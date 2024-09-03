@@ -1,0 +1,27 @@
+<!-- src/app/data-collection/data-collection.component.html -->
+<div>
+  <input type="file" (change)="onFileSelected($event)" accept=".csv,.xls,.xlsx">
+  <button (click)="onUpload()">Import Data</button>
+</div>
+
+<div *ngIf="previewData" class="preview-container">
+  <h3>Data Preview</h3>
+  <table class="preview-table">
+    <thead>
+      <tr>
+        <th *ngFor="let column of previewData.columns">{{column}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of previewData.top_rows">
+        <td *ngFor="let column of previewData.columns">{{row[column]}}</td>
+      </tr>
+      <tr class="separator-row">
+        <td *ngFor="let column of previewData.columns">...</td>
+      </tr>
+      <tr *ngFor="let row of previewData.bottom_rows">
+        <td *ngFor="let column of previewData.columns">{{row[column]}}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

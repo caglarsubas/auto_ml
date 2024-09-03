@@ -1,0 +1,40 @@
+/* src/app/data-collection/data-collection.component.css */
+.preview-container {
+  margin-top: 20px;
+  overflow-x: auto;
+}
+
+.preview-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 600px;
+}
+
+.preview-table th, .preview-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.preview-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.preview-table .separator-row td {
+  text-align: left;
+  font-weight: bold;
+  background-color: #f2f2f2;
+  color: #999999;
+}
+
+/* Responsive design for small screens */
+@media screen and (max-width: 600px) {
+  .preview-table {
+    font-size: 12px;
+  }
+  
+  .preview-table th, .preview-table td {
+    padding: 4px;
+  }
+}
