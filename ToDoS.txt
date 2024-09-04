@@ -1,0 +1,17 @@
+1- why there is no float and continuous feature in dictionary
+
+2- user can be able to skip the data dictionary upload
+
+3- push this changes as feature/2.0.1
+feature/a.b.c
+a= new fresh start
+b= new api
+c: new functionality (table, visual, click, logic check, any calculation)
+
+4- new api: Feature_Card
+clickable data_dictionary feature names
+when clicked new dialog window opened
+show Descriptive Statistics and plotly Histogram with hovering effect
+
+
+5- add 'Stack wrt Target', 'Percentage Y-axis' and 'Outlier Cleaning'checkboxes
