@@ -1,12 +1,19 @@
 1- why there is no float and continuous feature in dictionary
+(DONE)
 
 2- user can be able to skip the data dictionary upload
+(DONE)
 
 3- push this changes as feature/2.0.1
 feature/a.b.c
 a= new fresh start
 b= new api
 c: new functionality (table, visual, click, logic check, any calculation)
+(DONE)
+
+3.1- do not upload a new data if any already exist 
+with the same name in media/data_files directory
+(Waiting)
 
 4- new api: Feature_Card
 clickable data_dictionary feature names

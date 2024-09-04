@@ -53,6 +53,22 @@
   margin-right: 10px;
 }
 
+h1, h2, h3 {
+  color: #000;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.file-input-group {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.file-input-group input[type="file"] {
+  margin-right: 10px;
+}
+
 button {
   padding: 8px 16px;
   background-color: #740505;
@@ -76,4 +92,23 @@ button:hover {
   .data-dictionary-table th, .data-dictionary-table td {
     padding: 4px;
   }
+}
+
+.error-message {
+  color: #ff0000;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.use-existing-btn {
+  margin-left: 10px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.use-existing-btn:hover {
+  background-color: #45a049;
 }

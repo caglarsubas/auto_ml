@@ -1,8 +1,12 @@
 <!-- src/app/data-collection/data-collection.component.html -->
-<div>
-  <h2>Data Collection</h2>
+<h2>Data Collection</h2>
+<div class="file-input-group">
   <input type="file" (change)="onFileSelected($event)" accept=".csv,.xls,.xlsx">
-  <button (click)="onUpload()">Import Data</button>
+  <button (click)="onUpload()" class="import-btn">Import Data</button>
+</div>
+<div *ngIf="errorMessage" class="error-message">
+  {{ errorMessage }}
+  <button *ngIf="showUseExistingButton" (click)="useExistingFile()" class="use-existing-btn">Use Existing File</button>
 </div>
 
 <div *ngIf="previewData" class="preview-container">
@@ -26,9 +30,9 @@
     </tbody>
   </table>
 
+  <h2>Data Dictionary Collection</h2>
   <div class="dictionary-actions">
     <div class="dictionary-upload">
-      <h2>Data Dictionary Collection</h2>
       <input type="file" (change)="onDictionaryFileSelected($event)" accept=".csv,.xls,.xlsx">
       <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
     </div>

@@ -4,6 +4,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import DataFile
 from .serializers import DataFileSerializer
+import os
+from django.conf import settings
 import pandas as pd
 import numpy as np
 
@@ -12,6 +14,35 @@ class DataFileViewSet(viewsets.ModelViewSet):
     queryset = DataFile.objects.all()
     serializer_class = DataFileSerializer
 
+    def create(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if a file with the same name already exists
+        file_path = os.path.join(settings.MEDIA_ROOT, 'data_files', file.name)
+        if os.path.exists(file_path):
+            return Response(
+                {"error": f"A file named '{file.name}' already exists. Please choose a different name or use the existing file."},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        # If the file doesn't exist, proceed with the creation
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=False, methods=['get'], url_path='by-name/(?P<file_name>.+)')
+    def get_by_name(self, request, file_name=None):
+        try:
+            data_file = DataFile.objects.get(file__endswith=file_name)
+            serializer = self.get_serializer(data_file)
+            return Response(serializer.data)
+        except DataFile.DoesNotExist:
+            return Response({"error": f"File '{file_name}' not found."}, status=status.HTTP_404_NOT_FOUND)
+    
     @action(detail=True, methods=['get'])
     def preview(self, request, pk=None):
         data_file = self.get_object()
