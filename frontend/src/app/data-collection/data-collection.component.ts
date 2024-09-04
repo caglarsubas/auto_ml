@@ -9,12 +9,19 @@ import { HttpClient } from '@angular/common/http';
 })
 export class DataCollectionComponent {
   selectedFile: File | null = null;
+  selectedDictionaryFile: File | null = null;
   previewData: any = null;
+  dataDictionary: any[] = [];
+  currentFileId: number | null = null;
 
   constructor(private http: HttpClient) {}
 
   onFileSelected(event: any): void {
     this.selectedFile = event.target.files[0];
+  }
+
+  onDictionaryFileSelected(event: any): void {
+    this.selectedDictionaryFile = event.target.files[0];
   }
 
   onUpload(): void {
@@ -27,6 +34,7 @@ export class DataCollectionComponent {
         .subscribe(
           (response: any) => {
             console.log('File uploaded successfully');
+            this.currentFileId = response.id;
             this.getPreview(response.id);
           },
           error => console.error('Error uploading file:', error)
@@ -41,6 +49,26 @@ export class DataCollectionComponent {
           this.previewData = data;
         },
         error => console.error('Error getting preview:', error)
+      );
+  }
+
+  onGenerateDataDictionary(withUpload: boolean): void {
+    if (this.currentFileId === null) {
+      console.error('No file has been uploaded yet');
+      return;
+    }
+
+    const formData = new FormData();
+    if (withUpload && this.selectedDictionaryFile) {
+      formData.append('dictionary', this.selectedDictionaryFile);
+    }
+
+    this.http.post(`http://localhost:8000/api/data-files/${this.currentFileId}/data_dictionary/`, formData)
+      .subscribe(
+        (data: any) => {
+          this.dataDictionary = data;
+        },
+        error => console.error('Error generating data dictionary:', error)
       );
   }
 }

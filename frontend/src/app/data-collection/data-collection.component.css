@@ -1,40 +1,79 @@
 /* src/app/data-collection/data-collection.component.css */
-.preview-container {
+.preview-container, .data-dictionary-container {
   margin-top: 20px;
+}
+
+.table-container {
+  max-height: 400px;  /* Adjust this value as needed */
+  overflow-y: auto;
   overflow-x: auto;
 }
 
-.preview-table {
-  border-collapse: collapse;
+.preview-table, .data-dictionary-table {
   width: 100%;
-  min-width: 600px;
+  border-collapse: collapse;
 }
 
-.preview-table th, .preview-table td {
+.preview-table th, .preview-table td,
+.data-dictionary-table th, .data-dictionary-table td {
   border: 1px solid #ddd;
   padding: 8px;
   text-align: left;
 }
 
-.preview-table th {
+.preview-table th, .data-dictionary-table th {
   background-color: #f2f2f2;
   font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .preview-table .separator-row td {
-  text-align: left;
+  text-align: center;
   font-weight: bold;
-  background-color: #f2f2f2;
-  color: #999999;
+  background-color: #f9f9f9;
+  color: #999;
+}
+
+.dictionary-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.dictionary-upload {
+  display: flex;
+  align-items: center;
+}
+
+.dictionary-upload input[type="file"] {
+  margin-right: 10px;
+}
+
+button {
+  padding: 8px 16px;
+  background-color: #740505;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #740505;
 }
 
 /* Responsive design for small screens */
 @media screen and (max-width: 600px) {
-  .preview-table {
+  .preview-table, .data-dictionary-table {
     font-size: 12px;
   }
   
-  .preview-table th, .preview-table td {
+  .preview-table th, .preview-table td,
+  .data-dictionary-table th, .data-dictionary-table td {
     padding: 4px;
   }
 }

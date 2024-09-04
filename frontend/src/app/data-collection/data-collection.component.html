@@ -1,5 +1,6 @@
 <!-- src/app/data-collection/data-collection.component.html -->
 <div>
+  <h2>Data Collection</h2>
   <input type="file" (change)="onFileSelected($event)" accept=".csv,.xls,.xlsx">
   <button (click)="onUpload()">Import Data</button>
 </div>
@@ -24,4 +25,39 @@
       </tr>
     </tbody>
   </table>
+
+  <div class="dictionary-actions">
+    <div class="dictionary-upload">
+      <h2>Data Dictionary Collection</h2>
+      <input type="file" (change)="onDictionaryFileSelected($event)" accept=".csv,.xls,.xlsx">
+      <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
+    </div>
+    <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
+  </div>
+
+  <div *ngIf="dataDictionary.length > 0" class="data-dictionary-container">
+    <h3>Data Dictionary</h3>
+    <div class="table-container">
+      <table class="data-dictionary-table">
+        <thead>
+          <tr>
+            <th>Feature Name</th>
+            <th>Feature Description</th>
+            <th>Data Type</th>
+            <th># of Unique Values</th>
+            <th>Level of Measurement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of dataDictionary">
+            <td>{{item.Feature_Name}}</td>
+            <td>{{item.Feature_Description || 'N/A'}}</td>
+            <td>{{item.Data_Type}}</td>
+            <td>{{item['#_of_Unique_Value']}}</td>
+            <td>{{item.Level_of_Measurement}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
