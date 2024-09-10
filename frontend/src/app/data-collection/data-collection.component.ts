@@ -1,12 +1,14 @@
-// src/app/data-collection/data-collection.component.ts
 import { Component } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { MatDialog } from '@angular/material/dialog';
+import { FeatureCardComponent } from '../feature-card/feature-card.component';
 
 @Component({
   selector: 'app-data-collection',
   templateUrl: './data-collection.component.html',
   styleUrls: ['./data-collection.component.css']
 })
+
 export class DataCollectionComponent {
   selectedFile: File | null = null;
   selectedDictionaryFile: File | null = null;
@@ -17,7 +19,7 @@ export class DataCollectionComponent {
   showUseExistingButton: boolean = false;
   existingFileName: string | null = null;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private dialog: MatDialog) {}
 
   onFileSelected(event: any): void {
     this.selectedFile = event.target.files[0];
@@ -111,4 +113,12 @@ export class DataCollectionComponent {
         error => console.error('Error generating data dictionary:', error)
       );
   }
+
+  openFeatureCard(feature: any): void {
+    this.dialog.open(FeatureCardComponent, {
+      width: '400px',
+      data: feature
+    });
+  }
+  
 }

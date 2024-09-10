@@ -1,67 +1,81 @@
-<!-- src/app/data-collection/data-collection.component.html -->
-<h2>Data Collection</h2>
+<h1>Data Collection</h1>
+
 <div class="file-input-group">
-  <input type="file" (change)="onFileSelected($event)" accept=".csv,.xls,.xlsx">
-  <button (click)="onUpload()" class="import-btn">Import Data</button>
+  <input type="file" (change)="onFileSelected($event)">
+  <button (click)="onUpload()">Import Data</button>
 </div>
-<div *ngIf="errorMessage" class="error-message">
+
+<div class="error-message" *ngIf="errorMessage">
   {{ errorMessage }}
-  <button *ngIf="showUseExistingButton" (click)="useExistingFile()" class="use-existing-btn">Use Existing File</button>
+  <button *ngIf="showUseExistingButton" (click)="useExistingFile()" class="use-existing-btn">
+    Use Existing File
+  </button>
 </div>
 
-<div *ngIf="previewData" class="preview-container">
-  <h3>Data Preview</h3>
-  <table class="preview-table">
-    <thead>
-      <tr>
-        <th *ngFor="let column of previewData.columns">{{column}}</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let row of previewData.top_rows">
-        <td *ngFor="let column of previewData.columns">{{row[column]}}</td>
-      </tr>
-      <tr class="separator-row">
-        <td *ngFor="let column of previewData.columns">...</td>
-      </tr>
-      <tr *ngFor="let row of previewData.bottom_rows">
-        <td *ngFor="let column of previewData.columns">{{row[column]}}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2>Data Dictionary Collection</h2>
-  <div class="dictionary-actions">
-    <div class="dictionary-upload">
-      <input type="file" (change)="onDictionaryFileSelected($event)" accept=".csv,.xls,.xlsx">
-      <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
-    </div>
-    <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
+<div class="preview-container" *ngIf="previewData">
+  <h2>Data Preview</h2>
+  <div class="table-container">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th *ngFor="let column of previewData.columns">{{ column }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of previewData.top_rows">
+          <td *ngFor="let column of previewData.columns">{{ row[column] }}</td>
+        </tr>
+        <tr class="separator-row">
+          <td [attr.colspan]="previewData.columns.length">...</td>
+        </tr>
+        <tr *ngFor="let row of previewData.bottom_rows">
+          <td *ngFor="let column of previewData.columns">{{ row[column] }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
+</div>
 
-  <div *ngIf="dataDictionary.length > 0" class="data-dictionary-container">
-    <h3>Data Dictionary</h3>
-    <div class="table-container">
-      <table class="data-dictionary-table">
-        <thead>
-          <tr>
-            <th>Feature Name</th>
-            <th>Feature Description</th>
-            <th>Data Type</th>
-            <th># of Unique Values</th>
-            <th>Level of Measurement</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of dataDictionary">
-            <td>{{item.Feature_Name}}</td>
-            <td>{{item.Feature_Description || 'N/A'}}</td>
-            <td>{{item.Data_Type}}</td>
-            <td>{{item['#_of_Unique_Value']}}</td>
-            <td>{{item.Level_of_Measurement}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+<h2>Data Dictionary Collection</h2>
+
+<div class="dictionary-actions">
+  <div class="dictionary-upload">
+    <input type="file" (change)="onDictionaryFileSelected($event)">
+    <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
+  </div>
+  <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
+</div>
+
+<div class="data-dictionary-container" *ngIf="dataDictionary.length > 0">
+  <h3>Data Dictionary</h3>
+  <div class="table-container">
+    <table class="data-dictionary-table">
+      <thead>
+        <tr>
+          <th>Feature Name</th>
+          <th>Feature Description</th>
+          <th>Data Type</th>
+          <th># of Unique Values</th>
+          <th>Level of Measurement</th>
+          <th>Missing Ratio (%)</th>
+          <th>Mode Ratio (%)</th>
+          <th>Model Usage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of dataDictionary">
+          <td>
+            <a href="javascript:void(0)" (click)="openFeatureCard(item)">{{item.Feature_Name}}</a>
+          </td>
+          <td>{{item.Feature_Description || 'N/A'}}</td>
+          <td>{{item.Data_Type}}</td>
+          <td>{{item['#_of_Unique_Value']}}</td>
+          <td>{{item.Level_of_Measurement}}</td>
+          <td>{{item.Missing_Ratio}}</td>
+          <td>{{item.Mode_Ratio}}</td>
+          <td>{{item.Model_Usage_YN}}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
