@@ -8,6 +8,7 @@ import os
 from django.conf import settings
 import pandas as pd
 import numpy as np
+from scipy import stats as scipy_stats
 
 
 class DataFileViewSet(viewsets.ModelViewSet):
@@ -64,6 +65,47 @@ class DataFileViewSet(viewsets.ModelViewSet):
         }
         return Response(preview)
 
+    def calculate_descriptive_stats(self, column_data, data_type, level_of_measurement):
+        desc_stats = {}
+        if level_of_measurement in ['continuous', 'cardinal']:
+            numeric_data = pd.to_numeric(column_data, errors='coerce')
+            desc_stats = {
+                'Mean': round(numeric_data.mean(), 2),
+                'Min': round(numeric_data.min(), 2),
+                '1st_Quantile': round(numeric_data.quantile(0.01), 2),
+                '5th_Quantile': round(numeric_data.quantile(0.05), 2),
+                '25th_Q1': round(numeric_data.quantile(0.25), 2),
+                '50th_Median': round(numeric_data.median(), 2),
+                '75th_Q3': round(numeric_data.quantile(0.75), 2),
+                '95th_Quantile': round(numeric_data.quantile(0.95), 2),
+                '99th_Quantile': round(numeric_data.quantile(0.99), 2),
+                'Max': round(numeric_data.max(), 2),
+                'Std': round(numeric_data.std(), 2),
+                'Skewness': round(scipy_stats.skew(numeric_data.dropna()), 2),
+                'Kurtosis': round(scipy_stats.kurtosis(numeric_data.dropna()), 2)
+            }
+        elif level_of_measurement in ['nominal', 'ordinal']:
+            value_counts = column_data.value_counts(dropna=False)
+            total_count = len(column_data)
+            desc_stats = {
+                '#_of_Categories': len(value_counts),
+                'Mode_Value': value_counts.index[0] if len(value_counts) > 0 else None,
+                'Mode_Ratio': round((value_counts.iloc[0] / total_count) * 100, 2) if len(value_counts) > 0 else 0,
+                'Missing_Ratio': round((column_data.isnull().sum() / total_count) * 100, 2),
+                '#_of_Outlier_Categories': sum((value_counts / total_count) < 0.005)
+            }
+        return desc_stats
+
+    # to json serialization of NaNs
+    def replace_nan_with_none(self, obj):
+        if isinstance(obj, dict):
+            return {key: self.replace_nan_with_none(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self.replace_nan_with_none(item) for item in obj]
+        elif isinstance(obj, float) and np.isnan(obj):
+            return None
+        return obj
+        
     @action(detail=True, methods=['post'])
     def data_dictionary(self, request, pk=None):
         data_file = self.get_object()
@@ -110,18 +152,36 @@ class DataFileViewSet(viewsets.ModelViewSet):
                 if all(numeric_data.astype(float) == numeric_data.astype(int)):
                     data_type = 'integer'
                 else:
-                    pass #'float'
+                    data_type = 'float'
             else:
                 data_type = column_data.dtype.name
 
             unique_count = column_data.nunique(dropna=False)
             level_of_measurement = determine_level_of_measurement(column_data, data_type, unique_count)
 
+            # Calculate Missing_Ratio and Mode_Ratio
+            missing_ratio = (column_data.isnull().sum() / len(column_data)) * 100
+            mode_count = column_data.value_counts().iloc[0] if len(column_data) > 0 else 0
+            mode_ratio = (mode_count / len(column_data)) * 100
+
+            # Determine Model_Usage_YN
+            model_usage_yn = ('No' if level_of_measurement in ['id', 'date', 'datetime', 'timestamp'] or 
+                              column in ['Target'] or 'date' in data_type.lower() or 
+                              (unique_count/len(column_data))>0.90 
+                              else 'Yes')
+
+            # Calculate descriptive statistics
+            descriptive_stats = self.calculate_descriptive_stats(column_data, data_type, level_of_measurement)
+
             data_dict.append({
                 'Feature_Name': column,
                 'Data_Type': data_type,
                 '#_of_Unique_Value': unique_count,
-                'Level_of_Measurement': level_of_measurement
+                'Level_of_Measurement': level_of_measurement,
+                'Missing_Ratio': round(missing_ratio, 2),
+                'Mode_Ratio': round(mode_ratio, 2),
+                'Model_Usage_YN': model_usage_yn,
+                'Descriptive_Stats': descriptive_stats
             })
 
         # Process dictionary file if provided
@@ -140,4 +200,5 @@ class DataFileViewSet(viewsets.ModelViewSet):
                     if 'Level_of_Measurement' in dict_df.columns:
                         item['Level_of_Measurement'] = dict_df.loc[item['Feature_Name'], 'Level_of_Measurement']
 
+        data_dict = self.replace_nan_with_none(data_dict)
         return Response(data_dict)
