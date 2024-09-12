@@ -8,7 +8,6 @@ import { FeatureCardComponent } from '../feature-card/feature-card.component';
   templateUrl: './data-collection.component.html',
   styleUrls: ['./data-collection.component.css']
 })
-
 export class DataCollectionComponent {
   selectedFile: File | null = null;
   selectedDictionaryFile: File | null = null;
@@ -45,7 +44,6 @@ export class DataCollectionComponent {
             if (this.currentFileId !== null) {
               this.getPreview(this.currentFileId);
             }
-            this.getPreview(response.id);
             this.errorMessage = null;
             this.showUseExistingButton = false;
           },
@@ -115,10 +113,14 @@ export class DataCollectionComponent {
   }
 
   openFeatureCard(feature: any): void {
-    this.dialog.open(FeatureCardComponent, {
-      width: '400px',
-      data: feature
-    });
+    if (this.currentFileId !== null && feature.Feature_Name) {
+      this.dialog.open(FeatureCardComponent, {
+        width: '400px',
+        data: { fileId: this.currentFileId.toString(), columnName: feature.Feature_Name }
+      });
+    } else {
+      console.error('Cannot open feature card: fileId or columnName is missing');
+      // Optionally show an error message to the user
+    }
   }
-  
 }

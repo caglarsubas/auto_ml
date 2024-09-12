@@ -5,4 +5,4 @@ from .models import DataFile
 class DataFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DataFile
-        fields = ['id', 'file', 'name', 'uploaded_at']
+        fields = ['id', 'file', 'name', 'original_name', 'uploaded_at']

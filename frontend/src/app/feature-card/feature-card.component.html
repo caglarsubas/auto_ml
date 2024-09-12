@@ -1,36 +1,31 @@
-<h2 mat-dialog-title>Feature Card of {{data.Feature_Name}}</h2>
-<mat-dialog-content>
-  <p><strong>Description:</strong> {{data.Feature_Description || 'N/A'}}</p>
-  
+<h2 mat-dialog-title *ngIf="featureData">Feature Card of {{featureData.Feature_Name}}</h2>
+<mat-dialog-content *ngIf="featureData">
+  <div *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </div>
+  <div *ngIf="featureData">
+    <h3>{{ featureData.Feature_Name }}</h3>
+    <p><strong>Description:</strong> {{ featureData.Feature_Description || 'N/A' }}</p>
+    <!-- ... rest of the template ... -->
+  </div>
+
   <h3>Descriptive Statistics</h3>
   <div class="table-container">
-    <table *ngIf="data.Level_of_Measurement === 'continuous' || data.Level_of_Measurement === 'cardinal'" class="descriptive-stats-table">
-      <thead>
-        <tr>
-          <th *ngFor="let stat of numericalStats">{{stat}}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td *ngFor="let stat of numericalStats">{{data.Descriptive_Stats[stat] ?? 'N/A'}}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <table *ngIf="data.Level_of_Measurement === 'nominal' || data.Level_of_Measurement === 'ordinal'" class="descriptive-stats-table">
-      <thead>
-        <tr>
-          <th *ngFor="let stat of categoricalStats">{{stat}}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td *ngFor="let stat of categoricalStats">{{data.Descriptive_Stats[stat] ?? 'N/A'}}</td>
-        </tr>
-      </tbody>
+    <table class="descriptive-stats-table">
+      <tr *ngFor="let stat of getStats()">
+        <th>{{stat}}</th>
+        <td>{{getStatValue(stat)}}</td>
+      </tr>
     </table>
   </div>
+
+  <h3>Distribution</h3>
+  <div id="visualization" style="width: 100%; height: 400px;">
+    <ng-container *ngIf="!isBrowser">
+      Visualization is not available during server-side rendering.
+    </ng-container>
+  </div>
 </mat-dialog-content>
-<mat-dialog-actions>
+<mat-dialog-actions align="end">
   <button mat-button mat-dialog-close>Close</button>
 </mat-dialog-actions>

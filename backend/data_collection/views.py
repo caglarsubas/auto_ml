@@ -14,15 +14,15 @@ from scipy import stats as scipy_stats
 class DataFileViewSet(viewsets.ModelViewSet):
     queryset = DataFile.objects.all()
     serializer_class = DataFileSerializer
-
+    
     def create(self, request, *args, **kwargs):
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a file with the same name already exists
-        file_path = os.path.join(settings.MEDIA_ROOT, 'data_files', file.name)
-        if os.path.exists(file_path):
+        existing_file = DataFile.objects.filter(original_name=file.name).first()
+        if existing_file:
             return Response(
                 {"error": f"A file named '{file.name}' already exists. Please choose a different name or use the existing file."},
                 status=status.HTTP_409_CONFLICT
@@ -34,6 +34,10 @@ class DataFileViewSet(viewsets.ModelViewSet):
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        file = self.request.FILES['file']
+        serializer.save(original_name=file.name)
 
     @action(detail=False, methods=['get'], url_path='by-name/(?P<file_name>.+)')
     def get_by_name(self, request, file_name=None):

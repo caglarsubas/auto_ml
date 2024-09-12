@@ -1,3 +1,15 @@
 <!-- src/app/app.component.html -->
-<h1>Auto-ML Platform</h1>
-<app-data-collection></app-data-collection>
+<!--<h1>Auto-ML Platform</h1> -->
+<!--<app-data-collection></app-data-collection> -->
+
+<mat-toolbar color="primary">
+  <span>Auto-ML Platform</span>
+  <span class="spacer"></span>
+  <a mat-button routerLink="/data-collection">Data Collection</a>
+  <a mat-button routerLink="/feature-card">Feature Card</a>
+  <a mat-button routerLink="/data-preprocessing">Preprocessing</a>
+</mat-toolbar>
+
+<div class="content-container">
+  <router-outlet></router-outlet>
+</div>
