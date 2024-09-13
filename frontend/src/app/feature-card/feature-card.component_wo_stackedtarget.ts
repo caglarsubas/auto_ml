@@ -41,7 +41,6 @@ export class FeatureCardComponent implements OnInit {
   usePercentageYAxis: boolean = false;
   outlierCleaningEnabled: boolean = false;  // Bound to the 'Outlier Cleaning' checkbox
   sparsityCleaningEnabled: boolean = false;  // Bound to 'Sparsity Cleaning' checkbox
-  stackedWrtTarget: boolean = false;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { fileId: string, columnName: string },
@@ -120,140 +119,67 @@ export class FeatureCardComponent implements OnInit {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count'  // Dynamic Y-axis label
       }
     };
-    
-    let histogramData: any[] = this.featureData?.Descriptive_Stats?.histogram_data ?? [];
-    
-    if (this.stackedWrtTarget) {
-      this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
-        (stackedData: any) => {
-          console.log('Received stacked data:', stackedData);
-          if (this.outlierCleaningEnabled && this.isNumerical()) {
-            for (let targetClass in stackedData) {
-              console.log(`target-class: ${targetClass} and its data: ${stackedData[targetClass]}`)
-              stackedData[targetClass] = this.cleanOutliers(stackedData[targetClass]);
-              console.log(`outlier cleaned target-class data: ${stackedData[targetClass]}`)
-            }
-          }
-          if (this.sparsityCleaningEnabled && this.isNumerical()) {
-            for (let targetClass in stackedData) {
-              console.log(`target-class: ${targetClass} and its data: ${stackedData[targetClass]}`)
-              stackedData[targetClass] = this.cleanSparsity(stackedData[targetClass]);
-              console.log(`sparsity cleaned target-class data: ${stackedData[targetClass]}`)
-            }
-          }
-          const processedData = this.preprocessStackedData(stackedData);
-          this.plotStackedData(processedData, layout);
-        },
-        error => {
-          console.error('Error fetching stacked data:', error);
-          this.errorMessage = error.message || 'An error occurred while fetching stacked data';
-          this.stackedWrtTarget = false;
-          this.plotNonStackedData(histogramData, layout);
-        }
-      );
-    } else {
-      if (this.outlierCleaningEnabled && this.isNumerical()) {
-        histogramData = this.cleanOutliers(histogramData);
-      }
-      if (this.sparsityCleaningEnabled && this.isNumerical()) {
-        histogramData = this.cleanSparsity(histogramData);
-      }
-      this.plotNonStackedData(histogramData, layout);
-    }
-  }
-
-  preprocessStackedData(data: any): any {
-    return Object.keys(data).reduce((acc, key) => {
-      if (Array.isArray(data[key])) {
-        acc[key] = data[key].map((value: any) => value === null ? 0 : parseFloat(value) || 0);
-      } else {
-        acc[key] = Object.entries(data[key]).reduce((innerAcc, [innerKey, innerValue]) => {
-          innerAcc[innerKey] = innerValue === null ? 0 : parseFloat(innerValue as string) || 0;
-          return innerAcc;
-        }, {} as {[key: string]: number});
-      }
-      return acc;
-    }, {} as any);
-  }
-
-  plotStackedData(stackedData: any, layout: any) {
-    const Plotly = (window as any).Plotly;
-    if (this.isNumerical()) {
-      // Create stacked histogram
-      const traces = Object.keys(stackedData).map(targetClass => ({
-        x: stackedData[targetClass].filter((v: number) => v !== 0 && !isNaN(v)),
-        type: 'histogram',
-        name: targetClass,
-        opacity: 0.7,
-        histnorm: this.usePercentageYAxis ? 'percent' : 'count',
-      }));
-      layout.barmode = 'group';
-      layout.bargap = 0.05;  // Add some gap between bars
-      layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
-      Plotly.newPlot('visualization', traces, layout);
-    } else {
-      // Create stacked bar chart
-      const categories = Object.keys(stackedData[Object.keys(stackedData)[0]]);
-      const traces = Object.keys(stackedData).map(targetClass => ({
-        x: categories,
-        y: categories.map(cat => stackedData[targetClass][cat]),
-        type: 'bar',
-        name: targetClass,
-        opacity: 0.7,
-      }));
-      layout.barmode = 'group';
-      layout.bargap = 0.15;  // Add some gap between bars
-      layout.bargroupgap = 0.1;  // Gap between bars in a group
-      layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
-      Plotly.newPlot('visualization', traces, layout);
-    }
-  }
   
-  plotNonStackedData(histogramData: any[], layout: any) {
-    const Plotly = (window as any).Plotly;
-    const plotData: any[] = [];
-    if (this.isNumerical()) {
-      if (histogramData && histogramData.length > 0) {
-        plotData.push({
-          x: histogramData,
-          type: 'histogram',
-          marker: {
-            color: 'rgba(100, 149, 237, 0.7)',
-            line: {
-              color: 'rgba(100, 149, 237, 1)',
-              width: 1
-            },
-          },
-          histnorm: this.usePercentageYAxis ? 'percent' : 'count',
-        });
-      } else {
-        console.warn('No histogram data available');
-      }
-    } else {
-      const valueCounts = this.featureData?.Descriptive_Stats.value_counts;
-      if (valueCounts && Object.keys(valueCounts).length > 0) {
-        const categories = Object.keys(valueCounts);
-        const counts = Object.values(valueCounts);
-        plotData.push({
-          x: categories,
-          y: counts,
-          type: 'bar',
-          marker: {
-            color: 'rgba(100, 149, 237, 0.7)',
-            line: {
-              color: 'rgba(100, 149, 237, 1)',
-              width: 1
-            },
-          },
-        });
-      } else {
-        console.warn('No value counts data available');
-      }
+    let histogramData = this.featureData?.Descriptive_Stats?.histogram_data ?? [];
+    
+    // Only apply outlier cleaning if the feature is numerical and the checkbox is selected
+    if (this.outlierCleaningEnabled && this.isNumerical()) {
+      histogramData = this.cleanOutliers(histogramData);
     }
-    if (plotData.length > 0) {
-      Plotly.newPlot('visualization', plotData, layout);
-    } else {
-      console.warn('No data available for visualization');
+    // Only apply sparsity cleaning if the feature is numerical and the checkbox is selected
+    if (this.sparsityCleaningEnabled && this.isNumerical()) {
+      histogramData = this.cleanSparsity(histogramData);
+    }
+
+    try {
+      if (this.isNumerical()) {
+        //const histogramData = this.featureData.Descriptive_Stats.histogram_data;
+        if (histogramData && histogramData.length > 0) {
+          plotData.push({
+            x: histogramData,
+            type: 'histogram',
+            marker: {
+              color: 'rgba(100, 149, 237, 0.7)',
+              line: {
+                color: 'rgba(100, 149, 237, 1)',
+                width: 1
+              },
+            },
+            histnorm: this.usePercentageYAxis ? 'percent' : 'count', // Toggle between percentage and count
+          });
+        } else {
+          console.warn('No histogram data available');
+        }
+      } else { //for categorical features
+        const valueCounts = this.featureData.Descriptive_Stats.value_counts;
+        if (valueCounts && Object.keys(valueCounts).length > 0) {
+          const categories = Object.keys(valueCounts);
+          const counts = Object.values(valueCounts);
+          plotData.push({
+            x: categories,
+            y: counts,
+            type: 'bar',
+            marker: {
+              color: 'rgba(100, 149, 237, 0.7)',
+              line: {
+                color: 'rgba(100, 149, 237, 1)',
+                width: 1
+              },
+              histnorm: this.usePercentageYAxis ? 'percent' : 'count', // Toggle between percentage and count
+            }
+          });
+        } else {
+          console.warn('No value counts data available');
+        }
+      }
+  
+      if (plotData.length > 0) {
+        Plotly.newPlot('visualization', plotData, layout);
+      } else {
+        console.warn('No data available for visualization');
+      }
+    } catch (error) {
+      console.error('Error creating visualization:', error);
     }
   }
 

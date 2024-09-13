@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
@@ -28,5 +29,29 @@ export class DataService {
     return this.http.get(`${this.apiUrl}feature-card/${fileId}/get_feature_info/?column=${encodeURIComponent(columnName)}`);
   }
 
-  // Add more methods as needed
+  getStackedFeatureData(fileId: string, columnName: string): Observable<any> {
+    const url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
+    console.log('Requesting URL:', url);
+    return this.http.get(url).pipe(
+      tap(data => console.log('Raw response:', data)),
+      catchError(error => {
+        console.error('Error in getStackedFeatureData:', error);
+        if (error instanceof SyntaxError) {
+          console.error('JSON parsing error:', error.message);
+        }
+        return throwError(() => new Error(error.message || 'An unknown error occurred'));
+      })
+    );
+  }
+  
+  private handleError(error: HttpErrorResponse) {
+    console.error('An error occurred:', error);
+    let errorMessage = 'An unknown error occurred';
+    if (error.error instanceof ErrorEvent) {
+      errorMessage = `Error: ${error.error.message}`;
+    } else {
+      errorMessage = `Error Code: ${error.status}\nMessage: ${error.message}`;
+    }
+    return throwError(() => new Error(errorMessage));
+  }
 }

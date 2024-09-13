@@ -24,8 +24,21 @@
     <ng-container *ngIf="!isBrowser">
       Visualization is not available during server-side rendering.
     </ng-container>
+    <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
+      Percentage Y-axis
+    </mat-checkbox>
+    <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="createVisualization()">
+      Outlier Cleaning
+    </mat-checkbox>
+    <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="createVisualization()">
+      Sparsity Cleaning
+    </mat-checkbox>
+    <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="createVisualization()">
+      Stacked wrt Target
+    </mat-checkbox>
   </div>
 </mat-dialog-content>
+
 <mat-dialog-actions align="end">
   <button mat-button mat-dialog-close>Close</button>
 </mat-dialog-actions>
