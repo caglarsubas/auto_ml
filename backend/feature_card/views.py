@@ -9,8 +9,12 @@ import logging
 import os
 from django.conf import settings
 from data_collection.models import DataFile
+from django.http import JsonResponse
+from django.db.models import F
+import json
 
 logger = logging.getLogger(__name__)
+
 class FeatureCardViewSet(viewsets.ViewSet):
     @action(detail=True, methods=['get'])
     def get_feature_info(self, request, pk=None):
@@ -54,17 +58,17 @@ class FeatureCardViewSet(viewsets.ViewSet):
 
         # Calculate descriptive statistics
         stats = self.calculate_descriptive_stats(column_data, level_of_measurement)
-
+        
         feature_data = {
             "Feature_Name": column_name,
             "Feature_Description": "",  # You might want to store and retrieve this separately
             "Level_of_Measurement": level_of_measurement,
-            "Descriptive_Stats": stats
+            "Descriptive_Stats": stats,
         }
 
         serializer = FeatureCardSerializer(feature_data)
         return Response(serializer.data)  # Replace with actual data
-
+    
     def determine_level_of_measurement(self, column_data):
         if pd.api.types.is_numeric_dtype(column_data):
             if column_data.nunique() > 10:  # arbitrary threshold
@@ -105,3 +109,51 @@ class FeatureCardViewSet(viewsets.ViewSet):
                 'value_counts': value_counts.to_dict()
             }
         return stats
+
+    def json_default(value):
+        if isinstance(value, (np.integer, np.floating)):
+            return float(value) if not np.isnan(value) else None
+        elif isinstance(value, np.ndarray):
+            return [json_default(v) for v in value]
+        elif pd.isna(value):
+            return None
+        raise TypeError(f"Unserializable value: {value}")
+
+    @action(detail=True, methods=['get'])
+    def get_stacked_feature_data(self, request, pk=None):
+        file_id = pk
+        column_name = request.query_params.get('column', None)
+        
+        if not column_name:
+            return Response({"error": "Column name is required"}, status=400)
+
+        try:
+            data_file = DataFile.objects.get(id=file_id)
+            file_path = data_file.file.path
+            df = pd.read_csv(file_path)
+            
+            target_column = 'Target'
+            
+            if column_name not in df.columns:
+                return Response({"error": f"Column '{column_name}' not found in the dataset"}, status=404)
+            if target_column not in df.columns:
+                return Response({"error": "Target column not found in the dataset"}, status=404)
+            
+            feature_data = df[column_name]
+            target_data = df[target_column]
+            
+            stacked_data = {}
+            for target_class in target_data.unique():
+                if pd.api.types.is_numeric_dtype(feature_data):
+                    class_data = feature_data[target_data == target_class].tolist()
+                    stacked_data[str(target_class)] = [x if not pd.isna(x) else None for x in class_data]
+                else:
+                    value_counts = feature_data[target_data == target_class].value_counts()
+                    stacked_data[str(target_class)] = value_counts.to_dict()
+
+            json_data = json.dumps(stacked_data, default=self.json_default)
+            return JsonResponse(json.loads(json_data), safe=False)
+
+        except Exception as e:
+            logger.error(f"Error in get_stacked_feature_data: {str(e)}", exc_info=True)
+            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=500)

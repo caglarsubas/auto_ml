@@ -22,3 +22,48 @@ show Descriptive Statistics and plotly Histogram with hovering effect
 
 
 5- add 'Stack wrt Target', 'Percentage Y-axis' and 'Outlier Cleaning'checkboxes
+
+6- add sparse-ratio into the descriptive-statistics table in 
+feature-card of numerical features only
+
+7- add feature description under the title of feature card dialog
+
+!!!CFH (13.09.2024): 
+some features (var_11) feature-card can not be opened
+error message from backend console:
+Received request for file_id: 1, column: Var_15
+Attempting to access file at: /home/caglarsubas/projects_new/auto_ml/backend/media/data_files/TebArf_CaseStudyData_CreditScoring_2020_all.csv
+"GET /api/feature-card/1/get_feature_info/?column=Var_15 HTTP/1.1" 200 245
+"GET /api/feature-card/1/get_stacked_feature_data/?column=Var_15 HTTP/1.1" 200 58
+Received request for file_id: 1, column: Var_11
+Attempting to access file at: /home/caglarsubas/projects_new/auto_ml/backend/media/data_files/TebArf_CaseStudyData_CreditScoring_2020_all.csv
+Internal Server Error: /api/feature-card/1/get_feature_info/
+Traceback (most recent call last):
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 220, in _get_response
+    response = response.render()
+               ^^^^^^^^^^^^^^^^^
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/django/template/response.py", line 114, in render
+    self.content = self.rendered_content
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/rest_framework/response.py", line 74, in rendered_content
+    ret = renderer.render(self.data, accepted_media_type, context)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/rest_framework/renderers.py", line 100, in render
+    ret = json.dumps(
+          ^^^^^^^^^^^
+  File "/home/caglarsubas/projects_new/auto_ml/venv/lib/python3.12/site-packages/rest_framework/utils/json.py", line 25, in dumps
+    return json.dumps(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/encoder.py", line 258, in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+ValueError: Out of range float values are not JSON compliant: nan
