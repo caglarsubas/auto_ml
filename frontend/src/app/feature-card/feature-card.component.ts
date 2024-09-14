@@ -192,19 +192,24 @@ export class FeatureCardComponent implements OnInit {
       layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
       Plotly.newPlot('visualization', traces, layout);
     } else {
-      // Create stacked bar chart
-      const categories = Object.keys(stackedData[Object.keys(stackedData)[0]]);
-      const traces = Object.keys(stackedData).map(targetClass => ({
-        x: categories,
-        y: categories.map(cat => stackedData[targetClass][cat]),
-        type: 'bar',
-        name: targetClass,
-        opacity: 0.7,
-      }));
+      // For categorical data, create grouped bar chart
+      const categories = [...new Set(Object.keys(stackedData).flatMap(key => Object.keys(stackedData[key])))];
+      const traces = Object.keys(stackedData).map(targetClass => {
+        const values = categories.map(cat => stackedData[targetClass][cat] || 0);
+        const total = values.reduce((sum, val) => sum + val, 0);
+        return {
+          x: categories,
+          y: this.usePercentageYAxis ? values.map(v => (v / total) * 100) : values,
+          type: 'bar',
+          name: targetClass,
+          opacity: 0.7,
+        };
+      });
       layout.barmode = 'group';
       layout.bargap = 0.15;  // Add some gap between bars
       layout.bargroupgap = 0.1;  // Gap between bars in a group
       layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
+      layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
       Plotly.newPlot('visualization', traces, layout);
     }
   }
@@ -234,9 +239,10 @@ export class FeatureCardComponent implements OnInit {
       if (valueCounts && Object.keys(valueCounts).length > 0) {
         const categories = Object.keys(valueCounts);
         const counts = Object.values(valueCounts);
+        const total = counts.reduce((sum: number, val: number) => sum + val, 0);
         plotData.push({
           x: categories,
-          y: counts,
+          y: this.usePercentageYAxis ? counts.map((v: number) => (v / total) * 100) : counts,
           type: 'bar',
           marker: {
             color: 'rgba(100, 149, 237, 0.7)',
@@ -250,6 +256,7 @@ export class FeatureCardComponent implements OnInit {
         console.warn('No value counts data available');
       }
     }
+    layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
     if (plotData.length > 0) {
       Plotly.newPlot('visualization', plotData, layout);
     } else {
