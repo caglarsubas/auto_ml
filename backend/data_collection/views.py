@@ -2,7 +2,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import DataFile
+from .models import DataFile, DataDictionary
 from .serializers import DataFileSerializer
 import os
 from django.conf import settings
@@ -200,9 +200,17 @@ class DataFileViewSet(viewsets.ModelViewSet):
             dict_df = dict_df.set_index(dict_df.columns[0])
             for item in data_dict:
                 if item['Feature_Name'] in dict_df.index:
-                    item['Feature_Description'] = dict_df.loc[item['Feature_Name'], dict_df.columns[0]]
+                    description = dict_df.loc[item['Feature_Name'], dict_df.columns[0]]
+                    item['Feature_Description'] = description
                     if 'Level_of_Measurement' in dict_df.columns:
                         item['Level_of_Measurement'] = dict_df.loc[item['Feature_Name'], 'Level_of_Measurement']
+                    
+                    # Save to DataDictionary model
+                    DataDictionary.objects.update_or_create(
+                        data_file=data_file,
+                        column_name=item['Feature_Name'],
+                        defaults={'description': description}
+                    )
 
         data_dict = self.replace_nan_with_none(data_dict)
         return Response(data_dict)

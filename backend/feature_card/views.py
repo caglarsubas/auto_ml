@@ -8,13 +8,14 @@ from scipy import stats as scipy_stats
 import logging
 import os
 from django.conf import settings
-from data_collection.models import DataFile
+from data_collection.models import DataFile, DataDictionary  # Make sure to import DataDictionary if you haven't
 from django.http import JsonResponse
-from django.db.models import F
+from django.db import models
 import json
 import math
 logger = logging.getLogger(__name__)
 
+        
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -70,10 +71,17 @@ class FeatureCardViewSet(viewsets.ViewSet):
         try:
             # Calculate descriptive statistics
             stats = self.calculate_descriptive_stats(column_data, level_of_measurement)
-            
+
+            # Get the description from DataDictionary
+            try:
+                data_dict = DataDictionary.objects.get(data_file_id=file_id, column_name=column_name)
+                feature_description = data_dict.description
+            except DataDictionary.DoesNotExist:
+                feature_description = None
+
             feature_data = {
                 "Feature_Name": column_name,
-                "Feature_Description": "",  # You might want to store and retrieve this separately
+                "Feature_Description": feature_description if feature_description else "No description available.",
                 "Level_of_Measurement": level_of_measurement,
                 "Descriptive_Stats": stats,
             }
@@ -112,7 +120,6 @@ class FeatureCardViewSet(viewsets.ViewSet):
             logger.error(f"Error in get_feature_info: {str(e)}", exc_info=True)
             return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=500)
     
-
     def determine_level_of_measurement(self, column_data):
         if pd.api.types.is_numeric_dtype(column_data):
             if column_data.nunique() > 10:  # arbitrary threshold
@@ -138,19 +145,19 @@ class FeatureCardViewSet(viewsets.ViewSet):
             non_nan_data = numeric_data.dropna()
             
             stats = {
-                'Mean': self.safe_float(non_nan_data.mean()),
-                'Min': self.safe_float(non_nan_data.min()),
-                '1st_Quantile': self.safe_float(non_nan_data.quantile(0.01)),
-                '5th_Quantile': self.safe_float(non_nan_data.quantile(0.05)),
-                '25th_Q1': self.safe_float(non_nan_data.quantile(0.25)),
-                '50th_Median': self.safe_float(non_nan_data.median()),
-                '75th_Q3': self.safe_float(non_nan_data.quantile(0.75)),
-                '95th_Quantile': self.safe_float(non_nan_data.quantile(0.95)),
-                '99th_Quantile': self.safe_float(non_nan_data.quantile(0.99)),
-                'Max': self.safe_float(non_nan_data.max()),
-                'Std': self.safe_float(non_nan_data.std()),
-                'Skewness': self.safe_float(scipy_stats.skew(non_nan_data)) if len(non_nan_data) > 0 else None,
-                'Kurtosis': self.safe_float(scipy_stats.kurtosis(non_nan_data)) if len(non_nan_data) > 0 else None,
+                'Mean': round(self.safe_float(non_nan_data.mean()), 2),
+                'Min': round(self.safe_float(non_nan_data.min()), 2),
+                '1st_Quantile': round(self.safe_float(non_nan_data.quantile(0.01)), 2),
+                '5th_Quantile': round(self.safe_float(non_nan_data.quantile(0.05)), 2),
+                '25th_Q1': round(self.safe_float(non_nan_data.quantile(0.25)), 2),
+                '50th_Median': round(self.safe_float(non_nan_data.median()), 2),
+                '75th_Q3': round(self.safe_float(non_nan_data.quantile(0.75)), 2),
+                '95th_Quantile': round(self.safe_float(non_nan_data.quantile(0.95)), 2),
+                '99th_Quantile': round(self.safe_float(non_nan_data.quantile(0.99)), 2),
+                'Max': round(self.safe_float(non_nan_data.max()), 2),
+                'Std': round(self.safe_float(non_nan_data.std()), 2),
+                'Skewness': round((self.safe_float(scipy_stats.skew(non_nan_data)) if len(non_nan_data) > 0 else None), 2),
+                'Kurtosis': round((self.safe_float(scipy_stats.kurtosis(non_nan_data)) if len(non_nan_data) > 0 else None), 2),
                 'histogram_data': [self.safe_float(x) for x in non_nan_data.tolist() if self.safe_float(x) is not None]
             }
         else:
@@ -159,8 +166,8 @@ class FeatureCardViewSet(viewsets.ViewSet):
             stats = {
                 '#_of_Categories': int(len(value_counts)),
                 'Mode_Value': str(value_counts.index[0]) if len(value_counts) > 0 else None,
-                'Mode_Ratio': self.safe_float((value_counts.iloc[0] / total_count) * 100) if len(value_counts) > 0 else None,
-                'Missing_Ratio': self.safe_float((column_data.isnull().sum() / total_count) * 100),
+                'Mode_Ratio': round((self.safe_float((value_counts.iloc[0] / total_count) * 100) if len(value_counts) > 0 else None), 2),
+                'Missing_Ratio': round(self.safe_float((column_data.isnull().sum() / total_count) * 100), 2),
                 '#_of_Outlier_Categories': int(sum((value_counts / total_count) < 0.005)),
                 'value_counts': {str(k): int(v) for k, v in value_counts.items()}
             }

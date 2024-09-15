@@ -5,8 +5,7 @@
   </div>
   <div *ngIf="featureData">
     <h3>{{ featureData.Feature_Name }}</h3>
-    <p><strong>Description:</strong> {{ featureData.Feature_Description || 'N/A' }}</p>
-    <!-- ... rest of the template ... -->
+    <p><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
   </div>
 
   <h3>Descriptive Statistics</h3>

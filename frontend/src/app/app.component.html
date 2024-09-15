@@ -3,11 +3,46 @@
 <!--<app-data-collection></app-data-collection> -->
 
 <mat-toolbar color="primary">
-  <span>Auto-ML Platform</span>
+  <span>
+    <img src="assets/declarai_logo.png" alt="Logo" style="height: 65px; margin-left: 10px;">
+  </span>
   <span class="spacer"></span>
-  <a mat-button routerLink="/data-collection">Data Collection</a>
-  <a mat-button routerLink="/feature-card">Feature Card</a>
-  <a mat-button routerLink="/data-preprocessing">Preprocessing</a>
+  <!-- Home Page Button with Dropdown -->
+  <a mat-button >Home Page</a>
+  <a mat-button [matMenuTriggerFor]="FeatureStore">Feature Store</a>
+  <mat-menu #FeatureStore="matMenu">
+    <button mat-menu-item>Feature Monitoring</button>
+    <button mat-menu-item>Feature Collection</button>
+    <button mat-menu-item>Feature Engineering</button>
+    <button mat-menu-item>Feature Search</button>
+  </mat-menu>
+  <a mat-button [matMenuTriggerFor]="ModelStore">Model Store</a>
+  <mat-menu #ModelStore="matMenu">
+    <button mat-menu-item>Model Monitoring</button>
+    <button mat-menu-item>Model Re-Fitting</button>
+    <button mat-menu-item>Model Development</button>
+  </mat-menu>
+  <a mat-button [matMenuTriggerFor]="Deployments">Deployments</a>
+  <mat-menu #Deployments="matMenu">
+    <button mat-menu-item>Deployed Artifacts</button>
+    <button mat-menu-item>Security Monitoring</button>
+    <button mat-menu-item>Performance Monitoring</button>
+    <button mat-menu-item>New Deployment</button>
+  </mat-menu>
+  <a mat-button [matMenuTriggerFor]="Documentation">Documentation</a>
+  <mat-menu #Documentation="matMenu">
+    <button mat-menu-item>Declarative ML</button>
+    <button mat-menu-item>Algorithm APIs</button>
+    <button mat-menu-item>Pipeline Types</button>
+    <button mat-menu-item>Supported DBs</button>
+  </mat-menu>
+  <a mat-button [matMenuTriggerFor]="About">About</a>
+  <mat-menu #About="matMenu">
+    <button mat-menu-item>declar.ai</button>
+    <button mat-menu-item>Team</button>
+    <button mat-menu-item>References</button>
+    <button mat-menu-item>Community</button>
+  </mat-menu>
 </mat-toolbar>
 
 <div class="content-container">

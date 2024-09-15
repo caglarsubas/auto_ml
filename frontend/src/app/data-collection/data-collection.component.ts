@@ -17,6 +17,7 @@ export class DataCollectionComponent {
   errorMessage: string | null = null;
   showUseExistingButton: boolean = false;
   existingFileName: string | null = null;
+  showDataDictionaryCollection: boolean = false;
 
   constructor(private http: HttpClient, private dialog: MatDialog) {}
 
@@ -46,6 +47,8 @@ export class DataCollectionComponent {
             }
             this.errorMessage = null;
             this.showUseExistingButton = false;
+            // Show Data Dictionary Collection after successful upload
+            this.showDataDictionaryCollection = true;
           },
           (error: HttpErrorResponse) => {
             if (error.status === 409) {
@@ -73,6 +76,8 @@ export class DataCollectionComponent {
             }
             this.errorMessage = null;
             this.showUseExistingButton = false;
+            // Show Data Dictionary Collection after using existing file
+            this.showDataDictionaryCollection = true;
           },
           error => {
             console.error('Error fetching existing file:', error);
@@ -87,6 +92,8 @@ export class DataCollectionComponent {
       .subscribe(
         (data: any) => {
           this.previewData = data;
+          // Ensure Data Dictionary Collection is shown after preview is loaded
+          this.showDataDictionaryCollection = true;
         },
         error => console.error('Error getting preview:', error)
       );

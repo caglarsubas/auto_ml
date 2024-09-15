@@ -12,6 +12,7 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';  // Import FormsModule
 import { MatCheckboxModule } from '@angular/material/checkbox';  // Ensure you have this for MatCheckbox
+import { MatMenuModule } from '@angular/material/menu';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -37,8 +38,9 @@ import { FeatureCardComponent } from './feature-card/feature-card.component';
     MatProgressBarModule,
     MatSnackBarModule,
     MatDialogModule,
-    FormsModule,  // Add FormsModule here
-    MatCheckboxModule  // Add this if not already imported
+    FormsModule,
+    MatCheckboxModule,
+    MatMenuModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

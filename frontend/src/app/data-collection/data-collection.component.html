@@ -1,5 +1,5 @@
-<h1>Data Collection</h1>
-
+<h1>Step-1: Pipeline Declarations</h1>
+<h2>1.1- Data Declaration</h2>
 <div class="file-input-group">
   <input type="file" (change)="onFileSelected($event)">
   <button (click)="onUpload()">Import Data</button>
@@ -13,7 +13,7 @@
 </div>
 
 <div class="preview-container" *ngIf="previewData">
-  <h2>Data Preview</h2>
+  <h3>Data Preview</h3>
   <div class="table-container">
     <table class="preview-table">
       <thead>
@@ -36,14 +36,15 @@
   </div>
 </div>
 
-<h2>Data Dictionary Collection</h2>
-
-<div class="dictionary-actions">
-  <div class="dictionary-upload">
-    <input type="file" (change)="onDictionaryFileSelected($event)">
-    <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
+<div *ngIf="showDataDictionaryCollection">
+  <h2>1.2- Data-Dictionary Declaration</h2>
+  <div class="dictionary-actions">
+    <div class="dictionary-upload">
+      <input type="file" (change)="onDictionaryFileSelected($event)">
+      <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
+    </div>
+    <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
   </div>
-  <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
 </div>
 
 <div class="data-dictionary-container" *ngIf="dataDictionary.length > 0">

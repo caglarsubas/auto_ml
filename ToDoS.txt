@@ -27,23 +27,22 @@ show Descriptive Statistics and plotly Histogram with hovering effect
 7- add feature description under the title of feature card dialog
 
 !!!CFH (14.09.2024): 
-when we selected the 'Stack wrt Target' checkbox for a categorical 
-feature, the string 'NaN' category, which is created manually,
-disappears in the bar-plot
 
-- make the checkboxes: 'Outlier Cleaning' and 'Sparsity Cleaning'
-    disabled when the selected feature is categorical.
 - feature descriptions in the feature-card are being rendered as Null
 - add a 'Full-Screen button left-near the 'Close' button, which
     - widens the popup-dialog us much as possible
     - transpose the descriptive-statistics table and
     - makes the distribution-plot bigger
+- add legend title 'Target Classes' into the distribution plot when 
+    'Stacked wrt Target' selected
+- when we selected the 'Stack wrt Target' checkbox for a categorical 
+feature, the string 'NaN' category, which is created manually,
+disappears in the bar-plot
+- make the checkboxes: 'Outlier Cleaning' and 'Sparsity Cleaning'
+    disabled when the selected feature is categorical.
 - add a info symbol right-top of the 'Outlier Cleaning' and
     'Sparsity Cleaning' checkboxes and add hovering text effect on 
     them indicating a specific given information lets be 'XYZ' for now
-- add a 'Select a Feature' dropdown menu under the feature card
+- add a 'Select a Feature' dropdown menu on the feature_name
     as the last <div> where user can change the feature of the
     feature-card
-- in the initial screen, open the 'Data Dictionary Collection' 
-    segment right after the completion of the 'Data Collection' and
-    its 'Data Preview' operations

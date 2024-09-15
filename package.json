@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@angular/cli": "^18.2.2"
+    "@angular/cli": "^18.2.2",
+    "menu": "^0.2.5"
   }
 }
