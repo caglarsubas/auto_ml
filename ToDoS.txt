@@ -28,11 +28,6 @@ show Descriptive Statistics and plotly Histogram with hovering effect
 
 !!!CFH (14.09.2024): 
 
-- feature descriptions in the feature-card are being rendered as Null
-- add a 'Full-Screen button left-near the 'Close' button, which
-    - widens the popup-dialog us much as possible
-    - transpose the descriptive-statistics table and
-    - makes the distribution-plot bigger
 - add legend title 'Target Classes' into the distribution plot when 
     'Stacked wrt Target' selected
 - when we selected the 'Stack wrt Target' checkbox for a categorical 

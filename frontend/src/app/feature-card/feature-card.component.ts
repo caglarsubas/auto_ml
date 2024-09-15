@@ -1,7 +1,6 @@
 import { Component, Inject, OnInit, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogRef, } from '@angular/material/dialog';
-// Update this import statement to match your project structure
 import { DataService } from '../services/data.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import * as math from 'mathjs';  // Optional: using math.js for easier percentile calculation
@@ -42,12 +41,13 @@ export class FeatureCardComponent implements OnInit {
   outlierCleaningEnabled: boolean = false;  // Bound to the 'Outlier Cleaning' checkbox
   sparsityCleaningEnabled: boolean = false;  // Bound to 'Sparsity Cleaning' checkbox
   stackedWrtTarget: boolean = false;
+  isFullScreen: boolean = false;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { fileId: string, columnName: string },
     @Inject(PLATFORM_ID) platformId: Object,
     private dataService: DataService,
-    //public dialogRef: MatDialogRef<FeatureCardComponent>,
+    public dialogRef: MatDialogRef<FeatureCardComponent>,
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
     console.log('FeatureCard constructed with data:', data);
@@ -118,6 +118,13 @@ export class FeatureCardComponent implements OnInit {
       },
       yaxis: {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count'  // Dynamic Y-axis label
+      },
+      height: this.isFullScreen ? window.innerHeight * 0.7 : 400,
+      width: this.isFullScreen ? window.innerWidth * 0.95 : undefined, // Adjust width for full screen
+      showlegend: true,  // Ensure the legend is shown
+      legend: {
+        title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
+        traceorder: 'normal'
       }
     };
     
@@ -177,6 +184,8 @@ export class FeatureCardComponent implements OnInit {
   }
 
   plotStackedData(stackedData: any, layout: any) {
+    console.log('Plotting stacked data:', stackedData);
+    console.log('Layout:', layout);
     const Plotly = (window as any).Plotly;
     if (this.isNumerical()) {
       // Create stacked histogram
@@ -189,8 +198,10 @@ export class FeatureCardComponent implements OnInit {
       }));
       layout.barmode = 'group';
       layout.bargap = 0.05;  // Add some gap between bars
-      layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
+      layout.showlegend = true;  // Ensure the legend is shown
+      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };  // Ensure legend is visible
       Plotly.newPlot('visualization', traces, layout);
+      console.log('Plotly.newPlot called with:', traces, layout);
     } else {
       // For categorical data, create grouped bar chart
       const categories = [...new Set(Object.keys(stackedData).flatMap(key => Object.keys(stackedData[key])))];
@@ -208,9 +219,11 @@ export class FeatureCardComponent implements OnInit {
       layout.barmode = 'group';
       layout.bargap = 0.15;  // Add some gap between bars
       layout.bargroupgap = 0.1;  // Gap between bars in a group
-      layout.legend = { traceorder: 'normal' };  // Ensure legend is visible
+      layout.showlegend = true;  // Ensure the legend is shown
+      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };  // Ensure legend is visible
       layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
       Plotly.newPlot('visualization', traces, layout);
+      console.log('Plotly.newPlot called with:', traces, layout);
     }
   }
   
@@ -330,5 +343,19 @@ export class FeatureCardComponent implements OnInit {
     }
 
     return mode;
+  }
+
+  toggleFullScreen() {
+    this.isFullScreen = !this.isFullScreen;
+    if (this.isFullScreen) {
+      this.dialogRef.updateSize('100vw%', '100vh');
+      this.dialogRef.updatePosition({ top: '0', left: '0' });
+    } else {
+      this.dialogRef.updateSize('400px', 'auto');
+      this.dialogRef.updatePosition(); // Reset to default position
+    }
+    setTimeout(() => {
+      this.createVisualization();
+    }, 0);
   }
 }
