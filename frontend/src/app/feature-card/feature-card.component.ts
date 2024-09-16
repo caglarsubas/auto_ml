@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, PLATFORM_ID } from '@angular/core';
+import { Component, Inject, OnInit, OnDestroy, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogRef, } from '@angular/material/dialog';
 import { DataService } from '../services/data.service';
@@ -22,7 +22,7 @@ interface FeatureData {
   styleUrls: ['./feature-card.component.css']
 })
 
-export class FeatureCardComponent implements OnInit {
+export class FeatureCardComponent implements OnInit, OnDestroy {
   
   numericalStats = [
     'Mean', 'Min', '1st_Quantile', '5th_Quantile', '25th_Q1', 
@@ -41,7 +41,11 @@ export class FeatureCardComponent implements OnInit {
   outlierCleaningEnabled: boolean = false;  // Bound to the 'Outlier Cleaning' checkbox
   sparsityCleaningEnabled: boolean = false;  // Bound to 'Sparsity Cleaning' checkbox
   stackedWrtTarget: boolean = false;
+  public originalPlotSize = { width: 400, height: 'auto' }; // Adjust these values as needed
   isFullScreen: boolean = false;
+  private resizeListener: () => void;
+  isCategorical: boolean = false;
+  tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { fileId: string, columnName: string },
@@ -50,11 +54,25 @@ export class FeatureCardComponent implements OnInit {
     public dialogRef: MatDialogRef<FeatureCardComponent>,
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
-    console.log('FeatureCard constructed with data:', data);
+    this.resizeListener = () => {
+      if (this.isFullScreen) {
+        this.createVisualization();
+        console.log('FeatureCard constructed with data:', data);
+      }
+    };
   }
 
   ngOnInit() {
     this.loadFeatureData();
+    if (this.isBrowser) {
+      window.addEventListener('resize', this.resizeListener);
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.isBrowser) {
+      window.removeEventListener('resize', this.resizeListener);
+    }
   }
   
   loadFeatureData() {
@@ -62,6 +80,12 @@ export class FeatureCardComponent implements OnInit {
     this.dataService.getFeatureCard(this.data.fileId, this.data.columnName).subscribe(
       (data: FeatureData) => {
         this.featureData = data;
+        this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
+        // Disable cleaning options for categorical data
+        if (this.isCategorical) {
+          this.outlierCleaningEnabled = false;
+          this.sparsityCleaningEnabled = false;
+        }        
         if (this.isBrowser) {
           this.loadPlotly().then(() => {
             setTimeout(() => {
@@ -119,8 +143,8 @@ export class FeatureCardComponent implements OnInit {
       yaxis: {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count'  // Dynamic Y-axis label
       },
-      height: this.isFullScreen ? window.innerHeight * 0.7 : 400,
-      width: this.isFullScreen ? window.innerWidth * 0.95 : undefined, // Adjust width for full screen
+      height: this.isFullScreen ? window.innerHeight * 0.7 : this.originalPlotSize.height,
+      width: this.isFullScreen ? window.innerWidth * 0.95 : this.originalPlotSize.width, // Adjust width for full screen
       showlegend: true,  // Ensure the legend is shown
       legend: {
         title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
@@ -348,14 +372,33 @@ export class FeatureCardComponent implements OnInit {
   toggleFullScreen() {
     this.isFullScreen = !this.isFullScreen;
     if (this.isFullScreen) {
-      this.dialogRef.updateSize('100vw%', '100vh');
+      this.dialogRef.updateSize('100vw', '100vh');
       this.dialogRef.updatePosition({ top: '0', left: '0' });
+      this.tooltipPosition = 'above'; // Change tooltip position for full-screen
     } else {
       this.dialogRef.updateSize('400px', 'auto');
       this.dialogRef.updatePosition(); // Reset to default position
+      this.tooltipPosition = 'above'; // Reset tooltip position
     }
     setTimeout(() => {
       this.createVisualization();
     }, 0);
   }
+
+  getOutlierCleaningTooltip(): string {
+    if (this.isCategorical) {
+      return "Outlier cleaning is only available for numerical features";
+    } else {
+      return "Datapoints falling outside 5th-95th percentile interval are removed from the numerical features.";
+    }
+  }
+
+  getSparsityCleaningTooltip(): string {
+    if (this.isCategorical) {
+      return "Sparsity cleaning is only available for numerical features";
+    } else {
+      return "Datapoints equal the Sparse-Value (mode-value having greater than 25% share) are removed from the numerical features.";
+    }
+  }
+  
 }

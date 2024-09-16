@@ -33,11 +33,11 @@
 }
 
 .transposed .descriptive-stats-table th {
-  text-align: right;
+  text-align: center;
 }
 
 .transposed .descriptive-stats-table td {
-  text-align: left;
+  text-align: center;
 }
 
 .feature-card-container {
@@ -45,6 +45,18 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
+}
+
+.checkbox-container {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.checkbox-container > div {
+  display: flex;
+  align-items: center;
 }
 
 .full-screen {
@@ -60,6 +72,11 @@
   box-sizing: border-box;
 }
 
+::ng-deep .mat-tooltip {
+  font-size: 14px;
+  max-width: 250px;
+}
+
 mat-dialog-content {
   flex: 1;
   overflow-y: auto;
@@ -67,6 +84,7 @@ mat-dialog-content {
 
 
 @media screen and (max-width: 1200px) {
+  
   .descriptive-stats-table {
     font-size: 12px;
   }

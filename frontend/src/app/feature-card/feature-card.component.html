@@ -1,14 +1,12 @@
 <div class="feature-card-container" [class.full-screen]="isFullScreen">
-  <h2 mat-dialog-title *ngIf="featureData">Feature Card of {{featureData.Feature_Name}}</h2>
+  <h2 mat-dialog-title> <strong>Feature Card</strong></h2>
 
-  <div *ngIf="errorMessage" class="error-message">
-    {{ errorMessage }}
-  </div>
+  <div *ngIf="errorMessage" class="error-message"> {{ errorMessage }} </div>
+
+  <h3 *ngIf="featureData"> {{ featureData.Feature_Name }}</h3>
+  <p *ngIf="featureData"><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
 
   <mat-dialog-content *ngIf="featureData">
-      <h3>{{ featureData.Feature_Name }}</h3>
-      <p><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
-
     <h3>Descriptive Statistics</h3>
     <div class="table-container" [class.transposed]="isFullScreen">
       <table class="descriptive-stats-table">
@@ -30,26 +28,42 @@
     </div>
 
     <h3>Distribution</h3>
-    <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div>
-    <ng-container *ngIf="!isBrowser">
-        Visualization is not available during server-side rendering.
-    </ng-container>
-    <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
-      Percentage Y-axis
-    </mat-checkbox>
-    <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="createVisualization()">
-      Outlier Cleaning
-    </mat-checkbox>
-    <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="createVisualization()">
-      Sparsity Cleaning
-    </mat-checkbox>
-    <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="createVisualization()">
-      Stacked wrt Target
-    </mat-checkbox>
+    <!-- <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div> -->
+    <div id="visualization" [style.width.px]="isFullScreen ? null : originalPlotSize.width" [style.height.px]="isFullScreen ? null : originalPlotSize.height"></div>
+    
+    <div class="checkbox-container">
+      
+      <div>
+        <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
+          Percentage Y-axis
+        </mat-checkbox>
+      </div>
+
+      <div 
+      [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
+        <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="createVisualization()" [disabled]="isCategorical">
+          Outlier Cleaning
+        </mat-checkbox>
+      </div>
+      
+      <div [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
+        <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="createVisualization()" [disabled]="isCategorical">
+          Sparsity Cleaning
+        </mat-checkbox>
+      </div>
+      
+      <div>
+        <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="createVisualization()">
+          Stacked wrt Target
+        </mat-checkbox>
+      </div>
+    
+    </div>
   </mat-dialog-content>
 
   <mat-dialog-actions align="end">
     <button mat-button (click)="toggleFullScreen()">{{ isFullScreen ? 'Exit Full-Screen' : 'Full-Screen' }}</button>
     <button mat-button mat-dialog-close>Close</button>
   </mat-dialog-actions>
+
 </div>

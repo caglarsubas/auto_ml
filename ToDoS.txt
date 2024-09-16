@@ -26,13 +26,16 @@ show Descriptive Statistics and plotly Histogram with hovering effect
 
 7- add feature description under the title of feature card dialog
 
-!!!CFH (14.09.2024): 
+!!!CFH (16.09.2024): 
 
-- add legend title 'Target Classes' into the distribution plot when 
-    'Stacked wrt Target' selected
-- when we selected the 'Stack wrt Target' checkbox for a categorical 
-feature, the string 'NaN' category, which is created manually,
-disappears in the bar-plot
+- decrease the punto size of the values in data-preview table in data-collection step 
+(couldn't achieve)
+
+- we are still loosing the manually created 'NaN' string category of 
+    cateorical features when user clicks 'Stacked wrt Target' checkbox
+    Var_11 is an example
+
+
 - make the checkboxes: 'Outlier Cleaning' and 'Sparsity Cleaning'
     disabled when the selected feature is categorical.
 - add a info symbol right-top of the 'Outlier Cleaning' and

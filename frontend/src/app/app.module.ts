@@ -13,6 +13,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';  // Import FormsModule
 import { MatCheckboxModule } from '@angular/material/checkbox';  // Ensure you have this for MatCheckbox
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -41,6 +42,7 @@ import { FeatureCardComponent } from './feature-card/feature-card.component';
     FormsModule,
     MatCheckboxModule,
     MatMenuModule,
+    MatTooltipModule,
   ],
   providers: [],
   bootstrap: [AppComponent]
