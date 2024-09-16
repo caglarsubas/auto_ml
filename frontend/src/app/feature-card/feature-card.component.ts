@@ -196,12 +196,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   preprocessStackedData(data: any): any {
     return Object.keys(data).reduce((acc, key) => {
       if (Array.isArray(data[key])) {
-        acc[key] = data[key].map((value: any) => value === null ? 0 : parseFloat(value) || 0);
+        acc[key] = data[key].map((value: any) => 
+          value === null || value === 'NaN' ? 'NaN' : parseFloat(value) || 0
+        );
       } else {
         acc[key] = Object.entries(data[key]).reduce((innerAcc, [innerKey, innerValue]) => {
-          innerAcc[innerKey] = innerValue === null ? 0 : parseFloat(innerValue as string) || 0;
+          innerAcc[innerKey] = innerValue === null || innerValue === 'NaN' ? 'NaN' : parseFloat(innerValue as string) || 0;
           return innerAcc;
-        }, {} as {[key: string]: number});
+        }, {} as {[key: string]: number | string});
       }
       return acc;
     }, {} as any);
@@ -231,10 +233,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const categories = [...new Set(Object.keys(stackedData).flatMap(key => Object.keys(stackedData[key])))];
       const traces = Object.keys(stackedData).map(targetClass => {
         const values = categories.map(cat => stackedData[targetClass][cat] || 0);
-        const total = values.reduce((sum, val) => sum + val, 0);
+        const total = values.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
         return {
           x: categories,
-          y: this.usePercentageYAxis ? values.map(v => (v / total) * 100) : values,
+          y: this.usePercentageYAxis ? values.map(v => (typeof v === 'number' ? (v / total) * 100 : 0)) : values,
           type: 'bar',
           name: targetClass,
           opacity: 0.7,
@@ -400,5 +402,5 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       return "Datapoints equal the Sparse-Value (mode-value having greater than 25% share) are removed from the numerical features.";
     }
   }
-  
+
 }

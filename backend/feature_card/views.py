@@ -213,7 +213,7 @@ class FeatureCardViewSet(viewsets.ViewSet):
                 else:
                     # For object (categorical) type, include NaN as a category
                     class_data = feature_data[target_data == target_class].fillna('NaN')
-                    value_counts = feature_data[target_data == target_class].value_counts()
+                    value_counts = feature_data[target_data == target_class].value_counts(dropna=False)
                     stacked_data[str(target_class)] = value_counts.to_dict()
 
             json_data = json.dumps(stacked_data, default=self.json_default)

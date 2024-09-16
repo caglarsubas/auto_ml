@@ -26,21 +26,35 @@ show Descriptive Statistics and plotly Histogram with hovering effect
 
 7- add feature description under the title of feature card dialog
 
-!!!CFH (16.09.2024): 
+!!!CFH (17.09.2024): 
 
+v2.0.x:
+- add a checkbox right-near the choose-file button of data-declaration
+    which named as 'First line is not header' for both csv and excel 
+    suffix data_files when clicked use the first raw of the file as a datapoint 
+    too and generate 'Col_1', 'Col_2', etc. type generic header line.
+- add a dropdown menu if the file extansion is '.csv' right near the 
+    'First line is not header' checkbox which named as 'Column Separator' 
+    having 'Semicolon' value as default button also includes 'Comma', 'Tab' and 'Space' options
+- add a checkbox right-near choose-file button of data-declaration
+    which named as 'First sheet is not the data' for only excel data_files
+    when selected by the user read the second sheet in the given excel file for 
+    importing the data
 - decrease the punto size of the values in data-preview table in data-collection step 
-(couldn't achieve)
-
-- we are still loosing the manually created 'NaN' string category of 
-    cateorical features when user clicks 'Stacked wrt Target' checkbox
-    Var_11 is an example
-
-
-- make the checkboxes: 'Outlier Cleaning' and 'Sparsity Cleaning'
-    disabled when the selected feature is categorical.
-- add a info symbol right-top of the 'Outlier Cleaning' and
-    'Sparsity Cleaning' checkboxes and add hovering text effect on 
-    them indicating a specific given information lets be 'XYZ' for now
+(nth: couldn't achieve)
+- add blox-lot as marginal=box (nth)
+- separate the rows of the descriptive-statistics table in feature-card popup-dialog
+    into the number of target-classes and make the statistics values in each rows
+    are dedicated to that target-class if 'Stacked wrt Target' checkbox is selected. 
+    add an initial column to the descriptive-statistics table named as 'Target Classes'
+    having rows equal to the distinct values that target feature can take. (mth)
 - add a 'Select a Feature' dropdown menu on the feature_name
     as the last <div> where user can change the feature of the
-    feature-card
+    feature-card (mth)
+
+v2.1.x:
+- add a login-page create a user and password. after passing login page
+    user reaches a home-page where the top-menu falls inside the page 
+    when user clicks model-store open a new menu including 
+    -model monitoring, -model refitting - model development
+    then when user clicks -model development(mth)

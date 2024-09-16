@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, tap } from 'rxjs/operators';
+import { catchError, tap, map } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
@@ -33,8 +33,9 @@ export class DataService {
     const url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
     console.log('Requesting URL:', url);
     return this.http.get(url).pipe(
-      tap(data => console.log('Raw response:', data)),
-      catchError(error => {
+      tap((data: any) => console.log('Raw response:', data)),
+      map((data: any) => this.preprocessStackedData(data)),
+      catchError((error: any) => {
         console.error('Error in getStackedFeatureData:', error);
         if (error instanceof SyntaxError) {
           console.error('JSON parsing error:', error.message);
@@ -54,4 +55,19 @@ export class DataService {
     }
     return throwError(() => new Error(errorMessage));
   }
+
+  private preprocessStackedData(data: any): any {
+    return Object.keys(data).reduce((acc: any, key: string) => {
+      if (typeof data[key] === 'object' && data[key] !== null) {
+        acc[key] = Object.entries(data[key]).reduce((innerAcc: any, [innerKey, innerValue]: [string, any]) => {
+          innerAcc[innerKey] = innerValue === null ? 'NaN' : innerValue;
+          return innerAcc;
+        }, {} as {[key: string]: any});
+      } else {
+        acc[key] = data[key];
+      }
+      return acc;
+    }, {});
+  }
+
 }
