@@ -1,4 +1,6 @@
 from django.db import models
+import os
+from django.conf import settings
 
 class DataFile(models.Model):
     file = models.FileField(upload_to='data_files/')
@@ -8,6 +10,17 @@ class DataFile(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_file_path(self):
+        if os.path.exists(self.file.path):
+            return self.file.path
+        
+        data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
+        for filename in os.listdir(data_files_dir):
+            if filename.startswith('processed_') and filename.endswith(self.original_name):
+                return os.path.join(data_files_dir, filename)
+
+        return None
 
 class DataDictionary(models.Model):
     data_file = models.ForeignKey(DataFile, on_delete=models.CASCADE, related_name='data_dictionary')

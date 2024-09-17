@@ -2,6 +2,7 @@
 <h2>1.1- Data Declaration</h2>
 <div class="file-input-group">
   <input type="file" (change)="onFileSelected($event)">
+  <mat-checkbox [(ngModel)]="firstLineIsNotHeader">First line is not header</mat-checkbox>
   <button (click)="onUpload()">Import Data</button>
 </div>
 
@@ -14,6 +15,7 @@
 
 <div class="preview-container" *ngIf="previewData">
   <h3>Data Preview</h3>
+  <p *ngIf="previewData.note" class="preview-note">{{ previewData.note }}</p>
   <div class="table-container">
     <table class="preview-table">
       <thead>

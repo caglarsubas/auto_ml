@@ -18,6 +18,7 @@ export class DataCollectionComponent {
   showUseExistingButton: boolean = false;
   existingFileName: string | null = null;
   showDataDictionaryCollection: boolean = false;
+  firstLineIsNotHeader: boolean = false;
 
   constructor(private http: HttpClient, private dialog: MatDialog) {}
 
@@ -34,32 +35,37 @@ export class DataCollectionComponent {
   onUpload(): void {
     if (this.selectedFile) {
       const formData = new FormData();
-      formData.append('file', this.selectedFile);
+      formData.append('file', this.selectedFile, this.selectedFile.name);
       formData.append('name', this.selectedFile.name);
-
+      formData.append('first_line_is_not_header', this.firstLineIsNotHeader.toString());
+  
       this.http.post('http://localhost:8000/api/data-files/', formData)
         .subscribe(
           (response: any) => {
-            console.log('File uploaded successfully');
+            console.log('File uploaded successfully', response);
             this.currentFileId = response.id;
             if (this.currentFileId !== null) {
               this.getPreview(this.currentFileId);
             }
             this.errorMessage = null;
             this.showUseExistingButton = false;
-            // Show Data Dictionary Collection after successful upload
             this.showDataDictionaryCollection = true;
           },
           (error: HttpErrorResponse) => {
+            console.error('Error uploading file:', error);
+            this.errorMessage = 'An error occurred while uploading the file: ' + (error.error?.error || error.message);
             if (error.status === 409) {
-              this.errorMessage = error.error.error;
               this.showUseExistingButton = true;
               this.existingFileName = this.selectedFile?.name || null;
             } else {
-              this.errorMessage = 'An error occurred while uploading the file.';
               this.showUseExistingButton = false;
             }
-            console.error('Error uploading file:', error);
+            // Log more details about the error
+            if (error.error instanceof ErrorEvent) {
+              console.error('Client-side error:', error.error.message);
+            } else {
+              console.error('Server-side error:', error.status, error.error);
+            }
           }
         );
     }
@@ -92,7 +98,9 @@ export class DataCollectionComponent {
       .subscribe(
         (data: any) => {
           this.previewData = data;
-          // Ensure Data Dictionary Collection is shown after preview is loaded
+          if (this.firstLineIsNotHeader) {
+            this.previewData.note = "Note: First line is treated as data, generic headers are used.";
+          }
           this.showDataDictionaryCollection = true;
         },
         error => console.error('Error getting preview:', error)

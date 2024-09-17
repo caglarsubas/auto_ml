@@ -1,4 +1,4 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .serializers import FeatureCardSerializer
@@ -38,31 +38,45 @@ class FeatureCardViewSet(viewsets.ViewSet):
 
         if not column_name:
             logger.error("Column name is missing in the request")
-            return Response({"error": "Column name is required"}, status=400)
+            return Response({"error": "Column name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             data_file = DataFile.objects.get(id=file_id)
         except DataFile.DoesNotExist:
             logger.error(f"DataFile with id {file_id} not found")
-            return Response({"error": f"File not found for ID: {file_id}"}, status=404)
+            return Response({"error": f"File not found for ID: {file_id}"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Assuming your files are stored in a 'data_files' directory in your project
-        file_path = os.path.join(settings.MEDIA_ROOT, 'data_files', data_file.original_name)
-        logger.info(f"Attempting to access file at: {os.path.abspath(file_path)}")
+        #file_path = data_file.file.path
+        file_path = data_file.get_file_path()
+        if not file_path:
+            logger.error(f"File not found for {data_file.original_name}")
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+        logger.info(f"Stored file path: {file_path}")
 
         if not os.path.exists(file_path):
-            logger.error(f"File not found: {file_path}")
-            return Response({"error": f"File not found for ID: {file_id}"}, status=404)
+            # Search for the file in the data_files directory
+            data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
+            for filename in os.listdir(data_files_dir):
+                if filename.startswith('processed_') and filename.endswith(data_file.original_name):
+                    file_path = os.path.join(data_files_dir, filename)
+                    logger.info(f"Found processed file: {file_path}")
+                    # Update the database with the correct file path
+                    data_file.file.name = os.path.join('data_files', filename)
+                    data_file.save()
+                    break
+            else:
+                logger.error(f"Processed file not found for {data_file.original_name}")
+                return Response({"error": "Processed file not found"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             df = pd.read_csv(file_path)
         except Exception as e:
             logger.error(f"Error reading file: {str(e)}")
-            return Response({"error": f"Error reading file: {str(e)}"}, status=500)
+            return Response({"error": f"Error reading file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if column_name not in df.columns:
             logger.error(f"Column '{column_name}' not found in the dataset")
-            return Response({"error": f"Column '{column_name}' not found in the dataset"}, status=404)
+            return Response({"error": f"Column '{column_name}' not found in the dataset"}, status=status.HTTP_404_NOT_FOUND)
 
         column_data = df[column_name]
         

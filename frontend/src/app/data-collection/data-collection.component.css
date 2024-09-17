@@ -59,9 +59,15 @@ h1, h2, h3 {
   margin-bottom: 10px;
 }
 
+.preview-note {
+  color: #ff0000;
+  font-style: italic;
+}
+
 .file-input-group {
   display: flex;
   align-items: center;
+  gap: 10px;
   margin-bottom: 20px;
 }
 

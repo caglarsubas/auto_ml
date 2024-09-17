@@ -5,11 +5,16 @@ from rest_framework.response import Response
 from .models import DataFile, DataDictionary
 from .serializers import DataFileSerializer
 import os
+from django.db.models import Q
 from django.conf import settings
+from django.core.files.storage import default_storage, FileSystemStorage
+from django.core.files.base import ContentFile
 import pandas as pd
 import numpy as np
 from scipy import stats as scipy_stats
+import logging
 
+logger = logging.getLogger(__name__)
 
 class DataFileViewSet(viewsets.ModelViewSet):
     queryset = DataFile.objects.all()
@@ -17,23 +22,59 @@ class DataFileViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         file = request.FILES.get('file')
+        name = request.POST.get('name')
+        first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
+
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same name already exists
-        existing_file = DataFile.objects.filter(original_name=file.name).first()
-        if existing_file:
-            return Response(
-                {"error": f"A file named '{file.name}' already exists. Please choose a different name or use the existing file."},
-                status=status.HTTP_409_CONFLICT
-            )
+        try:
+            # Check if a file with the same name already exists
+            existing_file = DataFile.objects.filter(original_name=name).first()
+            
+            if existing_file:
+                # Update the existing file
+                file_path = existing_file.file.path
+                with open(file_path, 'wb+') as destination:
+                    for chunk in file.chunks():
+                        destination.write(chunk)
+                data_file = existing_file
+            else:
+                # Save the new file
+                file_path = os.path.join('data_files', name)
+                path = default_storage.save(file_path, file)
+                data_file = DataFile.objects.create(
+                    file=path,
+                    name=name,
+                    original_name=name
+                )
 
-        # If the file doesn't exist, proceed with the creation
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            # Process the file
+            if file_path.endswith('.csv'):
+                df = pd.read_csv(file_path, header=None if first_line_is_not_header else 0, low_memory=False)
+            elif file_path.endswith(('.xls', '.xlsx')):
+                df = pd.read_excel(file_path, header=None if first_line_is_not_header else 0)
+            else:
+                return Response({"error": "Unsupported file format"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if first_line_is_not_header:
+                df.columns = [f'Col_{i+1}' for i in range(len(df.columns))]
+
+            # Save processed file
+            processed_file_name = f'processed_{name}'
+            processed_file_path = os.path.join('data_files', processed_file_name)
+            full_processed_path = os.path.join(settings.MEDIA_ROOT, processed_file_path)
+            df.to_csv(full_processed_path, index=False)
+
+            # Update DataFile instance with processed file
+            data_file.file.name = processed_file_path
+            data_file.save()
+            serializer = self.get_serializer(data_file)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def perform_create(self, serializer):
         file = self.request.FILES['file']
@@ -65,7 +106,8 @@ class DataFileViewSet(viewsets.ModelViewSet):
         preview = {
             "top_rows": df.head().to_dict(orient='records'),
             "bottom_rows": df.tail().to_dict(orient='records'),
-            "columns": df.columns.tolist()
+            "columns": df.columns.tolist(),
+            "first_line_is_not_header": any(col.startswith('Col_') for col in df.columns)
         }
         return Response(preview)
 
