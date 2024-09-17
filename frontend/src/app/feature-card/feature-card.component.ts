@@ -134,60 +134,60 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       return;
     }
   
-    const plotData: any[] = [];
     const layout: any = {
       title: `Distribution of ${this.featureData.Feature_Name}`,
       xaxis: { 
         title: `Values of ${this.featureData.Feature_Name}` 
       },
       yaxis: {
-        title: this.usePercentageYAxis ? 'Percentage' : 'Count'  // Dynamic Y-axis label
+        title: this.usePercentageYAxis ? 'Percentage' : 'Count'
       },
       height: this.isFullScreen ? window.innerHeight * 0.7 : this.originalPlotSize.height,
-      width: this.isFullScreen ? window.innerWidth * 0.95 : this.originalPlotSize.width, // Adjust width for full screen
-      showlegend: true,  // Ensure the legend is shown
+      width: this.isFullScreen ? window.innerWidth * 0.95 : this.originalPlotSize.width,
+      showlegend: true,
       legend: {
         title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
         traceorder: 'normal'
       }
     };
-    
-    let histogramData: any[] = this.featureData?.Descriptive_Stats?.histogram_data ?? [];
-    
+  
     if (this.stackedWrtTarget) {
       this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
         (stackedData: any) => {
           console.log('Received stacked data:', stackedData);
-          if (this.outlierCleaningEnabled && this.isNumerical()) {
-            for (let targetClass in stackedData) {
-              console.log(`target-class: ${targetClass} and its data: ${stackedData[targetClass]}`)
-              stackedData[targetClass] = this.cleanOutliers(stackedData[targetClass]);
-              console.log(`outlier cleaned target-class data: ${stackedData[targetClass]}`)
+          let processedData = this.preprocessStackedData(stackedData);
+          
+          if (this.isNumerical()) {
+            if (this.outlierCleaningEnabled) {
+              processedData = Object.fromEntries(
+                Object.entries(processedData).map(([key, value]) => [key, this.cleanOutliers(value as number[])])
+              );
+            }
+            if (this.sparsityCleaningEnabled) {
+              processedData = Object.fromEntries(
+                Object.entries(processedData).map(([key, value]) => [key, this.cleanSparsity(value as number[])])
+              );
             }
           }
-          if (this.sparsityCleaningEnabled && this.isNumerical()) {
-            for (let targetClass in stackedData) {
-              console.log(`target-class: ${targetClass} and its data: ${stackedData[targetClass]}`)
-              stackedData[targetClass] = this.cleanSparsity(stackedData[targetClass]);
-              console.log(`sparsity cleaned target-class data: ${stackedData[targetClass]}`)
-            }
-          }
-          const processedData = this.preprocessStackedData(stackedData);
+          
           this.plotStackedData(processedData, layout);
         },
         error => {
           console.error('Error fetching stacked data:', error);
           this.errorMessage = error.message || 'An error occurred while fetching stacked data';
           this.stackedWrtTarget = false;
-          this.plotNonStackedData(histogramData, layout);
+          this.plotNonStackedData(this.featureData?.Descriptive_Stats.histogram_data || [], layout);
         }
       );
     } else {
-      if (this.outlierCleaningEnabled && this.isNumerical()) {
-        histogramData = this.cleanOutliers(histogramData);
-      }
-      if (this.sparsityCleaningEnabled && this.isNumerical()) {
-        histogramData = this.cleanSparsity(histogramData);
+      let histogramData = this.featureData.Descriptive_Stats?.histogram_data || [];
+      if (this.isNumerical()) {
+        if (this.outlierCleaningEnabled) {
+          histogramData = this.cleanOutliers(histogramData) as number[];
+        }
+        if (this.sparsityCleaningEnabled) {
+          histogramData = this.cleanSparsity(histogramData) as number[];
+        }
       }
       this.plotNonStackedData(histogramData, layout);
     }
@@ -215,13 +215,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const Plotly = (window as any).Plotly;
     if (this.isNumerical()) {
       // Create stacked histogram
-      const traces = Object.keys(stackedData).map(targetClass => ({
-        x: stackedData[targetClass].filter((v: number) => v !== 0 && !isNaN(v)),
-        type: 'histogram',
-        name: targetClass,
-        opacity: 0.7,
-        histnorm: this.usePercentageYAxis ? 'percent' : 'count',
-      }));
+      const traces = Object.keys(stackedData).map(targetClass => {
+        const data = Array.isArray(stackedData[targetClass]) 
+        ? stackedData[targetClass] 
+        : Object.values(stackedData[targetClass]);
+        return {
+          x: data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number),
+          type: 'histogram',
+          name: targetClass,
+          opacity: 0.7,
+          histnorm: this.usePercentageYAxis ? 'percent' : 'count',
+        };
+      });
       layout.barmode = 'group';
       layout.bargap = 0.05;  // Add some gap between bars
       layout.showlegend = true;  // Ensure the legend is shown
@@ -230,13 +235,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       console.log('Plotly.newPlot called with:', traces, layout);
     } else {
       // For categorical data, create grouped bar chart
-      const categories = [...new Set(Object.keys(stackedData).flatMap(key => Object.keys(stackedData[key])))];
+      const allCategories = new Set<string>();
+      Object.values(stackedData).forEach((data: any) => {
+        if (typeof data === 'object') {
+          Object.keys(data).forEach(key => allCategories.add(key));
+        }
+      });
+      const categories = Array.from(allCategories);
       const traces = Object.keys(stackedData).map(targetClass => {
-        const values = categories.map(cat => stackedData[targetClass][cat] || 0);
+        const data = stackedData[targetClass];
+        const values = categories.map(cat => (data[cat] || 0));
         const total = values.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
         return {
           x: categories,
-          y: this.usePercentageYAxis ? values.map(v => (typeof v === 'number' ? (v / total) * 100 : 0)) : values,
+          y: this.usePercentageYAxis 
+          ? values.map(v => (typeof v === 'number' ? (v / total) * 100 : 0))
+          : values,
           type: 'bar',
           name: targetClass,
           opacity: 0.7,
@@ -317,11 +331,19 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // Function to clean outliers below 5th and above 95th percentiles
-  cleanOutliers(data: number[]): number[] {
-    const lowerBound = this.getPercentile(data, 5);
-    const upperBound = this.getPercentile(data, 95);
-
-    return data.filter(value => value >= lowerBound && value <= upperBound);
+  cleanOutliers(data: number[] | { [key: string]: number }): number[] | { [key: string]: number } {
+    if (Array.isArray(data)) {
+      const lowerBound = this.getPercentile(data, 5);
+      const upperBound = this.getPercentile(data, 95);
+      return data.filter(value => value >= lowerBound && value <= upperBound);
+    } else {
+      const values = Object.values(data);
+      const lowerBound = this.getPercentile(values, 5);
+      const upperBound = this.getPercentile(values, 95);
+      return Object.fromEntries(
+        Object.entries(data).filter(([_, value]) => value >= lowerBound && value <= upperBound)
+      );
+    }
   }
 
   // Helper function to calculate percentile
@@ -332,17 +354,21 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // Function to clean sparsity by removing mode if its ratio is greater than 25%
-  cleanSparsity(data: number[]): number[] {
-    const modeValue = this.getMode(data);
-    const modeCount = data.filter(value => value === modeValue).length;
-    const modeRatio = (modeCount / data.length) * 100;
-
-    // Only remove the mode if its ratio is greater than 25%
-    if (modeRatio > 25) {
-      return data.filter(value => value !== modeValue);
+  cleanSparsity(data: number[] | { [key: string]: number }): number[] | { [key: string]: number } {
+    if (Array.isArray(data)) {
+      const modeValue = this.getMode(data);
+      const modeCount = data.filter(value => value === modeValue).length;
+      const modeRatio = (modeCount / data.length) * 100;
+      return modeRatio > 25 ? data.filter(value => value !== modeValue) : data;
+    } else {
+      const values = Object.values(data);
+      const modeValue = this.getMode(values);
+      const modeCount = values.filter(value => value === modeValue).length;
+      const modeRatio = (modeCount / values.length) * 100;
+      return modeRatio > 25 
+        ? Object.fromEntries(Object.entries(data).filter(([_, value]) => value !== modeValue))
+        : data;
     }
-
-    return data;  // Return the original data if mode-ratio is not greater than 25%
   }
 
   // Helper function to calculate mode

@@ -1,38 +1,18 @@
-1- why there is no float and continuous feature in dictionary
-(DONE)
+push policy
 
-2- user can be able to skip the data dictionary upload
-(DONE)
+feature/x.y.z-greek
+x: new fresh start
+y: new api
+z: new functionality or bug-fix
 
-3- push this changes as feature/2.0.1
-feature/a.b.c
-a= new fresh start
-b= new api
-c: new functionality (table, visual, click, logic check, any calculation)
-(DONE)
-
-3.1- do not upload a new data if any already exist 
-with the same name in media/data_files directory
-(Waiting)
-
-4- new api: Feature_Card
-clickable data_dictionary feature names
-when clicked new dialog window opened
-show Descriptive Statistics and plotly Histogram with hovering effect
-
-
-
-
-
-7- add feature description under the title of feature card dialog
 
 !!!CFH (17.09.2024): 
 
 v2.0.x:
 - add a checkbox right-near the choose-file button of data-declaration
     which named as 'First line is not header' for both csv and excel 
-    suffix data_files when clicked use the first raw of the file as a datapoint 
-    too and generate 'Col_1', 'Col_2', etc. type generic header line.
+    suffix datafiles. when checkbox is clicked use the first raw of the file as a 
+    datapoint too and generate 'Col_1', 'Col_2', etc. type generic header line. (mth)
 - add a dropdown menu if the file extansion is '.csv' right near the 
     'First line is not header' checkbox which named as 'Column Separator' 
     having 'Semicolon' value as default button also includes 'Comma', 'Tab' and 'Space' options
@@ -58,3 +38,6 @@ v2.1.x:
     when user clicks model-store open a new menu including 
     -model monitoring, -model refitting - model development
     then when user clicks -model development(mth)
+
+- Add unit test for each functionality currently being hold and run that test
+    each time new functionality being added or bug-fix implemented (mth)
