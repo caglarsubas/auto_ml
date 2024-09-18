@@ -41,7 +41,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   outlierCleaningEnabled: boolean = false;  // Bound to the 'Outlier Cleaning' checkbox
   sparsityCleaningEnabled: boolean = false;  // Bound to 'Sparsity Cleaning' checkbox
   stackedWrtTarget: boolean = false;
-  public originalPlotSize = { width: 400, height: 'auto' }; // Adjust these values as needed
+  public originalPlotSize = { width: 400, height: 400 }; // Adjust these values as needed
   isFullScreen: boolean = false;
   private resizeListener: () => void;
   isCategorical: boolean = false;
@@ -137,18 +137,27 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const layout: any = {
       title: `Distribution of ${this.featureData.Feature_Name}`,
       xaxis: { 
-        title: `Values of ${this.featureData.Feature_Name}` 
+        title: `Values of ${this.featureData.Feature_Name}`,
+        domain: [0, 1]  // Full width for x-axis
       },
       yaxis: {
-        title: this.usePercentageYAxis ? 'Percentage' : 'Count'
+        title: this.usePercentageYAxis ? 'Percentage' : 'Count',
+        domain: [0, 0.85]  // Histogram takes 85% of height
       },
-      height: this.isFullScreen ? window.innerHeight * 0.7 : this.originalPlotSize.height,
-      width: this.isFullScreen ? window.innerWidth * 0.95 : this.originalPlotSize.width,
+      yaxis2: {
+        title: '',
+        domain: [0.87, 1],  // Box plot takes top 13% of height
+        showticklabels: false
+      },
+      height: this.isFullScreen ? window.innerHeight * 0.60 : this.originalPlotSize.height,
+      width: this.isFullScreen ? window.innerWidth * 0.90 : this.originalPlotSize.width,
       showlegend: true,
       legend: {
         title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
         traceorder: 'normal'
-      }
+      },
+      // Add margin to accommodate the box plot
+      margin: { t: 50, b: 50, l: 50, r: 50 }
     };
   
     if (this.stackedWrtTarget) {
@@ -214,23 +223,43 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     console.log('Layout:', layout);
     const Plotly = (window as any).Plotly;
     if (this.isNumerical()) {
-      // Create stacked histogram
-      const traces = Object.keys(stackedData).map(targetClass => {
+      const traces: any[] = [];
+      Object.keys(stackedData).forEach((targetClass, index) => {
         const data = Array.isArray(stackedData[targetClass]) 
-        ? stackedData[targetClass] 
-        : Object.values(stackedData[targetClass]);
-        return {
-          x: data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number),
+          ? stackedData[targetClass] 
+          : Object.values(stackedData[targetClass]);
+        const filteredData = data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number);
+        
+        // Histogram trace
+        traces.push({
+          x: filteredData,
           type: 'histogram',
-          name: targetClass,
+          name: `${targetClass} (Histogram)`,
           opacity: 0.7,
-          histnorm: this.usePercentageYAxis ? 'percent' : 'count',
-        };
+          histnorm: this.usePercentageYAxis ? 'percent' : '',
+          yaxis: 'y'
+        });
+        
+        // Box plot trace
+        traces.push({
+          x: filteredData,
+          type: 'box',
+          name: `${targetClass} (Box Plot)`,
+          marker: { color: Plotly.d3.rgb(Plotly.d3.schemeCategory10[index]).brighter(0.5) },
+          boxpoints: 'outliers',
+          yaxis: 'y2',
+          boxmean: true,
+          line: {
+            width: 1
+          }
+        });
       });
+      
       layout.barmode = 'group';
-      layout.bargap = 0.05;  // Add some gap between bars
-      layout.showlegend = true;  // Ensure the legend is shown
-      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };  // Ensure legend is visible
+      layout.bargap = 0.05;
+      layout.showlegend = true;
+      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
+
       Plotly.newPlot('visualization', traces, layout);
       console.log('Plotly.newPlot called with:', traces, layout);
     } else {
@@ -272,9 +301,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const plotData: any[] = [];
     if (this.isNumerical()) {
       if (histogramData && histogramData.length > 0) {
-        plotData.push({
+      // Histogram trace
+      plotData.push({
           x: histogramData,
           type: 'histogram',
+          name: 'Distribution',
           marker: {
             color: 'rgba(100, 149, 237, 0.7)',
             line: {
@@ -283,6 +314,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             },
           },
           histnorm: this.usePercentageYAxis ? 'percent' : 'count',
+          yaxis: 'y'
+        });
+        // Add box plot trace
+        plotData.push({
+          x: histogramData,
+          type: 'box',
+          name: 'Box Plot',
+          marker: { color: 'rgba(100, 149, 237, 0.7)' },
+          boxpoints: 'outliers',
+          yaxis: 'y2',
+          boxmean: true,
+          line: {
+            width: 1
+          }
         });
       } else {
         console.warn('No histogram data available');
