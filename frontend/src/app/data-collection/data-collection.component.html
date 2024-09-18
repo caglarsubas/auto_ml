@@ -1,9 +1,20 @@
 <h1>Step-1: Pipeline Declarations</h1>
 <h2>1.1- Data Declaration</h2>
+
 <div class="file-input-group">
   <input type="file" (change)="onFileSelected($event)">
   <mat-checkbox [(ngModel)]="firstLineIsNotHeader">First line is not header</mat-checkbox>
-  <button (click)="onUpload()">Import Data</button>
+  <mat-checkbox *ngIf="isExcelFile && hasMultipleSheets" [(ngModel)]="firstSheetHasNotDataset">First sheet has not the dataset</mat-checkbox>
+  <mat-form-field *ngIf="selectedFile && selectedFile.name && selectedFile.name.toLowerCase().endsWith('.csv')">
+    <mat-label>Column Separator</mat-label>
+    <mat-select [(ngModel)]="columnSeparator">
+      <mat-option value="semicolon">Semicolon</mat-option>
+      <mat-option value="comma">Comma</mat-option>
+      <mat-option value="tab">Tab</mat-option>
+      <mat-option value="space">Space</mat-option>
+    </mat-select>
+  </mat-form-field>
+  <button mat-raised-button color="primary" (click)="onUpload()">Import Data</button>
 </div>
 
 <div class="error-message" *ngIf="errorMessage">

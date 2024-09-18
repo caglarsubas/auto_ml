@@ -14,6 +14,9 @@ import { FormsModule } from '@angular/forms';  // Import FormsModule
 import { MatCheckboxModule } from '@angular/material/checkbox';  // Ensure you have this for MatCheckbox
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatOptionModule } from '@angular/material/core';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -43,6 +46,9 @@ import { FeatureCardComponent } from './feature-card/feature-card.component';
     MatCheckboxModule,
     MatMenuModule,
     MatTooltipModule,
+    MatSelectModule,
+    MatFormFieldModule,
+    MatOptionModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

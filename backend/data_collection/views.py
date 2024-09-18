@@ -9,10 +9,14 @@ from django.db.models import Q
 from django.conf import settings
 from django.core.files.storage import default_storage, FileSystemStorage
 from django.core.files.base import ContentFile
+from django.core.exceptions import MultipleObjectsReturned
 import pandas as pd
 import numpy as np
 from scipy import stats as scipy_stats
 import logging
+from openpyxl import load_workbook
+from rest_framework.exceptions import ValidationError
+import magic  # You'll need to install python-magic: pip install python-magic
 
 logger = logging.getLogger(__name__)
 
@@ -24,36 +28,32 @@ class DataFileViewSet(viewsets.ModelViewSet):
         file = request.FILES.get('file')
         name = request.POST.get('name')
         first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
+        first_sheet_has_not_dataset = request.POST.get('first_sheet_has_not_dataset') == 'true'
 
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Check if a file with the same name already exists
-            existing_file = DataFile.objects.filter(original_name=name).first()
-            
-            if existing_file:
-                # Update the existing file
-                file_path = existing_file.file.path
-                with open(file_path, 'wb+') as destination:
-                    for chunk in file.chunks():
-                        destination.write(chunk)
-                data_file = existing_file
-            else:
-                # Save the new file
-                file_path = os.path.join('data_files', name)
-                path = default_storage.save(file_path, file)
-                data_file = DataFile.objects.create(
-                    file=path,
-                    name=name,
-                    original_name=name
-                )
+            # Create the data_files directory if it doesn't exist
+            data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
+            os.makedirs(data_files_dir, exist_ok=True)
+
+            # Save the file
+            file_path = os.path.join(data_files_dir, name)
+            with open(file_path, 'wb+') as destination:
+                for chunk in file.chunks():
+                    destination.write(chunk)
 
             # Process the file
-            if file_path.endswith('.csv'):
-                df = pd.read_csv(file_path, header=None if first_line_is_not_header else 0, low_memory=False)
-            elif file_path.endswith(('.xls', '.xlsx')):
-                df = pd.read_excel(file_path, header=None if first_line_is_not_header else 0)
+            if file_path.lower().endswith('.csv'):
+                df = pd.read_csv(file_path, header=None if first_line_is_not_header else 0)
+            elif file_path.lower().endswith(('.xls', '.xlsx')):
+                if first_sheet_has_not_dataset:
+                    wb = load_workbook(filename=file_path, read_only=True)
+                    sheet_to_read = wb.sheetnames[1] if len(wb.sheetnames) > 1 else wb.sheetnames[0]
+                    df = pd.read_excel(file_path, sheet_name=sheet_to_read, header=None if first_line_is_not_header else 0, engine='openpyxl')
+                else:
+                    df = pd.read_excel(file_path, header=None if first_line_is_not_header else 0, engine='openpyxl')
             else:
                 return Response({"error": "Unsupported file format"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -66,9 +66,27 @@ class DataFileViewSet(viewsets.ModelViewSet):
             full_processed_path = os.path.join(settings.MEDIA_ROOT, processed_file_path)
             df.to_csv(full_processed_path, index=False)
 
-            # Update DataFile instance with processed file
-            data_file.file.name = processed_file_path
-            data_file.save()
+            # Create or update DataFile instance
+            try:
+                data_file = DataFile.objects.get(original_name=name)
+                data_file.file = processed_file_path
+                data_file.name = name
+                data_file.save()
+            except DataFile.DoesNotExist:
+                data_file = DataFile.objects.create(
+                    file=processed_file_path,
+                    name=name,
+                    original_name=name
+                )
+            except MultipleObjectsReturned:
+                # Handle the case where multiple objects are found
+                DataFile.objects.filter(original_name=name).delete()
+                data_file = DataFile.objects.create(
+                    file=processed_file_path,
+                    name=name,
+                    original_name=name
+                    )
+
             serializer = self.get_serializer(data_file)
             headers = self.get_success_headers(serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -93,23 +111,50 @@ class DataFileViewSet(viewsets.ModelViewSet):
     def preview(self, request, pk=None):
         data_file = self.get_object()
         file_path = data_file.file.path
+
+        # Ensure the file exists
+        if not os.path.exists(file_path):
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check file type
+        mime = magic.Magic(mime=True)
+        file_type = mime.from_file(file_path)
         
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-        elif file_path.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(file_path)
-        else:
-            return Response({"error": "Unsupported file format"}, status=400)
-        
-        df = df.replace({np.nan: None})
-        
-        preview = {
-            "top_rows": df.head().to_dict(orient='records'),
-            "bottom_rows": df.tail().to_dict(orient='records'),
-            "columns": df.columns.tolist(),
-            "first_line_is_not_header": any(col.startswith('Col_') for col in df.columns)
-        }
-        return Response(preview)
+        print(f"File path: {file_path}")
+        print(f"Detected MIME type: {file_type}")
+
+        try:
+            if file_type == 'text/csv' or file_path.lower().endswith('.csv'):
+                df = pd.read_csv(file_path)
+            elif file_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'] or file_path.lower().endswith(('.xls', '.xlsx')):
+                # Try different engines
+                try:
+                    df = pd.read_excel(file_path, engine='openpyxl')
+                except Exception as openpyxl_error:
+                    print(f"Error with openpyxl: {str(openpyxl_error)}")
+                    try:
+                        df = pd.read_excel(file_path, engine='xlrd')
+                    except Exception as xlrd_error:
+                        print(f"Error with xlrd: {str(xlrd_error)}")
+                        raise ValueError("Unable to read Excel file with available engines.")
+            else:
+                return Response({"error": f"Unsupported file format: {file_type}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            df = df.replace({np.nan: None})
+
+            preview = {
+                "top_rows": df.head().to_dict(orient='records'),
+                "bottom_rows": df.tail().to_dict(orient='records'),
+                "columns": df.columns.tolist(),
+                "first_line_is_not_header": any(col.startswith('Col_') for col in df.columns)
+            }
+            return Response(preview)
+        except Exception as e:
+            # Log the full error for debugging
+            import traceback
+            print(f"Error in preview: {str(e)}")
+            print(traceback.format_exc())
+            return Response({"error": f"Error reading file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def calculate_descriptive_stats(self, column_data, data_type, level_of_measurement):
         desc_stats = {}
@@ -158,101 +203,133 @@ class DataFileViewSet(viewsets.ModelViewSet):
         file_path = data_file.file.path
         dictionary_file = request.FILES.get('dictionary')
 
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-        elif file_path.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(file_path)
-        else:
-            return Response({"error": "Unsupported file format"}, status=400)
+        # Check file type
+        mime = magic.Magic(mime=True)
+        file_type = mime.from_file(file_path)
+        
+        print(f"Data file path: {file_path}")
+        print(f"Detected MIME type: {file_type}")
 
-        def determine_level_of_measurement(column_data, data_type, unique_count):
-            if unique_count == len(column_data):
-                return 'id'
-            elif (data_type == 'float64')&(unique_count>1000):
-                return 'continuous'
-            elif (data_type == 'float64')&(unique_count<=1000):
-                return 'cardinal'
-            elif data_type == 'integer':
-                if unique_count > 1000 or unique_count / len(column_data) > 0.1:
-                    return 'continuous'
-                else:
-                    if unique_count>5:
-                        return 'cardinal'
-                    else:
-                        return 'nominal'
-            elif data_type == 'object':
+        try:
+            if file_type == 'text/csv' or file_path.lower().endswith('.csv'):
+                df = pd.read_csv(file_path)
+            elif file_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'] or file_path.lower().endswith(('.xls', '.xlsx')):
+                # Try different engines
                 try:
-                    pd.to_datetime(column_data, errors='raise', format='%d/%m/%Y %I:%M:%S %p')
-                    return 'datetime'
-                except:
-                    return 'nominal'
+                    df = pd.read_excel(file_path, engine='openpyxl')
+                except Exception as openpyxl_error:
+                    print(f"Error with openpyxl: {str(openpyxl_error)}")
+                    try:
+                        df = pd.read_excel(file_path, engine='xlrd')
+                    except Exception as xlrd_error:
+                        print(f"Error with xlrd: {str(xlrd_error)}")
+                        raise ValueError("Unable to read Excel file with available engines.")
             else:
-                return 'unknown'
+                return Response({"error": f"Unsupported file format: {file_type}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        data_dict = []
-        for column in df.columns:
-            column_data = df[column]
-            numeric_data = pd.to_numeric(column_data, errors='coerce')
-            
-            if numeric_data.notna().all():
-                if all(numeric_data.astype(float) == numeric_data.astype(int)):
-                    data_type = 'integer'
+            def determine_level_of_measurement(column_data, data_type, unique_count):
+                if unique_count == len(column_data):
+                    return 'id'
+                elif (data_type == 'float64')&(unique_count>1000):
+                    return 'continuous'
+                elif (data_type == 'float64')&(unique_count<=1000):
+                    return 'cardinal'
+                elif data_type == 'integer':
+                    if unique_count > 1000 or unique_count / len(column_data) > 0.1:
+                        return 'continuous'
+                    else:
+                        if unique_count>5:
+                            return 'cardinal'
+                        else:
+                            return 'nominal'
+                elif data_type == 'object':
+                    try:
+                        pd.to_datetime(column_data, errors='raise', format='%d/%m/%Y %I:%M:%S %p')
+                        return 'datetime'
+                    except:
+                        return 'nominal'
                 else:
-                    data_type = 'float'
-            else:
-                data_type = column_data.dtype.name
+                    return 'unknown'
 
-            unique_count = column_data.nunique(dropna=False)
-            level_of_measurement = determine_level_of_measurement(column_data, data_type, unique_count)
+            data_dict = []
+            for column in df.columns:
+                column_data = df[column]
+                numeric_data = pd.to_numeric(column_data, errors='coerce')
+                
+                if numeric_data.notna().all():
+                    if all(numeric_data.astype(float) == numeric_data.astype(int)):
+                        data_type = 'integer'
+                    else:
+                        data_type = 'float'
+                else:
+                    data_type = column_data.dtype.name
 
-            # Calculate Missing_Ratio and Mode_Ratio
-            missing_ratio = (column_data.isnull().sum() / len(column_data)) * 100
-            mode_count = column_data.value_counts().iloc[0] if len(column_data) > 0 else 0
-            mode_ratio = (mode_count / len(column_data)) * 100
+                unique_count = column_data.nunique(dropna=False)
+                level_of_measurement = determine_level_of_measurement(column_data, data_type, unique_count)
 
-            # Determine Model_Usage_YN
-            model_usage_yn = ('No' if level_of_measurement in ['id', 'date', 'datetime', 'timestamp'] or 
-                              column in ['Target'] or 'date' in data_type.lower() or 
-                              (unique_count/len(column_data))>0.90 
-                              else 'Yes')
+                # Calculate Missing_Ratio and Mode_Ratio
+                missing_ratio = (column_data.isnull().sum() / len(column_data)) * 100
+                mode_count = column_data.value_counts().iloc[0] if len(column_data) > 0 else 0
+                mode_ratio = (mode_count / len(column_data)) * 100
 
-            # Calculate descriptive statistics
-            descriptive_stats = self.calculate_descriptive_stats(column_data, data_type, level_of_measurement)
+                # Determine Model_Usage_YN
+                model_usage_yn = ('No' if level_of_measurement in ['id', 'date', 'datetime', 'timestamp'] or 
+                                column in ['Target'] or 'date' in data_type.lower() or 
+                                (unique_count/len(column_data))>0.90 
+                                else 'Yes')
 
-            data_dict.append({
-                'Feature_Name': column,
-                'Data_Type': data_type,
-                '#_of_Unique_Value': unique_count,
-                'Level_of_Measurement': level_of_measurement,
-                'Missing_Ratio': round(missing_ratio, 2),
-                'Mode_Ratio': round(mode_ratio, 2),
-                'Model_Usage_YN': model_usage_yn,
-                'Descriptive_Stats': descriptive_stats
-            })
+                # Calculate descriptive statistics
+                descriptive_stats = self.calculate_descriptive_stats(column_data, data_type, level_of_measurement)
 
-        # Process dictionary file if provided
-        if dictionary_file:
-            if dictionary_file.name.endswith('.csv'):
-                dict_df = pd.read_csv(dictionary_file)
-            elif dictionary_file.name.endswith(('.xls', '.xlsx')):
-                dict_df = pd.read_excel(dictionary_file)
-            else:
-                return Response({"error": "Unsupported dictionary file format"}, status=400)
+                data_dict.append({
+                    'Feature_Name': column,
+                    'Data_Type': data_type,
+                    '#_of_Unique_Value': unique_count,
+                    'Level_of_Measurement': level_of_measurement,
+                    'Missing_Ratio': round(missing_ratio, 2),
+                    'Mode_Ratio': round(mode_ratio, 2),
+                    'Model_Usage_YN': model_usage_yn,
+                    'Descriptive_Stats': descriptive_stats
+                })
 
-            dict_df = dict_df.set_index(dict_df.columns[0])
-            for item in data_dict:
-                if item['Feature_Name'] in dict_df.index:
-                    description = dict_df.loc[item['Feature_Name'], dict_df.columns[0]]
-                    item['Feature_Description'] = description
-                    if 'Level_of_Measurement' in dict_df.columns:
-                        item['Level_of_Measurement'] = dict_df.loc[item['Feature_Name'], 'Level_of_Measurement']
-                    
-                    # Save to DataDictionary model
-                    DataDictionary.objects.update_or_create(
-                        data_file=data_file,
-                        column_name=item['Feature_Name'],
-                        defaults={'description': description}
-                    )
+            # Process dictionary file if provided
+            if dictionary_file:
+                dict_file_type = mime.from_buffer(dictionary_file.read())
+                dictionary_file.seek(0)  # Reset file pointer
+                print(f"Dictionary file type: {dict_file_type}")
 
-        data_dict = self.replace_nan_with_none(data_dict)
-        return Response(data_dict)
+                try:
+                    if dict_file_type == 'text/csv' or dictionary_file.name.lower().endswith('.csv'):
+                        dict_df = pd.read_csv(dictionary_file)
+                    elif dict_file_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'] or dictionary_file.name.lower().endswith(('.xls', '.xlsx')):
+                        dict_df = pd.read_excel(dictionary_file, engine='openpyxl')
+                    else:
+                        return Response({"error": "Unsupported dictionary file format"}, status=400)
+
+                    dict_df = dict_df.set_index(dict_df.columns[0])
+                    for item in data_dict:
+                        if item['Feature_Name'] in dict_df.index:
+                            description = dict_df.loc[item['Feature_Name'], dict_df.columns[0]]
+                            item['Feature_Description'] = description
+                            if 'Level_of_Measurement' in dict_df.columns:
+                                item['Level_of_Measurement'] = dict_df.loc[item['Feature_Name'], 'Level_of_Measurement']
+                            
+                            # Save to DataDictionary model
+                            DataDictionary.objects.update_or_create(
+                                data_file=data_file,
+                                column_name=item['Feature_Name'],
+                                defaults={'description': description}
+                            )
+
+                except Exception as e:
+                    print(f"Error processing dictionary file: {str(e)}")
+                    return Response({"error": f"Error processing dictionary file: {str(e)}"}, status=400)
+
+            data_dict = self.replace_nan_with_none(data_dict)
+            return Response(data_dict)
+
+        except Exception as e:
+            import traceback
+            print(f"Error in data_dictionary: {str(e)}")
+            print(traceback.format_exc())
+            return Response({"error": f"Error processing file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

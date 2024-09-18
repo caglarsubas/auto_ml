@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@angular/cli": "^18.2.2",
-    "menu": "^0.2.5"
+    "menu": "^0.2.5",
+    "xlsx": "^0.18.5"
   }
 }

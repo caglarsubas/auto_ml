@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
+import * as XLSX from 'xlsx';
 
 @Component({
   selector: 'app-data-collection',
@@ -19,6 +20,10 @@ export class DataCollectionComponent {
   existingFileName: string | null = null;
   showDataDictionaryCollection: boolean = false;
   firstLineIsNotHeader: boolean = false;
+  columnSeparator: string = 'semicolon';
+  isExcelFile: boolean = false;
+  hasMultipleSheets: boolean = false;
+  firstSheetHasNotDataset: boolean = false;
 
   constructor(private http: HttpClient, private dialog: MatDialog) {}
 
@@ -26,6 +31,30 @@ export class DataCollectionComponent {
     this.selectedFile = event.target.files[0];
     this.errorMessage = null;
     this.showUseExistingButton = false;
+    this.columnSeparator = 'semicolon';
+    
+    // Reset Excel-related properties
+    this.isExcelFile = false;
+    this.hasMultipleSheets = false;
+    this.firstSheetHasNotDataset = false;
+
+    if (this.selectedFile) {
+      const fileName = this.selectedFile.name.toLowerCase();
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        this.isExcelFile = true;
+        this.checkExcelSheets();
+      }
+    }
+  }
+
+  checkExcelSheets(): void {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: 'array'});
+      this.hasMultipleSheets = workbook.SheetNames.length > 1;
+    };
+    reader.readAsArrayBuffer(this.selectedFile as Blob);
   }
 
   onDictionaryFileSelected(event: any): void {
@@ -38,7 +67,9 @@ export class DataCollectionComponent {
       formData.append('file', this.selectedFile, this.selectedFile.name);
       formData.append('name', this.selectedFile.name);
       formData.append('first_line_is_not_header', this.firstLineIsNotHeader.toString());
-  
+      formData.append('column_separator', this.columnSeparator);
+      formData.append('first_sheet_has_not_dataset', this.firstSheetHasNotDataset.toString());
+
       this.http.post('http://localhost:8000/api/data-files/', formData)
         .subscribe(
           (response: any) => {
