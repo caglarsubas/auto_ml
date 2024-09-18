@@ -10,7 +10,7 @@ z: new functionality or bug-fix
 
 v2.0.x:
 
-- add blox-lot as marginal=box (nth)
+- add blox-lot for stacked version also (!!!CFH: broser-console error)
 - separate the rows of the descriptive-statistics table in feature-card popup-dialog
     into the number of target-classes and make the statistics values in each rows
     are dedicated to that target-class if 'Stacked wrt Target' checkbox is selected. 

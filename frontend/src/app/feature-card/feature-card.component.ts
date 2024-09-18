@@ -65,7 +65,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.loadFeatureData();
     if (this.isBrowser) {
-      window.addEventListener('resize', this.resizeListener);
+      this.loadPlotly().then(() => {
+        window.addEventListener('resize', this.resizeListener);
+      }).catch(error => {
+        console.error('Error loading Plotly:', error);
+        this.errorMessage = 'An error occurred while loading the visualization library. Please try again.';
+      });
     }
   }
 
@@ -105,13 +110,19 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     );
   }
 
-  async loadPlotly() {
+  async loadPlotly(): Promise<void> {
     if (!(window as any).Plotly) {
       try {
         const Plotly = await import('plotly.js-dist-min');
         (window as any).Plotly = Plotly.default;
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error loading Plotly:', error);
+        if (error instanceof Error) {
+          this.errorMessage = `An error occurred while loading the visualization library: ${error.message}. Please try again.`;
+        } else {
+          this.errorMessage = 'An unknown error occurred while loading the visualization library. Please try again.';
+        }
+        throw error;
       }
     }
   }
@@ -142,12 +153,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       },
       yaxis: {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count',
-        domain: [0, 0.85]  // Histogram takes 85% of height
+        domain: [0, 0.85]
       },
       yaxis2: {
-        title: '',
-        domain: [0.87, 1],  // Box plot takes top 13% of height
-        showticklabels: false
+        domain: [0.87, 1],
+        showticklabels: false,
+        zeroline: false,
+        showgrid: false,
+        title: ''
       },
       height: this.isFullScreen ? window.innerHeight * 0.60 : this.originalPlotSize.height,
       width: this.isFullScreen ? window.innerWidth * 0.90 : this.originalPlotSize.width,
@@ -167,6 +180,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           let processedData = this.preprocessStackedData(stackedData);
           
           if (this.isNumerical()) {
+            //layout.xaxis.rangeslider = {};  // Add a range slider for better navigation
             if (this.outlierCleaningEnabled) {
               processedData = Object.fromEntries(
                 Object.entries(processedData).map(([key, value]) => [key, this.cleanOutliers(value as number[])])
@@ -222,8 +236,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     console.log('Plotting stacked data:', stackedData);
     console.log('Layout:', layout);
     const Plotly = (window as any).Plotly;
+    if (!Plotly) {
+      console.error('Plotly is not loaded');
+      return;
+    }
     if (this.isNumerical()) {
-      const traces: any[] = [];
+      const histogramTraces: any[] = [];
+      const boxplotTraces: any[] = [];
+      const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+      
       Object.keys(stackedData).forEach((targetClass, index) => {
         const data = Array.isArray(stackedData[targetClass]) 
           ? stackedData[targetClass] 
@@ -231,37 +252,54 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         const filteredData = data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number);
         
         // Histogram trace
-        traces.push({
+        histogramTraces.push({
           x: filteredData,
           type: 'histogram',
-          name: `${targetClass} (Histogram)`,
+          name: `${targetClass}`,
           opacity: 0.7,
           histnorm: this.usePercentageYAxis ? 'percent' : '',
-          yaxis: 'y'
+          marker: { color: colors[index % colors.length] }
         });
         
         // Box plot trace
-        traces.push({
+        boxplotTraces.push({
           x: filteredData,
           type: 'box',
-          name: `${targetClass} (Box Plot)`,
-          marker: { color: Plotly.d3.rgb(Plotly.d3.schemeCategory10[index]).brighter(0.5) },
+          name: `${targetClass} (Box)`,
+          marker: { color: colors[index % colors.length] },
           boxpoints: 'outliers',
-          yaxis: 'y2',
           boxmean: true,
-          line: {
-            width: 1
-          }
+          line: { width: 1 },
+          yaxis: 'y2',
+          showlegend: false
         });
       });
       
       layout.barmode = 'group';
-      layout.bargap = 0.05;
+      layout.bargap = 0.1;
+      layout.bargroupgap = 0.05;
       layout.showlegend = true;
       layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
 
-      Plotly.newPlot('visualization', traces, layout);
-      console.log('Plotly.newPlot called with:', traces, layout);
+      // Adjust layout for combined plot
+      layout.yaxis = {
+        title: this.usePercentageYAxis ? 'Percentage' : 'Count',
+        domain: [0, 0.85]
+      };
+      layout.yaxis2 = {
+        domain: [0.87, 1],
+        showticklabels: false,
+        zeroline: false,
+        showgrid: false,
+        title: ''
+      };
+
+      const allTraces = [...boxplotTraces, ...histogramTraces];  // Box plots first to be behind histograms
+
+      Plotly.newPlot('visualization', allTraces, layout).catch((error: Error) => {
+        console.error('Error plotting data:', error);
+        this.errorMessage = 'An error occurred while creating the visualization. Please try again.'});
+      console.log('Plotly.newPlot called with:', allTraces, layout);
     } else {
       // For categorical data, create grouped bar chart
       const allCategories = new Set<string>();
@@ -298,14 +336,28 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   
   plotNonStackedData(histogramData: any[], layout: any) {
     const Plotly = (window as any).Plotly;
-    const plotData: any[] = [];
+    const traces: any[] = [];
     if (this.isNumerical()) {
       if (histogramData && histogramData.length > 0) {
-      // Histogram trace
-      plotData.push({
+        // Box plot trace (add first to be behind histogram)
+        traces.push({
+          x: histogramData,
+          type: 'box',
+          name: 'Box Plot',
+          marker: { color: 'rgba(100, 149, 237, 0.7)' },
+          boxpoints: 'outliers',
+          boxmean: true,
+          line: { width: 1 },
+          ysrc: 'y2',
+          showlegend: false
+        });
+        // Histogram trace
+        traces.push({
           x: histogramData,
           type: 'histogram',
           name: 'Distribution',
+          opacity: 0.7,
+          histnorm: this.usePercentageYAxis ? 'percent' : '',
           marker: {
             color: 'rgba(100, 149, 237, 0.7)',
             line: {
@@ -313,21 +365,6 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
               width: 1
             },
           },
-          histnorm: this.usePercentageYAxis ? 'percent' : 'count',
-          yaxis: 'y'
-        });
-        // Add box plot trace
-        plotData.push({
-          x: histogramData,
-          type: 'box',
-          name: 'Box Plot',
-          marker: { color: 'rgba(100, 149, 237, 0.7)' },
-          boxpoints: 'outliers',
-          yaxis: 'y2',
-          boxmean: true,
-          line: {
-            width: 1
-          }
         });
       } else {
         console.warn('No histogram data available');
@@ -338,7 +375,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         const categories = Object.keys(valueCounts);
         const counts = Object.values(valueCounts);
         const total = counts.reduce((sum: number, val: number) => sum + val, 0);
-        plotData.push({
+        traces.push({
           x: categories,
           y: this.usePercentageYAxis ? counts.map((v: number) => (v / total) * 100) : counts,
           type: 'bar',
@@ -354,9 +391,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.warn('No value counts data available');
       }
     }
-    layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
-    if (plotData.length > 0) {
-      Plotly.newPlot('visualization', plotData, layout);
+
+    // Adjust layout for combined plot
+    layout.yaxis = {
+      title: this.usePercentageYAxis ? 'Percentage' : 'Count',
+      domain: [0, 0.85]
+    };
+    layout.yaxis2 = {
+      domain: [0.87, 1],
+      showticklabels: false,
+      zeroline: false,
+      showgrid: false,
+      title: ''
+    };
+
+    if (traces.length > 0) {
+      Plotly.newPlot('visualization', traces, layout);
     } else {
       console.warn('No data available for visualization');
     }
