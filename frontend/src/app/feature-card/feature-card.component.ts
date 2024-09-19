@@ -4,6 +4,7 @@ import { MAT_DIALOG_DATA, MatDialogRef, } from '@angular/material/dialog';
 import { DataService } from '../services/data.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import * as math from 'mathjs';  // Optional: using math.js for easier percentile calculation
+import { forkJoin } from 'rxjs';
 
 interface FeatureData {
   Feature_Name: string;
@@ -11,9 +12,11 @@ interface FeatureData {
   Level_of_Measurement: string;
   Descriptive_Stats: {
     [key: string]: any;
-    histogram_data?: number[];
-    value_counts?: { [key: string]: number };
   };
+  histogram_data?: number[];  // Add this line
+  value_counts?: { [key: string]: number };
+  Target_Classes?: string[];
+  Stacked_Stats?: { [targetClass: string]: { [stat: string]: any } };
 }
 
 @Component({
@@ -38,10 +41,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   featureData: FeatureData | null = null;
   errorMessage: string | null = null;
   usePercentageYAxis: boolean = false;
-  outlierCleaningEnabled: boolean = false;  // Bound to the 'Outlier Cleaning' checkbox
-  sparsityCleaningEnabled: boolean = false;  // Bound to 'Sparsity Cleaning' checkbox
+  outlierCleaningEnabled: boolean = false;
+  sparsityCleaningEnabled: boolean = false;
   stackedWrtTarget: boolean = false;
-  public originalPlotSize = { width: 400, height: 400 }; // Adjust these values as needed
+  public originalPlotSize = { width: 400, height: 400 };
   isFullScreen: boolean = false;
   private resizeListener: () => void;
   isCategorical: boolean = false;
@@ -82,15 +85,39 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   
   loadFeatureData() {
     console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}`);
-    this.dataService.getFeatureCard(this.data.fileId, this.data.columnName).subscribe(
-      (data: FeatureData) => {
-        this.featureData = data;
-        this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
-        // Disable cleaning options for categorical data
-        if (this.isCategorical) {
-          this.outlierCleaningEnabled = false;
-          this.sparsityCleaningEnabled = false;
-        }        
+    forkJoin({
+      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName),
+      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName)
+    }).subscribe({
+      next: ({ featureCard, stackedData }) => {
+        this.featureData = featureCard;
+        if (this.featureData) {
+          this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
+          
+          // Disable cleaning options for categorical data
+          if (this.isCategorical) {
+            this.outlierCleaningEnabled = false;
+            this.sparsityCleaningEnabled = false;
+          }
+          
+          // Process stacked data
+          this.featureData.Target_Classes = Object.keys(stackedData);
+          this.featureData.Stacked_Stats = {};
+          
+          for (const targetClass of this.featureData.Target_Classes) {
+            const classData = stackedData[targetClass];
+            if (this.featureData.Stacked_Stats) {
+              this.featureData.Stacked_Stats[targetClass] = this.calculateDescriptiveStats(classData);
+            }
+          }
+  
+          // If Descriptive_Stats is not calculated by the backend, calculate it here
+          if (!this.featureData.Descriptive_Stats || Object.keys(this.featureData.Descriptive_Stats).length === 0) {
+            const rawData = this.featureData['histogram_data'] || [];
+            this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(rawData);
+          }
+        }
+        
         if (this.isBrowser) {
           this.loadPlotly().then(() => {
             setTimeout(() => {
@@ -99,7 +126,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           });
         }
       },
-      (error: HttpErrorResponse) => {
+
+      error: (error: HttpErrorResponse) => {
         console.error('Error loading feature data:', error);
         if (error.status === 404) {
           this.errorMessage = `File or column not found. Please check the fileId (${this.data.fileId}) and columnName (${this.data.columnName}).`;
@@ -107,7 +135,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           this.errorMessage = 'An error occurred while loading the feature data. Please try again.';
         }
       }
-    );
+    });
   }
 
   async loadPlotly(): Promise<void> {
@@ -128,8 +156,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   createVisualization() {
-    if (!this.featureData) {
-      console.error('Feature data is not available');
+    if (!this.featureData || !this.featureData.Descriptive_Stats) {
+      console.error('No data available for visualization');
       return;
     }
   
@@ -199,11 +227,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           console.error('Error fetching stacked data:', error);
           this.errorMessage = error.message || 'An error occurred while fetching stacked data';
           this.stackedWrtTarget = false;
-          this.plotNonStackedData(this.featureData?.Descriptive_Stats.histogram_data || [], layout);
+          this.plotNonStackedData(this.featureData?.Descriptive_Stats['histogram_data'] as number[] || [], layout);
         }
       );
     } else {
-      let histogramData = this.featureData.Descriptive_Stats?.histogram_data || [];
+      let histogramData = this.featureData?.Descriptive_Stats['histogram_data'] as number[] || [];
       if (this.isNumerical()) {
         if (this.outlierCleaningEnabled) {
           histogramData = this.cleanOutliers(histogramData) as number[];
@@ -370,14 +398,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.warn('No histogram data available');
       }
     } else {
-      const valueCounts = this.featureData?.Descriptive_Stats.value_counts;
+      const valueCounts = this.featureData?.Descriptive_Stats['value_counts'] as { [key: string]: number } | undefined;
       if (valueCounts && Object.keys(valueCounts).length > 0) {
         const categories = Object.keys(valueCounts);
         const counts = Object.values(valueCounts);
         const total = counts.reduce((sum: number, val: number) => sum + val, 0);
         traces.push({
           x: categories,
-          y: this.usePercentageYAxis ? counts.map((v: number) => (v / total) * 100) : counts,
+          y: this.usePercentageYAxis 
+            ? counts.map((v: number) => ((v / total) * 100))
+            : counts,
           type: 'bar',
           marker: {
             color: 'rgba(100, 149, 237, 0.7)',
@@ -416,13 +446,116 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     return this.featureData?.Level_of_Measurement === 'continuous' || this.featureData?.Level_of_Measurement === 'cardinal';
   }
 
+  calculateDescriptiveStats(data: any): { [stat: string]: any } {
+    console.log('Data received in calculateDescriptiveStats:', data);
+    const stats: { [stat: string]: any } = {};
+    
+    let processedData: any[];
+    if (Array.isArray(data)) {
+      processedData = data;
+    } else if (typeof data === 'object' && data !== null) {
+      processedData = Object.values(data);
+    } else {
+      console.error('Invalid data provided to calculateDescriptiveStats:', data);
+      return stats;
+    }
+  
+    if (this.isNumerical()) {
+      const numericData = processedData.filter((v): v is number => typeof v === 'number' && !isNaN(v));
+      try {
+        stats['Mean'] = math.mean(numericData);
+        stats['Min'] = math.min(numericData);
+        stats['1st_Quantile'] = math.quantileSeq(numericData, 0.01);
+        stats['5th_Quantile'] = math.quantileSeq(numericData, 0.05);
+        stats['25th_Q1'] = math.quantileSeq(numericData, 0.25);
+        stats['50th_Median'] = math.median(numericData);
+        stats['75th_Q3'] = math.quantileSeq(numericData, 0.75);
+        stats['95th_Quantile'] = math.quantileSeq(numericData, 0.95);
+        stats['99th_Quantile'] = math.quantileSeq(numericData, 0.99);
+        stats['Max'] = math.max(numericData);
+        stats['Std'] = math.std(numericData);
+        stats['Skewness'] = this.calculateSkewness(numericData);
+        stats['Kurtosis'] = this.calculateKurtosis(numericData);
+      } catch (error) {
+        console.error('Error calculating numerical stats:', error);
+      }
+    } else {
+      try {
+        const valueCounts = this.calculateValueCounts(processedData);
+        stats['#_of_Categories'] = Object.keys(valueCounts).length;
+        const modeEntry = Object.entries(valueCounts).reduce((a, b) => a[1] > b[1] ? a : b);
+        stats['Mode_Value'] = modeEntry[0];
+        stats['Mode_Ratio'] = (modeEntry[1] / processedData.length) * 100;
+        stats['Missing_Ratio'] = (processedData.filter((v: number | null | undefined) => v === null || v === undefined).length / processedData.length) * 100;
+        stats['#_of_Outlier_Categories'] = Object.values(valueCounts).filter(count => (count / processedData.length) < 0.005).length;
+      } catch (error) {
+        console.error('Error calculating categorical stats:', error);
+      }
+    }
+
+    return stats;
+  }
+
+  private calculateValueCounts(data: any): { [key: string]: number } {
+    // If data is not an array, convert it to an array of its values
+    const dataArray = Array.isArray(data) ? data : Object.values(data);
+  
+    return dataArray.reduce((acc: { [key: string]: number }, val: any) => {
+      const key = String(val);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  calculateSkewness(data: number[]): number {
+    const n = data.length;
+    const mean = this.ensureNumber(math.mean(data));
+    const std = this.ensureNumber(math.std(data));
+    
+    if (std === 0) return 0; // Avoid division by zero
+
+    let sumCubedDeviations = 0;
+    for (let i = 0; i < n; i++) {
+      const deviation = this.ensureNumber((data[i] - mean) / std);
+      sumCubedDeviations += Math.pow(deviation, 3);
+    }
+    return sumCubedDeviations / n;
+  }
+
+  calculateKurtosis(data: number[]): number {
+    const n = data.length;
+    const mean = this.ensureNumber(math.mean(data));
+    const std = this.ensureNumber(math.std(data));
+    
+    if (std === 0) return 0; // Avoid division by zero
+
+    let sumFourthPowerDeviations = 0;
+    for (let i = 0; i < n; i++) {
+      const deviation = this.ensureNumber((data[i] - mean) / std);
+      sumFourthPowerDeviations += Math.pow(deviation, 4);
+    }
+    return (sumFourthPowerDeviations / n) - 3;
+  }
+  
   getStats(): string[] {
     return this.isNumerical() ? this.numericalStats : this.categoricalStats;
   }
 
-  getStatValue(stat: string): string | number {
-    const value = this.featureData?.Descriptive_Stats[stat];
-    return value !== undefined ? value : 'N/A';
+  getStatValue(stat: string, targetClass?: string): string | number {
+    if (this.stackedWrtTarget && targetClass) {
+      const value = this.featureData?.Stacked_Stats?.[targetClass]?.[stat];
+      return value !== undefined ? this.formatValue(value) : 'N/A';
+    } else {
+      const value = this.featureData?.Descriptive_Stats[stat];
+      return value !== undefined ? this.formatValue(value) : 'N/A';
+    }
+  }
+
+  formatValue(value: any): string | number {
+    if (typeof value === 'number') {
+      return Number(value.toFixed(2));
+    }
+    return value;
   }
 
   // Function to clean outliers below 5th and above 95th percentiles
@@ -524,4 +657,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
   }
 
+  private ensureNumber(value: any): number {
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
+  }
 }

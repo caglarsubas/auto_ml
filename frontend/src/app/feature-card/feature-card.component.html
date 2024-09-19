@@ -7,23 +7,29 @@
   <p *ngIf="featureData"><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
 
   <mat-dialog-content *ngIf="featureData">
+    
     <h3>Descriptive Statistics</h3>
     <div class="table-container" [class.transposed]="isFullScreen">
       <table class="descriptive-stats-table">
-        <ng-container *ngIf="!isFullScreen">
-          <tr *ngFor="let stat of getStats()">
-            <th>{{stat}}</th>
-            <td>{{getStatValue(stat)}}</td>
-          </tr>
-        </ng-container>
-        <ng-container *ngIf="isFullScreen">
+        <thead>
           <tr>
-            <th *ngFor="let stat of getStats()">{{stat}}</th>
+            <th *ngIf="stackedWrtTarget">Target Classes</th>
+            <th *ngFor="let stat of getStats()">{{ stat }}</th>
           </tr>
-          <tr>
-            <td *ngFor="let stat of getStats()">{{getStatValue(stat)}}</td>
-          </tr>
-        </ng-container>
+        </thead>
+        <tbody>
+          <ng-container *ngIf="!stackedWrtTarget">
+            <tr>
+              <td *ngFor="let stat of getStats()">{{ getStatValue(stat) }}</td>
+            </tr>
+          </ng-container>
+          <ng-container *ngIf="stackedWrtTarget && featureData?.Target_Classes">
+            <tr *ngFor="let targetClass of featureData.Target_Classes">
+              <td>{{ targetClass }}</td>
+              <td *ngFor="let stat of getStats()">{{ getStatValue(stat, targetClass) }}</td>
+            </tr>
+          </ng-container>
+        </tbody>
       </table>
     </div>
 
