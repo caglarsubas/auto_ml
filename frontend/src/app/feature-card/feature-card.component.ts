@@ -461,14 +461,24 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   onOutlierCleaningChange() {
-    console.log('Outlier cleaning toggled');
+    this.updateVisualizationAndStats();
+  }
+
+  onSparsityCleaningChange() {
+    this.updateVisualizationAndStats();
+  }
+
+  updateVisualizationAndStats() {
+    console.log('Updating visualization and stats');
     if (this.featureData && this.featureData.Descriptive_Stats && this.originalHistogramData) {
-      let histogramData: number[];
+      let histogramData: number[] = [...this.originalHistogramData];
       
       if (this.outlierCleaningEnabled) {
-        histogramData = this.cleanOutliers(this.originalHistogramData);
-      } else {
-        histogramData = [...this.originalHistogramData]; // Use spread operator to create a new array
+        histogramData = this.cleanOutliers(histogramData);
+      }
+      
+      if (this.sparsityCleaningEnabled) {
+        histogramData = this.cleanSparsity(histogramData) as number[];
       }
 
       console.log('Current histogram data:', histogramData);
@@ -479,9 +489,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       console.warn('Feature data, descriptive stats, or original histogram data not available');
       this.errorMessage = 'Feature data not available';
       this.outlierCleaningEnabled = false;
+      this.sparsityCleaningEnabled = false;
     }
   }
-
+  
   calculateDescriptiveStats(data: any): { [stat: string]: any } {
     console.log('Data received in calculateDescriptiveStats:', data);
     const stats: { [stat: string]: any } = {};

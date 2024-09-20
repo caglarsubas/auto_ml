@@ -53,7 +53,7 @@
       </div>
       
       <div [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
-        <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="createVisualization()" [disabled]="isCategorical">
+        <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="onSparsityCleaningChange()" [disabled]="isCategorical">
           Sparsity Cleaning
         </mat-checkbox>
       </div>
