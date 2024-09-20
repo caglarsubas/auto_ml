@@ -49,6 +49,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   private resizeListener: () => void;
   isCategorical: boolean = false;
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
+  private originalHistogramData: number[] | null = null;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { fileId: string, columnName: string },
@@ -92,6 +93,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       next: ({ featureCard, stackedData }) => {
         this.featureData = featureCard;
         if (this.featureData) {
+          // Store the original histogram data
+          this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
           this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
           
           // Disable cleaning options for categorical data
@@ -459,22 +462,21 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   onOutlierCleaningChange() {
     console.log('Outlier cleaning toggled');
-    if (this.featureData && this.featureData.Descriptive_Stats) {
-      const histogramData = this.featureData.Descriptive_Stats['histogram_data'];
-      if (Array.isArray(histogramData) && histogramData.length > 0) {
-        console.log('Original histogram data:', histogramData);
-        const cleanedData = this.outlierCleaningEnabled ? this.cleanOutliers(histogramData) : histogramData;
-        console.log('Cleaned histogram data:', cleanedData);
-        this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(cleanedData);
-        this.featureData.Descriptive_Stats['histogram_data'] = cleanedData; // Update histogram data
-        this.createVisualization();
+    if (this.featureData && this.featureData.Descriptive_Stats && this.originalHistogramData) {
+      let histogramData: number[];
+      
+      if (this.outlierCleaningEnabled) {
+        histogramData = this.cleanOutliers(this.originalHistogramData);
       } else {
-        console.warn('No histogram data available for outlier cleaning');
-        this.errorMessage = 'No data available for outlier cleaning';
-        this.outlierCleaningEnabled = false;
+        histogramData = [...this.originalHistogramData]; // Use spread operator to create a new array
       }
+
+      console.log('Current histogram data:', histogramData);
+      this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(histogramData);
+      this.featureData.Descriptive_Stats['histogram_data'] = histogramData;
+      this.createVisualization();
     } else {
-      console.warn('Feature data or descriptive stats not available');
+      console.warn('Feature data, descriptive stats, or original histogram data not available');
       this.errorMessage = 'Feature data not available';
       this.outlierCleaningEnabled = false;
     }
