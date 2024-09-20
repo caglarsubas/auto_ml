@@ -1,9 +1,9 @@
 <div class="feature-card-container" [class.full-screen]="isFullScreen">
-  <h2 mat-dialog-title> <strong>Feature Card</strong></h2>
+  <h2 id="feature-card" mat-dialog-title> <strong>Feature Card</strong></h2>
 
   <div *ngIf="errorMessage" class="error-message"> {{ errorMessage }} </div>
 
-  <h3 *ngIf="featureData"> {{ featureData.Feature_Name }}</h3>
+  <h3 id="featuredata.feature_name" *ngIf="featureData"> {{ featureData.Feature_Name }}</h3>
   <p *ngIf="featureData"><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
 
   <mat-dialog-content *ngIf="featureData">
@@ -46,8 +46,8 @@
       </div>
 
       <div 
-      [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
-        <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="createVisualization()" [disabled]="isCategorical">
+      [matTooltip]="getOutlierCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
+        <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="onOutlierCleaningChange()" [disabled]="isCategorical">
           Outlier Cleaning
         </mat-checkbox>
       </div>

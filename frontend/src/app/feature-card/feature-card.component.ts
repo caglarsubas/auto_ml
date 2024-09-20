@@ -156,23 +156,34 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   createVisualization() {
+    console.log('Creating visualization');
     if (!this.featureData || !this.featureData.Descriptive_Stats) {
       console.error('No data available for visualization');
+      this.errorMessage = 'No data available for visualization';
       return;
     }
-  
+
+    const histogramData = this.featureData.Descriptive_Stats['histogram_data'];
+    if (!Array.isArray(histogramData) || histogramData.length === 0) {
+      console.error('No histogram data available for visualization');
+      this.errorMessage = 'No data available for visualization';
+      return;
+    }
+
+    console.log('Histogram data for visualization:', histogramData);
+
     const Plotly = (window as any).Plotly;
     if (!Plotly) {
       console.error('Plotly is not loaded');
       return;
     }
-  
+
     const plotElement = document.getElementById('visualization');
     if (!plotElement) {
       console.error('Visualization element not found');
       return;
     }
-  
+
     const layout: any = {
       title: `Distribution of ${this.featureData.Feature_Name}`,
       xaxis: { 
@@ -446,6 +457,29 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     return this.featureData?.Level_of_Measurement === 'continuous' || this.featureData?.Level_of_Measurement === 'cardinal';
   }
 
+  onOutlierCleaningChange() {
+    console.log('Outlier cleaning toggled');
+    if (this.featureData && this.featureData.Descriptive_Stats) {
+      const histogramData = this.featureData.Descriptive_Stats['histogram_data'];
+      if (Array.isArray(histogramData) && histogramData.length > 0) {
+        console.log('Original histogram data:', histogramData);
+        const cleanedData = this.outlierCleaningEnabled ? this.cleanOutliers(histogramData) : histogramData;
+        console.log('Cleaned histogram data:', cleanedData);
+        this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(cleanedData);
+        this.featureData.Descriptive_Stats['histogram_data'] = cleanedData; // Update histogram data
+        this.createVisualization();
+      } else {
+        console.warn('No histogram data available for outlier cleaning');
+        this.errorMessage = 'No data available for outlier cleaning';
+        this.outlierCleaningEnabled = false;
+      }
+    } else {
+      console.warn('Feature data or descriptive stats not available');
+      this.errorMessage = 'Feature data not available';
+      this.outlierCleaningEnabled = false;
+    }
+  }
+
   calculateDescriptiveStats(data: any): { [stat: string]: any } {
     console.log('Data received in calculateDescriptiveStats:', data);
     const stats: { [stat: string]: any } = {};
@@ -559,19 +593,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // Function to clean outliers below 5th and above 95th percentiles
-  cleanOutliers(data: number[] | { [key: string]: number }): number[] | { [key: string]: number } {
-    if (Array.isArray(data)) {
-      const lowerBound = this.getPercentile(data, 5);
-      const upperBound = this.getPercentile(data, 95);
-      return data.filter(value => value >= lowerBound && value <= upperBound);
-    } else {
-      const values = Object.values(data);
-      const lowerBound = this.getPercentile(values, 5);
-      const upperBound = this.getPercentile(values, 95);
-      return Object.fromEntries(
-        Object.entries(data).filter(([_, value]) => value >= lowerBound && value <= upperBound)
-      );
+  cleanOutliers(data: number[]): number[] {
+    if (!Array.isArray(data) || data.length === 0) {
+      console.warn('Invalid data for outlier cleaning');
+      return data;
     }
+    const lowerBound = this.getPercentile(data, 5);
+    const upperBound = this.getPercentile(data, 95);
+    return data.filter(value => value >= lowerBound && value <= upperBound);
   }
 
   // Helper function to calculate percentile
