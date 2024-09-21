@@ -8,14 +8,6 @@ z: new functionality or bug-fix
 
 !!!CFH (17.09.2024): 
 
-v2.0.x:
-
-- !!!CFH: continue from the last answer of claude. (mth)
-- add a 'Select a Feature' dropdown menu on the feature_name
-    as the last <div> where user can change the feature of the
-    feature-card (mth)
-- decrease the punto size of the values in data-preview table in data-collection step 
-(nth: couldn't achieve)
 
 
 v2.1.x:

@@ -215,7 +215,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const layout: any = {
       title: `Distribution of ${this.featureData.Feature_Name}`,
       xaxis: { 
-        title: `Values of ${this.featureData.Feature_Name}`,
+        title: this.isNumerical() ? `Values of ${this.featureData.Feature_Name}` : 'Categories',
         domain: [0, 1]  // Full width for x-axis
       },
       yaxis: {
@@ -544,15 +544,27 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         const processedData = this.processStackedData(this.originalStackedData);
         this.updateStackedStats(processedData);
         this.createVisualization(processedData);
-      } else if (this.originalHistogramData) {
-        const processedData = this.cleanData(this.originalHistogramData);
-        this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(processedData);
-        this.featureData.Descriptive_Stats['histogram_data'] = processedData;
-        this.createVisualization(processedData);
       } else {
-        console.warn('No data available for processing');
-        this.errorMessage = 'No data available for processing';
-        return;
+        if (this.isNumerical()) {
+          if (this.originalHistogramData) {
+            const processedData = this.cleanData(this.originalHistogramData);
+            this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(processedData);
+            this.featureData.Descriptive_Stats['histogram_data'] = processedData;
+            this.createVisualization(processedData);
+          } else {
+            console.warn('No histogram data available for numerical feature');
+            this.errorMessage = 'No histogram data available for visualization';
+          }
+        } else {
+          // Handle categorical data
+          const valueCounts = this.featureData.Descriptive_Stats['value_counts'];
+          if (valueCounts) {
+            this.createVisualization(valueCounts);
+          } else {
+            console.warn('No value counts data available for categorical feature');
+            this.errorMessage = 'No value counts data available for visualization';
+          }
+        }
       }
     } else {
       console.warn('Feature data or descriptive stats not available');
