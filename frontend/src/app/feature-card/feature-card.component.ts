@@ -19,12 +19,17 @@ interface FeatureData {
   Stacked_Stats?: { [targetClass: string]: { [stat: string]: any } };
 }
 
-// Add this new interface for the dialog data
+interface FeatureInfo {
+  Feature_Name: string;
+  Feature_Description: string;
+}
+
 interface FeatureCardDialogData {
   fileId: string;
   columnName: string;
-  featureNames: string[];
+  features: FeatureInfo[];
 }
+
 
 @Component({
   selector: 'app-feature-card',
@@ -58,7 +63,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
   private originalHistogramData: number[] | null = null;
   private originalStackedData: any | null = null;
-  featureNames: string[] = [];
+  features: FeatureInfo[] = [];
   selectedFeatureName: string;
   
   constructor(
@@ -74,7 +79,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.log('FeatureCard constructed with data:', data);
       }
     };
-    this.featureNames = data.featureNames;
+    this.features = data.features;
     this.selectedFeatureName = data.columnName;
   }
 
@@ -452,6 +457,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     return this.featureData?.Level_of_Measurement === 'continuous' || this.featureData?.Level_of_Measurement === 'cardinal';
   }
 
+  getFeatureDescription(featureName: string): string {
+    const feature = this.features.find(f => f.Feature_Name === featureName);
+    return feature ? feature.Feature_Description : 'No description available';
+  }
+  
   onOutlierCleaningChange() {
     this.updateVisualizationAndStats();
   }

@@ -160,13 +160,16 @@ export class DataCollectionComponent {
 
   openFeatureCard(feature: any): void {
     if (this.currentFileId !== null && feature.Feature_Name) {
-      const featureNames = this.dataDictionary.map(item => item.Feature_Name);
+      const features = this.dataDictionary.map(item => ({
+        Feature_Name: item.Feature_Name,
+        Feature_Description: item.Feature_Description || 'No description available'
+      }));
       this.dialog.open(FeatureCardComponent, {
         width: '400px',
         data: { 
           fileId: this.currentFileId.toString(), 
           columnName: feature.Feature_Name,
-          featureNames: featureNames
+          features: features
         }
       });
     } else {

@@ -6,13 +6,11 @@
   <mat-form-field>
     <mat-label>Select Feature</mat-label>
     <mat-select [(ngModel)]="selectedFeatureName" (selectionChange)="onFeatureChange()">
-      <mat-option *ngFor="let feature of featureNames" [value]="feature">
-        {{ feature }}
+      <mat-option *ngFor="let feature of features" [value]="feature.Feature_Name">
+        {{ feature.Feature_Name }}: {{ feature.Feature_Description || 'No description available' }}
       </mat-option>
     </mat-select>
   </mat-form-field>
-  
-  <p *ngIf="featureData"><strong>Description:</strong> {{ featureData.Feature_Description || 'No description available.' }}</p>
 
   <mat-dialog-content *ngIf="featureData">
     
