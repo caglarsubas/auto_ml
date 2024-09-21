@@ -160,9 +160,14 @@ export class DataCollectionComponent {
 
   openFeatureCard(feature: any): void {
     if (this.currentFileId !== null && feature.Feature_Name) {
+      const featureNames = this.dataDictionary.map(item => item.Feature_Name);
       this.dialog.open(FeatureCardComponent, {
         width: '400px',
-        data: { fileId: this.currentFileId.toString(), columnName: feature.Feature_Name }
+        data: { 
+          fileId: this.currentFileId.toString(), 
+          columnName: feature.Feature_Name,
+          featureNames: featureNames
+        }
       });
     } else {
       console.error('Cannot open feature card: fileId or columnName is missing');

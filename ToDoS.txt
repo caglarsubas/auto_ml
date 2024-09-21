@@ -10,11 +10,7 @@ z: new functionality or bug-fix
 
 v2.0.x:
 
-- separate the rows of the descriptive-statistics table in feature-card popup-dialog
-    into the number of target-classes and make the statistics values in each rows
-    are dedicated to that target-class if 'Stacked wrt Target' checkbox is selected. 
-    add an initial column to the descriptive-statistics table named as 'Target Classes'
-    having rows equal to the distinct values that target feature can take. (mth)
+- !!!CFH: continue from the last answer of claude. (mth)
 - add a 'Select a Feature' dropdown menu on the feature_name
     as the last <div> where user can change the feature of the
     feature-card (mth)
@@ -23,6 +19,10 @@ v2.0.x:
 
 
 v2.1.x:
+- create a 'tab' type navigation bar inside the feature-card popup-dialog.
+    where tab titles are: 'descriptives', 'quality', 'importance' and explainability
+
+v2.2.x:
 - add a login-page create a user and password. after passing login page
     user reaches a home-page where the top-menu falls inside the page 
     when user clicks model-store open a new menu including 

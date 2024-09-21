@@ -19,6 +19,13 @@ interface FeatureData {
   Stacked_Stats?: { [targetClass: string]: { [stat: string]: any } };
 }
 
+// Add this new interface for the dialog data
+interface FeatureCardDialogData {
+  fileId: string;
+  columnName: string;
+  featureNames: string[];
+}
+
 @Component({
   selector: 'app-feature-card',
   templateUrl: './feature-card.component.html',
@@ -50,9 +57,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   isCategorical: boolean = false;
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
   private originalHistogramData: number[] | null = null;
-
+  private originalStackedData: any | null = null;
+  featureNames: string[] = [];
+  selectedFeatureName: string;
+  
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: { fileId: string, columnName: string },
+    @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
     @Inject(PLATFORM_ID) platformId: Object,
     private dataService: DataService,
     public dialogRef: MatDialogRef<FeatureCardComponent>,
@@ -64,6 +74,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.log('FeatureCard constructed with data:', data);
       }
     };
+    this.featureNames = data.featureNames;
+    this.selectedFeatureName = data.columnName;
   }
 
   ngOnInit() {
@@ -83,6 +95,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       window.removeEventListener('resize', this.resizeListener);
     }
   }
+
+  onFeatureChange() {
+    this.data.columnName = this.selectedFeatureName;
+    this.loadFeatureData();
+  }
   
   loadFeatureData() {
     console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}`);
@@ -95,6 +112,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         if (this.featureData) {
           // Store the original histogram data
           this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
+          this.originalStackedData = this.preprocessStackedData(stackedData);
           this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
           
           // Disable cleaning options for categorical data
@@ -158,10 +176,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
   }
 
-  createVisualization() {
-    console.log('Creating visualization');
+  createVisualization(data?: any) {
+    console.log('Creating visualization with data:', data);
     if (!this.featureData || !this.featureData.Descriptive_Stats) {
-      console.error('No data available for visualization');
+      console.error('No feature data available for visualization');
       this.errorMessage = 'No data available for visualization';
       return;
     }
@@ -216,43 +234,19 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     };
   
     if (this.stackedWrtTarget) {
-      this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
-        (stackedData: any) => {
-          console.log('Received stacked data:', stackedData);
-          let processedData = this.preprocessStackedData(stackedData);
-          
-          if (this.isNumerical()) {
-            //layout.xaxis.rangeslider = {};  // Add a range slider for better navigation
-            if (this.outlierCleaningEnabled) {
-              processedData = Object.fromEntries(
-                Object.entries(processedData).map(([key, value]) => [key, this.cleanOutliers(value as number[])])
-              );
-            }
-            if (this.sparsityCleaningEnabled) {
-              processedData = Object.fromEntries(
-                Object.entries(processedData).map(([key, value]) => [key, this.cleanSparsity(value as number[])])
-              );
-            }
-          }
-          
-          this.plotStackedData(processedData, layout);
-        },
-        error => {
-          console.error('Error fetching stacked data:', error);
-          this.errorMessage = error.message || 'An error occurred while fetching stacked data';
-          this.stackedWrtTarget = false;
-          this.plotNonStackedData(this.featureData?.Descriptive_Stats['histogram_data'] as number[] || [], layout);
-        }
-      );
+      const stackedData = data || this.processStackedData(this.originalStackedData);
+      if (Object.keys(stackedData).length === 0) {
+        console.error('No stacked data available for visualization');
+        this.errorMessage = 'No stacked data available for visualization';
+        return;
+      }
+      this.plotStackedData(stackedData, layout);
     } else {
-      let histogramData = this.featureData?.Descriptive_Stats['histogram_data'] as number[] || [];
-      if (this.isNumerical()) {
-        if (this.outlierCleaningEnabled) {
-          histogramData = this.cleanOutliers(histogramData) as number[];
-        }
-        if (this.sparsityCleaningEnabled) {
-          histogramData = this.cleanSparsity(histogramData) as number[];
-        }
+      const histogramData = data || this.cleanData(this.originalHistogramData || []);
+      if (histogramData.length === 0) {
+        console.error('No histogram data available for visualization');
+        this.errorMessage = 'No data available for visualization';
+        return;
       }
       this.plotNonStackedData(histogramData, layout);
     }
@@ -276,10 +270,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   plotStackedData(stackedData: any, layout: any) {
     console.log('Plotting stacked data:', stackedData);
-    console.log('Layout:', layout);
     const Plotly = (window as any).Plotly;
     if (!Plotly) {
       console.error('Plotly is not loaded');
+      this.errorMessage = 'Visualization library not loaded';
       return;
     }
     if (this.isNumerical()) {
@@ -288,9 +282,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
       
       Object.keys(stackedData).forEach((targetClass, index) => {
-        const data = Array.isArray(stackedData[targetClass]) 
-          ? stackedData[targetClass] 
-          : Object.values(stackedData[targetClass]);
+        const data = stackedData[targetClass];
         const filteredData = data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number);
         
         // Histogram trace
@@ -468,28 +460,99 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.updateVisualizationAndStats();
   }
 
+  onStackedWrtTargetChange() {
+    if (this.stackedWrtTarget && !this.originalStackedData) {
+      // Fetch stacked data if not available
+      this.fetchStackedData();
+    } else {
+      this.updateVisualizationAndStats();
+    }
+  }
+
+  fetchStackedData() {
+    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
+      (stackedData: any) => {
+        console.log('Received stacked data:', stackedData);
+        this.originalStackedData = this.preprocessStackedData(stackedData);
+        this.updateVisualizationAndStats();
+      },
+      error => {
+        console.error('Error fetching stacked data:', error);
+        this.errorMessage = 'Failed to fetch stacked data. Please try again.';
+        this.stackedWrtTarget = false;
+      }
+    );
+  }
+
   updateVisualizationAndStats() {
     console.log('Updating visualization and stats');
-    if (this.featureData && this.featureData.Descriptive_Stats && this.originalHistogramData) {
-      let histogramData: number[] = [...this.originalHistogramData];
-      
-      if (this.outlierCleaningEnabled) {
-        histogramData = this.cleanOutliers(histogramData);
+    if (this.featureData && this.featureData.Descriptive_Stats) {
+      if (this.stackedWrtTarget && this.originalStackedData) {
+        const processedData = this.processStackedData(this.originalStackedData);
+        this.updateStackedStats(processedData);
+        this.createVisualization(processedData);
+      } else if (this.originalHistogramData) {
+        const processedData = this.cleanData(this.originalHistogramData);
+        this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(processedData);
+        this.featureData.Descriptive_Stats['histogram_data'] = processedData;
+        this.createVisualization(processedData);
+      } else {
+        console.warn('No data available for processing');
+        this.errorMessage = 'No data available for processing';
+        return;
       }
-      
-      if (this.sparsityCleaningEnabled) {
-        histogramData = this.cleanSparsity(histogramData) as number[];
-      }
-
-      console.log('Current histogram data:', histogramData);
-      this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(histogramData);
-      this.featureData.Descriptive_Stats['histogram_data'] = histogramData;
-      this.createVisualization();
     } else {
-      console.warn('Feature data, descriptive stats, or original histogram data not available');
+      console.warn('Feature data or descriptive stats not available');
       this.errorMessage = 'Feature data not available';
-      this.outlierCleaningEnabled = false;
-      this.sparsityCleaningEnabled = false;
+    }
+  }
+
+  processStackedData(stackedData: any): any {
+    if (!stackedData) {
+      console.warn('Stacked data is undefined or null');
+      return {};
+    }
+    const processedData: any = {};
+    for (const [key, value] of Object.entries(stackedData)) {
+      if (Array.isArray(value)) {
+        processedData[key] = this.cleanData(value as number[]);
+      } else if (typeof value === 'object' && value !== null) {
+        processedData[key] = this.cleanData(Object.values(value) as number[]);
+      } else {
+        console.warn(`Unexpected data type for key ${key}:`, value);
+        processedData[key] = [];
+      }
+    }
+    return processedData;
+  }
+
+  cleanData(data: number[]): number[] {
+    let cleanedData = [...data];
+    if (this.outlierCleaningEnabled) {
+      cleanedData = this.cleanOutliers(cleanedData);
+    }
+    if (this.sparsityCleaningEnabled) {
+      cleanedData = this.cleanSparsity(cleanedData) as number[];
+    }
+    return cleanedData;
+  }
+
+  cleanStackedData(stackedData: any): any {
+    const cleanedData: any = {};
+    for (const [key, value] of Object.entries(stackedData)) {
+      if (Array.isArray(value)) {
+        cleanedData[key] = this.cleanData(value as number[]);
+      } else {
+        cleanedData[key] = value;
+      }
+    }
+    return cleanedData;
+  }
+
+  updateStackedStats(stackedData: any) {
+    this.featureData!.Stacked_Stats = {};
+    for (const [key, value] of Object.entries(stackedData)) {
+      this.featureData!.Stacked_Stats[key] = this.calculateDescriptiveStats(value as number[]);
     }
   }
   
