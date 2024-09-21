@@ -190,9 +190,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
 
     const histogramData = this.featureData.Descriptive_Stats['histogram_data'];
-    if (!Array.isArray(histogramData) || histogramData.length === 0) {
-      console.error('No histogram data available for visualization');
-      this.errorMessage = 'No data available for visualization';
+    const valueCounts = this.featureData.Descriptive_Stats['value_counts'];
+
+    if (!histogramData && !valueCounts) {
+      console.error('No histogram or value counts data available for visualization');
+      this.errorMessage = 'No suitable data available for visualization';
       return;
     }
 
@@ -247,14 +249,55 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
       this.plotStackedData(stackedData, layout);
     } else {
-      const histogramData = data || this.cleanData(this.originalHistogramData || []);
-      if (histogramData.length === 0) {
-        console.error('No histogram data available for visualization');
-        this.errorMessage = 'No data available for visualization';
-        return;
+      if (this.isNumerical()) {
+        const histogramData = data || this.cleanData(this.originalHistogramData || []);
+        if (histogramData.length === 0) {
+          console.error('No histogram data available for visualization');
+          this.errorMessage = 'No data available for visualization';
+          return;
+        }
+        this.plotNonStackedData(histogramData, layout);
+      } else {
+        // For categorical data
+        if (valueCounts && Object.keys(valueCounts).length > 0) {
+          this.plotCategoricalData(valueCounts, layout);
+        } else {
+          console.error('No value counts data available for categorical visualization');
+          this.errorMessage = 'No data available for categorical visualization';
+          return;
+        }
       }
-      this.plotNonStackedData(histogramData, layout);
     }
+  }
+
+  plotCategoricalData(valueCounts: { [key: string]: number }, layout: any) {
+    const Plotly = (window as any).Plotly;
+    const categories = Object.keys(valueCounts);
+    const counts = Object.values(valueCounts);
+    const total = counts.reduce((sum, val) => sum + val, 0);
+
+    const trace = {
+      x: categories,
+      y: this.usePercentageYAxis 
+        ? counts.map(v => (v / total) * 100)
+        : counts,
+      type: 'bar',
+      marker: {
+        color: 'rgba(100, 149, 237, 0.7)',
+        line: {
+          color: 'rgba(100, 149, 237, 1)',
+          width: 1
+        },
+      },
+    };
+
+    layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
+    layout.xaxis.title = 'Categories';
+
+    Plotly.newPlot('visualization', [trace], layout).catch((error: Error) => {
+      console.error('Error plotting categorical data:', error);
+      this.errorMessage = 'An error occurred while creating the visualization. Please try again.';
+    });
   }
 
   preprocessStackedData(data: any): any {
@@ -461,7 +504,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const feature = this.features.find(f => f.Feature_Name === featureName);
     return feature ? feature.Feature_Description : 'No description available';
   }
-  
+
   onOutlierCleaningChange() {
     this.updateVisualizationAndStats();
   }
