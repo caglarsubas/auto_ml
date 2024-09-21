@@ -7,11 +7,12 @@
   width: 100%;
   border-collapse: collapse;
   white-space: nowrap;
+  font-size: 0.95rem; /* Decrease font size */
 }
 
 .descriptive-stats-table th, .descriptive-stats-table td {
   border: 1px solid #ddd;
-  padding: 8px;
+  padding: 7px;
   text-align: center;
 }
 
@@ -86,11 +87,11 @@ mat-dialog-content {
 @media screen and (max-width: 1200px) {
   
   .descriptive-stats-table {
-    font-size: 12px;
+    font-size: 0.85rem; /* Further decrease font size for smaller screens */
   }
   
   .descriptive-stats-table th, .descriptive-stats-table td {
-    padding: 4px;
+    padding: 3px;
   }
 }
 

@@ -2,3 +2,15 @@
 
 html, body { height: 100%; }
 body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+
+/* Global styles for tables */
+table {
+    font-size: 0.85rem;
+  }
+  
+  @media screen and (max-width: 600px) {
+    table {
+      font-size: 0.75rem;
+    }
+  }
+  

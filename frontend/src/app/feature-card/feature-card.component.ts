@@ -5,6 +5,8 @@ import { DataService } from '../services/data.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import * as math from 'mathjs';  // Optional: using math.js for easier percentile calculation
 import { forkJoin } from 'rxjs';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatSelectModule } from '@angular/material/select';
 
 interface FeatureData {
   Feature_Name: string;
@@ -56,7 +58,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   outlierCleaningEnabled: boolean = false;
   sparsityCleaningEnabled: boolean = false;
   stackedWrtTarget: boolean = false;
-  public originalPlotSize = { width: 400, height: 400 };
+  public originalPlotSize = { width: 400, height: 300 };
   isFullScreen: boolean = false;
   private resizeListener: () => void;
   isCategorical: boolean = false;
@@ -229,7 +231,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         showgrid: false,
         title: ''
       },
-      height: this.isFullScreen ? window.innerHeight * 0.60 : this.originalPlotSize.height,
+      height: this.isFullScreen ? window.innerHeight * 0.40 : this.originalPlotSize.height,
       width: this.isFullScreen ? window.innerWidth * 0.90 : this.originalPlotSize.width,
       showlegend: true,
       legend: {

@@ -12,12 +12,13 @@
 .preview-table, .data-dictionary-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.80rem; /* Decrease font size */
 }
 
 .preview-table th, .preview-table td,
 .data-dictionary-table th, .data-dictionary-table td {
   border: 1px solid #ddd;
-  padding: 8px;
+  padding: 5px;
   text-align: left;
 }
 
@@ -91,12 +92,12 @@ button:hover {
 /* Responsive design for small screens */
 @media screen and (max-width: 600px) {
   .preview-table, .data-dictionary-table {
-    font-size: 12px;
+    font-size: 0.75rem; /* Further decrease font size for mobile */
   }
   
   .preview-table th, .preview-table td,
   .data-dictionary-table th, .data-dictionary-table td {
-    padding: 4px;
+    padding: 3px; /* Further reduce padding for mobile */
   }
 }
 

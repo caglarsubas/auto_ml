@@ -17,6 +17,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatOptionModule } from '@angular/material/core';
+import { MatTabsModule } from '@angular/material/tabs';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -49,6 +50,7 @@ import { FeatureCardComponent } from './feature-card/feature-card.component';
     MatSelectModule,
     MatFormFieldModule,
     MatOptionModule,
+    MatTabsModule,
   ],
   providers: [],
   bootstrap: [AppComponent]
