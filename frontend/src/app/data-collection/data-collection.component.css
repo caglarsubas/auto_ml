@@ -1,24 +1,50 @@
 /* src/app/data-collection/data-collection.component.css */
+body {
+  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1, h2, h3 {
+  color: #740505;
+  margin-top: 30px;
+  margin-bottom: 15px;
+}
+
 .preview-container, .data-dictionary-container {
-  margin-top: 20px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 20px;
+  margin-top: 30px;
 }
 
 .table-container {
-  max-height: 400px;  /* Adjust this value as needed */
+  max-height: 400px;
   overflow-y: auto;
   overflow-x: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
 }
 
 .preview-table, .data-dictionary-table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.80rem; /* Decrease font size */
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
 }
 
 .preview-table th, .preview-table td,
 .data-dictionary-table th, .data-dictionary-table td {
-  border: 1px solid #ddd;
-  padding: 5px;
+  border: 1px solid #e0e0e0;
+  padding: 10px;
   text-align: left;
 }
 
@@ -34,7 +60,7 @@
   text-align: center;
   font-weight: bold;
   background-color: #f9f9f9;
-  color: #999;
+  color: #740505;
 }
 
 .dictionary-actions {
@@ -48,74 +74,258 @@
 .dictionary-upload {
   display: flex;
   align-items: center;
-}
-
-.dictionary-upload input[type="file"] {
-  margin-right: 10px;
-}
-
-h1, h2, h3 {
-  color: #000;
-  margin-top: 20px;
-  margin-bottom: 10px;
-}
-
-.preview-note {
-  color: #ff0000;
-  font-style: italic;
+  gap: 10px;
 }
 
 .file-input-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 .file-input-group input[type="file"] {
-  margin-right: 10px;
+  flex: 1;
+  min-width: 200px;
 }
 
 button {
-  padding: 8px 16px;
+  padding: 10px 20px;
   background-color: #740505;
   color: white;
   border: none;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, transform 0.1s;
+  font-weight: bold;
 }
 
 button:hover {
-  background-color: #740505;
+  background-color: #8f0a0a;
+  transform: translateY(-2px);
 }
 
-/* Responsive design for small screens */
-@media screen and (max-width: 600px) {
-  .preview-table, .data-dictionary-table {
-    font-size: 0.75rem; /* Further decrease font size for mobile */
-  }
-  
-  .preview-table th, .preview-table td,
-  .data-dictionary-table th, .data-dictionary-table td {
-    padding: 3px; /* Further reduce padding for mobile */
-  }
+button:active {
+  transform: translateY(0);
+}
+
+.preview-note {
+  color: #740505;
+  font-style: italic;
+  margin-bottom: 10px;
 }
 
 .error-message {
   color: #ff0000;
   margin-top: 10px;
   font-weight: bold;
+  background-color: #ffe6e6;
+  padding: 10px;
+  border-radius: 4px;
 }
 
 .use-existing-btn {
-  margin-left: 10px;
   background-color: #4CAF50;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
+  margin-left: 10px;
 }
 
 .use-existing-btn:hover {
   background-color: #45a049;
+}
+
+/* Responsive design */
+@media screen and (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  .preview-table, .data-dictionary-table {
+    font-size: 0.75rem;
+  }
+  
+  .preview-table th, .preview-table td,
+  .data-dictionary-table th, .data-dictionary-table td {
+    padding: 5px;
+  }
+
+  .file-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  button {
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
+/* Custom checkboxes */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #740505;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:checked::before {
+  content: '\2714';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #740505;
+  font-size: 16px;
+}
+
+/* Custom file input */
+input[type="file"] {
+  border: 1px solid #ccc;
+  display: inline-block;
+  padding: 6px 12px;
+  cursor: pointer;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+input[type="file"]::-webkit-file-upload-button {
+  visibility: hidden;
+}
+
+input[type="file"]::before {
+  content: 'Select file';
+  display: inline-block;
+  background-color: #740505;
+  color: white;
+  padding: 5px 10px;
+  outline: none;
+  white-space: nowrap;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 10pt;
+  border-radius: 3px;
+  margin-right: 10px;
+}
+
+input[type="file"]:hover::before {
+  background-color: #8f0a0a;
+}
+
+.import-data-btn {
+  background-color: #740505;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+}
+
+.import-data-btn:hover {
+  background-color: #8f0a0a;
+  transform: translateY(-2px);
+}
+
+.import-data-btn:active {
+  transform: translateY(0);
+}
+
+/* Styles for the 'Column Separator' dropdown */
+.column-separator-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: white;
+  border: 1px solid #740505;
+  border-radius: 4px;
+  padding: 8px 30px 8px 10px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23740505' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 10px) center;;
+  background-size: 16px;
+  min-height: 38px;
+  box-sizing: border-box;
+  text-indent: 0.01px;
+  text-overflow: '';
+}
+
+.column-separator-select:hover {
+  border-color: #8f0a0a;
+}
+
+.column-separator-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(116, 5, 5, 0.2);
+}
+
+/* Container for the column separator dropdown */
+.column-separator-container {
+  display: inline-block; /* Or 'block' if you want it on a new line */
+  margin-bottom: 10px; /* Add some space below the container */
+}
+
+/* Label for the column separator */
+.column-separator-label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Ensure the dropdown options are not cut off */
+.column-separator-select option {
+  padding: 8px;
+}
+
+/* Hide default arrow in IE */
+.column-separator-select::-ms-expand {
+  display: none;
+}
+
+/* Container for the file input, checkbox, dropdown, and import button */
+.data-import-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.data-import-controls > * {
+  flex: 0 0 auto;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+  .data-import-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .data-import-controls > * {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .import-data-btn {
+    width: 100%;
+  }
+
+  .column-separator-container {
+    width: 100%;
+  }
+  
+  .column-separator-select {
+    width: 100%;
+  }
 }

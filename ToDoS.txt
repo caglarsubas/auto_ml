@@ -11,8 +11,10 @@ z: new functionality or bug-fix
 
 
 v2.1.x:
-- create a 'tab' type navigation bar inside the feature-card popup-dialog.
-    where tab titles are: 'descriptives', 'quality', 'importance' and explainability
+- redesign data-collection and feature-card pages
+    !!!CFH: we have still 2 arrays in the columns-separator dropdown menu 
+    try option-2 also
+    continue designin the feature-card pages also
 
 v2.2.x:
 - add a login-page create a user and password. after passing login page
@@ -20,6 +22,11 @@ v2.2.x:
     when user clicks model-store open a new menu including 
     -model monitoring, -model refitting - model development
     then when user clicks -model development(mth)
+
+- Now, I want to create a tab typed navigation menu on the top of the 'pipeline' page. 
+there will be 5 separate tabs and their titles will be '1-Declarations', '2-Preprocessing', 
+'3-Modelling', '4-Evaluation and '5-Deployment'. What we currently have is in 'data collection' 
+api and component which should be reached via clicking the '1-Declaration' tab.
 
 - Add unit test for each functionality currently being hold and run that test
     each time new functionality being added or bug-fix implemented (mth)
