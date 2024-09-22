@@ -1,0 +1,35 @@
+.model-development-container {
+    display: flex;
+    height: 100vh;
+  }
+  
+  .model-development-nav {
+    width: 200px;
+    background-color: #f0f0f0;
+    padding: 20px;
+  }
+  
+  .model-development-nav ul {
+    list-style-type: none;
+    padding: 0;
+  }
+  
+  .model-development-nav li {
+    margin-bottom: 10px;
+  }
+  
+  .model-development-nav a {
+    text-decoration: none;
+    color: #333;
+    font-weight: bold;
+  }
+  
+  .model-development-nav a.active {
+    color: #007bff;
+  }
+  
+  .model-development-content {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+  }
