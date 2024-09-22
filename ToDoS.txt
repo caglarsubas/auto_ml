@@ -11,10 +11,8 @@ z: new functionality or bug-fix
 
 
 v2.1.x:
-- redesign data-collection and feature-card pages
-    !!!CFH: we have still 2 arrays in the columns-separator dropdown menu 
-    try option-2 also
-    continue designing the feature-card pages also
+- !!!CFH: we have still 2 arrays in the columns-separator dropdown menu 
+
 
 v2.2.x:
 - Now, I want to create a tab typed navigation menu on the top of the 'pipeline' page. 

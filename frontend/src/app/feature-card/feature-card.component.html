@@ -18,7 +18,7 @@
     <mat-tab-group>
       <mat-tab label="Descriptives">
         <ng-container *ngIf="featureData">
-          <h3>Descriptive Statistics</h3>
+          <p style="font-size: 14px"><br><strong>Descriptive Statistics</strong></p>
           <div class="table-container" [class.transposed]="isFullScreen">
             <table class="descriptive-stats-table">
               <thead>
@@ -43,7 +43,7 @@
             </table>
           </div>
 
-          <h3>Distribution Plot</h3>
+          <p style="font-size: 14px"><br><strong>Distribution Plot</strong></p>
           <!-- <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div> -->
           <div id="visualization" [style.width.px]="isFullScreen ? null : originalPlotSize.width" [style.height.px]="isFullScreen ? null : originalPlotSize.height"></div>
           <!--<div id="visualization" [style.height.px]="isFullScreen ? null : 800"></div>-->

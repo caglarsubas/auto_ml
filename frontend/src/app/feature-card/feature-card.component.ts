@@ -239,7 +239,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         traceorder: 'normal'
       },
       // Add margin to accommodate the box plot
-      margin: { t: 50, b: 50, l: 50, r: 50 }
+      margin: { t: 50, b: 50, l: 50, r: 50 },
+      colorway: this.stackedWrtTarget 
+        ? ['#740505', '#a34203', '#d28100', '#f7b538'] // Complementary colors for stacked
+        : ['#740505'], // Single maroon color for non-stacked
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
     };
   
     if (this.stackedWrtTarget) {
@@ -285,7 +290,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         : counts,
       type: 'bar',
       marker: {
-        color: 'rgba(100, 149, 237, 0.7)',
+        color: layout.colorway[0],
         line: {
           color: 'rgba(100, 149, 237, 1)',
           width: 1
@@ -329,7 +334,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     if (this.isNumerical()) {
       const histogramTraces: any[] = [];
       const boxplotTraces: any[] = [];
-      const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+      //const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
       
       Object.keys(stackedData).forEach((targetClass, index) => {
         const data = stackedData[targetClass];
@@ -342,7 +347,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           name: `${targetClass}`,
           opacity: 0.7,
           histnorm: this.usePercentageYAxis ? 'percent' : '',
-          marker: { color: colors[index % colors.length] }
+          marker: { color: layout.colorway[index % layout.colorway.length] }
         });
         
         // Box plot trace
@@ -350,7 +355,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           x: filteredData,
           type: 'box',
           name: `${targetClass} (Box)`,
-          marker: { color: colors[index % colors.length] },
+          marker: { color: layout.colorway[index % layout.colorway.length] },
           boxpoints: 'outliers',
           boxmean: true,
           line: { width: 1 },
@@ -428,10 +433,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           x: histogramData,
           type: 'box',
           name: 'Box Plot',
-          marker: { color: 'rgba(100, 149, 237, 0.7)' },
+          marker: { color: layout.colorway[0] },
           boxpoints: 'outliers',
           boxmean: true,
-          line: { width: 1 },
+          line: { color: '#ffffff', width: 1 },
           ysrc: 'y2',
           showlegend: false
         });
@@ -443,9 +448,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           opacity: 0.7,
           histnorm: this.usePercentageYAxis ? 'percent' : '',
           marker: {
-            color: 'rgba(100, 149, 237, 0.7)',
+            color: layout.colorway[0],
             line: {
-              color: 'rgba(100, 149, 237, 1)',
+              color: 'black',
               width: 1
             },
           },
@@ -466,9 +471,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             : counts,
           type: 'bar',
           marker: {
-            color: 'rgba(100, 149, 237, 0.7)',
+            color: layout.colorway[0],
             line: {
-              color: 'rgba(100, 149, 237, 1)',
+              color: 'black',
               width: 1
             },
           },
