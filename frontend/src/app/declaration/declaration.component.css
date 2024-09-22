@@ -1,0 +1,271 @@
+/* src/app/data-collection/data-collection.component.css */
+body {
+  font-family: 'Poppins', 'Roboto', sans-serif;
+  background-color: #f0f2f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+h1, h2, h3 {
+  color: #740505;
+  margin-top: 40px;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+.preview-container, .data-dictionary-container {
+  background: linear-gradient(135deg, #ffffff, #f6f6f6);
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  padding: 30px;
+  margin-top: 40px;
+}
+
+.table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+}
+
+.preview-table, .data-dictionary-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+}
+
+.preview-table th, .preview-table td,
+.data-dictionary-table th, .data-dictionary-table td {
+  border: 1px solid #e0e0e0;
+  padding: 8px;
+  text-align: left;
+}
+
+.preview-table th, .data-dictionary-table th {
+  background-color: #740505;
+  color: white;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.preview-table .separator-row td {
+  text-align: center;
+  font-weight: bold;
+  background-color: #f9f9f9;
+  color: #740505;
+}
+
+.dictionary-actions, .data-import-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-top: 30px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.dictionary-upload, .file-input-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+button, .import-data-btn, .use-existing-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #740505, #8f0a0a);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+button:hover, .import-data-btn:hover, .use-existing-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+}
+
+button:active, .import-data-btn:active, .use-existing-btn:active {
+  transform: translateY(-1px);
+}
+
+.preview-note {
+  color: #740505;
+  font-style: italic;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.error-message {
+  color: #ffffff;
+  margin-top: 15px;
+  font-weight: bold;
+  background-color: #ff3b3b;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(255,59,59,0.2);
+}
+
+.use-existing-btn {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+}
+
+/* Custom checkboxes */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #740505;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  transition: all 0.3s ease;
+}
+
+input[type="checkbox"]:checked {
+  background-color: #740505;
+}
+
+input[type="checkbox"]:checked::before {
+  content: '\2714';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 16px;
+}
+
+/* Custom file input */
+input[type="file"] {
+  border: 2px solid #740505;
+  display: inline-block;
+  padding: 10px 15px;
+  cursor: pointer;
+  background-color: white;
+  border-radius: 50px;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]::-webkit-file-upload-button {
+  visibility: hidden;
+}
+
+input[type="file"]::before {
+  content: 'Select file';
+  display: inline-block;
+  background: linear-gradient(135deg, #740505, #8f0a0a);
+  color: white;
+  padding: 8px 15px;
+  outline: none;
+  white-space: nowrap;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 25px;
+  margin-right: 15px;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]:hover::before {
+  background: linear-gradient(135deg, #8f0a0a, #740505);
+}
+
+/* Styles for the 'Column Separator' dropdown */
+.column-separator-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: white;
+  border: 2px solid #740505;
+  border-radius: 50px;
+  padding: 10px 40px 10px 20px;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23740505' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 15px) center;
+  background-size: 16px;
+  min-height: 44px;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.column-separator-select:hover, .column-separator-select:focus {
+  border-color: #8f0a0a;
+  box-shadow: 0 0 0 3px rgba(116, 5, 5, 0.2);
+}
+
+.column-separator-container {
+  display: inline-block;
+  margin-bottom: 15px;
+}
+
+.column-separator-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: bold;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.column-separator-select option {
+  padding: 10px;
+}
+
+/* Hide default arrow in IE */
+.column-separator-select::-ms-expand {
+  display: none;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .preview-table, .data-dictionary-table {
+    font-size: 0.8rem;
+  }
+  
+  .preview-table th, .preview-table td,
+  .data-dictionary-table th, .data-dictionary-table td {
+    padding: 8px;
+  }
+
+  .data-import-controls, .dictionary-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .data-import-controls > *, .dictionary-actions > * {
+    width: 100%;
+    margin-bottom: 15px;
+  }
+
+  button, .import-data-btn, .column-separator-select {
+    width: 100%;
+  }
+}

@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { DataCollectionComponent } from './data-collection/data-collection.component';
+import { DeclarationComponent } from './declaration/declaration.component';
 import { PreprocessingComponent } from './preprocessing/preprocessing.component';
 import { ModelingComponent } from './modeling/modeling.component';
 import { EvaluationComponent } from './evaluation/evaluation.component';
@@ -13,7 +13,7 @@ const routes: Routes = [
     path: 'model-development',
     component: ModelDevelopmentComponent,
     children: [
-      { path: 'declaration', component: DataCollectionComponent },
+      { path: 'declaration', component: DeclarationComponent },
       { path: 'preprocessing', component: PreprocessingComponent },
       { path: 'modeling', component: ModelingComponent },
       { path: 'evaluation', component: EvaluationComponent },

@@ -14,15 +14,15 @@ export class DataService {
   uploadFile(file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    return this.http.post(`${this.apiUrl}data-files/`, formData);
+    return this.http.post(`${this.apiUrl}declaration/`, formData);
   }
 
   getDataPreview(fileId: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}data-files/${fileId}/preview/`);
+    return this.http.get(`${this.apiUrl}declaration/${fileId}/preview/`);
   }
 
   getDataDictionary(fileId: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}data-files/${fileId}/data_dictionary/`);
+    return this.http.get(`${this.apiUrl}declaration/${fileId}/data_dictionary/`);
   }
 
   getFeatureCard(fileId: string, columnName: string): Observable<any> {

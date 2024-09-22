@@ -21,7 +21,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { DataCollectionComponent } from './data-collection/data-collection.component';
+import { DeclarationComponent } from './declaration/declaration.component';
 import { FeatureCardComponent } from './feature-card/feature-card.component';
 import { PreprocessingComponent } from './preprocessing/preprocessing.component';
 import { ModelingComponent } from './modeling/modeling.component';
@@ -32,7 +32,7 @@ import { ModelDevelopmentComponent } from './model-development/model-development
 @NgModule({
   declarations: [
     AppComponent,
-    DataCollectionComponent,
+    DeclarationComponent,
     FeatureCardComponent,
     PreprocessingComponent,
     ModelingComponent,
