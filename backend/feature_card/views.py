@@ -8,7 +8,7 @@ from scipy import stats as scipy_stats
 import logging
 import os
 from django.conf import settings
-from data_collection.models import DataFile, DataDictionary  # Make sure to import DataDictionary if you haven't
+from declaration.models import Declaration, DataDictionary  # Make sure to import DataDictionary if you haven't
 from django.http import JsonResponse
 from django.db import models
 import json
@@ -41,8 +41,8 @@ class FeatureCardViewSet(viewsets.ViewSet):
             return Response({"error": "Column name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            data_file = DataFile.objects.get(id=file_id)
-        except DataFile.DoesNotExist:
+            data_file = Declaration.objects.get(id=file_id)
+        except Declaration.DoesNotExist:
             logger.error(f"DataFile with id {file_id} not found")
             return Response({"error": f"File not found for ID: {file_id}"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -205,7 +205,7 @@ class FeatureCardViewSet(viewsets.ViewSet):
             return Response({"error": "Column name is required"}, status=400)
 
         try:
-            data_file = DataFile.objects.get(id=file_id)
+            data_file = Declaration.objects.get(id=file_id)
             file_path = data_file.file.path
             df = pd.read_csv(file_path)
             

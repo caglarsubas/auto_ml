@@ -2,8 +2,8 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import DataFile, DataDictionary
-from .serializers import DataFileSerializer
+from .models import Declaration, DataDictionary
+from .serializers import DeclarationSerializer
 import os
 from django.db.models import Q
 from django.conf import settings
@@ -20,9 +20,9 @@ import magic  # You'll need to install python-magic: pip install python-magic
 
 logger = logging.getLogger(__name__)
 
-class DataFileViewSet(viewsets.ModelViewSet):
-    queryset = DataFile.objects.all()
-    serializer_class = DataFileSerializer
+class DeclarationViewSet(viewsets.ModelViewSet):
+    queryset = Declaration.objects.all()
+    serializer_class = DeclarationSerializer
     
     def create(self, request, *args, **kwargs):
         file = request.FILES.get('file')
@@ -66,22 +66,22 @@ class DataFileViewSet(viewsets.ModelViewSet):
             full_processed_path = os.path.join(settings.MEDIA_ROOT, processed_file_path)
             df.to_csv(full_processed_path, index=False)
 
-            # Create or update DataFile instance
+            # Create or update Declaration instance
             try:
-                data_file = DataFile.objects.get(original_name=name)
+                data_file = Declaration.objects.get(original_name=name)
                 data_file.file = processed_file_path
                 data_file.name = name
                 data_file.save()
-            except DataFile.DoesNotExist:
-                data_file = DataFile.objects.create(
+            except Declaration.DoesNotExist:
+                data_file = Declaration.objects.create(
                     file=processed_file_path,
                     name=name,
                     original_name=name
                 )
             except MultipleObjectsReturned:
                 # Handle the case where multiple objects are found
-                DataFile.objects.filter(original_name=name).delete()
-                data_file = DataFile.objects.create(
+                Declaration.objects.filter(original_name=name).delete()
+                data_file = Declaration.objects.create(
                     file=processed_file_path,
                     name=name,
                     original_name=name
@@ -101,10 +101,10 @@ class DataFileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='by-name/(?P<file_name>.+)')
     def get_by_name(self, request, file_name=None):
         try:
-            data_file = DataFile.objects.get(file__endswith=file_name)
+            data_file = Declaration.objects.get(file__endswith=file_name)
             serializer = self.get_serializer(data_file)
             return Response(serializer.data)
-        except DataFile.DoesNotExist:
+        except Declaration.DoesNotExist:
             return Response({"error": f"File '{file_name}' not found."}, status=status.HTTP_404_NOT_FOUND)
     
     @action(detail=True, methods=['get'])

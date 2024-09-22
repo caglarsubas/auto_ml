@@ -2,9 +2,9 @@ from django.apps import AppConfig
 import os
 from django.conf import settings
 
-class DataCollectionConfig(AppConfig):
+class DeclarationConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'data_collection'
+    name = 'declaration'
 
     def ready(self):
         data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')

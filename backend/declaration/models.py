@@ -2,7 +2,7 @@ from django.db import models
 import os
 from django.conf import settings
 
-class DataFile(models.Model):
+class Declaration(models.Model):
     file = models.FileField(upload_to='data_files/')
     name = models.CharField(max_length=255)
     original_name = models.CharField(max_length=255, unique=True)
@@ -23,7 +23,7 @@ class DataFile(models.Model):
         return None
 
 class DataDictionary(models.Model):
-    data_file = models.ForeignKey(DataFile, on_delete=models.CASCADE, related_name='data_dictionary')
+    data_file = models.ForeignKey(Declaration, on_delete=models.CASCADE, related_name='data_dictionary')
     column_name = models.CharField(max_length=255)
     description = models.TextField()
 
