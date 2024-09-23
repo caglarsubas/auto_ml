@@ -6,19 +6,9 @@ y: new api
 z: new functionality or bug-fix
 
 
-!!!CFH (17.09.2024): 
-
-
-
 v2.1.x:
-- !!!CFH: we have still 2 arrays in the columns-separator dropdown menu 
-
-
-v2.2.x:
-- Now, I want to create a tab typed navigation menu on the top of the 'pipeline' page. 
-there will be 5 separate tabs and their titles will be '1-Declarations', '2-Preprocessing', 
-'3-Modelling', '4-Evaluation and '5-Deployment'. What we currently have is in 'data collection' 
-api and component which should be reached via clicking the '1-Declaration' tab.
+- modernize the nav menu:
+    - wheel menu with hovering and spinning animation
 
 - add a login-page create a user and password. after passing login page
     user reaches a home-page where the top-menu falls inside the page 

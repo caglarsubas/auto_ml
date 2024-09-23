@@ -1,14 +1,19 @@
 <div class="model-development-container">
-    <nav class="model-development-nav">
-      <ul>
-        <li><a routerLink="declaration" routerLinkActive="active">Declaration</a></li>
-        <li><a routerLink="preprocessing" routerLinkActive="active">Preprocessing</a></li>
-        <li><a routerLink="modeling" routerLinkActive="active">Modeling</a></li>
-        <li><a routerLink="evaluation" routerLinkActive="active">Evaluation</a></li>
-        <li><a routerLink="deployment" routerLinkActive="active">Deployment</a></li>
-      </ul>
-    </nav>
-    <div class="model-development-content">
-      <router-outlet></router-outlet>
-    </div>
+  <p style="font-size:larger; font-weight:bold">
+    Model Development Pipeline</p>
+  <nav class="side-menu">
+    <div class="menu-header">Pipeline Flow</div>
+    <ul>
+      <li *ngFor="let item of menuItems; let i = index" 
+          [class.active]="currentRoute === item">
+        <a [routerLink]="['/model-development', item]">
+          {{i + 1}}-{{ item | titlecase }}
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <div class="model-development-content">
+    <router-outlet></router-outlet>
   </div>
+</div>
