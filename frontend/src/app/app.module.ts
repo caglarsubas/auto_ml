@@ -18,6 +18,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatOptionModule } from '@angular/material/core';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatRippleModule } from '@angular/material/core';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -63,6 +64,7 @@ import { HomeComponent } from './home/home.component';
     MatFormFieldModule,
     MatOptionModule,
     MatTabsModule,
+    MatRippleModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

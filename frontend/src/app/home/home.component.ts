@@ -28,6 +28,6 @@ export class HomeComponent {
     { 
       name: 'About', 
       icon: 'assets/about_4.png',
-      subItems: ['declar.ai', 'Team', 'References', 'Community'] }
+      subItems: ['User Guide', 'White Paper', 'Team & Community', 'References'] }
   ];
 }
