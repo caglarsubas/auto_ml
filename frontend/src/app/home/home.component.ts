@@ -18,13 +18,13 @@ export class HomeComponent {
       icon: 'assets/model_store_4.png',
       subItems: ['Model Development', 'Model Re-Fitting', 'Model Monitoring'] },
     { 
-      name: 'Deploys', 
+      name: 'Deployments', 
       icon: 'assets/deploy_4.png',
       subItems: ['Deployed Artifacts', 'Security Monitoring', 'Performance Monitoring', 'New Deployment'] },
     { 
-      name: 'Docs', 
+      name: 'Reporting', 
       icon: 'assets/docs_3.png',
-      subItems: ['Declarative ML', 'Algorithm APIs', 'Pipeline Types', 'Supported DBs'] },
+      subItems: ['Model Summary', 'Quality Report', 'Explainability', 'Causality'] },
     { 
       name: 'About', 
       icon: 'assets/about_4.png',

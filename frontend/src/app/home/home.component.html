@@ -8,7 +8,7 @@
             <img *ngIf="item.icon" [src]="item.icon" [alt]="item.name + ' icon'" class="menu-icon">
             <div *ngIf="!item.icon" class="icon-placeholder"></div>
         </div>
-        <h2>{{ item.name }}</h2>
+        <h4>{{ item.name }}</h4>
         <ul>
           <li *ngFor="let subItem of item.subItems">{{ subItem }}</li>
         </ul>
