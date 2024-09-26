@@ -6,8 +6,10 @@ import { ModelingComponent } from './modeling/modeling.component';
 import { EvaluationComponent } from './evaluation/evaluation.component';
 import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
+import { HomeComponent } from './home/home.component';
 
 const routes: Routes = [
+  { path: '', component: HomeComponent },
   { path: '', redirectTo: '/model-development', pathMatch: 'full' },
   {
     path: 'model-development',

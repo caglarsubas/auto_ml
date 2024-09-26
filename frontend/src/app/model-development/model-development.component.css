@@ -1,3 +1,36 @@
+.model-development-container {
+  padding: 20px;
+}
+
+h1 {
+  color: #740505;
+  margin-bottom: 20px;
+}
+
+.pipeline-dropdown {
+  margin-bottom: 20px;
+}
+
+.pipeline-dropdown select {
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #740505;
+  border-radius: 5px;
+  background-color: white;
+  color: #740505;
+  cursor: pointer;
+  position: right;
+}
+
+.model-development-line {
+  margin:0px 0;
+  height:5px;
+  background:
+    repeating-linear-gradient(90deg,#740505 0 5px ,#0000 0 9px);
+  background-size:100% 2px;
+  background-repeat:no-repeat;
+}
+
 .side-menu {
   position: fixed;
   left: -180px;

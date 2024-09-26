@@ -7,8 +7,6 @@ z: new functionality or bug-fix
 
 
 v2.1.x:
-- modernize the nav menu:
-    - wheel menu with hovering and spinning animation
 
 - add a login-page create a user and password. after passing login page
     user reaches a home-page where the top-menu falls inside the page 

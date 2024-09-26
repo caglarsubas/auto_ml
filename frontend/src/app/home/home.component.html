@@ -1,0 +1,17 @@
+<!-- home.component.html -->
+<div class="home-container">
+    <h1>Welcome to <strong>declar.ai</strong></h1>
+    <p style='color: maroon;'><em>Democratizing the power of ML</em></p>
+    <div class="menu-grid">
+      <div *ngFor="let item of menuItems" class="menu-item">
+        <div class="icon-container">
+            <img *ngIf="item.icon" [src]="item.icon" [alt]="item.name + ' icon'" class="menu-icon">
+            <div *ngIf="!item.icon" class="icon-placeholder"></div>
+        </div>
+        <h2>{{ item.name }}</h2>
+        <ul>
+          <li *ngFor="let subItem of item.subItems">{{ subItem }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>

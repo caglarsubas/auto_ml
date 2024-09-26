@@ -28,6 +28,7 @@ import { ModelingComponent } from './modeling/modeling.component';
 import { EvaluationComponent } from './evaluation/evaluation.component';
 import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
+import { HomeComponent } from './home/home.component';
 
 @NgModule({
   declarations: [
@@ -38,7 +39,8 @@ import { ModelDevelopmentComponent } from './model-development/model-development
     ModelingComponent,
     EvaluationComponent,
     DeploymentComponent,
-    ModelDevelopmentComponent
+    ModelDevelopmentComponent,
+    HomeComponent
   ],
   imports: [
     BrowserModule,

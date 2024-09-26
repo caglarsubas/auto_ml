@@ -10,6 +10,7 @@ import { filter } from 'rxjs/operators';
 export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'modeling', 'evaluation', 'deployment'];
+  selectedPipeline: string = '';
 
   constructor(private router: Router) {}
 
@@ -19,5 +20,12 @@ export class ModelDevelopmentComponent implements OnInit {
     ).subscribe(() => {
       this.currentRoute = this.router.url.split('/').pop() || 'declaration';
     });
+  }
+
+  onPipelineChange(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    this.selectedPipeline = select.value;
+    // Here you can add logic to handle the pipeline change
+    console.log('Selected pipeline:', this.selectedPipeline);
   }
 }
