@@ -28,4 +28,9 @@ export class ModelDevelopmentComponent implements OnInit {
     // Here you can add logic to handle the pipeline change
     console.log('Selected pipeline:', this.selectedPipeline);
   }
+  onStartClick() {
+    if (this.selectedPipeline) {
+      this.router.navigate(['/model-development/declaration']);
+    }
+  }
 }

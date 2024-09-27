@@ -9,6 +9,7 @@ h1 {
 
 .pipeline-dropdown {
   margin-bottom: 20px;
+  flex-grow: 1;
 }
 
 .pipeline-dropdown select {
@@ -20,6 +21,33 @@ h1 {
   color: #740505;
   cursor: pointer;
   position: right;
+}
+
+.header-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.start-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #740505;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.start-button:hover {
+  background-color: #8f0a0a;
+}
+
+.start-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 .model-development-line {

@@ -1,17 +1,19 @@
 <div class="model-development-container">
-  
-  <div class="pipeline-dropdown">
-    <p style="font-size:larger; font-weight:bold">Model Development</p>
-    <select (change)="onPipelineChange($event)">
-      <option value="boosting" disabled selected>1- Boosting Pipeline</option>
-      <option value="logit">2- Logit Pipeline</option>
-      <option value="credit-scoring">3- Credit Scoring Pipeline</option>
-      <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
-    </select>
+  <div class="header-controls">  
+    <div class="pipeline-dropdown">
+      <p style="font-size:larger; font-weight:bold">Model Development</p>
+      <select (change)="onPipelineChange($event)">
+        <option value="boosting" disabled selected>Select Pipeline</option>
+        <option value="boosting">1- Boosting Pipeline</option>
+        <option value="logit">2- Logit Pipeline</option>
+        <option value="credit-scoring">3- Credit Scoring Pipeline</option>
+        <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
+      </select>
+    </div>
+    <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
   </div>
-
+  
   <div class="model-development-line"></div>
-
   <nav class="side-menu">
     <div class="menu-header">Pipeline Flow</div>
     <ul>
