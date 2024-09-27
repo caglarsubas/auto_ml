@@ -8,8 +8,8 @@ z: new functionality or bug-fix
 
 v2.1.x:
 
-- change Docs menu purpose to reporting phase
-- make home page sub menu items clickable
+- home page should stand on localhost/4200/home endpoint
+- make home page sub menu item 'model-development' router-linked to model-development page
 - make top logo hovering (when hovered make bigger)
 
 - add a login-page create a user and password. after passing login page

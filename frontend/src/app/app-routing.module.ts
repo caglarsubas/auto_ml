@@ -9,7 +9,7 @@ import { ModelDevelopmentComponent } from './model-development/model-development
 import { HomeComponent } from './home/home.component';
 
 const routes: Routes = [
-  { path: '', component: HomeComponent },
+  { path: 'home', component: HomeComponent },
   { path: '', redirectTo: '/model-development', pathMatch: 'full' },
   {
     path: 'model-development',
