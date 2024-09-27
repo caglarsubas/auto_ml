@@ -268,4 +268,12 @@ input[type="file"]:hover::before {
   button, .import-data-btn, .column-separator-select {
     width: 100%;
   }
+
+  .not-started-message {
+    text-align: center;
+    font-size: 1.2em;
+    color: #740505;
+    margin-top: 50px;
+  }
+  
 }

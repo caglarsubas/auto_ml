@@ -1,15 +1,19 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import * as XLSX from 'xlsx';
+import { SharedService } from '../services/shared.service';
+import { combineLatest, Observable, Subscription } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-declaration',
   templateUrl: './declaration.component.html',
   styleUrls: ['./declaration.component.css']
 })
-export class DeclarationComponent {
+
+export class DeclarationComponent implements OnInit, OnDestroy {
   selectedFile: File | null = null;
   selectedDictionaryFile: File | null = null;
   previewData: any = null;
@@ -24,8 +28,29 @@ export class DeclarationComponent {
   isExcelFile: boolean = false;
   hasMultipleSheets: boolean = false;
   firstSheetHasNotDataset: boolean = false;
+  showContent: boolean = false;
+  private subscription: Subscription = new Subscription();
 
-  constructor(private http: HttpClient, private dialog: MatDialog) {}
+  constructor(
+    private http: HttpClient,
+    private dialog: MatDialog,
+    private sharedService: SharedService
+  ) {}
+
+  ngOnInit() {
+    this.subscription = combineLatest([
+      this.sharedService.isStarted$,
+      this.sharedService.selectedPipeline$
+    ]).subscribe(([isStarted, selectedPipeline]) => {
+      this.showContent = isStarted && !!selectedPipeline;
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.subscription) {
+      this.subscription.unsubscribe();
+    }
+  }
 
   onFileSelected(event: any): void {
     this.selectedFile = event.target.files[0];

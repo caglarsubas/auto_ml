@@ -30,6 +30,7 @@ import { EvaluationComponent } from './evaluation/evaluation.component';
 import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
 import { HomeComponent } from './home/home.component';
+import { SharedService } from './services/shared.service';
 
 @NgModule({
   declarations: [
@@ -66,7 +67,7 @@ import { HomeComponent } from './home/home.component';
     MatTabsModule,
     MatRippleModule,
   ],
-  providers: [],
+  providers: [SharedService],
   bootstrap: [AppComponent]
 })
 export class AppModule { }
