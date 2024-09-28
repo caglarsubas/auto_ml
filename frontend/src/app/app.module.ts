@@ -31,6 +31,7 @@ import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
 import { HomeComponent } from './home/home.component';
 import { SharedService } from './services/shared.service';
+import { LoginComponent } from './login/login.component';
 
 @NgModule({
   declarations: [
@@ -42,7 +43,8 @@ import { SharedService } from './services/shared.service';
     EvaluationComponent,
     DeploymentComponent,
     ModelDevelopmentComponent,
-    HomeComponent
+    HomeComponent,
+    LoginComponent
   ],
   imports: [
     BrowserModule,

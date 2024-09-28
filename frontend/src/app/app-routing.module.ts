@@ -7,10 +7,12 @@ import { EvaluationComponent } from './evaluation/evaluation.component';
 import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
 import { HomeComponent } from './home/home.component';
+import { LoginComponent } from './login/login.component';
 
 const routes: Routes = [
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
+  { path: 'login', component: LoginComponent },
   { path: 'home', component: HomeComponent },
-  { path: '', redirectTo: '/model-development', pathMatch: 'full' },
   {
     path: 'model-development',
     component: ModelDevelopmentComponent,
