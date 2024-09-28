@@ -4,7 +4,15 @@
 
 <mat-toolbar color="primary">
   <span class="logo-container">
-    <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo" class="logo" style="height: 65px; margin-left: 10px;">
+    <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo" class="logo" style="height: 65px; margin-left: 10px;"
+    (mousemove)="updateMagnifier($event)" 
+    (mouseenter)="showMagnifier = true"
+    (mouseleave)="showMagnifier = false">
+    <div class="magnifier" [style.display]="showMagnifier ? 'block' : 'none'" 
+    [style.left.px]="magnifierX" [style.top.px]="magnifierY">
+      <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo Magnified" class="magnified-logo" 
+      [style.transform]="'translate(' + (-magnifierX * 2) + 'px, ' + (-magnifierY * 2) + 'px) scale(2)'">
+    </div>
   </span>
   <span class="spacer"></span>
   <!-- Home Page Button with Dropdown -->

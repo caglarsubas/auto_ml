@@ -43,7 +43,7 @@
   .menu-item:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     transform: translateY(-5px);
-    background-color: #dda5a5; /* Add this line to change the background color on hover */
+    background-color: #e6e5e5; /* Add this line to change the background color on hover */
   }
   
   .icon-container {
