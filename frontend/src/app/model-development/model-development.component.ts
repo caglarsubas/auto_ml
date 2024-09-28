@@ -12,6 +12,15 @@ export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
+  currentStep: string = 'declaration';
+  showDeclaration: boolean = false;  // Add this line
+  showSteps: { [key: string]: boolean } = {
+    declaration: false,
+    preprocessing: false,
+    modeling: false,
+    evaluation: false,
+    deployment: false
+  };
 
   constructor(private router: Router, private sharedService: SharedService) {}
 
@@ -24,10 +33,19 @@ export class ModelDevelopmentComponent implements OnInit {
     console.log('Selected pipeline:', this.selectedPipeline);
     this.sharedService.setSelectedPipeline(this.selectedPipeline);
   }
+
   onStartClick() {
     if (this.selectedPipeline) {
       this.sharedService.setStarted(true);
       this.router.navigate(['/model-development/declaration']);
+      this.setCurrentStep('declaration');
     }
+  }
+
+  setCurrentStep(step: string) {
+    this.currentStep = step;
+    Object.keys(this.showSteps).forEach(key => {
+      this.showSteps[key] = key === step;
+    });
   }
 }

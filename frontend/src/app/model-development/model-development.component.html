@@ -14,20 +14,26 @@
   </div>
   
   <div class="model-development-line"></div>
-  <nav class="side-menu">
-    <div class="menu-header">Pipeline Flow</div>
-    <ul>
-      <li *ngFor="let item of menuItems; let i = index" 
-          [class.active]="currentRoute === item">
-        <a [routerLink]="['/model-development', item]">
-          {{i + 1}}-{{ item | titlecase }}
-        </a>
-      </li>
-    </ul>
-  </nav>
+  <div class="content-wrapper">
+    <nav class="side-menu">
+      <div class="menu-header">Pipeline Flow</div>
+      <ul>
+        <li *ngFor="let item of menuItems; let i = index" 
+            [class.active]="currentStep  === item"
+            (click)="setCurrentStep(item)">
+            <a href="javascript:void(0)">{{i + 1}}- {{ item | titlecase }}</a>
+        </li>
+      </ul>
+    </nav>
 
-  <div class="model-development-content">
-    <router-outlet></router-outlet>
+    <div class="main-content">
+      <app-declaration *ngIf="showSteps['declaration']"></app-declaration>
+      <app-preprocessing *ngIf="showSteps['preprocessing']"></app-preprocessing>
+      <app-modeling *ngIf="showSteps['modeling']"></app-modeling>
+      <app-evaluation *ngIf="showSteps['evaluation']"></app-evaluation>
+      <app-deployment *ngIf="showSteps['deployment']"></app-deployment>
+    </div>
+
   </div>
 
 </div>

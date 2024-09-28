@@ -1,5 +1,6 @@
 // home.component.ts
 import { Component } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-home',
@@ -30,4 +31,10 @@ export class HomeComponent {
       icon: 'assets/about_4.png',
       subItems: ['User Guide', 'White Paper', 'Team & Community', 'References'] }
   ];
+
+  constructor(private router: Router) {}
+
+  navigateToModelDevelopment() {
+    this.router.navigate(['/model-development']);
+  }
 }

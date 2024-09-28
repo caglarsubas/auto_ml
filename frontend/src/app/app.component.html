@@ -8,7 +8,7 @@
   </span>
   <span class="spacer"></span>
   <!-- Home Page Button with Dropdown -->
-  <a mat-button routerLink="/">Home</a>
+  <a mat-button routerLink="/home">Home</a>
   <a mat-button [matMenuTriggerFor]="FeatureStore">Feature Store</a>
   <mat-menu #FeatureStore="matMenu">
     <button mat-menu-item>Feature Collection</button>
@@ -17,7 +17,7 @@
   </mat-menu>
   <a mat-button [matMenuTriggerFor]="ModelStore">Model Store</a>
   <mat-menu #ModelStore="matMenu">
-    <button mat-menu-item>Model Development</button>
+    <button mat-menu-item routerLink="/model-development">Model Development</button>
     <button mat-menu-item>Model Re-Fitting</button>
     <button mat-menu-item>Model Monitoring</button>
   </mat-menu>
