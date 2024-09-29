@@ -69,7 +69,9 @@ import { LoginComponent } from './login/login.component';
     MatTabsModule,
     MatRippleModule,
   ],
-  providers: [SharedService],
+  providers: [
+    SharedService,
+  ],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

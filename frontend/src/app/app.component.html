@@ -2,55 +2,71 @@
 <!--<h1>Auto-ML Platform</h1> -->
 <!--<app-data-collection></app-data-collection> -->
 
-<mat-toolbar color="primary">
-  <span class="logo-container">
-    <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo" class="logo" style="height: 65px; margin-left: 10px;"
-    (mousemove)="updateMagnifier($event)" 
-    (mouseenter)="showMagnifier = true"
-    (mouseleave)="showMagnifier = false">
-    <div class="magnifier" [style.display]="showMagnifier ? 'block' : 'none'" 
-    [style.left.px]="magnifierX" [style.top.px]="magnifierY">
-      <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo Magnified" class="magnified-logo" 
-      [style.transform]="'translate(' + (-magnifierX * 2) + 'px, ' + (-magnifierY * 2) + 'px) scale(2)'">
-    </div>
-  </span>
-  <span class="spacer"></span>
-  <!-- Home Page Button with Dropdown -->
-  <a mat-button routerLink="/home">Home</a>
-  <a mat-button [matMenuTriggerFor]="FeatureStore">Feature Store</a>
-  <mat-menu #FeatureStore="matMenu">
-    <button mat-menu-item>Feature Collection</button>
-    <button mat-menu-item>Feature Engineering</button>
-    <button mat-menu-item>Feature Monitoring</button>
-  </mat-menu>
-  <a mat-button [matMenuTriggerFor]="ModelStore">Model Store</a>
-  <mat-menu #ModelStore="matMenu">
-    <button mat-menu-item routerLink="/model-development">Model Development</button>
-    <button mat-menu-item>Model Re-Fitting</button>
-    <button mat-menu-item>Model Monitoring</button>
-  </mat-menu>
-  <a mat-button [matMenuTriggerFor]="Deployments">Deployments</a>
-  <mat-menu #Deployments="matMenu">
-    <button mat-menu-item>Deployed Artifacts</button>
-    <button mat-menu-item>Security Monitoring</button>
-    <button mat-menu-item>Performance Monitoring</button>
-    <button mat-menu-item>New Deployment</button>
-  </mat-menu>
-  <a mat-button [matMenuTriggerFor]="Reporting">Reporting</a>
-  <mat-menu #Reporting="matMenu">
-    <button mat-menu-item>Model Summary</button>
-    <button mat-menu-item>Quality Report</button>
-    <button mat-menu-item>Explainability</button>
-    <button mat-menu-item>Causality</button>
-  </mat-menu>
-  <a mat-button [matMenuTriggerFor]="About">About</a>
-  <mat-menu #About="matMenu">
-    <button mat-menu-item>User Guide</button>
-    <button mat-menu-item>White Paper</button>
-    <button mat-menu-item>Team & Community</button>
-    <button mat-menu-item>References</button>
-  </mat-menu>
-</mat-toolbar>
+<ng-container *ngIf="isBrowser">
+
+  <mat-toolbar color="primary">
+    <span class="logo-container">
+      <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo" class="logo" style="height: 65px; margin-left: 10px;"
+      (mousemove)="updateMagnifier($event)" 
+      (mouseenter)="showMagnifier = true"
+      (mouseleave)="showMagnifier = false">
+      <div class="magnifier" [style.display]="showMagnifier ? 'block' : 'none'" 
+      [style.left.px]="magnifierX" [style.top.px]="magnifierY">
+        <img src="assets/declarai_logo_2.png" alt="DeclarAI Logo Magnified" class="magnified-logo" 
+        [style.transform]="'translate(' + (-magnifierX * 2) + 'px, ' + (-magnifierY * 2) + 'px) scale(2)'">
+      </div>
+    </span>
+    
+    <span class="spacer"></span>
+
+    <ng-container *ngIf="isLoginPage">
+      <a mat-button [matMenuTriggerFor]="About">About</a>
+      <mat-menu #About="matMenu">
+        <button mat-menu-item>User Guide</button>
+        <button mat-menu-item>White Paper</button>
+        <button mat-menu-item>Team & Community</button>
+        <button mat-menu-item>References</button>
+      </mat-menu>
+    </ng-container>
+      
+    <ng-container *ngIf="isHomePage">
+      <!-- Add Sign Out button -->
+      <button mat-button (click)="onSignOut()">Sign Out</button>
+    </ng-container>
+
+    <ng-container *ngIf="!isLoginPage || !isHomePage">
+      <a mat-button routerLink="/home">Home</a>
+      <a mat-button [matMenuTriggerFor]="FeatureStore">Feature Store</a>
+      <mat-menu #FeatureStore="matMenu">
+        <button mat-menu-item>Feature Collection</button>
+        <button mat-menu-item>Feature Engineering</button>
+        <button mat-menu-item>Feature Monitoring</button>
+      </mat-menu>
+      <a mat-button [matMenuTriggerFor]="ModelStore">Model Store</a>
+      <mat-menu #ModelStore="matMenu">
+        <button mat-menu-item routerLink="/model-development">Model Development</button>
+        <button mat-menu-item>Model Re-Fitting</button>
+        <button mat-menu-item>Model Monitoring</button>
+      </mat-menu>
+      <a mat-button [matMenuTriggerFor]="Deployments">Deployments</a>
+      <mat-menu #Deployments="matMenu">
+        <button mat-menu-item>Deployed Artifacts</button>
+        <button mat-menu-item>Security Monitoring</button>
+        <button mat-menu-item>Performance Monitoring</button>
+        <button mat-menu-item>New Deployment</button>
+      </mat-menu>
+      <a mat-button [matMenuTriggerFor]="Reporting">Reporting</a>
+      <mat-menu #Reporting="matMenu">
+        <button mat-menu-item>Model Summary</button>
+        <button mat-menu-item>Quality Report</button>
+        <button mat-menu-item>Explainability</button>
+        <button mat-menu-item>Causality</button>
+      </mat-menu>
+      <!-- Add Sign Out button -->
+      <button mat-button (click)="onSignOut()">Sign Out</button>
+    </ng-container>
+
+  </mat-toolbar>
 
 <div class="content-container">
   <router-outlet></router-outlet>
