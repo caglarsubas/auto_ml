@@ -5,8 +5,7 @@
     <div class="menu-grid">
       <div *ngFor="let item of menuItems" class="menu-item">
         <div class="icon-container">
-            <img *ngIf="item.icon" [src]="item.icon" [alt]="item.name + ' icon'" class="menu-icon">
-            <div *ngIf="!item.icon" class="icon-placeholder"></div>
+            <img [src]="item.staticIcon" [attr.data-gif]="item.gifIcon" [alt]="item.name + ' icon'" class="menu-icon">
         </div>
         <h4>{{ item.name }}</h4>
         <ul>

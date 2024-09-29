@@ -190,7 +190,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         Feature_Description: item.Feature_Description || 'No description available'
       }));
       this.dialog.open(FeatureCardComponent, {
-        width: '400px',
+        width: '600px',
         data: { 
           fileId: this.currentFileId.toString(), 
           columnName: feature.Feature_Name,

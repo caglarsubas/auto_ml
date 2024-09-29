@@ -58,7 +58,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   outlierCleaningEnabled: boolean = false;
   sparsityCleaningEnabled: boolean = false;
   stackedWrtTarget: boolean = false;
-  public originalPlotSize = { width: 400, height: 300 };
+  public originalPlotSize = { width: 500, height: 300 };
   isFullScreen: boolean = false;
   private resizeListener: () => void;
   isCategorical: boolean = false;
