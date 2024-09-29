@@ -45,6 +45,15 @@
     transform: translateY(-5px);
     background-color: #e6e5e5; /* Add this line to change the background color on hover */
   }
+
+  .menu-item li a {
+    text-decoration: none;
+    color: inherit;
+  }
+  
+  .menu-item li a:hover {
+    text-decoration: none;
+  }
   
   .icon-container {
     width: 125px;
