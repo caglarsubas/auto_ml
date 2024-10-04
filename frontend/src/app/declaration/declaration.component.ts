@@ -14,7 +14,7 @@ import { map } from 'rxjs/operators';
 })
 
 export class DeclarationComponent implements OnInit, OnDestroy {
-  selectedFile: File | null = null;
+  selectedFiles: File[] = [];
   selectedDictionaryFile: File | null = null;
   previewData: any = null;
   dataDictionary: any[] = [];
@@ -52,8 +52,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     }
   }
 
-  onFileSelected(event: any): void {
-    this.selectedFile = event.target.files[0];
+  onFilesSelected(event: any): void {
+    this.selectedFiles = Array.from(event.target.files);
     this.errorMessage = null;
     this.showUseExistingButton = false;
     this.columnSeparator = 'semicolon';
@@ -63,8 +63,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     this.hasMultipleSheets = false;
     this.firstSheetHasNotDataset = false;
 
-    if (this.selectedFile) {
-      const fileName = this.selectedFile.name.toLowerCase();
+    if (this.selectedFiles.length > 0) {
+      const fileName = this.selectedFiles[0].name.toLowerCase();
       if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         this.isExcelFile = true;
         this.checkExcelSheets();
@@ -79,7 +79,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       const workbook = XLSX.read(data, {type: 'array'});
       this.hasMultipleSheets = workbook.SheetNames.length > 1;
     };
-    reader.readAsArrayBuffer(this.selectedFile as Blob);
+    reader.readAsArrayBuffer(this.selectedFiles[0] as Blob);
   }
 
   onDictionaryFileSelected(event: any): void {
@@ -87,10 +87,11 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   }
 
   onUpload(): void {
-    if (this.selectedFile) {
+    if (this.selectedFiles.length > 0) {
       const formData = new FormData();
-      formData.append('file', this.selectedFile, this.selectedFile.name);
-      formData.append('name', this.selectedFile.name);
+      this.selectedFiles.forEach((file, index) => {
+        formData.append(`file${index}`, file, file.name);
+      });
       formData.append('first_line_is_not_header', this.firstLineIsNotHeader.toString());
       formData.append('column_separator', this.columnSeparator);
       formData.append('first_sheet_has_not_dataset', this.firstSheetHasNotDataset.toString());
@@ -112,7 +113,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.errorMessage = 'An error occurred while uploading the file: ' + (error.error?.error || error.message);
             if (error.status === 409) {
               this.showUseExistingButton = true;
-              this.existingFileName = this.selectedFile?.name || null;
+              this.existingFileName = this.selectedFiles[0]?.name || null;
             } else {
               this.showUseExistingButton = false;
             }

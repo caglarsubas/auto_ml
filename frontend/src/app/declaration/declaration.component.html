@@ -4,7 +4,7 @@
 
     <h3>Data Declaration</h3>
     <div class="data-import-controls">
-      <input type="file" (change)="onFileSelected($event)">
+      <input type="file" (change)="onFilesSelected($event)" multiple>
       <div>
         <input type="checkbox" [(ngModel)]="firstLineIsNotHeader" id="firstLineHeader">
         <label for="firstLineHeader">First line is not header</label>
@@ -13,7 +13,7 @@
         <input type="checkbox" [(ngModel)]="firstSheetHasNotDataset" id="firstSheetDataset">
         <label for="firstSheetDataset">First sheet has not the dataset</label>
       </div>
-      <div *ngIf="selectedFile && selectedFile.name && selectedFile.name.toLowerCase().endsWith('.csv')" class="column-separator-container">
+      <div *ngIf="selectedFiles[0] && selectedFiles[0].name.toLowerCase().endsWith('.csv')" class="column-separator-container">
         <label for="columnSeparator" class="column-separator-label">Column Separator</label>
         <select id="columnSeparator" [(ngModel)]="columnSeparator" class="column-separator-select">
           <option value="semicolon">Semicolon</option>

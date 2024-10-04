@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Declaration, DataDictionary
 from .serializers import DeclarationSerializer
-import os
+import os, io
 from django.db.models import Q
 from django.conf import settings
 from django.core.files.storage import default_storage, FileSystemStorage
@@ -17,6 +17,7 @@ import logging
 from openpyxl import load_workbook
 from rest_framework.exceptions import ValidationError
 import magic  # You'll need to install python-magic: pip install python-magic
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -25,75 +26,75 @@ class DeclarationViewSet(viewsets.ModelViewSet):
     serializer_class = DeclarationSerializer
     
     def create(self, request, *args, **kwargs):
-        file = request.FILES.get('file')
-        name = request.POST.get('name')
+        files = request.FILES
         first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
         first_sheet_has_not_dataset = request.POST.get('first_sheet_has_not_dataset') == 'true'
+        column_separator = request.POST.get('column_separator', 'semicolon')
 
-        if not file:
-            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        if not files:
+            return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Create the data_files directory if it doesn't exist
-            data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
-            os.makedirs(data_files_dir, exist_ok=True)
-
-            # Save the file
-            file_path = os.path.join(data_files_dir, name)
-            with open(file_path, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
-
-            # Process the file
-            if file_path.lower().endswith('.csv'):
-                df = pd.read_csv(file_path, header=None if first_line_is_not_header else 0)
-            elif file_path.lower().endswith(('.xls', '.xlsx')):
-                if first_sheet_has_not_dataset:
-                    wb = load_workbook(filename=file_path, read_only=True)
-                    sheet_to_read = wb.sheetnames[1] if len(wb.sheetnames) > 1 else wb.sheetnames[0]
-                    df = pd.read_excel(file_path, sheet_name=sheet_to_read, header=None if first_line_is_not_header else 0, engine='openpyxl')
+            merged_df = None
+            for file_key in files:
+                file = files[file_key]
+                file_content = file.read()
+                
+                if file.name.lower().endswith('.csv'):
+                    df = pd.read_csv(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, sep=self.get_separator(column_separator))
+                elif file.name.lower().endswith(('.xls', '.xlsx')):
+                    if first_sheet_has_not_dataset:
+                        wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
+                        sheet_to_read = wb.sheetnames[1] if len(wb.sheetnames) > 1 else wb.sheetnames[0]
+                        df = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_to_read, header=None if first_line_is_not_header else 0, engine='openpyxl')
+                    else:
+                        df = pd.read_excel(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, engine='openpyxl')
                 else:
-                    df = pd.read_excel(file_path, header=None if first_line_is_not_header else 0, engine='openpyxl')
-            else:
-                return Response({"error": "Unsupported file format"}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"error": f"Unsupported file format: {file.name}"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if first_line_is_not_header:
-                df.columns = [f'Col_{i+1}' for i in range(len(df.columns))]
+                if first_line_is_not_header:
+                    df.columns = [f'Col_{i+1}' for i in range(len(df.columns))]
 
-            # Save processed file
-            processed_file_name = f'processed_{name}'
-            processed_file_path = os.path.join('data_files', processed_file_name)
-            full_processed_path = os.path.join(settings.MEDIA_ROOT, processed_file_path)
-            df.to_csv(full_processed_path, index=False)
+                if merged_df is None:
+                    merged_df = df
+                else:
+                    merged_df = pd.concat([merged_df, df], axis=0, ignore_index=True)
 
-            # Create or update Declaration instance
-            try:
-                data_file = Declaration.objects.get(original_name=name)
-                data_file.file = processed_file_path
-                data_file.name = name
-                data_file.save()
-            except Declaration.DoesNotExist:
-                data_file = Declaration.objects.create(
-                    file=processed_file_path,
-                    name=name,
-                    original_name=name
-                )
-            except MultipleObjectsReturned:
-                # Handle the case where multiple objects are found
-                Declaration.objects.filter(original_name=name).delete()
-                data_file = Declaration.objects.create(
-                    file=processed_file_path,
-                    name=name,
-                    original_name=name
-                    )
+            # Save merged DataFrame
+            merged_file_name = f'merged_data_{timezone.now().strftime("%Y%m%d%H%M%S")}.csv'
+            merged_file_path = os.path.join('data_files', merged_file_name)
+            full_merged_path = os.path.join(settings.MEDIA_ROOT, merged_file_path)
+            
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(full_merged_path), exist_ok=True)
+            
+            merged_df.to_csv(full_merged_path, index=False)
 
-            serializer = self.get_serializer(data_file)
+            # Create Declaration instance
+            declaration = Declaration.objects.create(
+                file=merged_file_path,
+                name=merged_file_name,
+                original_name=merged_file_name
+            )
+
+            serializer = self.get_serializer(declaration)
             headers = self.get_success_headers(serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
         except Exception as e:
+            import traceback
+            print(traceback.format_exc())  # This will print the full traceback
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def get_separator(self, separator_name):
+        separators = {
+            'semicolon': ';',
+            'comma': ',',
+            'tab': '\t',
+            'space': ' '
+        }
+        return separators.get(separator_name, ';')
+        
     def perform_create(self, serializer):
         file = self.request.FILES['file']
         serializer.save(original_name=file.name)
