@@ -6,17 +6,13 @@ y: new api
 z: new functionality or bug-fix
 
 
-v2.1.x:
 
-- home page should stand on localhost/4200/home endpoint
-- make home page sub menu item 'model-development' router-linked to model-development page
-- make top logo hovering (when hovered make bigger)
+v2.3.x:
 
-- add a login-page create a user and password. after passing login page
-    user reaches a home-page where the top-menu falls inside the page 
-    when user clicks model-store open a new menu including 
-    -model monitoring, -model refitting - model development
-    then when user clicks -model development(mth)
+- continue with preprocessing
+    - in Descriptives and Quality use only raw-data
+    - in importance and rest use preprocessed-data 
+
 
 
 - Add unit test for each functionality currently being hold and run that test

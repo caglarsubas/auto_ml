@@ -22,6 +22,9 @@
           <option value="space">Space</option>
         </select>
       </div>
+      <div *ngIf="selectedFiles.length > 1">
+        <mat-checkbox [(ngModel)]="mergeColumnWise">Merge column-wise</mat-checkbox>
+      </div>
       <button class="import-data-btn" (click)="onUpload()">Import Data</button>
     </div>
 
@@ -33,6 +36,8 @@
     <div *ngIf="previewData" class="preview-container">
       <h3>Data Preview</h3>
       <p *ngIf="previewData.note" class="preview-note">{{ previewData.note }}</p>
+      <p>Total Rows: {{ previewData.total_rows }}</p>
+      <p>Total Columns: {{ previewData.total_columns }}</p>
       <div class="table-container">
         <table class="preview-table">
           <thead>

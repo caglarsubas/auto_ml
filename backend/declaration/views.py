@@ -30,12 +30,13 @@ class DeclarationViewSet(viewsets.ModelViewSet):
         first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
         first_sheet_has_not_dataset = request.POST.get('first_sheet_has_not_dataset') == 'true'
         column_separator = request.POST.get('column_separator', 'semicolon')
+        merge_column_wise = request.POST.get('merge_column_wise') == 'true'
 
         if not files:
             return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            merged_df = None
+            dataframes = []
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
@@ -55,10 +56,20 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 if first_line_is_not_header:
                     df.columns = [f'Col_{i+1}' for i in range(len(df.columns))]
 
-                if merged_df is None:
-                    merged_df = df
+                dataframes.append(df)
+
+            # Merge dataframes based on user choice
+            if len(dataframes) > 1:
+                if merge_column_wise:
+                    # Merge column-wise (horizontally)
+                    merged_df = pd.concat(dataframes, axis=1)
+                    # Rename duplicate columns
+                    merged_df.columns = self.rename_duplicate_columns(merged_df.columns)
                 else:
-                    merged_df = pd.concat([merged_df, df], axis=0, ignore_index=True)
+                    # Merge row-wise (vertically)
+                    merged_df = pd.concat(dataframes, axis=0, ignore_index=True)
+            else:
+                merged_df = dataframes[0]
 
             # Save merged DataFrame
             merged_file_name = f'merged_data_{timezone.now().strftime("%Y%m%d%H%M%S")}.csv'
@@ -85,6 +96,19 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             import traceback
             print(traceback.format_exc())  # This will print the full traceback
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def rename_duplicate_columns(self, columns):
+        new_columns = []
+        seen = set()
+        for item in columns:
+            counter = 1
+            new_item = item
+            while new_item in seen:
+                new_item = f"{item}_{counter}"
+                counter += 1
+            new_columns.append(new_item)
+            seen.add(new_item)
+        return new_columns
 
     def get_separator(self, separator_name):
         separators = {
@@ -144,11 +168,17 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             df = df.replace({np.nan: None})
 
             preview = {
-                "top_rows": df.head().to_dict(orient='records'),
-                "bottom_rows": df.tail().to_dict(orient='records'),
+                "file_name": data_file.name,
+                "total_rows": len(df),
+                "total_columns": len(df.columns),
                 "columns": df.columns.tolist(),
+                "top_rows": df.head(5).to_dict(orient='records'),
+                "bottom_rows": df.tail(5).to_dict(orient='records'),
+                "data_types": df.dtypes.apply(lambda x: x.name).to_dict(),
+                "non_null_counts": df.count().to_dict(),
                 "first_line_is_not_header": any(col.startswith('Col_') for col in df.columns)
             }
+
             return Response(preview)
         except Exception as e:
             # Log the full error for debugging

@@ -30,6 +30,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   firstSheetHasNotDataset: boolean = false;
   showContent: boolean = false;
   private subscription: Subscription = new Subscription();
+  mergeColumnWise: boolean = false;
 
   constructor(
     private http: HttpClient,
@@ -70,6 +71,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.checkExcelSheets();
       }
     }
+    // Reset mergeColumnWise when only one file is selected
+    if (this.selectedFiles.length <= 1) {
+      this.mergeColumnWise = false;
+    }
   }
 
   checkExcelSheets(): void {
@@ -95,6 +100,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       formData.append('first_line_is_not_header', this.firstLineIsNotHeader.toString());
       formData.append('column_separator', this.columnSeparator);
       formData.append('first_sheet_has_not_dataset', this.firstSheetHasNotDataset.toString());
+      formData.append('merge_column_wise', this.mergeColumnWise.toString());
 
       this.http.post('http://localhost:8000/api/declaration/', formData)
         .subscribe(
