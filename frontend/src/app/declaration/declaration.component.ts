@@ -6,11 +6,12 @@ import * as XLSX from 'xlsx';
 import { SharedService } from '../services/shared.service';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-declaration',
   templateUrl: './declaration.component.html',
-  styleUrls: ['./declaration.component.css']
+  styleUrls: ['./declaration.component.css'],
 })
 
 export class DeclarationComponent implements OnInit, OnDestroy {
@@ -35,7 +36,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   constructor(
     private http: HttpClient,
     private dialog: MatDialog,
-    private sharedService: SharedService
+    private sharedService: SharedService,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -209,4 +211,9 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       // Optionally show an error message to the user
     }
   }
+
+  goToPreprocessing(): void {
+    this.router.navigate(['/model-development/preprocessing']);
+  }
+  
 }

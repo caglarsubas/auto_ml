@@ -107,6 +107,15 @@
 
 </ng-container>
 
+<div class="next-button-container" *ngIf="dataDictionary.length > 0">
+  <button 
+    class="next-button" 
+    [disabled]="!dataDictionary.length" 
+    (click)="goToPreprocessing()">
+    <span class="next-icon">&#9654;</span> Preprocessing
+  </button>
+</div>
+
 <ng-template #notStarted>
   <div class="not-started-message">
     Please select a pipeline and click 'Start' to begin the model development process.
