@@ -1,8 +1,8 @@
 <div class="model-development-container">
   
-  <div class="argument-declaration">  
+  <div class="pipeline-declaration">  
     <div class="pipeline-type-dropdown">
-      <p style="font-size:larger; font-weight:bold">Model Development</p>
+      <p style="font-size:larger; font-weight:bold">Model Development - Pipeline Declarations</p>
       <select (change)="onPipelineChange($event)">
         <option value="boosting" disabled selected>Select Pipeline</option>
         <option value="boosting">1- Boosting Pipeline</option>
@@ -15,24 +15,19 @@
   </div>
   
   <div class="model-development-line"></div>
+
   <div class="content-wrapper">
     <nav class="side-menu">
       <div class="menu-header">Pipeline Flow</div>
       <ul>
-        <li *ngFor="let item of menuItems; let i = index" 
-            [class.active]="currentStep  === item"
-            (click)="setCurrentStep(item)">
-            <a href="javascript:void(0)">{{i + 1}}- {{ item | titlecase }}</a>
+        <li *ngFor="let item of menuItems; let i = index" [class.active]="currentStep  === item">
+          <a [routerLink]="['/model-development', item]">{{i + 1}}- {{ item | titlecase }}</a>
         </li>
       </ul>
     </nav>
 
     <div class="main-content">
-      <app-declaration *ngIf="showSteps['declaration']"></app-declaration>
-      <app-preprocessing *ngIf="showSteps['preprocessing']"></app-preprocessing>
-      <app-modeling *ngIf="showSteps['modeling']"></app-modeling>
-      <app-evaluation *ngIf="showSteps['evaluation']"></app-evaluation>
-      <app-deployment *ngIf="showSteps['deployment']"></app-deployment>
+      <router-outlet></router-outlet>
     </div>
 
   </div>

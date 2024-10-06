@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router, NavigationEnd } from '@angular/router';
+import { Router, NavigationEnd, Event as RouterEvent } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
 
@@ -8,6 +8,7 @@ import { SharedService } from '../services/shared.service';
   templateUrl: './model-development.component.html',
   styleUrls: ['./model-development.component.css']
 })
+
 export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'modeling', 'evaluation', 'deployment'];
@@ -24,7 +25,14 @@ export class ModelDevelopmentComponent implements OnInit {
 
   constructor(private router: Router, private sharedService: SharedService) {}
 
-  ngOnInit() {}
+  ngOnInit() {
+    this.router.events.pipe(
+      filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd)
+    ).subscribe((event: NavigationEnd) => {
+      const urlParts = event.urlAfterRedirects.split('/');
+      this.currentStep = urlParts[urlParts.length - 1];
+    });
+  }
 
   onPipelineChange(event: Event) {
     const select = event.target as HTMLSelectElement;
@@ -38,14 +46,6 @@ export class ModelDevelopmentComponent implements OnInit {
     if (this.selectedPipeline) {
       this.sharedService.setStarted(true);
       this.router.navigate(['/model-development/declaration']);
-      this.setCurrentStep('declaration');
     }
-  }
-
-  setCurrentStep(step: string) {
-    this.currentStep = step;
-    Object.keys(this.showSteps).forEach(key => {
-      this.showSteps[key] = key === step;
-    });
   }
 }

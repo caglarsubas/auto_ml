@@ -23,7 +23,7 @@ h1 {
   position: right;
 }
 
-.argument-declaration {
+.pipeline-declaration {
   display: flex;
   justify-content: space-between;
   align-items: center;

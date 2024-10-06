@@ -1,2 +1,21 @@
-<h2>Preprocessing</h2>
-<p>This is the preprocessing component. Content will be added in future development.</p>
+<div class="preprocessing-declaration">
+    <h2>Data Purifier Declaration</h2>
+  
+    <div class="selected-options">
+      <h3>Selected Options:</h3>
+      <ul>
+        <li *ngFor="let option of selectedOptions">
+          {{ option.id }}. {{ option.name }}
+        </li>
+      </ul>
+    </div>
+  
+    <mat-form-field appearance="fill">
+      <mat-label>Select Data Purification Options</mat-label>
+      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event)">
+        <mat-option *ngFor="let option of purifierOptions" [value]="option" [disabled]="isOptionDisabled(option)">
+          {{ option.id }}. {{ option.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
