@@ -11,6 +11,9 @@ export class SharedService {
   private selectedPipelineSubject = new BehaviorSubject<string>('');
   selectedPipeline$: Observable<string> = this.selectedPipelineSubject.asObservable();
 
+  private preprocessingInitiatedSubject = new BehaviorSubject<boolean>(false);
+  preprocessingInitiated$: Observable<boolean> = this.preprocessingInitiatedSubject.asObservable();
+
   setStarted(value: boolean): void {
     this.isStartedSubject.next(value);
   }
@@ -18,4 +21,9 @@ export class SharedService {
   setSelectedPipeline(pipeline: string): void {
     this.selectedPipelineSubject.next(pipeline);
   }
+
+  setPreprocessingInitiated(value: boolean): void {
+    this.preprocessingInitiatedSubject.next(value);
+  }
+  
 }

@@ -10,6 +10,7 @@ z: new functionality or bug-fix
 v2.3.x:
 
 - continue with preprocessing
+    - use dropdown choices and implement the backend operations
     - in Descriptives and Quality use only raw-data
     - in importance and rest use preprocessed-data 
 

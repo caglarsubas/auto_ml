@@ -109,3 +109,84 @@ h1 {
   margin-left: 60px;
   padding: 20px;
 }
+
+.preprocessing-declaration {
+  background: linear-gradient(135deg, #ffffff, #f6f6f6);
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  padding: 30px;
+  margin-top: 40px;
+}
+
+.preprocessing-declaration h2 {
+  color: #740505;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+.preprocessing-declaration .selected-options {
+  margin-bottom: 20px;
+}
+
+.preprocessing-declaration .selected-options h3 {
+  color: #740505;
+  font-size: 1.1em;
+  margin-bottom: 10px;
+}
+
+.preprocessing-declaration .selected-options ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+.preprocessing-declaration .selected-options li {
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.preprocessing-declaration mat-form-field {
+  width: 100%;
+}
+
+.preprocessing-declaration .mat-select {
+  width: 100%;
+}
+
+.preprocessing-declaration .mat-option {
+  font-size: 14px;
+}
+
+.preprocessing-declaration .mat-select-value {
+  color: #333;
+}
+
+.preprocessing-declaration .mat-select-arrow {
+  color: #740505;
+}
+
+.preprocessing-declaration .mat-form-field-label {
+  color: #740505;
+}
+
+.preprocessing-declaration .mat-form-field-underline {
+  background-color: #740505;
+}
+
+.preprocessing-declaration .mat-form-field-ripple {
+  background-color: #740505;
+}
+
+.preprocessing-declaration .mat-select-panel {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.preprocessing-declaration .mat-option.mat-selected:not(.mat-option-disabled) {
+  color: #740505;
+}
+
+.preprocessing-declaration .mat-option:hover:not(.mat-option-disabled) {
+  background: rgba(116, 5, 5, 0.1);
+}

@@ -107,7 +107,7 @@
 
 </ng-container>
 
-<div class="next-button-container" *ngIf="dataDictionary.length > 0">
+<div class="next-button-container" *ngIf="dataDictionary.length > 0 && !preprocessingInitiated">
   <button 
     class="next-button" 
     [disabled]="!dataDictionary.length" 
@@ -117,7 +117,7 @@
 </div>
 
 <ng-template #notStarted>
-  <div class="not-started-message">
+  <div class="not-started-message" *ngIf="!showContent">
     Please select a pipeline and click 'Start' to begin the model development process.
   </div>
 </ng-template>

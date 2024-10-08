@@ -32,6 +32,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   showContent: boolean = false;
   private subscription: Subscription = new Subscription();
   mergeColumnWise: boolean = false;
+  preprocessingInitiated: boolean = false;
 
   constructor(
     private http: HttpClient,
@@ -41,12 +42,16 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    this.subscription = combineLatest([
-      this.sharedService.isStarted$,
-      this.sharedService.selectedPipeline$
-    ]).subscribe(([isStarted, selectedPipeline]) => {
-      this.showContent = isStarted && !!selectedPipeline;
-    });
+    this.subscription.add(
+      combineLatest([
+        this.sharedService.isStarted$,
+        this.sharedService.selectedPipeline$,
+        this.sharedService.preprocessingInitiated$
+      ]).subscribe(([isStarted, selectedPipeline, preprocessingInitiated]) => {
+        this.showContent = isStarted && !!selectedPipeline;
+        this.preprocessingInitiated = preprocessingInitiated;
+      })
+    );
   }
 
   ngOnDestroy() {
@@ -213,6 +218,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   }
 
   goToPreprocessing(): void {
+    this.sharedService.setPreprocessingInitiated(true);
     this.router.navigate(['/model-development/preprocessing']);
   }
   

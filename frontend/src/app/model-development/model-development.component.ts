@@ -3,6 +3,7 @@ import { Router, NavigationEnd, Event as RouterEvent } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
 import { MatSelectChange } from '@angular/material/select';
+import { Subscription } from 'rxjs';
 
 interface PurifierOption {
   id: number;
@@ -29,6 +30,8 @@ export class ModelDevelopmentComponent implements OnInit {
     evaluation: false,
     deployment: false
   };
+  private subscription: Subscription = new Subscription();
+
   purifierOptions: PurifierOption[] = [
     { id: 1, name: 'Column-wise duplicate drop' },
     { id: 2, name: 'Row-wise duplicate drop' },
@@ -67,14 +70,25 @@ export class ModelDevelopmentComponent implements OnInit {
   constructor(private router: Router, private sharedService: SharedService) {}
 
   ngOnInit() {
-    this.router.events.pipe(
-      filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd)
-    ).subscribe((event: NavigationEnd) => {
-      const urlParts = event.urlAfterRedirects.split('/');
-      this.currentStep = urlParts[urlParts.length - 1];
-    });
+    this.subscription.add(
+      this.router.events.pipe(
+        filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd)
+      ).subscribe((event: NavigationEnd) => {
+        const urlParts = event.urlAfterRedirects.split('/');
+        this.currentStep = urlParts[urlParts.length - 1];
+        
+        // Reset preprocessing flag when navigating back to declaration
+        if (this.currentStep === 'declaration') {
+          this.sharedService.setPreprocessingInitiated(false);
+        }
+      })
+    );
   }
 
+  ngOnDestroy() {
+    this.subscription.unsubscribe();
+  }
+  
   onPipelineChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     this.selectedPipeline = select.value;
