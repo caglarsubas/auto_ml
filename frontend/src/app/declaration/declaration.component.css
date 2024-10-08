@@ -219,7 +219,7 @@ input[type="file"]:hover::before {
 
 .column-separator-container {
   display: inline-block;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
 }
 
 .column-separator-label {

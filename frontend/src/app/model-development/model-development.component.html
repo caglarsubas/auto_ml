@@ -1,8 +1,11 @@
 <div class="model-development-container">
-  
-  <div class="pipeline-declaration">  
+  <!-- Always show the header -->
+  <br><br>
+  <h1>Model Development</h1>
+
+  <div *ngIf="currentStep === 'declaration'" class="pipeline-declaration">  
     <div class="pipeline-type-dropdown">
-      <p style="font-size:larger; font-weight:bold">Model Development - Pipeline Declarations</p>
+      <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
       <select (change)="onPipelineChange($event)">
         <option value="boosting" disabled selected>Select Pipeline</option>
         <option value="boosting">1- Boosting Pipeline</option>
@@ -13,9 +16,34 @@
     </div>
     <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
   </div>
+  <!-- Declaration specific content -->
+  <app-declaration></app-declaration>
+
+
+  <!-- Conditional rendering for Preprocessing step -->
+  <div *ngIf="currentStep === 'preprocessing'" class="preprocessing-declaration">
+    <h2>Data Purifier Declaration</h2>
+    <div class="selected-options">
+      <h3>Selected Options:</h3>
+      <ul>
+        <li *ngFor="let option of selectedOptions">
+          {{ option.id }}. {{ option.name }}
+        </li>
+      </ul>
+    </div>
+    <mat-form-field appearance="fill">
+      <mat-label>Select Data Purification Options</mat-label>
+      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event)">
+        <mat-option *ngFor="let option of purifierOptions" [value]="option" [disabled]="isOptionDisabled(option)">
+          {{ option.id }}. {{ option.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
   
   <div class="model-development-line"></div>
 
+  <!-- Always show the side menu -->
   <div class="content-wrapper">
     <nav class="side-menu">
       <div class="menu-header">Pipeline Flow</div>
@@ -25,11 +53,6 @@
         </li>
       </ul>
     </nav>
-
-    <div class="main-content">
-      <router-outlet></router-outlet>
-    </div>
-
   </div>
 
 </div>
