@@ -1,0 +1,24 @@
+push policy
+
+feature/x.y.z-greek
+x: new fresh start
+y: new api
+z: new functionality or bug-fix
+
+
+
+v2.3.x:
+
+- continue with preprocessing
+    - use dropdown choices and implement the backend operations
+    - in Descriptives and Quality use only raw-data
+    - in importance and rest use preprocessed-data 
+
+
+
+- Add unit test for each functionality currently being hold and run that test
+    each time new functionality being added or bug-fix implemented (mth)
+
+- add sub titles under about/declarai:
+    <button mat-menu-item>Declarative ML</button>
+    <button mat-menu-item>White Paper</button>

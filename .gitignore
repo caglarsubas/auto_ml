@@ -30,3 +30,7 @@ node_modules
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# User created
+get_github_context.sh
+auto_ml_context.md

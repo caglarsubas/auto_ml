@@ -1,0 +1,58 @@
+<div class="model-development-container">
+  <!-- Always show the header -->
+  <br><br>
+  <h1>Model Development</h1>
+
+  <div *ngIf="currentStep === 'declaration'" class="pipeline-declaration">  
+    <div class="pipeline-type-dropdown">
+      <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
+      <select (change)="onPipelineChange($event)">
+        <option value="boosting" disabled selected>Select Pipeline</option>
+        <option value="boosting">1- Boosting Pipeline</option>
+        <option value="logit">2- Logit Pipeline</option>
+        <option value="credit-scoring">3- Credit Scoring Pipeline</option>
+        <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
+      </select>
+    </div>
+    <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
+  </div>
+  <!-- Declaration specific content -->
+  <app-declaration></app-declaration>
+
+
+  <!-- Conditional rendering for Preprocessing step -->
+  <div *ngIf="currentStep === 'preprocessing'" class="preprocessing-declaration">
+    <h2>Data Purifier Declaration</h2>
+    <div class="selected-options">
+      <h3>Selected Options:</h3>
+      <ul>
+        <li *ngFor="let option of selectedOptions">
+          {{ option.id }}. {{ option.name }}
+        </li>
+      </ul>
+    </div>
+    <mat-form-field appearance="fill">
+      <mat-label>Select Data Purification Options</mat-label>
+      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event)">
+        <mat-option *ngFor="let option of purifierOptions" [value]="option" [disabled]="isOptionDisabled(option)">
+          {{ option.id }}. {{ option.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+  
+  <div class="model-development-line"></div>
+
+  <!-- Always show the side menu -->
+  <div class="content-wrapper">
+    <nav class="side-menu">
+      <div class="menu-header">Pipeline Flow</div>
+      <ul>
+        <li *ngFor="let item of menuItems; let i = index" [class.active]="currentStep  === item">
+          <a [routerLink]="['/model-development', item]">{{i + 1}}- {{ item | titlecase }}</a>
+        </li>
+      </ul>
+    </nav>
+  </div>
+
+</div>

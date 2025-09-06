@@ -1,0 +1,30 @@
+.preprocessing-declaration {
+    padding: 20px;
+  }
+  
+  h2 {
+    color: #740505;
+    margin-bottom: 20px;
+  }
+  
+  .selected-options {
+    margin-bottom: 20px;
+  }
+  
+  .selected-options h3 {
+    color: #740505;
+    font-size: 1.1em;
+  }
+  
+  .selected-options ul {
+    list-style-type: none;
+    padding-left: 0;
+  }
+  
+  .selected-options li {
+    margin-bottom: 5px;
+  }
+  
+  mat-form-field {
+    width: 100%;
+  }

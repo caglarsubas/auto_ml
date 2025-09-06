@@ -1,0 +1,101 @@
+<div class="feature-card-container" [class.full-screen]="isFullScreen">
+
+  <h2 id="feature-card" mat-dialog-title> <strong>Feature Card</strong></h2>
+
+  <div *ngIf="errorMessage" class="error-message"> {{ errorMessage }} </div>
+
+  <mat-form-field>
+    <mat-label>Select Feature</mat-label>
+    <mat-select [(ngModel)]="selectedFeatureName" (selectionChange)="onFeatureChange()">
+      <mat-option *ngFor="let feature of features" [value]="feature.Feature_Name">
+        {{ feature.Feature_Name }}: {{ feature.Feature_Description || 'No description available' }}
+      </mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-dialog-content *ngIf="featureData">
+  
+    <mat-tab-group>
+      <mat-tab label="Descriptives">
+        <ng-container *ngIf="featureData">
+          <p style="font-size: 14px"><br><strong>Descriptive Statistics</strong></p>
+          <div class="table-container" [class.transposed]="isFullScreen">
+            <table class="descriptive-stats-table">
+              <thead>
+                <tr>
+                  <th *ngIf="stackedWrtTarget">Target Classes</th>
+                  <th *ngFor="let stat of getStats()">{{ stat }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngIf="!stackedWrtTarget">
+                  <tr>
+                    <td *ngFor="let stat of getStats()">{{ getStatValue(stat) }}</td>
+                  </tr>
+                </ng-container>
+                <ng-container *ngIf="stackedWrtTarget && featureData?.Target_Classes">
+                  <tr *ngFor="let targetClass of featureData.Target_Classes">
+                    <td>{{ targetClass }}</td>
+                    <td *ngFor="let stat of getStats()">{{ getStatValue(stat, targetClass) }}</td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+
+          <p style="font-size: 14px"><br><strong>Distribution Plot</strong></p>
+          <!-- <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div> -->
+          <div id="visualization" [style.width.px]="isFullScreen ? null : originalPlotSize.width" [style.height.px]="isFullScreen ? null : originalPlotSize.height"></div>
+          <!--<div id="visualization" [style.height.px]="isFullScreen ? null : 800"></div>-->
+          <div class="checkbox-container">
+            
+            <div>
+              <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
+                Percentage Y-axis
+              </mat-checkbox>
+            </div>
+
+            <div 
+            [matTooltip]="getOutlierCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
+              <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="onOutlierCleaningChange()" [disabled]="isCategorical">
+                Outlier Cleaning
+              </mat-checkbox>
+            </div>
+            
+            <div [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
+              <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="onSparsityCleaningChange()" [disabled]="isCategorical">
+                Sparsity Cleaning
+              </mat-checkbox>
+            </div>
+            
+            <div>
+              <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="onStackedWrtTargetChange()">
+                Stacked wrt Target
+              </mat-checkbox>
+            </div>
+          </div>
+        </ng-container>
+      </mat-tab>
+
+      <mat-tab label="Quality">
+        <p>Quality information will be displayed here.</p>
+      </mat-tab>
+      
+      <mat-tab label="Importance">
+        <p>Importance information will be displayed here.</p>
+      </mat-tab>
+      
+      <mat-tab label="Explainability">
+        <p>Explainability information will be displayed here.</p>
+      </mat-tab>
+    
+    </mat-tab-group>
+
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="toggleFullScreen()">{{ isFullScreen ? 'Exit Full-Screen' : 'Full-Screen' }}</button>
+    <button mat-button mat-dialog-close>Close</button>
+  </mat-dialog-actions>
+
+</div>
