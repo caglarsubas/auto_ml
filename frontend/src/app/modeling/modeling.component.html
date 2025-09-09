@@ -1,1 +1,41 @@
-<p>modeling works!</p>
+<div class="modeling-container">
+  <h2>Modeling</h2>
+  <div style="margin-top: 12px;">
+    <div *ngIf="availableAlgorithms.length > 0" style="max-width: 320px;">
+      <mat-form-field appearance="fill" style="width: 100%;">
+        <mat-label>Select Algorithm</mat-label>
+        <mat-select [(ngModel)]="selectedAlgorithm">
+          <mat-option *ngFor="let algo of availableAlgorithms" [value]="algo">{{ algo }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+    <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+      <button mat-raised-button color="accent"
+              (click)="startModeling()"
+              [disabled]="!processedFilePath || currentFileId === null || isStarting || (availableAlgorithms.length > 0 && !selectedAlgorithm)">
+        {{ isStarting ? 'Starting…' : 'Start Modeling' }}
+      </button>
+      <mat-progress-bar *ngIf="isStarting" mode="indeterminate" style="width: 240px;"></mat-progress-bar>
+    </div>
+  </div>
+
+  <div *ngIf="modelingStatus" style="margin-top: 16px;">
+    <h4>Modeling Status</h4>
+    <div>Status: {{ modelingStatus?.status || modelingStatus?.job_status }}</div>
+    <div *ngIf="modelingStatus?.metrics">
+      <div>Rows: {{ modelingStatus.metrics?.rows }}</div>
+      <div>Features: {{ modelingStatus.metrics?.features }}</div>
+      <div *ngIf="modelingStatus.metrics?.columns?.length">Columns (first {{ modelingStatus.metrics.columns.length }}):</div>
+      <ul>
+        <li *ngFor="let c of modelingStatus.metrics.columns">{{ c }}</li>
+      </ul>
+    </div>
+    <div *ngIf="modelingStatus?.model" style="margin-top: 8px;">
+      <div>Model type: {{ modelingStatus.model?.model_type || 'n/a' }}</div>
+      <div *ngIf="modelingStatus.model?.score !== undefined">Score: {{ modelingStatus.model?.score }}</div>
+      <div *ngIf="modelingStatus.model?.model_path">Saved model: {{ modelingStatus.model?.model_path }}</div>
+      <div *ngIf="modelingStatus.model?.warning" style="color: #a67c00;">Warning: {{ modelingStatus.model?.warning }}</div>
+      <div *ngIf="modelingStatus.model?.error" style="color: #b00020;">Error: {{ modelingStatus.model?.error }}</div>
+    </div>
+  </div>
+</div>

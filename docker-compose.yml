@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - DJANGO_ALLOWED_HOSTS=*
+      - DATQ_MAX_CELLS=20000000
+      - DATQ_SAMPLE_ROWS=10000
+    # Uncomment the following to enable live-reload development by mounting the code
+    # volumes:
+    #   - .:/app
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - "4300:4300"
+    depends_on:
+      - backend

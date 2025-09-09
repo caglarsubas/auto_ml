@@ -3,25 +3,25 @@
   <br><br>
   <h1>Model Development</h1>
 
-  <div *ngIf="currentStep === 'declaration'" class="pipeline-declaration">  
+  <div class="pipeline-declaration">  
     <div class="pipeline-type-dropdown">
       <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
       <select (change)="onPipelineChange($event)">
-        <option value="boosting" disabled selected>Select Pipeline</option>
+        <option value="" disabled selected>Select Pipeline</option>
         <option value="boosting">1- Boosting Pipeline</option>
         <option value="logit">2- Logit Pipeline</option>
         <option value="credit-scoring">3- Credit Scoring Pipeline</option>
         <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
       </select>
     </div>
+  
     <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
   </div>
-  <!-- Declaration specific content -->
+  <!-- Declaration specific content (always visible at top) -->
   <app-declaration></app-declaration>
 
-
-  <!-- Conditional rendering for Preprocessing step -->
-  <div *ngIf="currentStep === 'preprocessing'" class="preprocessing-declaration">
+  <!-- Preprocessing step appears only after Data Declaration (file selected/uploaded) and remains visible -->
+  <div *ngIf="preprocessingAvailable" class="preprocessing-declaration">
     <h2>Data Purifier Declaration</h2>
     <div class="selected-options">
       <h3>Selected Options:</h3>
@@ -39,6 +39,241 @@
         </mat-option>
       </mat-select>
     </mat-form-field>
+
+    <!-- Train/Test Split Controls -->
+    <div style="margin-top: 12px; display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
+      <label style="display:flex; align-items:center; gap:6px;">
+        <span>Split Strategy:</span>
+        <select [ngModel]="splitStrategy" (ngModelChange)="splitStrategy = $event">
+          <option value="random">Random</option>
+          <option value="oot">Out-of-Time (OOT)</option>
+        </select>
+      </label>
+      <ng-container *ngIf="splitStrategy === 'oot'">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>Date Column:</span>
+          <select [ngModel]="splitDateColumn" (ngModelChange)="splitDateColumn = $event">
+            <option [ngValue]="null" disabled>Select date column</option>
+            <option *ngFor="let c of dateColumns" [ngValue]="c">{{ c }}</option>
+          </select>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>OOT Mode:</span>
+          <select [ngModel]="ootMode" (ngModelChange)="ootMode = $event">
+            <option value="percent">Percent (default 75/25)</option>
+            <option value="cutoff">Time Cutoff</option>
+          </select>
+        </label>
+        <ng-container *ngIf="ootMode === 'percent'">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span>OOT Percent:</span>
+            <input type="number" min="1" max="99" [ngModel]="ootPercent" (ngModelChange)="ootPercent = $event" style="width:80px;" />
+          </label>
+          <small style="color:#666;">Sorted by time ascending; last {{ootPercent}}% goes to OOT (test).</small>
+        </ng-container>
+        <ng-container *ngIf="ootMode === 'cutoff'">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span>Cutoff:</span>
+            <input type="datetime-local" [ngModel]="splitCutoff" (ngModelChange)="splitCutoff = $event" />
+          </label>
+          <small style="color:#666;">Train ≤ cutoff, Test &gt; cutoff</small>
+        </ng-container>
+      </ng-container>
+    </div>
+
+    <!-- Run preprocessing to compute Data Quality summary -->
+    <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+      <button mat-raised-button color="primary"
+              (click)="proceedFromPreprocessing()"
+              [disabled]="isProcessing">
+        {{ isProcessing ? 'Processing…' : 'Run Preprocessing' }}
+      </button>
+      <mat-progress-bar *ngIf="isProcessing" mode="indeterminate" style="width: 240px;"></mat-progress-bar>
+    </div>
+
+    <!-- Data Quality Step Anchor and Summary Table -->
+    <div id="data-quality-anchor"></div>
+    <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
+      <h2>Data Quality</h2>
+      <h3 style="margin-top: 8px;">Data Quality Summary</h3>
+      <!-- Controls: search + page size + exports -->
+      <div style="display:flex; align-items:center; gap:12px; margin: 8px 0 12px 0; flex-wrap: wrap;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>Search:</span>
+          <input type="text" [ngModel]="datqGlobalFilter" (ngModelChange)="datqGlobalFilter = $event; onFilterChange()" placeholder="Global filter" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
+        </label>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>Page size:</span>
+          <select [ngModel]="datqPageSize" (ngModelChange)="changeDatqPageSize($event)">
+            <option *ngFor="let s of datqPageSizes" [value]="s">{{ s }}</option>
+          </select>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>Columns:</span>
+          <select [ngModel]="datqPreset" (ngModelChange)="applyDatqPreset($event)">
+            <option value="core">Core</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" [ngModel]="datqWrapCells" (ngModelChange)="datqWrapCells = $event" />
+          <span>Wrap cells</span>
+        </label>
+        <span style="color:#666;">Total rows: {{ datqTotal }}</span>
+        <span style="flex:1 1 auto;"></span>
+        <button mat-stroked-button (click)="togglePinVariable()">Pin Variable</button>
+        <button mat-stroked-button (click)="resetSorting()">Reset Sorting</button>
+        <button mat-stroked-button (click)="resetLayout()">Reset Layout</button>
+        <button mat-stroked-button color="primary" (click)="clearFilters()">Clear Filters</button>
+        <button mat-stroked-button color="primary" (click)="exportDatqAsCSV()">Export CSV</button>
+        <button mat-stroked-button color="primary" (click)="exportDatqAsJSON()">Export JSON</button>
+      </div>
+
+      <div class="datq-table-container" style="overflow:auto; max-width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; max-height: 500px;">
+        <table class="datq-table mat-elevation-z1" style="border-collapse: separate; width: 100%; min-width: 1800px; table-layout: auto;">
+          <thead>
+            <tr class="header-row">
+              <th *ngFor="let col of datqDisplayColumns" (click)="onSort(col)" [ngStyle]="getPinnedStyle(col, 'header')"
+                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
+                  [style.position]="'sticky'" [style.top.px]="0" [style.zIndex]="3"
+                  style="text-align: left; padding: 8px; border-bottom: 1px solid #eee; white-space: nowrap; cursor: pointer; background:#fff; overflow:hidden; text-overflow: ellipsis;">
+                <span style="display:inline-flex; align-items:center; gap:6px;">
+                  <span>{{ col }}</span>
+                  <span *ngIf="datqSortColumn === col">{{ datqSortDir === 'asc' ? '▲' : '▼' }}</span>
+                  <button type="button" (click)="togglePin(col); $event.stopPropagation()" title="Pin/Unpin" style="border:none; background:transparent; cursor:pointer; line-height:1;">
+                    📌
+                  </button>
+                  <span *ngIf="selectedCount(col) > 0" class="chip" title="Selected values">{{ selectedCount(col) }}</span>
+                </span>
+                <span class="resize-handle" title="Resize" (mousedown)="onResizeStart(col, $event)"></span>
+              </th>
+            </tr>
+            <tr class="filters">
+              <th *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'filter')"
+                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
+                  [style.position]="'sticky'" [style.top.px]="40" [style.zIndex]="2"
+                  style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; white-space: nowrap; background:#fff; overflow:visible; text-overflow: ellipsis;">
+                <div class="filter-input-wrap">
+                  <input type="text" [ngModel]="datqColumnFilters[col]" (ngModelChange)="datqColumnFilters[col] = $event; onFilterChange()" (focus)="openFilterMenu(col)" (click)="$event.stopPropagation()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
+                  <button type="button" class="filter-trigger" title="Unique filter" (click)="openFilterMenu(col); $event.stopPropagation()">▾</button>
+                </div>
+                <div class="filter-menu" *ngIf="datqFilterMenuFor===col" (click)="$event.stopPropagation()">
+                  <div class="menu-header">Filter {{ col }}</div>
+                  <input type="text" [(ngModel)]="datqFilterMenuSearch" placeholder="Search values" class="menu-search" />
+                  <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin: 6px 0;">
+                    <input type="checkbox" [(ngModel)]="datqShowOnlySelected[col]" /> Show only selected
+                  </label>
+                  <div style="font-size: 11px; color:#888; margin: 4px 0;">
+                    Values: {{ uniqueCount(col) }} · Selected: {{ selectedCount(col) }} · Query: '{{ datqFilterMenuSearch }}'
+                  </div>
+                  <div class="value-list">
+                    <div *ngIf="visibleUniqueValues(col).length === 0" style="color:#777; font-size:12px; padding: 6px;">No values</div>
+                    <label class="value-item" *ngFor="let item of visibleUniqueValues(col)">
+                      <input type="checkbox" [checked]="isValueChecked(col, item.value)" (change)="toggleValue(col, item.value, $any($event.target).checked)" />
+                      <span class="val" [title]="item.value">{{ item.value }}</span>
+                      <span class="cnt">{{ item.count }}</span>
+                    </label>
+                  </div>
+                  <div class="menu-actions">
+                    <button type="button" (click)="selectAllValues(col)">Select all</button>
+                    <button type="button" (click)="clearSelectedValues(col)">Clear</button>
+                    <span style="flex:1 1 auto;"></span>
+                    <button type="button" (click)="applySelectedValues()">Apply</button>
+                    <button type="button" (click)="closeFilterMenu()">Close</button>
+                  </div>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of datqPagedRows" (click)="onDatqRowClick(row)" style="cursor:pointer;"
+                [class.selected]="datqSelectedVariable === (row['Variable'] || row['variable'] || row['index'])">
+              <td *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'cell')"
+                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
+                  [style.white-space]="datqWrapCells ? 'normal' : 'nowrap'" [style.word-break]="datqWrapCells ? 'break-word' : 'normal'"
+                  style="padding: 8px; border-bottom: 1px solid #f5f5f5; background:#fff; overflow:hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;">{{ displayCell(row, col) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Pagination controls -->
+      <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <button mat-button (click)="prevDatqPage()" [disabled]="datqPage <= 1">Prev</button>
+        <span>Page {{ datqPage }} of {{ datqTotalPages }}</span>
+        <button mat-button (click)="nextDatqPage()" [disabled]="datqPage >= datqTotalPages">Next</button>
+      </div>
+
+      <!-- Detail section -->
+      <div *ngIf="datqSelectedVariable" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa;">
+        <div style="display:flex; align-items:center; gap: 12px;">
+          <h4 style="margin:0;">Data Quality Detail: {{ datqSelectedVariable }}</h4>
+          <span *ngIf="datqDetailLoading" style="color:#666;">Loading…</span>
+          <span style="flex:1 1 auto;"></span>
+          <button mat-stroked-button (click)="exportDatqDetailAsCSV()" [disabled]="!datqDetail || !datqDetailColumns.length">Export Detail CSV</button>
+          <button mat-stroked-button (click)="exportDatqDetailAsJSON()" [disabled]="!datqDetail">Export Detail JSON</button>
+          <button mat-button (click)="closeDatqDetail()">Close</button>
+        </div>
+        <div *ngIf="datqDetail && !datqDetailLoading" style="margin-top: 10px;">
+          <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#333;">
+            <span><strong>Type:</strong> {{ datqDetail.variable_type }}</span>
+            <span><strong>PSI:</strong> {{ datqDetail.psi }}</span>
+            <span><strong>Train N:</strong> {{ datqDetail.train_count }}</span>
+            <span><strong>Test N:</strong> {{ datqDetail.test_count }}</span>
+            <span><strong>Train Missing:</strong> {{ datqDetail.train_missing_ratio }}</span>
+            <span><strong>Test Missing:</strong> {{ datqDetail.test_missing_ratio }}</span>
+          </div>
+          <div class="psi-legend">Train share vs Test share per bin</div>
+          <div class="psi-viz">
+            <div class="psi-row" *ngFor="let r of datqDetail?.psi_table">
+              <div class="psi-bin" [title]="r['bin']">{{ r['bin'] }}</div>
+              <div class="psi-bars">
+                <div class="bar-train" [style.width.%]="percent(r['train_share'])" [title]="'Train: ' + r['train_share']"></div>
+                <div class="bar-test" [style.width.%]="percent(r['test_share'])" [title]="'Test: ' + r['test_share']"></div>
+              </div>
+              <div class="psi-contrib" [ngClass]="{'pos': (r['PSI_contribution']||0) >= 0, 'neg': (r['PSI_contribution']||0) < 0}">{{ r['PSI_contribution'] }}</div>
+            </div>
+          </div>
+          <!-- Detail table controls -->
+          <div style="display:flex; align-items:center; gap:12px; margin: 12px 0 8px 0; flex-wrap: wrap;">
+            <label style="display:flex; align-items:center; gap:6px;">
+              <span>Search:</span>
+              <input type="text" [ngModel]="detailGlobalFilter" (ngModelChange)="detailGlobalFilter = $event; onDetailFilterChange()" placeholder="Filter detail" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
+            </label>
+            <span style="flex:1 1 auto;"></span>
+            <button mat-stroked-button (click)="clearDetailFilters()">Clear Detail Filters</button>
+          </div>
+
+          <div style="overflow:auto; max-height: 360px; border: 1px solid #eee; border-radius: 4px;">
+            <table style="border-collapse: collapse; width: 100%; min-width: 520px;">
+              <thead>
+                <tr>
+                  <th *ngFor="let c of datqDetailColumns" (click)="onDetailSort(c)" style="text-align:left; padding:8px; border-bottom:1px solid #eee; white-space:nowrap; cursor:pointer;">
+                    {{ c }}
+                    <span *ngIf="detailSortColumn === c">{{ detailSortDir === 'asc' ? '▲' : '▼' }}</span>
+                  </th>
+                </tr>
+                <tr>
+                  <th *ngFor="let c of datqDetailColumns" style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee; white-space:nowrap;">
+                    <input type="text" [ngModel]="detailColumnFilters[c]" (ngModelChange)="detailColumnFilters[c] = $event; onDetailFilterChange()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of datqDetailSortedRows">
+                  <td *ngFor="let c of datqDetailColumns" style="padding:8px; border-bottom:1px solid #f5f5f5; white-space:nowrap;">{{ r[c] }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
+        <button mat-stroked-button color="primary" (click)="goToModeling()" [disabled]="!(datqSummary && datqSummary.length)">Proceed to Modeling</button>
+        <small style="color:#666;" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
+        <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue.</small>
+      </div>
+    </div>
   </div>
   
   <div class="model-development-line"></div>
@@ -48,11 +283,15 @@
     <nav class="side-menu">
       <div class="menu-header">Pipeline Flow</div>
       <ul>
-        <li *ngFor="let item of menuItems; let i = index" [class.active]="currentStep  === item">
-          <a [routerLink]="['/model-development', item]">{{i + 1}}- {{ item | titlecase }}</a>
+        <li *ngFor="let item of menuItems; let i = index" [class.active]="currentStep  === item" [class.disabled]="!stepEnabled(item)">
+          <a href="#" (click)="onMenuClick($event, item)">{{i + 1}}- {{ item | titlecase }}</a>
         </li>
       </ul>
     </nav>
   </div>
+
+  <!-- Modeling step appears after preprocessing run completes and remains visible -->
+  <div id="modeling-anchor"></div>
+  <app-modeling *ngIf="modelingAvailable"></app-modeling>
 
 </div>

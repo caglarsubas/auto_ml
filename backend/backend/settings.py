@@ -10,8 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
-import os
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,7 +26,9 @@ SECRET_KEY = 'django-insecure-o9i2bh5!+++d(4wqi%h7q(h+f)h(_2%#r%f+z&+c2cwc=i%e$y
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Allow hosts from environment for containerized/dev environments
+# Example: DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,0.0.0.0"
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 
 # Application definition
@@ -38,18 +40,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'declaration.apps.DeclarationConfig',
-    'preprocessing',
-    'modeling',
-    'evaluation',
-    'deployment',
-    'feature_card',
+    # Third-party
     'rest_framework',
     'corsheaders',
-    ]
+    # Local apps
+    'declaration',
+    'deployment',
+    'evaluation',
+    'feature_card',
+    'modeling',
+    'preprocessing',
+]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Add this line
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -127,6 +131,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
@@ -134,11 +142,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Allow all origins for development (adjust this for production)
 CORS_ALLOW_ALL_ORIGINS = True
-
-# Configure media files handling
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
 
 LOGGING = {
     'version': 1,
@@ -161,7 +164,4 @@ LOGGING = {
     },
 }
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_FILES_DIR = os.path.join(BASE_DIR, 'data_files')
-
-CSRF_TRUSTED_ORIGINS = ['http://localhost:4200']
+CSRF_TRUSTED_ORIGINS = ['http://localhost:4200', 'http://localhost:4300']

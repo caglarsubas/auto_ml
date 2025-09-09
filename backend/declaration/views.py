@@ -228,7 +228,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             return None
         return obj
         
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['get', 'post'])
     def data_dictionary(self, request, pk=None):
         data_file = self.get_object()
         file_path = data_file.file.path

@@ -2,12 +2,13 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, tap, map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DataService {
-  private apiUrl = 'http://localhost:8000/api/';  // Update this with your Django backend URL
+  private apiUrl = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) { }
 
@@ -41,6 +42,65 @@ export class DataService {
           console.error('JSON parsing error:', error.message);
         }
         return throwError(() => new Error(error.message || 'An unknown error occurred'));
+      })
+    );
+  }
+
+  // Submit selected preprocessing options for a given file
+  applyPreprocessing(fileId: number, options: number[]): Observable<any> {
+    const payload = { file_id: fileId, options };
+    return this.http.post(`${this.apiUrl}preprocessing/apply/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error applying preprocessing:', error);
+        return throwError(() => new Error(error.message || 'Failed to apply preprocessing'));
+      })
+    );
+  }
+
+  // Run preprocessing. If options omitted, backend uses previously saved config.
+  // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
+    const payload: any = { file_id: fileId };
+    if (options) payload.options = options;
+    if (split) payload.split = split;
+    return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error running preprocessing:', error);
+        return throwError(() => new Error(error.message || 'Failed to run preprocessing'));
+      })
+    );
+  }
+
+  // Get detailed PSI report for a specific variable from processed file
+  getDatqDetail(fileId: number, processedFile: string, column: string, split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile, column };
+    if (split) payload.split = split;
+    return this.http.post(`${this.apiUrl}preprocessing/datq_detail/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error getting datq detail:', error);
+        return throwError(() => new Error(error.message || 'Failed to get data quality detail'));
+      })
+    );
+  }
+
+  // Start modeling with the processed file path and optional algorithm
+  startModeling(fileId: number, processedFile: string, algorithm?: string): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile };
+    if (algorithm) payload.algorithm = algorithm;
+    return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error starting modeling:', error);
+        return throwError(() => new Error(error.message || 'Failed to start modeling'));
+      })
+    );
+  }
+
+  // Get modeling status/metrics
+  getModelingStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting modeling status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get modeling status'));
       })
     );
   }

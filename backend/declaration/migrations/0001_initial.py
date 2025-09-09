@@ -16,9 +16,9 @@ class Migration(migrations.Migration):
             name='Declaration',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('file', models.FileField(upload_to='declaration/')),
+                ('file', models.FileField(upload_to='data_files/')),
                 ('name', models.CharField(max_length=255)),
-                ('original_name', models.CharField(max_length=255, unique=True)),
+                ('original_name', models.CharField(max_length=255)),
                 ('uploaded_at', models.DateTimeField(auto_now_add=True)),
             ],
         ),
@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
                 ('data_file', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='data_dictionary', to='declaration.declaration')),
             ],
             options={
-                'unique_together': {('declaration', 'column_name')},
+                'unique_together': {('data_file', 'column_name')},
             },
         ),
     ]

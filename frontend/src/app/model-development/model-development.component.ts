@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
-import { Router, NavigationEnd, Event as RouterEvent } from '@angular/router';
-import { filter } from 'rxjs/operators';
+import { Component, OnInit, HostListener } from '@angular/core';
+import { Router } from '@angular/router';
+import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
 import { MatSelectChange } from '@angular/material/select';
 import { Subscription } from 'rxjs';
+import { DataService } from '../services/data.service';
 
 interface PurifierOption {
   id: number;
@@ -19,7 +20,7 @@ interface PurifierOption {
 
 export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
-  menuItems = ['declaration', 'preprocessing', 'modeling', 'evaluation', 'deployment'];
+  menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
@@ -31,6 +32,336 @@ export class ModelDevelopmentComponent implements OnInit {
     deployment: false
   };
   private subscription: Subscription = new Subscription();
+  currentFileId: number | null = null;
+  processedFilePath: string | null = null;
+  isProcessing: boolean = false;
+  // New state flags for progressive reveal
+  isStarted: boolean = false;
+  modelingAvailable: boolean = false;
+  preprocessingAvailable: boolean = false;
+  preprocessingInitiated: boolean = false;
+
+  // Split controls
+  splitStrategy: 'random' | 'oot' = 'random';
+  splitDateColumn: string | null = null;
+  splitCutoff: string = '';
+  // OOT mode: cutoff vs percent; default cutoff; percent default 25 (last % as test)
+  ootMode: 'cutoff' | 'percent' = 'percent';
+  ootPercent: number = 25;
+  dateColumns: string[] = [];
+  currentSplit: { strategy?: string; date_column?: string; cutoff?: string; percent?: number } | null = null;
+
+  // Data Quality summary from backend after preprocessing run
+  datqSummary: any[] | null = null;
+  datqColumns: string[] = [];
+  datqAllColumns: string[] = [];
+  datqPreset: 'core' | 'all' = 'core';
+  datqPage: number = 1;
+  datqPageSize: number = 25;
+  datqPageSizes: number[] = [10, 25, 50, 100];
+  datqGlobalFilter: string = '';
+  datqColumnFilters: { [key: string]: string } = {};
+  // Unique-values dropdown filter state
+  datqFilterMenuFor: string | null = null; // which column menu is open
+  datqFilterMenuSearch: string = '';
+  datqUniqueValuesCache: { [col: string]: Array<{ value: string, count: number }> } = {};
+  datqSelectedValues: { [col: string]: Set<string> } = {};
+  datqShowOnlySelected: { [col: string]: boolean } = {};
+  datqSortColumn: string | null = null;
+  datqSortDir: 'asc' | 'desc' = 'asc';
+  // Pinned columns and layout helpers
+  pinnedColumns: string[] = [];
+  pinnedColumnWidth = 260; // base px; actual per-col uses colWidth()
+  private readonly datqPrefsKey = 'datq_prefs_v1';
+  private readonly datqWidthsKey = 'datq_widths_v1';
+
+  get datqDisplayColumns(): string[] {
+    const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
+    const rest = this.datqColumns.filter(c => !pins.includes(c));
+    return [...pins, ...rest];
+  }
+
+  // ===== Unique-values dropdown filter helpers =====
+  openFilterMenu(col: string): void {
+    try {
+      this.datqFilterMenuFor = col;
+      this.datqFilterMenuSearch = '';
+      this.ensureFilterKeys();
+      // Debug: log context and attempt building unique values
+      try {
+        console.log('[UI] openFilterMenu', col, 'rows=', this.datqSummary ? this.datqSummary.length : 0);
+      } catch {}
+      this.buildUniqueValues(col);
+    } catch {}
+  }
+
+  closeFilterMenu(): void {
+    this.datqFilterMenuFor = null;
+    this.datqFilterMenuSearch = '';
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(ev: MouseEvent): void {
+    // Close the menu if clicking outside any filter menu element
+    let hasMenu = false;
+    const path = (ev as any).composedPath ? (ev as any).composedPath() as HTMLElement[] : null;
+    if (path && Array.isArray(path)) {
+      hasMenu = path.some((el: any) => el && el.classList && (el.classList.contains('filter-menu') || el.classList.contains('filter-trigger') || el.classList.contains('filter-input-wrap')));
+    } else {
+      // Fallback for browsers without composedPath (e.g., Safari)
+      let node = ev.target as HTMLElement | null;
+      const isInside = (el: HTMLElement | null): boolean => !!el && !!(el.classList && (el.classList.contains('filter-menu') || el.classList.contains('filter-trigger') || el.classList.contains('filter-input-wrap')));
+      while (node) {
+        if (isInside(node)) { hasMenu = true; break; }
+        node = node.parentElement;
+      }
+    }
+    if (!hasMenu) this.closeFilterMenu();
+  }
+
+  buildUniqueValues(col: string): void {
+    try {
+      if (!this.datqSummary || !this.datqSummary.length) {
+        this.datqUniqueValuesCache[col] = [];
+        try { console.warn('[UI] buildUniqueValues skipped; no datqSummary yet for', col); } catch {}
+        return;
+      }
+      const counts = new Map<string, number>();
+      for (const r of this.datqSummary) {
+        const disp = String(this.displayCell(r, col));
+        counts.set(disp, (counts.get(disp) || 0) + 1);
+      }
+      const arr = Array.from(counts.entries()).map(([value, count]) => ({ value, count }));
+      arr.sort((a, b) => b.count - a.count || String(a.value).localeCompare(String(b.value)));
+      this.datqUniqueValuesCache[col] = arr;
+      try {
+        console.log('[UI] buildUniqueValues ok', col, 'uniqueCount=', arr.length, 'sample=', arr.slice(0, 5));
+      } catch {}
+    } catch {
+      this.datqUniqueValuesCache[col] = [];
+    }
+  }
+
+  visibleUniqueValues(col: string): Array<{ value: string, count: number }> {
+    // Fallback: if cache empty, try to build once on demand
+    if (!this.datqUniqueValuesCache[col] || this.datqUniqueValuesCache[col].length === 0) {
+      try { this.buildUniqueValues(col); } catch {}
+    }
+    const all = this.datqUniqueValuesCache[col] || [];
+    const q = (this.datqFilterMenuSearch || '').toLowerCase();
+    const onlySel = !!this.datqShowOnlySelected[col];
+    const filteredByQuery = q ? all.filter(x => String(x.value).toLowerCase().includes(q)) : all;
+    if (!onlySel) return filteredByQuery;
+    const set = this.datqSelectedValues[col] || new Set<string>();
+    return filteredByQuery.filter(x => set.has(String(x.value)));
+  }
+
+  isValueChecked(col: string, value: string): boolean {
+    const set = this.datqSelectedValues[col];
+    return !!set && set.has(value);
+  }
+
+  toggleValue(col: string, value: string, checked: boolean): void {
+    this.ensureFilterKeys();
+    const set = this.datqSelectedValues[col] || new Set<string>();
+    if (checked) set.add(value); else set.delete(value);
+    this.datqSelectedValues[col] = set;
+  }
+
+  selectAllValues(col: string): void {
+    const arr = this.datqUniqueValuesCache[col] || [];
+    const set = new Set<string>(arr.map(x => String(x.value)));
+    this.datqSelectedValues[col] = set;
+  }
+
+  clearSelectedValues(col: string): void {
+    this.datqSelectedValues[col] = new Set<string>();
+  }
+
+  applySelectedValues(): void {
+    this.datqPage = 1;
+    this.closeFilterMenu();
+  }
+
+  // Effective width for a column (user override or default)
+  getColWidth(col: string): number {
+    return this.colWidths[col] || this.colWidth(col);
+  }
+
+  // Wrapping toggle for table cells
+  datqWrapCells: boolean = true;
+  // Column resizing state
+  colWidths: { [col: string]: number } = {};
+  private resizingCol: string | null = null;
+  private resizeStartX = 0;
+  private resizeStartW = 0;
+
+  // Preferred column widths to reduce overlap
+  colWidth(col: string): number {
+    if (!col) return 220;
+    const c = String(col);
+    if (c === 'Variable' || c === 'variable' || c === 'index') return 320;
+    if (c === 'Datq_Decision') return 200;
+    if (c === 'Variable_Type') return 160;
+    if (c === 'PSI' || c === 'CSI') return 140;
+    if (/_Train$/.test(c) || /_Test$/.test(c)) return 200;
+    return 220;
+  }
+
+  // Reorder columns: Variable, PSI/Decision/Type/CSI, paired Train/Test changes, then remaining
+  private reorderDatqColumns(): void {
+    if (!this.datqColumns || this.datqColumns.length === 0) return;
+    const cols = [...this.datqColumns];
+    const has = (k: string) => cols.includes(k);
+    const pickVar = has('Variable') ? 'Variable' : (has('variable') ? 'variable' : (has('index') ? 'index' : null));
+
+    // Pair Train/Test columns by base name
+    const trainTestBases = new Set<string>();
+    for (const c of cols) {
+      const m = c.match(/^(.*)_(Train|Test)$/);
+      if (m) trainTestBases.add(m[1]);
+    }
+    const paired: string[] = [];
+    const basesSorted = Array.from(trainTestBases).sort((a,b) => a.localeCompare(b));
+    for (const b of basesSorted) {
+      const t1 = `${b}_Train`;
+      const t2 = `${b}_Test`;
+      if (cols.includes(t1)) paired.push(t1);
+      if (cols.includes(t2)) paired.push(t2);
+    }
+
+    const fixed = [pickVar, 'PSI', 'Datq_Decision', 'Variable_Type', 'CSI'].filter(x => !!x && has(x as string)) as string[];
+    const excluded = new Set<string>([...fixed, ...paired]);
+    const rest = cols.filter(c => !excluded.has(c));
+    this.datqColumns = [...fixed, ...paired, ...rest];
+  }
+
+  togglePinVariable(): void {
+    const variableCol = this.datqColumns.includes('Variable') ? 'Variable' : (this.datqColumns.includes('variable') ? 'variable' : null);
+    if (!variableCol) return;
+    this.togglePin(variableCol);
+  }
+
+  getPinnedStyle(col: string, type: 'header' | 'filter' | 'cell' = 'cell'): {[k: string]: any} {
+    const idx = this.pinnedColumns.indexOf(col);
+    const isVar = this.isVariableColumn(col);
+    if (idx === -1 && !isVar) return {};
+    // Left offset:
+    // - for pinned columns: sum widths of preceding pinned columns
+    // - for Variable column (if not pinned): sits right after all pinned columns
+    let left = 0;
+    if (idx >= 0) {
+      for (let i = 0; i < idx; i++) {
+        const c = this.pinnedColumns[i];
+        left += this.getColWidth(c);
+      }
+    } else if (isVar) {
+      for (let i = 0; i < this.pinnedColumns.length; i++) {
+        const c = this.pinnedColumns[i];
+        left += this.getColWidth(c);
+      }
+    }
+    const z = type === 'header' ? 6 : (type === 'filter' ? 5 : 4);
+    const w = this.getColWidth(col);
+    return {
+      position: 'sticky',
+      left: left + 'px',
+      zIndex: z,
+      background: '#fff',
+      minWidth: w + 'px',
+      maxWidth: w + 'px'
+    };
+  }
+
+  private isVariableColumn(col: string): boolean {
+    const varCol = this.datqColumns?.includes('Variable') ? 'Variable'
+      : (this.datqColumns?.includes('variable') ? 'variable'
+        : (this.datqColumns?.includes('index') ? 'index' : null));
+    return !!varCol && col === varCol;
+  }
+
+  selectedCount(col: string): number {
+    const set = this.datqSelectedValues?.[col];
+    return set ? set.size : 0;
+  }
+
+  uniqueCount(col: string): number {
+    const arr = this.datqUniqueValuesCache?.[col];
+    return Array.isArray(arr) ? arr.length : 0;
+  }
+
+  get datqTotal(): number { return this.datqFilteredRows ? this.datqFilteredRows.length : 0; }
+  get datqTotalPages(): number { return this.datqPageSize > 0 ? Math.max(1, Math.ceil(this.datqTotal / this.datqPageSize)) : 1; }
+  get datqFilteredRows(): any[] {
+    if (!this.datqSummary) return [];
+    const gf = (this.datqGlobalFilter || '').toLowerCase();
+    const colFilters = this.datqColumnFilters || {};
+    const selectedSets = this.datqSelectedValues || {};
+    return this.datqSummary.filter(row => {
+      // Global filter: any cell contains string
+      const passGlobal = !gf || this.datqColumns.some(c => (row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf)));
+      if (!passGlobal) return false;
+      // Column filters: each specified column must match
+      for (const c of this.datqColumns) {
+        const cf = (colFilters[c] || '').toLowerCase();
+        if (!cf) continue;
+        const cell = row[c];
+        const text = (cell === null || cell === undefined) ? '' : String(cell).toLowerCase();
+        if (!text.includes(cf)) return false;
+      }
+      // Unique-values selections: if any selected for a column, the display value must be in the set
+      for (const c of this.datqColumns) {
+        const set = selectedSets[c];
+        if (set && set.size > 0) {
+          const disp = String(this.displayCell(row, c));
+          if (!set.has(disp)) return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  get datqSortedRows(): any[] {
+    const rows = [...this.datqFilteredRows];
+    if (!this.datqSortColumn) return rows;
+    const col = this.datqSortColumn;
+    const dir = this.datqSortDir === 'asc' ? 1 : -1;
+    const isNumeric = rows.every(r => r[col] === null || r[col] === undefined || (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))));
+    rows.sort((a, b) => {
+      const va = a[col];
+      const vb = b[col];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // nulls last
+      if (vb == null) return -1;
+      if (isNumeric) {
+        const na = Number(va);
+        const nb = Number(vb);
+        return (na - nb) * dir;
+      }
+      const sa = String(va).toLowerCase();
+      const sb = String(vb).toLowerCase();
+      if (sa < sb) return -1 * dir;
+      if (sa > sb) return 1 * dir;
+      return 0;
+    });
+    return rows;
+  }
+
+  get datqPagedRows(): any[] {
+    const rows = this.datqSortedRows;
+    const start = (this.datqPage - 1) * this.datqPageSize;
+    return rows.slice(start, start + this.datqPageSize);
+  }
+
+  // Detail report state
+  datqSelectedVariable: string | null = null;
+  datqDetail: any | null = null;
+  datqDetailColumns: string[] = [];
+  datqDetailLoading: boolean = false;
+  detailGlobalFilter: string = '';
+  detailColumnFilters: { [key: string]: string } = {};
+  detailSortColumn: string | null = null;
+  detailSortDir: 'asc' | 'desc' = 'asc';
 
   purifierOptions: PurifierOption[] = [
     { id: 1, name: 'Column-wise duplicate drop' },
@@ -67,22 +398,491 @@ export class ModelDevelopmentComponent implements OnInit {
 
   selectedOptions: PurifierOption[] = [];
 
-  constructor(private router: Router, private sharedService: SharedService) {}
+  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService) {}
 
   ngOnInit() {
+    // Baseline reset to prevent stale state causing steps to appear out of order
+    this.sharedService.setStarted(false);
+    this.sharedService.setPreprocessingInitiated(false);
+    this.sharedService.setPreprocessingRunResult(null);
+    this.sharedService.setProcessedFilePath(null);
+    this.sharedService.setCurrentFileId(null);
+    this.currentStep = 'declaration';
+    this.modelingAvailable = false;
+    this.preprocessingAvailable = false;
+
     this.subscription.add(
-      this.router.events.pipe(
-        filter((event: RouterEvent): event is NavigationEnd => event instanceof NavigationEnd)
-      ).subscribe((event: NavigationEnd) => {
-        const urlParts = event.urlAfterRedirects.split('/');
-        this.currentStep = urlParts[urlParts.length - 1];
-        
-        // Reset preprocessing flag when navigating back to declaration
-        if (this.currentStep === 'declaration') {
-          this.sharedService.setPreprocessingInitiated(false);
+      this.sharedService.currentFileId$.subscribe((id: number | null) => {
+        this.currentFileId = id;
+        this.computePreprocessingAvailable();
+        // Load datetime columns from data dictionary (preferred)
+        if (id !== null) {
+          try {
+            this.dataService.getDataDictionary(String(id)).subscribe({
+              next: (list: any[]) => {
+                const rows = Array.isArray(list) ? list : [];
+                const dtCols = rows
+                  .filter(item => {
+                    const lom = String(item?.Level_of_Measurement || '').toLowerCase();
+                    const dtype = String(item?.Data_Type || '').toLowerCase();
+                    const name = String(item?.Feature_Name || '');
+                    return lom === 'datetime' || dtype.includes('date') || /date|time|dt/i.test(name);
+                  })
+                  .map(item => String(item.Feature_Name));
+                this.dateColumns = Array.from(new Set(dtCols));
+              },
+              error: () => {
+                // Fallback to preview-based heuristic if dictionary fails
+                this.dataService.getDataPreview(String(id)).subscribe({
+                  next: (resp: any) => {
+                    try {
+                      const types = resp?.data_types || {};
+                      const cols = Object.keys(types).filter(k => String(types[k]).toLowerCase().includes('date') || /date|time|dt/i.test(k));
+                      this.dateColumns = cols;
+                    } catch { this.dateColumns = []; }
+                  },
+                  error: () => { this.dateColumns = []; }
+                });
+              }
+            });
+          } catch { this.dateColumns = []; }
         }
       })
     );
+
+    // Track pipeline start
+    this.subscription.add(
+      this.sharedService.isStarted$.subscribe((started: boolean) => {
+        this.isStarted = started;
+        this.computePreprocessingAvailable();
+      })
+    );
+
+    // Do not auto-enable modeling on preprocessing result; user will click "Proceed to Modeling"
+    this.subscription.add(
+      this.sharedService.preprocessingRunResult$.subscribe((_result: any) => {
+        this.modelingAvailable = false;
+      })
+    );
+
+    // Track when user explicitly moves from Declaration to Preprocessing
+    this.subscription.add(
+      this.sharedService.preprocessingInitiated$.subscribe((initiated: boolean) => {
+        this.preprocessingInitiated = initiated;
+        this.computePreprocessingAvailable();
+      })
+    );
+
+    // Track processed file path for detail API
+    this.subscription.add(
+      this.sharedService.processedFilePath$.subscribe((p: string | null) => {
+        this.processedFilePath = p;
+      })
+    );
+
+    // Load persisted preferences (page size, pinned columns, sort) and widths
+    this.loadDatqPrefs();
+    this.loadDatqWidths();
+  }
+
+  // After user reviews the Data Quality summary, proceed to Modeling section
+  goToModeling(): void {
+    this.modelingAvailable = true;
+    this.currentStep = 'modeling';
+    // Smooth scroll to modeling section
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('modeling-anchor');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch (e) {
+        console.warn('Scroll failed:', e);
+      }
+    }, 0);
+  }
+
+  changeDatqPageSize(event: any): void {
+    const value = Number(event?.target?.value ?? this.datqPageSize);
+    this.datqPageSize = value > 0 ? value : 25;
+    this.datqPage = 1;
+    this.saveDatqPrefs();
+  }
+
+  prevDatqPage(): void {
+    if (this.datqPage > 1) this.datqPage--;
+  }
+
+  nextDatqPage(): void {
+    if (this.datqPage < this.datqTotalPages) this.datqPage++;
+  }
+
+  onSort(col: string): void {
+    if (this.datqSortColumn === col) {
+      this.datqSortDir = this.datqSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.datqSortColumn = col;
+      this.datqSortDir = 'asc';
+    }
+    this.datqPage = 1;
+    this.saveDatqPrefs();
+  }
+
+  onFilterChange(): void {
+    this.ensureFilterKeys();
+    this.datqPage = 1;
+  }
+
+  clearFilters(): void {
+    this.datqGlobalFilter = '';
+    this.datqColumnFilters = {};
+    this.ensureFilterKeys();
+    this.datqPage = 1;
+  }
+
+  private ensureFilterKeys(): void {
+    if (!this.datqColumns) return;
+    for (const c of this.datqColumns) {
+      if (!(c in this.datqColumnFilters)) this.datqColumnFilters[c] = '';
+      if (!(c in this.datqSelectedValues)) this.datqSelectedValues[c] = new Set<string>();
+      if (!(c in this.datqShowOnlySelected)) this.datqShowOnlySelected[c] = false;
+    }
+  }
+
+  private ensureDetailFilterKeys(): void {
+    if (!this.datqDetailColumns) return;
+    for (const c of this.datqDetailColumns) {
+      if (!(c in this.detailColumnFilters)) this.detailColumnFilters[c] = '';
+    }
+  }
+
+  get datqDetailFilteredRows(): any[] {
+    const rows: any[] = Array.isArray(this.datqDetail?.psi_table) ? this.datqDetail!.psi_table : [];
+    if (!rows.length) return [];
+    const gf = (this.detailGlobalFilter || '').toLowerCase();
+    const colFilters = this.detailColumnFilters || {};
+    const cols = this.datqDetailColumns || [];
+    return rows.filter(row => {
+      const passGlobal = !gf || cols.some(c => (row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf)));
+      if (!passGlobal) return false;
+      for (const c of cols) {
+        const cf = (colFilters[c] || '').toLowerCase();
+        if (!cf) continue;
+        const cell = row[c];
+        const text = (cell === null || cell === undefined) ? '' : String(cell).toLowerCase();
+        if (!text.includes(cf)) return false;
+      }
+      return true;
+    });
+  }
+
+  get datqDetailSortedRows(): any[] {
+    const rows = [...this.datqDetailFilteredRows];
+    if (!this.detailSortColumn) return rows;
+    const col = this.detailSortColumn;
+    const dir = this.detailSortDir === 'asc' ? 1 : -1;
+    const isNumeric = rows.every(r => r[col] === null || r[col] === undefined || (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))));
+    rows.sort((a, b) => {
+      const va = a[col];
+      const vb = b[col];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (isNumeric) {
+        const na = Number(va);
+        const nb = Number(vb);
+        return (na - nb) * dir;
+      }
+      const sa = String(va).toLowerCase();
+      const sb = String(vb).toLowerCase();
+      if (sa < sb) return -1 * dir;
+      if (sa > sb) return 1 * dir;
+      return 0;
+    });
+    return rows;
+  }
+
+  onDetailSort(col: string): void {
+    if (this.detailSortColumn === col) {
+      this.detailSortDir = this.detailSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.detailSortColumn = col;
+      this.detailSortDir = 'asc';
+    }
+  }
+
+  onDetailFilterChange(): void {
+    this.ensureDetailFilterKeys();
+  }
+
+  clearDetailFilters(): void {
+    this.detailGlobalFilter = '';
+    this.detailColumnFilters = {};
+    this.ensureDetailFilterKeys();
+  }
+
+  get maxAbsContribution(): number {
+    const rows: any[] = Array.isArray(this.datqDetail?.psi_table) ? this.datqDetail!.psi_table : [];
+    if (!rows.length) return 0;
+    let max = 0;
+    for (const r of rows) {
+      const v = Math.abs(Number(r['PSI_contribution']) || 0);
+      if (v > max) max = v;
+    }
+    return max;
+  }
+
+  contribWidth(v: any): number {
+    const max = this.maxAbsContribution;
+    const val = Math.abs(Number(v) || 0);
+    return max > 0 ? Math.min(100, Math.max(0, (val / max) * 100)) : 0;
+  }
+
+  onPinnedColumnsChange(cols: string[]): void {
+    this.pinnedColumns = (cols || []).filter(c => this.datqColumns.includes(c));
+    this.saveDatqPrefs();
+  }
+
+  togglePin(col: string): void {
+    if (this.pinnedColumns.includes(col)) {
+      this.pinnedColumns = this.pinnedColumns.filter(c => c !== col);
+    } else {
+      this.pinnedColumns = [...this.pinnedColumns, col];
+    }
+    this.saveDatqPrefs();
+  }
+
+  resetSorting(): void {
+    this.datqSortColumn = null;
+    this.datqSortDir = 'asc';
+    this.saveDatqPrefs();
+  }
+
+  resetLayout(): void {
+    this.resetSorting();
+    this.pinnedColumns = [];
+    this.saveDatqPrefs();
+  }
+
+  private variableKeyFromRow(row: any): string {
+    // Try common keys, fallback to first key
+    if (!row) return '';
+    if ('Variable' in row) return 'Variable';
+    if ('variable' in row) return 'variable';
+    if ('index' in row) return 'index';
+    const keys = Object.keys(row);
+    return keys.length ? keys[0] : '';
+  }
+
+  onDatqRowClick(row: any): void {
+    try {
+      const key = this.variableKeyFromRow(row);
+      const variable = row?.[key];
+      if (!variable) return;
+      if (this.currentFileId == null || !this.processedFilePath) {
+        console.warn('Missing file id or processed file path for datq detail.');
+        return;
+      }
+      this.datqSelectedVariable = String(variable);
+      this.datqDetailLoading = true;
+      this.datqDetail = null;
+      this.datqDetailColumns = [];
+      this.dataService.getDatqDetail(
+        this.currentFileId,
+        this.processedFilePath,
+        this.datqSelectedVariable,
+        this.currentSplit || { strategy: this.splitStrategy, date_column: this.splitDateColumn || undefined, cutoff: this.splitCutoff || undefined, percent: this.ootMode === 'percent' ? this.ootPercent : undefined }
+      ).subscribe({
+        next: (resp: any) => {
+          this.datqDetail = resp || null;
+          const rows = Array.isArray(resp?.psi_table) ? resp.psi_table : [];
+          this.datqDetailColumns = rows.length ? Object.keys(rows[0]) : [];
+          this.ensureDetailFilterKeys();
+        },
+        error: (err: any) => {
+          console.error('Failed to get datq detail:', err);
+        },
+        complete: () => {
+          this.datqDetailLoading = false;
+        }
+      });
+    } catch (e) {
+      console.warn('onDatqRowClick failed:', e);
+    }
+  }
+
+  exportDatqDetailAsCSV(): void {
+    if (!this.datqDetail) return;
+    const rows = this.datqDetailSortedRows as any[];
+    if (rows.length === 0) return;
+    const cols = this.datqDetailColumns.length ? this.datqDetailColumns : Object.keys(rows[0]);
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = cols.join(',');
+    const body = rows.map(r => cols.map(c => escape(r[c])).join(','));
+    const csv = [header, ...body].join('\n');
+    const name = this.datqSelectedVariable ? `datq_detail_${this.datqSelectedVariable}.csv` : 'datq_detail.csv';
+    this.downloadBlob(csv, name, 'text/csv;charset=utf-8');
+  }
+
+  exportDatqDetailAsJSON(): void {
+    if (!this.datqDetail) return;
+    const json = JSON.stringify(this.datqDetailSortedRows, null, 2);
+    const name = this.datqSelectedVariable ? `datq_detail_${this.datqSelectedVariable}.json` : 'datq_detail.json';
+    this.downloadBlob(json, name, 'application/json;charset=utf-8');
+  }
+
+  closeDatqDetail(): void {
+    this.datqSelectedVariable = null;
+    this.datqDetail = null;
+    this.datqDetailColumns = [];
+    this.datqDetailLoading = false;
+  }
+
+  exportDatqAsCSV(): void {
+    if (!this.datqSummary || this.datqSummary.length === 0) return;
+    const cols = this.datqDisplayColumns.length ? this.datqDisplayColumns : (this.datqColumns.length ? this.datqColumns : Object.keys(this.datqSummary[0]));
+    const rowsSource = this.datqSortedRows; // export filtered + sorted, unpaged
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = cols.join(',');
+    const rows = rowsSource.map(r => cols.map(c => escape(r[c])).join(','));
+    const csv = [header, ...rows].join('\n');
+    this.downloadBlob(csv, 'data_quality_summary.csv', 'text/csv;charset=utf-8');
+  }
+
+  exportDatqAsJSON(): void {
+    if (!this.datqSummary) return;
+    const rowsSource = this.datqSortedRows; // export filtered + sorted, unpaged
+    const json = JSON.stringify(rowsSource, null, 2);
+    this.downloadBlob(json, 'data_quality_summary.json', 'application/json;charset=utf-8');
+  }
+
+  private downloadBlob(content: string, filename: string, type: string): void {
+    try {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn('Download failed:', e);
+    }
+  }
+
+  percent(v: any): number {
+    const n = Number(v);
+    if (!isFinite(n) || isNaN(n)) return 0;
+    const p = n * 100;
+    return p < 0 ? 0 : (p > 100 ? 100 : p);
+  }
+
+  private loadDatqPrefs(): void {
+    try {
+      const raw = localStorage.getItem(this.datqPrefsKey);
+      if (!raw) return;
+      const prefs = JSON.parse(raw);
+      if (typeof prefs?.pageSize === 'number') this.datqPageSize = prefs.pageSize;
+      if (Array.isArray(prefs?.pinned)) this.pinnedColumns = prefs.pinned;
+      if (typeof prefs?.sortColumn === 'string' || prefs?.sortColumn === null) this.datqSortColumn = prefs.sortColumn;
+      if (prefs?.sortDir === 'asc' || prefs?.sortDir === 'desc') this.datqSortDir = prefs.sortDir;
+    } catch {}
+  }
+
+  private saveDatqPrefs(): void {
+    try {
+      const prefs = {
+        pageSize: this.datqPageSize,
+        pinned: this.pinnedColumns,
+        sortColumn: this.datqSortColumn,
+        sortDir: this.datqSortDir,
+      };
+      localStorage.setItem(this.datqPrefsKey, JSON.stringify(prefs));
+    } catch {}
+  }
+
+  private saveDatqWidths(): void {
+    try {
+      localStorage.setItem(this.datqWidthsKey, JSON.stringify(this.colWidths));
+    } catch {}
+  }
+
+  private loadDatqWidths(): void {
+    try {
+      const raw = localStorage.getItem(this.datqWidthsKey);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === 'object') this.colWidths = obj;
+    } catch {}
+  }
+
+  onResizeStart(col: string, ev: MouseEvent): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.resizingCol = col;
+    this.resizeStartX = ev.clientX;
+    this.resizeStartW = this.getColWidth(col);
+    const move = (e: MouseEvent) => this.onResizing(e);
+    const up = () => this.onResizeEnd(move, up);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up, { once: true });
+  }
+
+  private onResizing(ev: MouseEvent): void {
+    if (!this.resizingCol) return;
+    const dx = ev.clientX - this.resizeStartX;
+    const newW = Math.max(120, Math.min(800, this.resizeStartW + dx));
+    this.colWidths[this.resizingCol] = newW;
+  }
+
+  private onResizeEnd(move: any, up: any): void {
+    window.removeEventListener('mousemove', move as any);
+    // 'up' listener is once:true
+    this.resizingCol = null;
+    this.saveDatqWidths();
+  }
+
+  // Display formatter: clamp PSI/CSI to 6 decimals
+  displayCell(row: any, col: string): any {
+    const v = row?.[col];
+    const varType = String(row?.['Variable_Type'] || '').toLowerCase();
+    const colName = String(col);
+    const isTrainTest = (suffix: string) => colName.endsWith(`_${suffix}`);
+    const base = colName.replace(/_(Train|Test)$/i, '');
+    const numericOnlyBases = new Set([
+      'Mean_Change','Median_Change','STD_Change','Min_Change',
+      'Quantile_1_Change','Quantile_5_Change','Q1_Change','Q3_Change',
+      'Quantile_95_Change','Quantile_99_Change','Max_Change',
+      'Skewness_Change','Kurtosis_Change'
+    ]);
+    const categoricalOnlyBases = new Set(['Mode_Change']);
+
+    // Not Applicable rules
+    if (colName === 'PSI' && varType === 'categorical') return 'NA';
+    if (colName === 'CSI' && varType === 'numerical') return 'NA';
+    if (numericOnlyBases.has(base) && varType === 'categorical') return 'NA';
+    if (categoricalOnlyBases.has(base) && varType === 'numerical') return 'NA';
+
+    if (v == null) return '';
+
+    // Numeric formatting for PSI/CSI
+    if (colName === 'PSI' || colName === 'CSI') {
+      const n = Number(v);
+      if (!isFinite(n) || isNaN(n)) return v;
+      return n.toFixed(6);
+    }
+
+    return v;
   }
 
   ngOnDestroy() {
@@ -99,8 +899,17 @@ export class ModelDevelopmentComponent implements OnInit {
 
   onStartClick() {
     if (this.selectedPipeline) {
+      // Reset state for a clean run
+      this.sharedService.setCurrentFileId(null);
+      this.sharedService.setPreprocessingInitiated(false);
+      this.sharedService.setPreprocessingRunResult(null);
+      this.sharedService.setProcessedFilePath(null);
+      this.selectedOptions = [];
+      this.modelingAvailable = false;
+      this.preprocessingAvailable = false;
+      this.currentStep = 'declaration';
+      // Start pipeline
       this.sharedService.setStarted(true);
-      this.router.navigate(['/model-development/declaration']);
     }
   }
 
@@ -117,5 +926,164 @@ export class ModelDevelopmentComponent implements OnInit {
 
     const selectedGroups = new Set(this.selectedOptions.map(opt => opt.group).filter(group => group !== undefined));
     return selectedGroups.has(option.group) && !this.selectedOptions.includes(option);
+  }
+
+  // Save selected purifier options and move to Modeling step
+  proceedFromPreprocessing(): void {
+    const optionIds = this.selectedOptions.map(o => o.id);
+    this.sharedService.setSelectedPurifierOptions(optionIds);
+    if (this.currentFileId == null) {
+      console.error('No file ID found. Please upload/select a data file first.');
+      return;
+    }
+    // Validate OOT params if selected
+    let split: any = { strategy: 'random' };
+    if (this.splitStrategy === 'oot') {
+      if (!this.splitDateColumn) {
+        console.error('Please select a date column for OOT split.');
+        return;
+      }
+      if (this.ootMode === 'cutoff') {
+        if (!this.splitCutoff) {
+          console.error('Please provide a cutoff datetime for OOT split.');
+          return;
+        }
+        split = { strategy: 'oot', date_column: this.splitDateColumn, cutoff: this.splitCutoff };
+      } else {
+        const pct = Number(this.ootPercent);
+        const valid = isFinite(pct) && pct > 0 && pct < 100;
+        split = { strategy: 'oot', date_column: this.splitDateColumn, percent: valid ? pct : 25 };
+      }
+    }
+    this.currentSplit = split;
+    // Submit selection to backend, then run preprocessing, finally navigate on success
+    this.isProcessing = true;
+    this.dataService.applyPreprocessing(this.currentFileId, optionIds).pipe(
+      switchMap(() => this.dataService.runPreprocessing(this.currentFileId as number, undefined, split)),
+      finalize(() => { this.isProcessing = false; })
+    ).subscribe({
+      next: (result: any) => {
+        console.log('[Preprocessing] run result:', result);
+        this.sharedService.setPreprocessingRunResult(result);
+        this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
+        // Capture Data Quality summary and keep user on Preprocessing step
+        this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
+        this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+        this.datqColumns = [...this.datqAllColumns];
+        this.reorderDatqColumns();
+        this.applyDatqPreset(this.datqPreset);
+        this.ensureFilterKeys();
+        // Apply persisted pins if any; else default pin Variable once
+        if (this.pinnedColumns.length > 0) {
+          this.pinnedColumns = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
+        } else {
+          if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
+          else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
+        }
+        // Default sort by PSI desc if present
+        if (this.datqColumns.includes('PSI')) {
+          this.datqSortColumn = 'PSI';
+          this.datqSortDir = 'desc';
+        }
+        this.datqPage = 1;
+        this.saveDatqPrefs();
+        // Navigate to Data Quality step to review summary, then user can proceed to Modeling
+        if (this.datqSummary && this.datqSummary.length > 0) {
+          this.currentStep = 'data quality';
+          setTimeout(() => {
+            try {
+              const el = document.getElementById('data-quality-anchor');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            } catch {}
+          }, 0);
+        }
+      },
+      error: (err: any) => {
+        console.error('Failed to run preprocessing:', err);
+      }
+    });
+  }
+
+  applyDatqPreset(preset: 'core' | 'all'): void {
+    this.datqPreset = preset;
+    if (!this.datqAllColumns || this.datqAllColumns.length === 0) return;
+    if (preset === 'all') {
+      this.datqColumns = [...this.datqAllColumns];
+      this.reorderDatqColumns();
+      this.ensureFilterKeys();
+      return;
+    }
+    // Build a curated core set
+    const cols = new Set(this.datqAllColumns);
+    const pick = (k: string) => cols.has(k) ? k : null;
+    const varCol = pick('Variable') || pick('variable') || pick('index');
+    const basePrefs = [
+      '%_Missing_Change',
+      'Mean_Change', 'Median_Change', 'STD_Change',
+      'Min_Change', 'Max_Change'
+    ];
+    const pairFor = (b: string) => {
+      const t1 = `${b}_Train`;
+      const t2 = `${b}_Test`;
+      if (cols.has(t1) || cols.has(t2)) {
+        const arr: string[] = [];
+        if (cols.has(t1)) arr.push(t1);
+        if (cols.has(t2)) arr.push(t2);
+        return arr;
+      }
+      // fallback to single column if backend didn't flatten
+      return cols.has(b) ? [b] : [];
+    };
+    const fixed = [varCol, pick('PSI'), pick('Datq_Decision'), pick('Variable_Type'), pick('CSI')].filter(Boolean) as string[];
+    const pairs = basePrefs.flatMap(b => pairFor(b));
+    // Keep order from all-columns after we compute our intended order
+    const desiredOrder = [...fixed, ...pairs];
+    const seen = new Set<string>();
+    const ordered = [] as string[];
+    for (const c of this.datqAllColumns) {
+      if (desiredOrder.includes(c) && !seen.has(c)) {
+        ordered.push(c);
+        seen.add(c);
+      }
+    }
+    this.datqColumns = ordered.length ? ordered : [...this.datqAllColumns];
+    this.ensureFilterKeys();
+  }
+
+  stepEnabled(item: string): boolean {
+    if (item === 'declaration') return true;
+    if (item === 'preprocessing') return this.preprocessingAvailable;
+    if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
+    if (item === 'modeling') return this.modelingAvailable;
+    if (item === 'evaluation') return this.modelingAvailable; // can refine later
+    if (item === 'deployment') return this.modelingAvailable; // can refine later
+    return false;
+  }
+
+  onMenuClick(event: Event, item: string): void {
+    if (!this.stepEnabled(item)) {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    this.currentStep = item;
+    // Scroll to anchors for known sections
+    setTimeout(() => {
+      try {
+        if (item === 'data quality') {
+          const el = document.getElementById('data-quality-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (item === 'modeling') {
+          const el = document.getElementById('modeling-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch {}
+    }, 0);
+  }
+
+  private computePreprocessingAvailable(): void {
+    this.preprocessingAvailable = this.isStarted && this.preprocessingInitiated && (this.currentFileId !== null);
   }
 }
