@@ -5,6 +5,8 @@ import { SharedService } from '../services/shared.service';
 import { MatSelectChange } from '@angular/material/select';
 import { Subscription } from 'rxjs';
 import { DataService } from '../services/data.service';
+import { MatDialog } from '@angular/material/dialog';
+import { FeatureCardComponent } from '../feature-card/feature-card.component';
 
 interface PurifierOption {
   id: number;
@@ -273,11 +275,42 @@ export class ModelDevelopmentComponent implements OnInit {
     };
   }
 
-  private isVariableColumn(col: string): boolean {
+  isVariableColumn(col: string): boolean {
     const varCol = this.datqColumns?.includes('Variable') ? 'Variable'
       : (this.datqColumns?.includes('variable') ? 'variable'
         : (this.datqColumns?.includes('index') ? 'index' : null));
     return !!varCol && col === varCol;
+  }
+
+  openFeatureCardFromDatq(variableName: string): void {
+    try {
+      if (!variableName) return;
+      const fileId = this.currentFileId != null ? String(this.currentFileId) : null;
+      if (!fileId) {
+        console.warn('openFeatureCardFromDatq: missing currentFileId');
+      }
+      // Build features list (names only; descriptions unknown at this step)
+      const features = (this.datqSummary || []).map(r => {
+        const name = r['Variable'] ?? r['variable'] ?? r['index'];
+        return { Feature_Name: String(name), Feature_Description: 'No description available' };
+      }).filter(x => !!x.Feature_Name);
+      // Find quality summary row for the selected variable
+      const row = (this.datqSummary || []).find(r => String(r['Variable'] ?? r['variable'] ?? r['index']) === String(variableName));
+      const qualitySummary = row ? { ...row } : null;
+      const processedFile = this.processedFilePath || null;
+      this.dialog.open(FeatureCardComponent, {
+        width: '900px',
+        data: {
+          fileId: fileId || '',
+          columnName: String(variableName),
+          features: features,
+          processedFile: processedFile || undefined,
+          qualitySummary: qualitySummary || undefined,
+        }
+      });
+    } catch (e) {
+      console.error('Failed to open Feature Card from Data Quality:', e);
+    }
   }
 
   selectedCount(col: string): number {
@@ -398,7 +431,7 @@ export class ModelDevelopmentComponent implements OnInit {
 
   selectedOptions: PurifierOption[] = [];
 
-  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService) {}
+  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
 
   ngOnInit() {
     // Baseline reset to prevent stale state causing steps to appear out of order

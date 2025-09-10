@@ -30,6 +30,8 @@ interface FeatureCardDialogData {
   fileId: string;
   columnName: string;
   features: FeatureInfo[];
+  processedFile?: string;
+  qualitySummary?: { [key: string]: any };
 }
 
 
@@ -67,6 +69,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   private originalStackedData: any | null = null;
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
+  qualitySummary: { [key: string]: any } | null = null;
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -83,6 +86,24 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     };
     this.features = data.features;
     this.selectedFeatureName = data.columnName;
+    this.qualitySummary = data.qualitySummary || null;
+  }
+
+  // Quality helpers
+  hasQuality(): boolean {
+    return !!this.qualitySummary && Object.keys(this.qualitySummary).length > 0;
+  }
+
+  qualityPairs(): Array<{ key: string, value: any }> {
+    if (!this.qualitySummary) return [];
+    const entries = Object.entries(this.qualitySummary);
+    const preferred = ['Variable', 'variable', 'index', 'Datq_Decision', 'Variable_Type', 'PSI', 'CSI'];
+    const score = (k: string) => {
+      const i = preferred.indexOf(k);
+      return i === -1 ? 1000 : i;
+    };
+    entries.sort((a, b) => score(a[0]) - score(b[0]));
+    return entries.map(([key, value]) => ({ key, value }));
   }
 
   ngOnInit() {
@@ -106,6 +127,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   onFeatureChange() {
     this.data.columnName = this.selectedFeatureName;
     this.loadFeatureData();
+    // We only have quality for the initially clicked feature from Data Quality summary.
+    // When user changes selection, clear quality panel (unless later provided via a future API).
+    this.qualitySummary = null;
   }
   
   loadFeatureData() {

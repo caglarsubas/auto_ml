@@ -78,7 +78,28 @@
       </mat-tab>
 
       <mat-tab label="Quality">
-        <p>Quality information will be displayed here.</p>
+        <ng-container *ngIf="hasQuality(); else noQuality">
+          <p style="font-size: 14px"><br><strong>Data Quality Summary</strong></p>
+          <div class="table-container">
+            <table class="descriptive-stats-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let kv of qualityPairs()">
+                  <td>{{ kv.key }}</td>
+                  <td>{{ kv.value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ng-container>
+        <ng-template #noQuality>
+          <p>Quality information will be displayed here.</p>
+        </ng-template>
       </mat-tab>
       
       <mat-tab label="Importance">
