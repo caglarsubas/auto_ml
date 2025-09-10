@@ -49,6 +49,261 @@ class PreprocessingApplyView(APIView):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingDatqTimeseriesView(APIView):
+    """Returns monthly rolling PSI series (3m and 6m) for a selected variable.
+
+    Payload: { file_id: number, processed_file: string, column: string, date_column: string, metric?: 'psi'|'csi',
+               split?: { strategy?: 'random'|'oot', date_column?: string, cutoff?: string, percent?: number },
+               windows?: list[int], min_bin_share_allowed?: float }
+    Currently implements PSI; CSI aliases to PSI for compatibility.
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            data = request.data
+            file_id = data.get('file_id')
+            processed_file = data.get('processed_file')
+            column = data.get('column') or data.get('variable')
+            date_column = data.get('date_column')
+            metric = (data.get('metric') or 'psi').lower()
+            split = data.get('split') if isinstance(data.get('split'), dict) else None
+            windows = data.get('windows') if isinstance(data.get('windows'), (list, tuple)) else None
+            try:
+                windows = [int(w) for w in (windows or [3, 6]) if int(w) >= 1]
+            except Exception:
+                windows = [3, 6]
+            windows = sorted(list(dict.fromkeys(windows)))  # unique & sorted
+            min_bin_share_allowed = data.get('min_bin_share_allowed')
+            try:
+                min_bin_share_allowed = float(min_bin_share_allowed) if min_bin_share_allowed is not None else 0.05
+            except Exception:
+                min_bin_share_allowed = 0.05
+
+            if file_id is None:
+                return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not processed_file:
+                return Response({'error': 'processed_file is required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not column:
+                return Response({'error': 'column is required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not date_column:
+                return Response({'error': 'date_column is required for timeseries analysis'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate declaration exists
+            try:
+                _ = Declaration.objects.get(pk=file_id)
+            except Declaration.DoesNotExist:
+                return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Resolve file path (allow either relative under MEDIA_ROOT or absolute)
+            full_path = processed_file
+            if not os.path.isabs(full_path):
+                full_path = os.path.join(settings.MEDIA_ROOT, processed_file)
+            if not os.path.exists(full_path):
+                return Response({'error': f'processed_file not found at {full_path}'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Read processed dataframe
+            lower = full_path.lower()
+            if lower.endswith('.csv'):
+                df = pd.read_csv(full_path)
+            elif lower.endswith(('.xls', '.xlsx')):
+                try:
+                    df = pd.read_excel(full_path, engine='openpyxl')
+                except Exception:
+                    df = pd.read_excel(full_path, engine='xlrd')
+            else:
+                df = pd.read_csv(full_path)
+
+            if column not in df.columns:
+                return Response({'error': f'column {column} not in processed file'}, status=status.HTTP_400_BAD_REQUEST)
+            if date_column not in df.columns:
+                return Response({'error': f'date_column {date_column} not in processed file'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Preserve full frame for overall PSI; build a timeseries frame filtered by valid dates
+            df_full = df.copy()
+            # Prepare time axis (monthly) on a copy for rolling windows
+            dt = pd.to_datetime(df[date_column], errors='coerce', dayfirst=True)
+            valid_mask = dt.notna()
+            df_ts = df.loc[valid_mask].copy()
+            dt = dt.loc[valid_mask]
+            # Also build a month index for the full frame to align with split indices
+            dt_full = pd.to_datetime(df_full[date_column], errors='coerce', dayfirst=True)
+            months_full = dt_full.dt.to_period('M').dt.to_timestamp()
+            if df_ts.empty:
+                return Response({'series': [], 'message': 'No valid datetime rows after parsing.'}, status=status.HTTP_200_OK)
+
+            months = dt.dt.to_period('M').dt.to_timestamp()
+            df_ts['_month'] = months
+            uniq_months = sorted(df_ts['_month'].dropna().unique().tolist())
+            if len(uniq_months) < 2:
+                return Response({'series': [], 'message': 'Not enough distinct months to compute rolling PSI.'}, status=status.HTTP_200_OK)
+
+            # Helper classes (as used in other endpoints)
+            class _ArgDecl:
+                def __init__(self, target_name: str | None):
+                    self.numerical_col_sparcity_degree_value_upper_treshold = 0.99
+                    self.min_bin_share_allowed = min_bin_share_allowed
+                    self.min_bin_count_allowed = 2
+                    self.data_target_feature = target_name
+
+            class _VarDemystify:
+                def __init__(self, frame: pd.DataFrame, target_name: str | None):
+                    num_cols = set(frame.select_dtypes(include=[np.number]).columns.tolist())
+                    obj_cols = [c for c in frame.columns if c not in num_cols]
+                    # Promote mostly-numeric object columns
+                    def _mostly_numeric(series: pd.Series) -> bool:
+                        try:
+                            ser = series
+                            if len(ser) > 5000:
+                                ser = ser.sample(5000, random_state=42)
+                            s0 = ser.astype(str).str.replace(' ', '', regex=False)
+                            s_en = s0.str.replace(',', '', regex=False)
+                            p_en = pd.to_numeric(s_en, errors='coerce')
+                            s_eu = s0.str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                            p_eu = pd.to_numeric(s_eu, errors='coerce')
+                            parsed = p_en if p_en.notna().mean() >= p_eu.notna().mean() else p_eu
+                            ratio = parsed.notna().mean()
+                            nun = parsed.nunique(dropna=True)
+                            return (ratio >= 0.5) and (nun >= 2)
+                        except Exception:
+                            return False
+                    for c in obj_cols:
+                        try:
+                            if _mostly_numeric(frame[c]):
+                                num_cols.add(c)
+                        except Exception:
+                            pass
+                    num_cols = list(num_cols)
+                    cat_cols = [c for c in frame.columns if c not in num_cols]
+                    self.numerical_model_features_list = num_cols
+                    self.categorical_model_features_list = cat_cols
+                    # Meta info for Data_Quality
+                    meta_index = frame.columns
+                    miss = frame.isna().mean()
+                    sparsity_bound = pd.Series(0.0, index=meta_index)
+                    sparsity_ratio = pd.Series(0.0, index=meta_index)
+                    for c in meta_index:
+                        if c in self.numerical_model_features_list and np.issubdtype(frame[c].dtype, np.number):
+                            try:
+                                q1 = frame[c].quantile(0.01)
+                                sparsity_bound[c] = (frame[c] <= q1).mean()
+                                sparsity_ratio[c] = (frame[c] == 0).mean()
+                            except Exception:
+                                sparsity_bound[c] = 0.0
+                                sparsity_ratio[c] = 0.0
+                        else:
+                            try:
+                                mode_val = frame[c].mode(dropna=True)
+                                top = mode_val.iloc[0] if not mode_val.empty else None
+                                sparsity_bound[c] = (frame[c] == top).mean() if top is not None else 0.0
+                                sparsity_ratio[c] = 0.0
+                            except Exception:
+                                sparsity_bound[c] = 0.0
+                                sparsity_ratio[c] = 0.0
+                    self.data_meta_info_df = pd.DataFrame({
+                        '%_Missing_Value': miss,
+                        'Sparcity_Bound_Quantile': sparsity_bound,
+                        '%_Sparcity': sparsity_ratio,
+                    })
+
+            target_name = 'Target' if 'Target' in df_full.columns else None
+
+            # Build train/test split consistent with Data Quality summary logic
+            def _build_split_indices(frame: pd.DataFrame):
+                try:
+                    if isinstance(split, dict) and split.get('strategy') == 'oot':
+                        # Prefer explicit date_column from split, otherwise use payload's date_column
+                        dc = split.get('date_column') or date_column
+                        if dc and dc in frame.columns:
+                            ser = pd.to_datetime(frame[dc], errors='coerce')
+                            # Percent-based split support
+                            pct = split.get('percent')
+                            if pct is not None:
+                                try:
+                                    pctf = float(pct)
+                                except Exception:
+                                    pctf = None
+                                if pctf is not None and 0 < pctf < 100:
+                                    order = ser.sort_values(kind='mergesort').index
+                                    k = int(len(order) * (1 - pctf / 100.0))
+                                    k = max(0, min(len(order), k))
+                                    return order[:k], order[k:]
+                            cutoff = split.get('cutoff')
+                            if cutoff:
+                                mask_train = ser <= pd.to_datetime(cutoff)
+                                return frame.index[mask_train], frame.index[~mask_train]
+                except Exception as e:
+                    print(f"[DatqTimeseries] OOT split failed: {e}, falling back to random")
+                rng = np.random.RandomState(42)
+                m = rng.rand(len(frame)) < 0.7
+                return frame.index[m], frame.index[~m]
+
+            def _psi_between(frame: pd.DataFrame, train_idx, test_idx) -> float | None:
+                try:
+                    class _Splitter:
+                        def __init__(self, tr, te):
+                            self.train_data_indeces = tr
+                            self.test_data_indeces = te
+                    dq = Data_Quality(_ArgDecl(target_name), _VarDemystify(frame, target_name), data_splitter=_Splitter(train_idx, test_idx))
+                    dq.feature_psi(frame)
+                    detailed = getattr(dq, 'feature_psi_detailed_dict', {})
+                    if column in detailed:
+                        psi_value, _tbl = detailed[column]
+                        try:
+                            return float(psi_value)
+                        except Exception:
+                            return None
+                    return None
+                except Exception as e:
+                    print(f"[DatqTimeseries] PSI computation failed for {column}: {e}")
+                    return None
+
+            # Establish train/test split once for consistency with overall
+            try:
+                tr_idx, te_idx = _build_split_indices(df_full)
+            except Exception:
+                tr_idx, te_idx = df_full.index[:0], df_full.index[:0]
+
+            out_series = []
+            for m in uniq_months:
+                rec = {'month': m.strftime('%Y-%m')}
+                try:
+                    idx_m = uniq_months.index(m)
+                except ValueError:
+                    idx_m = -1
+                for w in windows:
+                    key = f"psi_{w}m"
+                    nkey = f"n_{w}m"
+                    if idx_m >= (w - 1) and len(tr_idx) > 0 and metric in ('psi', 'csi'):
+                        win = uniq_months[idx_m - (w - 1): idx_m + 1]
+                        maskw = months_full.isin(win)
+                        tew = te_idx[maskw.loc[te_idx]]
+                        rec[key] = _psi_between(df_full, tr_idx, tew) if len(tew) > 0 else None
+                        try:
+                            rec[nkey] = int(len(tew))
+                        except Exception:
+                            rec[nkey] = None
+                    else:
+                        rec[key] = None
+                        rec[nkey] = None
+                out_series.append(rec)
+
+            # Overall (non-rolling) PSI/CSI: match Data Quality summary split (random 70/30 default)
+            overall = None
+            try:
+                tr_idx, te_idx = _build_split_indices(df_full)
+                if metric in ('psi', 'csi'):
+                    overall = _psi_between(df_full, tr_idx, te_idx)
+            except Exception:
+                overall = None
+
+            return Response({'series': out_series, 'metric': 'psi', 'overall': overall}, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            print("[PreprocessingDatqTimeseriesView] ERROR:\n" + traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
 class PreprocessingRunView(APIView):
     """Runs preprocessing on the uploaded file using selected options and returns a small preview.
 
@@ -104,7 +359,7 @@ class PreprocessingRunView(APIView):
                     preserve_cols = {str(split.get('date_column'))}
             except Exception:
                 preserve_cols = None
-            df_processed, dropped_columns = self._apply_options(df, set(options), preserve=preserve_cols)
+            df_processed, dropped_columns, dropped_by_step = self._apply_options(df, set(options), preserve=preserve_cols)
             print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape}")
 
             # Save processed file
@@ -366,7 +621,9 @@ class PreprocessingRunView(APIView):
                 'split': split if isinstance(split, dict) else {'strategy': 'random'},
                 'row_count_before': rows_before,
                 'row_count_after': len(df_processed),
+                'rows_removed_total': int(max(0, rows_before - len(df_processed))),
                 'dropped_columns': dropped_columns,
+                'dropped_columns_by_step': dropped_by_step,
                 'original_columns_count': len(cols_before),
                 'new_columns_count': len(df_processed.columns),
                 'head': df_processed.head(5).replace({np.nan: None}).to_dict(orient='records'),
@@ -425,33 +682,48 @@ class PreprocessingRunView(APIView):
             return pd.read_csv(path)
 
     def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None):
-        dropped_cols = []
+        dropped_cols: list[str] = []
+        breakdown: list[dict] = []
         work = df.copy()
 
         # 1: Column-wise duplicate drop
         if 1 in options:
+            _rows_before = len(work)
             before_cols = list(work.columns)
             work = work.T.drop_duplicates().T
             dc = [c for c in before_cols if c not in work.columns]
             if preserve:
                 dc = [c for c in dc if c not in preserve]
             dropped_cols += dc
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            # Always record the step outcome (even if no columns removed)
+            breakdown.append({'step': 'Column-wise duplicate drop', 'option_ids': [1], 'columns': dc, 'rows_removed': _rows_removed})
 
         # 2: Row-wise duplicate drop
         if 2 in options:
+            _rows_before = len(work)
             work = work.drop_duplicates()
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Row-wise duplicate drop', 'option_ids': [2], 'columns': [], 'rows_removed': _rows_removed})
 
         # 3: Zero-variance drop
         if 3 in options:
+            _rows_before = len(work)
             nunique = work.nunique(dropna=False)
             to_drop = nunique[nunique <= 1].index.tolist()
             if preserve:
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
             dropped_cols += to_drop
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Zero-variance drop', 'option_ids': [3], 'columns': to_drop, 'rows_removed': _rows_removed})
 
         # 4: Perfect-correlation drop
         if 4 in options:
+            _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
                 corr = num.corr().abs()
@@ -461,12 +733,19 @@ class PreprocessingRunView(APIView):
                     to_drop = [c for c in to_drop if c not in preserve]
                 work = work.drop(columns=to_drop, errors='ignore')
                 dropped_cols += to_drop
+            else:
+                to_drop = []
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Perfect-correlation drop', 'option_ids': [4], 'columns': to_drop, 'rows_removed': _rows_removed})
 
         # 5-8: Corr-drop thresholds
         corr_thresholds = {5: 0.95, 6: 0.90, 7: 0.85, 8: 0.80}
         selected_corr = [t for k, t in corr_thresholds.items() if k in options]
         if selected_corr:
             thr = min(selected_corr)  # be conservative: drop more if multiple selected
+            selected_corr_ids = [k for k in corr_thresholds.keys() if k in options]
+            _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
                 corr = num.corr().abs()
@@ -484,24 +763,37 @@ class PreprocessingRunView(APIView):
                     removed = {c for c in removed if c not in preserve}
                 work = work.drop(columns=list(removed), errors='ignore')
                 dropped_cols += list(removed)
+                cols_removed_list = list(removed)
+            else:
+                cols_removed_list = []
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Correlation drop (threshold)', 'option_ids': selected_corr_ids, 'threshold': thr, 'columns': cols_removed_list, 'rows_removed': _rows_removed})
 
         # 9-13: Missing-drop thresholds
         miss_thresholds = {9: 0.20, 10: 0.30, 11: 0.40, 12: 0.50, 13: 0.60}
         selected_miss = [t for k, t in miss_thresholds.items() if k in options]
         if selected_miss:
             thr = min(selected_miss)
+            selected_miss_ids = [k for k in miss_thresholds.keys() if k in options]
+            _rows_before = len(work)
             miss_ratio = work.isna().mean()
             to_drop = miss_ratio[miss_ratio >= thr].index.tolist()
             if preserve:
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
             dropped_cols += to_drop
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Missing-drop (threshold)', 'option_ids': selected_miss_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
         # 14-18: Sparsity (zeros) drop thresholds
         sparse_thresholds = {14: 0.20, 15: 0.30, 16: 0.40, 17: 0.50, 18: 0.60}
         selected_sparse = [t for k, t in sparse_thresholds.items() if k in options]
         if selected_sparse:
             thr = min(selected_sparse)
+            selected_sparse_ids = [k for k in sparse_thresholds.keys() if k in options]
+            _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
                 zero_ratio = (num == 0).mean()
@@ -510,12 +802,19 @@ class PreprocessingRunView(APIView):
                     to_drop = [c for c in to_drop if c not in preserve]
                 work = work.drop(columns=to_drop)
                 dropped_cols += to_drop
+            else:
+                to_drop = []
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Sparsity zeros drop (threshold)', 'option_ids': selected_sparse_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
         # 19-23: Combined sparsity + missing thresholds
         combo_thresholds = {19: 0.95, 20: 0.90, 21: 0.85, 22: 0.80, 23: 0.75}
         selected_combo = [t for k, t in combo_thresholds.items() if k in options]
         if selected_combo:
             thr = min(selected_combo)
+            selected_combo_ids = [k for k in combo_thresholds.keys() if k in options]
+            _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             zero_ratio = (num == 0).mean() if not num.empty else pd.Series(0, index=[])
             miss_ratio = work.isna().mean()
@@ -527,6 +826,9 @@ class PreprocessingRunView(APIView):
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
             dropped_cols += to_drop
+            _rows_after = len(work)
+            _rows_removed = int(max(0, _rows_before - _rows_after))
+            breakdown.append({'step': 'Combined sparsity+missing drop (threshold)', 'option_ids': selected_combo_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
         # 28-30: Outlier cleaning via quantile clipping
         quantiles = {28: (0.01, 0.99), 29: (0.05, 0.95), 30: (0.10, 0.90)}
@@ -541,7 +843,7 @@ class PreprocessingRunView(APIView):
                 for c in num_clipped.columns:
                     work[c] = num_clipped[c]
 
-        return work, list(dict.fromkeys(dropped_cols))
+        return work, list(dict.fromkeys(dropped_cols)), breakdown
 
     def _safe_timestamp(self) -> str:
         from datetime import datetime

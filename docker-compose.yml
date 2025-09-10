@@ -9,9 +9,9 @@ services:
       - DJANGO_ALLOWED_HOSTS=*
       - DATQ_MAX_CELLS=20000000
       - DATQ_SAMPLE_ROWS=10000
-    # Uncomment the following to enable live-reload development by mounting the code
-    # volumes:
-    #   - .:/app
+    # Mount project root for live-reload development (Django autoreload)
+    volumes:
+      - .:/app
   frontend:
     build:
       context: .
@@ -20,3 +20,7 @@ services:
       - "4300:4300"
     depends_on:
       - backend
+    # Mount frontend source so Angular dev server rebuilds on change; keep container node_modules
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

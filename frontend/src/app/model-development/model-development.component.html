@@ -93,6 +93,34 @@
 
     <!-- Data Quality Step Anchor and Summary Table -->
     <div id="data-quality-anchor"></div>
+    <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
+    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="purifier-summary" style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fffdf7;">
+      <h3 style="margin: 0 0 6px 0;">Data Purifier Summary</h3>
+      <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#444; font-size: 13px; margin-bottom:8px;">
+        <span><strong>Rows:</strong> {{ rowCountBefore }} → {{ rowCountAfter }}</span>
+        <span><strong>Rows removed:</strong> {{ rowsRemovedTotal }}</span>
+        <span><strong>Total columns dropped:</strong> {{ droppedTotalCount() }}</span>
+      </div>
+      <div *ngFor="let s of droppedColumnsByStep; trackBy: trackByStepIndex" style="margin: 6px 0 10px 0;">
+        <div>
+          <strong>{{ s.step }}</strong>
+          <span *ngIf="s.threshold != null"> (threshold: {{ s.threshold }})</span>
+          <span *ngIf="s.option_ids && s.option_ids.length"> — Options: {{ s.option_ids.join(', ') }}</span>
+          <span style="color:#666; margin-left: 8px;">Rows removed in step: {{ s.rows_removed || 0 }}</span>
+        </div>
+        <div *ngIf="s.columns && s.columns.length; else noCols" style="font-size: 12px; color:#333;">
+          <details>
+            <summary>{{ s.columns.length }} column(s)</summary>
+            <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
+              <span *ngFor="let c of s.columns" style="border: 1px solid #eee; padding: 2px 6px; border-radius: 12px; background: #fafafa;">{{ c }}</span>
+            </div>
+          </details>
+        </div>
+        <ng-template #noCols>
+          <div style="font-size: 12px; color: #777;">No columns dropped in this step</div>
+        </ng-template>
+      </div>
+    </div>
     <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
       <h2>Data Quality</h2>
       <h3 style="margin-top: 8px;">Data Quality Summary</h3>

@@ -31,6 +31,7 @@ interface FeatureCardDialogData {
   columnName: string;
   features: FeatureInfo[];
   processedFile?: string;
+  dateColumn?: string;
   qualitySummary?: { [key: string]: any };
 }
 
@@ -70,6 +71,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
   qualitySummary: { [key: string]: any } | null = null;
+
+  // Quality timeseries (supports dynamic windows like 1m/3m/6m)
+  qualityTimeseries: any[] = [];
+  qualityTimeseriesMetric: 'psi' | 'csi' = 'psi';
+  qualityTimeseriesLoading: boolean = false;
+  qualityTimeseriesError: string | null = null;
+  qualityTimeseriesOverall: number | null = null;
+  // Controls
+  selectedQualityWindows: number[] = [1, 3, 6];
+  minBinShareAllowed: number = 0.05;
+  showWindowCounts: boolean = true;
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -79,14 +91,36 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   ) {
     this.isBrowser = isPlatformBrowser(platformId);
     this.resizeListener = () => {
-      if (this.isFullScreen) {
+      // Redraw charts on resize
+      if (this.isBrowser) {
         this.createVisualization();
-        console.log('FeatureCard constructed with data:', data);
+        this.drawQualityTimeseries();
       }
     };
     this.features = data.features;
     this.selectedFeatureName = data.columnName;
     this.qualitySummary = data.qualitySummary || null;
+  }
+
+  qualityWindowsLabel(): string {
+    try {
+      return this.selectedQualityWindows.sort((a,b)=>a-b).map(w => `${w}m`).join('/');
+    } catch { return '3m/6m'; }
+  }
+
+  toggleQualityWindow(w: number, checked: boolean): void {
+    const set = new Set(this.selectedQualityWindows);
+    if (checked) set.add(w); else set.delete(w);
+    this.selectedQualityWindows = Array.from(set).sort((a,b)=>a-b);
+    this.fetchQualityTimeseries();
+  }
+
+  onMinBinShareChange(val: any): void {
+    const n = Number(val);
+    if (!isFinite(n) || isNaN(n)) return;
+    const clamped = Math.max(0, Math.min(0.5, n));
+    this.minBinShareAllowed = clamped;
+    this.fetchQualityTimeseries();
   }
 
   // Quality helpers
@@ -111,6 +145,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     if (this.isBrowser) {
       this.loadPlotly().then(() => {
         window.addEventListener('resize', this.resizeListener);
+        // Once Plotly is available, attempt to draw quality timeseries
+        this.fetchQualityTimeseries();
       }).catch(error => {
         console.error('Error loading Plotly:', error);
         this.errorMessage = 'An error occurred while loading the visualization library. Please try again.';
@@ -130,6 +166,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     // We only have quality for the initially clicked feature from Data Quality summary.
     // When user changes selection, clear quality panel (unless later provided via a future API).
     this.qualitySummary = null;
+    // Refresh timeseries for the newly selected variable
+    this.fetchQualityTimeseries();
   }
   
   loadFeatureData() {
@@ -298,6 +336,153 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           return;
         }
       }
+    }
+  }
+
+  // ===== Quality timeseries (3m/6m rolling PSI/CSI) =====
+  private inferQualityMetric(): 'psi' | 'csi' {
+    try {
+      if (this.qualitySummary && (this.qualitySummary['PSI'] !== undefined || this.qualitySummary['psi'] !== undefined)) return 'psi';
+      if (this.qualitySummary && (this.qualitySummary['CSI'] !== undefined || this.qualitySummary['csi'] !== undefined)) return 'csi';
+      return 'psi';
+    } catch { return 'psi'; }
+  }
+
+  fetchQualityTimeseries(): void {
+    try {
+      if (!this.isBrowser) return;
+      if (!this.data.processedFile || !this.data.dateColumn) {
+        this.qualityTimeseriesError = 'Date column or processed file not available for timeseries.';
+        return;
+      }
+      const fid = Number(this.data.fileId);
+      if (!isFinite(fid)) {
+        this.qualityTimeseriesError = 'Invalid file id';
+        return;
+      }
+      this.qualityTimeseriesMetric = this.inferQualityMetric();
+      this.qualityTimeseriesLoading = true;
+      this.qualityTimeseriesError = null;
+      this.dataService.getDatqTimeseries(
+        fid,
+        this.data.processedFile,
+        this.data.columnName,
+        this.data.dateColumn,
+        this.qualityTimeseriesMetric,
+        this.selectedQualityWindows,
+        this.minBinShareAllowed
+      ).subscribe({
+        next: (resp: any) => {
+          const series = Array.isArray(resp?.series) ? resp.series : [];
+          this.qualityTimeseries = series;
+          // Prefer the PSI/CSI value from the qualitySummary row to ensure exact match with the summary table
+          let overallFromSummary: number | null = null;
+          try {
+            if (this.qualitySummary) {
+              const key = (this.qualityTimeseriesMetric === 'psi') ? (('PSI' in this.qualitySummary) ? 'PSI' : 'psi')
+                                                                : (('CSI' in this.qualitySummary) ? 'CSI' : 'csi');
+              const v = (this.qualitySummary as any)[key];
+              const n = Number(v);
+              overallFromSummary = (isFinite(n) && !isNaN(n)) ? n : null;
+            }
+          } catch {}
+          const overallFromApi = (resp && resp.overall != null && resp.overall !== '') ? Number(resp.overall) : null;
+          this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
+          this.drawQualityTimeseries();
+        },
+        error: (err: any) => {
+          console.error('Failed to fetch quality timeseries:', err);
+          this.qualityTimeseriesError = 'Failed to fetch timeseries';
+        },
+        complete: () => { this.qualityTimeseriesLoading = false; }
+      });
+    } catch (e) {
+      console.warn('fetchQualityTimeseries failed:', e);
+      this.qualityTimeseriesError = 'Failed to compute timeseries';
+      this.qualityTimeseriesLoading = false;
+    }
+  }
+
+  drawQualityTimeseries(): void {
+    try {
+      if (!this.isBrowser) return;
+      const Plotly = (window as any).Plotly;
+      if (!Plotly) return;
+      const el = document.getElementById('quality-timeseries');
+      if (!el) {
+        // Tab content may be lazy-rendered; retry shortly after activation
+        setTimeout(() => this.drawQualityTimeseries(), 250);
+        return;
+      }
+      const series = Array.isArray(this.qualityTimeseries) ? this.qualityTimeseries : [];
+      const x = series.map((r: any) => r?.month || null).filter((v: any) => v != null);
+      const traces: any[] = [];
+      // add rolling windows dynamically
+      const windowStyles: {[w: number]: {color: string; dash?: string}} = {
+        1: { color: '#388e3c' },
+        3: { color: '#1976d2' },
+        6: { color: '#d32f2f', dash: 'dot' },
+      };
+      let hasAnyRolling = false;
+      for (const w of this.selectedQualityWindows.sort((a,b)=>a-b)) {
+        const key = `psi_${w}m`;
+        const y = series.map((r: any) => (r && r[key] != null ? Number(r[key]) : null));
+        const has = y.some(v => v != null);
+        if (has) {
+          hasAnyRolling = true;
+          const st = windowStyles[w] || { color: '#455a64' };
+          traces.push({
+            x,
+            y,
+            mode: 'lines+markers',
+            name: `${w}-month rolling`,
+            line: { color: st.color, width: 2, ...(st.dash ? { dash: st.dash } : {}) },
+            connectgaps: false
+          });
+          if (this.showWindowCounts) {
+            const nkey = `n_${w}m`;
+            const ny = series.map((r: any) => (r && r[nkey] != null ? Number(r[nkey]) : null));
+            const baseColor = st.color;
+            traces.push({
+              x,
+              y: ny,
+              type: 'bar',
+              name: `${w}m N`,
+              yaxis: 'y2',
+              opacity: 0.25,
+              marker: { color: baseColor },
+              hovertemplate: `${w}m N: %{y}<extra></extra>`
+            });
+          }
+        }
+      }
+      if (!hasAnyRolling && this.qualityTimeseriesOverall == null) {
+        (el as any).innerHTML = '<div style="color:#777; font-size:12px;">No series available.</div>';
+        return;
+      }
+      if (this.qualityTimeseriesOverall != null && x.length) {
+        traces.push({
+          x,
+          y: x.map(() => this.qualityTimeseriesOverall as number),
+          mode: 'lines',
+          name: 'overall',
+          line: { color: '#455a64', width: 2, dash: 'dash' },
+          hovertemplate: `Overall ${this.qualityTimeseriesMetric.toUpperCase()}: %{y:.6f}<extra></extra>`
+        });
+      }
+      const layout: any = {
+        margin: { t: 24, r: 12, b: 40, l: 48 },
+        height: this.isFullScreen ? Math.floor(window.innerHeight * 0.50) : 560,
+        width: this.isFullScreen ? Math.floor(window.innerWidth * 0.85) : undefined,
+        xaxis: { title: 'Month' },
+        yaxis: { title: `Rolling ${this.qualityTimeseriesMetric.toUpperCase()} (${this.qualityWindowsLabel()})`, tickformat: '.6f' },
+        yaxis2: { title: 'N (test)', overlaying: 'y', side: 'right', rangemode: 'tozero' },
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.2 }
+      };
+      Plotly.newPlot('quality-timeseries', traces, layout);
+    } catch (e) {
+      console.warn('drawQualityTimeseries failed:', e);
     }
   }
 

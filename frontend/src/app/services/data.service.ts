@@ -83,6 +83,29 @@ export class DataService {
     );
   }
 
+  // Get monthly rolling PSI/CSI time series for a variable
+  getDatqTimeseries(
+    fileId: number,
+    processedFile: string,
+    column: string,
+    dateColumn: string,
+    metric: 'psi' | 'csi' = 'psi',
+    windows?: number[],
+    minBinShareAllowed?: number,
+    split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }
+  ): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile, column, date_column: dateColumn, metric };
+    if (windows && windows.length) payload.windows = windows;
+    if (minBinShareAllowed != null) payload.min_bin_share_allowed = minBinShareAllowed;
+    if (split) payload.split = split;
+    return this.http.post(`${this.apiUrl}preprocessing/datq_timeseries/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error getting datq timeseries:', error);
+        return throwError(() => new Error(error.message || 'Failed to get data quality timeseries'));
+      })
+    );
+  }
+
   // Start modeling with the processed file path and optional algorithm
   startModeling(fileId: number, processedFile: string, algorithm?: string): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };

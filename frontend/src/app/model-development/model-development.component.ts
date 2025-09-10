@@ -41,6 +41,13 @@ export class ModelDevelopmentComponent implements OnInit {
   isStarted: boolean = false;
   modelingAvailable: boolean = false;
   preprocessingAvailable: boolean = false;
+  // Purifier breakdown: which columns were dropped at which step, and how many rows were removed
+  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number }>= [];
+  // Total rows removed across all preprocessing steps
+  rowsRemovedTotal: number = 0;
+  // Row counts before/after preprocessing run (for summary display)
+  rowCountBefore: number = 0;
+  rowCountAfter: number = 0;
   preprocessingInitiated: boolean = false;
 
   // Split controls
@@ -295,9 +302,10 @@ export class ModelDevelopmentComponent implements OnInit {
         return { Feature_Name: String(name), Feature_Description: 'No description available' };
       }).filter(x => !!x.Feature_Name);
       // Find quality summary row for the selected variable
-      const row = (this.datqSummary || []).find(r => String(r['Variable'] ?? r['variable'] ?? r['index']) === String(variableName));
+      const row = (this.datqSummary || []).find(r => String(r['Variable'] || r['variable'] || r['index']) === String(variableName));
       const qualitySummary = row ? { ...row } : null;
       const processedFile = this.processedFilePath || null;
+      const dateColumn = this.splitDateColumn || (this.dateColumns && this.dateColumns.length ? this.dateColumns[0] : null);
       this.dialog.open(FeatureCardComponent, {
         width: '900px',
         data: {
@@ -305,6 +313,7 @@ export class ModelDevelopmentComponent implements OnInit {
           columnName: String(variableName),
           features: features,
           processedFile: processedFile || undefined,
+          dateColumn: dateColumn || undefined,
           qualitySummary: qualitySummary || undefined,
         }
       });
@@ -988,55 +997,71 @@ export class ModelDevelopmentComponent implements OnInit {
         split = { strategy: 'oot', date_column: this.splitDateColumn, percent: valid ? pct : 25 };
       }
     }
-    this.currentSplit = split;
-    // Submit selection to backend, then run preprocessing, finally navigate on success
+
     this.isProcessing = true;
-    this.dataService.applyPreprocessing(this.currentFileId, optionIds).pipe(
-      switchMap(() => this.dataService.runPreprocessing(this.currentFileId as number, undefined, split)),
-      finalize(() => { this.isProcessing = false; })
-    ).subscribe({
-      next: (result: any) => {
-        console.log('[Preprocessing] run result:', result);
-        this.sharedService.setPreprocessingRunResult(result);
-        this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
-        // Capture Data Quality summary and keep user on Preprocessing step
-        this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
-        this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
-        this.datqColumns = [...this.datqAllColumns];
-        this.reorderDatqColumns();
-        this.applyDatqPreset(this.datqPreset);
-        this.ensureFilterKeys();
-        // Apply persisted pins if any; else default pin Variable once
-        if (this.pinnedColumns.length > 0) {
-          this.pinnedColumns = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
-        } else {
-          if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
-          else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
+    this.dataService.runPreprocessing(this.currentFileId, optionIds, split)
+      .pipe(finalize(() => { this.isProcessing = false; }))
+      .subscribe(
+        (result: any) => {
+          console.log('[Preprocessing] run result:', result);
+          this.sharedService.setPreprocessingRunResult(result);
+          this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
+          // Capture breakdown of dropped columns per purifier step (if provided)
+          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step) ? result.dropped_columns_by_step : [];
+          // Capture total rows removed if provided
+          this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
+          // Capture row counts before/after
+          this.rowCountBefore = Number(result?.row_count_before ?? 0);
+          this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Capture Data Quality summary
+          this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
+          this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+          this.datqColumns = [...this.datqAllColumns];
+          this.reorderDatqColumns();
+          this.ensureFilterKeys();
+          // Apply persisted pins if any; else default pin Variable once
+          if (this.pinnedColumns.length > 0) {
+            this.pinnedColumns = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
+          } else {
+            if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
+            else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
+          }
+          // Default sort by PSI desc if present
+          if (this.datqColumns.includes('PSI')) {
+            this.datqSortColumn = 'PSI';
+            this.datqSortDir = 'desc';
+          }
+          this.datqPage = 1;
+          this.saveDatqPrefs();
+          // Navigate to Data Quality section
+          if (this.datqSummary && this.datqSummary.length > 0) {
+            this.currentStep = 'data quality';
+            setTimeout(() => {
+              try {
+                const el = document.getElementById('data-quality-anchor');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              } catch {}
+            }, 0);
+          }
+        },
+        (err: any) => {
+          console.error('Failed to run preprocessing:', err);
         }
-        // Default sort by PSI desc if present
-        if (this.datqColumns.includes('PSI')) {
-          this.datqSortColumn = 'PSI';
-          this.datqSortDir = 'desc';
-        }
-        this.datqPage = 1;
-        this.saveDatqPrefs();
-        // Navigate to Data Quality step to review summary, then user can proceed to Modeling
-        if (this.datqSummary && this.datqSummary.length > 0) {
-          this.currentStep = 'data quality';
-          setTimeout(() => {
-            try {
-              const el = document.getElementById('data-quality-anchor');
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }
-            } catch {}
-          }, 0);
-        }
-      },
-      error: (err: any) => {
-        console.error('Failed to run preprocessing:', err);
-      }
-    });
+      );
+  }
+
+  // Helpers for UI
+  droppedTotalCount(): number {
+    try {
+      return (this.droppedColumnsByStep || []).reduce((acc, s) => acc + (Array.isArray(s.columns) ? s.columns.length : 0), 0);
+    } catch { return 0; }
+  }
+
+  trackByStepIndex(_idx: number, item: any): string {
+    const s = item?.step || 'step';
+    const ids = Array.isArray(item?.option_ids) ? item.option_ids.join(',') : '';
+    const thr = (item?.threshold != null) ? String(item.threshold) : '';
+    return `${s}|${ids}|${thr}`;
   }
 
   applyDatqPreset(preset: 'core' | 'all'): void {
