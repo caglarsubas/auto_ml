@@ -23,8 +23,5 @@ v2.3.x:
     <button mat-menu-item>Declarative ML</button>
     <button mat-menu-item>White Paper</button>
 
-- psi/csi alternatives (fixed in summary table but dropdown choice in plot):
-    - Kolmogrov-Smirnov
-    - Jensen-Shannon Divergence
-    - Wasserstein Distance
+
 

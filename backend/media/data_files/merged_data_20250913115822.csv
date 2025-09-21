@@ -1,0 +1,54 @@
+Feature_Name,Feature_Description
+AppID,Primary Key
+Application_Datetime,Application date and timestamp
+Target,Good_Bad_Flag
+Var_1,CC Num of application_L1M
+Var_2,Worst Account Status All Credits
+Var_3,Any Legal Action YN
+Var_4,Existing Credit Card Previous Limit
+Var_5,LO Num of application_L6M
+Var_6,TS Last Legal Action
+Var_7,TS Oldest Open Credit Card
+Var_8,CC TS First Open Active Credit Card
+Var_9,Last Credit Decision
+Var_10,Total Assets_3
+Var_11,Any Legal Action no date YN
+Var_12,TS Last Closed good account
+Var_13,CC Num of application_L6M
+Var_14,Home Phone YN
+Var_15,Employers Address YN
+Var_16,AMC_Transfer_Outstanding
+Var_17,Existing Customer Limit
+Var_18,CC Total Payment of all Credit cards
+Var_19,OD Tot Outstanding Balance YTL
+Var_20,Residential Status
+Var_21,Time in Employment
+Var_22,CC Number of months in 1 delay_L12M
+Var_23,Last Declared Monthly Income_L3M
+Var_24,Monthly Net Income
+Var_25,Employment Field
+Var_26,Tenure
+Var_27,Monthly Family Income
+Var_28,Declared Monthly Net Income
+Var_29,Existing Overdraft Limit
+Var_30,Verified Own Income Amount
+Var_31,LO Num of open accounts_L12M
+Var_32,Total Amount of Open Mortgage Loans
+Var_33,OD Number of months in 2 delay_L24M
+Var_34,LO Number of closed good account
+Var_35,PO Credit Exisits_YN
+Var_36,CC Worst Payment Status_L24M
+Var_37,CB Unpaid Notes_Cheques YN
+Var_38,Worst Status of All Loans_L3Y
+Var_39,Total Assets_1
+Var_40,MO Number of months in 3 or more delay_L24M
+Var_41,LO TS First Open Date
+Var_42,MO Number of months in 1 delay_L6M
+Var_43,MO Number of months in 3 or more delay_L6M
+Var_44,E Mail Given YN
+Var_45,OD_Pending Credit_YN
+Var_46,CC Number of months in 2 delay_L12M
+Var_47,Num Unpaid Cards L25M-L36M
+Var_48,Guarantee YN
+Var_49,Overridden_From_Final_Decline_YN
+Var_50,CC Existing Customers in L6M

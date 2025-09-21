@@ -66,6 +66,9 @@ class PreprocessingDatqTimeseriesView(APIView):
             column = data.get('column') or data.get('variable')
             date_column = data.get('date_column')
             metric = (data.get('metric') or 'psi').lower()
+            # normalize metric aliases
+            if metric in ('wasserstein', 'emd', 'earth_mover', 'earthmover', 'w1'):
+                metric = 'wd'
             split = data.get('split') if isinstance(data.get('split'), dict) else None
             windows = data.get('windows') if isinstance(data.get('windows'), (list, tuple)) else None
             try:
@@ -257,6 +260,109 @@ class PreprocessingDatqTimeseriesView(APIView):
                     print(f"[DatqTimeseries] PSI computation failed for {column}: {e}")
                     return None
 
+            def _coerce_numeric(ser: pd.Series) -> pd.Series:
+                try:
+                    s = pd.to_numeric(ser, errors='coerce')
+                    return s.dropna()
+                except Exception:
+                    return pd.Series(dtype=float)
+
+            def _sanitize_for_calc(arr: np.ndarray) -> np.ndarray:
+                """Remove NaNs and infs from a numpy array for safe calculations."""
+                return arr[np.isfinite(arr)]
+
+            def _ks_between(frame: pd.DataFrame, train_idx, test_idx) -> float | None:
+                try:
+                    s_tr_raw = _coerce_numeric(frame.loc[train_idx, column])
+                    s_te_raw = _coerce_numeric(frame.loc[test_idx, column])
+                    s_tr = _sanitize_for_calc(s_tr_raw.values)
+                    s_te = _sanitize_for_calc(s_te_raw.values)
+                    if s_tr.size < 2 or s_te.size < 2:
+                        return None
+                    # Empirical CDF based KS statistic
+                    v = np.sort(np.unique(np.concatenate([s_tr, s_te])))
+                    if v.size == 0:
+                        return None
+                    # Compute CDFs at each v
+                    cdf_tr = np.searchsorted(np.sort(s_tr), v, side='right') / s_tr.size
+                    cdf_te = np.searchsorted(np.sort(s_te), v, side='right') / s_te.size
+                    d = np.max(np.abs(cdf_tr - cdf_te))
+                    return float(d)
+                except Exception as e:
+                    print(f"[DatqTimeseries] KS computation failed for {column}: {e}")
+                    return None
+
+            def _jsd_between(frame: pd.DataFrame, train_idx, test_idx, bins: int = 10) -> float | None:
+                try:
+                    s_tr_raw = frame.loc[train_idx, column]
+                    s_te_raw = frame.loc[test_idx, column]
+                    # numeric path
+                    x_tr_raw = _coerce_numeric(s_tr_raw)
+                    x_te_raw = _coerce_numeric(s_te_raw)
+                    x_tr = _sanitize_for_calc(x_tr_raw.values)
+                    x_te = _sanitize_for_calc(x_te_raw.values)
+                    if x_tr.size >= 2 and x_te.size >= 2:
+                        # train-quantile based bins to keep baseline consistent
+                        qs = np.linspace(0, 1, bins + 1)
+                        try:
+                            edges = np.unique(np.quantile(x_tr, qs))
+                        except Exception:
+                            edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
+                        if edges.size < 2:
+                            return None
+                        p, _ = np.histogram(x_tr, bins=edges)
+                        q, _ = np.histogram(x_te, bins=edges)
+                    else:
+                        # categorical fallback using value counts over union of categories
+                        vc_tr = s_tr_raw.astype(str).value_counts()
+                        vc_te = s_te_raw.astype(str).value_counts()
+                        cats = sorted(list(set(vc_tr.index).union(set(vc_te.index))))
+                        if len(cats) < 2:
+                            return None
+                        p = np.array([vc_tr.get(c, 0) for c in cats], dtype=float)
+                        q = np.array([vc_te.get(c, 0) for c in cats], dtype=float)
+                    if p.sum() == 0 or q.sum() == 0:
+                        return None
+                    p = p / p.sum()
+                    q = q / q.sum()
+                    m = 0.5 * (p + q)
+                    eps = 1e-12
+                    def _kl(a, b):
+                        a = np.clip(a, eps, 1.0)
+                        b = np.clip(b, eps, 1.0)
+                        return float(np.sum(a * np.log(a / b)))
+                    jsd = 0.5 * _kl(p, m) + 0.5 * _kl(q, m)
+                    return float(jsd)
+                except Exception as e:
+                    print(f"[DatqTimeseries] JSD computation failed for {column}: {e}")
+                    return None
+
+            def _wd_between(frame: pd.DataFrame, train_idx, test_idx) -> float | None:
+                try:
+                    x_raw = _coerce_numeric(frame.loc[train_idx, column]).values
+                    y_raw = _coerce_numeric(frame.loc[test_idx, column]).values
+                    x = _sanitize_for_calc(x_raw)
+                    y = _sanitize_for_calc(y_raw)
+                    if x.size == 0 or y.size == 0:
+                        return None
+                    # 1D Wasserstein (Earth Mover's) via CDF difference integral
+                    xs = np.sort(x)
+                    ys = np.sort(y)
+                    all_values = np.concatenate([xs, ys])
+                    ux = np.unique(all_values[np.isfinite(all_values)])
+                    if ux.size < 2:
+                        return 0.0
+                    Fx = np.searchsorted(xs, ux, side='right') / xs.size
+                    Fy = np.searchsorted(ys, ux, side='right') / ys.size
+                    # integrate |Fx - Fy| over x using trapezoidal rule between knots
+                    diffs = np.abs(Fx - Fy)
+                    dx = np.diff(ux)
+                    area = np.sum(0.5 * (diffs[:-1] + diffs[1:]) * dx)
+                    return float(area)
+                except Exception as e:
+                    print(f"[DatqTimeseries] Wasserstein computation failed for {column}: {e}")
+                    return None
+
             # Establish train/test split once for consistency with overall
             try:
                 tr_idx, te_idx = _build_split_indices(df_full)
@@ -271,13 +377,26 @@ class PreprocessingDatqTimeseriesView(APIView):
                 except ValueError:
                     idx_m = -1
                 for w in windows:
-                    key = f"psi_{w}m"
+                    key_prefix = 'psi' if metric in ('psi', 'csi') else ('ks' if metric == 'ks' else ('jsd' if metric == 'jsd' else 'wd'))
+                    key = f"{key_prefix}_{w}m"
                     nkey = f"n_{w}m"
-                    if idx_m >= (w - 1) and len(tr_idx) > 0 and metric in ('psi', 'csi'):
+                    if idx_m >= (w - 1) and len(tr_idx) > 0:
                         win = uniq_months[idx_m - (w - 1): idx_m + 1]
                         maskw = months_full.isin(win)
                         tew = te_idx[maskw.loc[te_idx]]
-                        rec[key] = _psi_between(df_full, tr_idx, tew) if len(tew) > 0 else None
+                        if len(tew) > 0:
+                            if metric in ('psi', 'csi'):
+                                rec[key] = _psi_between(df_full, tr_idx, tew)
+                            elif metric == 'ks':
+                                rec[key] = _ks_between(df_full, tr_idx, tew)
+                            elif metric == 'jsd':
+                                rec[key] = _jsd_between(df_full, tr_idx, tew)
+                            elif metric == 'wd':
+                                rec[key] = _wd_between(df_full, tr_idx, tew)
+                            else:
+                                rec[key] = None
+                        else:
+                            rec[key] = None
                         try:
                             rec[nkey] = int(len(tew))
                         except Exception:
@@ -293,10 +412,16 @@ class PreprocessingDatqTimeseriesView(APIView):
                 tr_idx, te_idx = _build_split_indices(df_full)
                 if metric in ('psi', 'csi'):
                     overall = _psi_between(df_full, tr_idx, te_idx)
+                elif metric == 'ks':
+                    overall = _ks_between(df_full, tr_idx, te_idx)
+                elif metric == 'jsd':
+                    overall = _jsd_between(df_full, tr_idx, te_idx)
+                elif metric == 'wd':
+                    overall = _wd_between(df_full, tr_idx, te_idx)
             except Exception:
                 overall = None
 
-            return Response({'series': out_series, 'metric': 'psi', 'overall': overall}, status=status.HTTP_200_OK)
+            return Response({'series': out_series, 'metric': metric, 'overall': overall}, status=status.HTTP_200_OK)
         except Exception as e:
             import traceback
             print("[PreprocessingDatqTimeseriesView] ERROR:\n" + traceback.format_exc())
@@ -563,6 +688,99 @@ class PreprocessingRunView(APIView):
                     df_all.index.name = 'Variable'
                 except Exception:
                     pass
+                # Add alternative shift metrics (KS, JSD, Wasserstein) computed on the same split
+                try:
+                    def _coerce_numeric(ser: pd.Series) -> pd.Series:
+                        try:
+                            s = pd.to_numeric(ser, errors='coerce')
+                            return s.dropna()
+                        except Exception:
+                            return pd.Series(dtype=float)
+
+                    def _ks_col(frame: pd.DataFrame, col: str) -> float | None:
+                        try:
+                            s_tr = _coerce_numeric(frame.loc[train_idx, col])
+                            s_te = _coerce_numeric(frame.loc[test_idx, col])
+                            if len(s_tr) < 2 or len(s_te) < 2:
+                                return None
+                            v = np.sort(np.unique(np.concatenate([s_tr.values, s_te.values])))
+                            if v.size == 0:
+                                return None
+                            cdf_tr = np.searchsorted(np.sort(s_tr.values), v, side='right') / len(s_tr)
+                            cdf_te = np.searchsorted(np.sort(s_te.values), v, side='right') / len(s_te)
+                            d = np.max(np.abs(cdf_tr - cdf_te))
+                            return float(d)
+                        except Exception:
+                            return None
+
+                    def _jsd_col(frame: pd.DataFrame, col: str, bins: int = 10) -> float | None:
+                        try:
+                            s_tr_raw = frame.loc[train_idx, col]
+                            s_te_raw = frame.loc[test_idx, col]
+                            x_tr = _coerce_numeric(s_tr_raw)
+                            x_te = _coerce_numeric(s_te_raw)
+                            if len(x_tr) >= 2 and len(x_te) >= 2:
+                                qs = np.linspace(0, 1, bins + 1)
+                                try:
+                                    edges = np.unique(np.quantile(x_tr.values, qs))
+                                except Exception:
+                                    edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
+                                if edges.size < 2:
+                                    return None
+                                p, _ = np.histogram(x_tr.values, bins=edges)
+                                q, _ = np.histogram(x_te.values, bins=edges)
+                            else:
+                                vc_tr = s_tr_raw.astype(str).value_counts()
+                                vc_te = s_te_raw.astype(str).value_counts()
+                                cats = sorted(list(set(vc_tr.index).union(set(vc_te.index))))
+                                if len(cats) < 2:
+                                    return None
+                                p = np.array([vc_tr.get(c, 0) for c in cats], dtype=float)
+                                q = np.array([vc_te.get(c, 0) for c in cats], dtype=float)
+                            if p.sum() == 0 or q.sum() == 0:
+                                return None
+                            p = p / p.sum(); q = q / q.sum(); m = 0.5 * (p + q)
+                            eps = 1e-12
+                            def _kl(a, b):
+                                a = np.clip(a, eps, 1.0); b = np.clip(b, eps, 1.0)
+                                return float(np.sum(a * np.log(a / b)))
+                            return float(0.5 * _kl(p, m) + 0.5 * _kl(q, m))
+                        except Exception:
+                            return None
+
+                    def _wd_col(frame: pd.DataFrame, col: str) -> float | None:
+                        try:
+                            x = _coerce_numeric(frame.loc[train_idx, col]).values
+                            y = _coerce_numeric(frame.loc[test_idx, col]).values
+                            if x.size == 0 or y.size == 0:
+                                return None
+                            xs = np.sort(x); ys = np.sort(y)
+                            ux = np.unique(np.concatenate([xs, ys]))
+                            if ux.size < 2:
+                                return 0.0
+                            Fx = np.searchsorted(xs, ux, side='right') / xs.size
+                            Fy = np.searchsorted(ys, ux, side='right') / ys.size
+                            diffs = np.abs(Fx - Fy)
+                            dx = np.diff(ux)
+                            area = np.sum(0.5 * (diffs[:-1] + diffs[1:]) * dx)
+                            return float(area)
+                        except Exception:
+                            return None
+
+                    # Compute per variable present in the summary index
+                    ks_vals = {}
+                    jsd_vals = {}
+                    wd_vals = {}
+                    for var in df_all.index.tolist():
+                        if var in df_for_datq.columns:
+                            ks_vals[var] = _ks_col(df_for_datq, var)
+                            jsd_vals[var] = _jsd_col(df_for_datq, var)
+                            wd_vals[var] = _wd_col(df_for_datq, var)
+                    df_all['KS'] = pd.Series(ks_vals)
+                    df_all['JSD'] = pd.Series(jsd_vals)
+                    df_all['Wasserstein'] = pd.Series(wd_vals)
+                except Exception as _alt_err:
+                    print(f"[PreprocessingRun] alternative metrics failed: {_alt_err}")
                 try:
                     def _is_len2_seq(v):
                         try:

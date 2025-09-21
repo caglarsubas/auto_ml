@@ -8,6 +8,8 @@ import { forkJoin } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 
+declare var Plotly: any;
+
 interface FeatureData {
   Feature_Name: string;
   Feature_Description: string;
@@ -64,6 +66,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   public originalPlotSize = { width: 500, height: 300 };
   isFullScreen: boolean = false;
   private resizeListener: () => void;
+  private resizeDebounce: any = null;
   isCategorical: boolean = false;
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
   private originalHistogramData: number[] | null = null;
@@ -71,17 +74,29 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
   qualitySummary: { [key: string]: any } | null = null;
+  // Preserve the initially provided quality row so the Quality tab is not empty on first open
+  private initialQualitySummary: { [key: string]: any } | null = null;
 
   // Quality timeseries (supports dynamic windows like 1m/3m/6m)
   qualityTimeseries: any[] = [];
-  qualityTimeseriesMetric: 'psi' | 'csi' = 'psi';
+  qualityTimeseriesMetric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd' = 'psi';
   qualityTimeseriesLoading: boolean = false;
   qualityTimeseriesError: string | null = null;
   qualityTimeseriesOverall: number | null = null;
   // Controls
   selectedQualityWindows: number[] = [1, 3, 6];
   minBinShareAllowed: number = 0.05;
+  // Legend handling for thresholds
+  private qualityLegendHandlersAttached: boolean = false;
+  private qualityThresholdTraceIndices: number[] = [];
+  private qualityGraphDiv: any = null;
   showWindowCounts: boolean = true;
+  private metricLockedByUser: boolean = false;
+  // Cached dropdown options for current feature type
+  metricOptions: Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd', label: string }> = [];
+  // Cached labels to avoid heavy template calls
+  metricLabelText: string = 'PSI';
+  qualityWindowsLabelText: string = '1m/3m/6m';
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -93,25 +108,133 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.resizeListener = () => {
       // Redraw charts on resize
       if (this.isBrowser) {
-        this.createVisualization();
-        this.drawQualityTimeseries();
+        if (this.resizeDebounce) clearTimeout(this.resizeDebounce);
+        this.resizeDebounce = setTimeout(() => {
+          this.createVisualization();
+          this.drawQualityTimeseries();
+        }, 200);
       }
     };
     this.features = data.features;
     this.selectedFeatureName = data.columnName;
     this.qualitySummary = data.qualitySummary || null;
+    this.initialQualitySummary = data.qualitySummary || null;
   }
 
-  qualityWindowsLabel(): string {
+  // Robust description getter for dropdown display
+  getFeatureDescription(featureName: string): string {
     try {
-      return this.selectedQualityWindows.sort((a,b)=>a-b).map(w => `${w}m`).join('/');
+      const f: any = this.features.find(x => x.Feature_Name === featureName);
+      const desc = f?.Feature_Description ?? f?.Description ?? f?.description ?? f?.Variable_Description;
+      const s = desc != null ? String(desc).trim() : '';
+      return s !== '' ? s : 'No description available';
+    } catch { return 'No description available'; }
+  }
+
+  onMetricChange(metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd') {
+    this.metricLockedByUser = true;
+    this.qualityTimeseriesMetric = metric;
+    this.metricLabelText = this.computeMetricLabel();
+    this.fetchQualityTimeseries();
+  }
+
+  private computeMetricLabel(): string {
+    switch (this.qualityTimeseriesMetric) {
+      case 'psi': return 'PSI';
+      case 'csi': return 'CSI';
+      case 'ks': return 'KS';
+      case 'jsd': return 'JSD';
+      case 'wd': return 'Wasserstein';
+      default: return String(this.qualityTimeseriesMetric).toUpperCase();
+    }
+  }
+
+  // Determine if current feature is numerical
+  isNumerical(): boolean {
+    const lom = this.featureData?.Level_of_Measurement;
+    return lom === 'continuous' || lom === 'cardinal';
+  }
+
+  /**
+   * Return the list of metrics available for the currently selected feature type.
+   * - Numerical: PSI, KS, JSD, Wasserstein
+   * - Categorical: CSI, JSD
+   */
+  availableMetrics(): Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd', label: string }> {
+    if (this.isNumerical()) {
+      return [
+        { value: 'psi', label: 'Population Stability Index (PSI)' },
+        { value: 'ks', label: 'Kolmogorov-Smirnov (KS)' },
+        { value: 'jsd', label: 'Jensen-Shannon Divergence (JSD)' },
+        { value: 'wd', label: 'Wasserstein Distance' },
+      ];
+    }
+    // Categorical by default
+    return [
+      { value: 'csi', label: 'Characteristic Stability Index (CSI)' },
+      { value: 'jsd', label: 'Jensen-Shannon Divergence (JSD)' },
+    ];
+  }
+
+  /** Default metric for the current feature type */
+  private defaultMetricForFeature(): 'psi' | 'csi' | 'ks' | 'jsd' | 'wd' {
+    return this.isNumerical() ? 'psi' : 'csi';
+  }
+
+  /** Refresh cached options according to current feature type */
+  private refreshMetricOptions(): void {
+    this.metricOptions = this.availableMetrics();
+  }
+
+  private computeQualityWindowsLabel(): string {
+    try {
+      return [...this.selectedQualityWindows].sort((a,b)=>a-b).map(w => `${w}m`).join('/');
     } catch { return '3m/6m'; }
+  }
+
+  // Magnitude categories per metric (heuristics for non-PSI/CSI)
+  // Returns two thresholds for the three bands: low < T1, T1..T2 mid, >= T2 high
+  private metricThresholds(metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd'):
+    Array<{ y: number; band: 'low' | 'high'; color: string; dash?: 'dash' | 'dot' | 'dashdot' }>
+  {
+    // PSI/CSI: industry convention
+    if (metric === 'psi' || metric === 'csi') {
+      return [
+        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.25, band: 'high', color: '#d32f2f', dash: 'dash' },
+      ];
+    }
+    // KS: common guidance — <0.10 small, 0.10–0.20 moderate, >0.20 strong
+    if (metric === 'ks') {
+      return [
+        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.20, band: 'high', color: '#d32f2f', dash: 'dash' },
+      ];
+    }
+    // JSD (base 2): heuristic bands — <0.10 low, 0.10–0.30 medium, ≥0.30 high
+    if (metric === 'jsd') {
+      return [
+        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.30, band: 'high', color: '#d32f2f', dash: 'dash' },
+      ];
+    }
+    // Wasserstein (normalized): heuristic — <0.10 low, 0.10–0.30 medium, ≥0.30 high
+    if (metric === 'wd') {
+      return [
+        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.30, band: 'high', color: '#d32f2f', dash: 'dash' },
+      ];
+    }
+    return [];
   }
 
   toggleQualityWindow(w: number, checked: boolean): void {
     const set = new Set(this.selectedQualityWindows);
     if (checked) set.add(w); else set.delete(w);
     this.selectedQualityWindows = Array.from(set).sort((a,b)=>a-b);
+    this.qualityWindowsLabelText = this.computeQualityWindowsLabel();
+    // Redraw immediately for responsiveness
+    this.drawQualityTimeseries();
     this.fetchQualityTimeseries();
   }
 
@@ -125,13 +248,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   // Quality helpers
   hasQuality(): boolean {
-    return !!this.qualitySummary && Object.keys(this.qualitySummary).length > 0;
+    const q = this.qualitySummary ?? this.initialQualitySummary;
+    return !!q && Object.keys(q).length > 0;
   }
 
   qualityPairs(): Array<{ key: string, value: any }> {
-    if (!this.qualitySummary) return [];
-    const entries = Object.entries(this.qualitySummary);
-    const preferred = ['Variable', 'variable', 'index', 'Datq_Decision', 'Variable_Type', 'PSI', 'CSI'];
+    const src = this.qualitySummary ?? this.initialQualitySummary;
+    if (!src) return [];
+    const entries = Object.entries(src);
+    const preferred = ['Variable', 'variable', 'index', 'Datq_Decision', 'Variable_Type', 'PSI', 'CSI', 'KS', 'JSD', 'Wasserstein'];
     const score = (k: string) => {
       const i = preferred.indexOf(k);
       return i === -1 ? 1000 : i;
@@ -161,12 +286,26 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   onFeatureChange() {
+    const prev = this.data.columnName;
+    const changed = String(this.selectedFeatureName) !== String(prev);
     this.data.columnName = this.selectedFeatureName;
     this.loadFeatureData();
     // We only have quality for the initially clicked feature from Data Quality summary.
-    // When user changes selection, clear quality panel (unless later provided via a future API).
-    this.qualitySummary = null;
+    // Clear quality panel ONLY if the user actually changed the feature selection.
+    if (changed) {
+      this.qualitySummary = null;
+      this.initialQualitySummary = null;
+    }
     // Refresh timeseries for the newly selected variable
+    // Reset metric lock so we can apply proper default per feature type
+    this.metricLockedByUser = false;
+    // Ensure selected metric is valid for new feature type
+    this.refreshMetricOptions();
+    const allowed = new Set(this.metricOptions.map(m => m.value));
+    if (!allowed.has(this.qualityTimeseriesMetric)) {
+      this.qualityTimeseriesMetric = this.defaultMetricForFeature();
+      this.metricLabelText = this.computeMetricLabel();
+    }
     this.fetchQualityTimeseries();
   }
   
@@ -183,6 +322,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
           this.originalStackedData = this.preprocessStackedData(stackedData);
           this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
+          this.refreshMetricOptions();
+          // Ensure metric consistency with detected feature type if user hasn't explicitly chosen
+          if (!this.metricLockedByUser) {
+            const allowed = new Set(this.metricOptions.map(m => m.value));
+            if (!allowed.has(this.qualityTimeseriesMetric)) {
+              this.qualityTimeseriesMetric = this.defaultMetricForFeature();
+            }
+          }
+          // Update cached labels
+          this.metricLabelText = this.computeMetricLabel();
+          this.qualityWindowsLabelText = this.computeQualityWindowsLabel();
           
           // Disable cleaning options for categorical data
           if (this.isCategorical) {
@@ -340,10 +490,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // ===== Quality timeseries (3m/6m rolling PSI/CSI) =====
-  private inferQualityMetric(): 'psi' | 'csi' {
+  private inferQualityMetric(): 'psi' | 'csi' | 'ks' | 'jsd' | 'wd' {
     try {
-      if (this.qualitySummary && (this.qualitySummary['PSI'] !== undefined || this.qualitySummary['psi'] !== undefined)) return 'psi';
-      if (this.qualitySummary && (this.qualitySummary['CSI'] !== undefined || this.qualitySummary['csi'] !== undefined)) return 'csi';
+      // 1) Prefer explicit summary keys (ensures consistency with Data Quality table)
+      const qs = this.qualitySummary ?? this.initialQualitySummary;
+      if (qs && (qs['PSI'] !== undefined || qs['psi'] !== undefined)) return 'psi';
+      if (qs && (qs['CSI'] !== undefined || qs['csi'] !== undefined)) return 'csi';
+      // 2) If feature type known, choose type default
+      if (this.featureData) return this.defaultMetricForFeature();
+      // 3) Safe fallback to PSI to avoid unexpected CSI on numerics before feature loads
       return 'psi';
     } catch { return 'psi'; }
   }
@@ -360,7 +515,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         this.qualityTimeseriesError = 'Invalid file id';
         return;
       }
-      this.qualityTimeseriesMetric = this.inferQualityMetric();
+      if (!this.metricLockedByUser) {
+        this.qualityTimeseriesMetric = this.inferQualityMetric();
+        this.metricLabelText = this.computeMetricLabel();
+      }
       this.qualityTimeseriesLoading = true;
       this.qualityTimeseriesError = null;
       this.dataService.getDatqTimeseries(
@@ -378,12 +536,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           // Prefer the PSI/CSI value from the qualitySummary row to ensure exact match with the summary table
           let overallFromSummary: number | null = null;
           try {
-            if (this.qualitySummary) {
-              const key = (this.qualityTimeseriesMetric === 'psi') ? (('PSI' in this.qualitySummary) ? 'PSI' : 'psi')
-                                                                : (('CSI' in this.qualitySummary) ? 'CSI' : 'csi');
-              const v = (this.qualitySummary as any)[key];
-              const n = Number(v);
-              overallFromSummary = (isFinite(n) && !isNaN(n)) ? n : null;
+            const qs = this.qualitySummary ?? this.initialQualitySummary;
+            if (qs) {
+              const metric = this.qualityTimeseriesMetric;
+              let key: string | null = null;
+              if (metric === 'psi') key = ('PSI' in qs) ? 'PSI' : (('psi' in qs) ? 'psi' : null);
+              else if (metric === 'csi') key = ('CSI' in qs) ? 'CSI' : (('csi' in qs) ? 'csi' : null);
+              else if (metric === 'ks') key = 'KS';
+              else if (metric === 'jsd') key = 'JSD';
+              else if (metric === 'wd') key = 'Wasserstein';
+              if (key) {
+                const v = (qs as any)[key];
+                const n = Number(v);
+                overallFromSummary = (isFinite(n) && !isNaN(n)) ? n : null;
+              }
             }
           } catch {}
           const overallFromApi = (resp && resp.overall != null && resp.overall !== '') ? Number(resp.overall) : null;
@@ -425,7 +591,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       };
       let hasAnyRolling = false;
       for (const w of this.selectedQualityWindows.sort((a,b)=>a-b)) {
-        const key = `psi_${w}m`;
+        const prefix = (this.qualityTimeseriesMetric === 'psi' || this.qualityTimeseriesMetric === 'csi') ? 'psi' : this.qualityTimeseriesMetric;
+        const key = `${prefix}_${w}m`;
         const y = series.map((r: any) => (r && r[key] != null ? Number(r[key]) : null));
         const has = y.some(v => v != null);
         if (has) {
@@ -435,7 +602,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             x,
             y,
             mode: 'lines+markers',
-            name: `${w}-month rolling`,
+            name: `${w}-month ${this.metricLabelText} rolling`,
             line: { color: st.color, width: 2, ...(st.dash ? { dash: st.dash } : {}) },
             connectgaps: false
           });
@@ -465,25 +632,177 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           x,
           y: x.map(() => this.qualityTimeseriesOverall as number),
           mode: 'lines',
-          name: 'overall',
+          name: `overall ${this.metricLabelText}`,
           line: { color: '#455a64', width: 2, dash: 'dash' },
-          hovertemplate: `Overall ${this.qualityTimeseriesMetric.toUpperCase()}: %{y:.6f}<extra></extra>`
+          hovertemplate: `Overall ${this.metricLabelText}: %{y:.6f}<extra></extra>`
         });
       }
       const layout: any = {
-        margin: { t: 24, r: 12, b: 40, l: 48 },
+        margin: { t: 24, r: 64, b: 100, l: 56 },
         height: this.isFullScreen ? Math.floor(window.innerHeight * 0.50) : 560,
         width: this.isFullScreen ? Math.floor(window.innerWidth * 0.85) : undefined,
         xaxis: { title: 'Month' },
-        yaxis: { title: `Rolling ${this.qualityTimeseriesMetric.toUpperCase()} (${this.qualityWindowsLabel()})`, tickformat: '.6f' },
-        yaxis2: { title: 'N (test)', overlaying: 'y', side: 'right', rangemode: 'tozero' },
+        yaxis: { title: { text: `Rolling ${this.metricLabelText} (${this.qualityWindowsLabelText})`, standoff: 12 }, tickformat: '.6f', automargin: true, rangemode: 'tozero' },
+        yaxis2: { title: { text: 'N (test)', standoff: 12 }, overlaying: 'y', side: 'right', rangemode: 'tozero', automargin: true },
         showlegend: true,
-        legend: { orientation: 'h', y: -0.2 }
+        legend: { orientation: 'h', y: -0.3, x: 0.5, xanchor: 'center', itemclick: 'toggle', itemdoubleclick: 'toggleothers' }
       };
-      Plotly.newPlot('quality-timeseries', traces, layout);
+
+      // Reset threshold trace indices before adding new ones
+      this.qualityThresholdTraceIndices = [];
+      // Add magnitude guidance using line traces (appear in legend) and concise annotations
+      const guides = this.metricThresholds(this.qualityTimeseriesMetric);
+      if (guides && guides.length) {
+        const xGuide = x.length >= 2 ? [x[0], x[x.length - 1]] : (x.length === 1 ? [x[0], x[0]] : ['0','1']);
+        // low and high threshold lines
+        for (const g of guides) {
+          traces.push({
+            x: xGuide,
+            y: [g.y, g.y],
+            mode: 'lines',
+            name: g.band, // legend label: low or high
+            line: { color: g.color, width: 2, dash: g.dash || 'dash' },
+            hoverinfo: 'skip',
+            meta: { threshold: true, band: g.band }
+          });
+          this.qualityThresholdTraceIndices.push(traces.length - 1);
+        }
+        // Add a legend-only entry for mid band
+        traces.push({
+          x: xGuide,
+          y: [null, null],
+          mode: 'lines',
+          name: 'mid',
+          line: { color: '#9e9e9e', width: 1.5, dash: 'dashdot' },
+          visible: 'legendonly',
+          hoverinfo: 'skip'
+        });
+        // concise annotations at right edge
+        layout.annotations = (layout.annotations || []).concat(
+          guides.map(g => ({
+            xref: 'paper', x: 1.005, xanchor: 'left',
+            yref: 'y', y: g.y,
+            text: g.band,
+            showarrow: false,
+            font: { size: 10, color: g.color },
+            align: 'left'
+          }))
+        );
+        // shapes removed; rely on trace-only for legend-driven on/off behavior
+      }
+      const gd: any = document.getElementById('quality-timeseries');
+      try { (gd as any).style.pointerEvents = 'auto'; } catch {}
+      // If graph div changed (e.g., metric switched), allow reattaching handlers
+      if (this.qualityGraphDiv !== gd) {
+        this.qualityLegendHandlersAttached = false;
+        this.qualityGraphDiv = gd;
+      }
+      const config = { responsive: true, displayModeBar: false, staticPlot: false } as any;
+      Plotly.newPlot(gd, traces, layout, config).then(() => {
+        this.attachQualityLegendHandlers(gd);
+        // Ensure annotations match visibility on first render
+        this.updateThresholdAnnotationsFromVisibility(gd);
+        // Let Plotly compute initial autorange
+        (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+      });
     } catch (e) {
       console.warn('drawQualityTimeseries failed:', e);
     }
+  }
+
+  private attachQualityLegendHandlers(gd: any): void {
+    try {
+      if (this.qualityLegendHandlersAttached || !gd || !gd.on) return;
+      const refresh = () => {
+        try {
+          this.updateThresholdAnnotationsFromVisibility(gd);
+          // Trigger autorange based on current visibility after legend toggle
+          (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+        } catch {}
+      };
+      const schedule = () => { setTimeout(refresh, 0); setTimeout(refresh, 80); };
+      // Manually handle legend clicks to ensure toggling and rescaling
+      gd.on('plotly_legendclick', (eventData: any) => {
+        console.log('Legend click detected:', eventData);
+        const curveNumber = eventData.curveNumber;
+        const trace = gd.data[curveNumber];
+        if (!trace) return false; // Should not happen
+
+        // Toggle visibility
+        const currentlyVisible = trace.visible !== 'legendonly' && trace.visible !== false;
+        const newVisibility = currentlyVisible ? 'legendonly' : true;
+        Plotly.restyle(gd, { visible: newVisibility }, [curveNumber]).then(() => {
+            // After restyle, update annotations and rescale
+            schedule();
+        });
+
+        return false; // Prevent Plotly's default behavior
+      });
+
+      gd.on('plotly_legenddoubleclick', (eventData: any) => {
+        console.log('Legend double-click detected:', eventData);
+        const curveNumber = eventData.curveNumber;
+        const traceCount = gd.data.length;
+        const newVisibilities = Array(traceCount).fill('legendonly');
+        newVisibilities[curveNumber] = true;
+
+        Plotly.restyle(gd, { visible: newVisibilities }).then(() => {
+            schedule();
+        });
+
+        return false; // Prevent Plotly's default behavior
+      });
+
+      // Also listen to restyle to catch other visibility changes
+      gd.on('plotly_restyle', schedule);
+      this.qualityLegendHandlersAttached = true;
+    } catch {}
+  }
+
+  private updateThresholdAnnotationsFromVisibility(gd: any): void {
+    try {
+      if (!gd) return;
+      const guides = this.metricThresholds(this.qualityTimeseriesMetric);
+      if (!guides || guides.length === 0) {
+        (window as any).Plotly.relayout(gd, { annotations: [], shapes: [] });
+        return;
+      }
+      const visibleBands = new Set<string>();
+      // evaluate visibility by scanning traces with names 'low'/'high'
+      let foundThresholdTraces = false;
+      for (const t of gd.data || []) {
+        if (!t || !t.name) continue;
+        const nm = String(t.name);
+        if (nm !== 'low' && nm !== 'high') continue;
+        foundThresholdTraces = true;
+        if (t.visible === false || t.visible === 'legendonly') continue;
+        visibleBands.add(nm);
+      }
+      if (!foundThresholdTraces) {
+        // Fallback: if traces not present (e.g., filtered by Plotly), assume both visible
+        visibleBands.add('low');
+        visibleBands.add('high');
+      }
+      const ann = guides
+        .filter(g => visibleBands.has(g.band))
+        .map(g => ({
+          xref: 'paper', x: 1.005, xanchor: 'left',
+          yref: 'y', y: g.y,
+          text: g.band,
+          showarrow: false,
+          font: { size: 10, color: g.color },
+          align: 'left'
+        }));
+      (window as any).Plotly.relayout(gd, { annotations: ann, shapes: [] });
+    } catch {}
+  }
+
+  // Let Plotly autorange handle rescaling on legend toggles
+  private recomputeYAxisFromVisible(gd: any): void {
+    try {
+      if (!gd) return;
+      (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+    } catch {}
   }
 
   plotCategoricalData(valueCounts: { [key: string]: number }, layout: any) {
@@ -705,22 +1024,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       title: ''
     };
 
-    if (traces.length > 0) {
-      Plotly.newPlot('visualization', traces, layout);
-    } else {
-      console.warn('No data available for visualization');
-    }
+    Plotly.newPlot('visualization', traces, layout).catch((error: Error) => {
+      console.error('Error plotting data:', error);
+      this.errorMessage = 'An error occurred while creating the visualization. Please try again.'});
+    console.log('Plotly.newPlot called with:', traces, layout);
   }
 
-  isNumerical(): boolean {
-    return this.featureData?.Level_of_Measurement === 'continuous' || this.featureData?.Level_of_Measurement === 'cardinal';
-  }
-
-  getFeatureDescription(featureName: string): string {
-    const feature = this.features.find(f => f.Feature_Name === featureName);
-    return feature ? feature.Feature_Description : 'No description available';
-  }
-
+  // UI handlers referenced by template controls
   onOutlierCleaningChange() {
     this.updateVisualizationAndStats();
   }
@@ -731,7 +1041,6 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   onStackedWrtTargetChange() {
     if (this.stackedWrtTarget && !this.originalStackedData) {
-      // Fetch stacked data if not available
       this.fetchStackedData();
     } else {
       this.updateVisualizationAndStats();
@@ -741,7 +1050,6 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   fetchStackedData() {
     this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
       (stackedData: any) => {
-        console.log('Received stacked data:', stackedData);
         this.originalStackedData = this.preprocessStackedData(stackedData);
         this.updateVisualizationAndStats();
       },
@@ -754,7 +1062,6 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   updateVisualizationAndStats() {
-    console.log('Updating visualization and stats');
     if (this.featureData && this.featureData.Descriptive_Stats) {
       if (this.stackedWrtTarget && this.originalStackedData) {
         const processedData = this.processStackedData(this.originalStackedData);
@@ -772,7 +1079,6 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             this.errorMessage = 'No histogram data available for visualization';
           }
         } else {
-          // Handle categorical data
           const valueCounts = this.featureData.Descriptive_Stats['value_counts'];
           if (valueCounts) {
             this.createVisualization(valueCounts);
@@ -788,11 +1094,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Process stacked arrays/objects and apply cleaning toggles
   processStackedData(stackedData: any): any {
-    if (!stackedData) {
-      console.warn('Stacked data is undefined or null');
-      return {};
-    }
+    if (!stackedData) return {};
     const processedData: any = {};
     for (const [key, value] of Object.entries(stackedData)) {
       if (Array.isArray(value)) {
@@ -800,57 +1104,39 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       } else if (typeof value === 'object' && value !== null) {
         processedData[key] = this.cleanData(Object.values(value) as number[]);
       } else {
-        console.warn(`Unexpected data type for key ${key}:`, value);
         processedData[key] = [];
       }
     }
     return processedData;
   }
 
+  // Apply outlier and sparsity cleaning depending on toggles
   cleanData(data: number[]): number[] {
     let cleanedData = [...data];
-    if (this.outlierCleaningEnabled) {
-      cleanedData = this.cleanOutliers(cleanedData);
-    }
-    if (this.sparsityCleaningEnabled) {
-      cleanedData = this.cleanSparsity(cleanedData) as number[];
-    }
-    return cleanedData;
-  }
-
-  cleanStackedData(stackedData: any): any {
-    const cleanedData: any = {};
-    for (const [key, value] of Object.entries(stackedData)) {
-      if (Array.isArray(value)) {
-        cleanedData[key] = this.cleanData(value as number[]);
-      } else {
-        cleanedData[key] = value;
-      }
-    }
+    if (this.outlierCleaningEnabled) cleanedData = this.cleanOutliers(cleanedData);
+    if (this.sparsityCleaningEnabled) cleanedData = this.cleanSparsity(cleanedData) as number[];
     return cleanedData;
   }
 
   updateStackedStats(stackedData: any) {
-    this.featureData!.Stacked_Stats = {};
+    if (!this.featureData) return;
+    this.featureData.Stacked_Stats = {};
     for (const [key, value] of Object.entries(stackedData)) {
-      this.featureData!.Stacked_Stats[key] = this.calculateDescriptiveStats(value as number[]);
+      this.featureData.Stacked_Stats[key] = this.calculateDescriptiveStats(value as number[]);
     }
   }
-  
+
   calculateDescriptiveStats(data: any): { [stat: string]: any } {
-    console.log('Data received in calculateDescriptiveStats:', data);
     const stats: { [stat: string]: any } = {};
-    
     let processedData: any[];
     if (Array.isArray(data)) {
       processedData = data;
     } else if (typeof data === 'object' && data !== null) {
       processedData = Object.values(data);
     } else {
-      console.error('Invalid data provided to calculateDescriptiveStats:', data);
       return stats;
     }
-  
+
     if (this.isNumerical()) {
       const numericData = processedData.filter((v): v is number => typeof v === 'number' && !isNaN(v));
       try {
@@ -888,9 +1174,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   private calculateValueCounts(data: any): { [key: string]: number } {
-    // If data is not an array, convert it to an array of its values
     const dataArray = Array.isArray(data) ? data : Object.values(data);
-  
     return dataArray.reduce((acc: { [key: string]: number }, val: any) => {
       const key = String(val);
       acc[key] = (acc[key] || 0) + 1;

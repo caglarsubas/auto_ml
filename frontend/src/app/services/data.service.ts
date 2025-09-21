@@ -89,7 +89,7 @@ export class DataService {
     processedFile: string,
     column: string,
     dateColumn: string,
-    metric: 'psi' | 'csi' = 'psi',
+    metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd' = 'psi',
     windows?: number[],
     minBinShareAllowed?: number,
     split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }

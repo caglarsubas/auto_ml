@@ -355,6 +355,19 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"Error processing dictionary file: {str(e)}")
                     return Response({"error": f"Error processing dictionary file: {str(e)}"}, status=400)
+            else:
+                # No dictionary file uploaded in this request; try to enrich from saved DataDictionary
+                try:
+                    for item in data_dict:
+                        try:
+                            desc = DataDictionary.get_description(data_file.id, item['Feature_Name'])
+                            if desc:
+                                item['Feature_Description'] = desc
+                        except Exception:
+                            pass
+                except Exception:
+                    # Non-fatal: continue without descriptions
+                    pass
 
             data_dict = self.replace_nan_with_none(data_dict)
             return Response(data_dict)

@@ -58,6 +58,8 @@ export class ModelDevelopmentComponent implements OnInit {
   ootMode: 'cutoff' | 'percent' = 'percent';
   ootPercent: number = 25;
   dateColumns: string[] = [];
+  // Cache full data dictionary (to provide Feature_Description to Feature Card)
+  dataDictionaryCache: any[] = [];
   currentSplit: { strategy?: string; date_column?: string; cutoff?: string; percent?: number } | null = null;
 
   // Data Quality summary from backend after preprocessing run
@@ -296,27 +298,57 @@ export class ModelDevelopmentComponent implements OnInit {
       if (!fileId) {
         console.warn('openFeatureCardFromDatq: missing currentFileId');
       }
-      // Build features list (names only; descriptions unknown at this step)
-      const features = (this.datqSummary || []).map(r => {
-        const name = r['Variable'] ?? r['variable'] ?? r['index'];
-        return { Feature_Name: String(name), Feature_Description: 'No description available' };
-      }).filter(x => !!x.Feature_Name);
-      // Find quality summary row for the selected variable
-      const row = (this.datqSummary || []).find(r => String(r['Variable'] || r['variable'] || r['index']) === String(variableName));
-      const qualitySummary = row ? { ...row } : null;
-      const processedFile = this.processedFilePath || null;
-      const dateColumn = this.splitDateColumn || (this.dateColumns && this.dateColumns.length ? this.dateColumns[0] : null);
-      this.dialog.open(FeatureCardComponent, {
-        width: '900px',
-        data: {
-          fileId: fileId || '',
-          columnName: String(variableName),
-          features: features,
-          processedFile: processedFile || undefined,
-          dateColumn: dateColumn || undefined,
-          qualitySummary: qualitySummary || undefined,
+      const openWithFeatures = (features: Array<{ Feature_Name: string; Feature_Description: string }>) => {
+        const row = (this.datqSummary || []).find(r => String(r['Variable'] || r['variable'] || r['index']) === String(variableName));
+        const qualitySummary = row ? { ...row } : null;
+        const processedFile = this.processedFilePath || null;
+        const dateColumn = this.splitDateColumn || (this.dateColumns && this.dateColumns.length ? this.dateColumns[0] : null);
+        this.dialog.open(FeatureCardComponent, {
+          width: '900px',
+          data: {
+            fileId: fileId || '',
+            columnName: String(variableName),
+            features: features,
+            processedFile: processedFile || undefined,
+            dateColumn: dateColumn || undefined,
+            qualitySummary: qualitySummary || undefined,
+          }
+        });
+      };
+
+      const buildFromCache = (): Array<{ Feature_Name: string; Feature_Description: string }> => {
+        if (this.dataDictionaryCache && this.dataDictionaryCache.length) {
+          return this.dataDictionaryCache
+            .map(item => ({
+              Feature_Name: String(item?.Feature_Name || ''),
+              Feature_Description: String(item?.Feature_Description || 'No description available')
+            }))
+            .filter(x => !!x.Feature_Name);
         }
-      });
+        // Fallback to names only from datqSummary
+        return (this.datqSummary || [])
+          .map(r => {
+            const name = r['Variable'] ?? r['variable'] ?? r['index'];
+            return { Feature_Name: String(name), Feature_Description: 'No description available' };
+          })
+          .filter(x => !!x.Feature_Name);
+      };
+
+      const cacheHasDescriptions = Array.isArray(this.dataDictionaryCache) && this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+      if (!cacheHasDescriptions && fileId) {
+        // Refresh dictionary to get latest descriptions before opening
+        this.dataService.getDataDictionary(fileId).subscribe({
+          next: (list: any[]) => {
+            this.dataDictionaryCache = Array.isArray(list) ? list : [];
+            openWithFeatures(buildFromCache());
+          },
+          error: () => {
+            openWithFeatures(buildFromCache());
+          }
+        });
+      } else {
+        openWithFeatures(buildFromCache());
+      }
     } catch (e) {
       console.error('Failed to open Feature Card from Data Quality:', e);
     }
@@ -463,6 +495,8 @@ export class ModelDevelopmentComponent implements OnInit {
             this.dataService.getDataDictionary(String(id)).subscribe({
               next: (list: any[]) => {
                 const rows = Array.isArray(list) ? list : [];
+                // Cache full dictionary for FeatureCard (Feature_Description, Level_of_Measurement, etc.)
+                this.dataDictionaryCache = rows;
                 const dtCols = rows
                   .filter(item => {
                     const lom = String(item?.Level_of_Measurement || '').toLowerCase();

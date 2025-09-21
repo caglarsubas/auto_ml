@@ -8,7 +8,7 @@
     <mat-label>Select Feature</mat-label>
     <mat-select [(ngModel)]="selectedFeatureName" (selectionChange)="onFeatureChange()">
       <mat-option *ngFor="let feature of features" [value]="feature.Feature_Name">
-        {{ feature.Feature_Name }}: {{ feature.Feature_Description || 'No description available' }}
+        {{ feature.Feature_Name }}: {{ getFeatureDescription(feature.Feature_Name) }}
       </mat-option>
     </mat-select>
   </mat-form-field>
@@ -97,8 +97,16 @@
             </table>
           </div>
 
-          <p style="font-size: 14px"><br><strong>Rolling {{ qualityTimeseriesMetric.toUpperCase() }} ({{ qualityWindowsLabel() }})</strong></p>
-          <div class="checkbox-container" style="gap: 16px; align-items: center; margin: 8px 0 0;">
+          <p style="font-size: 14px"><br><strong>Rolling {{ metricLabelText }} ({{ qualityWindowsLabelText }})</strong></p>
+          <div class="checkbox-container" style="gap: 16px; align-items: center; margin: 8px 0 0; flex-wrap: wrap;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; color:#555;">Metric</span>
+              <mat-form-field appearance="outline" style="width: 260px; margin-bottom: 0;">
+                <mat-select [value]="qualityTimeseriesMetric" (selectionChange)="onMetricChange($event.value)">
+                  <mat-option *ngFor="let m of metricOptions" [value]="m.value">{{ m.label }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
             <div>
               <mat-checkbox [checked]="selectedQualityWindows.includes(1)" (change)="toggleQualityWindow(1, $event.checked)">1m</mat-checkbox>
               <mat-checkbox [checked]="selectedQualityWindows.includes(3)" (change)="toggleQualityWindow(3, $event.checked)">3m</mat-checkbox>
@@ -106,7 +114,7 @@
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:12px; color:#555;">min_bin_share_allowed</span>
-              <mat-form-field appearance="outline" style="width: 120px; margin-bottom: -1.25em;">
+              <mat-form-field appearance="outline" style="width: 120px; margin-bottom: 0;">
                 <input matInput type="number" step="0.01" min="0" max="0.5" [(ngModel)]="minBinShareAllowed" (ngModelChange)="onMinBinShareChange($event)">
               </mat-form-field>
             </div>
@@ -116,7 +124,9 @@
           </div>
           <div *ngIf="qualityTimeseriesLoading" style="color:#666; font-size:12px; margin: 6px 0;">Loading timeseries…</div>
           <div *ngIf="qualityTimeseriesError" style="color:#b71c1c; font-size:12px; margin: 6px 0;">{{ qualityTimeseriesError }}</div>
-          <div id="quality-timeseries" style="width:100%; height: 640px;"></div>
+          <div style="position: relative; z-index: 10; pointer-events: auto;">
+            <div id="quality-timeseries" style="width:100%; height: 640px;"></div>
+          </div>
         </ng-container>
         <ng-template #noQuality>
           <p>Quality information will be displayed here.</p>
