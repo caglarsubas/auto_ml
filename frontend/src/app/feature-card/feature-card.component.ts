@@ -135,6 +135,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.metricLockedByUser = true;
     this.qualityTimeseriesMetric = metric;
     this.metricLabelText = this.computeMetricLabel();
+    // Force re-attachment of legend handlers on next draw
+    this.qualityLegendHandlersAttached = false;
     this.fetchQualityTimeseries();
   }
 
@@ -698,12 +700,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         this.qualityGraphDiv = gd;
       }
       const config = { responsive: true, displayModeBar: false, staticPlot: false } as any;
+      // Purge any previous plot to ensure clean listeners/state across metric switches
+      try { (window as any).Plotly.purge(gd); } catch {}
       Plotly.newPlot(gd, traces, layout, config).then(() => {
         this.attachQualityLegendHandlers(gd);
         // Ensure annotations match visibility on first render
         this.updateThresholdAnnotationsFromVisibility(gd);
-        // Let Plotly compute initial autorange
-        (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+        // Let Plotly compute initial autorange and then apply robust rescale
+        (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true, 'yaxis2.autorange': true }).then(() => {
+          this.recomputeYAxisFromVisible(gd);
+        });
       });
     } catch (e) {
       console.warn('drawQualityTimeseries failed:', e);
@@ -717,40 +723,47 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         try {
           this.updateThresholdAnnotationsFromVisibility(gd);
           // Trigger autorange based on current visibility after legend toggle
-          (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+          (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true, 'yaxis2.autorange': true }).then(() => {
+            this.recomputeYAxisFromVisible(gd);
+          });
         } catch {}
       };
       const schedule = () => { setTimeout(refresh, 0); setTimeout(refresh, 80); };
-      // Manually handle legend clicks to ensure toggling and rescaling
+      // Manually handle legend clicks only for threshold traces (low/high).
+      // For all other traces, let Plotly perform its default toggling.
       gd.on('plotly_legendclick', (eventData: any) => {
-        console.log('Legend click detected:', eventData);
         const curveNumber = eventData.curveNumber;
         const trace = gd.data[curveNumber];
         if (!trace) return false; // Should not happen
-
-        // Toggle visibility
-        const currentlyVisible = trace.visible !== 'legendonly' && trace.visible !== false;
-        const newVisibility = currentlyVisible ? 'legendonly' : true;
-        Plotly.restyle(gd, { visible: newVisibility }, [curveNumber]).then(() => {
-            // After restyle, update annotations and rescale
+        const nm = String(trace.name || '').toLowerCase();
+        if (nm === 'low' || nm === 'high') {
+          const currentlyVisible = trace.visible !== 'legendonly' && trace.visible !== false;
+          const newVisibility = currentlyVisible ? 'legendonly' : true;
+          Plotly.restyle(gd, { visible: newVisibility }, [curveNumber]).then(() => {
             schedule();
-        });
-
-        return false; // Prevent Plotly's default behavior
+          });
+          return false; // prevent default only for thresholds
+        }
+        setTimeout(schedule, 0);
+        return true; // allow default for non-threshold traces
       });
 
       gd.on('plotly_legenddoubleclick', (eventData: any) => {
-        console.log('Legend double-click detected:', eventData);
         const curveNumber = eventData.curveNumber;
-        const traceCount = gd.data.length;
-        const newVisibilities = Array(traceCount).fill('legendonly');
-        newVisibilities[curveNumber] = true;
-
-        Plotly.restyle(gd, { visible: newVisibilities }).then(() => {
+        const trace = gd.data[curveNumber];
+        if (!trace) return false;
+        const nm = String(trace.name || '').toLowerCase();
+        if (nm === 'low' || nm === 'high') {
+          const traceCount = gd.data.length;
+          const newVisibilities = Array(traceCount).fill('legendonly');
+          newVisibilities[curveNumber] = true;
+          Plotly.restyle(gd, { visible: newVisibilities }).then(() => {
             schedule();
-        });
-
-        return false; // Prevent Plotly's default behavior
+          });
+          return false; // prevent default only for thresholds
+        }
+        setTimeout(schedule, 0);
+        return true; // allow default for non-threshold traces
       });
 
       // Also listen to restyle to catch other visibility changes
@@ -797,11 +810,41 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     } catch {}
   }
 
-  // Let Plotly autorange handle rescaling on legend toggles
+  // Robust rescaling after legend toggles: compute range from visible non-threshold traces
   private recomputeYAxisFromVisible(gd: any): void {
     try {
-      if (!gd) return;
-      (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true });
+      const Plotly = (window as any).Plotly;
+      if (!gd || !Plotly) return;
+      const data = Array.isArray(gd.data) ? gd.data : [];
+      let ymin = Number.POSITIVE_INFINITY;
+      let ymax = Number.NEGATIVE_INFINITY;
+      let found = false;
+      for (const t of data) {
+        if (!t) continue;
+        const nm = String(t.name || '').toLowerCase();
+        // skip only the legend-only helper trace 'mid'
+        if (nm === 'mid') continue;
+        const axis = t.yaxis || 'y';
+        if (axis !== 'y' && axis !== 'y1') continue; // ignore y2 (counts)
+        const vis = t.visible;
+        if (vis === 'legendonly' || vis === false) continue;
+        const ys: any[] = Array.isArray(t.y) ? t.y : [];
+        for (const v of ys) {
+          const n = Number(v);
+          if (Number.isFinite(n)) {
+            if (n < ymin) ymin = n;
+            if (n > ymax) ymax = n;
+            found = true;
+          }
+        }
+      }
+      if (!found) return;
+      // enforce to-zero bottom unless negative values are present
+      if (!(ymin < 0)) ymin = 0;
+      const span = Math.max(1e-12, ymax - ymin);
+      const pad = Math.max(0.02, 0.10 * span);
+      const yMaxPadded = ymax + pad;
+      Plotly.relayout(gd, { 'yaxis.autorange': false, 'yaxis.range': [ymin, yMaxPadded] });
     } catch {}
   }
 
