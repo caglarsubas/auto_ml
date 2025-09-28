@@ -8,7 +8,7 @@ WORKDIR /app
 
 # System dependencies for python-magic
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libmagic1 file \
+    && apt-get install -y --no-install-recommends libmagic1 file build-essential gcc g++ libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip

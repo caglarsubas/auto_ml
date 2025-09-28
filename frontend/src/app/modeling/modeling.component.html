@@ -25,10 +25,6 @@
     <div *ngIf="modelingStatus?.metrics">
       <div>Rows: {{ modelingStatus.metrics?.rows }}</div>
       <div>Features: {{ modelingStatus.metrics?.features }}</div>
-      <div *ngIf="modelingStatus.metrics?.columns?.length">Columns (first {{ modelingStatus.metrics.columns.length }}):</div>
-      <ul>
-        <li *ngFor="let c of modelingStatus.metrics.columns">{{ c }}</li>
-      </ul>
     </div>
     <div *ngIf="modelingStatus?.model" style="margin-top: 8px;">
       <div>Model type: {{ modelingStatus.model?.model_type || 'n/a' }}</div>
@@ -36,6 +32,70 @@
       <div *ngIf="modelingStatus.model?.model_path">Saved model: {{ modelingStatus.model?.model_path }}</div>
       <div *ngIf="modelingStatus.model?.warning" style="color: #a67c00;">Warning: {{ modelingStatus.model?.warning }}</div>
       <div *ngIf="modelingStatus.model?.error" style="color: #b00020;">Error: {{ modelingStatus.model?.error }}</div>
+      
+      <!-- Cross-Validation summary -->
+      <div *ngIf="modelingStatus.model?.cv" style="margin-top: 16px;">
+        <h4>Cross-Validation</h4>
+        <div *ngIf="modelingStatus.model.cv?.roc_auc_mean != null">
+          ROC-AUC (mean ± std): 
+          {{ modelingStatus.model.cv.roc_auc_mean | number:'1.3-3' }}
+          ± {{ modelingStatus.model.cv.roc_auc_std | number:'1.3-3' }}
+        </div>
+        <div *ngIf="modelingStatus.model.cv?.pr_auc_mean != null">
+          PR-AUC (mean ± std): 
+          {{ modelingStatus.model.cv.pr_auc_mean | number:'1.3-3' }}
+          ± {{ modelingStatus.model.cv.pr_auc_std | number:'1.3-3' }}
+        </div>
+
+        <!-- Interactive charts: stacked vertically -->
+        <div style="display:flex; flex-direction: column; gap:32px; margin-top: 12px;">
+          <div>
+            <div style="text-align:center; font-weight:600; margin: 0 0 6px 0;">Cross-Validated ROC Curve</div>
+            <div id="cv-roc-plot" style="width:100%; height: 420px;"></div>
+          </div>
+          <div>
+            <div style="text-align:center; font-weight:600; margin: 0 0 6px 0;">Cross-Validated PR Curve</div>
+            <div id="cv-pr-plot" style="width:100%; height: 420px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SHAP Beeswarm (interactive) -->
+      <div *ngIf="modelingStatus?.model?.shap_beeswarm" style="margin-top: 20px;">
+        <h4>SHAP Beeswarm (interactive)</h4>
+        <div style="font-size: 12px; color:#666; margin-bottom:6px;">Shows per-sample SHAP impact per top features. Color encodes feature value.</div>
+        <div id="shap-beeswarm" style="width: 100%; height: 540px;"></div>
+      </div>
+
+      <!-- Selected features table (impact > 0) -->
+      <div *ngIf="modelingStatus.model?.selected_features?.length" style="margin-top: 16px;">
+        <h4>Selected Features (impact > 0)</h4>
+        <div style="font-size: 12px; color:#666; margin-bottom:6px;">Total: {{ modelingStatus.model.selected_features.length }}</div>
+        <div style="overflow:auto; max-height: 360px; border: 1px solid #eee;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="background: #fafafa; text-align: left;">
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 28%;">Feature</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee;">Description</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let f of modelingStatus.model.selected_features">
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">{{ f.feature }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ f.description || '—' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SHAP beeswarm image -->
+      <div *ngIf="modelingStatus.model?.beeswarm_png" style="margin-top: 16px;">
+        <h4>SHAP Beeswarm</h4>
+        <img [src]="modelingStatus.model.beeswarm_png" alt="SHAP Beeswarm" style="max-width: 100%; height: auto; border: 1px solid #eee;"/>
+      </div>
     </div>
   </div>
 </div>

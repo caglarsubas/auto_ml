@@ -97,6 +97,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   // Cached labels to avoid heavy template calls
   metricLabelText: string = 'PSI';
   qualityWindowsLabelText: string = '1m/3m/6m';
+  // Modeling / Importance state
+  modelingLoading: boolean = false;
+  modelingError: string | null = null;
+  modelInfo: any = null;
+  importanceGain: Array<{ feature: string; score: number }> = [];
+  importanceShap: Array<{ feature: string; score: number }> = [];
+  selectedImportanceType: 'shap' | 'gain' = 'shap';
+  importanceLimit: number = 20;
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -148,6 +156,94 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       case 'jsd': return 'JSD';
       case 'wd': return 'Wasserstein';
       default: return String(this.qualityTimeseriesMetric).toUpperCase();
+    }
+  }
+
+  // ===== Modeling / Importance =====
+  proceedModeling(): void {
+    try {
+      if (!this.isBrowser) return;
+      this.modelingError = null;
+      if (!this.data.processedFile) {
+        this.modelingError = 'Processed file is required to start modelling.';
+        return;
+      }
+      const fid = Number(this.data.fileId);
+      if (!isFinite(fid)) {
+        this.modelingError = 'Invalid file id';
+        return;
+      }
+      this.modelingLoading = true;
+      this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
+        next: (resp: any) => {
+          this.modelInfo = resp?.model || null;
+          const imps = this.modelInfo?.importances || {};
+          this.importanceGain = Array.isArray(imps.gain) ? imps.gain : [];
+          this.importanceShap = Array.isArray(imps.shap_mean_abs) ? imps.shap_mean_abs : [];
+          if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+          else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+          this.drawImportancePlot();
+        },
+        error: (err: any) => {
+          console.error('Modeling failed:', err);
+          this.modelingError = 'Failed to run modelling';
+        },
+        complete: () => {
+          this.modelingLoading = false;
+        }
+      });
+    } catch (e) {
+      console.warn('proceedModeling failed:', e);
+      this.modelingError = 'Failed to start modelling';
+      this.modelingLoading = false;
+    }
+  }
+
+  onImportanceTypeChange(t: 'shap' | 'gain') {
+    this.selectedImportanceType = t;
+    this.drawImportancePlot();
+  }
+
+  drawImportancePlot(): void {
+    try {
+      if (!this.isBrowser) return;
+      const Plotly = (window as any).Plotly;
+      if (!Plotly) return;
+      const el = document.getElementById('importance-plot');
+      if (!el) return;
+
+      const items = (this.selectedImportanceType === 'shap') ? this.importanceShap : this.importanceGain;
+      if (!Array.isArray(items) || items.length === 0) {
+        (el as any).innerHTML = '<div style="color:#777; font-size:12px;">No importances available.</div>';
+        return;
+      }
+      const sorted = [...items].sort((a, b) => (b.score - a.score));
+      const top = sorted.slice(0, Math.max(5, Math.min(100, this.importanceLimit || 20)));
+      const y = top.map(d => d.feature).reverse();
+      const x = top.map(d => d.score).reverse();
+      const title = this.selectedImportanceType === 'shap' ? 'SHAP mean |impact|' : 'XGBoost gain';
+
+      const trace = {
+        x,
+        y,
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: '#4E79A7' },
+        hovertemplate: '%{y}: %{x:.6f}<extra></extra>'
+      } as any;
+      const layout = {
+        margin: { l: 180, r: 24, t: 36, b: 36 },
+        height: Math.max(320, 28 * top.length + 120),
+        title: { text: title, font: { size: 14 } },
+        xaxis: { title: 'Score' },
+        yaxis: { automargin: true },
+        showlegend: false
+      } as any;
+      const config = { responsive: true, displayModeBar: false } as any;
+      try { (window as any).Plotly.react(el, [trace], layout, config); }
+      catch { Plotly.newPlot(el, [trace], layout, config); }
+    } catch (e) {
+      console.warn('drawImportancePlot failed:', e);
     }
   }
 

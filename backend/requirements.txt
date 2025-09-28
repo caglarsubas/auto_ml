@@ -8,3 +8,8 @@ xlrd>=2.0
 python-magic>=0.4
 django-cors-headers>=4.3
 scikit-learn>=1.4
+
+# Modeling dependencies
+xgboost>=1.7
+shap>=0.42
+matplotlib>=3.7

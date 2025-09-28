@@ -134,7 +134,36 @@
       </mat-tab>
       
       <mat-tab label="Importance">
-        <p>Importance information will be displayed here.</p>
+        <div style="margin-top: 16px; display:flex; gap:12px; align-items:center; flex-wrap: wrap;">
+          <button mat-raised-button color="primary" (click)="proceedModeling()" [disabled]="modelingLoading || !data.processedFile">
+            {{ modelingLoading ? 'Training…' : 'Proceed Modelling' }}
+          </button>
+          <span *ngIf="!data.processedFile" style="color:#888; font-size:12px;">Processed file is required to start modelling.</span>
+          <span *ngIf="modelInfo?.valid_auc != null" style="font-size:12px; color:#555;">Valid AUC: {{ modelInfo.valid_auc | number:'1.3-3' }}</span>
+          <span *ngIf="modelInfo?.feature_count != null" style="font-size:12px; color:#555;">Features: {{ modelInfo.feature_count }}</span>
+        </div>
+
+        <div *ngIf="modelingError" style="color:#b71c1c; font-size:12px; margin-top: 8px;">{{ modelingError }}</div>
+
+        <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" style="margin-top: 12px; display:flex; align-items:center; gap:16px; flex-wrap: wrap;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:12px; color:#555;">Importance</span>
+            <mat-form-field appearance="outline" style="width: 180px; margin-bottom:0;">
+              <mat-select [(value)]="selectedImportanceType" (selectionChange)="onImportanceTypeChange($event.value)">
+                <mat-option value="shap">SHAP mean |impact|</mat-option>
+                <mat-option value="gain">XGBoost gain</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:12px; color:#555;">Top</span>
+            <mat-form-field appearance="outline" style="width: 100px; margin-bottom:0;">
+              <input matInput type="number" min="5" max="100" [(ngModel)]="importanceLimit" (ngModelChange)="drawImportancePlot()">
+            </mat-form-field>
+          </div>
+        </div>
+
+        <div id="importance-plot" style="width:100%; height: 520px; margin-top: 8px;"></div>
       </mat-tab>
       
       <mat-tab label="Explainability">
