@@ -1,4 +1,4 @@
-import { Component, OnInit, Inject } from '@angular/core';
+import { Component, OnInit, Inject, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID } from '@angular/core';
 import { Router } from '@angular/router';
@@ -14,7 +14,7 @@ interface PurifierOption { id: number; name: string; }
   templateUrl: './modeling.component.html',
   styleUrls: ['./modeling.component.css']
 })
-export class ModelingComponent implements OnInit {
+export class ModelingComponent implements OnInit, AfterViewInit {
   selectedOptionIds: number[] = [];
   selectedOptionNames: string[] = [];
   runPreview: any | null = null;
@@ -25,6 +25,9 @@ export class ModelingComponent implements OnInit {
   modelingStatus: any | null = null;
   private pollingSub: Subscription | null = null;
   isBrowser: boolean = false;
+  showNulls: boolean = false;
+  private plotlyReady: Promise<void> | null = null;
+  private chartsDrawn: boolean = false;
 
   // Pipeline and algorithm selection
   selectedPipeline: string = '';
@@ -65,13 +68,15 @@ export class ModelingComponent implements OnInit {
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]' },
   ];
 
-  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object) {
+  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 
   ngOnInit(): void {
     if (this.isBrowser) {
-      this.loadPlotly();
+      this.plotlyReady = this.loadPlotly();
+    } else {
+      this.plotlyReady = Promise.resolve();
     }
     this.sharedService.selectedPurifierOptions$.subscribe((ids) => {
       this.selectedOptionIds = ids;
@@ -114,6 +119,29 @@ export class ModelingComponent implements OnInit {
     });
   }
 
+  ngAfterViewInit(): void {
+    if (!this.isBrowser) return;
+    // Defer to ensure *ngIf DOM nodes are present
+    setTimeout(() => this.tryDrawChartsIfReady(), 0);
+  }
+
+  private tryDrawChartsIfReady(attempt: number = 0): void {
+    try {
+      if (!this.isBrowser) return;
+      if (!this.modelingStatus?.model?.cv) return;
+      if (this.chartsDrawn) return;
+      const ready = this.plotlyReady || Promise.resolve();
+      ready.then(() => {
+        try { this.cdr.detectChanges(); } catch {}
+        this.drawCvCharts()
+          .then(() => { this.chartsDrawn = true; })
+          .catch(() => {
+            if (attempt < 10) setTimeout(() => this.tryDrawChartsIfReady(attempt + 1), 250);
+          });
+      });
+    } catch {}
+  }
+
   goBackToPreprocessing(): void {
     this.router.navigate(['/model-development/preprocessing']);
   }
@@ -129,12 +157,16 @@ export class ModelingComponent implements OnInit {
       return;
     }
     this.isStarting = true;
+    this.chartsDrawn = false;
     this.dataService.startModeling(this.currentFileId, this.processedFilePath, this.selectedAlgorithm || undefined).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
       next: (resp) => {
         console.log('Modeling started:', resp);
         this.modelingStatus = resp;
+        // If the response already indicates completion, draw charts immediately
+        const js = (resp as any)?.job_status || (resp as any)?.status;
+        if (js === 'completed') { setTimeout(() => this.tryDrawChartsIfReady(), 0); }
         // Begin polling status until completed or error
         this.startStatusPolling();
       },
@@ -155,11 +187,12 @@ export class ModelingComponent implements OnInit {
       this.dataService.getModelingStatus(this.currentFileId).subscribe({
         next: (status) => {
           this.modelingStatus = status;
-          const s = status?.status || status?.job_status;
+          const s = status?.job_status || status?.status;
           if (s === 'completed' || s === 'error') {
             this.stopStatusPolling();
             // draw CV charts when available
-            setTimeout(() => this.drawCvCharts(), 0);
+            this.chartsDrawn = false;
+            setTimeout(() => this.tryDrawChartsIfReady(), 0);
           }
         },
         error: (err) => {
@@ -189,21 +222,30 @@ export class ModelingComponent implements OnInit {
   private async loadPlotly(): Promise<void> {
     try {
       if (!(window as any).Plotly) {
-        const Plotly = await import('plotly.js-dist-min');
-        (window as any).Plotly = Plotly.default;
+        const mod: any = await import('plotly.js-dist-min');
+        const PlotlyObj: any = (mod && (mod.default || mod)) || null;
+        if (!PlotlyObj || typeof PlotlyObj.newPlot !== 'function') {
+          console.warn('[Plotly] Failed to resolve newPlot from module, module keys:', Object.keys(mod || {}));
+        }
+        (window as any).Plotly = PlotlyObj;
+      }
+      if (!(window as any).Plotly || typeof (window as any).Plotly.newPlot !== 'function') {
+        console.error('[Plotly] newPlot not available after load');
       }
     } catch (e) {
       console.warn('Failed to load Plotly for CV charts:', e);
     }
   }
 
-  private drawCvCharts(): void {
+  private async drawCvCharts(): Promise<void> {
     try {
       if (!this.isBrowser) return;
+      if (this.plotlyReady) { await this.plotlyReady; }
       const Plotly = (window as any).Plotly; if (!Plotly) return;
       const cv = this.modelingStatus?.model?.cv; if (!cv) return;
-      if (cv.roc_curve) this.drawRocCurvePlot(cv);
-      if (cv.pr_curve) this.drawPrCurvePlot(cv);
+      // Try drawing regardless of partial availability; functions will fallback gracefully
+      this.drawRocCurvePlot(cv);
+      this.drawPrCurvePlot(cv);
       // SHAP beeswarm
       this.drawShapBeeswarm();
     } catch (e) {
@@ -211,14 +253,18 @@ export class ModelingComponent implements OnInit {
     }
   }
 
-  private drawRocCurvePlot(cv: any): void {
+  private drawRocCurvePlot(cv: any, attempt: number = 0): void {
     const Plotly = (window as any).Plotly; if (!Plotly) return;
-    const roc = cv.roc_curve; if (!roc) return;
-    const el = document.getElementById('cv-roc-plot'); if (!el) return;
-    const fpr: number[] = roc.fpr || [];
-    const meanTpr: number[] | null = roc.mean_tpr || null;
-    const stdTpr: number[] | null = roc.std_tpr || null;
-    const foldTpr: number[][] = roc.fold_tpr || [];
+    const roc = cv.roc_curve || {};
+    const el = document.getElementById('cv-roc-plot');
+    if (!el) {
+      if (attempt < 10) setTimeout(() => this.drawRocCurvePlot(cv, attempt + 1), 250);
+      return;
+    }
+    const fpr: number[] = Array.isArray(roc.fpr) ? roc.fpr : [0, 1];
+    const meanTpr: number[] | null = Array.isArray(roc.mean_tpr) ? roc.mean_tpr : null;
+    const stdTpr: number[] | null = Array.isArray(roc.std_tpr) ? roc.std_tpr : null;
+    const foldTpr: number[][] = Array.isArray(roc.fold_tpr) ? roc.fold_tpr : [];
     const traces: any[] = [];
 
     // Fold curves (light)
@@ -267,18 +313,21 @@ export class ModelingComponent implements OnInit {
   }
 
   // ===== SHAP Beeswarm (interactive) =====
-  private drawShapBeeswarm(): void {
+  public drawShapBeeswarm(attempt: number = 0): void {
     try {
       if (!this.isBrowser) return;
-      const Plotly = (window as any).Plotly; if (!Plotly) return;
+      const Plotly = (window as any).Plotly; if (!Plotly) { if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250); return; }
       const payload = this.modelingStatus?.model?.shap_beeswarm; if (!payload) return;
-      const el = document.getElementById('shap-beeswarm'); if (!el) return;
+      const el = document.getElementById('shap-beeswarm'); if (!el) { if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250); return; }
 
       const features: string[] = payload.features || [];
       const shapValues: number[][] = payload.shap_values || [];
       const featureValues: number[][] = payload.feature_values || [];
+      const metadata: any[] = payload.metadata || [];
       const nFeat = features.length;
       if (!nFeat) return;
+      // Dynamic height based on feature count (35px per feature for better spacing)
+      try { (el as HTMLElement).style.height = `${Math.max(480, 35 * nFeat)}px`; } catch {}
 
       const traces: any[] = [];
       const jitter = 0.35;
@@ -298,10 +347,12 @@ export class ModelingComponent implements OnInit {
         return a[base] + (a[base + 1] !== undefined ? rest * (a[base + 1] - a[base]) : 0);
       };
 
+      let colorbarPlaced = false;
       for (let i = 0; i < nFeat; i++) {
         const xs = (shapValues[i] || []).map(v => Number(v));
-        const vsRaw = (featureValues[i] || []).map(v => Number(v));
-        const vs = vsRaw.map(v => Number.isFinite(v) ? v : 0);
+        const rawArr: any[] = featureValues[i] || [];
+        const isNull = rawArr.map(v => v == null || (typeof v === 'number' && !Number.isFinite(v)));
+        const vs = rawArr.map(v => (v == null ? NaN : Number(v)));
         const base = nFeat - 1 - i; // top feature at top
         const N = xs.length;
         // Beeswarm: KDE-based amplitude and uniform placement within the envelope
@@ -388,51 +439,104 @@ export class ModelingComponent implements OnInit {
         // Draw envelope as filled area between upper and lower
         traces.push({ x: centers, y: upperY, type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false } as any);
         traces.push({ x: centers, y: lowerY, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(120,120,120,0.20)', line: { width: 0 }, hoverinfo: 'skip', showlegend: false } as any);
-        // Robust min/max per feature (like SHAP): use [5th,95th] pct to avoid outliers dominating
-        let vmin = q(vs, 0.05);
-        let vmax = q(vs, 0.95);
-        if (!isFinite(vmin) || !isFinite(vmax) || vmin === vmax) {
-          vmin = Math.min(...vs);
-          vmax = Math.max(...vs);
-          if (vmin === vmax) { vmin = vmax - 1; }
+        // Split indices by null/non-null for coloring
+        const idxNonNull: number[] = [];
+        const idxNull: number[] = [];
+        for (let j = 0; j < N; j++) (isNull[j] ? idxNull : idxNonNull).push(j);
+
+        // Non-null coloring with per-feature normalization
+        if (idxNonNull.length > 0) {
+          const vsNN = idxNonNull.map(j => vs[j]);
+          let vmin = q(vsNN as number[], 0.05);
+          let vmax = q(vsNN as number[], 0.95);
+          if (!isFinite(vmin) || !isFinite(vmax) || vmin === vmax) {
+            vmin = Math.min(...(vsNN as number[]));
+            vmax = Math.max(...(vsNN as number[]));
+            if (vmin === vmax) { vmin = vmax - 1; }
+          }
+          const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
+          const cnorm = vsNN.map(v => (Number(v) - vmin) / denom).map(u => u < 0 ? 0 : (u > 1 ? 1 : u));
+          traces.push({
+            type: 'scatter',
+            mode: 'markers',
+            name: features[i],
+            x: idxNonNull.map(j => xs[j]),
+            y: idxNonNull.map(j => yvals[j]),
+            customdata: idxNonNull.map(j => rawArr[j]),
+            marker: {
+              color: cnorm,
+              colorscale,
+              cmin: 0,
+              cmax: 1,
+              showscale: !colorbarPlaced,
+              colorbar: !colorbarPlaced ? { title: { text: 'Feature value' }, thickness: 14, tickmode: 'array', tickvals: [0, 1], ticktext: ['Low', 'High'] } : undefined,
+              size: 6,
+              opacity: 0.85
+            },
+            hovertemplate: `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
+            showlegend: false
+          } as any);
+          if (!colorbarPlaced) colorbarPlaced = true;
         }
-        const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
-        const cnorm = vs.map(v => (v - vmin) / denom).map(u => u < 0 ? 0 : (u > 1 ? 1 : u));
-        if (i === 0) {
-          try { console.debug('[SHAP] feature', features[i], 'min/max', vmin, vmax); } catch {}
+
+        // Null overlay as grey markers, optionally shown
+        if (this.showNulls && idxNull.length > 0) {
+          traces.push({
+            type: 'scatter',
+            mode: 'markers',
+            x: idxNull.map(j => xs[j]),
+            y: idxNull.map(j => yvals[j]),
+            marker: { color: 'rgba(130,130,130,0.9)', size: 6, symbol: 'x', line: { width: 0.5, color: 'rgba(80,80,80,0.9)' } },
+            hovertemplate: `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=null<extra></extra>`,
+            showlegend: false
+          } as any);
         }
-        traces.push({
-          type: 'scatter',
-          mode: 'markers',
-          name: features[i],
-          x: xs,
-          y: yvals,
-          customdata: vs,
-          marker: {
-            color: cnorm,
-            colorscale,
-            cmin: 0,
-            cmax: 1,
-            showscale: i === 0,
-            colorbar: i === 0 ? { title: { text: 'Feature value' }, thickness: 14, tickmode: 'array', tickvals: [0, 1], ticktext: ['Low', 'High'] } : undefined,
-            size: 6,
-            opacity: 0.8
-          },
-          hovertemplate: `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
-          showlegend: false
-        } as any);
       }
 
       const tickvals = Array.from({ length: nFeat }, (_, idx) => idx);
       const ticktext = Array.from({ length: nFeat }, (_, idx) => features[nFeat - 1 - idx]);
+      // Build annotations for y-axis labels with hover metadata
+      const yAxisAnnotations = Array.from({ length: nFeat }, (_, idx) => {
+        const origIdx = nFeat - 1 - idx;
+        const fname = features[origIdx];
+        const meta = metadata[origIdx] || {};
+        const desc = meta.description || '';
+        const psi = meta.psi;
+        const csi = meta.csi;
+        const impact = meta.impact;
+        // Build hover text: show description if available, otherwise feature name
+        let hoverParts = [];
+        if (desc) {
+          hoverParts.push(`<b>${desc}</b>`);
+        } else {
+          hoverParts.push(`<b>${fname}</b>`);
+        }
+        if (impact != null && Number.isFinite(impact)) hoverParts.push(`Impact: ${Number(impact).toFixed(6)}`);
+        if (psi != null && Number.isFinite(psi)) hoverParts.push(`PSI: ${Number(psi).toFixed(4)}`);
+        if (csi != null && Number.isFinite(csi)) hoverParts.push(`CSI: ${Number(csi).toFixed(4)}`);
+        return {
+          x: -0.01,
+          y: idx,
+          xref: 'paper',
+          yref: 'y',
+          text: fname,
+          showarrow: false,
+          xanchor: 'right',
+          yanchor: 'middle',
+          font: { size: 9, color: '#333' },
+          hovertext: hoverParts.join('<br>'),
+          hoverlabel: { bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#999', font: { size: 11 } }
+        };
+      });
       const layout = {
         title: { text: '' },
-        margin: { l: 160, r: 48, t: 12, b: 40 },
+        margin: { l: 220, r: 48, t: 12, b: 40 },
         xaxis: { title: { text: 'SHAP value (impact on model output)' }, zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
-        yaxis: { tickmode: 'array', tickvals, ticktext, range: [-0.6, nFeat - 0.4] },
+        yaxis: { tickmode: 'array', tickvals, ticktext: [], showticklabels: false, range: [-0.6, nFeat - 0.4] },
         showlegend: false,
         hovermode: 'closest',
-        shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.5, y1: nFeat - 0.5, line: { color: '#888', width: 1 } }]
+        shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.5, y1: nFeat - 0.5, line: { color: '#888', width: 1 } }],
+        annotations: yAxisAnnotations
       } as any;
       const config = { responsive: true, displayModeBar: true } as any;
       try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
@@ -441,16 +545,20 @@ export class ModelingComponent implements OnInit {
     }
   }
 
-  private drawPrCurvePlot(cv: any): void {
+  private drawPrCurvePlot(cv: any, attempt: number = 0): void {
     const Plotly = (window as any).Plotly; if (!Plotly) return;
-    const pr = cv.pr_curve; if (!pr) return;
-    const el = document.getElementById('cv-pr-plot'); if (!el) return;
-    const recall: number[] = pr.recall || [];
-    const meanPrec: number[] | null = pr.mean_precision || null;
-    const stdPrec: number[] | null = pr.std_precision || null;
-    const foldPrec: number[][] = pr.fold_precision || [];
-    const rawFolds: Array<{precision:number[]; recall:number[]; auc?: number}> = pr.folds_raw || [];
-    const baseline: number | null = pr.baseline ?? null;
+    const pr = cv.pr_curve || {};
+    const el = document.getElementById('cv-pr-plot');
+    if (!el) {
+      if (attempt < 10) setTimeout(() => this.drawPrCurvePlot(cv, attempt + 1), 250);
+      return;
+    }
+    const recall: number[] = Array.isArray(pr.recall) ? pr.recall : [0, 1];
+    const meanPrec: number[] | null = Array.isArray(pr.mean_precision) ? pr.mean_precision : null;
+    const stdPrec: number[] | null = Array.isArray(pr.std_precision) ? pr.std_precision : null;
+    const foldPrec: number[][] = Array.isArray(pr.fold_precision) ? pr.fold_precision : [];
+    const rawFolds: Array<{precision:number[]; recall:number[]; auc?: number}> = Array.isArray(pr.folds_raw) ? pr.folds_raw : [];
+    const baseline: number | null = (pr.baseline ?? cv?.pr_curve?.baseline ?? null);
     const micro: any = cv.pr_curve_micro || null;
     const traces: any[] = [];
 

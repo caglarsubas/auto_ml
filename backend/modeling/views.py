@@ -7,6 +7,7 @@ from declaration.models import Declaration
 import os
 from django.conf import settings
 import json
+import math
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedKFold
@@ -80,13 +81,14 @@ class ModelingStartView(APIView):
             if target_col is not None:
                 # Prepare features/target
                 y = df[target_col]
-                X = df.drop(columns=[target_col])
+                # Keep a raw copy to preserve original NaNs for interactive SHAP visualization
+                X_raw = df.drop(columns=[target_col])
                 # Use only numeric features for simplicity
-                X = X.select_dtypes(include=['number']).copy()
+                X_raw = X_raw.select_dtypes(include=['number']).copy()
                 # Drop columns with all NaNs
-                X = X.dropna(axis=1, how='all')
-                # Fill remaining NaNs with column means (numeric)
-                X = X.fillna(X.mean(numeric_only=True))
+                X_raw = X_raw.dropna(axis=1, how='all')
+                # Filled copy for modeling
+                X = X_raw.fillna(X_raw.mean(numeric_only=True))
 
                 # If no features remain, skip training
                 if X.shape[1] >= 1 and len(y) >= 5:
@@ -104,6 +106,11 @@ class ModelingStartView(APIView):
                         X_train, X_valid, y_train, y_valid = train_test_split(
                             X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
                         )
+                        # Raw (unfilled) view for the same validation rows
+                        try:
+                            X_valid_raw = X_raw.loc[X_valid.index]
+                        except Exception:
+                            X_valid_raw = X_valid.copy()
 
                         num_classes = int(len(np.unique(y_train)))
                         objective = 'binary:logistic' if num_classes == 2 else 'multi:softprob'
@@ -194,6 +201,7 @@ class ModelingStartView(APIView):
                             explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
                             # limit to at most 5000 rows for performance
                             Xv = X_valid
+                            Xv_raw = X_valid_raw
                             if Xv.shape[0] > 5000:
                                 Xv = Xv.sample(5000, random_state=42)
                             shap_vals = explainer.shap_values(Xv)
@@ -251,14 +259,20 @@ class ModelingStartView(APIView):
 
                             # Interactive beeswarm compact payload (top_k features; per-sample shap and feature values)
                             try:
-                                top_k = 20
-                                # Determine top feature indices based on mean_abs
-                                order_idx = np.argsort(-mean_abs)[:min(top_k, len(mean_abs))]
+                                # Include all features with positive mean |impact|
+                                order_sorted = np.argsort(-mean_abs)
+                                order_idx = np.array([i for i in order_sorted if mean_abs[i] > 0])
                                 # Cap rows for transport size
                                 Xv_compact = Xv
+                                Xv_raw_compact = Xv_raw
                                 max_rows = 2000
                                 if Xv_compact.shape[0] > max_rows:
                                     Xv_compact = Xv_compact.sample(max_rows, random_state=42)
+                                    # keep raw values aligned to the same subset
+                                    try:
+                                        Xv_raw_compact = Xv_raw.loc[Xv_compact.index]
+                                    except Exception:
+                                        Xv_raw_compact = Xv_compact.copy()
                                 # Index alignment for shap_matrix when we sampled rows above
                                 if shap_matrix.shape[0] != Xv_compact.shape[0]:
                                     # Recompute shap on the compact subset to stay aligned
@@ -275,10 +289,73 @@ class ModelingStartView(APIView):
                                     shap_matrix_compact = shap_matrix
                                 features_ordered = [feat_names[i] for i in order_idx]
                                 # Build arrays per feature: shap values and raw feature values
+                                feature_values_list = []
+                                for i in order_idx:
+                                    s = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce')
+                                    # convert NaN -> None so JSON renders as null
+                                    s = s.where(s.notna(), None).astype(object)
+                                    feature_values_list.append(s.tolist())
+                                # sanitize shap values (NaN/Inf -> None) for JSON
+                                shap_values_list = []
+                                for i in order_idx:
+                                    col = shap_matrix_compact[:, i]
+                                    safe_col = [ float(x) if np.isfinite(x) else None for x in col ]
+                                    shap_values_list.append(safe_col)
+                                # Collect metadata per feature: description, PSI/CSI, mean_abs_impact
+                                # Metadata order must match features_ordered
+                                feature_metadata = []
+                                try:
+                                    from declaration.models import DataDictionary
+                                    # Load data quality summary from JSON saved during preprocessing
+                                    dq_summary = None
+                                    try:
+                                        datq_json_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
+                                        if os.path.exists(datq_json_path):
+                                            with open(datq_json_path, 'r', encoding='utf-8') as f:
+                                                datq_records = json.load(f)
+                                            # Build dict: variable_name -> {PSI, CSI, ...}
+                                            dq_summary = {rec.get('Variable', ''): rec for rec in datq_records if rec.get('Variable')}
+                                    except Exception:
+                                        pass
+                                    for i in order_idx:
+                                        fname = feat_names[i]
+                                        desc = DataDictionary.get_description(file_id, fname) or ''
+                                        # Use mean_abs for consistency with selected_features table
+                                        impact_abs = float(mean_abs[i])
+                                        # Try to get PSI or CSI from data quality summary
+                                        psi_val = None
+                                        csi_val = None
+                                        if dq_summary and fname in dq_summary:
+                                            row = dq_summary[fname]
+                                            psi_val = row.get('PSI', None)
+                                            csi_val = row.get('CSI', None)
+                                        feature_metadata.append({
+                                            'feature': fname,
+                                            'description': desc,
+                                            'impact': impact_abs,
+                                            'psi': psi_val,
+                                            'csi': csi_val
+                                        })
+                                except Exception as meta_err:
+                                    try:
+                                        print(f"[ModelingStart] Feature metadata collection failed: {meta_err}")
+                                    except:
+                                        pass
+                                    # Fallback: minimal metadata
+                                    for i in order_idx:
+                                        fname = feat_names[i]
+                                        feature_metadata.append({
+                                            'feature': fname,
+                                            'description': '',
+                                            'impact': float(mean_abs[i]),
+                                            'psi': None,
+                                            'csi': None
+                                        })
                                 shap_beeswarm = {
                                     'features': features_ordered,
-                                    'shap_values': [ shap_matrix_compact[:, i].astype(float).tolist() for i in order_idx ],
-                                    'feature_values': [ Xv_compact.iloc[:, i].astype(float).fillna(0.0).tolist() for i in order_idx ],
+                                    'shap_values': shap_values_list,
+                                    'feature_values': feature_values_list,
+                                    'metadata': feature_metadata,
                                 }
                             except Exception as e:
                                 try:
@@ -479,15 +556,50 @@ class ModelingStartView(APIView):
             except Exception:
                 pass
 
+        # Helper to sanitize payloads for JSON (replace NaN/Inf with None recursively)
+        def _sanitize_json(o):
+            try:
+                import numpy as np
+                if isinstance(o, (float, np.floating)):
+                    return float(o) if math.isfinite(o) else None
+                if isinstance(o, (np.integer,)):
+                    return int(o)
+                if isinstance(o, (np.bool_,)):
+                    return bool(o)
+                if isinstance(o, (np.ndarray,)):
+                    return [_sanitize_json(x) for x in o.tolist()]
+            except Exception:
+                pass
+            if isinstance(o, list):
+                return [_sanitize_json(x) for x in o]
+            if isinstance(o, tuple):
+                return [_sanitize_json(x) for x in o]
+            if isinstance(o, dict):
+                return {k: _sanitize_json(v) for k, v in o.items()}
+            if isinstance(o, float):
+                return o if math.isfinite(o) else None
+            return o
+
         # mark completed
         # attach algorithm to model info if provided
         if algorithm:
             model_info['requested_algorithm'] = algorithm
 
-        with open(status_path, 'w', encoding='utf-8') as f:
-            json.dump({'status': 'completed', 'file_id': file_id, 'processed_file': processed_file, 'metrics': metrics, 'model': model_info, 'algorithm': algorithm}, f)
+        result_payload = {
+            'status': 'ok',
+            'job_status': 'completed',
+            'file_id': file_id,
+            'processed_file': processed_file,
+            'metrics': metrics,
+            'model': model_info,
+            'algorithm': algorithm
+        }
+        safe_payload = _sanitize_json(result_payload)
 
-        return Response({'status': 'ok', 'job_status': 'completed', 'file_id': file_id, 'processed_file': processed_file, 'metrics': metrics, 'model': model_info, 'algorithm': algorithm}, status=status.HTTP_200_OK)
+        with open(status_path, 'w', encoding='utf-8') as f:
+            json.dump(safe_payload, f)
+
+        return Response(safe_payload, status=status.HTTP_200_OK)
 
 
 @method_decorator(csrf_exempt, name='dispatch')

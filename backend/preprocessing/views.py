@@ -833,6 +833,18 @@ class PreprocessingRunView(APIView):
                 datq_summary_records = None
                 print(f"[PreprocessingRun] datq_summary error: {dq_err}")
 
+            # Save datq_summary as JSON for later use in modeling
+            if datq_summary_records:
+                try:
+                    datq_dir = os.path.join(settings.MEDIA_ROOT, 'data_quality')
+                    os.makedirs(datq_dir, exist_ok=True)
+                    datq_json_path = os.path.join(datq_dir, f'{file_id}_datq_summary.json')
+                    with open(datq_json_path, 'w', encoding='utf-8') as f:
+                        json.dump(datq_summary_records, f)
+                    print(f"[PreprocessingRun] saved datq_summary JSON -> {datq_json_path}")
+                except Exception as e:
+                    print(f"[PreprocessingRun] failed to save datq_summary JSON: {e}")
+
             preview = {
                 'file_id': file_id,
                 'options': options,
