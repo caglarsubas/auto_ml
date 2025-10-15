@@ -7,7 +7,7 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-v2.4.0-2025-10-15:
+v2.4.1-2025-10-15:
 - add feature-wise shap plots (partial dependicy plots) into their cards
 - 
 

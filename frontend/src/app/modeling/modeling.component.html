@@ -64,6 +64,11 @@
       <div *ngIf="modelingStatus?.model?.shap_beeswarm" style="margin-top: 20px;">
         <h4>SHAP Beeswarm (interactive)</h4>
         <div style="font-size: 12px; color:#666; margin-bottom:6px;">Shows per-sample SHAP impact per features (color encodes feature value).</div>
+        <div *ngIf="modelingStatus.model?.beeswarm_png" style="margin-bottom:8px;">
+          <button mat-stroked-button color="primary" (click)="downloadBeeswarm()">
+            Download Beeswarm
+          </button>
+        </div>
         <div style="display:flex; align-items:center; gap:12px; margin: 6px 0 10px 0;">
           <label style="font-size: 13px; color:#444; display:flex; align-items:center; gap:6px;">
             <input type="checkbox" [(ngModel)]="showNulls" (ngModelChange)="drawShapBeeswarm()" />
@@ -73,9 +78,9 @@
         <div id="shap-beeswarm" style="width: 100%; height: 540px;"></div>
       </div>
 
-      <!-- Selected features table (impact > 0) -->
+      <!-- Selected features table (sorted by SHAP |impact|) -->
       <div *ngIf="modelingStatus.model?.selected_features?.length" style="margin-top: 16px;">
-        <h4>Selected Features (impact > 0)</h4>
+        <h4>Selected Features (sorted by |impact|)</h4>
         <div style="font-size: 12px; color:#666; margin-bottom:6px;">Total: {{ modelingStatus.model.selected_features.length }}</div>
         <div style="overflow:auto; max-height: 360px; border: 1px solid #eee;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -83,7 +88,8 @@
               <tr style="background: #fafafa; text-align: left;">
                 <th style="padding: 8px; border-bottom: 1px solid #eee; width: 28%;">Feature</th>
                 <th style="padding: 8px; border-bottom: 1px solid #eee;">Description</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">Impact</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">|Impact|</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">Signed impact</th>
               </tr>
             </thead>
             <tbody>
@@ -91,17 +97,13 @@
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">{{ f.feature }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ f.description || '—' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.signed_impact | number:'1.6-6' }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- SHAP beeswarm image -->
-      <div *ngIf="modelingStatus.model?.beeswarm_png" style="margin-top: 16px;">
-        <h4>SHAP Beeswarm</h4>
-        <img [src]="modelingStatus.model.beeswarm_png" alt="SHAP Beeswarm" style="max-width: 100%; height: auto; border: 1px solid #eee;"/>
-      </div>
     </div>
   </div>
 </div>

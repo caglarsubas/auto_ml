@@ -100,8 +100,17 @@ class ModelingStartView(APIView):
                         is_classification = True
 
                     if is_classification:
-                        # Encode categories to integers (handles string labels)
-                        y_encoded, y_categories = pd.factorize(y)
+                        # Encode binary targets to 0/1 ensuring 1 == positive class, else fallback to factorize
+                        try:
+                            y_num = pd.to_numeric(y, errors='coerce')
+                            uniq = y_num.dropna().unique().tolist()
+                            uniq_int = sorted({int(v) for v in uniq if float(v) in (0.0, 1.0)})
+                            if len(uniq_int) == 2 and set(uniq_int) == {0, 1}:
+                                y_encoded = y_num.fillna(0).astype(int)
+                            else:
+                                raise ValueError('not binary 0/1')
+                        except Exception:
+                            y_encoded, y_categories = pd.factorize(y)
                         # Train/valid split with stratification for stability
                         X_train, X_valid, y_train, y_valid = train_test_split(
                             X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
@@ -204,44 +213,109 @@ class ModelingStartView(APIView):
                             Xv_raw = X_valid_raw
                             if Xv.shape[0] > 5000:
                                 Xv = Xv.sample(5000, random_state=42)
+                                try:
+                                    Xv_raw = Xv_raw.loc[Xv.index]
+                                except Exception:
+                                    Xv_raw = Xv.copy()
                             shap_vals = explainer.shap_values(Xv)
                             if isinstance(shap_vals, list):
-                                # multiclass: average mean |shap| across classes
-                                mean_abs = np.mean([ np.mean(np.abs(sv), axis=0) for sv in shap_vals ], axis=0)
+                                try:
+                                    shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
+                                except Exception:
+                                    shap_matrix = shap_vals[0]
                             else:
-                                # binary/regression shape: (n_samples, n_features)
-                                mean_abs = np.mean(np.abs(shap_vals), axis=0)
-                            shap_items = sorted(
-                                ((feat_names[i], float(mean_abs[i])) for i in range(len(feat_names))),
-                                key=lambda kv: kv[1], reverse=True
-                            )
-                            shap_importance = [ {'feature': k, 'score': v} for k, v in shap_items ]
-                            # Selected features (impact > 0) with descriptions
+                                shap_matrix = shap_vals
+                            mean_abs = np.mean(np.abs(shap_matrix), axis=0)
+                            mean_signed = np.mean(shap_matrix, axis=0)
+                            shap_details: list[dict[str, object]] = []
+                            for idx, fname in enumerate(feat_names):
+                                mean_abs_val = float(mean_abs[idx]) if np.isfinite(mean_abs[idx]) else 0.0
+                                signed_mean_val = float(mean_signed[idx]) if np.isfinite(mean_signed[idx]) else 0.0
+                                # Direction from SHAP behavior vs feature value:
+                                # 1) Prefer robust top-vs-bottom quantile mean SHAP difference
+                                # 2) Fallback to Spearman correlation
+                                # 3) Fallback to signed mean
+                                direction = 0.0
+                                try:
+                                    fv = pd.to_numeric(Xv_raw.iloc[:, idx], errors='coerce').to_numpy()
+                                except Exception:
+                                    fv = Xv.iloc[:, idx].to_numpy() if hasattr(Xv, 'iloc') else np.asarray([])
+                                sv = shap_matrix[:, idx] if shap_matrix.ndim == 2 else np.asarray([])
+                                if fv.size and sv.size and fv.shape[0] == sv.shape[0]:
+                                    mask = np.isfinite(fv) & np.isfinite(sv)
+                                    if np.sum(mask) > 2:
+                                        fv_m = fv[mask]
+                                        sv_m = sv[mask]
+                                        try:
+                                            q_low = np.nanpercentile(fv_m, 25)
+                                            q_high = np.nanpercentile(fv_m, 75)
+                                            top = sv_m[fv_m >= q_high]
+                                            bot = sv_m[fv_m <= q_low]
+                                            if top.size >= 5 and bot.size >= 5:
+                                                diff = float(np.nanmean(top) - np.nanmean(bot))
+                                                if np.isfinite(diff) and diff != 0.0:
+                                                    direction = float(np.sign(diff))
+                                        except Exception:
+                                            pass
+                                        # Fallback to Spearman if still undecided
+                                        if direction == 0.0:
+                                            fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
+                                            sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
+                                            corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
+                                            if not np.isfinite(corr):
+                                                corr = np.corrcoef(fv_m, sv_m)[0, 1]
+                                            if np.isfinite(corr) and corr != 0.0:
+                                                direction = float(np.sign(corr))
+                                if direction == 0.0 and signed_mean_val != 0.0:
+                                    direction = float(np.sign(signed_mean_val))
+                                if direction == 0.0 and mean_abs_val > 0.0:
+                                    direction = 1.0
+                                shap_details.append({
+                                    'index': idx,
+                                    'feature': fname,
+                                    'mean_abs': mean_abs_val,
+                                    'direction': direction,
+                                    'signed_mean': signed_mean_val,
+                                })
+                            shap_details_sorted = sorted(shap_details, key=lambda item: item['mean_abs'], reverse=True)
+                            shap_importance = [
+                                {'feature': item['feature'], 'score': item['mean_abs']}
+                                for item in shap_details_sorted
+                                if item['mean_abs'] > 0
+                            ]
+
                             try:
                                 from declaration.models import DataDictionary
                                 selected_features = []
-                                for fname, val in shap_items:
-                                    if val > 0:
-                                        desc = DataDictionary.get_description(file_id, fname) or ''
-                                        selected_features.append({'feature': fname, 'description': desc, 'impact': float(val)})
+                                for item in shap_details_sorted:
+                                    if item['mean_abs'] <= 0:
+                                        continue
+                                    desc = DataDictionary.get_description(file_id, item['feature']) or ''
+                                    selected_features.append({
+                                        'feature': item['feature'],
+                                        'description': desc,
+                                        'impact': item['mean_abs'],
+                                        'signed_impact': item['mean_abs'] * item['direction'],
+                                        'signed_mean': item['signed_mean'],
+                                    })
                             except Exception:
-                                selected_features = [{'feature': fname, 'description': '', 'impact': float(val)} for fname, val in shap_items if val > 0]
-                            # Generate beeswarm image (static) and prepare interactive payload (compact)
+                                selected_features = []
+                                for item in shap_details_sorted:
+                                    if item['mean_abs'] <= 0:
+                                        continue
+                                    selected_features.append({
+                                        'feature': item['feature'],
+                                        'description': '',
+                                        'impact': item['mean_abs'],
+                                        'signed_impact': item['mean_abs'] * item['direction'],
+                                        'signed_mean': item['signed_mean'],
+                                    })
+
                             try:
                                 import matplotlib
                                 matplotlib.use('Agg')
                                 import matplotlib.pyplot as plt
                                 import io, base64
-                                # Ensure 2D shap matrix (n_samples, n_features)
-                                shap_matrix = None
-                                if isinstance(shap_vals, list):
-                                    try:
-                                        # average across classes to get a single 2D matrix preserving sign
-                                        shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
-                                    except Exception:
-                                        shap_matrix = shap_vals[0]
-                                else:
-                                    shap_matrix = shap_vals
                                 # Draw beeswarm and save the current figure
                                 shap.summary_plot(shap_matrix, Xv, plot_type='dot', show=False, max_display=40)
                                 fig = plt.gcf()
@@ -351,12 +425,57 @@ class ModelingStartView(APIView):
                                             'psi': None,
                                             'csi': None
                                         })
+                                # Build beeswarm payload
                                 shap_beeswarm = {
                                     'features': features_ordered,
                                     'shap_values': shap_values_list,
                                     'feature_values': feature_values_list,
                                     'metadata': feature_metadata,
                                 }
+                                # Re-derive direction using the exact compact data used in the UI
+                                try:
+                                    direction_map = {}
+                                    for i in order_idx:
+                                        try:
+                                            fv = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce').to_numpy()
+                                        except Exception:
+                                            fv = Xv_compact.iloc[:, i].to_numpy()
+                                        sv = shap_matrix_compact[:, i]
+                                        mask = np.isfinite(fv) & np.isfinite(sv)
+                                        dir_val = 0.0
+                                        if np.sum(mask) > 2:
+                                            fv_m = fv[mask]
+                                            sv_m = sv[mask]
+                                            try:
+                                                ql = np.nanpercentile(fv_m, 25)
+                                                qh = np.nanpercentile(fv_m, 75)
+                                                top = sv_m[fv_m >= qh]
+                                                bot = sv_m[fv_m <= ql]
+                                                if top.size >= 5 and bot.size >= 5:
+                                                    d = float(np.nanmean(top) - np.nanmean(bot))
+                                                    if np.isfinite(d) and d != 0.0:
+                                                        dir_val = float(np.sign(d))
+                                            except Exception:
+                                                pass
+                                            if dir_val == 0.0:
+                                                fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
+                                                sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
+                                                corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
+                                                if not np.isfinite(corr):
+                                                    corr = np.corrcoef(fv_m, sv_m)[0, 1]
+                                                if np.isfinite(corr) and corr != 0.0:
+                                                    dir_val = float(np.sign(corr))
+                                        direction_map[feat_names[i]] = dir_val
+                                    # Override signed_impact in selected_features when available
+                                    try:
+                                        for row in selected_features:
+                                            fname = row.get('feature')
+                                            if fname in direction_map:
+                                                row['signed_impact'] = float(row.get('impact', 0.0)) * float(direction_map[fname])
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    pass
                             except Exception as e:
                                 try:
                                     print(f"[ModelingStart] SHAP interactive payload failed: {e}")

@@ -609,4 +609,20 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     const config = { responsive: true, displayModeBar: true } as any;
     try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
   }
+
+  public downloadBeeswarm(): void {
+    try {
+      const png = this.modelingStatus?.model?.beeswarm_png;
+      if (!png) return;
+      const link = document.createElement('a');
+      link.href = png;
+      const fileId = this.currentFileId != null ? this.currentFileId : 'beeswarm';
+      link.download = `shap_beeswarm_${fileId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.warn('downloadBeeswarm failed:', e);
+    }
+  }
 }
