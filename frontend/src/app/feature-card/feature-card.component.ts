@@ -105,6 +105,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   importanceShap: Array<{ feature: string; score: number }> = [];
   selectedImportanceType: 'shap' | 'gain' = 'shap';
   importanceLimit: number = 20;
+
+  // Explainability state
+  explainabilityData: any = null;
+  explainabilityLoading: boolean = false;
+  explainabilityError: string | null = null;
+  explainabilityFetched: boolean = false;  // Track if we've already fetched
+  
+  // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
+  currentTabIndex: number = 0;
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -120,6 +129,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         this.resizeDebounce = setTimeout(() => {
           this.createVisualization();
           this.drawQualityTimeseries();
+          this.drawExplainabilityPlots();
         }, 200);
       }
     };
@@ -393,6 +403,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     if (changed) {
       this.qualitySummary = null;
       this.initialQualitySummary = null;
+      // Reset explainability data so it reloads for new feature
+      this.explainabilityData = null;
+      this.explainabilityFetched = false;
+      this.explainabilityError = null;
+      
+      // If user is currently on Explainability tab, trigger fetch immediately
+      if (this.currentTabIndex === 3) {
+        this.fetchFeatureExplainability();
+      }
     }
     // Refresh timeseries for the newly selected variable
     // Reset metric lock so we can apply proper default per feature type
@@ -1469,5 +1488,394 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   private ensureNumber(value: any): number {
     const num = Number(value);
     return isNaN(num) ? 0 : num;
+  }
+
+  // Handle tab change to auto-load explainability
+  onTabChange(event: any): void {
+    const tabIndex = event.index;
+    this.currentTabIndex = tabIndex;  // Track current tab
+    
+    // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
+    if (tabIndex === 3 && !this.explainabilityFetched && !this.explainabilityLoading) {
+      this.fetchFeatureExplainability();
+    }
+  }
+
+  // ===== Explainability (SHAP beeswarm + Partial Dependence) =====
+  fetchFeatureExplainability(): void {
+    try {
+      if (!this.isBrowser) return;
+      if (!this.data.processedFile) {
+        this.explainabilityError = 'Processed file required. Please run preprocessing first.';
+        return;
+      }
+      const fid = Number(this.data.fileId);
+      if (!isFinite(fid)) {
+        this.explainabilityError = 'Invalid file id';
+        return;
+      }
+      this.explainabilityLoading = true;
+      this.explainabilityError = null;
+      this.explainabilityFetched = true;
+      
+      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500).subscribe({
+        next: (resp: any) => {
+          this.explainabilityData = resp;
+          setTimeout(() => this.drawExplainabilityPlots(), 0);
+        },
+        error: (err: any) => {
+          console.error('Fetch explainability failed:', err);
+          
+          // Check if this is a "feature not in model" case (expected, not an error)
+          const reason = err?.error?.reason;
+          const detail = err?.error?.detail;
+          
+          if (reason === 'feature_not_in_model') {
+            // This is expected - feature was not selected during modeling
+            this.explainabilityError = detail || err?.error?.error || 
+              `Feature "${this.selectedFeatureName}" was not selected during the modeling phase. Explainability analysis is only available for features used in the trained model.`;
+            this.explainabilityFetched = true;  // Don't allow retry - this is expected
+          } else {
+            // This is an actual error
+            this.explainabilityError = err?.error?.error || err?.message || 
+              'Failed to load explainability data. Please ensure a model has been trained.';
+            this.explainabilityFetched = false;  // Allow retry on actual error
+          }
+        },
+        complete: () => {
+          this.explainabilityLoading = false;
+        }
+      });
+    } catch (e) {
+      console.warn('fetchFeatureExplainability failed:', e);
+      this.explainabilityError = 'Failed to load explainability data';
+      this.explainabilityLoading = false;
+      this.explainabilityFetched = false;  // Allow retry on error
+    }
+  }
+
+  drawExplainabilityPlots(): void {
+    if (!this.isBrowser || !this.explainabilityData) return;
+    this.drawShapBeeswarmSingle();
+    this.drawPartialDependencePlot();
+  }
+
+  getShapStaticImage(): string | null {
+    try {
+      return this.explainabilityData?.partial_dependence?.shap_static_image || null;
+    } catch {
+      return null;
+    }
+  }
+
+  downloadShapPdpImage(): void {
+    try {
+      const imageData = this.getShapStaticImage();
+      if (!imageData) {
+        console.warn('No SHAP PDP image available to download');
+        return;
+      }
+
+      // Extract base64 data from data URI
+      const base64Data = imageData.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const featureName = this.explainabilityData?.feature_name || this.selectedFeatureName || 'feature';
+      link.href = url;
+      link.download = `shap_pdp_${featureName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download SHAP PDP image:', error);
+    }
+  }
+
+  private drawShapBeeswarmSingle(): void {
+    try {
+      if (!Plotly || !this.explainabilityData?.beeswarm) return;
+      const el = document.getElementById('explainability-beeswarm');
+      if (!el) return;
+
+      const beeswarm = this.explainabilityData.beeswarm;
+      const shapVals: number[] = beeswarm.shap_values || [];
+      const featValsRaw: any[] = beeswarm.feature_values_raw || [];
+      const featName = this.explainabilityData.feature_name || this.selectedFeatureName;
+
+      if (!shapVals.length) return;
+
+      // Filter valid points (check both SHAP values and feature values)
+      const isNull = featValsRaw.map((v: any, i: number) => {
+        const shapInvalid = shapVals[i] == null || (typeof shapVals[i] === 'number' && !Number.isFinite(shapVals[i]));
+        const featInvalid = v == null || (typeof v === 'number' && !Number.isFinite(v));
+        return shapInvalid || featInvalid;
+      });
+      const idxNonNull: number[] = [];
+      const idxNull: number[] = [];
+      for (let i = 0; i < shapVals.length; i++) {
+        (isNull[i] ? idxNull : idxNonNull).push(i);
+      }
+
+      // Compute color normalization (5th-95th percentile)
+      const nonNullVals = idxNonNull.map(i => Number(featValsRaw[i])).filter(v => Number.isFinite(v));
+      let vmin = 0, vmax = 1;
+      if (nonNullVals.length > 0) {
+        const sorted = nonNullVals.slice().sort((a, b) => a - b);
+        const q05idx = Math.floor(sorted.length * 0.05);
+        const q95idx = Math.floor(sorted.length * 0.95);
+        vmin = sorted[q05idx] || sorted[0];
+        vmax = sorted[q95idx] || sorted[sorted.length - 1];
+        if (vmin === vmax) { vmin = sorted[0]; vmax = sorted[sorted.length - 1]; }
+        if (vmin === vmax) { vmin = vmax - 1; }
+      }
+      const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
+
+      // Build traces
+      const traces: any[] = [];
+      const colorscale: any = [
+        [0.0, '#2166ac'],  // blue (low)
+        [0.5, '#f7f7f7'],  // white (mid)
+        [1.0, '#b2182b']   // red (high)
+      ];
+
+      // Non-null points
+      if (idxNonNull.length > 0) {
+        const xVals = idxNonNull.map(i => shapVals[i]);
+        const yVals = idxNonNull.map(() => Math.random() * 0.4 - 0.2); // jitter
+        const colors = idxNonNull.map(i => {
+          const v = Number(featValsRaw[i]);
+          const u = (v - vmin) / denom;
+          return u < 0 ? 0 : (u > 1 ? 1 : u);
+        });
+        traces.push({
+          type: 'scatter',
+          mode: 'markers',
+          x: xVals,
+          y: yVals,
+          customdata: idxNonNull.map(i => featValsRaw[i]),
+          marker: {
+            color: colors,
+            colorscale: colorscale,
+            cmin: 0,
+            cmax: 1,
+            showscale: true,
+            colorbar: { title: { text: 'Feature value' }, thickness: 14, tickmode: 'array', tickvals: [0, 1], ticktext: ['Low', 'High'] },
+            size: 8,
+            opacity: 0.85
+          },
+          hovertemplate: `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
+          showlegend: false
+        });
+      }
+
+      // Null points (grey X markers)
+      if (idxNull.length > 0) {
+        const xVals = idxNull.map(i => shapVals[i]);
+        const yVals = idxNull.map(() => Math.random() * 0.4 - 0.2);
+        traces.push({
+          type: 'scatter',
+          mode: 'markers',
+          x: xVals,
+          y: yVals,
+          marker: { color: 'rgba(130,130,130,0.9)', size: 8, symbol: 'x', line: { width: 0.5, color: 'rgba(80,80,80,0.9)' } },
+          hovertemplate: `${featName}<br>SHAP=%{x:.4f}<br>Value=null<extra></extra>`,
+          showlegend: false
+        });
+      }
+
+      const layout = {
+        title: { text: `SHAP values for ${featName}`, font: { size: 14 } },
+        margin: { l: 60, r: 48, t: 40, b: 50 },
+        xaxis: { title: { text: 'SHAP value (impact on model output)' }, zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
+        yaxis: { showticklabels: false, zeroline: false, range: [-0.3, 0.3] },
+        hovermode: 'closest',
+        showlegend: false,
+        shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.3, y1: 0.3, line: { color: '#888', width: 1 } }]
+      } as any;
+      const config = { responsive: true, displayModeBar: true } as any;
+      try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+    } catch (e) {
+      console.warn('drawShapBeeswarmSingle failed:', e);
+    }
+  }
+
+  private drawPartialDependencePlot(): void {
+    try {
+      if (!Plotly || !this.explainabilityData?.partial_dependence) return;
+      const el = document.getElementById('explainability-pdp');
+      if (!el) return;
+
+      const pdp = this.explainabilityData.partial_dependence;
+      // Filter out null/undefined values from arrays (backend may send null for NaN/Inf values)
+      const grid: number[] = (pdp.grid || []).filter((v: any) => v != null && isFinite(v));
+      const pdpMean: number[] = (pdp.pdp_mean || []).filter((v: any) => v != null && isFinite(v));
+      const iceCurves: number[][] = (pdp.ice_curves || [])
+        .map((curve: any[]) => curve.filter((v: any) => v != null && isFinite(v)))
+        .filter((curve: any[]) => curve.length > 0);
+      const baseValue: number = (pdp.base_value != null && isFinite(pdp.base_value)) ? pdp.base_value : 0;
+      const expectedFeatureValue: number = (pdp.expected_feature_value != null && isFinite(pdp.expected_feature_value)) 
+        ? pdp.expected_feature_value 
+        : grid[Math.floor(grid.length / 2)] || 0;
+      const histogram = pdp.histogram || { centers: [], counts: [] };
+      // Filter histogram data
+      if (histogram.centers && histogram.counts) {
+        const validIndices: number[] = [];
+        histogram.centers.forEach((v: any, i: number) => {
+          if (v != null && isFinite(v) && histogram.counts[i] != null) {
+            validIndices.push(i);
+          }
+        });
+        histogram.centers = validIndices.map(i => histogram.centers[i]);
+        histogram.counts = validIndices.map(i => histogram.counts[i]);
+      }
+      const featName = this.explainabilityData.feature_name || this.selectedFeatureName;
+
+      if (!grid.length || !pdpMean.length) return;
+
+      const traces: any[] = [];
+      
+      // Add histogram as background (if available)
+      if (histogram.centers && histogram.centers.length > 0 && histogram.counts && histogram.counts.length > 0) {
+        // Normalize histogram counts for better visualization
+        const maxCount = Math.max(...histogram.counts);
+        const normalizedCounts = histogram.counts.map((c: number) => c / maxCount);
+        
+        traces.push({
+          type: 'bar',
+          x: histogram.centers,
+          y: normalizedCounts,
+          marker: { color: 'rgba(200, 200, 200, 0.3)' },
+          name: 'Distribution',
+          yaxis: 'y2',
+          hoverinfo: 'skip',
+          showlegend: false
+        });
+      }
+
+      // Compute y-axis range based on PDP mean (not ICE curves) for better visibility
+      // This matches the SHAP static plot's focused range
+      const pdpVals = [...pdpMean, baseValue];
+      const yMin = Math.min(...pdpVals);
+      const yMax = Math.max(...pdpVals);
+      const yPadding = (yMax - yMin) * 0.15 || 0.3;
+      const yRangeMin = yMin - yPadding;
+      const yRangeMax = yMax + yPadding;
+
+      // Filter ICE curves to only show those within visible range (avoid extreme outliers)
+      const filteredIceCurves = iceCurves.filter(curve => {
+        const curveMin = Math.min(...curve);
+        const curveMax = Math.max(...curve);
+        // Keep ICE curves that have at least some overlap with visible range
+        return curveMax >= yRangeMin && curveMin <= yRangeMax;
+      });
+
+      // ICE curves (individual conditional expectation) - very light grey, clipped to visible range
+      if (filteredIceCurves.length > 0) {
+        filteredIceCurves.forEach((curve, idx) => {
+          traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            x: grid,
+            y: curve,
+            line: { color: 'rgba(150,150,150,0.1)', width: 0.8 },
+            name: idx === 0 ? 'ICE curves' : undefined,
+            hoverinfo: 'skip',
+            showlegend: idx === 0
+          });
+        });
+      }
+
+      // PDP mean (average effect) - thick blue line
+      traces.push({
+        type: 'scatter',
+        mode: 'lines',
+        x: grid,
+        y: pdpMean,
+        line: { color: '#1f77b4', width: 3 },
+        name: 'PDP (mean)',
+        hovertemplate: `${featName}=%{x:.4f}<br>E[f(X) | ${featName}]=%{y:.4f}<extra></extra>`
+      });
+
+      const layout = {
+        title: { text: `Partial Dependence Plot for ${featName}`, font: { size: 14 } },
+        margin: { l: 70, r: 48, t: 40, b: 80 },
+        xaxis: { title: { text: featName, font: { size: 13 } } },
+        yaxis: { 
+          title: { text: `E[f(X) | ${featName}]`, font: { size: 13 } }, 
+          range: [yRangeMin, yRangeMax],
+          side: 'left'
+        },
+        yaxis2: {
+          overlaying: 'y',
+          side: 'right',
+          showticklabels: false,
+          showgrid: false,
+          range: [0, 1.2]
+        },
+        hovermode: 'closest',
+        legend: { orientation: 'h', x: 0, y: -0.15, xanchor: 'left', yanchor: 'top', font: { size: 11 } },
+        barmode: 'overlay',
+        shapes: [
+          {
+            type: 'line',
+            x0: grid[0],
+            x1: grid[grid.length - 1],
+            y0: baseValue,
+            y1: baseValue,
+            line: { color: '#888', width: 1.5, dash: 'dash' },
+            name: 'E[f(X)]'
+          },
+          {
+            type: 'line',
+            x0: expectedFeatureValue,
+            x1: expectedFeatureValue,
+            y0: yRangeMin,
+            y1: yRangeMax,
+            line: { color: '#888', width: 1.5, dash: 'dash' },
+            name: `E[${featName}]`
+          }
+        ],
+        annotations: [
+          {
+            x: grid[Math.floor(grid.length * 0.02)],
+            y: baseValue,
+            xanchor: 'left',
+            yanchor: 'bottom',
+            text: `E[f(X)]`,
+            showarrow: false,
+            font: { size: 10, color: '#555' },
+            bgcolor: 'rgba(255,255,255,0.8)',
+            borderpad: 2
+          },
+          {
+            x: expectedFeatureValue,
+            y: yRangeMax - (yRangeMax - yRangeMin) * 0.05,
+            xanchor: 'center',
+            yanchor: 'top',
+            text: `E[${featName}]`,
+            showarrow: false,
+            font: { size: 10, color: '#555' },
+            bgcolor: 'rgba(255,255,255,0.8)',
+            borderpad: 2
+          }
+        ]
+      } as any;
+      const config = { responsive: true, displayModeBar: true } as any;
+      try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+    } catch (e) {
+      console.warn('drawPartialDependencePlot failed:', e);
+    }
   }
 }

@@ -736,3 +736,293 @@ class ModelingStatusView(APIView):
             return Response(payload, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'status': 'error', 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class FeatureExplainabilityView(APIView):
+    """Returns SHAP explainability data for a single feature: beeswarm and partial dependence.
+    
+    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number }
+    """
+
+    def post(self, request, *args, **kwargs):
+        file_id = request.data.get('file_id')
+        feature_name = request.data.get('feature_name')
+        processed_file = request.data.get('processed_file')
+        n_samples = request.data.get('n_samples', 500)
+
+        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}")
+
+        if file_id is None:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not feature_name:
+            return Response({'error': 'feature_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Load model
+            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+            model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
+            if not os.path.exists(model_path):
+                return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
+            
+            booster = xgb.Booster()
+            booster.load_model(model_path)
+
+            # Load processed data
+            if processed_file:
+                full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+            else:
+                # Try to find from status
+                modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
+                status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
+                if os.path.exists(status_path):
+                    with open(status_path, 'r', encoding='utf-8') as f:
+                        status_data = json.load(f)
+                    processed_file = status_data.get('processed_file')
+                    if processed_file:
+                        full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+                    else:
+                        return Response({'error': 'processed_file not found in modeling status'}, status=status.HTTP_404_NOT_FOUND)
+                else:
+                    return Response({'error': 'processed_file required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not os.path.exists(full_path):
+                return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Load data
+            df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+            
+            # Heuristically choose target
+            target_col = None
+            for candidate in ['Target', 'target', 'label', 'Label', 'y']:
+                if candidate in df.columns:
+                    target_col = candidate
+                    break
+            if target_col is None and len(df.columns) >= 2:
+                target_col = df.columns[-1]
+            
+            if target_col is None or target_col not in df.columns:
+                return Response({'error': 'Target column not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+            y = df[target_col]
+            X_raw = df.drop(columns=[target_col])
+            X_raw = X_raw.select_dtypes(include=['number']).copy()
+            X_raw = X_raw.dropna(axis=1, how='all')
+            X = X_raw.fillna(X_raw.mean(numeric_only=True))
+
+            # Check if feature was used in the trained model FIRST (before checking data)
+            # This ensures we give the correct message for features excluded during modeling
+            model_features = booster.feature_names
+            print(f"[FeatureExplainability] Model has {len(model_features) if model_features else 0} features")
+            print(f"[FeatureExplainability] Feature '{feature_name}' in model: {feature_name in model_features if model_features else 'N/A'}")
+            if model_features:
+                print(f"[FeatureExplainability] Model features: {model_features[:10]}")  # First 10
+            
+            if model_features and feature_name not in model_features:
+                print(f"[FeatureExplainability] Feature '{feature_name}' NOT in model - returning feature_not_in_model response")
+                return Response({
+                    'error': f'Feature "{feature_name}" was not selected during the modeling phase.',
+                    'reason': 'feature_not_in_model',
+                    'detail': 'This feature was excluded from the model, likely due to zero or very low predictive impact. Explainability analysis is only available for features used in the trained model.'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Only check if feature exists in data if it's in the model
+            # (If it's in the model but not in current data, that's a real error)
+            if feature_name not in X.columns:
+                return Response({
+                    'error': f'Feature {feature_name} not found in processed data',
+                    'reason': 'feature_not_in_data',
+                    'detail': 'This feature is in the model but not available in the current processed dataset. Please ensure preprocessing was completed correctly.'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Sample for performance
+            if X.shape[0] > n_samples:
+                sample_idx = X.sample(n_samples, random_state=42).index
+                X_sampled = X.loc[sample_idx]
+                X_raw_sampled = X_raw.loc[sample_idx]
+            else:
+                X_sampled = X
+                X_raw_sampled = X_raw
+
+            # Compute SHAP values
+            feature_names = list(map(str, X.columns.tolist()))
+            dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
+            shap_vals = explainer.shap_values(X_sampled)
+            if isinstance(shap_vals, list):
+                try:
+                    shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
+                except Exception:
+                    shap_matrix = shap_vals[0]
+            else:
+                shap_matrix = shap_vals
+
+            # Get feature index
+            feat_idx = list(X.columns).index(feature_name)
+            
+            # Beeswarm data for this feature
+            shap_values_feature = shap_matrix[:, feat_idx].tolist()
+            feature_values_raw = X_raw_sampled[feature_name].tolist()
+            feature_values_filled = X_sampled[feature_name].tolist()
+
+            # Partial dependence plot (SHAP-aligned: use raw output margin)
+            # Compute base value (expected value of model output on the dataset)
+            dmatrix_base = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            base_preds = booster.predict(dmatrix_base, output_margin=True)
+            base_value = float(np.mean(base_preds))
+            
+            # Create a grid of values for this feature
+            # Use 0.5th-99.5th percentile to capture more distribution (not cut off important regions)
+            feat_vals = X_sampled[feature_name].values
+            feat_vals_clean = feat_vals[~np.isnan(feat_vals)]
+            
+            if len(feat_vals_clean) > 0:
+                feat_min, feat_max = np.percentile(feat_vals_clean, [0.5, 99.5])
+            else:
+                feat_min, feat_max = 0, 1
+                
+            if feat_min == feat_max:
+                feat_min = np.nanmin(feat_vals)
+                feat_max = np.nanmax(feat_vals)
+            if feat_min == feat_max:
+                feat_min -= 1
+                feat_max += 1
+            
+            grid_size = 50
+            grid = np.linspace(feat_min, feat_max, grid_size)
+            
+            # Create histogram for feature distribution (for background visualization)
+            hist_bins = 30
+            hist_counts, hist_edges = np.histogram(feat_vals_clean, bins=hist_bins, range=(feat_min, feat_max))
+            hist_centers = (hist_edges[:-1] + hist_edges[1:]) / 2
+            
+            # For each grid point, set feature to that value and predict (using raw margin output)
+            X_pd = X_sampled.copy()
+            ice_curves = []
+            pdp_mean = []
+            
+            for grid_val in grid:
+                X_pd[feature_name] = grid_val
+                dmatrix_pd = xgb.DMatrix(X_pd, feature_names=feature_names)
+                # Use output_margin=True to get raw predictions (before sigmoid)
+                # This aligns with SHAP values which are in logit space
+                preds_margin = booster.predict(dmatrix_pd, output_margin=True)
+                
+                ice_curves.append(preds_margin.tolist())
+                pdp_mean.append(float(np.mean(preds_margin)))
+            
+            # Transpose ice_curves for easier consumption (each row is one sample's curve)
+            ice_curves_transposed = np.array(ice_curves).T.tolist()
+
+            # Generate static SHAP partial dependence plot
+            shap_pdp_image_base64 = None
+            try:
+                import matplotlib
+                matplotlib.use('Agg')  # Non-interactive backend
+                import matplotlib.pyplot as plt
+                import io
+                import base64
+                
+                # Create wrapper function for model prediction that SHAP expects
+                def model_predict(data_array):
+                    """Wrapper for XGBoost predict that returns raw margin output"""
+                    if isinstance(data_array, np.ndarray):
+                        # Convert to DataFrame with proper column names
+                        data_df = pd.DataFrame(data_array, columns=feature_names)
+                    else:
+                        data_df = data_array
+                    dmat = xgb.DMatrix(data_df, feature_names=feature_names)
+                    return booster.predict(dmat, output_margin=True)
+                
+                # Create figure for SHAP's partial_dependence_plot
+                fig, ax = plt.subplots(figsize=(8, 5))
+                
+                # Use SHAP's built-in partial_dependence_plot
+                # Note: We'll show the PDP without the red SHAP overlay line to avoid compatibility issues
+                # The main purpose is to show the official SHAP PDP curve for comparison
+                shap.partial_dependence_plot(
+                    feature_name,
+                    model_predict,
+                    X_sampled,
+                    model_expected_value=True,
+                    feature_expected_value=True,
+                    show=False,
+                    ice=False,
+                    ax=ax
+                )
+                
+                plt.tight_layout()
+                
+                # Save to base64
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+                shap_pdp_image_base64 = f'data:image/png;base64,{img_base64}'
+                plt.close(fig)
+                buf.close()
+            except Exception as plot_err:
+                print(f"[FeatureExplainability] SHAP PDP plot generation failed: {plot_err}")
+                import traceback
+                traceback.print_exc()
+
+            # Compute expected feature value (mean of feature)
+            expected_feature_value = float(np.nanmean(X_sampled[feature_name].values))
+            
+            # Clean up NaN values for JSON serialization
+            # Replace NaN with None in lists (JSON null)
+            def clean_for_json(value):
+                """Convert NaN/Inf to None for JSON compliance"""
+                if isinstance(value, (list, np.ndarray)):
+                    return [clean_for_json(v) for v in value]
+                elif isinstance(value, float):
+                    if np.isnan(value) or np.isinf(value):
+                        return None
+                    return value
+                return value
+            
+            # Clean all data structures
+            grid_clean = clean_for_json(grid.tolist())
+            pdp_mean_clean = clean_for_json(pdp_mean)
+            ice_curves_clean = clean_for_json(ice_curves_transposed[:100])
+            hist_centers_clean = clean_for_json(hist_centers.tolist())
+            hist_counts_clean = hist_counts.tolist()  # counts are integers, should be safe
+            
+            # Clean beeswarm data as well
+            shap_values_clean = clean_for_json(shap_values_feature)
+            feature_values_raw_clean = clean_for_json(feature_values_raw)
+            feature_values_filled_clean = clean_for_json(feature_values_filled)
+            
+            # Handle expected_feature_value and base_value separately
+            if np.isnan(expected_feature_value) or np.isinf(expected_feature_value):
+                expected_feature_value = None
+            if np.isnan(base_value) or np.isinf(base_value):
+                base_value = 0.0  # Default to 0 if base value is invalid
+            
+            result = {
+                'feature_name': feature_name,
+                'beeswarm': {
+                    'shap_values': shap_values_clean,
+                    'feature_values_raw': feature_values_raw_clean,
+                    'feature_values_filled': feature_values_filled_clean,
+                },
+                'partial_dependence': {
+                    'grid': grid_clean,
+                    'pdp_mean': pdp_mean_clean,
+                    'ice_curves': ice_curves_clean,  # Limit to 100 curves for performance
+                    'base_value': base_value,  # Expected model output (E[f(x)])
+                    'expected_feature_value': expected_feature_value,  # E[feature]
+                    'histogram': {
+                        'centers': hist_centers_clean,
+                        'counts': hist_counts_clean
+                    },
+                    'shap_static_image': shap_pdp_image_base64  # Static SHAP PDP for comparison
+                }
+            }
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

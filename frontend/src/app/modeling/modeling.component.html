@@ -94,7 +94,9 @@
             </thead>
             <tbody>
               <tr *ngFor="let f of modelingStatus.model.selected_features">
-                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">{{ f.feature }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">
+                  <a href="javascript:void(0)" (click)="openFeatureCard(f.feature)" style="color: #1976d2; text-decoration: underline; cursor: pointer;">{{ f.feature }}</a>
+                </td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ f.description || '—' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.signed_impact | number:'1.6-6' }}</td>

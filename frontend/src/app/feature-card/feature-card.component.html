@@ -15,7 +15,7 @@
 
   <mat-dialog-content *ngIf="featureData">
   
-    <mat-tab-group>
+    <mat-tab-group (selectedTabChange)="onTabChange($event)">
       <mat-tab label="Descriptives">
         <ng-container *ngIf="featureData">
           <p style="font-size: 14px"><br><strong>Descriptive Statistics</strong></p>
@@ -167,7 +167,73 @@
       </mat-tab>
       
       <mat-tab label="Explainability">
-        <p>Explainability information will be displayed here.</p>
+        <div style="margin-top: 16px;">
+          <div *ngIf="explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
+            <mat-spinner diameter="24"></mat-spinner>
+            <span style="font-size:12px; color:#555;">Loading explainability data…</span>
+          </div>
+          
+          <div *ngIf="explainabilityError && explainabilityFetched" style="margin-bottom: 16px;">
+            <!-- Info message for features not in model (expected behavior) -->
+            <div style="padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+              <p style="font-size: 13px; color: #1565c0; margin: 0; margin-bottom: 8px;">
+                <strong>ℹ Feature Not Included in Model</strong>
+              </p>
+              <p style="font-size: 12px; color: #1976d2; margin: 0; line-height: 1.5;">
+                {{ explainabilityError }}
+              </p>
+              <p style="font-size: 11px; color: #1976d2; margin: 8px 0 0 0; font-style: italic;">
+                💡 Tip: Only features with measurable predictive impact are included in the model. You can view feature importance in the "Importance" tab to see which features were selected.
+              </p>
+            </div>
+          </div>
+          
+          <div *ngIf="explainabilityError && !explainabilityFetched" style="margin-bottom: 16px;">
+            <!-- Error message for actual errors (allow retry) -->
+            <div style="padding: 12px; border-radius: 4px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
+              <p style="font-size: 13px; color: #856404; margin: 0; margin-bottom: 8px;">
+                <strong>⚠ Error Loading Explainability Data</strong>
+              </p>
+              <p style="font-size: 12px; color: #856404; margin: 0;">
+                {{ explainabilityError }}
+              </p>
+              <button mat-stroked-button color="primary" (click)="fetchFeatureExplainability()" 
+                      style="margin-top: 10px; font-size: 11px;">
+                Retry
+              </button>
+            </div>
+          </div>
+          
+          <div *ngIf="!explainabilityLoading && !explainabilityError && !explainabilityData && !explainabilityFetched" 
+               style="padding: 12px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3; margin-bottom: 16px;">
+            <p style="font-size: 12px; color: #1976d2; margin: 0;">
+              <strong>ℹ Info:</strong> Explainability data will load automatically when you visit this tab, or you can click below to load now.
+            </p>
+            <button mat-stroked-button color="primary" (click)="fetchFeatureExplainability()" style="margin-top: 10px; font-size: 11px;">
+              Load Explainability Data
+            </button>
+          </div>
+
+          <div *ngIf="explainabilityData">
+            <p style="font-size: 14px; margin-top: 8px;"><strong>SHAP Beeswarm (Single Feature)</strong></p>
+            <p style="font-size: 12px; color:#666; margin-bottom: 8px;">Each point represents a sample. Color indicates feature value (blue=low, red=high). Position on x-axis shows SHAP impact on model output.</p>
+            <div id="explainability-beeswarm" style="width:100%; height: 360px;"></div>
+
+            <p style="font-size: 14px; margin-top: 24px;"><strong>Partial Dependence Plot (PDP) - Interactive</strong></p>
+            <p style="font-size: 12px; color:#666; margin-bottom: 8px;">Shows the expected model output E[f(X) | feature] as feature varies. Grey dashed lines are reference lines E[f(X)] and E[feature]. Light grey bars show feature distribution. ICE curves (individual samples) shown transparently; blue line is the PDP (average). Y-axis is in logit space for binary classification.</p>
+            <div id="explainability-pdp" style="width:100%; height: 420px;"></div>
+
+            <div *ngIf="getShapStaticImage()" style="margin-top: 16px; display: flex; justify-content: flex-start;">
+              <button mat-stroked-button color="primary" (click)="downloadShapPdpImage()" style="font-size: 12px;">
+                <mat-icon style="font-size: 18px; height: 18px; width: 18px; margin-right: 4px;">download</mat-icon>
+                Download SHAP Reference PDP
+              </button>
+              <span style="font-size: 11px; color:#666; margin-left: 12px; align-self: center;">
+                (Static plot from SHAP library for comparison)
+              </span>
+            </div>
+          </div>
+        </div>
       </mat-tab>
     
     </mat-tab-group>

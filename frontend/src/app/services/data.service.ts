@@ -127,6 +127,20 @@ export class DataService {
       })
     );
   }
+
+  // Get feature explainability data (SHAP beeswarm + partial dependence)
+  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number): Observable<any> {
+    const payload: any = { file_id: fileId, feature_name: featureName };
+    if (processedFile) payload.processed_file = processedFile;
+    if (nSamples) payload.n_samples = nSamples;
+    return this.http.post(`${this.apiUrl}modeling/feature-explainability/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error getting feature explainability:', error);
+        // Preserve the full error structure so components can access error.error.reason, etc.
+        return throwError(() => error);
+      })
+    );
+  }
   
   private handleError(error: HttpErrorResponse) {
     console.error('An error occurred:', error);

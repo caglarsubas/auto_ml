@@ -6,6 +6,8 @@ import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
 import { finalize } from 'rxjs/operators';
 import { Subscription, interval } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { FeatureCardComponent } from '../feature-card/feature-card.component';
 
 interface PurifierOption { id: number; name: string; }
 
@@ -33,6 +35,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   selectedPipeline: string = '';
   availableAlgorithms: string[] = [];
   selectedAlgorithm: string | null = null;
+
+  // Data quality summary and date columns for feature-card
+  datqSummary: any[] | null = null;
+  dateColumns: string[] = [];
+  splitDateColumn: string | null = null;
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -68,7 +75,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]' },
   ];
 
-  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef) {
+  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef, private dialog: MatDialog) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 
@@ -91,6 +98,22 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.tableColumns = Object.keys(head[0]);
       } else {
         this.tableColumns = [];
+      }
+      // Extract data quality summary
+      if (result && Array.isArray(result.datq_summary)) {
+        this.datqSummary = result.datq_summary;
+      } else {
+        this.datqSummary = null;
+      }
+      // Detect date columns from table columns (common date/datetime patterns)
+      if (this.tableColumns.length > 0) {
+        this.dateColumns = this.tableColumns.filter(col => {
+          const lower = col.toLowerCase();
+          return lower.includes('date') || lower.includes('time') || lower.includes('dt_') || 
+                 lower.includes('timestamp') || lower === 'month' || lower === 'year';
+        });
+        // Set first date column as default split date column
+        this.splitDateColumn = this.dateColumns.length > 0 ? this.dateColumns[0] : null;
       }
     });
 
@@ -623,6 +646,80 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       document.body.removeChild(link);
     } catch (e) {
       console.warn('downloadBeeswarm failed:', e);
+    }
+  }
+
+  public openFeatureCard(featureName: string): void {
+    try {
+      if (!featureName || this.currentFileId == null) return;
+      const fileId = String(this.currentFileId);
+      const processedFile = this.processedFilePath || undefined;
+      const dateColumn = this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
+      
+      // Fetch data dictionary to get descriptions and other metadata
+      this.dataService.getDataDictionary(fileId).subscribe({
+        next: (dict: any[]) => {
+          const features = Array.isArray(dict)
+            ? dict.map(item => ({
+                Feature_Name: String(item?.Feature_Name || ''),
+                Feature_Description: String(item?.Feature_Description || 'No description available')
+              })).filter(x => !!x.Feature_Name)
+            : [{ Feature_Name: featureName, Feature_Description: 'No description available' }];
+          
+          // Find complete quality summary from datqSummary (full row with all metrics)
+          let qualitySummary: any = null;
+          if (this.datqSummary && Array.isArray(this.datqSummary)) {
+            const row = this.datqSummary.find(r => 
+              String(r['Variable'] || r['variable'] || r['index']) === String(featureName)
+            );
+            qualitySummary = row ? { ...row } : null;
+          }
+          
+          // If not found in datqSummary, try to build from selected_features (partial data)
+          if (!qualitySummary) {
+            const selectedFeature = this.modelingStatus?.model?.selected_features?.find(
+              (f: any) => f.feature === featureName
+            );
+            if (selectedFeature) {
+              qualitySummary = {
+                Variable: featureName,
+                impact: selectedFeature.impact,
+                signed_impact: selectedFeature.signed_impact,
+                psi: selectedFeature.psi,
+                csi: selectedFeature.csi
+              };
+            }
+          }
+          
+          this.dialog.open(FeatureCardComponent, {
+            width: '900px',
+            data: {
+              fileId: fileId,
+              columnName: featureName,
+              features: features,
+              processedFile: processedFile,
+              dateColumn: dateColumn,
+              qualitySummary: qualitySummary || undefined
+            }
+          });
+        },
+        error: (err) => {
+          console.warn('Failed to fetch data dictionary, opening with minimal data:', err);
+          // Fallback: open with minimal data
+          this.dialog.open(FeatureCardComponent, {
+            width: '900px',
+            data: {
+              fileId: fileId,
+              columnName: featureName,
+              features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
+              processedFile: processedFile,
+              dateColumn: dateColumn
+            }
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('openFeatureCard failed:', e);
     }
   }
 }

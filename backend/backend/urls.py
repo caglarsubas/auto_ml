@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView
-from modeling.views import ModelingStartView, ModelingStatusView
+from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/preprocessing/datq_timeseries/', PreprocessingDatqTimeseriesView.as_view(), name='preprocessing-datq-timeseries'),
     path('api/modeling/start/', ModelingStartView.as_view(), name='modeling-start'),
     path('api/modeling/status/<int:file_id>/', ModelingStatusView.as_view(), name='modeling-status'),
+    path('api/modeling/feature-explainability/', FeatureExplainabilityView.as_view(), name='feature-explainability'),
 ]
 
 if settings.DEBUG:
