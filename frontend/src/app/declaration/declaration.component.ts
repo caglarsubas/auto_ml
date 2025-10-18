@@ -41,6 +41,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   splitDateColumn: string | null = null;
   splitCutoff: string = '';
 
+  // Model_Usage tracking for Data Dictionary
+  variableModelUsage: { [featureName: string]: string } = {};
+  private readonly modelUsageKey = 'dict_model_usage_v1';
+
   constructor(
     private http: HttpClient,
     private dialog: MatDialog,
@@ -59,6 +63,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.preprocessingInitiated = preprocessingInitiated;
       })
     );
+    // Load saved model usage settings
+    this.loadModelUsage();
   }
 
   ngOnDestroy() {
@@ -217,6 +223,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       .subscribe(
         (data: any) => {
           this.dataDictionary = data;
+          // Initialize Model_Usage with backend's predetermined values (unless user has overridden)
+          this.initializeModelUsageFromBackend(data);
         },
         error => console.error('Error generating data dictionary:', error)
       );
@@ -243,7 +251,101 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   }
 
   goToPreprocessing(): void {
+    // Push current Model_Usage settings to SharedService before proceeding
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.sharedService.setPreprocessingInitiated(true);
+  }
+
+  // Get model usage for a feature
+  getModelUsage(featureName: string): string {
+    // Check if user has set a value (either from localStorage or manual selection)
+    if (this.variableModelUsage[featureName] !== undefined) {
+      return this.variableModelUsage[featureName];
+    }
+    // Fall back to backend's predetermined value from data dictionary
+    const feature = this.dataDictionary.find(f => f.Feature_Name === featureName);
+    if (feature && feature.Model_Usage_YN) {
+      return feature.Model_Usage_YN;
+    }
+    // Default to 'Yes' if no backend value
+    return 'Yes';
+  }
+
+  // Set model usage for a feature
+  setModelUsage(featureName: string, value: string): void {
+    this.variableModelUsage[featureName] = value;
+    this.saveModelUsage();
+  }
+
+  // Save model usage to localStorage
+  private saveModelUsage(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(this.modelUsageKey, JSON.stringify(this.variableModelUsage));
+    } catch {}
+  }
+
+  // Load model usage from localStorage
+  private loadModelUsage(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const saved = localStorage.getItem(this.modelUsageKey);
+      if (saved) {
+        this.variableModelUsage = JSON.parse(saved);
+      }
+    } catch {}
+  }
+
+  // Clear all model usage settings
+  clearAllModelUsage(): void {
+    this.variableModelUsage = {};
+    this.saveModelUsage();
+  }
+
+  // Initialize Model_Usage from backend's predetermined values
+  private initializeModelUsageFromBackend(dataDictionary: any[]): void {
+    if (!Array.isArray(dataDictionary)) return;
+    
+    // For each feature in the data dictionary
+    dataDictionary.forEach(feature => {
+      const featureName = feature.Feature_Name;
+      const backendValue = feature.Model_Usage_YN;
+      
+      // Only initialize if:
+      // 1. Feature has a backend value
+      // 2. User hasn't already set a value (localStorage override)
+      if (featureName && backendValue && this.variableModelUsage[featureName] === undefined) {
+        this.variableModelUsage[featureName] = backendValue;
+      }
+    });
+    
+    // Save the initialized values (merging with any existing user overrides)
+    this.saveModelUsage();
+  }
+
+  // Get list of features marked as 'No' (excluded from model)
+  getExcludedFeatures(): string[] {
+    // Include both user-set values and backend-determined values
+    const excluded: string[] = [];
+    
+    // Add user-set 'No' values
+    Object.keys(this.variableModelUsage).forEach(f => {
+      if (this.variableModelUsage[f] === 'No') {
+        excluded.push(f);
+      }
+    });
+    
+    // Add backend-determined 'No' values that user hasn't overridden
+    this.dataDictionary.forEach(feature => {
+      const featureName = feature.Feature_Name;
+      if (feature.Model_Usage_YN === 'No' && 
+          this.variableModelUsage[featureName] === undefined &&
+          !excluded.includes(featureName)) {
+        excluded.push(featureName);
+      }
+    });
+    
+    return excluded;
   }
   
 }

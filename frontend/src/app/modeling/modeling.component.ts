@@ -41,6 +41,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   dateColumns: string[] = [];
   splitDateColumn: string | null = null;
 
+  // Model_Usage settings (variables to exclude from modeling)
+  variableModelUsage: { [variable: string]: string } = {};
+
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
     { id: 1, name: 'Column-wise duplicate drop' },
@@ -140,6 +143,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.selectedAlgorithm = null;
       }
     });
+
+    // Subscribe to Model_Usage settings from Data Quality
+    this.sharedService.modelUsageSettings$.subscribe((settings) => {
+      if (settings) {
+        this.variableModelUsage = settings;
+        console.log('[Modeling] Received Model_Usage settings:', settings);
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -179,9 +190,15 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       console.error('Please select an algorithm before starting modeling');
       return;
     }
+    // Get list of variables to exclude (Model_Usage='No')
+    const excludedVariables = Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
+    if (excludedVariables.length > 0) {
+      console.log(`[Modeling] Excluding ${excludedVariables.length} variables with Model_Usage='No':`, excludedVariables);
+    }
+
     this.isStarting = true;
     this.chartsDrawn = false;
-    this.dataService.startModeling(this.currentFileId, this.processedFilePath, this.selectedAlgorithm || undefined).pipe(
+    this.dataService.startModeling(this.currentFileId, this.processedFilePath, this.selectedAlgorithm || undefined, excludedVariables).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
       next: (resp) => {

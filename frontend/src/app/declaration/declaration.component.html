@@ -73,6 +73,14 @@
 
     <div *ngIf="dataDictionary.length > 0" class="data-dictionary-container">
       <h3>Data Dictionary</h3>
+      <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+        <span style="color:#666;">Total features: {{ dataDictionary.length }}</span>
+        <span style="color:#d32f2f; font-weight: 500;" *ngIf="getExcludedFeatures().length > 0">
+          Excluded from model: {{ getExcludedFeatures().length }}
+        </span>
+        <span style="flex:1 1 auto;"></span>
+        <button mat-stroked-button color="warn" (click)="clearAllModelUsage()" *ngIf="getExcludedFeatures().length > 0">Clear All Exclusions</button>
+      </div>
       <div class="table-container">
         <table class="data-dictionary-table">
           <thead>
@@ -97,7 +105,14 @@
               <td>{{item.Level_of_Measurement}}</td>
               <td>{{item.Missing_Ratio}}</td>
               <td>{{item.Mode_Ratio}}</td>
-              <td>{{item.Model_Usage_YN}}</td>
+              <td>
+                <select [ngModel]="getModelUsage(item.Feature_Name)" 
+                        (ngModelChange)="setModelUsage(item.Feature_Name, $event)"
+                        style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </td>
               
             </tr>
           </tbody>

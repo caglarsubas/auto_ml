@@ -111,6 +111,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   explainabilityLoading: boolean = false;
   explainabilityError: string | null = null;
   explainabilityFetched: boolean = false;  // Track if we've already fetched
+  showNullsBeeswarm: boolean = false;  // Control showing null values in SHAP Beeswarm (Single Feature)
+  beeswarmMissingRatio: number = 0;  // Missing ratio for current feature in beeswarm plot
   
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
   currentTabIndex: number = 0;
@@ -1603,7 +1605,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
   }
 
-  private drawShapBeeswarmSingle(): void {
+  drawShapBeeswarmSingle(): void {
     try {
       if (!Plotly || !this.explainabilityData?.beeswarm) return;
       const el = document.getElementById('explainability-beeswarm');
@@ -1616,6 +1618,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
       if (!shapVals.length) return;
 
+      // Simple seeded random number generator for deterministic jitter
+      const seededRandom = (seed: number): number => {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+      };
+
       // Filter valid points (check both SHAP values and feature values)
       const isNull = featValsRaw.map((v: any, i: number) => {
         const shapInvalid = shapVals[i] == null || (typeof shapVals[i] === 'number' && !Number.isFinite(shapVals[i]));
@@ -1627,6 +1635,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       for (let i = 0; i < shapVals.length; i++) {
         (isNull[i] ? idxNull : idxNonNull).push(i);
       }
+
+      // Calculate and store missing ratio for display in checkbox label
+      this.beeswarmMissingRatio = shapVals.length > 0 ? (idxNull.length / shapVals.length) : 0;
 
       // Compute color normalization (5th-95th percentile)
       const nonNullVals = idxNonNull.map(i => Number(featValsRaw[i])).filter(v => Number.isFinite(v));
@@ -1653,7 +1664,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       // Non-null points
       if (idxNonNull.length > 0) {
         const xVals = idxNonNull.map(i => shapVals[i]);
-        const yVals = idxNonNull.map(() => Math.random() * 0.4 - 0.2); // jitter
+        // Use deterministic jitter based on sample index so points stay in same position
+        const yVals = idxNonNull.map(i => (seededRandom(i + 1) * 2 - 1) * 0.2);
         const colors = idxNonNull.map(i => {
           const v = Number(featValsRaw[i]);
           const u = (v - vmin) / denom;
@@ -1680,10 +1692,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         });
       }
 
-      // Null points (grey X markers)
-      if (idxNull.length > 0) {
+      // Null points (grey X markers) - only shown if checkbox is enabled
+      if (this.showNullsBeeswarm && idxNull.length > 0) {
         const xVals = idxNull.map(i => shapVals[i]);
-        const yVals = idxNull.map(() => Math.random() * 0.4 - 0.2);
+        // Use deterministic jitter for null points too
+        const yVals = idxNull.map(i => (seededRandom(i + 1) * 2 - 1) * 0.2);
         traces.push({
           type: 'scatter',
           mode: 'markers',

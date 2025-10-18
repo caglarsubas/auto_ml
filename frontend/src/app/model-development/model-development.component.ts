@@ -85,6 +85,9 @@ export class ModelDevelopmentComponent implements OnInit {
   pinnedColumnWidth = 260; // base px; actual per-col uses colWidth()
   private readonly datqPrefsKey = 'datq_prefs_v1';
   private readonly datqWidthsKey = 'datq_widths_v1';
+  // Model_Usage column: track which variables to use in model (variableName -> 'Yes'/'No')
+  variableModelUsage: { [variable: string]: string } = {};
+  private readonly modelUsageKey = 'datq_model_usage_v1';
 
   get datqDisplayColumns(): string[] {
     const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
@@ -212,6 +215,7 @@ export class ModelDevelopmentComponent implements OnInit {
     if (!col) return 220;
     const c = String(col);
     if (c === 'Variable' || c === 'variable' || c === 'index') return 320;
+    if (c === 'Model_Usage') return 140;  // Model_Usage column
     if (c === 'Datq_Decision') return 200;
     if (c === 'Variable_Type') return 160;
     if (c === 'PSI' || c === 'CSI') return 140;
@@ -219,7 +223,7 @@ export class ModelDevelopmentComponent implements OnInit {
     return 220;
   }
 
-  // Reorder columns: Variable, PSI/Decision/Type/CSI, paired Train/Test changes, then remaining
+  // Reorder columns: Variable, Drop, PSI/Decision/Type/CSI, paired Train/Test changes, then remaining
   private reorderDatqColumns(): void {
     if (!this.datqColumns || this.datqColumns.length === 0) return;
     const cols = [...this.datqColumns];
@@ -241,7 +245,8 @@ export class ModelDevelopmentComponent implements OnInit {
       if (cols.includes(t2)) paired.push(t2);
     }
 
-    const fixed = [pickVar, 'PSI', 'Datq_Decision', 'Variable_Type', 'CSI'].filter(x => !!x && has(x as string)) as string[];
+    // Add Model_Usage column after Variable (it won't come from backend)
+    const fixed = [pickVar, 'Model_Usage', 'PSI', 'Datq_Decision', 'Variable_Type', 'CSI'].filter(x => !!x && (x === 'Model_Usage' || has(x as string))) as string[];
     const excluded = new Set<string>([...fixed, ...paired]);
     const rest = cols.filter(c => !excluded.has(c));
     this.datqColumns = [...fixed, ...paired, ...rest];
@@ -251,6 +256,71 @@ export class ModelDevelopmentComponent implements OnInit {
     const variableCol = this.datqColumns.includes('Variable') ? 'Variable' : (this.datqColumns.includes('variable') ? 'variable' : null);
     if (!variableCol) return;
     this.togglePin(variableCol);
+  }
+
+  // Get model usage for a variable
+  getModelUsage(row: any): string {
+    const key = this.variableKeyFromRow(row);
+    const variable = row?.[key];
+    if (!variable) return 'Yes';
+    const varName = String(variable);
+    return this.variableModelUsage[varName] ?? 'Yes';
+  }
+
+  // Set model usage for a variable
+  setModelUsage(row: any, value: string): void {
+    const key = this.variableKeyFromRow(row);
+    const variable = row?.[key];
+    if (!variable) return;
+    const varName = String(variable);
+    this.variableModelUsage[varName] = value;
+    this.saveModelUsage();
+  }
+
+  // Save model usage to localStorage
+  private saveModelUsage(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(this.modelUsageKey, JSON.stringify(this.variableModelUsage));
+    } catch {}
+  }
+
+  // Load model usage from localStorage
+  private loadModelUsage(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const saved = localStorage.getItem(this.modelUsageKey);
+      if (saved) {
+        this.variableModelUsage = JSON.parse(saved);
+      }
+    } catch {}
+  }
+
+  // Clear all model usage settings
+  clearAllModelUsage(): void {
+    this.variableModelUsage = {};
+    this.saveModelUsage();
+  }
+
+  // Get list of variables marked as 'No' (excluded from model)
+  getExcludedVariables(): string[] {
+    return Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
+  }
+
+  // Initialize Model_Usage from Data Dictionary settings (passed via SharedService)
+  private initializeFromDataDictionary(settings: { [variable: string]: string }): void {
+    // ALWAYS sync from Data Dictionary (it's the source of truth)
+    // This ensures that any changes made in Data Dictionary are reflected in Data Quality
+    // Users can still override values in Data Quality after this initialization
+    console.log('[Data Quality] Syncing Model_Usage from Data Dictionary:', settings);
+    
+    // Overwrite ALL values from Data Dictionary
+    Object.keys(settings).forEach(variable => {
+      this.variableModelUsage[variable] = settings[variable];
+    });
+    
+    // Save the synced state
+    this.saveModelUsage();
   }
 
   getPinnedStyle(col: string, type: 'header' | 'filter' | 'cell' = 'cell'): {[k: string]: any} {
@@ -556,13 +626,26 @@ export class ModelDevelopmentComponent implements OnInit {
       })
     );
 
+    // Track Model_Usage settings from Data Dictionary to initialize Data Quality table
+    this.subscription.add(
+      this.sharedService.modelUsageSettings$.subscribe((settings: { [variable: string]: string } | null) => {
+        if (settings) {
+          // Initialize Data Quality Model_Usage with values from Data Dictionary
+          this.initializeFromDataDictionary(settings);
+        }
+      })
+    );
+
     // Load persisted preferences (page size, pinned columns, sort) and widths
     this.loadDatqPrefs();
     this.loadDatqWidths();
+    this.loadModelUsage();
   }
 
   // After user reviews the Data Quality summary, proceed to Modeling section
   goToModeling(): void {
+    // Push final Model_Usage settings to SharedService for modeling phase
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
     // Smooth scroll to modeling section
@@ -1032,8 +1115,14 @@ export class ModelDevelopmentComponent implements OnInit {
       }
     }
 
+    // Get list of variables to exclude (Model_Usage='No')
+    const excludedVariables = this.getExcludedVariables();
+    if (excludedVariables.length > 0) {
+      console.log(`[Preprocessing] Excluding ${excludedVariables.length} variables with Model_Usage='No':`, excludedVariables);
+    }
+
     this.isProcessing = true;
-    this.dataService.runPreprocessing(this.currentFileId, optionIds, split)
+    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables)
       .pipe(finalize(() => { this.isProcessing = false; }))
       .subscribe(
         (result: any) => {

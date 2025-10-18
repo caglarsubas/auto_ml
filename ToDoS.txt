@@ -7,12 +7,11 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-v2.4.1-2025-10-15:
-- add feature-wise shap plots (partial dependicy plots) into their cards
+v2.5.0-202510XX-Context:
+- continue with backward and forward version of SFS step
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
 - add causality features into explainability tab
-- add drop varible true/false clickable column into the data-quality summary table
-when true remove those variables for further processing
+
 
 
 - Add unit test for each functionality currently being hold and run that test

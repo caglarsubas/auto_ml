@@ -59,10 +59,12 @@ export class DataService {
 
   // Run preprocessing. If options omitted, backend uses previously saved config.
   // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
-  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
+  // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[]): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options) payload.options = options;
     if (split) payload.split = split;
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running preprocessing:', error);
@@ -107,9 +109,11 @@ export class DataService {
   }
 
   // Start modeling with the processed file path and optional algorithm
-  startModeling(fileId: number, processedFile: string, algorithm?: string): Observable<any> {
+  // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
+  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[]): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };
     if (algorithm) payload.algorithm = algorithm;
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting modeling:', error);

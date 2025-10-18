@@ -443,6 +443,7 @@ class PreprocessingRunView(APIView):
             file_id = data.get('file_id')
             options = data.get('options')
             split = data.get('split')  # {'strategy': 'random'|'oot', 'date_column': str, 'cutoff': str}
+            excluded_variables = data.get('excluded_variables', [])  # Variables with Model_Usage='No'
 
             if file_id is None:
                 return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -473,8 +474,21 @@ class PreprocessingRunView(APIView):
             t_read_start = time.monotonic()
             df = self._read_dataframe(file_path)
             print(f"[PreprocessingRun] read_dataframe ok in {time.monotonic()-t_read_start:.3f}s shape={df.shape}")
-            rows_before = len(df)
+            
+            # Track columns before any drops
             cols_before = list(df.columns)
+            
+            # Drop excluded variables (Model_Usage='No'), but preserve Target column
+            excluded_by_model_usage = []
+            if excluded_variables and isinstance(excluded_variables, list):
+                # Exclude Target from being dropped (it's needed for modeling)
+                excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
+                if excluded_present:
+                    excluded_by_model_usage = excluded_present
+                    df = df.drop(columns=excluded_present)
+                    print(f"[PreprocessingRun] Dropped {len(excluded_present)} excluded variables (Target preserved): {excluded_present}")
+            
+            rows_before = len(df)
 
             # Apply transformations
             t_apply_start = time.monotonic()
@@ -486,6 +500,19 @@ class PreprocessingRunView(APIView):
                 preserve_cols = None
             df_processed, dropped_columns, dropped_by_step = self._apply_options(df, set(options), preserve=preserve_cols)
             print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape}")
+            
+            # Add Model_Usage='No' drops to the beginning of the breakdown for transparency
+            if excluded_by_model_usage:
+                dropped_by_step.insert(0, {
+                    'step': 'Model_Usage exclusion',
+                    'option_ids': [],
+                    'columns': excluded_by_model_usage,
+                    'rows_removed': 0,
+                    'note': 'Variables marked as Model_Usage=No in Data Dictionary'
+                })
+            
+            # Combine all dropped columns
+            all_dropped_columns = excluded_by_model_usage + dropped_columns
 
             # Save processed file
             out_name = f"processed_{file_id}_{self._safe_timestamp()}.csv"
@@ -852,7 +879,7 @@ class PreprocessingRunView(APIView):
                 'row_count_before': rows_before,
                 'row_count_after': len(df_processed),
                 'rows_removed_total': int(max(0, rows_before - len(df_processed))),
-                'dropped_columns': dropped_columns,
+                'dropped_columns': all_dropped_columns,
                 'dropped_columns_by_step': dropped_by_step,
                 'original_columns_count': len(cols_before),
                 'new_columns_count': len(df_processed.columns),

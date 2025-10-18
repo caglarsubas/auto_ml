@@ -30,6 +30,10 @@ export class SharedService {
   private processedFilePathSubject = new BehaviorSubject<string | null>(null);
   processedFilePath$: Observable<string | null> = this.processedFilePathSubject.asObservable();
 
+  // Store Model_Usage settings from Data Dictionary to carry forward to Data Quality
+  private modelUsageSettingsSubject = new BehaviorSubject<{ [variable: string]: string } | null>(null);
+  modelUsageSettings$: Observable<{ [variable: string]: string } | null> = this.modelUsageSettingsSubject.asObservable();
+
   setStarted(value: boolean): void {
     this.isStartedSubject.next(value);
   }
@@ -56,6 +60,10 @@ export class SharedService {
 
   setProcessedFilePath(path: string | null): void {
     this.processedFilePathSubject.next(path);
+  }
+
+  setModelUsageSettings(settings: { [variable: string]: string } | null): void {
+    this.modelUsageSettingsSubject.next(settings);
   }
   
 }

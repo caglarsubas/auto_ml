@@ -29,6 +29,7 @@ class ModelingStartView(APIView):
         file_id = request.data.get('file_id')
         processed_file = request.data.get('processed_file')
         algorithm = request.data.get('algorithm')  # optional, e.g., 'xgboost', 'lightgbm', 'catboost'
+        excluded_variables = request.data.get('excluded_variables', [])  # Variables with Model_Usage='No'
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -63,6 +64,15 @@ class ModelingStartView(APIView):
         model_info = {}
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+            
+            # Drop excluded variables (Model_Usage='No'), but preserve Target column
+            if excluded_variables and isinstance(excluded_variables, list):
+                # Exclude Target from being dropped (it's needed as label for training)
+                excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
+                if excluded_present:
+                    df = df.drop(columns=excluded_present)
+                    print(f"[ModelingStart] Dropped {len(excluded_present)} excluded variables (Target preserved): {excluded_present}")
+            
             metrics = {
                 'rows': int(df.shape[0]),
                 'features': int(df.shape[1]),
