@@ -404,3 +404,33 @@ h1 {
 }
 .psi-contrib.pos { color: #2e7d32; }
 .psi-contrib.neg { color: #d32f2f; }
+
+/* Next button styling (matching Preprocessing button) */
+.next-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #740505 !important;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.next-button:hover:not(:disabled) {
+  background-color: #8f0a0a !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.next-button:active {
+  transform: none !important;
+}
+
+.next-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #740505 !important;
+}

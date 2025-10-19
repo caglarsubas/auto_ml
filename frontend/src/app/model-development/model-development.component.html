@@ -318,8 +318,10 @@
         </div>
       </div>
 
-      <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center;">
-        <button mat-stroked-button color="primary" (click)="goToModeling()" [disabled]="!(datqSummary && datqSummary.length)">Proceed to Modeling</button>
+      <div style="margin-top: 12px; margin-bottom: 30px; display: flex; gap: 12px; align-items: center;">
+        <button class="next-button" (click)="goToModeling()" [disabled]="!(datqSummary && datqSummary.length)">
+          <span class="next-icon">&#9654;</span> MODELING
+        </button>
         <small style="color:#666;" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
         <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue.</small>
       </div>

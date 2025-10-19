@@ -83,7 +83,7 @@ h1, h2, h3 {
   flex-wrap: wrap;
 }
 
-button, .import-data-btn, .use-existing-btn {
+button:not(.next-button), .import-data-btn, .use-existing-btn {
   padding: 12px 24px;
   background: linear-gradient(135deg, #740505, #8f0a0a);
   color: white;
@@ -97,12 +97,12 @@ button, .import-data-btn, .use-existing-btn {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-button:hover, .import-data-btn:hover, .use-existing-btn:hover {
+button:not(.next-button):hover, .import-data-btn:hover, .use-existing-btn:hover {
   transform: translateY(-3px);
   box-shadow: 0 6px 8px rgba(0,0,0,0.15);
 }
 
-button:active, .import-data-btn:active, .use-existing-btn:active {
+button:not(.next-button):active, .import-data-btn:active, .use-existing-btn:active {
   transform: translateY(-1px);
 }
 
@@ -242,28 +242,38 @@ input[type="file"]:hover::before {
 
 .next-button-container {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   margin-top: 20px;
+  margin-bottom: 30px;
 }
 
 .next-button {
   padding: 10px 20px;
   font-size: 16px;
-  background-color: #740505;
+  background-color: #740505 !important;
   color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s ease, opacity 0.3s ease;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
-.next-button:hover {
-  background-color: #8f0a0a;
+.next-button:hover:not(:disabled) {
+  background-color: #8f0a0a !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.next-button:active {
+  transform: none !important;
 }
 
 .next-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background-color: #740505 !important;
 }
 
 /* Responsive adjustments */

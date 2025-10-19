@@ -616,6 +616,10 @@ export class ModelDevelopmentComponent implements OnInit {
       this.sharedService.preprocessingInitiated$.subscribe((initiated: boolean) => {
         this.preprocessingInitiated = initiated;
         this.computePreprocessingAvailable();
+        // Update flow indicator to preprocessing step when user clicks preprocessing button
+        if (initiated) {
+          this.currentStep = 'preprocessing';
+        }
       })
     );
 
