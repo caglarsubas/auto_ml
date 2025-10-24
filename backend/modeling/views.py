@@ -493,6 +493,9 @@ class ModelingStartView(APIView):
                                     pass
                                 shap_beeswarm = None
                         except Exception as e:
+                            print(f"[ModelingStart] SHAP computation outer exception: {type(e).__name__}: {e}")
+                            import traceback
+                            traceback.print_exc()
                             shap_importance = []
                             selected_features = []
                             beeswarm_png = None
@@ -646,6 +649,7 @@ class ModelingStartView(APIView):
                             'beeswarm_png': beeswarm_png,
                             'shap_beeswarm': shap_beeswarm,
                         }
+                        print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
                     else:
                         # Regression fallback as before
                         y_num = pd.to_numeric(y, errors='coerce')
@@ -724,6 +728,9 @@ class ModelingStartView(APIView):
             'algorithm': algorithm
         }
         safe_payload = _sanitize_json(result_payload)
+        
+        # Debug: Check if SHAP data made it to the final payload
+        print(f"[ModelingStart] Final payload check: shap_beeswarm in model={'shap_beeswarm' in safe_payload.get('model', {})}, selected_features count={len(safe_payload.get('model', {}).get('selected_features', []))}")
 
         with open(status_path, 'w', encoding='utf-8') as f:
             json.dump(safe_payload, f)

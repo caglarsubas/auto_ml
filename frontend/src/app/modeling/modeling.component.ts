@@ -204,11 +204,13 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       next: (resp) => {
         console.log('Modeling started:', resp);
         this.modelingStatus = resp;
+        // Debug: Check SHAP data
+        console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
+        console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
         if (js === 'completed') { setTimeout(() => this.tryDrawChartsIfReady(), 0); }
-        // Begin polling status until completed or error
-        this.startStatusPolling();
+        else { this.startStatusPolling(); }
       },
       error: (err) => {
         console.error('Failed to start modeling:', err);
