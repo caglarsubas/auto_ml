@@ -31,6 +31,37 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   private plotlyReady: Promise<void> | null = null;
   private chartsDrawn: boolean = false;
 
+  // SFS (Sequential Feature Selection) configuration and results
+  sfsReady: boolean = false;  // Training data saved, ready to run SFS
+  sfsRunning: boolean = false;
+  sfsProgress: number = 0;
+  sfsMessage: string = '';
+  sfsCurrentMetrics: { [key: string]: number } = {};
+  sfsCompletedSteps: any[] = [];  // Real-time completed steps during SFS
+  showSfsProgressModal: boolean = false;  // Modal for viewing details during SFS
+  private sfsPolling: Subscription | null = null;
+  
+  // SFS method selection
+  sfsMethodForward: boolean = true;
+  sfsMethodBackward: boolean = false;
+  
+  // SFS stopping criteria - multiple metrics
+  sfsMetrics: Array<{ metric: string, pct_change: number }> = [
+    { metric: 'roc_auc', pct_change: 1.0 }
+  ];
+  sfsMinFeatures: number = 3;
+  sfsMaxFeatures: number = 10;
+  
+  // SFS results
+  sfsResults: any | null = null;
+  sfsForwardResults: any[] = [];
+  sfsBackwardResults: any[] = [];
+  selectedSfsStep: any | null = null;  // For modal display
+  showSfsModal: boolean = false;
+
+  // Utility for template
+  Object = Object;
+
   // Pipeline and algorithm selection
   selectedPipeline: string = '';
   availableAlgorithms: string[] = [];
@@ -207,9 +238,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         // Debug: Check SHAP data
         console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
         console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
+        // Check if SFS is ready (training data saved)
+        this.sfsReady = resp?.model?.sfs_ready || false;
+        console.log('SFS ready?', this.sfsReady);
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
-        if (js === 'completed') { setTimeout(() => this.tryDrawChartsIfReady(), 0); }
+        if (js === 'completed') { 
+          setTimeout(() => this.tryDrawChartsIfReady(), 0); 
+        }
         else { this.startStatusPolling(); }
       },
       error: (err) => {
@@ -229,6 +265,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.dataService.getModelingStatus(this.currentFileId).subscribe({
         next: (status) => {
           this.modelingStatus = status;
+          // Check if SFS is ready
+          this.sfsReady = status?.model?.sfs_ready || false;
           const s = status?.job_status || status?.status;
           if (s === 'completed' || s === 'error') {
             this.stopStatusPolling();
@@ -740,5 +778,219 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     } catch (e) {
       console.warn('openFeatureCard failed:', e);
     }
+  }
+
+  /**
+   * Add a new metric to SFS criteria
+   */
+  addSfsMetric(): void {
+    this.sfsMetrics.push({ metric: 'pr_auc', pct_change: 1.0 });
+  }
+
+  /**
+   * Remove a metric from SFS criteria
+   */
+  removeSfsMetric(index: number): void {
+    if (this.sfsMetrics.length > 1) {
+      this.sfsMetrics.splice(index, 1);
+    } else {
+      alert('At least one metric is required');
+    }
+  }
+
+  /**
+   * Restart SFS (reset results and show config panel)
+   */
+  restartSfs(): void {
+    this.sfsResults = null;
+    this.sfsForwardResults = [];
+    this.sfsBackwardResults = [];
+    this.sfsRunning = false;
+    this.sfsProgress = 0;
+    this.sfsMessage = '';
+    this.sfsCurrentMetrics = {};
+    this.sfsCompletedSteps = [];
+    this.showSfsProgressModal = false;
+  }
+
+  /**
+   * Open modal to view SFS progress details
+   */
+  openSfsProgressModal(): void {
+    this.showSfsProgressModal = true;
+  }
+
+  /**
+   * Close SFS progress modal
+   */
+  closeSfsProgressModal(): void {
+    this.showSfsProgressModal = false;
+  }
+
+  /**
+   * Start SFS with user-selected configuration
+   */
+  startSfs(): void {
+    if (!this.currentFileId) return;
+    
+    // Validate: at least one method must be selected
+    if (!this.sfsMethodForward && !this.sfsMethodBackward) {
+      alert('Please select at least one SFS method (Forward or Backward)');
+      return;
+    }
+    
+    // Validate: at least one metric
+    if (this.sfsMetrics.length === 0) {
+      alert('Please add at least one metric');
+      return;
+    }
+    
+    // Build methods array
+    const methods: string[] = [];
+    if (this.sfsMethodForward) methods.push('forward');
+    if (this.sfsMethodBackward) methods.push('backward');
+    
+    // Build stopping criteria with multiple metrics
+    const stoppingCriteria = {
+      metrics: this.sfsMetrics,
+      min_features: this.sfsMinFeatures,
+      max_features: this.sfsMaxFeatures
+    };
+    
+    console.log('[SFS] Starting with config:', { methods, stoppingCriteria });
+    
+    this.sfsRunning = true;
+    this.sfsProgress = 0;
+    this.sfsMessage = 'Starting SFS...';
+    this.sfsCurrentMetrics = {};
+    this.sfsCompletedSteps = [];
+    
+    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria).subscribe({
+      next: (resp: any) => {
+        console.log('[SFS] Started:', resp);
+        this.sfsMessage = resp.message || 'SFS running...';
+        // Start polling for progress
+        this.startSfsStatusPolling();
+      },
+      error: (err: any) => {
+        console.error('[SFS] Failed to start:', err);
+        this.sfsRunning = false;
+        this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
+      }
+    });
+  }
+
+  /**
+   * Poll SFS status/progress
+   */
+  private startSfsStatusPolling(): void {
+    if (this.currentFileId == null) return;
+    
+    // Clear any existing subscription
+    if (this.sfsPolling) {
+      this.sfsPolling.unsubscribe();
+    }
+    
+    this.sfsPolling = interval(1000).subscribe(() => {
+      if (this.currentFileId == null) return;
+      
+      this.dataService.getSfsStatus(this.currentFileId).subscribe({
+        next: (statusData: any) => {
+          console.log('[SFS-Status]', statusData);
+          
+          this.sfsProgress = statusData.progress || 0;
+          this.sfsMessage = statusData.message || 'Running...';
+          this.sfsCurrentMetrics = statusData.current_metrics || {};
+          this.sfsCompletedSteps = statusData.completed_steps || [];
+          
+          const status = statusData.status;
+          if (status === 'completed') {
+            this.stopSfsStatusPolling();
+            this.sfsRunning = false;
+            this.sfsProgress = 1.0;
+            this.sfsMessage = 'SFS completed successfully!';
+            // Fetch final results
+            setTimeout(() => this.fetchSfsResults(), 500);
+          } else if (status === 'error') {
+            this.stopSfsStatusPolling();
+            this.sfsRunning = false;
+            this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
+          }
+        },
+        error: (err: any) => {
+          console.error('[SFS-Status] Polling error:', err);
+          this.stopSfsStatusPolling();
+          this.sfsRunning = false;
+          this.sfsMessage = 'Failed to get SFS status';
+        }
+      });
+    });
+  }
+
+  /**
+   * Stop SFS status polling
+   */
+  private stopSfsStatusPolling(): void {
+    if (this.sfsPolling) {
+      this.sfsPolling.unsubscribe();
+      this.sfsPolling = null;
+    }
+  }
+
+  /**
+   * Fetch SFS (Sequential Feature Selection) results from backend
+   */
+  fetchSfsResults(): void {
+    if (!this.currentFileId) return;
+    
+    this.dataService.getSfsResults(this.currentFileId).subscribe({
+      next: (data: any) => {
+        console.log('[SFS] Results received:', data);
+        this.sfsResults = data;
+        this.sfsForwardResults = data.forward || [];
+        this.sfsBackwardResults = data.backward || [];
+      },
+      error: (err: any) => {
+        console.warn('[SFS] Failed to fetch results:', err);
+        this.sfsResults = null;
+        this.sfsForwardResults = [];
+        this.sfsBackwardResults = [];
+      }
+    });
+  }
+
+  /**
+   * Open modal to show detailed impact of adding/dropping a feature
+   */
+  openSfsDetailModal(step: any): void {
+    this.selectedSfsStep = step;
+    this.showSfsModal = true;
+  }
+
+  /**
+   * Close SFS detail modal
+   */
+  closeSfsModal(): void {
+    this.showSfsModal = false;
+    this.selectedSfsStep = null;
+  }
+
+  /**
+   * Get formatted PSI/CSI value for display
+   */
+  getStabilityDisplay(step: any): string {
+    if (!step.stability_value) return 'N/A';
+    return `${step.stability_type}=${step.stability_value.toFixed(4)}`;
+  }
+
+  /**
+   * Get SHAP changes as array for modal display
+   */
+  getShapChangesArray(shapChanges: any): Array<{feature: string, change: number}> {
+    if (!shapChanges) return [];
+    return Object.keys(shapChanges).map(key => ({
+      feature: key,
+      change: shapChanges[key]
+    })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
   }
 }

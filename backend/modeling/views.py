@@ -15,6 +15,12 @@ from sklearn.metrics import accuracy_score, r2_score, roc_auc_score, average_pre
 from joblib import dump as joblib_dump
 import xgboost as xgb
 import shap
+from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
+import threading
+import pickle
+
+# Global dict to track SFS progress per file_id
+SFS_PROGRESS = {}
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -125,7 +131,11 @@ class ModelingStartView(APIView):
                         X_train, X_valid, y_train, y_valid = train_test_split(
                             X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
                         )
-                        # Raw (unfilled) view for the same validation rows
+                        # Raw (unfilled) view for the same train and validation rows
+                        try:
+                            X_train_raw = X_raw.loc[X_train.index]
+                        except Exception:
+                            X_train_raw = X_train.copy()
                         try:
                             X_valid_raw = X_raw.loc[X_valid.index]
                         except Exception:
@@ -634,6 +644,28 @@ class ModelingStartView(APIView):
                         model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
                         booster.save_model(model_path)
 
+                        print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
+                        
+                        # SFS will be triggered manually by user
+                        # Save training data for later SFS use
+                        train_data_dir = os.path.join(settings.MEDIA_ROOT, 'train_data')
+                        os.makedirs(train_data_dir, exist_ok=True)
+                        train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
+                        
+                        import pickle
+                        train_data = {
+                            'X_train': X_train,
+                            'y_train': y_train,
+                            'X_valid': X_valid,
+                            'y_valid': y_valid,
+                            'X_train_raw': X_train_raw,
+                            'X_valid_raw': X_valid_raw,
+                            'feature_names': list(X_train.columns)
+                        }
+                        with open(train_data_path, 'wb') as f:
+                            pickle.dump(train_data, f)
+                        print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
+                        
                         model_info = {
                             'model_type': 'xgboost_classifier',
                             'valid_auc': valid_auc,
@@ -648,8 +680,8 @@ class ModelingStartView(APIView):
                             'cv': cv_summary,
                             'beeswarm_png': beeswarm_png,
                             'shap_beeswarm': shap_beeswarm,
+                            'sfs_ready': True,  # Training data saved, ready for SFS
                         }
-                        print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
                     else:
                         # Regression fallback as before
                         y_num = pd.to_numeric(y, errors='coerce')
@@ -1039,6 +1071,214 @@ class FeatureExplainabilityView(APIView):
 
             return Response(result, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SFSResultsView(APIView):
+    """Returns Sequential Feature Selection results for a given file_id."""
+    
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            # Load SFS results from JSON file
+            sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+            
+            if not os.path.exists(sfs_path):
+                return Response(
+                    {'error': 'SFS results not found', 'sfs_completed': False},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            with open(sfs_path, 'r', encoding='utf-8') as f:
+                sfs_data = json.load(f)
+            
+            return Response({
+                'sfs_completed': True,
+                'forward': sfs_data.get('forward', []),
+                'backward': sfs_data.get('backward', []),
+                'error': sfs_data.get('error', None)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e), 'sfs_completed': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SFSStartView(APIView):
+    """Start Sequential Feature Selection with user-defined parameters."""
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+            file_id = data.get('file_id')
+            methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
+            stopping_criteria = data.get('stopping_criteria', {})
+            
+            # Validate required parameters
+            if not file_id:
+                return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not methods or len(methods) == 0:
+                return Response({'error': 'At least one method (forward/backward) must be selected'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Load saved training data
+            train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+            
+            if not os.path.exists(train_data_path):
+                return Response({
+                    'error': 'Training data not found. Please run modeling first.',
+                    'status': 'error'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            with open(train_data_path, 'rb') as f:
+                train_data = pickle.load(f)
+            
+            X_train = train_data['X_train']
+            y_train = train_data['y_train']
+            X_valid = train_data['X_valid']
+            y_valid = train_data['y_valid']
+            X_train_raw = train_data['X_train_raw']
+            X_valid_raw = train_data['X_valid_raw']
+            
+            # Initialize progress tracking
+            SFS_PROGRESS[file_id] = {
+                'status': 'running',
+                'message': 'Starting SFS...',
+                'progress': 0.0,
+                'current_metric': None,
+                'error': None,
+                'completed_steps': []  # Track completed steps for real-time viewing
+            }
+            
+            # Define status callback
+            def update_progress(status_info):
+                SFS_PROGRESS[file_id].update(status_info)
+                print(f"[SFS-Progress] {status_info}")
+            
+            # Run SFS in background thread
+            def run_sfs_thread():
+                try:
+                    results = run_sfs_with_progress(
+                        X_train=X_train,
+                        y_train=y_train,
+                        X_test=X_valid,
+                        y_test=y_valid,
+                        X_train_raw=X_train_raw,
+                        X_test_raw=X_valid_raw,
+                        methods=methods,
+                        stopping_criteria=stopping_criteria,
+                        status_callback=update_progress,
+                        cv_folds=3
+                    )
+                    
+                    # Save results to JSON
+                    sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
+                    os.makedirs(sfs_dir, exist_ok=True)
+                    sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
+                    
+                    # Sanitize results for JSON serialization
+                    def sanitize_sfs(results_list):
+                        sanitized = []
+                        for item in results_list:
+                            sanitized_item = {
+                                'step': item['step'],
+                                'direction': item['direction'],
+                                'action': item['action'],
+                                'feature_name': item['feature_name'],
+                                'selected_features': item['selected_features'],
+                                'train_roc_auc': float(item['train_roc_auc']),
+                                'train_pr_auc': float(item['train_pr_auc']),
+                                'cv_roc_auc': float(item['cv_roc_auc']),
+                                'cv_pr_auc': float(item['cv_pr_auc']),
+                                'test_roc_auc': float(item['test_roc_auc']),
+                                'test_pr_auc': float(item['test_pr_auc']),
+                                'stability_type': item['stability_type'],
+                                'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
+                                'shap_importance': float(item['shap_importance']),
+                                'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
+                                'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()}
+                            }
+                            sanitized.append(sanitized_item)
+                        return sanitized
+                    
+                    sfs_data = {
+                        'forward': sanitize_sfs(results.get('forward', [])),
+                        'backward': sanitize_sfs(results.get('backward', [])),
+                        'status': results.get('status', 'completed'),
+                        'error': results.get('error', None)
+                    }
+                    
+                    with open(sfs_path, 'w', encoding='utf-8') as f:
+                        json.dump(sfs_data, f, indent=2)
+                    
+                    SFS_PROGRESS[file_id]['status'] = 'completed'
+                    SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
+                    SFS_PROGRESS[file_id]['progress'] = 1.0
+                    
+                    print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
+                    
+                except Exception as e:
+                    SFS_PROGRESS[file_id]['status'] = 'error'
+                    SFS_PROGRESS[file_id]['message'] = f'SFS failed: {str(e)}'
+                    SFS_PROGRESS[file_id]['error'] = str(e)
+                    print(f"[SFS] Error for file_id={file_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Start thread
+            thread = threading.Thread(target=run_sfs_thread)
+            thread.daemon = True
+            thread.start()
+            
+            return Response({
+                'status': 'started',
+                'message': 'SFS started in background',
+                'file_id': file_id,
+                'methods': methods,
+                'stopping_criteria': stopping_criteria
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SFSStatusView(APIView):
+    """Get current SFS progress/status for a file_id."""
+    
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            if file_id not in SFS_PROGRESS:
+                # Check if SFS results already exist
+                sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+                if os.path.exists(sfs_path):
+                    return Response({
+                        'status': 'completed',
+                        'message': 'SFS already completed',
+                        'progress': 1.0,
+                        'file_id': file_id
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'status': 'not_started',
+                        'message': 'SFS has not been started yet',
+                        'progress': 0.0,
+                        'file_id': file_id
+                    }, status=status.HTTP_200_OK)
+            
+            progress_info = SFS_PROGRESS[file_id]
+            return Response({
+                'file_id': file_id,
+                **progress_info
+            }, status=status.HTTP_200_OK)
+            
         except Exception as e:
             import traceback
             traceback.print_exc()

@@ -106,6 +106,450 @@
         </div>
       </div>
 
+      <!-- Sequential Feature Selection (SFS) Configuration Panel -->
+      <div *ngIf="sfsReady && !sfsRunning && (sfsForwardResults.length === 0 && sfsBackwardResults.length === 0)" style="margin-top: 24px; padding: 20px; border: 2px solid #740505; border-radius: 8px; background: #fff9f9;">
+        <h3 style="color: #740505; margin-top: 0;">Sequential Feature Selection (SFS)</h3>
+        <div style="font-size: 13px; color:#666; margin-bottom:16px;">
+          Configure and run systematic feature selection to understand performance impact of adding/removing features.
+        </div>
+
+        <!-- Method Selection -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin-bottom: 8px; font-size: 14px;">Selection Method (at least one required)</h4>
+          <div style="display: flex; gap: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" [(ngModel)]="sfsMethodForward" />
+              <span>Forward Selection (add features incrementally)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" [(ngModel)]="sfsMethodBackward" />
+              <span>Backward Elimination (remove features incrementally)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Stopping Criteria -->
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin-bottom: 8px; font-size: 14px;">Stopping Criteria - Metrics</h4>
+          
+          <!-- Multiple Metrics -->
+          <div *ngFor="let metricCriteria of sfsMetrics; let i = index" 
+               style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fafafa;">
+            
+            <!-- Metric Selection -->
+            <div style="flex: 1;">
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Metric</label>
+              <select [(ngModel)]="metricCriteria.metric" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="roc_auc">ROC-AUC</option>
+                <option value="pr_auc">PR-AUC</option>
+              </select>
+            </div>
+
+            <!-- Percentage Change Threshold -->
+            <div style="flex: 1;">
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">
+                Stop if change &lt; (%) <span style="color: #999;">(0 = no stop)</span>
+              </label>
+              <input type="number" [(ngModel)]="metricCriteria.pct_change" min="0" max="100" step="0.1"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+
+            <!-- Remove Button -->
+            <div>
+              <button (click)="removeSfsMetric(i)" 
+                      style="padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                      title="Remove metric">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Add Metric Button -->
+          <button (click)="addSfsMetric()" 
+                  style="padding: 8px 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 16px;">
+            ➕ Add Metric
+          </button>
+
+          <!-- Feature Count Limits -->
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
+            <!-- Min Features (Backward) -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Minimum Features (Backward)</label>
+              <input type="number" [(ngModel)]="sfsMinFeatures" min="1" max="50"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+
+            <!-- Max Features (Forward) -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Maximum Features (Forward)</label>
+              <input type="number" [(ngModel)]="sfsMaxFeatures" min="1" max="50"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Start Button -->
+        <div style="margin-top: 20px;">
+          <button mat-raised-button color="primary" (click)="startSfs()" 
+                  style="background-color: #740505 !important; color: white; padding: 10px 24px;">
+            <span style="font-size: 14px;">▶ Proceed to SFS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SFS Progress Display -->
+      <div *ngIf="sfsRunning" style="margin-top: 24px; padding: 20px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
+        <h3 style="color: #1976d2; margin-top: 0;">SFS Running...</h3>
+        
+        <!-- Progress Message -->
+        <div style="margin-bottom: 12px; font-size: 14px; color: #555;">
+          {{ sfsMessage }}
+        </div>
+
+        <!-- Overall Progress Bar -->
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Overall Progress</div>
+          <div style="background: #e0e0e0; border-radius: 4px; height: 24px; overflow: hidden;">
+            <div [style.width.%]="sfsProgress * 100" 
+                 style="background: linear-gradient(90deg, #1976d2, #42a5f5); height: 100%; transition: width 0.3s ease;
+                        display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 500;">
+              {{ (sfsProgress * 100).toFixed(0) }}%
+            </div>
+          </div>
+        </div>
+
+        <!-- Current Metrics Display -->
+        <div *ngIf="Object.keys(sfsCurrentMetrics).length > 0" style="margin-bottom: 8px;">
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Current Metrics</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+            <div *ngFor="let metric of Object.keys(sfsCurrentMetrics)" 
+                 style="background: #fff; border: 1px solid #1976d2; border-radius: 4px; padding: 8px 12px;">
+              <div style="font-size: 11px; color: #666; margin-bottom: 2px;">
+                {{ metric === 'roc_auc' ? 'ROC-AUC' : 'PR-AUC' }}
+              </div>
+              <div style="font-size: 16px; font-weight: 600; color: #1976d2;">
+                {{ sfsCurrentMetrics[metric].toFixed(4) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- View Details Button -->
+        <div *ngIf="sfsCompletedSteps.length > 0" style="margin-top: 16px; text-align: center;">
+          <button (click)="openSfsProgressModal()" 
+                  style="padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+            📊 View Details ({{ sfsCompletedSteps.length }} steps completed)
+          </button>
+        </div>
+
+        <!-- Loading Animation -->
+        <div style="margin-top: 12px; text-align: center;">
+          <mat-spinner diameter="40" style="margin: 0 auto;"></mat-spinner>
+        </div>
+      </div>
+
+      <!-- Sequential Feature Selection (SFS) Results -->
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0" style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <h3 style="color: #740505; margin: 0;">Sequential Feature Selection (SFS)</h3>
+            <div style="font-size: 13px; color:#666; margin-top: 4px;">
+              Systematic feature selection showing performance impact of adding/removing features using cross-validation.
+            </div>
+          </div>
+          <!-- Action Buttons -->
+          <div style="display: flex; gap: 12px;">
+            <button *ngIf="sfsCompletedSteps.length > 0" 
+                    (click)="openSfsProgressModal()" 
+                    style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              📊 View Details
+            </button>
+            <button (click)="restartSfs()" 
+                    style="padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              🔄 Restart SFS
+            </button>
+          </div>
+        </div>
+
+        <!-- Forward Selection Results -->
+        <div *ngIf="sfsForwardResults.length > 0" style="margin-bottom: 20px;">
+          <h4>Forward Selection (adding features incrementally)</h4>
+          <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #f5f5f5; text-align: left;">
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let step of sfsForwardResults">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
+                    <button mat-button color="primary" (click)="openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                      View
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Backward Elimination Results -->
+        <div *ngIf="sfsBackwardResults.length > 0">
+          <h4>Backward Elimination (removing features incrementally)</h4>
+          <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #f5f5f5; text-align: left;">
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let step of sfsBackwardResults">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
+                    <button mat-button color="primary" (click)="openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                      View
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SFS Detail Modal -->
+      <div *ngIf="showSfsModal && selectedSfsStep" class="sfs-modal-overlay" (click)="closeSfsModal()">
+        <div class="sfs-modal-content" (click)="$event.stopPropagation()">
+          <div class="sfs-modal-header">
+            <h3>Feature Impact Details: {{ selectedSfsStep.feature_name }}</h3>
+            <button mat-icon-button (click)="closeSfsModal()" class="close-button">
+              <span style="font-size: 24px;">&times;</span>
+            </button>
+          </div>
+          
+          <div class="sfs-modal-body">
+            <!-- Summary Information -->
+            <div style="margin-bottom: 20px;">
+              <h4>Action Summary</h4>
+              <p><strong>Step:</strong> {{ selectedSfsStep.step }} ({{ selectedSfsStep.direction }} selection)</p>
+              <p><strong>Action:</strong> Feature <strong>{{ selectedSfsStep.action }}</strong></p>
+              <p><strong>Feature SHAP Importance:</strong> {{ selectedSfsStep.shap_importance | number:'1.6-6' }}</p>
+              <p><strong>Stability Metric:</strong> {{ getStabilityDisplay(selectedSfsStep) }}</p>
+            </div>
+
+            <!-- Performance Metrics -->
+            <div style="margin-bottom: 20px;">
+              <h4>Model Performance After This Step</h4>
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #f5f5f5;">
+                    <th style="padding: 8px; border: 1px solid #ddd;">Metric</th>
+                    <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">Train</th>
+                    <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">CV</th>
+                    <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">Test</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd;">ROC-AUC</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.train_roc_auc | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">{{ selectedSfsStep.cv_roc_auc | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.test_roc_auc | number:'1.4-4' }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd;">PR-AUC</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.train_pr_auc | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">{{ selectedSfsStep.cv_pr_auc | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.test_pr_auc | number:'1.4-4' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- SHAP Impact Changes -->
+            <div *ngIf="getShapChangesArray(selectedSfsStep.shap_changes).length > 0">
+              <h4>SHAP Impact Changes for Existing Features</h4>
+              <div style="font-size: 12px; color:#666; margin-bottom:8px;">
+                Shows how this action affected the SHAP importance of other features already in the model.
+              </div>
+              <div style="overflow:auto; max-height: 300px; border: 1px solid #eee;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <thead>
+                    <tr style="background: #f5f5f5;">
+                      <th style="padding: 8px; border: 1px solid #ddd;">Feature</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">SHAP Impact Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let change of getShapChangesArray(selectedSfsStep.shap_changes)">
+                      <td style="padding: 8px; border: 1px solid #ddd;">{{ change.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd; text-align:right;" [style.color]="change.change > 0 ? '#4caf50' : '#f44336'">
+                        {{ change.change > 0 ? '+' : '' }}{{ change.change | number:'1.6-6' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Selected Features List -->
+            <div style="margin-top: 20px;">
+              <h4>Features in Model After This Step</h4>
+              <div style="font-size: 12px; color:#666; margin-bottom:8px;">
+                Total: {{ selectedSfsStep.selected_features?.length || 0 }} features
+              </div>
+              <div style="background: #f9f9f9; padding: 12px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                <span *ngFor="let feat of selectedSfsStep.selected_features; let last = last" style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: white; border: 1px solid #ddd; border-radius: 3px; font-size: 12px;">
+                  {{ feat }}<span *ngIf="!last">,</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="sfs-modal-footer">
+            <button mat-raised-button color="primary" (click)="closeSfsModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- SFS Progress Details Modal -->
+<div *ngIf="showSfsProgressModal" 
+     style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;"
+     (click)="closeSfsProgressModal()">
+  <div (click)="$event.stopPropagation()" 
+       style="background: white; border-radius: 8px; padding: 24px; max-width: 90vw; max-height: 85vh; overflow: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #1976d2; padding-bottom: 12px;">
+      <h3 style="margin: 0; color: #1976d2; font-size: 20px;">
+        🔍 SFS Progress Details
+      </h3>
+      <button (click)="closeSfsProgressModal()" 
+              style="background: #f44336; color: white; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 18px; font-weight: bold;">
+        ✕
+      </button>
+    </div>
+
+    <div *ngIf="sfsCompletedSteps.length === 0" style="text-align: center; padding: 40px; color: #999;">
+      No completed steps yet. SFS is initializing...
+    </div>
+
+    <div *ngIf="sfsCompletedSteps.length > 0">
+      <div style="margin-bottom: 16px; padding: 12px; background: #e3f2fd; border-left: 4px solid #1976d2; border-radius: 4px;">
+        <strong>Total Steps Completed:</strong> {{ sfsCompletedSteps.length }}
+      </div>
+
+      <!-- Steps Table -->
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background: #1976d2; color: white;">
+              <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Step</th>
+              <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Direction</th>
+              <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Action</th>
+              <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Feature</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV ROC-AUC</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV PR-AUC</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">ROC-AUC Change %</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">PR-AUC Change %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let step of sfsCompletedSteps; let i = index" 
+                [style.background]="i % 2 === 0 ? '#f9f9f9' : 'white'">
+              <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600;">{{ step.step }}</td>
+              <td style="padding: 10px; border: 1px solid #ddd;">
+                <span [style.background]="step.direction === 'forward' ? '#4caf50' : '#ff9800'" 
+                      style="padding: 4px 8px; border-radius: 4px; color: white; font-size: 11px; font-weight: 500;">
+                  {{ step.direction === 'forward' ? '▶ Forward' : '◀ Backward' }}
+                </span>
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd;">
+                <span [style.color]="step.action === 'added' ? '#4caf50' : '#f44336'" 
+                      style="font-weight: 500;">
+                  {{ step.action === 'added' ? '➕ Added' : '➖ Dropped' }}
+                </span>
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #1976d2; font-weight: 500;">
+                {{ step.feature_name }}
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #1976d2;">
+                {{ step.cv_roc_auc.toFixed(4) }}
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #1976d2;">
+                {{ step.cv_pr_auc.toFixed(4) }}
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                <span *ngIf="step.pct_changes && step.pct_changes.roc_auc !== undefined"
+                      [style.color]="step.pct_changes.roc_auc >= 0 ? '#4caf50' : '#f44336'"
+                      style="font-weight: 600;">
+                  {{ step.pct_changes.roc_auc >= 0 ? '+' : '' }}{{ step.pct_changes.roc_auc.toFixed(2) }}%
+                </span>
+                <span *ngIf="!step.pct_changes || step.pct_changes.roc_auc === undefined" style="color: #999;">
+                  —
+                </span>
+              </td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                <span *ngIf="step.pct_changes && step.pct_changes.pr_auc !== undefined"
+                      [style.color]="step.pct_changes.pr_auc >= 0 ? '#4caf50' : '#f44336'"
+                      style="font-weight: 600;">
+                  {{ step.pct_changes.pr_auc >= 0 ? '+' : '' }}{{ step.pct_changes.pr_auc.toFixed(2) }}%
+                </span>
+                <span *ngIf="!step.pct_changes || step.pct_changes.pr_auc === undefined" style="color: #999;">
+                  —
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; text-align: center;">
+      <button (click)="closeSfsProgressModal()" 
+              style="padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+        Close
+      </button>
     </div>
   </div>
 </div>
