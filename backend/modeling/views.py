@@ -8,6 +8,7 @@ import os
 from django.conf import settings
 import json
 import math
+import warnings
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedKFold
@@ -18,6 +19,9 @@ import shap
 from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
 import threading
 import pickle
+
+# Suppress NumPy warnings for invalid values during correlation/metrics calculations
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
 
 # Global dict to track SFS progress per file_id
 SFS_PROGRESS = {}
@@ -71,13 +75,15 @@ class ModelingStartView(APIView):
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
             
-            # Drop excluded variables (Model_Usage='No'), but preserve Target column
+            # Track excluded variables (Model_Usage='No') but keep them in dataframe
+            # They will be excluded when creating feature matrix X
+            excluded_cols_for_modeling = []
             if excluded_variables and isinstance(excluded_variables, list):
-                # Exclude Target from being dropped (it's needed as label for training)
+                # Exclude Target from the exclusion list (it's needed as label for training)
                 excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
                 if excluded_present:
-                    df = df.drop(columns=excluded_present)
-                    print(f"[ModelingStart] Dropped {len(excluded_present)} excluded variables (Target preserved): {excluded_present}")
+                    excluded_cols_for_modeling = excluded_present
+                    print(f"[ModelingStart] Excluding {len(excluded_present)} variables from model training (kept in dataset): {excluded_present}")
             
             metrics = {
                 'rows': int(df.shape[0]),
@@ -98,7 +104,9 @@ class ModelingStartView(APIView):
                 # Prepare features/target
                 y = df[target_col]
                 # Keep a raw copy to preserve original NaNs for interactive SHAP visualization
-                X_raw = df.drop(columns=[target_col])
+                # Exclude both target and excluded variables from feature matrix
+                cols_to_exclude = [target_col] + excluded_cols_for_modeling
+                X_raw = df.drop(columns=cols_to_exclude)
                 # Use only numeric features for simplicity
                 X_raw = X_raw.select_dtypes(include=['number']).copy()
                 # Drop columns with all NaNs
@@ -227,7 +235,11 @@ class ModelingStartView(APIView):
 
                         # SHAP mean |impact| and compact beeswarm payload
                         try:
-                            explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
+                            # Suppress SHAP FutureWarning about feature_perturbation
+                            import warnings
+                            with warnings.catch_warnings():
+                                warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
+                                explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
                             # limit to at most 5000 rows for performance
                             Xv = X_valid
                             Xv_raw = X_valid_raw
@@ -558,26 +570,34 @@ class ModelingStartView(APIView):
                                 cv_details.append({'roc_auc': roc, 'pr_auc': pr, 'best_iteration': int(getattr(bst, 'best_iteration', getattr(bst, 'best_ntree_limit', 0)))})
                                 # ROC/PR curves on fixed grids
                                 try:
-                                    fpr, tpr, _ = roc_curve(y_va, p)
-                                    tpr_interp = np.interp(roc_fpr_grid, fpr, tpr)
-                                    tpr_interp[0] = 0.0
-                                    tpr_interp[-1] = 1.0
-                                    tpr_fold_list.append(tpr_interp)
+                                    # Suppress numpy warnings for invalid values during interpolation
+                                    import warnings
+                                    with warnings.catch_warnings():
+                                        warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                                        fpr, tpr, _ = roc_curve(y_va, p)
+                                        tpr_interp = np.interp(roc_fpr_grid, fpr, tpr)
+                                        tpr_interp[0] = 0.0
+                                        tpr_interp[-1] = 1.0
+                                        tpr_fold_list.append(tpr_interp)
                                 except Exception:
                                     pass
                                 try:
-                                    precision, recall, _ = precision_recall_curve(y_va, p)
-                                    # keep raw curve for plotting
-                                    try:
-                                        pr_raw_folds.append({'precision': precision.tolist(), 'recall': recall.tolist(), 'auc': pr})
-                                    except Exception:
-                                        pass
-                                    # Step-wise (previous value) interpolation on a fixed recall grid
-                                    # For each r in grid, take precision at last recall <= r
-                                    idxs = np.searchsorted(recall, pr_recall_grid, side='right') - 1
-                                    idxs = np.clip(idxs, 0, len(precision) - 1)
-                                    prec_interp = precision[idxs]
-                                    prec_fold_list.append(prec_interp)
+                                    # Suppress numpy warnings for invalid values during interpolation
+                                    import warnings
+                                    with warnings.catch_warnings():
+                                        warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                                        precision, recall, _ = precision_recall_curve(y_va, p)
+                                        # keep raw curve for plotting
+                                        try:
+                                            pr_raw_folds.append({'precision': precision.tolist(), 'recall': recall.tolist(), 'auc': pr})
+                                        except Exception:
+                                            pass
+                                        # Step-wise (previous value) interpolation on a fixed recall grid
+                                        # For each r in grid, take precision at last recall <= r
+                                        idxs = np.searchsorted(recall, pr_recall_grid, side='right') - 1
+                                        idxs = np.clip(idxs, 0, len(precision) - 1)
+                                        prec_interp = precision[idxs]
+                                        prec_fold_list.append(prec_interp)
                                 except Exception:
                                     pass
                                 # Baseline (no-skill) level equals positive rate in the validation fold
@@ -896,7 +916,11 @@ class FeatureExplainabilityView(APIView):
             # Compute SHAP values
             feature_names = list(map(str, X.columns.tolist()))
             dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names)
-            explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
+            # Suppress SHAP FutureWarning about feature_perturbation
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
+                explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
             shap_vals = explainer.shap_values(X_sampled)
             if isinstance(shap_vals, list):
                 try:
@@ -1099,6 +1123,7 @@ class SFSResultsView(APIView):
                 'sfs_completed': True,
                 'forward': sfs_data.get('forward', []),
                 'backward': sfs_data.get('backward', []),
+                'backward_remaining_features': sfs_data.get('backward_remaining_features', []),
                 'error': sfs_data.get('error', None)
             }, status=status.HTTP_200_OK)
             
@@ -1118,6 +1143,7 @@ class SFSStartView(APIView):
             file_id = data.get('file_id')
             methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
             stopping_criteria = data.get('stopping_criteria', {})
+            initial_features = data.get('initial_features', None)  # Optional: Start with specific features
             
             # Validate required parameters
             if not file_id:
@@ -1173,7 +1199,8 @@ class SFSStartView(APIView):
                         methods=methods,
                         stopping_criteria=stopping_criteria,
                         status_callback=update_progress,
-                        cv_folds=3
+                        cv_folds=3,
+                        initial_features=initial_features
                     )
                     
                     # Save results to JSON
@@ -1201,7 +1228,8 @@ class SFSStartView(APIView):
                                 'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
                                 'shap_importance': float(item['shap_importance']),
                                 'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
-                                'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()}
+                                'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
+                                'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
                             }
                             sanitized.append(sanitized_item)
                         return sanitized
@@ -1209,6 +1237,7 @@ class SFSStartView(APIView):
                     sfs_data = {
                         'forward': sanitize_sfs(results.get('forward', [])),
                         'backward': sanitize_sfs(results.get('backward', [])),
+                        'backward_remaining_features': results.get('backward_remaining_features', []),
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None)
                     }

@@ -132,6 +132,57 @@ export class DataService {
     );
   }
 
+  // Start Sequential Feature Selection (SFS) with user parameters
+  startSfs(fileId: number, methods: string[], stoppingCriteria: any): Observable<any> {
+    const payload = {
+      file_id: fileId,
+      methods: methods,
+      stopping_criteria: stoppingCriteria
+    };
+    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error starting SFS:', error);
+        return throwError(() => new Error(error.message || 'Failed to start SFS'));
+      })
+    );
+  }
+
+  // Start SFS with initial features (for chained backward→forward SFS)
+  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[]): Observable<any> {
+    const payload = {
+      file_id: fileId,
+      methods: methods,
+      stopping_criteria: stoppingCriteria,
+      initial_features: initialFeatures
+    };
+    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error starting SFS with initial features:', error);
+        return throwError(() => new Error(error.message || 'Failed to start SFS'));
+      })
+    );
+  }
+
+  // Get SFS progress/status
+  getSfsStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/sfs/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting SFS status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get SFS status'));
+      })
+    );
+  }
+
+  // Get Sequential Feature Selection (SFS) results
+  getSfsResults(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting SFS results:', error);
+        return throwError(() => new Error(error.message || 'Failed to get SFS results'));
+      })
+    );
+  }
+
   // Get feature explainability data (SHAP beeswarm + partial dependence)
   getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };

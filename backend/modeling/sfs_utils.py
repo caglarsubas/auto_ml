@@ -6,6 +6,7 @@ with comprehensive metrics tracking, stability analysis (PSI/CSI), and
 SHAP impact monitoring.
 """
 
+import warnings
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
@@ -13,6 +14,9 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 import xgboost as xgb
 import shap
+
+# Suppress NumPy warnings for invalid values during PSI/CSI/SHAP calculations
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
 from typing import Dict, List, Tuple, Any, Optional
 
 
@@ -29,32 +33,37 @@ def calculate_psi(expected: np.ndarray, actual: np.ndarray, bins: int = 10) -> f
         PSI value (higher values indicate more distribution shift)
     """
     try:
-        # Remove NaN values
-        expected_clean = expected[np.isfinite(expected)]
-        actual_clean = actual[np.isfinite(actual)]
-        
-        if len(expected_clean) == 0 or len(actual_clean) == 0:
-            return None
-        
-        # Create bins based on expected distribution
-        breakpoints = np.percentile(expected_clean, np.linspace(0, 100, bins + 1))
-        breakpoints = np.unique(breakpoints)  # Remove duplicates
-        
-        if len(breakpoints) < 2:
-            return None
-        
-        # Calculate distributions
-        expected_percents = np.histogram(expected_clean, bins=breakpoints)[0] / len(expected_clean)
-        actual_percents = np.histogram(actual_clean, bins=breakpoints)[0] / len(actual_clean)
-        
-        # Add small constant to avoid division by zero
-        expected_percents = np.where(expected_percents == 0, 0.0001, expected_percents)
-        actual_percents = np.where(actual_percents == 0, 0.0001, actual_percents)
-        
-        # Calculate PSI
-        psi_value = np.sum((actual_percents - expected_percents) * np.log(actual_percents / expected_percents))
-        
-        return float(psi_value) if np.isfinite(psi_value) else None
+        import warnings
+        with warnings.catch_warnings():
+            # Suppress numpy warnings for invalid values
+            warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+            
+            # Remove NaN values
+            expected_clean = expected[np.isfinite(expected)]
+            actual_clean = actual[np.isfinite(actual)]
+            
+            if len(expected_clean) == 0 or len(actual_clean) == 0:
+                return None
+            
+            # Create bins based on expected distribution
+            breakpoints = np.percentile(expected_clean, np.linspace(0, 100, bins + 1))
+            breakpoints = np.unique(breakpoints)  # Remove duplicates
+            
+            if len(breakpoints) < 2:
+                return None
+            
+            # Calculate distributions
+            expected_percents = np.histogram(expected_clean, bins=breakpoints)[0] / len(expected_clean)
+            actual_percents = np.histogram(actual_clean, bins=breakpoints)[0] / len(actual_clean)
+            
+            # Add small constant to avoid division by zero
+            expected_percents = np.where(expected_percents == 0, 0.0001, expected_percents)
+            actual_percents = np.where(actual_percents == 0, 0.0001, actual_percents)
+            
+            # Calculate PSI
+            psi_value = np.sum((actual_percents - expected_percents) * np.log(actual_percents / expected_percents))
+            
+            return float(psi_value) if np.isfinite(psi_value) else None
         
     except Exception as e:
         print(f"PSI calculation error: {e}")
@@ -73,21 +82,26 @@ def calculate_csi(expected: np.ndarray, actual: np.ndarray) -> float:
         CSI value (higher values indicate more distribution shift)
     """
     try:
-        # Get unique categories from both distributions
-        all_categories = np.unique(np.concatenate([expected, actual]))
-        
-        csi_value = 0.0
-        for category in all_categories:
-            expected_pct = np.sum(expected == category) / len(expected) if len(expected) > 0 else 0.0001
-            actual_pct = np.sum(actual == category) / len(actual) if len(actual) > 0 else 0.0001
+        import warnings
+        with warnings.catch_warnings():
+            # Suppress numpy warnings for invalid values
+            warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
             
-            # Add small constant to avoid division by zero
-            expected_pct = max(expected_pct, 0.0001)
-            actual_pct = max(actual_pct, 0.0001)
+            # Get unique categories from both distributions
+            all_categories = np.unique(np.concatenate([expected, actual]))
             
-            csi_value += (actual_pct - expected_pct) * np.log(actual_pct / expected_pct)
-        
-        return float(csi_value) if np.isfinite(csi_value) else None
+            csi_value = 0.0
+            for category in all_categories:
+                expected_pct = np.sum(expected == category) / len(expected) if len(expected) > 0 else 0.0001
+                actual_pct = np.sum(actual == category) / len(actual) if len(actual) > 0 else 0.0001
+                
+                # Add small constant to avoid division by zero
+                expected_pct = max(expected_pct, 0.0001)
+                actual_pct = max(actual_pct, 0.0001)
+                
+                csi_value += (actual_pct - expected_pct) * np.log(actual_pct / expected_pct)
+            
+            return float(csi_value) if np.isfinite(csi_value) else None
         
     except Exception as e:
         print(f"CSI calculation error: {e}")
@@ -107,7 +121,11 @@ def compute_shap_importance(booster, X: pd.DataFrame, feature_names: List[str]) 
         Dictionary mapping feature names to SHAP importance scores
     """
     try:
-        explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
+        # Suppress SHAP FutureWarning about feature_perturbation
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
+            explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
         
         # Limit samples for performance
         X_sample = X.sample(min(1000, len(X)), random_state=42) if len(X) > 1000 else X
@@ -514,7 +532,8 @@ def run_sfs_with_progress(
     methods: List[str],  # ['forward', 'backward', 'both']
     stopping_criteria: Dict[str, Any],  # {metrics: [{metric, pct_change}], min_features, max_features}
     status_callback: Optional[callable] = None,
-    cv_folds: int = 3
+    cv_folds: int = 3,
+    initial_features: Optional[List[str]] = None  # Optional: Start with specific features
 ) -> Dict[str, Any]:
     """
     Run SFS with user-specified methods, stopping criteria, and progress tracking.
@@ -536,6 +555,16 @@ def run_sfs_with_progress(
     """
     results = {'forward': [], 'backward': [], 'status': 'running'}
     completed_steps = []  # Track completed steps for real-time viewing
+    
+    # Filter by initial_features if provided
+    if initial_features:
+        valid_features = [f for f in initial_features if f in X_train.columns]
+        if valid_features:
+            X_train = X_train[valid_features]
+            X_test = X_test[valid_features]
+            X_train_raw = X_train_raw[valid_features]
+            X_test_raw = X_test_raw[valid_features]
+            print(f"[SFS] Starting with {len(valid_features)} initial features: {valid_features}")
     
     def update_status(message: str, progress: float, current_metrics: Dict[str, float] = None, step_result: Dict = None):
         """Update status via callback"""
@@ -746,6 +775,12 @@ def run_sfs_with_progress(
                     break
             
             results['backward'] = backward_results
+            # Add remaining features after backward elimination
+            if backward_results:
+                results['backward_remaining_features'] = current_features
+                print(f"[SFS-Backward] Completed with {len(current_features)} remaining features: {current_features}")
+            else:
+                results['backward_remaining_features'] = list(X_train.columns)
         
         results['status'] = 'completed'
         update_status('SFS completed successfully', 1.0)
@@ -763,7 +798,7 @@ def run_sfs_with_progress(
         print(f"[SFS] Error: {e}")
         import traceback
         traceback.print_exc()
-    
+
     return results
 
 
@@ -872,14 +907,12 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             stability_value = None
             stability_type = 'N/A'
         
-        # Calculate SHAP importance
-        try:
-            X_sample = X_train[new_features].sample(min(1000, len(X_train)), random_state=42)
-            explainer = shap.TreeExplainer(best_metrics['booster'])
-            shap_values = explainer.shap_values(xgb.DMatrix(X_sample))
-            shap_importance = float(np.abs(shap_values[:, -1]).mean())  # Importance of newly added feature
-        except Exception:
-            shap_importance = 0.0
+        shap_importance_by_feature = compute_shap_importance(
+            best_metrics['booster'],
+            X_train[new_features],
+            new_features
+        )
+        shap_importance = float(shap_importance_by_feature.get(best_feature, 0.0))
         
         # Get feature importances from model
         try:
@@ -904,7 +937,8 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             'stability_value': stability_value,
             'shap_importance': shap_importance,
             'shap_changes': {},  # Could track changes if needed
-            'feature_importance': feature_importance
+            'feature_importance': feature_importance,
+            'shap_importance_by_feature': shap_importance_by_feature
         }
     except Exception as e:
         print(f"[SFS-Forward-Step] Error: {e}")
@@ -1017,7 +1051,11 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             stability_value = None
             stability_type = 'N/A'
         
-        # Calculate SHAP importance (not applicable for dropped feature, set to 0)
+        shap_importance_by_feature = compute_shap_importance(
+            best_metrics['booster'],
+            X_train[remaining_features],
+            remaining_features
+        )
         shap_importance = 0.0
         
         # Get feature importances from model
@@ -1043,7 +1081,8 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             'stability_value': stability_value,
             'shap_importance': shap_importance,
             'shap_changes': {},
-            'feature_importance': feature_importance
+            'feature_importance': feature_importance,
+            'shap_importance_by_feature': shap_importance_by_feature
         }
     except Exception as e:
         print(f"[SFS-Backward-Step] Error: {e}")

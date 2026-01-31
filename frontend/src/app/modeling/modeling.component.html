@@ -351,6 +351,33 @@
               </tbody>
             </table>
           </div>
+          
+          <!-- Remaining Features after Backward Elimination -->
+          <div *ngIf="sfsBackwardRemainingFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #740505;">
+            <h5 style="margin: 0 0 12px 0; color: #740505; font-size: 14px; font-weight: 600;">
+              📋 Remaining Features ({{ sfsBackwardRemainingFeatures.length }})
+            </h5>
+            <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                <span *ngFor="let feature of sfsBackwardRemainingFeatures" 
+                      style="display: inline-block; padding: 6px 12px; background: #e3f2fd; color: #1976d2; border-radius: 16px; font-size: 12px; font-weight: 500;">
+                  {{ feature }}
+                </span>
+              </div>
+            </div>
+            
+            <!-- Button to start forward selection on remaining features -->
+            <button mat-raised-button 
+                    (click)="startForwardFromBackwardFeatures()"
+                    [disabled]="sfsRunning"
+                    style="background-color: #1976d2 !important; color: white; padding: 10px 20px; font-size: 13px; font-weight: 500;">
+              <span *ngIf="!sfsRunning">▶ Run Forward Selection on These Features</span>
+              <span *ngIf="sfsRunning">⏳ Running...</span>
+            </button>
+            <p style="margin: 8px 0 0 0; font-size: 11px; color: #666; font-style: italic;">
+              Start forward feature selection using only the remaining features from backward elimination
+            </p>
+          </div>
         </div>
       </div>
 
@@ -422,6 +449,38 @@
                       <td style="padding: 8px; border: 1px solid #ddd;">{{ change.feature }}</td>
                       <td style="padding: 8px; border: 1px solid #ddd; text-align:right;" [style.color]="change.change > 0 ? '#4caf50' : '#f44336'">
                         {{ change.change > 0 ? '+' : '' }}{{ change.change | number:'1.6-6' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div *ngIf="getFeatureImpactRows(selectedSfsStep, previousSfsStep).length > 0" style="margin-top: 20px;">
+              <h4>Feature Importance (Gain & SHAP)</h4>
+              <div style="font-size: 12px; color:#666; margin-bottom:8px;">
+                Model built-in feature importance is based on XGBoost gain. SHAP impact is the mean absolute SHAP value per feature for the model at this step.
+                <span *ngIf="previousSfsStep" style="font-style: italic;"> Values in parentheses are from the previous step.</span>
+              </div>
+              <div style="overflow:auto; max-height: 300px; border: 1px solid #eee;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <thead>
+                    <tr style="background: #f5f5f5;">
+                      <th style="padding: 8px; border: 1px solid #ddd;">Feature</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">Gain Importance</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align:right;">SHAP Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of getFeatureImpactRows(selectedSfsStep, previousSfsStep)">
+                      <td style="padding: 8px; border: 1px solid #ddd;">{{ row.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">
+                        {{ row.gain | number:'1.6-6' }}
+                        <span *ngIf="row.prevGain !== null" style="color: #888; font-size: 11px;"> ({{ row.prevGain | number:'1.6-6' }})</span>
+                      </td>
+                      <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">
+                        {{ row.shap | number:'1.6-6' }}
+                        <span *ngIf="row.prevShap !== null" style="color: #888; font-size: 11px;"> ({{ row.prevShap | number:'1.6-6' }})</span>
                       </td>
                     </tr>
                   </tbody>

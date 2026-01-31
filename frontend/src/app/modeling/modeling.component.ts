@@ -56,7 +56,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsResults: any | null = null;
   sfsForwardResults: any[] = [];
   sfsBackwardResults: any[] = [];
+  sfsBackwardRemainingFeatures: string[] = [];  // Features remaining after backward elimination
+  sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward remaining features
   selectedSfsStep: any | null = null;  // For modal display
+  previousSfsStep: any | null = null;  // Previous step for comparison
   showSfsModal: boolean = false;
 
   // Utility for template
@@ -881,6 +884,49 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   }
 
   /**
+   * Start forward selection using the remaining features from backward elimination
+   */
+  startForwardFromBackwardFeatures(): void {
+    if (!this.currentFileId) return;
+    if (!this.sfsBackwardRemainingFeatures || this.sfsBackwardRemainingFeatures.length === 0) {
+      alert('No remaining features available from backward elimination');
+      return;
+    }
+
+    // Prepare stopping criteria for forward selection
+    const stoppingCriteria = {
+      metrics: this.sfsMetrics,
+      min_features: this.sfsMinFeatures,
+      max_features: this.sfsMaxFeatures
+    };
+
+    this.sfsRunning = true;
+    this.sfsProgress = 0;
+    this.sfsMessage = 'Starting forward selection from backward remaining features...';
+    this.sfsCurrentMetrics = {};
+    this.sfsCompletedSteps = [];
+
+    // Call startSfs with initial_features parameter
+    this.dataService.startSfsWithInitialFeatures(
+      this.currentFileId,
+      ['forward'],
+      stoppingCriteria,
+      this.sfsBackwardRemainingFeatures
+    ).subscribe({
+      next: (resp: any) => {
+        console.log('[SFS-Chain] Forward from backward started:', resp);
+        this.sfsMessage = 'Running forward selection on backward remaining features...';
+        this.startSfsStatusPolling();
+      },
+      error: (err: any) => {
+        console.error('[SFS-Chain] Failed to start:', err);
+        this.sfsRunning = false;
+        this.sfsMessage = 'Failed to start forward selection: ' + (err.message || err);
+      }
+    });
+  }
+
+  /**
    * Poll SFS status/progress
    */
   private startSfsStatusPolling(): void {
@@ -949,12 +995,15 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsResults = data;
         this.sfsForwardResults = data.forward || [];
         this.sfsBackwardResults = data.backward || [];
+        this.sfsBackwardRemainingFeatures = data.backward_remaining_features || [];
+        console.log('[SFS] Backward remaining features:', this.sfsBackwardRemainingFeatures);
       },
       error: (err: any) => {
         console.warn('[SFS] Failed to fetch results:', err);
         this.sfsResults = null;
         this.sfsForwardResults = [];
         this.sfsBackwardResults = [];
+        this.sfsBackwardRemainingFeatures = [];
       }
     });
   }
@@ -964,7 +1013,16 @@ export class ModelingComponent implements OnInit, AfterViewInit {
    */
   openSfsDetailModal(step: any): void {
     this.selectedSfsStep = step;
+    this.previousSfsStep = this.findPreviousStep(step);
     this.showSfsModal = true;
+  }
+
+  findPreviousStep(currentStep: any): any | null {
+    if (!currentStep || currentStep.step <= 1) return null;
+    const prevStepNum = currentStep.step - 1;
+    const direction = currentStep.direction;
+    const resultsArray = direction === 'forward' ? this.sfsForwardResults : this.sfsBackwardResults;
+    return resultsArray.find((s: any) => s.step === prevStepNum && s.direction === direction) || null;
   }
 
   /**
@@ -973,6 +1031,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   closeSfsModal(): void {
     this.showSfsModal = false;
     this.selectedSfsStep = null;
+    this.previousSfsStep = null;
   }
 
   /**
@@ -992,5 +1051,77 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       feature: key,
       change: shapChanges[key]
     })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  }
+
+  getFeatureImpactRows(step: any, prevStep: any = null): Array<{ feature: string; gain: number; shap: number; prevGain: number | null; prevShap: number | null }> {
+    if (!step) return [];
+    const selectedFeatures: string[] = step.selected_features || [];
+    if (!Array.isArray(selectedFeatures) || selectedFeatures.length === 0) return [];
+
+    const gainRaw = step.feature_importance || {};
+    const shapRaw = step.shap_importance_by_feature || {};
+
+    const gainMap: Record<string, number> = {};
+    Object.keys(gainRaw || {}).forEach((k) => {
+      const v = Number(gainRaw[k] ?? 0);
+      gainMap[k] = Number.isFinite(v) ? v : 0;
+    });
+
+    const normalizedGainByFeature: Record<string, number> = {};
+    for (const k of Object.keys(gainMap)) {
+      if (selectedFeatures.includes(k)) {
+        normalizedGainByFeature[k] = gainMap[k];
+        continue;
+      }
+      const m = /^f(\d+)$/.exec(k);
+      if (m) {
+        const idx = Number(m[1]);
+        const featName = selectedFeatures[idx];
+        if (featName) {
+          normalizedGainByFeature[featName] = gainMap[k];
+        }
+      }
+    }
+
+    const prevGainMap: Record<string, number> = {};
+    const prevShapMap: Record<string, number> = {};
+    if (prevStep) {
+      const prevFeatures: string[] = prevStep.selected_features || [];
+      const prevGainRaw = prevStep.feature_importance || {};
+      const prevShapRaw = prevStep.shap_importance_by_feature || {};
+      Object.keys(prevGainRaw || {}).forEach((k) => {
+        const v = Number(prevGainRaw[k] ?? 0);
+        if (prevFeatures.includes(k)) {
+          prevGainMap[k] = Number.isFinite(v) ? v : 0;
+        } else {
+          const m = /^f(\d+)$/.exec(k);
+          if (m) {
+            const idx = Number(m[1]);
+            const featName = prevFeatures[idx];
+            if (featName) prevGainMap[featName] = Number.isFinite(v) ? v : 0;
+          }
+        }
+      });
+      Object.keys(prevShapRaw || {}).forEach((k) => {
+        const v = Number(prevShapRaw[k] ?? 0);
+        prevShapMap[k] = Number.isFinite(v) ? v : 0;
+      });
+    }
+
+    const rows = selectedFeatures.map((feature) => {
+      const gainVal = Number(normalizedGainByFeature[feature] ?? 0);
+      const shapVal = Number(shapRaw?.[feature] ?? 0);
+      const prevGainVal = prevStep && feature in prevGainMap ? prevGainMap[feature] : null;
+      const prevShapVal = prevStep && feature in prevShapMap ? prevShapMap[feature] : null;
+      return {
+        feature,
+        gain: Number.isFinite(gainVal) ? gainVal : 0,
+        shap: Number.isFinite(shapVal) ? shapVal : 0,
+        prevGain: prevGainVal !== null && Number.isFinite(prevGainVal) ? prevGainVal : null,
+        prevShap: prevShapVal !== null && Number.isFinite(prevShapVal) ? prevShapVal : null
+      };
+    });
+
+    return rows.sort((a, b) => Math.abs(b.shap) - Math.abs(a.shap));
   }
 }

@@ -7,7 +7,7 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-v2.5.0-202510XX-Context:
+v2.5.1-202510XX-Context:
 - continue with backward and forward version of SFS step
 Next Steps (Optional Enhancements)
 While the implementation is complete and functional, here are potential future improvements:
@@ -19,26 +19,6 @@ Custom Scoring - Allow custom scoring functions
 Parallel Execution - Run forward/backward simultaneously
 History Tracking - Save multiple SFS runs for comparison
 
-
-Bug:
-[PreprocessingRun] Dropped 2 excluded variables (Target preserved): ['AppID', 'Application_Datetime']
-
-[PreprocessingRun] apply_options ok in 2.483s dropped=12 shape=(34582, 39)
-
-[PreprocessingRun] saved processed csv in 0.219s -> data_files/processed_122_20251021213025.csv
-
-[PreprocessingRun] datq using sampled rows: 10000/34582
-
-[PreprocessingRun] OOT split: date_column missing/unaligned; falling back to random
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4671: RuntimeWarning: invalid value encountered in subtract
-
-  diff_b_a = subtract(b, a)
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4673: RuntimeWarning: invalid value encountered in multiply
-
-  lerp_interpolation = asanyarray(add(a, diff_b_a * t, out=out))
-
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - add feature-importance derived directly from the model built-in method computed via 'gain' metric
 - stopping criteria selections via %-change of metrics and min-max feature count.
@@ -46,28 +26,7 @@ Bug:
 - while using xgboost, how do we encode the categorical variables? 
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
 - add causality features into explainability tab
-
-close below warnings:
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4671: RuntimeWarning: invalid value encountered in subtract
-
-  diff_b_a = subtract(b, a)
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4673: RuntimeWarning: invalid value encountered in multiply
-
-  lerp_interpolation = asanyarray(add(a, diff_b_a * t, out=out))
-
-/usr/local/lib/python3.12/site-packages/shap/explainers/_tree.py:253: FutureWarning: In the future, passing feature_perturbation='interventional' without providing a background dataset will raise an error. Please provide a background dataset to continue using the interventional approach or set feature_perturbation='auto' to automatically switch approaches.
-
-  warnings.warn(
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:3065: RuntimeWarning: invalid value encountered in divide
-
-  c /= stddev[:, None]
-
-/usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:3066: RuntimeWarning: invalid value encountered in divide
-
-  c /= stddev[None, :]
+- in data split for random choice add percentage selection also
 
 
 
@@ -77,6 +36,3 @@ close below warnings:
 - add sub titles under about/declarai:
     <button mat-menu-item>Declarative ML</button>
     <button mat-menu-item>White Paper</button>
-
-
-

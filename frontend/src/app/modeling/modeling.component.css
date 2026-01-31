@@ -1,0 +1,132 @@
+/* SFS Modal Styling */
+.sfs-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.sfs-modal-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 900px;
+  width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sfs-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sfs-modal-header h3 {
+  margin: 0;
+  color: #740505;
+  font-size: 20px;
+}
+
+.sfs-modal-header .close-button {
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: #666;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.sfs-modal-header .close-button:hover {
+  background: #f5f5f5;
+}
+
+.sfs-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sfs-modal-body h4 {
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sfs-modal-body p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.sfs-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Next button styling */
+.next-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #740505 !important;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.next-button:hover:not(:disabled) {
+  background-color: #8f0a0a !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.next-button:active {
+  transform: none !important;
+}
+
+.next-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #740505 !important;
+}
+
+.next-icon {
+  margin-right: 8px;
+}

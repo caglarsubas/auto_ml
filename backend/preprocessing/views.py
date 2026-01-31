@@ -2,6 +2,7 @@ import json
 import math
 import os
 import time
+import warnings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.conf import settings
@@ -12,6 +13,9 @@ from declaration.models import Declaration
 from .data_quality import Data_Quality
 import pandas as pd
 import numpy as np
+
+# Suppress NumPy warnings for invalid values during PSI/JSD/quantile calculations
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -303,15 +307,18 @@ class PreprocessingDatqTimeseriesView(APIView):
                     x_te = _sanitize_for_calc(x_te_raw.values)
                     if x_tr.size >= 2 and x_te.size >= 2:
                         # train-quantile based bins to keep baseline consistent
-                        qs = np.linspace(0, 1, bins + 1)
-                        try:
-                            edges = np.unique(np.quantile(x_tr, qs))
-                        except Exception:
-                            edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
-                        if edges.size < 2:
-                            return None
-                        p, _ = np.histogram(x_tr, bins=edges)
-                        q, _ = np.histogram(x_te, bins=edges)
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                            qs = np.linspace(0, 1, bins + 1)
+                            try:
+                                edges = np.unique(np.quantile(x_tr, qs))
+                            except Exception:
+                                edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
+                            if edges.size < 2:
+                                return None
+                            p, _ = np.histogram(x_tr, bins=edges)
+                            q, _ = np.histogram(x_te, bins=edges)
                     else:
                         # categorical fallback using value counts over union of categories
                         vc_tr = s_tr_raw.astype(str).value_counts()
@@ -478,15 +485,16 @@ class PreprocessingRunView(APIView):
             # Track columns before any drops
             cols_before = list(df.columns)
             
-            # Drop excluded variables (Model_Usage='No'), but preserve Target column
+            # Track excluded variables (Model_Usage='No') but keep them in dataframe
+            # They will be excluded from model training later, not from the dataset
             excluded_by_model_usage = []
             if excluded_variables and isinstance(excluded_variables, list):
-                # Exclude Target from being dropped (it's needed for modeling)
+                # Exclude Target from the exclusion list (it's needed for modeling)
                 excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
                 if excluded_present:
                     excluded_by_model_usage = excluded_present
-                    df = df.drop(columns=excluded_present)
-                    print(f"[PreprocessingRun] Dropped {len(excluded_present)} excluded variables (Target preserved): {excluded_present}")
+                    # DO NOT drop them from dataframe - keep for reference/tracking
+                    print(f"[PreprocessingRun] Marked {len(excluded_present)} variables as excluded from model training (kept in dataset): {excluded_present}")
             
             rows_before = len(df)
 
@@ -501,18 +509,19 @@ class PreprocessingRunView(APIView):
             df_processed, dropped_columns, dropped_by_step = self._apply_options(df, set(options), preserve=preserve_cols)
             print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape}")
             
-            # Add Model_Usage='No' drops to the beginning of the breakdown for transparency
+            # Add Model_Usage='No' info to the beginning of the breakdown for transparency
+            # Note: These are NOT dropped from dataframe, just excluded from model training
             if excluded_by_model_usage:
                 dropped_by_step.insert(0, {
                     'step': 'Model_Usage exclusion',
                     'option_ids': [],
                     'columns': excluded_by_model_usage,
                     'rows_removed': 0,
-                    'note': 'Variables marked as Model_Usage=No in Data Dictionary'
+                    'note': 'Variables marked as Model_Usage=No (excluded from training, kept in dataset)'
                 })
             
-            # Combine all dropped columns
-            all_dropped_columns = excluded_by_model_usage + dropped_columns
+            # Only actual dropped columns (excluded variables are NOT dropped)
+            all_dropped_columns = dropped_columns
 
             # Save processed file
             out_name = f"processed_{file_id}_{self._safe_timestamp()}.csv"
@@ -747,15 +756,18 @@ class PreprocessingRunView(APIView):
                             x_tr = _coerce_numeric(s_tr_raw)
                             x_te = _coerce_numeric(s_te_raw)
                             if len(x_tr) >= 2 and len(x_te) >= 2:
-                                qs = np.linspace(0, 1, bins + 1)
-                                try:
-                                    edges = np.unique(np.quantile(x_tr.values, qs))
-                                except Exception:
-                                    edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
-                                if edges.size < 2:
-                                    return None
-                                p, _ = np.histogram(x_tr.values, bins=edges)
-                                q, _ = np.histogram(x_te.values, bins=edges)
+                                import warnings
+                                with warnings.catch_warnings():
+                                    warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                                    qs = np.linspace(0, 1, bins + 1)
+                                    try:
+                                        edges = np.unique(np.quantile(x_tr.values, qs))
+                                    except Exception:
+                                        edges = np.unique(np.linspace(float(x_tr.min()), float(x_tr.max()), bins + 1))
+                                    if edges.size < 2:
+                                        return None
+                                    p, _ = np.histogram(x_tr.values, bins=edges)
+                                    q, _ = np.histogram(x_te.values, bins=edges)
                             else:
                                 vc_tr = s_tr_raw.astype(str).value_counts()
                                 vc_te = s_te_raw.astype(str).value_counts()

@@ -3,6 +3,9 @@ import os
 import numpy as np
 import pandas as pd
 
+# Suppress NumPy warnings for invalid values during PSI/quantile calculations
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+
 
 class Data_Quality():
 
@@ -258,10 +261,16 @@ class Data_Quality():
                         if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
                             psi_numerical_col_dict[col] = [np.nan, pd.DataFrame()]
                             continue
-                        bins = np.linspace(lo, hi, num=11)
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                            bins = np.linspace(lo, hi, num=11)
 
-                    b_tr = pd.cut(col_series_train, bins=bins, include_lowest=True)
-                    b_te = pd.cut(col_series_test, bins=bins, include_lowest=True)
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                        b_tr = pd.cut(col_series_train, bins=bins, include_lowest=True)
+                        b_te = pd.cut(col_series_test, bins=bins, include_lowest=True)
                     vc_tr = b_tr.value_counts(normalize=True)
                     vc_te = b_te.value_counts(normalize=True)
                     tbl = pd.concat([vc_tr, vc_te], axis=1, sort=False)
@@ -542,9 +551,15 @@ class Data_Quality():
                             lo, hi = combo.min(), combo.max()
                             if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
                                 continue
-                            bins = np.linspace(lo, hi, num=11)
-                        vc_tr = pd.cut(s_tr, bins=bins, include_lowest=True).value_counts(normalize=True)
-                        vc_te = pd.cut(s_te, bins=bins, include_lowest=True).value_counts(normalize=True)
+                            import warnings
+                            with warnings.catch_warnings():
+                                warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                                bins = np.linspace(lo, hi, num=11)
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+                            vc_tr = pd.cut(s_tr, bins=bins, include_lowest=True).value_counts(normalize=True)
+                            vc_te = pd.cut(s_te, bins=bins, include_lowest=True).value_counts(normalize=True)
                         tbl = pd.concat([vc_tr, vc_te], axis=1, sort=False)
                         tbl.columns = ['train_share', 'test_share']
                         eps = 1e-8
