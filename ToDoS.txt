@@ -7,17 +7,15 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-v2.5.1-202510XX-Context:
-- continue with backward and forward version of SFS step
-Next Steps (Optional Enhancements)
-While the implementation is complete and functional, here are potential future improvements:
+partial dependency plot in feature-card-modal/explainability tab
 
-Export Results - CSV/Excel export of SFS results
-Plot Performance Curves - Line charts showing metric progression
-Feature Comparison - Side-by-side before/after analysis
-Custom Scoring - Allow custom scoring functions
-Parallel Execution - Run forward/backward simultaneously
-History Tracking - Save multiple SFS runs for comparison
+While the implementation is complete and functional, here are potential future improvements:
+- Export Results - CSV/Excel export of SFS results
+- Plot Performance Curves - Line charts showing metric progression
+- Feature Comparison - Side-by-side before-adding/after-adding analysis
+- Custom Scoring - Allow custom scoring functions adding via UI
+- Parallel Execution Option - Run forward/backward simultaneously
+- History Tracking - Save multiple SFS runs for comparison
 
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - add feature-importance derived directly from the model built-in method computed via 'gain' metric
@@ -27,7 +25,7 @@ History Tracking - Save multiple SFS runs for comparison
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
 - add causality features into explainability tab
 - in data split for random choice add percentage selection also
-
+ 
 
 
 - Add unit test for each functionality currently being hold and run that test

@@ -86,20 +86,41 @@
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
               <tr style="background: #fafafa; text-align: left;">
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 28%;">Feature</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 20%;">Feature</th>
                 <th style="padding: 8px; border-bottom: 1px solid #eee;">Description</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">|Impact|</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">Signed impact</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 14%; text-align:right;">|Impact|</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 12%; text-align:right;">Signed impact</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right;">Gain</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 26%;">Usage</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let f of modelingStatus.model.selected_features">
+              <tr *ngFor="let f of modelingStatus.model.selected_features"
+                  [style.background]="featureUsage[f.feature] === 'drop' ? '#fff5f5' : 'transparent'">
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">
                   <a href="javascript:void(0)" (click)="openFeatureCard(f.feature)" style="color: #1976d2; text-decoration: underline; cursor: pointer;">{{ f.feature }}</a>
                 </td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ f.description || '—' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.signed_impact | number:'1.6-6' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.gain | number:'1.2-2' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <select
+                      [ngModel]="featureUsage[f.feature] || 'keep'"
+                      (ngModelChange)="featureUsage[f.feature] = $event; $event === 'keep' && (featureDropReason[f.feature] = '')"
+                      style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; background: #fff;">
+                      <option value="keep">Keep</option>
+                      <option value="drop">Drop</option>
+                    </select>
+                    <input
+                      *ngIf="featureUsage[f.feature] === 'drop'"
+                      type="text"
+                      placeholder="Reason for dropping..."
+                      [(ngModel)]="featureDropReason[f.feature]"
+                      style="flex: 1; padding: 4px 8px; border: 1px solid #e57373; border-radius: 4px; font-size: 12px; min-width: 120px;" />
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -190,9 +211,8 @@
 
         <!-- Start Button -->
         <div style="margin-top: 20px;">
-          <button mat-raised-button color="primary" (click)="startSfs()" 
-                  style="background-color: #740505 !important; color: white; padding: 10px 24px;">
-            <span style="font-size: 14px;">▶ Proceed to SFS</span>
+          <button mat-raised-button color="primary" (click)="startSfs()">
+            ▶ Proceed to SFS
           </button>
         </div>
       </div>
@@ -367,10 +387,9 @@
             </div>
             
             <!-- Button to start forward selection on remaining features -->
-            <button mat-raised-button 
+            <button mat-raised-button color="primary"
                     (click)="startForwardFromBackwardFeatures()"
-                    [disabled]="sfsRunning"
-                    style="background-color: #1976d2 !important; color: white; padding: 10px 20px; font-size: 13px; font-weight: 500;">
+                    [disabled]="sfsRunning">
               <span *ngIf="!sfsRunning">▶ Run Forward Selection on These Features</span>
               <span *ngIf="sfsRunning">⏳ Running...</span>
             </button>
@@ -383,12 +402,17 @@
 
       <!-- SFS Detail Modal -->
       <div *ngIf="showSfsModal && selectedSfsStep" class="sfs-modal-overlay" (click)="closeSfsModal()">
-        <div class="sfs-modal-content" (click)="$event.stopPropagation()">
+        <div class="sfs-modal-content" [class.expanded]="sfsModalExpanded" (click)="$event.stopPropagation()">
           <div class="sfs-modal-header">
             <h3>Feature Impact Details: {{ selectedSfsStep.feature_name }}</h3>
-            <button mat-icon-button (click)="closeSfsModal()" class="close-button">
-              <span style="font-size: 24px;">&times;</span>
-            </button>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button (click)="toggleSfsModalExpand()" class="close-button" title="{{ sfsModalExpanded ? 'Collapse' : 'Expand to full screen' }}">
+                <span style="font-size: 18px;">{{ sfsModalExpanded ? '⊙' : '⛶' }}</span>
+              </button>
+              <button mat-icon-button (click)="closeSfsModal()" class="close-button">
+                <span style="font-size: 24px;">&times;</span>
+              </button>
+            </div>
           </div>
           
           <div class="sfs-modal-body">
@@ -485,6 +509,30 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- Feature Progression Charts -->
+            <div style="margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px;">
+              <h4 style="margin-bottom: 4px;">Feature Progression Across SFS Steps</h4>
+              <p style="font-size: 12px; color:#666; margin-bottom: 12px;">
+                Track how each feature's importance and model performance evolve across all {{ selectedSfsStep.direction }} selection steps. 
+                The current step is marked with a red dotted line. The selected feature (<strong>{{ selectedSfsStep.feature_name }}</strong>) is highlighted.
+              </p>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                  <div id="sfs-progression-shap" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div>
+                  <div id="sfs-progression-gain" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div>
+                  <div id="sfs-progression-stability" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div>
+                  <div id="sfs-progression-performance" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
               </div>
             </div>
 

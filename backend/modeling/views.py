@@ -316,6 +316,9 @@ class ModelingStartView(APIView):
                                 if item['mean_abs'] > 0
                             ]
 
+                            # Build gain lookup from already-computed gain_importance
+                            gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
+
                             try:
                                 from declaration.models import DataDictionary
                                 selected_features = []
@@ -329,6 +332,7 @@ class ModelingStartView(APIView):
                                         'impact': item['mean_abs'],
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
+                                        'gain': gain_lookup.get(item['feature'], 0.0),
                                     })
                             except Exception:
                                 selected_features = []
@@ -341,6 +345,7 @@ class ModelingStartView(APIView):
                                         'impact': item['mean_abs'],
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
+                                        'gain': gain_lookup.get(item['feature'], 0.0),
                                     })
 
                             try:
@@ -904,6 +909,15 @@ class FeatureExplainabilityView(APIView):
                     'detail': 'This feature is in the model but not available in the current processed dataset. Please ensure preprocessing was completed correctly.'
                 }, status=status.HTTP_404_NOT_FOUND)
 
+            # Filter X and X_raw to only include model features (model may have been
+            # trained on a subset due to excluded_variables / Model_Usage settings).
+            # Without this, DMatrix dimensions won't match the model's expected features.
+            if model_features:
+                available_model_features = [c for c in model_features if c in X.columns]
+                print(f"[FeatureExplainability] Filtering data from {X.shape[1]} cols to {len(available_model_features)} model features")
+                X = X[available_model_features]
+                X_raw = X_raw[[c for c in available_model_features if c in X_raw.columns]]
+
             # Sample for performance
             if X.shape[0] > n_samples:
                 sample_idx = X.sample(n_samples, random_state=42).index
@@ -1144,6 +1158,7 @@ class SFSStartView(APIView):
             methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
             stopping_criteria = data.get('stopping_criteria', {})
             initial_features = data.get('initial_features', None)  # Optional: Start with specific features
+            excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
             
             # Validate required parameters
             if not file_id:
@@ -1170,6 +1185,16 @@ class SFSStartView(APIView):
             y_valid = train_data['y_valid']
             X_train_raw = train_data['X_train_raw']
             X_valid_raw = train_data['X_valid_raw']
+            
+            # Remove features marked as "drop" by user from all feature matrices
+            if excluded_features and isinstance(excluded_features, list):
+                cols_to_drop = [c for c in excluded_features if c in X_train.columns]
+                if cols_to_drop:
+                    print(f"[SFS] Excluding {len(cols_to_drop)} user-dropped features from SFS: {cols_to_drop}")
+                    X_train = X_train.drop(columns=cols_to_drop)
+                    X_valid = X_valid.drop(columns=cols_to_drop)
+                    X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
+                    X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
             
             # Initialize progress tracking
             SFS_PROGRESS[file_id] = {
@@ -1264,12 +1289,19 @@ class SFSStartView(APIView):
             thread.daemon = True
             thread.start()
             
+            excluded_count = len([c for c in (excluded_features or []) if c in train_data['X_train'].columns])
+            msg = f'SFS started in background ({X_train.shape[1]} features'
+            if excluded_count > 0:
+                msg += f', {excluded_count} excluded by user'
+            msg += ')'
+            
             return Response({
                 'status': 'started',
-                'message': 'SFS started in background',
+                'message': msg,
                 'file_id': file_id,
                 'methods': methods,
-                'stopping_criteria': stopping_criteria
+                'stopping_criteria': stopping_criteria,
+                'excluded_features': excluded_features or []
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

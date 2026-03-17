@@ -31,6 +31,12 @@ node_modules
 ehthumbs.db
 Thumbs.db
 
+# Media / data files (generated at runtime)
+backend/media/
+
+# Test reports
+test-reports/
+
 # User created
 get_github_context.sh
 auto_ml_context.md

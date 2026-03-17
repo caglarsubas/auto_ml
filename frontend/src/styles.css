@@ -312,6 +312,94 @@ textarea::placeholder {
   transform: none !important;
 }
 
+/* ---------- Angular Material Button Overrides ---------- */
+/* Raised buttons (primary action) */
+.mat-mdc-raised-button.mat-primary,
+.mat-mdc-raised-button.mat-accent {
+  font-family: var(--font-sans) !important;
+  font-weight: var(--font-semibold) !important;
+  font-size: var(--text-sm) !important;
+  letter-spacing: 0.02em !important;
+  border-radius: var(--radius-lg) !important;
+  padding: var(--space-2) var(--space-5) !important;
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%) !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgb(175 33 69 / 0.3) !important;
+  transition: all var(--transition-fast) !important;
+  text-transform: uppercase !important;
+  min-height: 38px !important;
+}
+
+.mat-mdc-raised-button.mat-primary:hover:not(:disabled),
+.mat-mdc-raised-button.mat-accent:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-700) 0%, var(--primary-800) 100%) !important;
+  box-shadow: 0 4px 12px rgb(175 33 69 / 0.4) !important;
+  transform: translateY(-1px);
+}
+
+.mat-mdc-raised-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* Stroked buttons (secondary action) */
+.mat-mdc-outlined-button,
+.mdc-button--outlined,
+button[mat-stroked-button] {
+  font-family: var(--font-sans) !important;
+  font-weight: var(--font-medium) !important;
+  font-size: var(--text-xs) !important;
+  letter-spacing: 0.02em !important;
+  border-radius: var(--radius-lg) !important;
+  border: 1.5px solid var(--neutral-300) !important;
+  color: var(--neutral-700) !important;
+  background: white !important;
+  padding: var(--space-1) var(--space-4) !important;
+  transition: all var(--transition-fast) !important;
+  min-height: 34px !important;
+  text-transform: uppercase !important;
+}
+
+.mat-mdc-outlined-button:hover:not(:disabled),
+.mdc-button--outlined:hover:not(:disabled),
+button[mat-stroked-button]:hover:not(:disabled) {
+  background: var(--neutral-50) !important;
+  border-color: var(--primary-400) !important;
+  color: var(--primary-700) !important;
+}
+
+.mat-mdc-outlined-button.mat-primary,
+button[mat-stroked-button][color="primary"] {
+  border-color: var(--primary-300) !important;
+  color: var(--primary-700) !important;
+}
+
+.mat-mdc-outlined-button.mat-warn,
+button[mat-stroked-button][color="warn"] {
+  border-color: var(--error-300, #fca5a5) !important;
+  color: var(--error-600, #dc2626) !important;
+}
+
+/* Flat/basic buttons (text buttons) */
+.mat-mdc-button {
+  font-family: var(--font-sans) !important;
+  font-weight: var(--font-medium) !important;
+  font-size: var(--text-sm) !important;
+  border-radius: var(--radius-lg) !important;
+  transition: all var(--transition-fast) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+}
+
+.mat-mdc-button:hover:not(:disabled) {
+  background: var(--neutral-100) !important;
+}
+
+.mat-mdc-button.mat-primary {
+  color: var(--primary-700) !important;
+}
+
 /* ---------- Modern Cards ---------- */
 .card {
   background: white;

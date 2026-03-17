@@ -156,6 +156,15 @@
   box-shadow: var(--shadow-2xl);
   animation: modalSlideUp 0.3s ease-out;
   overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.sfs-modal-content.expanded {
+  max-width: 100%;
+  width: 100%;
+  max-height: 100vh;
+  height: 100vh;
+  border-radius: 0;
 }
 
 @keyframes fadeIn {

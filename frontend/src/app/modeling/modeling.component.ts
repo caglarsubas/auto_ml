@@ -61,6 +61,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   selectedSfsStep: any | null = null;  // For modal display
   previousSfsStep: any | null = null;  // Previous step for comparison
   showSfsModal: boolean = false;
+  sfsModalExpanded: boolean = false;
 
   // Utility for template
   Object = Object;
@@ -77,6 +78,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
   // Model_Usage settings (variables to exclude from modeling)
   variableModelUsage: { [variable: string]: string } = {};
+
+  // Feature usage tracking for Selected Features table
+  featureUsage: { [feature: string]: string } = {};
+  featureDropReason: { [feature: string]: string } = {};
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -860,7 +865,19 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       max_features: this.sfsMaxFeatures
     };
     
-    console.log('[SFS] Starting with config:', { methods, stoppingCriteria });
+    // Collect features marked as "drop" in the Usage column
+    const excludedFeatures = Object.keys(this.featureUsage).filter(f => this.featureUsage[f] === 'drop');
+    const excludedReasonsMap: { [feature: string]: string } = {};
+    excludedFeatures.forEach(f => {
+      if (this.featureDropReason[f]) {
+        excludedReasonsMap[f] = this.featureDropReason[f];
+      }
+    });
+    if (excludedFeatures.length > 0) {
+      console.log('[SFS] Excluding features marked as "drop":', excludedFeatures, 'Reasons:', excludedReasonsMap);
+    }
+    
+    console.log('[SFS] Starting with config:', { methods, stoppingCriteria, excludedFeatures });
     
     this.sfsRunning = true;
     this.sfsProgress = 0;
@@ -868,7 +885,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
     
-    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria).subscribe({
+    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Started:', resp);
         this.sfsMessage = resp.message || 'SFS running...';
@@ -1015,6 +1032,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.selectedSfsStep = step;
     this.previousSfsStep = this.findPreviousStep(step);
     this.showSfsModal = true;
+    setTimeout(() => this.drawSfsFeatureProgressionCharts(), 50);
   }
 
   findPreviousStep(currentStep: any): any | null {
@@ -1030,8 +1048,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
    */
   closeSfsModal(): void {
     this.showSfsModal = false;
+    this.sfsModalExpanded = false;
     this.selectedSfsStep = null;
     this.previousSfsStep = null;
+  }
+
+  toggleSfsModalExpand(): void {
+    this.sfsModalExpanded = !this.sfsModalExpanded;
+    setTimeout(() => this.drawSfsFeatureProgressionCharts(), 100);
   }
 
   /**
@@ -1123,5 +1147,262 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     });
 
     return rows.sort((a, b) => Math.abs(b.shap) - Math.abs(a.shap));
+  }
+
+  /**
+   * Normalize gain keys (f0, f1... or actual names) to real feature names
+   */
+  private normalizeGainMap(gainRaw: Record<string, number>, selectedFeatures: string[]): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const k of Object.keys(gainRaw)) {
+      const v = Number(gainRaw[k] ?? 0);
+      if (!Number.isFinite(v)) continue;
+      if (selectedFeatures.includes(k)) {
+        result[k] = v;
+      } else {
+        const m = /^f(\d+)$/.exec(k);
+        if (m) {
+          const idx = Number(m[1]);
+          const featName = selectedFeatures[idx];
+          if (featName) result[featName] = v;
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Build per-feature metric progression across all SFS steps for the current direction.
+   * Returns { featureNames: string[], steps: number[],
+   *   shap: Record<string, (number|null)[]>, gain: Record<string, (number|null)[]>,
+   *   stability: { steps: number[], values: (number|null)[], types: string[] },
+   *   modelMetrics: { cvRocAuc: number[], cvPrAuc: number[], trainRocAuc: number[], testRocAuc: number[] } }
+   */
+  buildFeatureProgressionData(): any {
+    if (!this.selectedSfsStep) return null;
+    const direction = this.selectedSfsStep.direction;
+    const allSteps = direction === 'forward' ? this.sfsForwardResults : this.sfsBackwardResults;
+    if (!allSteps || allSteps.length === 0) return null;
+
+    const sortedSteps = [...allSteps].sort((a: any, b: any) => a.step - b.step);
+
+    // Collect all feature names that appear in any step
+    const allFeatureNames = new Set<string>();
+    for (const step of sortedSteps) {
+      const feats: string[] = step.selected_features || [];
+      feats.forEach((f: string) => allFeatureNames.add(f));
+    }
+
+    const stepNumbers = sortedSteps.map((s: any) => s.step);
+
+    // Per-feature SHAP and Gain across steps
+    const shapByFeature: Record<string, (number | null)[]> = {};
+    const gainByFeature: Record<string, (number | null)[]> = {};
+    allFeatureNames.forEach(f => {
+      shapByFeature[f] = [];
+      gainByFeature[f] = [];
+    });
+
+    // Per-step stability and model metrics
+    const stabilitySteps: number[] = [];
+    const stabilityValues: (number | null)[] = [];
+    const stabilityTypes: string[] = [];
+    const cvRocAuc: number[] = [];
+    const cvPrAuc: number[] = [];
+    const trainRocAuc: number[] = [];
+    const testRocAuc: number[] = [];
+
+    for (const step of sortedSteps) {
+      const feats: string[] = step.selected_features || [];
+      const shapRaw = step.shap_importance_by_feature || {};
+      const gainRaw = step.feature_importance || {};
+      const normalizedGain = this.normalizeGainMap(gainRaw, feats);
+
+      allFeatureNames.forEach(f => {
+        if (feats.includes(f)) {
+          shapByFeature[f].push(Number(shapRaw[f] ?? 0));
+          gainByFeature[f].push(Number(normalizedGain[f] ?? 0));
+        } else {
+          shapByFeature[f].push(null);
+          gainByFeature[f].push(null);
+        }
+      });
+
+      stabilitySteps.push(step.step);
+      stabilityValues.push(step.stability_value != null ? Number(step.stability_value) : null);
+      stabilityTypes.push(step.stability_type || 'N/A');
+
+      cvRocAuc.push(Number(step.cv_roc_auc ?? 0));
+      cvPrAuc.push(Number(step.cv_pr_auc ?? 0));
+      trainRocAuc.push(Number(step.train_roc_auc ?? 0));
+      testRocAuc.push(Number(step.test_roc_auc ?? 0));
+    }
+
+    return {
+      featureNames: Array.from(allFeatureNames),
+      steps: stepNumbers,
+      shap: shapByFeature,
+      gain: gainByFeature,
+      stability: { steps: stabilitySteps, values: stabilityValues, types: stabilityTypes },
+      modelMetrics: { cvRocAuc, cvPrAuc, trainRocAuc, testRocAuc }
+    };
+  }
+
+  /**
+   * Draw Plotly line charts for feature progression in the SFS detail modal
+   */
+  drawSfsFeatureProgressionCharts(): void {
+    if (!this.isBrowser) return;
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) return;
+    const data = this.buildFeatureProgressionData();
+    if (!data) return;
+
+    const currentFeature = this.selectedSfsStep?.feature_name;
+    const currentStep = this.selectedSfsStep?.step;
+
+    // Color palette for features
+    const colors = [
+      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+      '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+    ];
+
+    // Helper: vertical line shape at current step
+    const currentStepLine = (yMin: number, yMax: number): any => ({
+      type: 'line', x0: currentStep, x1: currentStep, y0: yMin, y1: yMax,
+      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' }
+    });
+
+    // Helper: annotation for current step
+    const currentStepAnnotation = (yPos: number): any => ({
+      x: currentStep, y: yPos, xanchor: 'left', yanchor: 'bottom',
+      text: ` Step ${currentStep}`, showarrow: false,
+      font: { size: 10, color: 'crimson' }, bgcolor: 'rgba(255,255,255,0.8)'
+    });
+
+    const baseLayout = {
+      margin: { l: 60, r: 20, t: 36, b: 50 },
+      hovermode: 'x unified' as const,
+      legend: { orientation: 'h' as const, x: 0, y: -0.25, xanchor: 'left' as const, yanchor: 'top' as const, font: { size: 10 } },
+      xaxis: { title: { text: 'SFS Step', font: { size: 12 } }, dtick: 1 }
+    };
+    const config = { responsive: true, displayModeBar: false } as any;
+
+    // --- 1. SHAP Impact Progression ---
+    const shapEl = document.getElementById('sfs-progression-shap');
+    if (shapEl) {
+      const traces: any[] = [];
+      data.featureNames.forEach((feat: string, i: number) => {
+        const isHighlighted = feat === currentFeature;
+        traces.push({
+          type: 'scatter', mode: 'lines+markers', connectgaps: false,
+          x: data.steps, y: data.shap[feat],
+          name: feat,
+          line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5, dash: isHighlighted ? 'solid' : 'solid' },
+          marker: { size: isHighlighted ? 8 : 4 },
+          opacity: isHighlighted ? 1.0 : 0.5,
+          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`
+        });
+      });
+      const allShapVals = Object.values(data.shap).flat().filter((v: any) => v != null) as number[];
+      const yMin = Math.min(0, ...allShapVals);
+      const yMax = Math.max(...allShapVals) * 1.1 || 1;
+      const layout = {
+        ...baseLayout,
+        title: { text: 'SHAP Impact per Feature Across Steps', font: { size: 13 } },
+        yaxis: { title: { text: 'Mean |SHAP|', font: { size: 12 } } },
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)]
+      };
+      try { Plotly.react(shapEl, traces, layout, config); } catch { Plotly.newPlot(shapEl, traces, layout, config); }
+    }
+
+    // --- 2. Gain Importance Progression ---
+    const gainEl = document.getElementById('sfs-progression-gain');
+    if (gainEl) {
+      const traces: any[] = [];
+      data.featureNames.forEach((feat: string, i: number) => {
+        const isHighlighted = feat === currentFeature;
+        traces.push({
+          type: 'scatter', mode: 'lines+markers', connectgaps: false,
+          x: data.steps, y: data.gain[feat],
+          name: feat,
+          line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
+          marker: { size: isHighlighted ? 8 : 4 },
+          opacity: isHighlighted ? 1.0 : 0.5,
+          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`
+        });
+      });
+      const allGainVals = Object.values(data.gain).flat().filter((v: any) => v != null) as number[];
+      const yMin = Math.min(0, ...allGainVals);
+      const yMax = Math.max(...allGainVals) * 1.1 || 1;
+      const layout = {
+        ...baseLayout,
+        title: { text: 'Gain Importance per Feature Across Steps', font: { size: 13 } },
+        yaxis: { title: { text: 'XGBoost Gain', font: { size: 12 } } },
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)]
+      };
+      try { Plotly.react(gainEl, traces, layout, config); } catch { Plotly.newPlot(gainEl, traces, layout, config); }
+    }
+
+    // --- 3. Stability (PSI/CSI) Progression ---
+    const stabEl = document.getElementById('sfs-progression-stability');
+    if (stabEl) {
+      const stabVals = data.stability.values;
+      const stabTexts = data.stability.types.map((t: string, i: number) =>
+        `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`
+      );
+      const traces: any[] = [{
+        type: 'scatter', mode: 'lines+markers',
+        x: data.steps, y: stabVals,
+        name: 'PSI / CSI',
+        line: { color: '#e377c2', width: 2 },
+        marker: { size: 6 },
+        text: stabTexts,
+        hovertemplate: '%{text}<extra></extra>'
+      }];
+      const cleanVals = stabVals.filter((v: any) => v != null) as number[];
+      const yMax = cleanVals.length > 0 ? Math.max(...cleanVals) * 1.3 || 0.1 : 0.1;
+      const layout = {
+        ...baseLayout,
+        title: { text: 'Stability Metric (PSI/CSI) per Step', font: { size: 13 } },
+        yaxis: { title: { text: 'PSI / CSI', font: { size: 12 } }, rangemode: 'tozero' as const },
+        shapes: [
+          currentStepLine(0, yMax),
+          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.1, y1: 0.1, line: { color: '#ff9800', width: 1, dash: 'dash' } },
+          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.25, y1: 0.25, line: { color: '#f44336', width: 1, dash: 'dash' } }
+        ],
+        annotations: [
+          currentStepAnnotation(yMax),
+          { x: data.steps[data.steps.length - 1], y: 0.1, xanchor: 'right', yanchor: 'bottom', text: 'Caution (0.1)', showarrow: false, font: { size: 9, color: '#ff9800' } },
+          { x: data.steps[data.steps.length - 1], y: 0.25, xanchor: 'right', yanchor: 'bottom', text: 'Unstable (0.25)', showarrow: false, font: { size: 9, color: '#f44336' } }
+        ]
+      };
+      try { Plotly.react(stabEl, traces, layout, config); } catch { Plotly.newPlot(stabEl, traces, layout, config); }
+    }
+
+    // --- 4. Model Performance (CV ROC-AUC / PR-AUC) Progression ---
+    const perfEl = document.getElementById('sfs-progression-performance');
+    if (perfEl) {
+      const traces: any[] = [
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvRocAuc, name: 'CV ROC-AUC', line: { color: '#1f77b4', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvPrAuc, name: 'CV PR-AUC', line: { color: '#ff7f0e', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.trainRocAuc, name: 'Train ROC-AUC', line: { color: '#1f77b4', width: 1, dash: 'dash' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.testRocAuc, name: 'Test ROC-AUC', line: { color: '#2ca02c', width: 1, dash: 'dot' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>' }
+      ];
+      const allPerf = [...data.modelMetrics.cvRocAuc, ...data.modelMetrics.cvPrAuc, ...data.modelMetrics.trainRocAuc, ...data.modelMetrics.testRocAuc].filter((v: number) => Number.isFinite(v));
+      const yMin = Math.min(...allPerf) * 0.95 || 0;
+      const yMax = Math.max(...allPerf) * 1.02 || 1;
+      const layout = {
+        ...baseLayout,
+        title: { text: 'Model Performance Across Steps', font: { size: 13 } },
+        yaxis: { title: { text: 'Metric Value', font: { size: 12 } }, range: [yMin, yMax] },
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)]
+      };
+      try { Plotly.react(perfEl, traces, layout, config); } catch { Plotly.newPlot(perfEl, traces, layout, config); }
+    }
   }
 }

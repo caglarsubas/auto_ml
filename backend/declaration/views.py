@@ -261,9 +261,9 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             def determine_level_of_measurement(column_data, data_type, unique_count):
                 if unique_count == len(column_data):
                     return 'id'
-                elif (data_type == 'float64')&(unique_count>1000):
+                elif (data_type in ('float64', 'float', 'float32'))&(unique_count>1000):
                     return 'continuous'
-                elif (data_type == 'float64')&(unique_count<=1000):
+                elif (data_type in ('float64', 'float', 'float32'))&(unique_count<=1000):
                     return 'cardinal'
                 elif data_type == 'integer':
                     if unique_count > 1000 or unique_count / len(column_data) > 0.1:
@@ -273,7 +273,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                             return 'cardinal'
                         else:
                             return 'nominal'
-                elif data_type == 'object':
+                elif data_type in ('object', 'str', 'string'):
                     try:
                         pd.to_datetime(column_data, errors='raise', format='%d/%m/%Y %I:%M:%S %p')
                         return 'datetime'
