@@ -235,21 +235,40 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const x = top.map(d => d.score).reverse();
       const title = this.selectedImportanceType === 'shap' ? 'SHAP mean |impact|' : 'XGBoost gain';
 
+      // Highlight the selected feature
+      const selFeat = this.selectedFeatureName;
+      const barColors = y.map(f => f === selFeat ? '#C02942' : '#4E79A7');
+
       const trace = {
         x,
         y,
         type: 'bar',
         orientation: 'h',
-        marker: { color: '#4E79A7' },
+        marker: { color: barColors },
         hovertemplate: '%{y}: %{x:.6f}<extra></extra>'
       } as any;
+
+      // Annotation arrow pointing to the selected feature bar
+      const annotations: any[] = [];
+      const selIdx = y.indexOf(selFeat);
+      if (selIdx >= 0) {
+        annotations.push({
+          x: x[selIdx], y: y[selIdx],
+          xanchor: 'left', yanchor: 'middle',
+          text: ` ← ${selFeat}`,
+          showarrow: false,
+          font: { size: 11, color: '#C02942', weight: 'bold' }
+        });
+      }
+
       const layout = {
         margin: { l: 180, r: 24, t: 36, b: 36 },
         height: Math.max(320, 28 * top.length + 120),
         title: { text: title, font: { size: 14 } },
         xaxis: { title: 'Score' },
         yaxis: { automargin: true },
-        showlegend: false
+        showlegend: false,
+        annotations
       } as any;
       const config = { responsive: true, displayModeBar: false } as any;
       try { (window as any).Plotly.react(el, [trace], layout, config); }
@@ -257,6 +276,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     } catch (e) {
       console.warn('drawImportancePlot failed:', e);
     }
+  }
+
+  /**
+   * Get the selected feature's rank and score for a given importance type
+   */
+  getFeatureImportanceRank(type: 'gain' | 'shap'): { rank: number; score: number; total: number } | null {
+    const items = type === 'shap' ? this.importanceShap : this.importanceGain;
+    if (!Array.isArray(items) || items.length === 0) return null;
+    const sorted = [...items].sort((a, b) => b.score - a.score);
+    const idx = sorted.findIndex(d => d.feature === this.selectedFeatureName);
+    if (idx < 0) return null;
+    return { rank: idx + 1, score: sorted[idx].score, total: sorted.length };
   }
 
   // Determine if current feature is numerical
@@ -1498,6 +1529,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.currentTabIndex = tabIndex;  // Track current tab
     
     // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
+    if (tabIndex === 2 && !this.importanceGain.length && !this.importanceShap.length && !this.modelingLoading) {
+      this.proceedModeling();
+    }
     if (tabIndex === 3 && !this.explainabilityFetched && !this.explainabilityLoading) {
       this.fetchFeatureExplainability();
     }

@@ -7,7 +7,7 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-partial dependency plot in feature-card-modal/explainability tab
+add feature-wise individual gain based feature-importance figures in feature-card-modal/importance tab
 
 While the implementation is complete and functional, here are potential future improvements:
 - Export Results - CSV/Excel export of SFS results
@@ -18,7 +18,6 @@ While the implementation is complete and functional, here are potential future i
 - History Tracking - Save multiple SFS runs for comparison
 
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
-- add feature-importance derived directly from the model built-in method computed via 'gain' metric
 - stopping criteria selections via %-change of metrics and min-max feature count.
 - multiple cpu core usage (feature adding/dropping in parallel) n_jobs parameter selection
 - while using xgboost, how do we encode the categorical variables? 
