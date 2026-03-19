@@ -74,7 +74,26 @@ class ModelingStartView(APIView):
         model_info = {}
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
-            
+
+            # ── Load encoding sidecar metadata (if available) ──
+            # CSV serialization loses pd.Categorical dtype.  The encoding step
+            # saves a `.meta.json` sidecar listing which columns are categorical.
+            meta_cat_cols = set()
+            meta_path = full_path.replace('.csv', '.meta.json') if full_path.lower().endswith('.csv') else None
+            if meta_path and os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as mf:
+                        meta = json.load(mf)
+                    for entry in meta.get('categorical_columns', []):
+                        feat = entry.get('feature', '')
+                        if feat and feat in df.columns:
+                            meta_cat_cols.add(feat)
+                    print(f"[ModelingStart] Loaded encoding metadata: {len(meta_cat_cols)} categorical cols from sidecar: {sorted(meta_cat_cols)}")
+                except Exception as me:
+                    print(f"[ModelingStart] Warning: failed to read encoding metadata: {me}")
+            else:
+                print(f"[ModelingStart] No encoding sidecar metadata found at {meta_path}")
+
             # Track excluded variables (Model_Usage='No') but keep them in dataframe
             # They will be excluded when creating feature matrix X
             excluded_cols_for_modeling = []
@@ -107,12 +126,34 @@ class ModelingStartView(APIView):
                 # Exclude both target and excluded variables from feature matrix
                 cols_to_exclude = [target_col] + excluded_cols_for_modeling
                 X_raw = df.drop(columns=cols_to_exclude)
-                # Use only numeric features for simplicity
-                X_raw = X_raw.select_dtypes(include=['number']).copy()
+                # Detect categorical columns:
+                #   1) from encoding sidecar metadata (authoritative)
+                #   2) fallback: dtype 'category' or 'object'
+                cat_cols = []
+                for c in X_raw.columns:
+                    if c in meta_cat_cols:
+                        cat_cols.append(c)
+                    elif hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                        cat_cols.append(c)
+                    elif X_raw[c].dtype == 'object':
+                        cat_cols.append(c)
+                # Keep numeric + categorical columns; drop anything else
+                keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
+                X_raw = X_raw[keep_cols].copy()
+                # Convert detected categorical columns to pd.Categorical for XGBoost native support
+                enable_cat = len(cat_cols) > 0
+                for c in cat_cols:
+                    if c in X_raw.columns:
+                        X_raw[c] = X_raw[c].astype('category')
+                print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
+                print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
                 X_raw = X_raw.dropna(axis=1, how='all')
-                # Filled copy for modeling
-                X = X_raw.fillna(X_raw.mean(numeric_only=True))
+                # Filled copy for modeling: fill numeric NaNs with mean, categorical NaNs are handled natively
+                X = X_raw.copy()
+                num_cols_for_fill = X.select_dtypes(include=['number']).columns
+                if len(num_cols_for_fill) > 0:
+                    X[num_cols_for_fill] = X[num_cols_for_fill].fillna(X[num_cols_for_fill].mean())
 
                 # If no features remain, skip training
                 if X.shape[1] >= 1 and len(y) >= 5:
@@ -182,8 +223,8 @@ class ModelingStartView(APIView):
 
                         # DMatrix with feature names for consistent importances/SHAP
                         feature_names = list(map(str, X.columns.tolist()))
-                        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names)
-                        dvalid = xgb.DMatrix(X_valid, label=y_valid, feature_names=feature_names)
+                        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names, enable_categorical=enable_cat)
+                        dvalid = xgb.DMatrix(X_valid, label=y_valid, feature_names=feature_names, enable_categorical=enable_cat)
 
                         booster = xgb.train(
                             params,
@@ -249,7 +290,16 @@ class ModelingStartView(APIView):
                                     Xv_raw = Xv_raw.loc[Xv.index]
                                 except Exception:
                                     Xv_raw = Xv.copy()
-                            shap_vals = explainer.shap_values(Xv)
+                            # SHAP's internal DMatrix doesn't pass enable_categorical,
+                            # so convert categorical columns to their numeric codes
+                            # before computing SHAP values.
+                            Xv_shap = Xv.copy()
+                            for c in cat_cols:
+                                if c in Xv_shap.columns and hasattr(Xv_shap[c], 'cat'):
+                                    Xv_shap[c] = Xv_shap[c].cat.codes.astype(float)
+                                    # Replace -1 (NaN sentinel from .cat.codes) with NaN
+                                    Xv_shap[c] = Xv_shap[c].replace(-1, np.nan)
+                            shap_vals = explainer.shap_values(Xv_shap)
                             if isinstance(shap_vals, list):
                                 try:
                                     shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
@@ -354,7 +404,7 @@ class ModelingStartView(APIView):
                                 import matplotlib.pyplot as plt
                                 import io, base64
                                 # Draw beeswarm and save the current figure
-                                shap.summary_plot(shap_matrix, Xv, plot_type='dot', show=False, max_display=40)
+                                shap.summary_plot(shap_matrix, Xv_shap, plot_type='dot', show=False, max_display=40)
                                 fig = plt.gcf()
                                 buf = io.BytesIO()
                                 fig.tight_layout()
@@ -387,8 +437,12 @@ class ModelingStartView(APIView):
                                 # Index alignment for shap_matrix when we sampled rows above
                                 if shap_matrix.shape[0] != Xv_compact.shape[0]:
                                     # Recompute shap on the compact subset to stay aligned
-                                    dsub = xgb.DMatrix(Xv_compact.values, feature_names=feature_names)
-                                    shap_sub = explainer.shap_values(Xv_compact)
+                                    Xv_compact_shap = Xv_compact.copy()
+                                    for c in cat_cols:
+                                        if c in Xv_compact_shap.columns and hasattr(Xv_compact_shap[c], 'cat'):
+                                            Xv_compact_shap[c] = Xv_compact_shap[c].cat.codes.astype(float)
+                                            Xv_compact_shap[c] = Xv_compact_shap[c].replace(-1, np.nan)
+                                    shap_sub = explainer.shap_values(Xv_compact_shap)
                                     if isinstance(shap_sub, list):
                                         try:
                                             shap_matrix_compact = np.mean(np.stack(shap_sub, axis=0), axis=0)
@@ -545,8 +599,8 @@ class ModelingStartView(APIView):
                             for tr_idx, va_idx in skf.split(X.values, y_encoded):
                                 X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
                                 y_tr, y_va = y_encoded[tr_idx], y_encoded[va_idx]
-                                dtr = xgb.DMatrix(X_tr, label=y_tr, feature_names=feature_names)
-                                dva = xgb.DMatrix(X_va, label=y_va, feature_names=feature_names)
+                                dtr = xgb.DMatrix(X_tr, label=y_tr, feature_names=feature_names, enable_categorical=enable_cat)
+                                dva = xgb.DMatrix(X_va, label=y_va, feature_names=feature_names, enable_categorical=enable_cat)
                                 bst = xgb.train(params, dtr, num_boost_round=500, evals=[(dva, 'valid')], early_stopping_rounds=50, verbose_eval=False)
                                 # predict proba of positive class
                                 try:
@@ -691,12 +745,21 @@ class ModelingStartView(APIView):
                             pickle.dump(train_data, f)
                         print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
                         
+                        # Log categorical feature gain importances for validation
+                        cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
+                        if cat_in_gain:
+                            print(f"[ModelingStart] Categorical features with gain > 0: {[(g['feature'], round(g['score'], 4)) for g in cat_in_gain]}")
+                        else:
+                            print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
+
                         model_info = {
                             'model_type': 'xgboost_classifier',
                             'valid_auc': valid_auc,
                             'best_iteration': int(getattr(booster, 'best_iteration', getattr(booster, 'best_ntree_limit', 0))),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
                             'feature_count': int(X.shape[1]),
+                            'categorical_features_used': cat_cols,
+                            'enable_categorical': enable_cat,
                             'importances': {
                                 'gain': gain_importance,
                                 'shap_mean_abs': shap_importance,
@@ -880,9 +943,24 @@ class FeatureExplainabilityView(APIView):
 
             y = df[target_col]
             X_raw = df.drop(columns=[target_col])
-            X_raw = X_raw.select_dtypes(include=['number']).copy()
+            # Detect categorical columns for enable_categorical support
+            _cat_cols_expl = []
+            for c in X_raw.columns:
+                if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                    _cat_cols_expl.append(c)
+                elif X_raw[c].dtype == 'object':
+                    _cat_cols_expl.append(c)
+            _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
+            X_raw = X_raw[_keep_expl].copy()
+            _enable_cat_expl = len(_cat_cols_expl) > 0
+            for c in _cat_cols_expl:
+                if c in X_raw.columns:
+                    X_raw[c] = X_raw[c].astype('category')
             X_raw = X_raw.dropna(axis=1, how='all')
-            X = X_raw.fillna(X_raw.mean(numeric_only=True))
+            X = X_raw.copy()
+            _num_expl = X.select_dtypes(include=['number']).columns
+            if len(_num_expl) > 0:
+                X[_num_expl] = X[_num_expl].fillna(X[_num_expl].mean())
 
             # Check if feature was used in the trained model FIRST (before checking data)
             # This ensures we give the correct message for features excluded during modeling
@@ -929,7 +1007,7 @@ class FeatureExplainabilityView(APIView):
 
             # Compute SHAP values
             feature_names = list(map(str, X.columns.tolist()))
-            dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names, enable_categorical=_enable_cat_expl)
             # Suppress SHAP FutureWarning about feature_perturbation
             import warnings
             with warnings.catch_warnings():
@@ -954,7 +1032,7 @@ class FeatureExplainabilityView(APIView):
 
             # Partial dependence plot (SHAP-aligned: use raw output margin)
             # Compute base value (expected value of model output on the dataset)
-            dmatrix_base = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            dmatrix_base = xgb.DMatrix(X_sampled, feature_names=feature_names, enable_categorical=_enable_cat_expl)
             base_preds = booster.predict(dmatrix_base, output_margin=True)
             base_value = float(np.mean(base_preds))
             
@@ -990,7 +1068,7 @@ class FeatureExplainabilityView(APIView):
             
             for grid_val in grid:
                 X_pd[feature_name] = grid_val
-                dmatrix_pd = xgb.DMatrix(X_pd, feature_names=feature_names)
+                dmatrix_pd = xgb.DMatrix(X_pd, feature_names=feature_names, enable_categorical=_enable_cat_expl)
                 # Use output_margin=True to get raw predictions (before sigmoid)
                 # This aligns with SHAP values which are in logit space
                 preds_margin = booster.predict(dmatrix_pd, output_margin=True)
@@ -1018,7 +1096,7 @@ class FeatureExplainabilityView(APIView):
                         data_df = pd.DataFrame(data_array, columns=feature_names)
                     else:
                         data_df = data_array
-                    dmat = xgb.DMatrix(data_df, feature_names=feature_names)
+                    dmat = xgb.DMatrix(data_df, feature_names=feature_names, enable_categorical=_enable_cat_expl)
                     return booster.predict(dmat, output_margin=True)
                 
                 # Create figure for SHAP's partial_dependence_plot

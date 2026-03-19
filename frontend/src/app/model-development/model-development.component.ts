@@ -22,7 +22,7 @@ interface PurifierOption {
 
 export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
-  menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
+  menuItems = ['declaration', 'preprocessing', 'data quality', 'encoding', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
@@ -88,6 +88,17 @@ export class ModelDevelopmentComponent implements OnInit {
   // Model_Usage column: track which variables to use in model (variableName -> 'Yes'/'No')
   variableModelUsage: { [variable: string]: string } = {};
   private readonly modelUsageKey = 'datq_model_usage_v1';
+
+  // ===== Encoding step state =====
+  encodingPlan: any[] = [];
+  encodingReport: any[] = [];
+  encodingSummary: any = null;
+  encodingAnalyzing: boolean = false;
+  encodingApplying: boolean = false;
+  encodingError: string | null = null;
+  encodingApplied: boolean = false;
+  encodedFilePath: string | null = null;
+  encodingUseNative: boolean = true;
 
   get datqDisplayColumns(): string[] {
     const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
@@ -540,7 +551,8 @@ export class ModelDevelopmentComponent implements OnInit {
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]', group: 5 },
   ];
 
-  selectedOptions: PurifierOption[] = [];
+  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28];
+  selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
   constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
 
@@ -1067,7 +1079,7 @@ export class ModelDevelopmentComponent implements OnInit {
       this.sharedService.setPreprocessingInitiated(false);
       this.sharedService.setPreprocessingRunResult(null);
       this.sharedService.setProcessedFilePath(null);
-      this.selectedOptions = [];
+      this.selectedOptions = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
       this.modelingAvailable = false;
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
@@ -1241,6 +1253,7 @@ export class ModelDevelopmentComponent implements OnInit {
     if (item === 'declaration') return true;
     if (item === 'preprocessing') return this.preprocessingAvailable;
     if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
+    if (item === 'encoding') return !!(this.datqSummary && this.datqSummary.length);
     if (item === 'modeling') return this.modelingAvailable;
     if (item === 'evaluation') return this.modelingAvailable; // can refine later
     if (item === 'deployment') return this.modelingAvailable; // can refine later
@@ -1260,6 +1273,9 @@ export class ModelDevelopmentComponent implements OnInit {
         if (item === 'data quality') {
           const el = document.getElementById('data-quality-anchor');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (item === 'encoding') {
+          const el = document.getElementById('encoding-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else if (item === 'modeling') {
           const el = document.getElementById('modeling-anchor');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1270,5 +1286,185 @@ export class ModelDevelopmentComponent implements OnInit {
 
   private computePreprocessingAvailable(): void {
     this.preprocessingAvailable = this.isStarted && this.preprocessingInitiated && (this.currentFileId !== null);
+  }
+
+  // ===== Encoding Step Methods =====
+
+  goToEncoding(): void {
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
+    this.currentStep = 'encoding';
+    if (!this.encodingPlan.length && !this.encodingAnalyzing) {
+      this.analyzeEncoding();
+    }
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('encoding-anchor');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }, 100);
+  }
+
+  analyzeEncoding(): void {
+    if (!this.currentFileId || !this.processedFilePath) return;
+    this.encodingAnalyzing = true;
+    this.encodingError = null;
+    const excluded = this.getExcludedVariables();
+    this.dataService.analyzeEncoding(
+      this.currentFileId, this.processedFilePath, this.dataDictionaryCache, excluded
+    ).subscribe({
+      next: (resp: any) => {
+        this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
+        this.encodingAnalyzing = false;
+      },
+      error: (err: any) => {
+        this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
+        this.encodingAnalyzing = false;
+      }
+    });
+  }
+
+  updateEncodingLom(entry: any, newLom: string): void {
+    entry.user_lom = newLom;
+    const nunique = entry.nunique || 0;
+    if (newLom === 'ordinal') {
+      if (nunique < 5) {
+        entry.fallback_strategy = 'one_hot_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (<5) → One-Hot Encoding`;
+        entry.needs_ranking = false;
+      } else if (nunique <= 10) {
+        entry.fallback_strategy = 'ordinal_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (5–10) → Ordinal Encoding (user ranking)`;
+        entry.needs_ranking = true;
+      } else {
+        entry.fallback_strategy = 'target_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (>10) → Target Encoding`;
+        entry.needs_ranking = false;
+      }
+    } else {
+      entry.fallback_strategy = 'label_encoding';
+      entry.fallback_reason = 'Nominal feature → Label Encoding';
+      entry.needs_ranking = false;
+      entry.ranking = null;
+    }
+  }
+
+  moveRankingUp(entry: any, idx: number): void {
+    if (!entry.ranking || idx <= 0) return;
+    const tmp = entry.ranking[idx - 1];
+    entry.ranking[idx - 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  moveRankingDown(entry: any, idx: number): void {
+    if (!entry.ranking || idx >= entry.ranking.length - 1) return;
+    const tmp = entry.ranking[idx + 1];
+    entry.ranking[idx + 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  initRanking(entry: any): void {
+    if (!entry.ranking || !entry.ranking.length) {
+      entry.ranking = [...(entry.unique_values || [])];
+    }
+  }
+
+  applyEncoding(): void {
+    if (!this.currentFileId || !this.processedFilePath) return;
+    this.encodingApplying = true;
+    this.encodingError = null;
+    // Init rankings for ordinal features that need them
+    for (const e of this.encodingPlan) {
+      if (e.needs_ranking && (!e.ranking || !e.ranking.length)) {
+        e.ranking = [...(e.unique_values || [])];
+      }
+    }
+    this.dataService.applyEncoding(
+      this.currentFileId, this.processedFilePath, this.encodingPlan, this.encodingUseNative
+    ).subscribe({
+      next: (resp: any) => {
+        this.encodingReport = Array.isArray(resp.report) ? resp.report : [];
+        this.encodingSummary = resp.summary || null;
+        this.encodedFilePath = resp.encoded_file || null;
+        this.encodingApplied = true;
+        this.encodingApplying = false;
+        // Share encoded file path and encoding report for modeling
+        this.sharedService.setEncodedFilePath(this.encodedFilePath);
+        this.sharedService.setEncodingReport(this.encodingReport);
+      },
+      error: (err: any) => {
+        this.encodingError = 'Failed to apply encoding: ' + (err?.message || err);
+        this.encodingApplying = false;
+      }
+    });
+  }
+
+  goToModelingFromEncoding(): void {
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
+    this.modelingAvailable = true;
+    this.currentStep = 'modeling';
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('modeling-anchor');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }, 100);
+  }
+
+  getFeatureDescription(featureName: string): string {
+    if (!this.dataDictionaryCache || !this.dataDictionaryCache.length) return '';
+    const entry = this.dataDictionaryCache.find((d: any) => d?.Feature_Name === featureName);
+    return entry?.Feature_Description || '';
+  }
+
+  isNativeCategorical(mapping: any): boolean {
+    return mapping?.type === 'native_categorical';
+  }
+
+  getNativeCategories(mapping: any): string[] {
+    if (!mapping || mapping.type !== 'native_categorical') return [];
+    return mapping.categories || [];
+  }
+
+  formatMappingPairs(mapping: any): { original: string; encoded: string }[] {
+    if (!mapping) return [];
+    const type = mapping.type || '';
+    if (type === 'native_categorical') {
+      return [];
+    }
+    if (type === 'label_encoding' || type === 'ordinal_encoding') {
+      const m = mapping.mapping || {};
+      return Object.entries(m).map(([k, v]) => ({ original: k, encoded: String(v) }));
+    }
+    if (type === 'target_encoding') {
+      const m = mapping.mapping || {};
+      return Object.entries(m).map(([k, v]) => ({ original: k, encoded: String(v) }));
+    }
+    if (type === 'one_hot_encoding') {
+      const cols: string[] = mapping.columns || [];
+      return cols.map((c: string) => ({ original: c, encoded: '0/1' }));
+    }
+    return [];
+  }
+
+  getStrategyLabel(strategy: string): string {
+    const labels: { [k: string]: string } = {
+      'native_categorical': 'XGBoost Native Categorical',
+      'label_encoding': 'Label Encoding',
+      'one_hot_encoding': 'One-Hot Encoding',
+      'ordinal_encoding': 'Ordinal Encoding',
+      'target_encoding': 'Target Encoding',
+    };
+    return labels[strategy] || strategy;
+  }
+
+  getStrategyColor(strategy: string): string {
+    const colors: { [k: string]: string } = {
+      'native_categorical': '#1976d2',
+      'label_encoding': '#7b1fa2',
+      'one_hot_encoding': '#388e3c',
+      'ordinal_encoding': '#f57c00',
+      'target_encoding': '#c62828',
+    };
+    return colors[strategy] || '#555';
   }
 }

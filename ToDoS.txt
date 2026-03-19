@@ -7,6 +7,22 @@ z: bug-fix or hot-fix
 
 
 !CFH!
+
+bring preprocessing multiple-options menu as preselected. use below values as default: 
+
+1. Column-wise duplicate drop: clicked
+2. Row-wise duplicate drop: clicked
+3. Zero-variance drop: clicked
+4. Perfect-correlation drop: clicked
+7. Corr-drop threshold = 0.85
+11. Sparsity-drop threshold = 0.95
+17. Missing-drop threshold = 0.95
+23. [Sparsity+Missing]-drop threshold = 0.95
+28. Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]
+
+
+
+
 add feature-wise individual gain based feature-importance figures in feature-card-modal/importance tab
 
 While the implementation is complete and functional, here are potential future improvements:
@@ -20,7 +36,7 @@ While the implementation is complete and functional, here are potential future i
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - stopping criteria selections via %-change of metrics and min-max feature count.
 - multiple cpu core usage (feature adding/dropping in parallel) n_jobs parameter selection
-- while using xgboost, how do we encode the categorical variables? 
+- how about scaling numerical features? not necessary for boosting algs
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
 - add causality features into explainability tab
 - in data split for random choice add percentage selection also

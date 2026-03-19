@@ -65,5 +65,21 @@ export class SharedService {
   setModelUsageSettings(settings: { [variable: string]: string } | null): void {
     this.modelUsageSettingsSubject.next(settings);
   }
+
+  // Store encoded file path (produced by encoding step)
+  private encodedFilePathSubject = new BehaviorSubject<string | null>(null);
+  encodedFilePath$: Observable<string | null> = this.encodedFilePathSubject.asObservable();
+
+  setEncodedFilePath(path: string | null): void {
+    this.encodedFilePathSubject.next(path);
+  }
+
+  // Store encoding report (mapping info for categorical features)
+  private encodingReportSubject = new BehaviorSubject<any[]>([]);
+  encodingReport$: Observable<any[]> = this.encodingReportSubject.asObservable();
+
+  setEncodingReport(report: any[]): void {
+    this.encodingReportSubject.next(report);
+  }
   
 }

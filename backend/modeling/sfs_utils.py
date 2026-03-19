@@ -177,10 +177,16 @@ def run_forward_sfs(
     results = []
     feature_names = list(X_train.columns)
     
+    # Detect categorical columns for enable_categorical support
+    _has_cat = any(
+        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+        for c in X_train.columns
+    )
+    
     if max_features is None:
         max_features = len(feature_names)
     
-    print(f"[SFS-Forward] Starting with {len(feature_names)} features, max_features={max_features}")
+    print(f"[SFS-Forward] Starting with {len(feature_names)} features, max_features={max_features}, enable_categorical={_has_cat}")
     
     try:
         # Initial baseline SHAP importance (empty model baseline)
@@ -206,8 +212,8 @@ def run_forward_sfs(
                 X_test_subset = X_test[current_features]
                 
                 # Train XGBoost model
-                dtrain = xgb.DMatrix(X_train_subset, label=y_train)
-                dtest = xgb.DMatrix(X_test_subset, label=y_test)
+                dtrain = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
+                dtest = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
                 
                 params = {
                     'objective': 'binary:logistic',
@@ -240,8 +246,8 @@ def run_forward_sfs(
                     X_cv_train, X_cv_val = X_train_subset.iloc[train_idx], X_train_subset.iloc[val_idx]
                     y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                     
-                    dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train)
-                    dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val)
+                    dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
+                    dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
                     
                     cv_booster = xgb.train(params, dcv_train, num_boost_round=100, verbose_eval=False)
                     y_cv_pred = cv_booster.predict(dcv_val)
@@ -366,14 +372,20 @@ def run_backward_sfs(
     results = []
     feature_names = list(X_train.columns)
     
-    print(f"[SFS-Backward] Starting with {len(feature_names)} features, min_features={min_features}")
+    # Detect categorical columns for enable_categorical support
+    _has_cat = any(
+        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+        for c in X_train.columns
+    )
+    
+    print(f"[SFS-Backward] Starting with {len(feature_names)} features, min_features={min_features}, enable_categorical={_has_cat}")
     
     try:
         # Start with all features
         selected_features = feature_names.copy()
         
         # Compute initial SHAP importance with all features
-        dtrain_full = xgb.DMatrix(X_train, label=y_train)
+        dtrain_full = xgb.DMatrix(X_train, label=y_train, enable_categorical=_has_cat)
         params = {
             'objective': 'binary:logistic',
             'eval_metric': 'auc',
@@ -406,8 +418,8 @@ def run_backward_sfs(
                 X_train_subset = X_train[current_features]
                 X_test_subset = X_test[current_features]
                 
-                dtrain = xgb.DMatrix(X_train_subset, label=y_train)
-                dtest = xgb.DMatrix(X_test_subset, label=y_test)
+                dtrain = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
+                dtest = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
                 
                 booster = xgb.train(params, dtrain, num_boost_round=100, verbose_eval=False)
                 
@@ -430,8 +442,8 @@ def run_backward_sfs(
                     X_cv_train, X_cv_val = X_train_subset.iloc[train_idx], X_train_subset.iloc[val_idx]
                     y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                     
-                    dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train)
-                    dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val)
+                    dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
+                    dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
                     
                     cv_booster = xgb.train(params, dcv_train, num_boost_round=100, verbose_eval=False)
                     y_cv_pred = cv_booster.predict(dcv_val)
@@ -806,6 +818,12 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                       current_features: List[str], step: int, cv_folds: int) -> Optional[Dict]:
     """Run a single forward selection step - evaluates all remaining features"""
     try:
+        # Detect categorical columns for enable_categorical support
+        _has_cat = any(
+            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+            for c in X_train.columns
+        )
+        
         remaining_features = [f for f in X_train.columns if f not in current_features]
         if not remaining_features:
             return None
@@ -823,8 +841,8 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             X_test_subset = X_test[candidate_features]
             
             # Train XGBoost model
-            dtrain = xgb.DMatrix(X_train_subset, label=y_train)
-            dtest = xgb.DMatrix(X_test_subset, label=y_test)
+            dtrain = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
+            dtest = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
             
             params = {
                 'objective': 'binary:logistic',
@@ -857,8 +875,8 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                 X_cv_train, X_cv_val = X_train_subset.iloc[train_idx], X_train_subset.iloc[val_idx]
                 y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train)
-                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val)
+                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
+                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
                 
                 cv_booster = xgb.train(params, dcv_train, num_boost_round=100, verbose_eval=False)
                 y_cv_pred = cv_booster.predict(dcv_val)
@@ -951,6 +969,12 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
                        current_features: List[str], step: int, cv_folds: int) -> Optional[Dict]:
     """Run a single backward elimination step - evaluates dropping each feature"""
     try:
+        # Detect categorical columns for enable_categorical support
+        _has_cat = any(
+            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+            for c in X_train.columns
+        )
+        
         if len(current_features) <= 1:
             return None
         
@@ -967,8 +991,8 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             X_test_subset = X_test[candidate_features]
             
             # Train XGBoost model
-            dtrain = xgb.DMatrix(X_train_subset, label=y_train)
-            dtest = xgb.DMatrix(X_test_subset, label=y_test)
+            dtrain = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
+            dtest = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
             
             params = {
                 'objective': 'binary:logistic',
@@ -1001,8 +1025,8 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
                 X_cv_train, X_cv_val = X_train_subset.iloc[train_idx], X_train_subset.iloc[val_idx]
                 y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train)
-                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val)
+                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
+                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
                 
                 cv_booster = xgb.train(params, dcv_train, num_boost_round=100, verbose_eval=False)
                 y_cv_pred = cv_booster.predict(dcv_val)

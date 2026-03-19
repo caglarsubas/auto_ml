@@ -79,6 +79,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   // Model_Usage settings (variables to exclude from modeling)
   variableModelUsage: { [variable: string]: string } = {};
 
+  // Encoded file path from encoding step (preferred over processedFilePath)
+  encodedFilePath: string | null = null;
+
+  // Encoding report with category mappings (for SHAP beeswarm labels)
+  encodingReport: any[] = [];
+  // Quick lookup: featureName -> { encoded_value -> original_label }
+  catLabelLookup: { [feature: string]: { [encoded: string]: string } } = {};
+
   // Feature usage tracking for Selected Features table
   featureUsage: { [feature: string]: string } = {};
   featureDropReason: { [feature: string]: string } = {};
@@ -190,6 +198,37 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         console.log('[Modeling] Received Model_Usage settings:', settings);
       }
     });
+
+    // Subscribe to encoded file path from encoding step
+    this.sharedService.encodedFilePath$.subscribe((path) => {
+      this.encodedFilePath = path;
+    });
+
+    // Subscribe to encoding report for categorical feature label lookup
+    this.sharedService.encodingReport$.subscribe((report) => {
+      this.encodingReport = report || [];
+      this.catLabelLookup = {};
+      for (const r of this.encodingReport) {
+        const feat = r.feature;
+        const mapping = r.mapping;
+        if (!feat || !mapping) continue;
+        const type = mapping.type || '';
+        const lookup: { [encoded: string]: string } = {};
+        if (type === 'native_categorical') {
+          const cats: string[] = mapping.categories || [];
+          cats.forEach((c: string, i: number) => { lookup[String(i)] = c; });
+        } else if (type === 'label_encoding' || type === 'ordinal_encoding') {
+          const m = mapping.mapping || {};
+          Object.entries(m).forEach(([k, v]) => { lookup[String(v)] = k; });
+        } else if (type === 'target_encoding') {
+          const m = mapping.mapping || {};
+          Object.entries(m).forEach(([k, v]) => { lookup[String(v)] = k; });
+        }
+        if (Object.keys(lookup).length > 0) {
+          this.catLabelLookup[feat] = lookup;
+        }
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -237,7 +276,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.isStarting = true;
     this.chartsDrawn = false;
-    this.dataService.startModeling(this.currentFileId, this.processedFilePath, this.selectedAlgorithm || undefined, excludedVariables).pipe(
+    const fileForModeling = this.encodedFilePath || this.processedFilePath;
+    this.dataService.startModeling(this.currentFileId, fileForModeling!, this.selectedAlgorithm || undefined, excludedVariables).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
       next: (resp) => {
@@ -544,13 +584,31 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           }
           const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
           const cnorm = vsNN.map(v => (Number(v) - vmin) / denom).map(u => u < 0 ? 0 : (u > 1 ? 1 : u));
+
+          // Check if this feature has a categorical encoding mapping
+          const catLookup = this.catLabelLookup[features[i]];
+          let customdata: any[];
+          let hovertemplate: string;
+          if (catLookup) {
+            // Categorical: show both encoded value and original label
+            customdata = idxNonNull.map(j => {
+              const enc = String(Math.round(Number(rawArr[j])));
+              const label = catLookup[enc] || rawArr[j];
+              return [rawArr[j], label];
+            });
+            hovertemplate = `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Encoded=%{customdata[0]}<br>Original=%{customdata[1]}<extra></extra>`;
+          } else {
+            customdata = idxNonNull.map(j => rawArr[j]);
+            hovertemplate = `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`;
+          }
+
           traces.push({
             type: 'scatter',
             mode: 'markers',
             name: features[i],
             x: idxNonNull.map(j => xs[j]),
             y: idxNonNull.map(j => yvals[j]),
-            customdata: idxNonNull.map(j => rawArr[j]),
+            customdata,
             marker: {
               color: cnorm,
               colorscale,
@@ -561,7 +619,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               size: 6,
               opacity: 0.85
             },
-            hovertemplate: `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
+            hovertemplate,
             showlegend: false
           } as any);
           if (!colorbarPlaced) colorbarPlaced = true;
@@ -764,7 +822,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               features: features,
               processedFile: processedFile,
               dateColumn: dateColumn,
-              qualitySummary: qualitySummary || undefined
+              qualitySummary: qualitySummary || undefined,
+              catLabelLookup: this.catLabelLookup
             }
           });
         },
@@ -778,7 +837,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               columnName: featureName,
               features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
               processedFile: processedFile,
-              dateColumn: dateColumn
+              dateColumn: dateColumn,
+              catLabelLookup: this.catLabelLookup
             }
           });
         }

@@ -5,6 +5,7 @@ from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView
 from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView
+from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -26,6 +27,8 @@ urlpatterns = [
     path('api/modeling/sfs/start/', SFSStartView.as_view(), name='sfs-start'),
     path('api/modeling/sfs/status/<int:file_id>/', SFSStatusView.as_view(), name='sfs-status'),
     path('api/modeling/sfs/<int:file_id>/', SFSResultsView.as_view(), name='sfs-results'),
+    path('api/encoding/analyze/', EncodingAnalyzeView.as_view(), name='encoding-analyze'),
+    path('api/encoding/apply/', EncodingApplyView.as_view(), name='encoding-apply'),
 ]
 
 if settings.DEBUG:

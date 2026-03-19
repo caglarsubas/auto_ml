@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # Local apps
     'declaration',
     'deployment',
+    'encoding',
     'evaluation',
     'feature_card',
     'modeling',

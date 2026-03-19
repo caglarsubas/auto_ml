@@ -35,6 +35,7 @@ interface FeatureCardDialogData {
   processedFile?: string;
   dateColumn?: string;
   qualitySummary?: { [key: string]: any };
+  catLabelLookup?: { [feature: string]: { [encoded: string]: string } };
 }
 
 
@@ -73,6 +74,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   private originalStackedData: any | null = null;
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
+  catLabelLookup: { [feature: string]: { [encoded: string]: string } } = {};
   qualitySummary: { [key: string]: any } | null = null;
   // Preserve the initially provided quality row so the Quality tab is not empty on first open
   private initialQualitySummary: { [key: string]: any } | null = null;
@@ -139,6 +141,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.selectedFeatureName = data.columnName;
     this.qualitySummary = data.qualitySummary || null;
     this.initialQualitySummary = data.qualitySummary || null;
+    this.catLabelLookup = data.catLabelLookup || {};
   }
 
   // Robust description getter for dropdown display
@@ -1705,12 +1708,29 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           const u = (v - vmin) / denom;
           return u < 0 ? 0 : (u > 1 ? 1 : u);
         });
+
+        // Check if this feature has a categorical encoding mapping
+        const singleCatLookup = this.catLabelLookup[featName];
+        let customdata: any[];
+        let hovertemplate: string;
+        if (singleCatLookup) {
+          customdata = idxNonNull.map(i => {
+            const enc = String(Math.round(Number(featValsRaw[i])));
+            const label = singleCatLookup[enc] || featValsRaw[i];
+            return [featValsRaw[i], label];
+          });
+          hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Encoded=%{customdata[0]}<br>Original=%{customdata[1]}<extra></extra>`;
+        } else {
+          customdata = idxNonNull.map(i => featValsRaw[i]);
+          hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`;
+        }
+
         traces.push({
           type: 'scatter',
           mode: 'markers',
           x: xVals,
           y: yVals,
-          customdata: idxNonNull.map(i => featValsRaw[i]),
+          customdata,
           marker: {
             color: colors,
             colorscale: colorscale,
@@ -1721,7 +1741,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             size: 8,
             opacity: 0.85
           },
-          hovertemplate: `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
+          hovertemplate,
           showlegend: false
         });
       }

@@ -200,6 +200,29 @@ export class DataService {
     );
   }
   
+  // Analyze categorical features and return encoding plan
+  analyzeEncoding(fileId: number, processedFile: string, dataDictionary: any[], excludedVariables?: string[]): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile, data_dictionary: dataDictionary };
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    return this.http.post(`${this.apiUrl}encoding/analyze/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error analyzing encoding:', error);
+        return throwError(() => new Error(error.message || 'Failed to analyze encoding'));
+      })
+    );
+  }
+
+  // Apply encoding based on user-adjusted plan
+  applyEncoding(fileId: number, processedFile: string, plan: any[], useNative: boolean = true): Observable<any> {
+    const payload = { file_id: fileId, processed_file: processedFile, plan, use_native: useNative };
+    return this.http.post(`${this.apiUrl}encoding/apply/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error applying encoding:', error);
+        return throwError(() => new Error(error.message || 'Failed to apply encoding'));
+      })
+    );
+  }
+
   private handleError(error: HttpErrorResponse) {
     console.error('An error occurred:', error);
     let errorMessage = 'An unknown error occurred';
