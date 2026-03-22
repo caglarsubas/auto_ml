@@ -81,5 +81,13 @@ export class SharedService {
   setEncodingReport(report: any[]): void {
     this.encodingReportSubject.next(report);
   }
+
+  // Store data dictionary cache for encoding analysis in modeling step
+  private dataDictionaryCacheSubject = new BehaviorSubject<any[]>([]);
+  dataDictionaryCache$: Observable<any[]> = this.dataDictionaryCacheSubject.asObservable();
+
+  setDataDictionaryCache(cache: any[]): void {
+    this.dataDictionaryCacheSubject.next(cache);
+  }
   
 }

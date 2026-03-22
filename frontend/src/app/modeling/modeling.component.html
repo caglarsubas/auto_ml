@@ -4,11 +4,97 @@
     <div *ngIf="availableAlgorithms.length > 0" style="max-width: 320px;">
       <mat-form-field appearance="fill" style="width: 100%;">
         <mat-label>Select Algorithm</mat-label>
-        <mat-select [(ngModel)]="selectedAlgorithm">
+        <mat-select [(ngModel)]="selectedAlgorithm" (ngModelChange)="onAlgorithmChange($event)">
           <mat-option *ngFor="let algo of availableAlgorithms" [value]="algo">{{ algo }}</mat-option>
         </mat-select>
       </mat-form-field>
     </div>
+
+    <!-- Encoding Plan (auto-loaded after algorithm selection) -->
+    <div *ngIf="selectedAlgorithm && (encodingPlan.length > 0 || encodingAnalyzing || encodingError)" style="margin-top: 16px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 15px;">Categorical Feature Encoding</h3>
+        <span style="font-size: 12px; color: #888;" *ngIf="encodingPlan.length > 0">({{ encodingPlan.length }} features)</span>
+        <mat-progress-bar *ngIf="encodingAnalyzing" mode="indeterminate" style="width: 160px;"></mat-progress-bar>
+      </div>
+      <p style="font-size: 12px; color: #555; margin: 0 0 10px 0;">
+        <strong>Primary:</strong> {{ getAlgorithmLabel(selectedAlgorithm) }} native categorical support
+        <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
+           target="_blank" rel="noopener noreferrer"
+           title="Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
+           style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 2px; vertical-align: middle;">i</a>.
+        <strong style="margin-left: 6px;">Fallback:</strong> strategy based on Level of Measurement and unique value count.
+      </p>
+
+      <div *ngIf="encodingError" style="color:#b71c1c; font-size:12px; margin-bottom: 8px; padding: 6px 10px; background: #fff3f3; border-radius: 4px;">{{ encodingError }}</div>
+
+      <!-- No categorical features -->
+      <div *ngIf="!encodingAnalyzing && encodingPlan.length === 0 && !encodingError"
+           style="padding: 12px 16px; background: #e8f5e9; border-left: 3px solid #4caf50; border-radius: 4px; margin-bottom: 12px;">
+        <span style="font-size: 13px; color: #2e7d32;"><strong>No categorical features detected.</strong> All features are numeric.</span>
+      </div>
+
+      <!-- Encoding Plan Table -->
+      <div *ngIf="encodingPlan.length > 0" style="overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+        <table style="border-collapse: collapse; width: 100%; min-width: 820px;">
+          <thead>
+            <tr style="background: #f5f5f5;">
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px; white-space: nowrap;">Feature</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Description</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Level of Measurement</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Unique</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Missing %</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Fallback Strategy</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Unique Values (top)</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Ordinal Ranking</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let entry of encodingPlan" style="border-bottom: 1px solid #eee;">
+              <td style="padding: 8px; font-weight: 500; font-size: 12px; white-space: nowrap;">{{ entry.feature }}</td>
+              <td style="padding: 8px; font-size: 11px; color: #555; max-width: 180px; overflow: hidden; text-overflow: ellipsis;" [title]="entry.description || getFeatureDescription(entry.feature)">{{ entry.description || getFeatureDescription(entry.feature) || '—' }}</td>
+              <td style="padding: 8px;">
+                <select [ngModel]="entry.user_lom" (ngModelChange)="updateEncodingLom(entry, $event)"
+                        style="padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px;">
+                  <option value="nominal">Nominal</option>
+                  <option value="ordinal">Ordinal</option>
+                </select>
+              </td>
+              <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.nunique }}</td>
+              <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.missing_ratio }}%</td>
+              <td style="padding: 8px;">
+                <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 500; color: white;"
+                      [style.background]="getStrategyColor(entry.fallback_strategy)">
+                  {{ getStrategyLabel(entry.fallback_strategy) }}
+                </span>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">{{ entry.fallback_reason }}</div>
+              </td>
+              <td style="padding: 8px; font-size: 10px; color: #555; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                <span *ngFor="let v of entry.unique_values?.slice(0, 8); let last = last">{{ v }}<span *ngIf="!last">, </span></span>
+                <span *ngIf="entry.unique_values?.length > 8" style="color: #999;">… +{{ entry.unique_values.length - 8 }}</span>
+              </td>
+              <td style="padding: 8px;">
+                <div *ngIf="entry.needs_ranking && entry.user_lom === 'ordinal'">
+                  <button mat-stroked-button (click)="initRanking(entry)" *ngIf="!entry.ranking?.length" style="font-size: 10px;">
+                    Set Ranking
+                  </button>
+                  <div *ngIf="entry.ranking?.length" style="display: flex; flex-direction: column; gap: 2px;">
+                    <div *ngFor="let val of entry.ranking; let i = index" style="display: flex; align-items: center; gap: 3px; font-size: 10px;">
+                      <span style="width: 16px; text-align: right; color: #888;">{{ i }}.</span>
+                      <span style="flex: 1; padding: 1px 5px; background: #f5f5f5; border-radius: 3px;">{{ val }}</span>
+                      <button type="button" (click)="moveRankingUp(entry, i)" [disabled]="i === 0" style="border:none; background:transparent; cursor:pointer; font-size:12px; padding:0;">▲</button>
+                      <button type="button" (click)="moveRankingDown(entry, i)" [disabled]="i === entry.ranking.length - 1" style="border:none; background:transparent; cursor:pointer; font-size:12px; padding:0;">▼</button>
+                    </div>
+                  </div>
+                </div>
+                <span *ngIf="!entry.needs_ranking" style="font-size: 10px; color: #aaa;">N/A</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
       <button mat-raised-button color="accent"
               (click)="startModeling()"
@@ -32,7 +118,26 @@
       <div *ngIf="modelingStatus.model?.model_path">Saved model: {{ modelingStatus.model?.model_path }}</div>
       <div *ngIf="modelingStatus.model?.warning" style="color: #a67c00;">Warning: {{ modelingStatus.model?.warning }}</div>
       <div *ngIf="modelingStatus.model?.error" style="color: #b00020;">Error: {{ modelingStatus.model?.error }}</div>
-      
+
+      <!-- Categorical Features (auto-detected by modeling backend) -->
+      <div *ngIf="modelingStatus.model?.encoding_report?.length > 0" style="margin-top: 12px; padding: 10px 14px; background: #f0f7ff; border-left: 3px solid #1976d2; border-radius: 4px;">
+        <div style="font-size: 12px; font-weight: 600; color: #1565c0; margin-bottom: 6px;">
+          Categorical Features ({{ modelingStatus.model.encoding_report.length }}) — handled via
+          <span style="font-weight: 700;">{{ selectedAlgorithm || 'XGBoost' }}</span> native support
+          <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
+             target="_blank" rel="noopener noreferrer"
+             title="XGBoost Optimal Partitioning: Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
+             style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 4px; vertical-align: middle;">i</a>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <span *ngFor="let r of modelingStatus.model.encoding_report"
+                style="display: inline-block; padding: 2px 8px; background: #e8eaf6; border-radius: 12px; font-size: 11px; color: #333; font-weight: 500;"
+                [title]="r.nunique + ' categories: ' + (r.categories?.slice(0, 10)?.join(', ') || '')">
+            {{ r.feature }} <span style="color: #888; font-weight: 400;">({{ r.nunique }})</span>
+          </span>
+        </div>
+      </div>
+
       <!-- Cross-Validation summary -->
       <div *ngIf="modelingStatus.model?.cv" style="margin-top: 16px;">
         <h4>Cross-Validation</h4>
@@ -80,22 +185,34 @@
 
       <!-- Selected features table (sorted by SHAP |impact|) -->
       <div *ngIf="modelingStatus.model?.selected_features?.length" style="margin-top: 16px;">
-        <h4>Selected Features (sorted by |impact|)</h4>
+        <h4>Selected Features (sorted by Combined Score)</h4>
         <div style="font-size: 12px; color:#666; margin-bottom:6px;">Total: {{ modelingStatus.model.selected_features.length }}</div>
         <div style="overflow:auto; max-height: 360px; border: 1px solid #eee;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
               <tr style="background: #fafafa; text-align: left;">
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 20%;">Feature</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee;">Description</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 14%; text-align:right;">|Impact|</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 12%; text-align:right;">Signed impact</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right;">Gain</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 26%;">Usage</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 14%; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('feature')">Feature <span style="font-size:10px; color:#999;">{{ getSfSortIcon('feature') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('description')">Description <span style="font-size:10px; color:#999;">{{ getSfSortIcon('description') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('impact')">|Impact| <span style="font-size:10px; color:#999;">{{ getSfSortIcon('impact') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('signed_impact')">Signed <span style="font-size:10px; color:#999;">{{ getSfSortIcon('signed_impact') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('gain')">Gain <span style="font-size:10px; color:#999;">{{ getSfSortIcon('gain') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 6%; text-align:right; cursor:pointer; user-select:none;"
+                    title="Variance Inflation Factor — measures multicollinearity. VIF=1: no correlation, 1–5: moderate, 5–10: high, >10: severe multicollinearity."
+                    (click)="sortSelectedFeatures('vif')">VIF <span style="font-size:10px; color:#999;">{{ getSfSortIcon('vif') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="ECDF-rank percentile of SHAP |impact| across all features [0–1]"
+                    (click)="sortSelectedFeatures('shap_percentile')">SHAP % <span style="font-size:10px; color:#999;">{{ getSfSortIcon('shap_percentile') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="ECDF-rank percentile of Gain importance across all features [0–1]"
+                    (click)="sortSelectedFeatures('gain_percentile')">Gain % <span style="font-size:10px; color:#999;">{{ getSfSortIcon('gain_percentile') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="Geometric mean of SHAP percentile and Gain percentile: C = √(SHAP% × Gain%)"
+                    (click)="sortSelectedFeatures('combined_score')">Combined <span style="font-size:10px; color:#999;">{{ getSfSortIcon('combined_score') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 16%;">Usage</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let f of modelingStatus.model.selected_features"
+              <tr *ngFor="let f of sortedSelectedFeatures"
                   [style.background]="featureUsage[f.feature] === 'drop' ? '#fff5f5' : 'transparent'">
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">
                   <a href="javascript:void(0)" (click)="openFeatureCard(f.feature)" style="color: #1976d2; text-decoration: underline; cursor: pointer;">{{ f.feature }}</a>
@@ -104,6 +221,17 @@
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.signed_impact | number:'1.6-6' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.gain | number:'1.2-2' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;"
+                    [style.color]="f.vif != null && f.vif > 10 ? '#b71c1c' : (f.vif != null && f.vif > 5 ? '#e65100' : '#333')">
+                  <span *ngIf="f.vif != null">{{ f.vif | number:'1.2-2' }}</span>
+                  <span *ngIf="f.vif == null" style="color:#aaa;">—</span>
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color:#555;">{{ f.shap_percentile | number:'1.4-4' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color:#555;">{{ f.gain_percentile | number:'1.4-4' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight:600;"
+                    [style.color]="f.combined_score >= 0.8 ? '#2e7d32' : (f.combined_score >= 0.5 ? '#1565c0' : '#555')">
+                  {{ f.combined_score | number:'1.4-4' }}
+                </td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <select

@@ -8,22 +8,9 @@ z: bug-fix or hot-fix
 
 !CFH!
 
-bring preprocessing multiple-options menu as preselected. use below values as default: 
-
-1. Column-wise duplicate drop: clicked
-2. Row-wise duplicate drop: clicked
-3. Zero-variance drop: clicked
-4. Perfect-correlation drop: clicked
-7. Corr-drop threshold = 0.85
-11. Sparsity-drop threshold = 0.95
-17. Missing-drop threshold = 0.95
-23. [Sparsity+Missing]-drop threshold = 0.95
-28. Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]
-
-
-
-
-add feature-wise individual gain based feature-importance figures in feature-card-modal/importance tab
+SFS:
+ 1- feature sorter using impact and gain (before sfs)
+ 2- add multicolinearity (VAR or VIR) as new column to 'Selected Features (sorted by |impact|)' table
 
 While the implementation is complete and functional, here are potential future improvements:
 - Export Results - CSV/Excel export of SFS results
@@ -40,8 +27,6 @@ While the implementation is complete and functional, here are potential future i
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
 - add causality features into explainability tab
 - in data split for random choice add percentage selection also
- 
-
 
 - Add unit test for each functionality currently being hold and run that test
     each time new functionality being added or bug-fix implemented (mth)

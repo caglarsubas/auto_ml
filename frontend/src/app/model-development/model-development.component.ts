@@ -22,7 +22,7 @@ interface PurifierOption {
 
 export class ModelDevelopmentComponent implements OnInit {
   currentRoute: string = '';
-  menuItems = ['declaration', 'preprocessing', 'data quality', 'encoding', 'modeling', 'evaluation', 'deployment'];
+  menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
@@ -421,6 +421,7 @@ export class ModelDevelopmentComponent implements OnInit {
         this.dataService.getDataDictionary(fileId).subscribe({
           next: (list: any[]) => {
             this.dataDictionaryCache = Array.isArray(list) ? list : [];
+            this.sharedService.setDataDictionaryCache(this.dataDictionaryCache);
             openWithFeatures(buildFromCache());
           },
           error: () => {
@@ -579,6 +580,7 @@ export class ModelDevelopmentComponent implements OnInit {
                 const rows = Array.isArray(list) ? list : [];
                 // Cache full dictionary for FeatureCard (Feature_Description, Level_of_Measurement, etc.)
                 this.dataDictionaryCache = rows;
+                this.sharedService.setDataDictionaryCache(rows);
                 const dtCols = rows
                   .filter(item => {
                     const lom = String(item?.Level_of_Measurement || '').toLowerCase();
@@ -1253,7 +1255,6 @@ export class ModelDevelopmentComponent implements OnInit {
     if (item === 'declaration') return true;
     if (item === 'preprocessing') return this.preprocessingAvailable;
     if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
-    if (item === 'encoding') return !!(this.datqSummary && this.datqSummary.length);
     if (item === 'modeling') return this.modelingAvailable;
     if (item === 'evaluation') return this.modelingAvailable; // can refine later
     if (item === 'deployment') return this.modelingAvailable; // can refine later
@@ -1273,9 +1274,6 @@ export class ModelDevelopmentComponent implements OnInit {
         if (item === 'data quality') {
           const el = document.getElementById('data-quality-anchor');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (item === 'encoding') {
-          const el = document.getElementById('encoding-anchor');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else if (item === 'modeling') {
           const el = document.getElementById('modeling-anchor');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1291,14 +1289,17 @@ export class ModelDevelopmentComponent implements OnInit {
   // ===== Encoding Step Methods =====
 
   goToEncoding(): void {
+    // For boosting pipeline, skip encoding and go directly to modeling
+    this.goToModelingFromDQ();
+  }
+
+  goToModelingFromDQ(): void {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
-    this.currentStep = 'encoding';
-    if (!this.encodingPlan.length && !this.encodingAnalyzing) {
-      this.analyzeEncoding();
-    }
+    this.modelingAvailable = true;
+    this.currentStep = 'modeling';
     setTimeout(() => {
       try {
-        const el = document.getElementById('encoding-anchor');
+        const el = document.getElementById('modeling-anchor');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch {}
     }, 100);

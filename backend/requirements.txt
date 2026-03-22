@@ -14,6 +14,7 @@ xgboost>=2.0,<3.0
 shap>=0.42
 matplotlib>=3.7
 mlxtend>=0.23
+statsmodels>=0.14
 
 # Testing dependencies
 pytest>=8.0

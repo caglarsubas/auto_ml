@@ -142,9 +142,17 @@ class ModelingStartView(APIView):
                 X_raw = X_raw[keep_cols].copy()
                 # Convert detected categorical columns to pd.Categorical for XGBoost native support
                 enable_cat = len(cat_cols) > 0
+                encoding_report = []
                 for c in cat_cols:
                     if c in X_raw.columns:
                         X_raw[c] = X_raw[c].astype('category')
+                        cats = [str(v) for v in X_raw[c].cat.categories]
+                        encoding_report.append({
+                            'feature': c,
+                            'strategy': 'native_categorical',
+                            'categories': cats,
+                            'nunique': len(cats),
+                        })
                 print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
                 print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
@@ -369,12 +377,56 @@ class ModelingStartView(APIView):
                             # Build gain lookup from already-computed gain_importance
                             gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
 
+                            # Compute VIF (Variance Inflation Factor) for multicollinearity
+                            vif_lookup: dict[str, float] = {}
+                            try:
+                                from statsmodels.stats.outliers_influence import variance_inflation_factor
+                                # Build numeric-only matrix for VIF (convert categoricals to codes)
+                                X_vif = X_train.copy()
+                                for c in X_vif.columns:
+                                    if hasattr(X_vif[c], 'cat'):
+                                        X_vif[c] = X_vif[c].cat.codes.astype(float)
+                                        X_vif[c] = X_vif[c].replace(-1, np.nan)
+                                X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
+                                X_vif = X_vif.fillna(X_vif.mean())
+                                # Drop zero-variance columns to avoid inf VIF
+                                nonzero_var = X_vif.columns[X_vif.var() > 0]
+                                X_vif = X_vif[nonzero_var]
+                                X_vif_arr = X_vif.values.astype(float)
+                                for i, col_name in enumerate(X_vif.columns):
+                                    try:
+                                        v = variance_inflation_factor(X_vif_arr, i)
+                                        vif_lookup[col_name] = round(float(v), 2) if np.isfinite(v) else None
+                                    except Exception:
+                                        vif_lookup[col_name] = None
+                                print(f"[ModelingStart] VIF computed for {len(vif_lookup)} features")
+                            except Exception as vif_err:
+                                print(f"[ModelingStart] VIF computation failed: {vif_err}")
+
+                            # --- ECDF-rank percentile normalization & combined score ---
+                            # Collect raw SHAP |impact| and gain for features with impact > 0
+                            _active_items = [it for it in shap_details_sorted if it['mean_abs'] > 0]
+                            _shap_vals = np.array([it['mean_abs'] for it in _active_items])
+                            _gain_vals = np.array([gain_lookup.get(it['feature'], 0.0) for it in _active_items])
+
+                            def _ecdf_rank(arr):
+                                """Return ECDF-based percentile ranks in [0, 1] — full precision."""
+                                n = len(arr)
+                                if n == 0:
+                                    return arr.copy()
+                                order = np.argsort(arr)
+                                ranks = np.empty_like(order, dtype=float)
+                                ranks[order] = np.arange(1, n + 1) / n
+                                return ranks
+
+                            _shap_pct = _ecdf_rank(_shap_vals)
+                            _gain_pct = _ecdf_rank(_gain_vals)
+                            _combined = np.sqrt(_shap_pct * _gain_pct)
+
                             try:
                                 from declaration.models import DataDictionary
                                 selected_features = []
-                                for item in shap_details_sorted:
-                                    if item['mean_abs'] <= 0:
-                                        continue
+                                for idx, item in enumerate(_active_items):
                                     desc = DataDictionary.get_description(file_id, item['feature']) or ''
                                     selected_features.append({
                                         'feature': item['feature'],
@@ -383,12 +435,14 @@ class ModelingStartView(APIView):
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
                                         'gain': gain_lookup.get(item['feature'], 0.0),
+                                        'vif': vif_lookup.get(item['feature']),
+                                        'shap_percentile': float(_shap_pct[idx]),
+                                        'gain_percentile': float(_gain_pct[idx]),
+                                        'combined_score': float(_combined[idx]),
                                     })
                             except Exception:
                                 selected_features = []
-                                for item in shap_details_sorted:
-                                    if item['mean_abs'] <= 0:
-                                        continue
+                                for idx, item in enumerate(_active_items):
                                     selected_features.append({
                                         'feature': item['feature'],
                                         'description': '',
@@ -396,7 +450,13 @@ class ModelingStartView(APIView):
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
                                         'gain': gain_lookup.get(item['feature'], 0.0),
+                                        'vif': vif_lookup.get(item['feature']),
+                                        'shap_percentile': float(_shap_pct[idx]),
+                                        'gain_percentile': float(_gain_pct[idx]),
+                                        'combined_score': float(_combined[idx]),
                                     })
+                            # Sort by combined score descending
+                            selected_features.sort(key=lambda x: x['combined_score'], reverse=True)
 
                             try:
                                 import matplotlib
@@ -760,6 +820,7 @@ class ModelingStartView(APIView):
                             'feature_count': int(X.shape[1]),
                             'categorical_features_used': cat_cols,
                             'enable_categorical': enable_cat,
+                            'encoding_report': encoding_report,
                             'importances': {
                                 'gain': gain_importance,
                                 'shap_mean_abs': shap_importance,

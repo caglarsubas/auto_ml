@@ -79,8 +79,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   // Model_Usage settings (variables to exclude from modeling)
   variableModelUsage: { [variable: string]: string } = {};
 
-  // Encoded file path from encoding step (preferred over processedFilePath)
-  encodedFilePath: string | null = null;
+  // Encoding plan state (shown after algorithm selection, before Start Modeling)
+  encodingPlan: any[] = [];
+  encodingAnalyzing: boolean = false;
+  encodingError: string | null = null;
+  dataDictionaryCache: any[] = [];
 
   // Encoding report with category mappings (for SHAP beeswarm labels)
   encodingReport: any[] = [];
@@ -90,6 +93,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   // Feature usage tracking for Selected Features table
   featureUsage: { [feature: string]: string } = {};
   featureDropReason: { [feature: string]: string } = {};
+
+  // Sort state for Selected Features table
+  sfSortColumn: string = 'combined_score';
+  sfSortDirection: 'asc' | 'desc' = 'desc';
+  sortedSelectedFeatures: any[] = [];
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -199,36 +207,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       }
     });
 
-    // Subscribe to encoded file path from encoding step
-    this.sharedService.encodedFilePath$.subscribe((path) => {
-      this.encodedFilePath = path;
+    // Subscribe to data dictionary cache for encoding analysis
+    this.sharedService.dataDictionaryCache$.subscribe((cache) => {
+      this.dataDictionaryCache = cache || [];
     });
 
-    // Subscribe to encoding report for categorical feature label lookup
-    this.sharedService.encodingReport$.subscribe((report) => {
-      this.encodingReport = report || [];
-      this.catLabelLookup = {};
-      for (const r of this.encodingReport) {
-        const feat = r.feature;
-        const mapping = r.mapping;
-        if (!feat || !mapping) continue;
-        const type = mapping.type || '';
-        const lookup: { [encoded: string]: string } = {};
-        if (type === 'native_categorical') {
-          const cats: string[] = mapping.categories || [];
-          cats.forEach((c: string, i: number) => { lookup[String(i)] = c; });
-        } else if (type === 'label_encoding' || type === 'ordinal_encoding') {
-          const m = mapping.mapping || {};
-          Object.entries(m).forEach(([k, v]) => { lookup[String(v)] = k; });
-        } else if (type === 'target_encoding') {
-          const m = mapping.mapping || {};
-          Object.entries(m).forEach(([k, v]) => { lookup[String(v)] = k; });
-        }
-        if (Object.keys(lookup).length > 0) {
-          this.catLabelLookup[feat] = lookup;
-        }
-      }
-    });
   }
 
   ngAfterViewInit(): void {
@@ -258,6 +241,181 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.router.navigate(['/model-development/preprocessing']);
   }
 
+  // ===== Encoding Plan Methods =====
+
+  onAlgorithmChange(algo: string): void {
+    this.selectedAlgorithm = algo;
+    // Auto-trigger encoding analysis when algorithm is selected
+    if (algo && this.currentFileId != null && this.processedFilePath) {
+      this.ensureDictionaryThenAnalyze();
+    }
+  }
+
+  private ensureDictionaryThenAnalyze(): void {
+    if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) {
+      this.analyzeEncoding();
+      return;
+    }
+    // Dictionary cache is empty — fetch it before analyzing
+    if (this.currentFileId != null) {
+      this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
+        next: (list: any[]) => {
+          this.dataDictionaryCache = Array.isArray(list) ? list : [];
+          this.analyzeEncoding();
+        },
+        error: () => {
+          // Proceed without descriptions
+          this.analyzeEncoding();
+        }
+      });
+    } else {
+      this.analyzeEncoding();
+    }
+  }
+
+  analyzeEncoding(): void {
+    if (!this.currentFileId || !this.processedFilePath) return;
+    this.encodingAnalyzing = true;
+    this.encodingError = null;
+    const excluded = Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
+    this.dataService.analyzeEncoding(
+      this.currentFileId, this.processedFilePath, this.dataDictionaryCache, excluded
+    ).subscribe({
+      next: (resp: any) => {
+        this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
+        this.encodingAnalyzing = false;
+      },
+      error: (err: any) => {
+        this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
+        this.encodingAnalyzing = false;
+      }
+    });
+  }
+
+  updateEncodingLom(entry: any, newLom: string): void {
+    entry.user_lom = newLom;
+    const nunique = entry.nunique || 0;
+    if (newLom === 'ordinal') {
+      if (nunique < 5) {
+        entry.fallback_strategy = 'one_hot_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (<5) → One-Hot Encoding`;
+        entry.needs_ranking = false;
+      } else if (nunique <= 10) {
+        entry.fallback_strategy = 'ordinal_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (5–10) → Ordinal Encoding (user ranking)`;
+        entry.needs_ranking = true;
+      } else {
+        entry.fallback_strategy = 'target_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (>10) → Target Encoding`;
+        entry.needs_ranking = false;
+      }
+    } else {
+      entry.fallback_strategy = 'label_encoding';
+      entry.fallback_reason = 'Nominal feature → Label Encoding';
+      entry.needs_ranking = false;
+      entry.ranking = null;
+    }
+  }
+
+  moveRankingUp(entry: any, idx: number): void {
+    if (!entry.ranking || idx <= 0) return;
+    const tmp = entry.ranking[idx - 1];
+    entry.ranking[idx - 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  moveRankingDown(entry: any, idx: number): void {
+    if (!entry.ranking || idx >= entry.ranking.length - 1) return;
+    const tmp = entry.ranking[idx + 1];
+    entry.ranking[idx + 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  initRanking(entry: any): void {
+    if (!entry.ranking || !entry.ranking.length) {
+      entry.ranking = [...(entry.unique_values || [])];
+    }
+  }
+
+  getStrategyLabel(strategy: string): string {
+    const labels: { [k: string]: string } = {
+      'native_categorical': 'Native Categorical',
+      'label_encoding': 'Label Encoding',
+      'one_hot_encoding': 'One-Hot Encoding',
+      'ordinal_encoding': 'Ordinal Encoding',
+      'target_encoding': 'Target Encoding',
+    };
+    return labels[strategy] || strategy;
+  }
+
+  getStrategyColor(strategy: string): string {
+    const colors: { [k: string]: string } = {
+      'native_categorical': '#1976d2',
+      'label_encoding': '#7b1fa2',
+      'one_hot_encoding': '#00796b',
+      'ordinal_encoding': '#e65100',
+      'target_encoding': '#c62828',
+    };
+    return colors[strategy] || '#616161';
+  }
+
+  getFeatureDescription(featureName: string): string {
+    if (!this.dataDictionaryCache || !this.dataDictionaryCache.length) return '';
+    const entry = this.dataDictionaryCache.find((d: any) => d?.Feature_Name === featureName);
+    return entry?.Feature_Description || '';
+  }
+
+  getAlgorithmLabel(algo: string | null): string {
+    const labels: { [k: string]: string } = {
+      'xgboost': 'XGBoost',
+      'lightgbm': 'LightGBM',
+      'catboost': 'CatBoost',
+    };
+    return labels[algo || ''] || algo || 'Boosting';
+  }
+
+  // ===== Selected Features Table Sorting =====
+
+  sortSelectedFeatures(column: string): void {
+    if (this.sfSortColumn === column) {
+      this.sfSortDirection = this.sfSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sfSortColumn = column;
+      // Default to descending for numeric columns, ascending for text
+      this.sfSortDirection = (column === 'feature' || column === 'description') ? 'asc' : 'desc';
+    }
+    this.applySfSort();
+  }
+
+  applySfSort(): void {
+    const features = this.modelingStatus?.model?.selected_features;
+    if (!features || !features.length) {
+      this.sortedSelectedFeatures = [];
+      return;
+    }
+    const col = this.sfSortColumn;
+    const dir = this.sfSortDirection === 'asc' ? 1 : -1;
+    this.sortedSelectedFeatures = [...features].sort((a: any, b: any) => {
+      let va = a[col];
+      let vb = b[col];
+      // Handle nulls — push them to the end
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      // String comparison for text columns
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return dir * va.localeCompare(vb);
+      }
+      // Numeric comparison
+      return dir * ((va > vb ? 1 : va < vb ? -1 : 0));
+    });
+  }
+
+  getSfSortIcon(column: string): string {
+    if (this.sfSortColumn !== column) return '⇅';
+    return this.sfSortDirection === 'asc' ? '↑' : '↓';
+  }
+
   startModeling(): void {
     if (this.currentFileId == null || !this.processedFilePath) {
       console.error('Missing file ID or processed file path');
@@ -276,8 +434,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.isStarting = true;
     this.chartsDrawn = false;
-    const fileForModeling = this.encodedFilePath || this.processedFilePath;
-    this.dataService.startModeling(this.currentFileId, fileForModeling!, this.selectedAlgorithm || undefined, excludedVariables).pipe(
+    this.dataService.startModeling(this.currentFileId, this.processedFilePath!, this.selectedAlgorithm || undefined, excludedVariables).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
       next: (resp) => {
@@ -286,9 +443,12 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         // Debug: Check SHAP data
         console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
         console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
+        this.applySfSort();
         // Check if SFS is ready (training data saved)
         this.sfsReady = resp?.model?.sfs_ready || false;
         console.log('SFS ready?', this.sfsReady);
+        // Build catLabelLookup from the encoding report returned by the modeling backend
+        this.buildCatLabelLookup(resp?.model?.encoding_report);
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
         if (js === 'completed') { 
@@ -302,6 +462,23 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     });
   }
 
+  private buildCatLabelLookup(encodingReport: any[] | null | undefined): void {
+    this.catLabelLookup = {};
+    if (!encodingReport || !Array.isArray(encodingReport)) return;
+    this.encodingReport = encodingReport;
+    for (const r of encodingReport) {
+      const feat = r.feature;
+      const cats: string[] = r.categories || [];
+      if (!feat || cats.length === 0) continue;
+      const lookup: { [encoded: string]: string } = {};
+      cats.forEach((c: string, i: number) => { lookup[String(i)] = c; });
+      if (Object.keys(lookup).length > 0) {
+        this.catLabelLookup[feat] = lookup;
+      }
+    }
+    console.log('[Modeling] Built catLabelLookup from model response:', Object.keys(this.catLabelLookup));
+  }
+
   private startStatusPolling(): void {
     if (this.currentFileId == null) return;
     // Clear any existing subscription
@@ -313,11 +490,16 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.dataService.getModelingStatus(this.currentFileId).subscribe({
         next: (status) => {
           this.modelingStatus = status;
+          this.applySfSort();
           // Check if SFS is ready
           this.sfsReady = status?.model?.sfs_ready || false;
           const s = status?.job_status || status?.status;
           if (s === 'completed' || s === 'error') {
             this.stopStatusPolling();
+            // Build catLabelLookup from encoding report in completed response
+            if (status?.model?.encoding_report) {
+              this.buildCatLabelLookup(status.model.encoding_report);
+            }
             // draw CV charts when available
             this.chartsDrawn = false;
             setTimeout(() => this.tryDrawChartsIfReady(), 0);

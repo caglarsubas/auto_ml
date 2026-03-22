@@ -31,6 +31,9 @@ node_modules
 ehthumbs.db
 Thumbs.db
 
+# Datasets (never push to repo)
+datasets/
+
 # Media / data files (generated at runtime)
 backend/media/
 

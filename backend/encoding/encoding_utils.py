@@ -35,12 +35,14 @@ def analyze_categorical_features(
     excluded = set(excluded_cols or [])
     excluded.add(target_col)
 
-    # LoM lookup from data dictionary
+    # LoM and description lookup from data dictionary
     lom_lookup: Dict[str, str] = {}
+    desc_lookup: Dict[str, str] = {}
     for entry in data_dict:
         fname = entry.get('Feature_Name', '')
         lom = entry.get('Level_of_Measurement', 'unknown')
         lom_lookup[fname] = lom
+        desc_lookup[fname] = entry.get('Feature_Description', '')
 
     plan: List[Dict] = []
     for col in df.columns:
@@ -76,6 +78,7 @@ def analyze_categorical_features(
 
         plan.append({
             'feature': col,
+            'description': desc_lookup.get(col, ''),
             'original_lom': lom,
             'user_lom': lom,
             'data_type': str(df[col].dtype),
