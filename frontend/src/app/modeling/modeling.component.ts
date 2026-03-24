@@ -42,8 +42,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   private sfsPolling: Subscription | null = null;
   
   // SFS method selection
-  sfsMethodForward: boolean = true;
-  sfsMethodBackward: boolean = false;
+  sfsMethodForward: boolean = false;
+  sfsMethodBackward: boolean = true;
   
   // SFS stopping criteria - multiple metrics
   sfsMetrics: Array<{ metric: string, pct_change: number }> = [

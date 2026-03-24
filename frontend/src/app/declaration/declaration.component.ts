@@ -89,12 +89,65 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         this.isExcelFile = true;
         this.checkExcelSheets();
+      } else if (fileName.endsWith('.csv') || fileName.endsWith('.txt') || fileName.endsWith('.tsv')) {
+        this.detectCsvSeparator(this.selectedFiles[0]);
       }
     }
     // Reset mergeColumnWise when only one file is selected
     if (this.selectedFiles.length <= 1) {
       this.mergeColumnWise = false;
     }
+  }
+
+  private detectCsvSeparator(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const text: string = e.target.result;
+      // Take first 5 lines for analysis
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 5);
+      if (lines.length === 0) return;
+
+      const candidates: { char: string; key: string }[] = [
+        { char: ',', key: 'comma' },
+        { char: ';', key: 'semicolon' },
+        { char: '\t', key: 'tab' },
+        { char: ' ', key: 'space' }
+      ];
+
+      // For each candidate, count occurrences per line and check consistency
+      let bestKey = 'semicolon';
+      let bestScore = -1;
+
+      for (const sep of candidates) {
+        const counts = lines.map(line => {
+          // Count separators outside quoted strings
+          let count = 0;
+          let inQuote = false;
+          for (const ch of line) {
+            if (ch === '"') { inQuote = !inQuote; }
+            else if (!inQuote && ch === sep.char) { count++; }
+          }
+          return count;
+        });
+        // All lines should have > 0 and roughly the same count
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        if (minCount <= 0) continue;
+        // Score: higher min count is better; penalize inconsistency
+        const consistency = minCount / (maxCount || 1);
+        const score = minCount * consistency;
+        if (score > bestScore) {
+          bestScore = score;
+          bestKey = sep.key;
+        }
+      }
+
+      this.columnSeparator = bestKey;
+      console.log(`[CSV Auto-detect] Detected separator: ${bestKey}`);
+    };
+    // Read only first 8KB — enough for header detection
+    const slice = file.slice(0, 8192);
+    reader.readAsText(slice);
   }
 
   checkExcelSheets(): void {
