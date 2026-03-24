@@ -57,7 +57,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsForwardResults: any[] = [];
   sfsBackwardResults: any[] = [];
   sfsBackwardRemainingFeatures: string[] = [];  // Features remaining after backward elimination
-  sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward remaining features
+  sfsBackwardCutStep: number | null = null;  // User-selected cutting point step in backward results
+  sfsBackwardCutFeatures: string[] = [];  // Features remaining at the selected cut step
+  sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward cut features
   selectedSfsStep: any | null = null;  // For modal display
   previousSfsStep: any | null = null;  // Previous step for comparison
   showSfsModal: boolean = false;
@@ -98,6 +100,16 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfSortColumn: string = 'combined_score';
   sfSortDirection: 'asc' | 'desc' = 'desc';
   sortedSelectedFeatures: any[] = [];
+
+  // VIF detail modal state
+  showVifDetailModal: boolean = false;
+  vifDetailFeature: string = '';
+  vifDetailVif: number | null = null;
+  vifDetailContributions: any[] = [];
+  vifDetailLoading: boolean = false;
+  vifDetailError: string | null = null;
+  vifDetailSortColumn: string = 'correlation';
+  vifDetailSortDirection: 'asc' | 'desc' = 'desc';
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -414,6 +426,69 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   getSfSortIcon(column: string): string {
     if (this.sfSortColumn !== column) return '⇅';
     return this.sfSortDirection === 'asc' ? '↑' : '↓';
+  }
+
+  // ===== VIF Detail Modal =====
+
+  openVifDetail(featureName: string, event: Event): void {
+    event.stopPropagation();
+    if (this.currentFileId == null) return;
+    this.vifDetailFeature = featureName;
+    this.vifDetailLoading = true;
+    this.vifDetailError = null;
+    this.vifDetailContributions = [];
+    this.vifDetailVif = null;
+    this.vifDetailSortColumn = 'correlation';
+    this.vifDetailSortDirection = 'desc';
+    this.showVifDetailModal = true;
+
+    this.dataService.getVifDetail(this.currentFileId, featureName).subscribe({
+      next: (resp: any) => {
+        this.vifDetailVif = resp.vif;
+        this.vifDetailContributions = resp.contributions || [];
+        this.vifDetailLoading = false;
+      },
+      error: (err: any) => {
+        this.vifDetailError = err?.error?.error || 'Failed to load VIF detail';
+        this.vifDetailLoading = false;
+      }
+    });
+  }
+
+  closeVifDetail(): void {
+    this.showVifDetailModal = false;
+    this.vifDetailFeature = '';
+    this.vifDetailContributions = [];
+    this.vifDetailError = null;
+  }
+
+  sortVifDetail(column: string): void {
+    if (this.vifDetailSortColumn === column) {
+      this.vifDetailSortDirection = this.vifDetailSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.vifDetailSortColumn = column;
+      this.vifDetailSortDirection = column === 'feature' ? 'asc' : 'desc';
+    }
+    this.applyVifDetailSort();
+  }
+
+  applyVifDetailSort(): void {
+    const col = this.vifDetailSortColumn;
+    const dir = this.vifDetailSortDirection === 'asc' ? 1 : -1;
+    this.vifDetailContributions = [...this.vifDetailContributions].sort((a: any, b: any) => {
+      let va = a[col];
+      let vb = b[col];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'string' && typeof vb === 'string') return dir * va.localeCompare(vb);
+      return dir * (va > vb ? 1 : va < vb ? -1 : 0);
+    });
+  }
+
+  getVifDetailSortIcon(column: string): string {
+    if (this.vifDetailSortColumn !== column) return '⇅';
+    return this.vifDetailSortDirection === 'asc' ? '↑' : '↓';
   }
 
   startModeling(): void {
@@ -1055,6 +1130,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsResults = null;
     this.sfsForwardResults = [];
     this.sfsBackwardResults = [];
+    this.sfsForwardFromBackwardResults = [];
+    this.sfsBackwardCutStep = null;
+    this.sfsBackwardCutFeatures = [];
     this.sfsRunning = false;
     this.sfsProgress = 0;
     this.sfsMessage = '';
@@ -1147,7 +1225,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
    */
   startForwardFromBackwardFeatures(): void {
     if (!this.currentFileId) return;
-    if (!this.sfsBackwardRemainingFeatures || this.sfsBackwardRemainingFeatures.length === 0) {
+    const featuresToUse = this.sfsBackwardCutFeatures.length > 0
+      ? this.sfsBackwardCutFeatures
+      : this.sfsBackwardRemainingFeatures;
+    if (!featuresToUse || featuresToUse.length === 0) {
       alert('No remaining features available from backward elimination');
       return;
     }
@@ -1161,7 +1242,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.sfsRunning = true;
     this.sfsProgress = 0;
-    this.sfsMessage = 'Starting forward selection from backward remaining features...';
+    this.sfsMessage = `Starting forward selection with ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
 
@@ -1170,11 +1251,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.currentFileId,
       ['forward'],
       stoppingCriteria,
-      this.sfsBackwardRemainingFeatures
+      featuresToUse
     ).subscribe({
       next: (resp: any) => {
         console.log('[SFS-Chain] Forward from backward started:', resp);
-        this.sfsMessage = 'Running forward selection on backward remaining features...';
+        this.sfsMessage = `Running forward selection on ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
         this.startSfsStatusPolling();
       },
       error: (err: any) => {
@@ -1255,7 +1336,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsForwardResults = data.forward || [];
         this.sfsBackwardResults = data.backward || [];
         this.sfsBackwardRemainingFeatures = data.backward_remaining_features || [];
+        this.sfsForwardFromBackwardResults = data.forward_from_backward || [];
         console.log('[SFS] Backward remaining features:', this.sfsBackwardRemainingFeatures);
+        console.log('[SFS] Forward-from-backward results:', this.sfsForwardFromBackwardResults.length);
+        // Initialize cut point to last backward step (default = all eliminations applied)
+        this.initBackwardCutStep();
       },
       error: (err: any) => {
         console.warn('[SFS] Failed to fetch results:', err);
@@ -1263,8 +1348,34 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsForwardResults = [];
         this.sfsBackwardResults = [];
         this.sfsBackwardRemainingFeatures = [];
+        this.sfsBackwardCutStep = null;
+        this.sfsBackwardCutFeatures = [];
       }
     });
+  }
+
+  /**
+   * Initialize backward cut step to the last step (default behavior)
+   */
+  initBackwardCutStep(): void {
+    if (this.sfsBackwardResults.length > 0) {
+      const lastStep = this.sfsBackwardResults[this.sfsBackwardResults.length - 1];
+      this.sfsBackwardCutStep = lastStep.step;
+      this.sfsBackwardCutFeatures = lastStep.selected_features || this.sfsBackwardRemainingFeatures;
+    } else {
+      this.sfsBackwardCutStep = null;
+      this.sfsBackwardCutFeatures = [];
+    }
+  }
+
+  /**
+   * Set the backward elimination cutting point to a specific step.
+   * Features remaining at that step become the candidate set for forward selection.
+   */
+  setBackwardCutStep(step: any): void {
+    this.sfsBackwardCutStep = step.step;
+    this.sfsBackwardCutFeatures = step.selected_features ? [...step.selected_features] : [];
+    console.log(`[SFS] Cut step set to ${step.step}, remaining features (${this.sfsBackwardCutFeatures.length}):`, this.sfsBackwardCutFeatures);
   }
 
   /**

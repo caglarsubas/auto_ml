@@ -280,20 +280,18 @@ def run_forward_sfs(
             selected_features.append(best_feature)
             remaining_features.remove(best_feature)
             
-            # Calculate PSI/CSI for the added feature
-            feature_idx = feature_names.index(best_feature)
-            train_feature_values = X_train_raw.iloc[:, feature_idx].values
-            test_feature_values = X_test_raw.iloc[:, feature_idx].values
-            
-            # Determine if numeric or categorical
-            is_numeric = pd.api.types.is_numeric_dtype(X_train_raw.iloc[:, feature_idx])
-            
-            if is_numeric:
-                stability_metric = calculate_psi(train_feature_values, test_feature_values)
+            # Calculate model stability PSI on predicted log-odds (train vs test)
+            try:
+                dtrain_sel = xgb.DMatrix(X_train[selected_features], enable_categorical=_has_cat)
+                dtest_sel = xgb.DMatrix(X_test[selected_features], enable_categorical=_has_cat)
+                train_logodds = best_metrics['booster'].predict(dtrain_sel, output_margin=True)
+                test_logodds = best_metrics['booster'].predict(dtest_sel, output_margin=True)
+                stability_metric = calculate_psi(train_logodds, test_logodds)
                 stability_type = 'PSI'
-            else:
-                stability_metric = calculate_csi(train_feature_values, test_feature_values)
-                stability_type = 'CSI'
+            except Exception as e:
+                print(f"[SFS-Forward] Model PSI calculation error: {e}")
+                stability_metric = None
+                stability_type = 'PSI'
             
             # Compute SHAP importance for current model
             current_shap_importance = compute_shap_importance(
@@ -476,20 +474,18 @@ def run_backward_sfs(
             # Remove the feature
             selected_features.remove(best_feature_to_drop)
             
-            # Calculate PSI/CSI for the dropped feature
-            feature_idx = feature_names.index(best_feature_to_drop)
-            train_feature_values = X_train_raw.iloc[:, feature_idx].values
-            test_feature_values = X_test_raw.iloc[:, feature_idx].values
-            
-            # Determine if numeric or categorical
-            is_numeric = pd.api.types.is_numeric_dtype(X_train_raw.iloc[:, feature_idx])
-            
-            if is_numeric:
-                stability_metric = calculate_psi(train_feature_values, test_feature_values)
+            # Calculate model stability PSI on predicted log-odds (train vs test)
+            try:
+                dtrain_sel = xgb.DMatrix(X_train[best_metrics['remaining_features']], enable_categorical=_has_cat)
+                dtest_sel = xgb.DMatrix(X_test[best_metrics['remaining_features']], enable_categorical=_has_cat)
+                train_logodds = best_metrics['booster'].predict(dtrain_sel, output_margin=True)
+                test_logodds = best_metrics['booster'].predict(dtest_sel, output_margin=True)
+                stability_metric = calculate_psi(train_logodds, test_logodds)
                 stability_type = 'PSI'
-            else:
-                stability_metric = calculate_csi(train_feature_values, test_feature_values)
-                stability_type = 'CSI'
+            except Exception as e:
+                print(f"[SFS-Backward] Model PSI calculation error: {e}")
+                stability_metric = None
+                stability_type = 'PSI'
             
             # Compute SHAP importance for model after removal
             current_shap_importance = compute_shap_importance(
@@ -907,23 +903,19 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         # Build final feature set
         new_features = current_features + [best_feature]
         
-        # Calculate stability for the added feature
+        # Calculate model stability PSI on predicted log-odds (train vs test)
         try:
-            if pd.api.types.is_numeric_dtype(X_train_raw[best_feature]):
-                stability_value = calculate_psi(
-                    X_train_raw[best_feature].values,
-                    X_test_raw[best_feature].values
-                )
-                stability_type = 'PSI'
-            else:
-                stability_value = calculate_csi(
-                    X_train_raw[best_feature].values,
-                    X_test_raw[best_feature].values
-                )
-                stability_type = 'CSI'
-        except Exception:
+            _has_cat_step = any(pd.api.types.is_categorical_dtype(X_train[c]) for c in new_features)
+            dtrain_sel = xgb.DMatrix(X_train[new_features], enable_categorical=_has_cat_step)
+            dtest_sel = xgb.DMatrix(X_test[new_features], enable_categorical=_has_cat_step)
+            train_logodds = best_metrics['booster'].predict(dtrain_sel, output_margin=True)
+            test_logodds = best_metrics['booster'].predict(dtest_sel, output_margin=True)
+            stability_value = calculate_psi(train_logodds, test_logodds)
+            stability_type = 'PSI'
+        except Exception as e:
+            print(f"[SFS-Forward-Step] Model PSI calculation error: {e}")
             stability_value = None
-            stability_type = 'N/A'
+            stability_type = 'PSI'
         
         shap_importance_by_feature = compute_shap_importance(
             best_metrics['booster'],
@@ -1057,23 +1049,19 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         # Build final feature set
         remaining_features = [f for f in current_features if f != best_feature_to_drop]
         
-        # Calculate stability for the dropped feature
+        # Calculate model stability PSI on predicted log-odds (train vs test)
         try:
-            if pd.api.types.is_numeric_dtype(X_train_raw[best_feature_to_drop]):
-                stability_value = calculate_psi(
-                    X_train_raw[best_feature_to_drop].values,
-                    X_test_raw[best_feature_to_drop].values
-                )
-                stability_type = 'PSI'
-            else:
-                stability_value = calculate_csi(
-                    X_train_raw[best_feature_to_drop].values,
-                    X_test_raw[best_feature_to_drop].values
-                )
-                stability_type = 'CSI'
-        except Exception:
+            _has_cat_step = any(pd.api.types.is_categorical_dtype(X_train[c]) for c in remaining_features)
+            dtrain_sel = xgb.DMatrix(X_train[remaining_features], enable_categorical=_has_cat_step)
+            dtest_sel = xgb.DMatrix(X_test[remaining_features], enable_categorical=_has_cat_step)
+            train_logodds = best_metrics['booster'].predict(dtrain_sel, output_margin=True)
+            test_logodds = best_metrics['booster'].predict(dtest_sel, output_margin=True)
+            stability_value = calculate_psi(train_logodds, test_logodds)
+            stability_type = 'PSI'
+        except Exception as e:
+            print(f"[SFS-Backward-Step] Model PSI calculation error: {e}")
             stability_value = None
-            stability_type = 'N/A'
+            stability_type = 'PSI'
         
         shap_importance_by_feature = compute_shap_importance(
             best_metrics['booster'],

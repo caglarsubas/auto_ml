@@ -223,7 +223,10 @@
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.gain | number:'1.2-2' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;"
                     [style.color]="f.vif != null && f.vif > 10 ? '#b71c1c' : (f.vif != null && f.vif > 5 ? '#e65100' : '#333')">
-                  <span *ngIf="f.vif != null">{{ f.vif | number:'1.2-2' }}</span>
+                  <a *ngIf="f.vif != null" href="javascript:void(0)" (click)="openVifDetail(f.feature, $event)"
+                     style="text-decoration: underline; cursor: pointer;"
+                     [style.color]="f.vif > 10 ? '#b71c1c' : (f.vif > 5 ? '#e65100' : '#1976d2')"
+                     title="Click to see VIF decomposition">{{ f.vif | number:'1.2-2' }}</a>
                   <span *ngIf="f.vif == null" style="color:#aaa;">—</span>
                 </td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color:#555;">{{ f.shap_percentile | number:'1.4-4' }}</td>
@@ -252,6 +255,93 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- VIF Detail Modal -->
+      <div *ngIf="showVifDetailModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;"
+           (click)="closeVifDetail()">
+        <div style="background: #fff; border-radius: 8px; padding: 24px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.3);"
+             (click)="$event.stopPropagation()">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0;">VIF Decomposition: <span style="color: #1976d2;">{{ vifDetailFeature }}</span></h3>
+            <button (click)="closeVifDetail()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;">✕</button>
+          </div>
+
+          <div *ngIf="vifDetailVif != null" style="margin-bottom: 12px; font-size: 14px;">
+            Overall VIF: <strong
+              [style.color]="vifDetailVif > 10 ? '#b71c1c' : (vifDetailVif > 5 ? '#e65100' : '#2e7d32')">{{ vifDetailVif | number:'1.2-2' }}</strong>
+            <span style="color: #888; margin-left: 8px; font-size: 12px;">
+              (1 = no collinearity, 1–5 = moderate, 5–10 = high, >10 = severe)
+            </span>
+          </div>
+          <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+            Each row shows how removing a single other feature would change the VIF of <strong>{{ vifDetailFeature }}</strong>.
+            "VIF Drop" = decrease in VIF when that feature is excluded from the regression.
+          </div>
+
+          <div *ngIf="vifDetailLoading" style="text-align: center; padding: 24px; color: #888;">
+            Loading VIF decomposition...
+          </div>
+
+          <div *ngIf="vifDetailError" style="text-align: center; padding: 24px; color: #b71c1c;">
+            {{ vifDetailError }}
+          </div>
+
+          <div *ngIf="!vifDetailLoading && !vifDetailError && vifDetailContributions.length > 0" style="overflow: auto; max-height: 55vh; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: #fafafa; text-align: left; position: sticky; top: 0; z-index: 1;">
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; cursor: pointer; user-select: none;" (click)="sortVifDetail('feature')">
+                    Feature <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('feature') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="Absolute Pearson correlation between this feature and the selected feature"
+                      (click)="sortVifDetail('correlation')">
+                    |Corr| <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('correlation') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="Signed Pearson correlation"
+                      (click)="sortVifDetail('signed_correlation')">
+                    Signed r <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('signed_correlation') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="VIF of the selected feature when this feature is removed from the model"
+                      (click)="sortVifDetail('vif_without')">
+                    VIF w/o <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('vif_without') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="VIF decrease when this feature is removed (positive = this feature inflates VIF)"
+                      (click)="sortVifDetail('vif_drop')">
+                    VIF Drop <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('vif_drop') }}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let c of vifDetailContributions"
+                    [style.background]="c.correlation >= 0.7 ? '#fff3e0' : (c.correlation >= 0.5 ? '#fff8e1' : 'transparent')">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">{{ c.feature }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right; font-weight: 600;"
+                      [style.color]="c.correlation >= 0.7 ? '#e65100' : (c.correlation >= 0.5 ? '#f57f17' : '#555')">
+                    {{ c.correlation | number:'1.4-4' }}
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right;"
+                      [style.color]="c.signed_correlation >= 0 ? '#2e7d32' : '#b71c1c'">
+                    {{ c.signed_correlation | number:'1.4-4' }}
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right;">
+                    <span *ngIf="c.vif_without != null">{{ c.vif_without | number:'1.2-2' }}</span>
+                    <span *ngIf="c.vif_without == null" style="color:#aaa;">—</span>
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right; font-weight: 600;"
+                      [style.color]="c.vif_drop != null && c.vif_drop > 1 ? '#b71c1c' : (c.vif_drop != null && c.vif_drop > 0.3 ? '#e65100' : '#555')">
+                    <span *ngIf="c.vif_drop != null">{{ c.vif_drop | number:'1.2-2' }}</span>
+                    <span *ngIf="c.vif_drop == null" style="color:#aaa;">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -397,7 +487,7 @@
       </div>
 
       <!-- Sequential Feature Selection (SFS) Results -->
-      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0" style="margin-top: 24px;">
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" style="margin-top: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div>
             <h3 style="color: #740505; margin: 0;">Sequential Feature Selection (SFS)</h3>
@@ -434,7 +524,7 @@
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
               </thead>
@@ -463,10 +553,98 @@
         <!-- Backward Elimination Results -->
         <div *ngIf="sfsBackwardResults.length > 0">
           <h4>Backward Elimination (removing features incrementally)</h4>
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            Select a cutting point to choose which features to keep for forward selection.
+          </div>
           <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
               <thead>
                 <tr style="background: #f5f5f5; text-align: left;">
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; width: 40px;"
+                      title="Select cutting point — features remaining at this step will be used for forward selection">Cut</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature Dropped</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Remaining</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let step of sfsBackwardResults"
+                    [style.background]="sfsBackwardCutStep === step.step ? '#e8f5e9' : 'transparent'"
+                    style="cursor: pointer; transition: background 0.15s;"
+                    (click)="setBackwardCutStep(step)">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: center;">
+                    <input type="radio" name="backwardCut"
+                           [checked]="sfsBackwardCutStep === step.step"
+                           (click)="$event.stopPropagation(); setBackwardCutStep(step)"
+                           style="cursor: pointer; accent-color: #2e7d32;" />
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color: #555; font-size: 11px;">
+                    {{ step.selected_features?.length || '—' }}
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
+                    <button mat-button color="primary" (click)="$event.stopPropagation(); openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                      View
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Remaining Features at Selected Cut Point -->
+          <div *ngIf="sfsBackwardCutFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2e7d32;">
+            <h5 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 14px; font-weight: 600;">
+              📋 Remaining Features at Step {{ sfsBackwardCutStep }} ({{ sfsBackwardCutFeatures.length }} features)
+            </h5>
+            <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                <span *ngFor="let feature of sfsBackwardCutFeatures" 
+                      style="display: inline-block; padding: 6px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 16px; font-size: 12px; font-weight: 500;">
+                  {{ feature }}
+                </span>
+              </div>
+            </div>
+            
+            <!-- Button to start forward selection on remaining features -->
+            <button mat-raised-button color="primary"
+                    (click)="startForwardFromBackwardFeatures()"
+                    [disabled]="sfsRunning">
+              <span *ngIf="!sfsRunning">▶ Run Forward Selection on These {{ sfsBackwardCutFeatures.length }} Features</span>
+              <span *ngIf="sfsRunning">⏳ Running...</span>
+            </button>
+            <p style="margin: 8px 0 0 0; font-size: 11px; color: #666; font-style: italic;">
+              Start forward feature selection using the {{ sfsBackwardCutFeatures.length }} features remaining at cut step {{ sfsBackwardCutStep }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Forward from Backward Results -->
+        <div *ngIf="sfsForwardFromBackwardResults.length > 0" style="margin-top: 24px;">
+          <h4 style="color: #2e7d32;">Forward Selection from Backward Cut (adding features incrementally)</h4>
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            Forward selection results using the {{ sfsForwardFromBackwardResults.length > 0 ? sfsForwardFromBackwardResults[0]?.selected_features?.length || '?' : '?' }} features from backward elimination cut point.
+          </div>
+          <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #e8f5e9; text-align: left;">
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
@@ -475,16 +653,16 @@
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let step of sfsBackwardResults">
+                <tr *ngFor="let step of sfsForwardFromBackwardResults">
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #2e7d32;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
@@ -498,32 +676,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
-          
-          <!-- Remaining Features after Backward Elimination -->
-          <div *ngIf="sfsBackwardRemainingFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #740505;">
-            <h5 style="margin: 0 0 12px 0; color: #740505; font-size: 14px; font-weight: 600;">
-              📋 Remaining Features ({{ sfsBackwardRemainingFeatures.length }})
-            </h5>
-            <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <span *ngFor="let feature of sfsBackwardRemainingFeatures" 
-                      style="display: inline-block; padding: 6px 12px; background: #e3f2fd; color: #1976d2; border-radius: 16px; font-size: 12px; font-weight: 500;">
-                  {{ feature }}
-                </span>
-              </div>
-            </div>
-            
-            <!-- Button to start forward selection on remaining features -->
-            <button mat-raised-button color="primary"
-                    (click)="startForwardFromBackwardFeatures()"
-                    [disabled]="sfsRunning">
-              <span *ngIf="!sfsRunning">▶ Run Forward Selection on These Features</span>
-              <span *ngIf="sfsRunning">⏳ Running...</span>
-            </button>
-            <p style="margin: 8px 0 0 0; font-size: 11px; color: #666; font-style: italic;">
-              Start forward feature selection using only the remaining features from backward elimination
-            </p>
           </div>
         </div>
       </div>

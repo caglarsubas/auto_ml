@@ -9,8 +9,13 @@ z: bug-fix or hot-fix
 !CFH!
 
 SFS:
- 1- feature sorter using impact and gain (before sfs)
- 2- add multicolinearity (VAR or VIR) as new column to 'Selected Features (sorted by |impact|)' table
+1- after getting the backward from the ui, user should be able to change the cutting feature count threshold via result table input field. (we have a screenshot in desktop) in the aim of
+2- after getting backward selection results, when user clicks the continue for forward selection wiith remained features, user lost the backward results table in the ui. keep everything in UI in the pricipal of tranparency and tracability
+3- sfs takes long time, make it faster. maybe multi-threading of adding (forward) or dropping (backward) features simultaneously in the multi-core environment works.
+
+beforeSFS:
+ 1- add nonlinear VIF if necessary
+
 
 While the implementation is complete and functional, here are potential future improvements:
 - Export Results - CSV/Excel export of SFS results

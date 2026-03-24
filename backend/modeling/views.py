@@ -1277,6 +1277,7 @@ class SFSResultsView(APIView):
                 'forward': sfs_data.get('forward', []),
                 'backward': sfs_data.get('backward', []),
                 'backward_remaining_features': sfs_data.get('backward_remaining_features', []),
+                'forward_from_backward': sfs_data.get('forward_from_backward', []),
                 'error': sfs_data.get('error', None)
             }, status=status.HTTP_200_OK)
             
@@ -1398,10 +1399,24 @@ class SFSStartView(APIView):
                             sanitized.append(sanitized_item)
                         return sanitized
                     
+                    # Merge with existing results to preserve previous runs (e.g. backward when forward-from-backward runs)
+                    existing_data = {}
+                    if os.path.exists(sfs_path):
+                        try:
+                            with open(sfs_path, 'r', encoding='utf-8') as ef:
+                                existing_data = json.load(ef)
+                        except Exception:
+                            existing_data = {}
+
+                    new_forward = sanitize_sfs(results.get('forward', []))
+                    new_backward = sanitize_sfs(results.get('backward', []))
+                    new_backward_remaining = results.get('backward_remaining_features', [])
+
                     sfs_data = {
-                        'forward': sanitize_sfs(results.get('forward', [])),
-                        'backward': sanitize_sfs(results.get('backward', [])),
-                        'backward_remaining_features': results.get('backward_remaining_features', []),
+                        'forward': new_forward if new_forward else existing_data.get('forward', []),
+                        'backward': new_backward if new_backward else existing_data.get('backward', []),
+                        'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
+                        'forward_from_backward': new_forward if existing_data.get('backward') and new_forward else existing_data.get('forward_from_backward', []),
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None)
                     }
@@ -1482,4 +1497,106 @@ class SFSStatusView(APIView):
         except Exception as e:
             import traceback
             traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VifDetailView(APIView):
+    """Return per-feature VIF decomposition for a given feature.
+
+    POST payload: { file_id: int, feature: str }
+    Returns:
+      - feature: the queried feature
+      - vif: its overall VIF
+      - contributions: list of { feature, correlation, vif_without } sorted by |correlation| desc
+        where 'correlation' is pairwise Pearson |r| and 'vif_without' is VIF of the queried
+        feature when the other feature is removed from the regression matrix.
+    """
+
+    def post(self, request, *args, **kwargs):
+        file_id = request.data.get('file_id')
+        feature_name = request.data.get('feature')
+
+        if file_id is None or not feature_name:
+            return Response({'error': 'file_id and feature are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+        if not os.path.exists(train_data_path):
+            return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with open(train_data_path, 'rb') as f:
+                train_data = pickle.load(f)
+
+            X_train = train_data['X_train']
+
+            # Build numeric VIF matrix (same logic as in ModelingStartView)
+            X_vif = X_train.copy()
+            for c in X_vif.columns:
+                if hasattr(X_vif[c], 'cat'):
+                    X_vif[c] = X_vif[c].cat.codes.astype(float)
+                    X_vif[c] = X_vif[c].replace(-1, np.nan)
+            X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
+            X_vif = X_vif.fillna(X_vif.mean())
+            nonzero_var = X_vif.columns[X_vif.var() > 0]
+            X_vif = X_vif[nonzero_var]
+
+            if feature_name not in X_vif.columns:
+                return Response({'error': f'Feature "{feature_name}" not found in numeric training data.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+            # Overall VIF for the queried feature
+            all_cols = list(X_vif.columns)
+            feat_idx = all_cols.index(feature_name)
+            X_arr = X_vif.values.astype(float)
+            overall_vif = variance_inflation_factor(X_arr, feat_idx)
+            overall_vif = round(float(overall_vif), 2) if np.isfinite(overall_vif) else None
+
+            # Pairwise correlations + VIF-without-each-feature
+            target_series = X_vif[feature_name]
+            other_cols = [c for c in all_cols if c != feature_name]
+            contributions = []
+
+            for other in other_cols:
+                # Pairwise |correlation|
+                corr_val = target_series.corr(X_vif[other])
+                abs_corr = abs(corr_val) if (corr_val is not None and np.isfinite(corr_val)) else 0.0
+
+                # VIF without this other feature
+                reduced_cols = [c for c in all_cols if c != other]
+                reduced_idx = reduced_cols.index(feature_name)
+                X_reduced = X_vif[reduced_cols].values.astype(float)
+                try:
+                    vif_without = variance_inflation_factor(X_reduced, reduced_idx)
+                    vif_without = round(float(vif_without), 2) if np.isfinite(vif_without) else None
+                except Exception:
+                    vif_without = None
+
+                # VIF drop = how much VIF decreases when this feature is removed
+                vif_drop = None
+                if overall_vif is not None and vif_without is not None:
+                    vif_drop = round(overall_vif - vif_without, 2)
+
+                contributions.append({
+                    'feature': other,
+                    'correlation': round(abs_corr, 4),
+                    'signed_correlation': round(float(corr_val), 4) if (corr_val is not None and np.isfinite(corr_val)) else 0.0,
+                    'vif_without': vif_without,
+                    'vif_drop': vif_drop,
+                })
+
+            # Sort by |correlation| descending
+            contributions.sort(key=lambda x: x['correlation'], reverse=True)
+
+            return Response({
+                'feature': feature_name,
+                'vif': overall_vif,
+                'contributions': contributions,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import traceback as tb
+            tb.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

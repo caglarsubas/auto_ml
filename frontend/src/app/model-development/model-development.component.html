@@ -49,6 +49,13 @@
           <option value="oot">Out-of-Time (OOT)</option>
         </select>
       </label>
+      <ng-container *ngIf="splitStrategy === 'random'">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>OOS Percent:</span>
+          <input type="number" min="1" max="99" [ngModel]="oosPercent" (ngModelChange)="oosPercent = $event" style="width:80px;" />
+        </label>
+        <small style="color:#666;">Random {{100 - oosPercent}}/{{oosPercent}} train/test split.</small>
+      </ng-container>
       <ng-container *ngIf="splitStrategy === 'oot'">
         <label style="display:flex; align-items:center; gap:6px;">
           <span>Date Column:</span>

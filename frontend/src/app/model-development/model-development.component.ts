@@ -57,6 +57,8 @@ export class ModelDevelopmentComponent implements OnInit {
   // OOT mode: cutoff vs percent; default cutoff; percent default 25 (last % as test)
   ootMode: 'cutoff' | 'percent' = 'percent';
   ootPercent: number = 25;
+  // Random split OOS percent (default 25% goes to test)
+  oosPercent: number = 25;
   dateColumns: string[] = [];
   // Cache full data dictionary (to provide Feature_Description to Feature Card)
   dataDictionaryCache: any[] = [];
@@ -1113,8 +1115,10 @@ export class ModelDevelopmentComponent implements OnInit {
       console.error('No file ID found. Please upload/select a data file first.');
       return;
     }
-    // Validate OOT params if selected
-    let split: any = { strategy: 'random' };
+    // Build split config
+    const oosPct = Number(this.oosPercent);
+    const oosValid = isFinite(oosPct) && oosPct > 0 && oosPct < 100;
+    let split: any = { strategy: 'random', percent: oosValid ? oosPct : 25 };
     if (this.splitStrategy === 'oot') {
       if (!this.splitDateColumn) {
         console.error('Please select a date column for OOT split.');

@@ -240,8 +240,17 @@ class PreprocessingDatqTimeseriesView(APIView):
                                 return frame.index[mask_train], frame.index[~mask_train]
                 except Exception as e:
                     print(f"[DatqTimeseries] OOT split failed: {e}, falling back to random")
+                # random split — use percent from split config if available
+                train_ratio = 0.75
+                if isinstance(split, dict) and split.get('percent') is not None:
+                    try:
+                        pctf = float(split['percent'])
+                        if 0 < pctf < 100:
+                            train_ratio = 1.0 - pctf / 100.0
+                    except Exception:
+                        pass
                 rng = np.random.RandomState(42)
-                m = rng.rand(len(frame)) < 0.7
+                m = rng.rand(len(frame)) < train_ratio
                 return frame.index[m], frame.index[~m]
 
             def _psi_between(frame: pd.DataFrame, train_idx, test_idx) -> float | None:
@@ -576,9 +585,18 @@ class PreprocessingRunView(APIView):
                                 return train_idx, test_idx
                 except Exception as e:
                     print(f"[PreprocessingRun] OOT split failed: {e}, falling back to random")
-                # random default
+                # random split — use percent from split config if available
+                train_ratio = 0.75  # default 75/25
+                if isinstance(split, dict) and split.get('percent') is not None:
+                    try:
+                        pctf = float(split['percent'])
+                        if 0 < pctf < 100:
+                            train_ratio = 1.0 - pctf / 100.0
+                    except Exception:
+                        pass
                 rng = np.random.RandomState(42)
-                m = rng.rand(len(frame)) < 0.7
+                m = rng.rand(len(frame)) < train_ratio
+                print(f"[PreprocessingRun] Random split train_ratio={train_ratio:.2f} -> train={m.sum()} test={(~m).sum()}")
                 return frame.index[m], frame.index[~m]
 
             # Build Data Quality summary safely
