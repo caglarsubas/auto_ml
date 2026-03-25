@@ -36,6 +36,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsRunning: boolean = false;
   sfsProgress: number = 0;
   sfsMessage: string = '';
+  sfsDurationSeconds: number | null = null;
   sfsCurrentMetrics: { [key: string]: number } = {};
   sfsCompletedSteps: any[] = [];  // Real-time completed steps during SFS
   showSfsProgressModal: boolean = false;  // Modal for viewing details during SFS
@@ -51,6 +52,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   ];
   sfsMinFeatures: number = 3;
   sfsMaxFeatures: number = 10;
+  sfsNJobs: number = 1;
+  sfsTopK: number = 5;
   
   // SFS results
   sfsResults: any | null = null;
@@ -1136,6 +1139,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsRunning = false;
     this.sfsProgress = 0;
     this.sfsMessage = '';
+    this.sfsDurationSeconds = null;
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
     this.showSfsProgressModal = false;
@@ -1153,6 +1157,17 @@ export class ModelingComponent implements OnInit, AfterViewInit {
    */
   closeSfsProgressModal(): void {
     this.showSfsProgressModal = false;
+  }
+
+  formatDuration(seconds: number | null): string {
+    if (seconds === null || seconds === undefined) return '';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    if (mins < 60) return `${mins}m ${secs}s`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs}h ${remMins}m ${secs}s`;
   }
 
   /**
@@ -1205,7 +1220,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
     
-    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures).subscribe({
+    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Started:', resp);
         this.sfsMessage = resp.message || 'SFS running...';
@@ -1251,7 +1266,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.currentFileId,
       ['forward'],
       stoppingCriteria,
-      featuresToUse
+      featuresToUse,
+      this.sfsNJobs,
+      this.sfsTopK
     ).subscribe({
       next: (resp: any) => {
         console.log('[SFS-Chain] Forward from backward started:', resp);
@@ -1294,12 +1311,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             this.stopSfsStatusPolling();
             this.sfsRunning = false;
             this.sfsProgress = 1.0;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS completed successfully!';
             // Fetch final results
             setTimeout(() => this.fetchSfsResults(), 500);
           } else if (status === 'error') {
             this.stopSfsStatusPolling();
             this.sfsRunning = false;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
           }
         },

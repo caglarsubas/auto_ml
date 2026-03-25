@@ -1299,6 +1299,8 @@ class SFSStartView(APIView):
             stopping_criteria = data.get('stopping_criteria', {})
             initial_features = data.get('initial_features', None)  # Optional: Start with specific features
             excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
+            n_jobs = int(data.get('n_jobs', 1))  # Parallel workers for candidate evaluation
+            top_k = int(data.get('top_k', 3))  # Top-K candidates to CV-evaluate per step
             
             # Validate required parameters
             if not file_id:
@@ -1337,13 +1339,16 @@ class SFSStartView(APIView):
                     X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
             
             # Initialize progress tracking
+            import time as _time
+            sfs_start_time = _time.time()
             SFS_PROGRESS[file_id] = {
                 'status': 'running',
                 'message': 'Starting SFS...',
                 'progress': 0.0,
                 'current_metric': None,
                 'error': None,
-                'completed_steps': []  # Track completed steps for real-time viewing
+                'completed_steps': [],  # Track completed steps for real-time viewing
+                'duration_seconds': None
             }
             
             # Define status callback
@@ -1365,7 +1370,9 @@ class SFSStartView(APIView):
                         stopping_criteria=stopping_criteria,
                         status_callback=update_progress,
                         cv_folds=3,
-                        initial_features=initial_features
+                        initial_features=initial_features,
+                        n_jobs=n_jobs,
+                        top_k=top_k
                     )
                     
                     # Save results to JSON
@@ -1424,16 +1431,20 @@ class SFSStartView(APIView):
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(sfs_data, f, indent=2)
                     
+                    elapsed = round(_time.time() - sfs_start_time, 1)
                     SFS_PROGRESS[file_id]['status'] = 'completed'
                     SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
                     SFS_PROGRESS[file_id]['progress'] = 1.0
+                    SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
                     
                     print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
                     
                 except Exception as e:
+                    elapsed = round(_time.time() - sfs_start_time, 1)
                     SFS_PROGRESS[file_id]['status'] = 'error'
                     SFS_PROGRESS[file_id]['message'] = f'SFS failed: {str(e)}'
                     SFS_PROGRESS[file_id]['error'] = str(e)
+                    SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
                     print(f"[SFS] Error for file_id={file_id}: {e}")
                     import traceback
                     traceback.print_exc()

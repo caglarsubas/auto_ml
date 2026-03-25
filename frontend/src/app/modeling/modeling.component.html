@@ -387,7 +387,7 @@
             <!-- Percentage Change Threshold -->
             <div style="flex: 1;">
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">
-                Stop if change &lt; (%) <span style="color: #999;">(0 = no stop)</span>
+                Stop if <span *ngIf="sfsMethodBackward && !sfsMethodForward">|change| &gt;</span><span *ngIf="sfsMethodForward && !sfsMethodBackward">change &lt;</span><span *ngIf="sfsMethodForward && sfsMethodBackward">change &lt; / |change| &gt;</span><span *ngIf="!sfsMethodForward && !sfsMethodBackward">change &lt;</span> (%) <span style="color: #999;">(0 = no stop)</span>
               </label>
               <input type="number" [(ngModel)]="metricCriteria.pct_change" min="0" max="100" step="0.1"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
@@ -409,8 +409,8 @@
             ➕ Add Metric
           </button>
 
-          <!-- Feature Count Limits -->
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
+          <!-- Feature Count Limits & Parallelism -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;">
             <!-- Min Features (Backward) -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Minimum Features (Backward)</label>
@@ -423,6 +423,22 @@
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Maximum Features (Forward)</label>
               <input type="number" [(ngModel)]="sfsMaxFeatures" min="1" max="50"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+
+            <!-- Parallel Workers -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Parallel Workers (n_jobs)</label>
+              <input type="number" [(ngModel)]="sfsNJobs" min="1" max="16"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
+                     title="Number of CPU cores for parallel candidate evaluation. Higher = faster but more memory." />
+            </div>
+
+            <!-- Top-K CV Candidates -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Top-K CV Candidates</label>
+              <input type="number" [(ngModel)]="sfsTopK" min="1" max="10"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
+                     title="Number of top candidates (ranked by test AUC) to cross-validate per step. Higher = more accurate but slower." />
             </div>
           </div>
         </div>
@@ -493,6 +509,9 @@
             <h3 style="color: #740505; margin: 0;">Sequential Feature Selection (SFS)</h3>
             <div style="font-size: 13px; color:#666; margin-top: 4px;">
               Systematic feature selection showing performance impact of adding/removing features using cross-validation.
+              <span *ngIf="sfsDurationSeconds !== null" style="margin-left: 8px; color: #1976d2; font-weight: 500;">
+                ⏱ Completed in {{ formatDuration(sfsDurationSeconds) }}
+              </span>
             </div>
           </div>
           <!-- Action Buttons -->
@@ -639,7 +658,7 @@
         <div *ngIf="sfsForwardFromBackwardResults.length > 0" style="margin-top: 24px;">
           <h4 style="color: #2e7d32;">Forward Selection from Backward Cut (adding features incrementally)</h4>
           <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-            Forward selection results using the {{ sfsForwardFromBackwardResults.length > 0 ? sfsForwardFromBackwardResults[0]?.selected_features?.length || '?' : '?' }} features from backward elimination cut point.
+            Forward selection results using the {{ sfsBackwardCutFeatures.length || sfsBackwardRemainingFeatures.length || '?' }} features from backward elimination cut point.
           </div>
           <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">

@@ -8,13 +8,16 @@ z: bug-fix or hot-fix
 
 !CFH!
 
-SFS:
-1- after getting the backward from the ui, user should be able to change the cutting feature count threshold via result table input field. (we have a screenshot in desktop) in the aim of
-2- after getting backward selection results, when user clicks the continue for forward selection wiith remained features, user lost the backward results table in the ui. keep everything in UI in the pricipal of tranparency and tracability
-3- sfs takes long time, make it faster. maybe multi-threading of adding (forward) or dropping (backward) features simultaneously in the multi-core environment works.
+- sfs takes long time, make it faster. maybe multi-threading of adding (forward) or dropping (backward) features simultaneously in the multi-core environment works.
 
-beforeSFS:
- 1- add nonlinear VIF if necessary
+- there should be a stop sfs button under the progress bar. when pushed we should show the completed steps and the results depending only on those completed steps. then user can be click the continue button where we should keep moving the paused process of SFS from where it was being stopped
+
+- start hyperparameter
+- add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
+- stopping criteria selections via %-change of metrics and min-max feature count.
+- make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
+- add causality features into explainability tab
+- add nonlinear VIF if necessary
 
 
 While the implementation is complete and functional, here are potential future improvements:
@@ -25,17 +28,4 @@ While the implementation is complete and functional, here are potential future i
 - Parallel Execution Option - Run forward/backward simultaneously
 - History Tracking - Save multiple SFS runs for comparison
 
-- add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
-- stopping criteria selections via %-change of metrics and min-max feature count.
-- multiple cpu core usage (feature adding/dropping in parallel) n_jobs parameter selection
-- how about scaling numerical features? not necessary for boosting algs
-- make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
-- add causality features into explainability tab
-- in data split for random choice add percentage selection also
 
-- Add unit test for each functionality currently being hold and run that test
-    each time new functionality being added or bug-fix implemented (mth)
-
-- add sub titles under about/declarai:
-    <button mat-menu-item>Declarative ML</button>
-    <button mat-menu-item>White Paper</button>
