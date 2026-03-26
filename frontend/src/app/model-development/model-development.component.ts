@@ -35,6 +35,19 @@ export class ModelDevelopmentComponent implements OnInit {
   };
   private subscription: Subscription = new Subscription();
   currentFileId: number | null = null;
+
+  // ===== Pipeline Persistence =====
+  savedPipelines: any[] = [];
+  showSavedPipelines: boolean = false;
+  activePipelineRunId: number | null = null;
+  pipelineRunName: string = '';
+  renamingPipelineId: number | null = null;
+  renamingPipelineName: string = '';
+  private _checkpointCreating: boolean = false;
+  private _pendingCheckpoint: boolean = false;
+  private _highWaterStep: string = 'declaration';
+  private _lastModelingSubstep: string | null = null;
+  private _pipelineConfigSaveTimer: any = null;
   processedFilePath: string | null = null;
   isProcessing: boolean = false;
   // New state flags for progressive reveal
@@ -288,6 +301,19 @@ export class ModelDevelopmentComponent implements OnInit {
     const varName = String(variable);
     this.variableModelUsage[varName] = value;
     this.saveModelUsage();
+    this.onPipelineConfigChanged();
+  }
+
+  /** Debounced auto-save when user modifies any pipeline config
+   *  (purifier options, split settings, Model_Usage, encoding LOM, etc.) */
+  onPipelineConfigChanged(): void {
+    if (!this.activePipelineRunId) return; // no pipeline to save to yet
+    if (this._pipelineConfigSaveTimer) clearTimeout(this._pipelineConfigSaveTimer);
+    this._pipelineConfigSaveTimer = setTimeout(() => {
+      const step = this.currentStep === 'data quality' ? 'data_quality' : this.currentStep;
+      console.log('[Pipeline] Config changed, auto-saving at step:', step);
+      this.saveCheckpoint(step);
+    }, 800);
   }
 
   // Save model usage to localStorage
@@ -621,9 +647,12 @@ export class ModelDevelopmentComponent implements OnInit {
     );
 
     // Do not auto-enable modeling on preprocessing result; user will click "Proceed to Modeling"
+    // Guard: only reset modelingAvailable if we haven't already entered modeling
     this.subscription.add(
       this.sharedService.preprocessingRunResult$.subscribe((_result: any) => {
-        this.modelingAvailable = false;
+        if (this.currentStep !== 'modeling' && this.currentStep !== 'sfs') {
+          this.modelingAvailable = false;
+        }
       })
     );
 
@@ -632,9 +661,11 @@ export class ModelDevelopmentComponent implements OnInit {
       this.sharedService.preprocessingInitiated$.subscribe((initiated: boolean) => {
         this.preprocessingInitiated = initiated;
         this.computePreprocessingAvailable();
-        // Update flow indicator to preprocessing step when user clicks preprocessing button
-        if (initiated) {
+        // Only transition to preprocessing if we're still at declaration (prevent regression)
+        if (initiated && this.currentStep === 'declaration') {
           this.currentStep = 'preprocessing';
+          // Auto-save checkpoint: preprocessing
+          this.saveCheckpoint('preprocessing');
         }
       })
     );
@@ -656,6 +687,39 @@ export class ModelDevelopmentComponent implements OnInit {
       })
     );
 
+    // Subscribe to checkpoint triggers from child components (declaration + modeling)
+    this.subscription.add(
+      this.sharedService.triggerCheckpoint$.subscribe((substep: string) => {
+        console.log('[Pipeline] Checkpoint trigger (Subject):', substep);
+        let step: string;
+        if (substep.startsWith('decl_')) {
+          step = 'declaration';
+        } else if (substep.startsWith('sfs_')) {
+          step = 'sfs';
+        } else {
+          step = 'modeling';
+        }
+        this.saveCheckpoint(step);
+      })
+    );
+
+    // Belt-and-suspenders: also subscribe to modelingCheckpoint$ BehaviorSubject
+    // and auto-save whenever the modeling substep advances.
+    // This catches cases where the Subject trigger might be missed.
+    this.subscription.add(
+      this.sharedService.modelingCheckpoint$.subscribe((state: any) => {
+        if (!state || !state.substep || !this.activePipelineRunId) return;
+        const substep = state.substep;
+        // Only save if substep actually changed (avoid duplicate saves)
+        if (substep !== this._lastModelingSubstep) {
+          console.log(`[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`);
+          this._lastModelingSubstep = substep;
+          const step = substep.startsWith('sfs_') ? 'sfs' : 'modeling';
+          this.saveCheckpoint(step);
+        }
+      })
+    );
+
     // Load persisted preferences (page size, pinned columns, sort) and widths
     this.loadDatqPrefs();
     this.loadDatqWidths();
@@ -668,6 +732,8 @@ export class ModelDevelopmentComponent implements OnInit {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
+    // Auto-save checkpoint: modeling
+    this.saveCheckpoint('modeling');
     // Smooth scroll to modeling section
     setTimeout(() => {
       try {
@@ -1067,11 +1133,279 @@ export class ModelDevelopmentComponent implements OnInit {
   ngOnDestroy() {
     this.subscription.unsubscribe();
   }
+
+  // ===== Pipeline Persistence Methods =====
+
+  loadSavedPipelines(): void {
+    this.dataService.listPipelineRuns().subscribe({
+      next: (runs: any[]) => { this.savedPipelines = runs || []; },
+      error: () => { this.savedPipelines = []; }
+    });
+  }
+
+  toggleSavedPipelines(): void {
+    this.showSavedPipelines = !this.showSavedPipelines;
+    if (this.showSavedPipelines) this.loadSavedPipelines();
+  }
+
+  getStepIndex(step: string): number {
+    const steps = ['declaration', 'preprocessing', 'data_quality', 'modeling', 'sfs', 'evaluation', 'deployment'];
+    const idx = steps.indexOf(step);
+    return idx >= 0 ? idx : 0;
+  }
+
+  getStepProgress(step: string): number {
+    return Math.round(((this.getStepIndex(step) + 1) / 7) * 100);
+  }
+
+  getStepLabel(step: string): string {
+    const labels: {[k: string]: string} = {
+      'declaration': 'Declaration',
+      'preprocessing': 'Preprocessing',
+      'data_quality': 'Data Quality',
+      'modeling': 'Modeling',
+      'sfs': 'SFS',
+      'evaluation': 'Evaluation',
+      'deployment': 'Deployment'
+    };
+    return labels[step] || step;
+  }
+
+  buildCheckpointState(): any {
+    return {
+      file_id: this.currentFileId,
+      pipeline_type: this.selectedPipeline,
+      current_step: this.currentStep === 'data quality' ? 'data_quality' : this.currentStep,
+      preprocessing: {
+        purifier_option_ids: this.selectedOptions.map(o => o.id),
+        split_strategy: this.splitStrategy,
+        split_date_column: this.splitDateColumn,
+        split_cutoff: this.splitCutoff,
+        oot_mode: this.ootMode,
+        oot_percent: this.ootPercent,
+        oos_percent: this.oosPercent,
+        processed_file_path: this.processedFilePath,
+        dropped_columns_by_step: this.droppedColumnsByStep,
+        rows_removed_total: this.rowsRemovedTotal,
+        row_count_before: this.rowCountBefore,
+        row_count_after: this.rowCountAfter,
+      },
+      data_quality: {
+        datq_summary: this.datqSummary,
+        model_usage: this.variableModelUsage,
+      },
+      flags: {
+        is_started: this.isStarted,
+        preprocessing_initiated: this.preprocessingInitiated,
+        preprocessing_available: this.preprocessingAvailable,
+        modeling_available: this.modelingAvailable,
+      },
+      modeling: this.sharedService.getModelingCheckpoint() || null,
+    };
+  }
+
+  private static readonly STEP_ORDER: {[k: string]: number} = {
+    'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
+    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6
+  };
+
+  saveCheckpoint(step?: string): void {
+    const state = this.buildCheckpointState();
+    const currentStep = step || state.current_step;
+    console.log(`[Pipeline] saveCheckpoint called: step=${step}, currentStep=${currentStep}, componentStep=${this.currentStep}, highWater=${this._highWaterStep}, id=${this.activePipelineRunId}, creating=${this._checkpointCreating}`);
+
+    // Frontend step regression guard: never send a PUT that would regress the step
+    const newOrder = ModelDevelopmentComponent.STEP_ORDER[currentStep] ?? 0;
+    const hwOrder = ModelDevelopmentComponent.STEP_ORDER[this._highWaterStep] ?? 0;
+    if (newOrder < hwOrder) {
+      console.warn(`[Pipeline] BLOCKED frontend regression: ${this._highWaterStep}(${hwOrder}) -> ${currentStep}(${newOrder})`, new Error().stack);
+      return;
+    }
+    this._highWaterStep = currentStep;
+
+    if (this.activePipelineRunId) {
+      // Already have an ID — safe to update directly
+      this.dataService.updatePipelineRun(this.activePipelineRunId, {
+        current_step: currentStep,
+        state: state,
+        file_id: this.currentFileId,
+      }).subscribe({
+        next: () => console.log('[Pipeline] Checkpoint saved:', currentStep),
+        error: (e: any) => console.error('[Pipeline] Checkpoint save failed:', e)
+      });
+    } else if (this._checkpointCreating) {
+      // A create is already in flight — just flag that we need a flush
+      this._pendingCheckpoint = true;
+      console.log('[Pipeline] Queued checkpoint (create in flight), componentStep:', this.currentStep);
+    } else {
+      // No ID yet, no create in flight — fire the create
+      this._checkpointCreating = true;
+      const name = this.pipelineRunName || `${this.selectedPipeline || 'pipeline'}-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}`;
+      this.dataService.createPipelineRun({
+        name: name,
+        pipeline_type: this.selectedPipeline || 'boosting',
+        file_id: this.currentFileId,
+        current_step: currentStep,
+        state: state,
+      }).subscribe({
+        next: (resp: any) => {
+          this.activePipelineRunId = resp.id;
+          this.pipelineRunName = resp.name;
+          this._checkpointCreating = false;
+          console.log('[Pipeline] Created & saved checkpoint:', resp.name, currentStep);
+          // Flush: re-save with CURRENT state (not stale queued step)
+          if (this._pendingCheckpoint) {
+            this._pendingCheckpoint = false;
+            console.log('[Pipeline] Flushing with current state, componentStep:', this.currentStep);
+            this.saveCheckpoint();
+          }
+        },
+        error: (e: any) => {
+          this._checkpointCreating = false;
+          this._pendingCheckpoint = false;
+          console.error('[Pipeline] Create failed:', e);
+        }
+      });
+    }
+  }
+
+  loadPipelineRun(id: number): void {
+    this.dataService.getPipelineRun(id).subscribe({
+      next: (run: any) => {
+        const s = run.state || {};
+
+        // ── 1. Set step & high-water FIRST (before any SharedService calls) ──
+        //    This prevents subscription guards from mis-firing during restore.
+        const step = run.current_step === 'data_quality' ? 'data quality' : (run.current_step === 'sfs' ? 'modeling' : run.current_step);
+        this.currentStep = step;
+        const restoredStepKey = step === 'data quality' ? 'data_quality' : step;
+        this._highWaterStep = restoredStepKey;
+
+        // ── 2. Restore identity ──
+        this.activePipelineRunId = run.id;
+        this.pipelineRunName = run.name;
+        this.selectedPipeline = s.pipeline_type || run.pipeline_type || 'boosting';
+
+        // ── 3. Restore flags (local first, then SharedService) ──
+        const flags = s.flags || {};
+        this.isStarted = flags.is_started !== false;
+        this.preprocessingInitiated = !!flags.preprocessing_initiated;
+        this.preprocessingAvailable = !!flags.preprocessing_available;
+        this.modelingAvailable = !!flags.modeling_available;
+
+        // ── 4. Restore preprocessing state ──
+        const pp = s.preprocessing || {};
+        if (pp.purifier_option_ids && pp.purifier_option_ids.length) {
+          this.selectedOptions = this.purifierOptions.filter(o => pp.purifier_option_ids.includes(o.id));
+        }
+        this.splitStrategy = pp.split_strategy || 'random';
+        this.splitDateColumn = pp.split_date_column || null;
+        this.splitCutoff = pp.split_cutoff || '';
+        this.ootMode = pp.oot_mode || 'percent';
+        this.ootPercent = pp.oot_percent ?? 25;
+        this.oosPercent = pp.oos_percent ?? 25;
+        this.processedFilePath = pp.processed_file_path || null;
+        this.droppedColumnsByStep = pp.dropped_columns_by_step || [];
+        this.rowsRemovedTotal = pp.rows_removed_total || 0;
+        this.rowCountBefore = pp.row_count_before || 0;
+        this.rowCountAfter = pp.row_count_after || 0;
+
+        // ── 5. Restore data quality state ──
+        const dq = s.data_quality || {};
+        if (dq.datq_summary && dq.datq_summary.length) {
+          this.datqSummary = dq.datq_summary;
+          this.datqAllColumns = Object.keys(this.datqSummary![0]);
+          this.datqColumns = [...this.datqAllColumns];
+          this.reorderDatqColumns();
+          this.ensureFilterKeys();
+          this.datqPage = 1;
+        }
+        if (dq.model_usage) {
+          this.variableModelUsage = dq.model_usage;
+          this.saveModelUsage();
+        }
+
+        // ── 6. Restore modeling inner state via SharedService (before component initializes) ──
+        if (s.modeling) {
+          this._lastModelingSubstep = s.modeling.substep || null;
+          this.sharedService.setModelingCheckpoint(s.modeling);
+        }
+
+        // ── 7. NOW fire SharedService setters (subscriptions will see correct currentStep) ──
+        this.sharedService.setSelectedPipeline(this.selectedPipeline);
+        this.sharedService.setStarted(this.isStarted);
+        this.sharedService.setPreprocessingInitiated(this.preprocessingInitiated);
+        this.sharedService.setProcessedFilePath(this.processedFilePath);
+        if (dq.model_usage) {
+          this.sharedService.setModelUsageSettings(dq.model_usage);
+        }
+        // Set file ID last — triggers declaration hydration (preview + dictionary fetch)
+        if (s.file_id != null) {
+          this.currentFileId = s.file_id;
+          this.sharedService.setCurrentFileId(s.file_id);
+        }
+
+        // ── 8. Close panel & scroll ──
+        this.showSavedPipelines = false;
+        console.log('[Pipeline] Loaded run:', run.name, 'at step:', step);
+
+        setTimeout(() => {
+          try {
+            if (step === 'data quality') {
+              const el = document.getElementById('data-quality-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else if (step === 'modeling' || step === 'sfs') {
+              const el = document.getElementById('modeling-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          } catch {}
+        }, 200);
+      },
+      error: (e: any) => console.error('[Pipeline] Load failed:', e)
+    });
+  }
+
+  deletePipelineRun(id: number): void {
+    if (!confirm('Delete this pipeline run?')) return;
+    this.dataService.deletePipelineRun(id).subscribe({
+      next: () => {
+        this.savedPipelines = this.savedPipelines.filter(r => r.id !== id);
+        if (this.activePipelineRunId === id) this.activePipelineRunId = null;
+      },
+      error: (e: any) => console.error('[Pipeline] Delete failed:', e)
+    });
+  }
+
+  startRenamePipeline(run: any): void {
+    this.renamingPipelineId = run.id;
+    this.renamingPipelineName = run.name;
+  }
+
+  confirmRenamePipeline(run: any): void {
+    if (!this.renamingPipelineName.trim()) return;
+    this.dataService.updatePipelineRun(run.id, { name: this.renamingPipelineName.trim() }).subscribe({
+      next: () => {
+        run.name = this.renamingPipelineName.trim();
+        if (this.activePipelineRunId === run.id) this.pipelineRunName = run.name;
+        this.renamingPipelineId = null;
+      },
+      error: (e: any) => console.error('[Pipeline] Rename failed:', e)
+    });
+  }
+
+  cancelRenamePipeline(): void {
+    this.renamingPipelineId = null;
+  }
   
   onPipelineChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     this.selectedPipeline = select.value;
-    // Here you can add logic to handle the pipeline change
+    console.log('Selected pipeline:', this.selectedPipeline);
+    this.sharedService.setSelectedPipeline(this.selectedPipeline);
+  }
+
+  onPipelineChange2(value: string) {
+    this.selectedPipeline = value;
     console.log('Selected pipeline:', this.selectedPipeline);
     this.sharedService.setSelectedPipeline(this.selectedPipeline);
   }
@@ -1079,6 +1413,12 @@ export class ModelDevelopmentComponent implements OnInit {
   onStartClick() {
     if (this.selectedPipeline) {
       // Reset state for a clean run
+      this.activePipelineRunId = null;
+      this.pipelineRunName = '';
+      this._checkpointCreating = false;
+      this._pendingCheckpoint = false;
+      this._highWaterStep = 'declaration';
+      this._lastModelingSubstep = null;
       this.sharedService.setCurrentFileId(null);
       this.sharedService.setPreprocessingInitiated(false);
       this.sharedService.setPreprocessingRunResult(null);
@@ -1089,6 +1429,8 @@ export class ModelDevelopmentComponent implements OnInit {
       this.currentStep = 'declaration';
       // Start pipeline
       this.sharedService.setStarted(true);
+      // Auto-save checkpoint: declaration
+      this.saveCheckpoint('declaration');
     }
   }
 
@@ -1181,6 +1523,8 @@ export class ModelDevelopmentComponent implements OnInit {
           // Navigate to Data Quality section
           if (this.datqSummary && this.datqSummary.length > 0) {
             this.currentStep = 'data quality';
+            // Auto-save checkpoint: data_quality
+            this.saveCheckpoint('data_quality');
             setTimeout(() => {
               try {
                 const el = document.getElementById('data-quality-anchor');
@@ -1301,6 +1645,8 @@ export class ModelDevelopmentComponent implements OnInit {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
+    // Auto-save checkpoint: modeling
+    this.saveCheckpoint('modeling');
     setTimeout(() => {
       try {
         const el = document.getElementById('modeling-anchor');

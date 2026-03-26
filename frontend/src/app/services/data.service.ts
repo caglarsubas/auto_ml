@@ -262,4 +262,51 @@ export class DataService {
     );
   }
 
+  // ===== Pipeline Run CRUD =====
+
+  listPipelineRuns(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}pipeline/`).pipe(
+      catchError((err: any) => {
+        console.error('Error listing pipeline runs:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  createPipelineRun(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}pipeline/create/`, payload).pipe(
+      catchError((err: any) => {
+        console.error('Error creating pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getPipelineRun(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}pipeline/${id}/`).pipe(
+      catchError((err: any) => {
+        console.error('Error getting pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  updatePipelineRun(id: number, payload: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}pipeline/${id}/`, payload).pipe(
+      catchError((err: any) => {
+        console.error('Error updating pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  deletePipelineRun(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}pipeline/${id}/`).pipe(
+      catchError((err: any) => {
+        console.error('Error deleting pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
 }

@@ -63,6 +63,29 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.preprocessingInitiated = preprocessingInitiated;
       })
     );
+
+    // Auto-hydrate when file ID is set externally (e.g., from loadPipelineRun restore)
+    this.subscription.add(
+      this.sharedService.currentFileId$.subscribe((id: number | null) => {
+        if (id !== null && id !== this.currentFileId) {
+          this.currentFileId = id;
+          this.getPreview(id);
+          this.showDataDictionaryCollection = true;
+          // Fetch existing data dictionary
+          this.http.get(`${this.apiBase}declaration/${id}/data_dictionary/`)
+            .subscribe(
+              (data: any) => {
+                if (Array.isArray(data) && data.length > 0) {
+                  this.dataDictionary = data;
+                  this.initializeModelUsageFromBackend(data);
+                }
+              },
+              () => { /* dictionary may not exist yet — that's fine */ }
+            );
+        }
+      })
+    );
+
     // Load saved model usage settings
     this.loadModelUsage();
   }
@@ -187,6 +210,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.errorMessage = null;
             this.showUseExistingButton = false;
             this.showDataDictionaryCollection = true;
+            // Checkpoint: data imported
+            this.sharedService.triggerCheckpoint('decl_data_imported');
           },
           (error: HttpErrorResponse) => {
             console.error('Error uploading file:', error);
@@ -222,6 +247,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.showUseExistingButton = false;
             // Show Data Dictionary Collection after using existing file
             this.showDataDictionaryCollection = true;
+            // Checkpoint: data imported (via existing file)
+            this.sharedService.triggerCheckpoint('decl_data_imported');
           },
           error => {
             console.error('Error fetching existing file:', error);
@@ -278,6 +305,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.dataDictionary = data;
           // Initialize Model_Usage with backend's predetermined values (unless user has overridden)
           this.initializeModelUsageFromBackend(data);
+          // Checkpoint: dictionary generated
+          this.sharedService.triggerCheckpoint('decl_dictionary_generated');
         },
         error => console.error('Error generating data dictionary:', error)
       );

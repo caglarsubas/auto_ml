@@ -165,4 +165,7 @@ LOGGING = {
     },
 }
 
+# Allow larger request bodies for pipeline checkpoint state (modeling status can be large)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB (default is 2.5 MB)
+
 CSRF_TRUSTED_ORIGINS = ['http://localhost:4200', 'http://localhost:4300']

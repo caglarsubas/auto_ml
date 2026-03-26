@@ -30,6 +30,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   showNulls: boolean = false;
   private plotlyReady: Promise<void> | null = null;
   private chartsDrawn: boolean = false;
+  private _currentSubstep: string = '';
+  private _configSaveTimer: any = null;
 
   // SFS (Sequential Feature Selection) configuration and results
   sfsReady: boolean = false;  // Training data saved, ready to run SFS
@@ -227,6 +229,14 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.dataDictionaryCache = cache || [];
     });
 
+    // Restore from checkpoint if available (pipeline resume)
+    const savedState = this.sharedService.getModelingCheckpoint();
+    if (savedState) {
+      this.restoreFromCheckpoint(savedState);
+      // Clear it so it doesn't re-apply on subsequent navigations
+      this.sharedService.setModelingCheckpoint(null);
+    }
+
   }
 
   ngAfterViewInit(): void {
@@ -263,6 +273,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     // Auto-trigger encoding analysis when algorithm is selected
     if (algo && this.currentFileId != null && this.processedFilePath) {
       this.ensureDictionaryThenAnalyze();
+    } else {
+      // No encoding needed — checkpoint immediately
+      this.pushModelingCheckpoint('algorithm_selected');
     }
   }
 
@@ -299,6 +312,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       next: (resp: any) => {
         this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
         this.encodingAnalyzing = false;
+        // Checkpoint after encoding analysis completes (includes encodingPlan)
+        this.pushModelingCheckpoint('encoding_completed');
       },
       error: (err: any) => {
         this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
@@ -530,7 +545,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
         if (js === 'completed') { 
-          setTimeout(() => this.tryDrawChartsIfReady(), 0); 
+          setTimeout(() => this.tryDrawChartsIfReady(), 0);
+          // Checkpoint: modeling completed
+          this.pushModelingCheckpoint('modeling_completed');
         }
         else { this.startStatusPolling(); }
       },
@@ -581,6 +598,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             // draw CV charts when available
             this.chartsDrawn = false;
             setTimeout(() => this.tryDrawChartsIfReady(), 0);
+            // Checkpoint: modeling completed (via polling)
+            if (s === 'completed') {
+              this.pushModelingCheckpoint('modeling_completed');
+            }
           }
         },
         error: (err) => {
@@ -600,6 +621,136 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
   ngOnDestroy(): void {
     this.stopStatusPolling();
+  }
+
+  // ===== Pipeline Checkpoint =====
+
+  /** Strip large binary/base64 fields from modelingStatus before checkpointing */
+  private slimModelingStatus(): any {
+    if (!this.modelingStatus) return null;
+    const ms = { ...this.modelingStatus };
+    if (ms.model) {
+      ms.model = { ...ms.model };
+      // Drop heavy fields that can be re-fetched from the status JSON on disk
+      delete ms.model.shap_beeswarm;   // raw SHAP values array (MBs)
+      delete ms.model.beeswarm_png;    // base64 PNG image
+      // Keep cv summary metrics but drop per-fold curve points
+      if (ms.model.cv && Array.isArray(ms.model.cv)) {
+        ms.model.cv = ms.model.cv.map((fold: any) => {
+          const slim: any = { ...fold };
+          delete slim.roc_curve;
+          delete slim.pr_curve;
+          return slim;
+        });
+      }
+    }
+    return ms;
+  }
+
+  /** Called by template when user changes any config (dropdowns, checkboxes, inputs).
+   *  Debounces to avoid spamming saves on rapid changes. */
+  onConfigChanged(): void {
+    if (!this._currentSubstep) return; // nothing to save yet
+    if (this._configSaveTimer) clearTimeout(this._configSaveTimer);
+    this._configSaveTimer = setTimeout(() => {
+      console.log('[Modeling] Config changed, auto-saving at substep:', this._currentSubstep);
+      this.pushModelingCheckpoint(this._currentSubstep);
+    }, 800);
+  }
+
+  private pushModelingCheckpoint(substep: string): void {
+    this._currentSubstep = substep;
+    const state: any = {
+      substep: substep,
+      selectedAlgorithm: this.selectedAlgorithm,
+      encodingPlan: this.encodingPlan,
+      modelingStatus: this.slimModelingStatus(),
+      sfsReady: this.sfsReady,
+      encodingReport: this.encodingReport,
+      catLabelLookup: this.catLabelLookup,
+      featureUsage: this.featureUsage,
+      featureDropReason: this.featureDropReason,
+      // SFS config
+      sfsMethodForward: this.sfsMethodForward,
+      sfsMethodBackward: this.sfsMethodBackward,
+      sfsMetrics: this.sfsMetrics,
+      sfsMinFeatures: this.sfsMinFeatures,
+      sfsMaxFeatures: this.sfsMaxFeatures,
+      sfsNJobs: this.sfsNJobs,
+      sfsTopK: this.sfsTopK,
+      // SFS results
+      sfsResults: this.sfsResults,
+      sfsForwardResults: this.sfsForwardResults,
+      sfsBackwardResults: this.sfsBackwardResults,
+      sfsBackwardRemainingFeatures: this.sfsBackwardRemainingFeatures,
+      sfsBackwardCutStep: this.sfsBackwardCutStep,
+      sfsBackwardCutFeatures: this.sfsBackwardCutFeatures,
+      sfsForwardFromBackwardResults: this.sfsForwardFromBackwardResults,
+      sfsDurationSeconds: this.sfsDurationSeconds,
+    };
+    this.sharedService.setModelingCheckpoint(state);
+    this.sharedService.triggerCheckpoint(substep);
+    console.log('[Modeling] Checkpoint pushed:', substep);
+  }
+
+  restoreFromCheckpoint(state: any): void {
+    if (!state) return;
+    console.log('[Modeling] Restoring from checkpoint:', state.substep);
+    this._currentSubstep = state.substep || '';
+
+    this.selectedAlgorithm = state.selectedAlgorithm || null;
+    this.encodingPlan = state.encodingPlan || [];
+    this.modelingStatus = state.modelingStatus || null;
+    this.sfsReady = state.sfsReady || false;
+    this.encodingReport = state.encodingReport || [];
+    this.catLabelLookup = state.catLabelLookup || {};
+    this.featureUsage = state.featureUsage || {};
+    this.featureDropReason = state.featureDropReason || {};
+
+    // SFS config
+    if (state.sfsMethodForward != null) this.sfsMethodForward = state.sfsMethodForward;
+    if (state.sfsMethodBackward != null) this.sfsMethodBackward = state.sfsMethodBackward;
+    if (state.sfsMetrics) this.sfsMetrics = state.sfsMetrics;
+    if (state.sfsMinFeatures != null) this.sfsMinFeatures = state.sfsMinFeatures;
+    if (state.sfsMaxFeatures != null) this.sfsMaxFeatures = state.sfsMaxFeatures;
+    if (state.sfsNJobs != null) this.sfsNJobs = state.sfsNJobs;
+    if (state.sfsTopK != null) this.sfsTopK = state.sfsTopK;
+
+    // SFS results
+    this.sfsResults = state.sfsResults || null;
+    this.sfsForwardResults = state.sfsForwardResults || [];
+    this.sfsBackwardResults = state.sfsBackwardResults || [];
+    this.sfsBackwardRemainingFeatures = state.sfsBackwardRemainingFeatures || [];
+    this.sfsBackwardCutStep = state.sfsBackwardCutStep ?? null;
+    this.sfsBackwardCutFeatures = state.sfsBackwardCutFeatures || [];
+    this.sfsForwardFromBackwardResults = state.sfsForwardFromBackwardResults || [];
+    this.sfsDurationSeconds = state.sfsDurationSeconds ?? null;
+
+    // Re-sort selected features if modeling status is present
+    if (this.modelingStatus) {
+      this.applySfSort();
+      this.chartsDrawn = false;
+      setTimeout(() => this.tryDrawChartsIfReady(), 100);
+
+      // The checkpoint stores a slim modelingStatus (without SHAP beeswarm,
+      // beeswarm_png, CV curves). Re-fetch the full data from the backend
+      // status JSON so the interactive SHAP beeswarm renders on restore.
+      if (this.currentFileId != null) {
+        this.dataService.getModelingStatus(this.currentFileId).subscribe({
+          next: (full: any) => {
+            if (full && (full.job_status === 'completed' || full.status === 'completed')) {
+              console.log('[Modeling] Re-fetched full modelingStatus from backend for SHAP beeswarm');
+              this.modelingStatus = full;
+              this.applySfSort();
+              this.buildCatLabelLookup(full?.model?.encoding_report);
+              this.chartsDrawn = false;
+              setTimeout(() => this.tryDrawChartsIfReady(), 100);
+            }
+          },
+          error: (err: any) => console.warn('[Modeling] Could not re-fetch modelingStatus:', err)
+        });
+      }
+    }
   }
 
   trackByKey(index: number, key: string): string {
@@ -1360,6 +1511,16 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         console.log('[SFS] Forward-from-backward results:', this.sfsForwardFromBackwardResults.length);
         // Initialize cut point to last backward step (default = all eliminations applied)
         this.initBackwardCutStep();
+        // Determine SFS checkpoint substep based on what results we have
+        if (this.sfsForwardFromBackwardResults.length > 0) {
+          this.pushModelingCheckpoint('sfs_forward_from_backward_completed');
+        } else if (this.sfsBackwardResults.length > 0 && this.sfsForwardResults.length > 0) {
+          this.pushModelingCheckpoint('sfs_completed');
+        } else if (this.sfsBackwardResults.length > 0) {
+          this.pushModelingCheckpoint('sfs_backward_completed');
+        } else if (this.sfsForwardResults.length > 0) {
+          this.pushModelingCheckpoint('sfs_forward_completed');
+        }
       },
       error: (err: any) => {
         console.warn('[SFS] Failed to fetch results:', err);

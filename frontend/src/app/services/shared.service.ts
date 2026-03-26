@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -88,6 +88,26 @@ export class SharedService {
 
   setDataDictionaryCache(cache: any[]): void {
     this.dataDictionaryCacheSubject.next(cache);
+  }
+
+  // Modeling inner checkpoint state (algorithm, encoding, modeling results, SFS)
+  private modelingCheckpointSubject = new BehaviorSubject<any | null>(null);
+  modelingCheckpoint$: Observable<any | null> = this.modelingCheckpointSubject.asObservable();
+
+  setModelingCheckpoint(state: any | null): void {
+    this.modelingCheckpointSubject.next(state);
+  }
+
+  getModelingCheckpoint(): any | null {
+    return this.modelingCheckpointSubject.getValue();
+  }
+
+  // Trigger checkpoint save event (modeling child → model-development parent)
+  private triggerCheckpointSubject = new Subject<string>();
+  triggerCheckpoint$: Observable<string> = this.triggerCheckpointSubject.asObservable();
+
+  triggerCheckpoint(substep: string): void {
+    this.triggerCheckpointSubject.next(substep);
   }
   
 }

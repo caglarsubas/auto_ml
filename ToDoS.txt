@@ -8,9 +8,30 @@ z: bug-fix or hot-fix
 
 !CFH!
 
-- sfs takes long time, make it faster. maybe multi-threading of adding (forward) or dropping (backward) features simultaneously in the multi-core environment works.
+- as a secondary defense of line of pipeline saving mechanism, if any quick exit being acted by the user, we can ask the approval of the user by asking 'exit without saving?' like question. also we can ad a on/off icon for autosaving (as we implemented already. if offed, show a saving icon which can be pushed by user to save the status of pipeline flow manually. in case of autosave functionality is offed and user tries to exit the pipeline without saving, aforementioned question ('exit without saving?') should appear with a save and a quit without save button
+- user should be able to add commentary lines. between each pre-located objects (figures, tables, menus, etc.) in the pipeline in the aim of taking decision notes about the flow for future investigations. these notes should saved as well in our autosaving or manuel-saving mechanism.
+
+
+this is the major and minor step taxonomy you should use in checkpiont saving schema:
+1- Declaration
+1.a- Pipeline Declaration
+1.b- Data Declaration
+1.c- Dictionary Declaration
+2- Preprocessing
+2.a- Data Purifier Declaration
+2.b- Data Quality Summary
+3- Modeling
+3.a- Categorical Feature Encoding
+3.b- Modeling (Start Modeling button)
+3.c- SFS
+3.c.i- SFS Backward (if firstly run before the consecutive forward selection run) 
+
+we must keep all the UI-table inputs (checkboxes or dropdown menu selections or open-text enterances) in the saved checkpoint object. so user can continue exactly where he left
 
 - there should be a stop sfs button under the progress bar. when pushed we should show the completed steps and the results depending only on those completed steps. then user can be click the continue button where we should keep moving the paused process of SFS from where it was being stopped
+- currently each pipeline run is stateless. hence user cannot continue where she/he left if wants to make a pause of the flow. Each pipeline run should be saved with a unique name (pipeline-type + timestamp) that can be changed by user and add checkpoints on every step completion that user can quit and come back to continue from the last checkpoint
+- in a pipeline run, user should be able to go backward (revert) between steps. for example, while in the modelling step user can walk 1 step back and can change the configuration of preprocessing step and restart it
+- we should show the train-test split validation to the user who is expecting the declared distribution. show with a wise illustration (can be stacked histogram where stackes we have target labels, so user can easily understand that target mean is not changing over splitted datasets)
 
 - start hyperparameter
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:

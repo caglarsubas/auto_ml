@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView
-from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, VifDetailView
+from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -30,6 +30,9 @@ urlpatterns = [
     path('api/encoding/analyze/', EncodingAnalyzeView.as_view(), name='encoding-analyze'),
     path('api/encoding/apply/', EncodingApplyView.as_view(), name='encoding-apply'),
     path('api/modeling/vif-detail/', VifDetailView.as_view(), name='vif-detail'),
+    path('api/pipeline/', PipelineRunListView.as_view(), name='pipeline-list'),
+    path('api/pipeline/create/', PipelineRunCreateView.as_view(), name='pipeline-create'),
+    path('api/pipeline/<int:pk>/', PipelineRunDetailView.as_view(), name='pipeline-detail'),
 ]
 
 if settings.DEBUG:

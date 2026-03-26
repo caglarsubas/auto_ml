@@ -54,7 +54,7 @@
               <td style="padding: 8px; font-weight: 500; font-size: 12px; white-space: nowrap;">{{ entry.feature }}</td>
               <td style="padding: 8px; font-size: 11px; color: #555; max-width: 180px; overflow: hidden; text-overflow: ellipsis;" [title]="entry.description || getFeatureDescription(entry.feature)">{{ entry.description || getFeatureDescription(entry.feature) || '—' }}</td>
               <td style="padding: 8px;">
-                <select [ngModel]="entry.user_lom" (ngModelChange)="updateEncodingLom(entry, $event)"
+                <select [ngModel]="entry.user_lom" (ngModelChange)="updateEncodingLom(entry, $event); onConfigChanged()"
                         style="padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px;">
                   <option value="nominal">Nominal</option>
                   <option value="ordinal">Ordinal</option>
@@ -239,7 +239,7 @@
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <select
                       [ngModel]="featureUsage[f.feature] || 'keep'"
-                      (ngModelChange)="featureUsage[f.feature] = $event; $event === 'keep' && (featureDropReason[f.feature] = '')"
+                      (ngModelChange)="featureUsage[f.feature] = $event; $event === 'keep' && (featureDropReason[f.feature] = ''); onConfigChanged()"
                       style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; background: #fff;">
                       <option value="keep">Keep</option>
                       <option value="drop">Drop</option>
@@ -248,7 +248,7 @@
                       *ngIf="featureUsage[f.feature] === 'drop'"
                       type="text"
                       placeholder="Reason for dropping..."
-                      [(ngModel)]="featureDropReason[f.feature]"
+                      [(ngModel)]="featureDropReason[f.feature]" (ngModelChange)="onConfigChanged()"
                       style="flex: 1; padding: 4px 8px; border: 1px solid #e57373; border-radius: 4px; font-size: 12px; min-width: 120px;" />
                   </div>
                 </td>
@@ -357,11 +357,11 @@
           <h4 style="margin-bottom: 8px; font-size: 14px;">Selection Method (at least one required)</h4>
           <div style="display: flex; gap: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" [(ngModel)]="sfsMethodForward" />
+              <input type="checkbox" [(ngModel)]="sfsMethodForward" (ngModelChange)="onConfigChanged()" />
               <span>Forward Selection (add features incrementally)</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" [(ngModel)]="sfsMethodBackward" />
+              <input type="checkbox" [(ngModel)]="sfsMethodBackward" (ngModelChange)="onConfigChanged()" />
               <span>Backward Elimination (remove features incrementally)</span>
             </label>
           </div>
@@ -378,7 +378,7 @@
             <!-- Metric Selection -->
             <div style="flex: 1;">
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Metric</label>
-              <select [(ngModel)]="metricCriteria.metric" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+              <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
                 <option value="roc_auc">ROC-AUC</option>
                 <option value="pr_auc">PR-AUC</option>
               </select>
@@ -389,7 +389,7 @@
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">
                 Stop if <span *ngIf="sfsMethodBackward && !sfsMethodForward">|change| &gt;</span><span *ngIf="sfsMethodForward && !sfsMethodBackward">change &lt;</span><span *ngIf="sfsMethodForward && sfsMethodBackward">change &lt; / |change| &gt;</span><span *ngIf="!sfsMethodForward && !sfsMethodBackward">change &lt;</span> (%) <span style="color: #999;">(0 = no stop)</span>
               </label>
-              <input type="number" [(ngModel)]="metricCriteria.pct_change" min="0" max="100" step="0.1"
+              <input type="number" [(ngModel)]="metricCriteria.pct_change" (ngModelChange)="onConfigChanged()" min="0" max="100" step="0.1"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
             </div>
 
@@ -414,21 +414,21 @@
             <!-- Min Features (Backward) -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Minimum Features (Backward)</label>
-              <input type="number" [(ngModel)]="sfsMinFeatures" min="1" max="50"
+              <input type="number" [(ngModel)]="sfsMinFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
             </div>
 
             <!-- Max Features (Forward) -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Maximum Features (Forward)</label>
-              <input type="number" [(ngModel)]="sfsMaxFeatures" min="1" max="50"
+              <input type="number" [(ngModel)]="sfsMaxFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
             </div>
 
             <!-- Parallel Workers -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Parallel Workers (n_jobs)</label>
-              <input type="number" [(ngModel)]="sfsNJobs" min="1" max="16"
+              <input type="number" [(ngModel)]="sfsNJobs" (ngModelChange)="onConfigChanged()" min="1" max="16"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
                      title="Number of CPU cores for parallel candidate evaluation. Higher = faster but more memory." />
             </div>
@@ -436,7 +436,7 @@
             <!-- Top-K CV Candidates -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Top-K CV Candidates</label>
-              <input type="number" [(ngModel)]="sfsTopK" min="1" max="10"
+              <input type="number" [(ngModel)]="sfsTopK" (ngModelChange)="onConfigChanged()" min="1" max="10"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
                      title="Number of top candidates (ranked by test AUC) to cross-validate per step. Higher = more accurate but slower." />
             </div>

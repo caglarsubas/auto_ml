@@ -17,6 +17,7 @@ from joblib import dump as joblib_dump
 import xgboost as xgb
 import shap
 from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
+from modeling.models import PipelineRun
 import threading
 import pickle
 
@@ -1611,3 +1612,168 @@ class VifDetailView(APIView):
             import traceback as tb
             tb.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================
+# Pipeline Run CRUD Views
+# ============================================================
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunListView(APIView):
+    """List all pipeline runs, ordered by most recently updated."""
+
+    def get(self, request, *args, **kwargs):
+        runs = PipelineRun.objects.all()
+        data = []
+        for run in runs:
+            data.append({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunCreateView(APIView):
+    """Create a new pipeline run."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            body = json.loads(request.body)
+            name = body.get('name', '')
+            pipeline_type = body.get('pipeline_type', 'boosting')
+            file_id = body.get('file_id')
+            current_step = body.get('current_step', 'declaration')
+            state = body.get('state', {})
+
+            if not name:
+                from datetime import datetime
+                name = f"{pipeline_type}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+            run = PipelineRun.objects.create(
+                name=name,
+                pipeline_type=pipeline_type,
+                file_id=file_id,
+                current_step=current_step,
+                status='active',
+                state=state,
+            )
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunDetailView(APIView):
+    """Get, update, or delete a single pipeline run."""
+
+    def get(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'state': run.state,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    STEP_ORDER = {
+        'declaration': 0,
+        'preprocessing': 1,
+        'data_quality': 2,
+        'modeling': 3,
+        'sfs': 4,
+        'evaluation': 5,
+        'deployment': 6,
+    }
+
+    def put(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            body = json.loads(request.body)
+            old_step = run.current_step
+            new_step = body.get('current_step', old_step)
+            state_substep = (body.get('state', {}).get('modeling') or {}).get('substep', '-')
+            old_order = self.STEP_ORDER.get(old_step, 0)
+            new_order = self.STEP_ORDER.get(new_step, 0)
+            print(f"[PipelineRun PUT id={pk}] {old_step}({old_order}) -> {new_step}({new_order}) substep={state_substep}", flush=True)
+
+            if 'name' in body:
+                run.name = body['name']
+            # Step regression guard: never allow step to go backwards
+            # When blocked, skip the entire update (state included) to prevent stale overwrites
+            if 'current_step' in body:
+                if new_order >= old_order:
+                    run.current_step = body['current_step']
+                    if 'status' in body:
+                        run.status = body['status']
+                    if 'state' in body:
+                        run.state = body['state']
+                    if 'file_id' in body:
+                        run.file_id = body['file_id']
+                    run.save()
+                else:
+                    print(f"[PipelineRun PUT id={pk}] BLOCKED step regression {old_step} -> {new_step} (entire update skipped)", flush=True)
+                    return Response({
+                        'id': run.id,
+                        'name': run.name,
+                        'pipeline_type': run.pipeline_type,
+                        'file_id': run.file_id,
+                        'current_step': run.current_step,
+                        'status': run.status,
+                        'state': run.state,
+                        'created_at': run.created_at.isoformat(),
+                        'updated_at': run.updated_at.isoformat(),
+                    }, status=status.HTTP_200_OK)
+            else:
+                if 'status' in body:
+                    run.status = body['status']
+                if 'state' in body:
+                    run.state = body['state']
+                if 'file_id' in body:
+                    run.file_id = body['file_id']
+                run.save()
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            run.delete()
+            return Response({'message': 'Pipeline run deleted'}, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
