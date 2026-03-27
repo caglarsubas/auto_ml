@@ -10,6 +10,65 @@
     <span *ngIf="activePipelineRunId" style="font-size: 13px; color: #555; background: #e3f2fd; padding: 4px 10px; border-radius: 12px;">
       Active: <strong>{{ pipelineRunName }}</strong>
     </span>
+
+    <!-- Autosave toggle + Manual save -->
+    <div *ngIf="activePipelineRunId" style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+      <!-- Autosave toggle -->
+      <button (click)="toggleAutosave()"
+              [title]="autosaveEnabled ? 'Autosave ON — click to disable' : 'Autosave OFF — click to enable'"
+              style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s;"
+              [style.background]="autosaveEnabled ? '#e8f5e9' : '#fff3e0'"
+              [style.borderColor]="autosaveEnabled ? '#4caf50' : '#ff9800'"
+              [style.color]="autosaveEnabled ? '#2e7d32' : '#e65100'">
+        <span style="font-size: 15px;">{{ autosaveEnabled ? '&#9889;' : '&#9888;' }}</span>
+        {{ autosaveEnabled ? 'Autosave' : 'Manual' }}
+      </button>
+
+      <!-- Manual save button (visible when autosave is OFF) -->
+      <button *ngIf="!autosaveEnabled"
+              (click)="manualSave()"
+              [disabled]="!_unsavedChanges"
+              title="Save pipeline now"
+              style="display: flex; align-items: center; gap: 4px; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;"
+              [style.background]="_unsavedChanges ? '#1565c0' : '#bdbdbd'"
+              [style.color]="'white'">
+        <span style="font-size: 15px;">&#128190;</span> Save
+      </button>
+
+      <!-- Unsaved indicator -->
+      <span *ngIf="!autosaveEnabled && _unsavedChanges"
+            style="font-size: 11px; color: #e65100; font-weight: 500; padding: 2px 8px; background: #fff3e0; border-radius: 10px;">
+        Unsaved changes
+      </span>
+    </div>
+  </div>
+
+  <!-- Exit Without Saving Dialog -->
+  <div *ngIf="showExitDialog"
+       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;"
+       (click)="cancelExit()">
+    <div style="background: white; border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); text-align: center;"
+         (click)="$event.stopPropagation()">
+      <div style="font-size: 40px; margin-bottom: 12px;">&#9888;&#65039;</div>
+      <h3 style="margin: 0 0 8px 0; color: #333;">Unsaved Changes</h3>
+      <p style="color: #666; font-size: 14px; margin: 0 0 24px 0;">
+        You have unsaved pipeline changes. Would you like to save before leaving?
+      </p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button (click)="exitWithSave()"
+                style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+          &#128190; Save &amp; Exit
+        </button>
+        <button (click)="exitWithoutSave()"
+                style="padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+          Exit Without Saving
+        </button>
+        <button (click)="cancelExit()"
+                style="padding: 10px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+          Cancel
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Saved Pipelines Panel -->

@@ -48,6 +48,12 @@ export class ModelDevelopmentComponent implements OnInit {
   private _highWaterStep: string = 'declaration';
   private _lastModelingSubstep: string | null = null;
   private _pipelineConfigSaveTimer: any = null;
+  // Autosave toggle & dirty-state tracking (persisted in localStorage)
+  autosaveEnabled: boolean = true;
+  _unsavedChanges: boolean = false;
+  showExitDialog: boolean = false;
+  private _pendingNavUrl: string | null = null;
+  private readonly _autosaveKey = 'pipeline_autosave_enabled';
   processedFilePath: string | null = null;
   isProcessing: boolean = false;
   // New state flags for progressive reveal
@@ -308,12 +314,91 @@ export class ModelDevelopmentComponent implements OnInit {
    *  (purifier options, split settings, Model_Usage, encoding LOM, etc.) */
   onPipelineConfigChanged(): void {
     if (!this.activePipelineRunId) return; // no pipeline to save to yet
+    if (!this.autosaveEnabled) {
+      this._unsavedChanges = true;
+      return;
+    }
     if (this._pipelineConfigSaveTimer) clearTimeout(this._pipelineConfigSaveTimer);
     this._pipelineConfigSaveTimer = setTimeout(() => {
       const step = this.currentStep === 'data quality' ? 'data_quality' : this.currentStep;
       console.log('[Pipeline] Config changed, auto-saving at step:', step);
       this.saveCheckpoint(step);
     }, 800);
+  }
+
+  /** Toggle autosave on/off (persisted to localStorage) */
+  toggleAutosave(): void {
+    this.autosaveEnabled = !this.autosaveEnabled;
+    this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
+    try { localStorage.setItem(this._autosaveKey, String(this.autosaveEnabled)); } catch {}
+    console.log('[Pipeline] Autosave:', this.autosaveEnabled ? 'ON' : 'OFF');
+    // If just turned on and there are unsaved changes, save immediately
+    if (this.autosaveEnabled && this._unsavedChanges) {
+      this.manualSave();
+    }
+  }
+
+  /** Manual save — called by user clicking the save icon */
+  manualSave(): void {
+    if (!this.activePipelineRunId) return;
+    const step = this.currentStep === 'data quality' ? 'data_quality' : this.currentStep;
+    console.log('[Pipeline] Manual save at step:', step);
+    this.saveCheckpoint(step, true);
+    this._unsavedChanges = false;
+  }
+
+  /** Check if there are unsaved changes that need confirmation */
+  hasUnsavedChanges(): boolean {
+    return !this.autosaveEnabled && this._unsavedChanges;
+  }
+
+  // ===== Exit Confirmation =====
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasUnsavedChanges()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  /** Called when user tries to navigate away (e.g. clicking Home, Login, etc.) */
+  confirmExit(url: string): boolean {
+    if (this.hasUnsavedChanges()) {
+      this._pendingNavUrl = url;
+      this.showExitDialog = true;
+      return false; // block navigation
+    }
+    return true; // allow navigation
+  }
+
+  /** User chose 'Save & Exit' in the exit dialog */
+  exitWithSave(): void {
+    this.manualSave();
+    this._unsavedChanges = false; // ensure dirty flag cleared before navigation
+    this.showExitDialog = false;
+    const url = this._pendingNavUrl;
+    this._pendingNavUrl = null;
+    if (url) {
+      this.router.navigateByUrl(url);
+    }
+  }
+
+  /** User chose 'Exit Without Saving' in the exit dialog */
+  exitWithoutSave(): void {
+    this._unsavedChanges = false; // clear dirty flag to allow navigation
+    this.showExitDialog = false;
+    const url = this._pendingNavUrl;
+    this._pendingNavUrl = null;
+    if (url) {
+      this.router.navigateByUrl(url);
+    }
+  }
+
+  /** User cancelled the exit dialog */
+  cancelExit(): void {
+    this.showExitDialog = false;
+    this._pendingNavUrl = null;
   }
 
   // Save model usage to localStorage
@@ -586,6 +671,15 @@ export class ModelDevelopmentComponent implements OnInit {
   constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
 
   ngOnInit() {
+    // Restore autosave preference from localStorage
+    try {
+      const stored = localStorage.getItem(this._autosaveKey);
+      if (stored !== null) {
+        this.autosaveEnabled = stored === 'true';
+        this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
+      }
+    } catch {}
+
     // Baseline reset to prevent stale state causing steps to appear out of order
     this.sharedService.setStarted(false);
     this.sharedService.setPreprocessingInitiated(false);
@@ -598,6 +692,10 @@ export class ModelDevelopmentComponent implements OnInit {
 
     this.subscription.add(
       this.sharedService.currentFileId$.subscribe((id: number | null) => {
+        // Mark dirty when file changes while autosave is off
+        if (id !== null && id !== this.currentFileId && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.currentFileId = id;
         this.computePreprocessingAvailable();
         // Load datetime columns from data dictionary (preferred)
@@ -641,6 +739,10 @@ export class ModelDevelopmentComponent implements OnInit {
     // Track pipeline start
     this.subscription.add(
       this.sharedService.isStarted$.subscribe((started: boolean) => {
+        // Mark dirty when pipeline starts while autosave is off
+        if (started && !this.isStarted && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.isStarted = started;
         this.computePreprocessingAvailable();
       })
@@ -659,6 +761,10 @@ export class ModelDevelopmentComponent implements OnInit {
     // Track when user explicitly moves from Declaration to Preprocessing
     this.subscription.add(
       this.sharedService.preprocessingInitiated$.subscribe((initiated: boolean) => {
+        // Mark dirty when preprocessing initiated while autosave is off
+        if (initiated && !this.preprocessingInitiated && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.preprocessingInitiated = initiated;
         this.computePreprocessingAvailable();
         // Only transition to preprocessing if we're still at declaration (prevent regression)
@@ -1130,6 +1236,16 @@ export class ModelDevelopmentComponent implements OnInit {
     return v;
   }
 
+  /** canDeactivate hook — called by the route guard with the target URL */
+  canDeactivate(nextUrl?: string): boolean {
+    if (this.hasUnsavedChanges()) {
+      this._pendingNavUrl = nextUrl || '/home';
+      this.showExitDialog = true;
+      return false;
+    }
+    return true;
+  }
+
   ngOnDestroy() {
     this.subscription.unsubscribe();
   }
@@ -1209,7 +1325,14 @@ export class ModelDevelopmentComponent implements OnInit {
     'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6
   };
 
-  saveCheckpoint(step?: string): void {
+  saveCheckpoint(step?: string, force: boolean = false): void {
+    // When autosave is OFF and this is NOT a forced save (manual/initial), just mark dirty
+    if (!this.autosaveEnabled && !force) {
+      this._unsavedChanges = true;
+      console.log(`[Pipeline] saveCheckpoint SKIPPED (autosave OFF): step=${step}, componentStep=${this.currentStep}`);
+      return;
+    }
+
     const state = this.buildCheckpointState();
     const currentStep = step || state.current_step;
     console.log(`[Pipeline] saveCheckpoint called: step=${step}, currentStep=${currentStep}, componentStep=${this.currentStep}, highWater=${this._highWaterStep}, id=${this.activePipelineRunId}, creating=${this._checkpointCreating}`);
@@ -1230,7 +1353,7 @@ export class ModelDevelopmentComponent implements OnInit {
         state: state,
         file_id: this.currentFileId,
       }).subscribe({
-        next: () => console.log('[Pipeline] Checkpoint saved:', currentStep),
+        next: () => { this._unsavedChanges = false; console.log('[Pipeline] Checkpoint saved:', currentStep); },
         error: (e: any) => console.error('[Pipeline] Checkpoint save failed:', e)
       });
     } else if (this._checkpointCreating) {
@@ -1252,12 +1375,13 @@ export class ModelDevelopmentComponent implements OnInit {
           this.activePipelineRunId = resp.id;
           this.pipelineRunName = resp.name;
           this._checkpointCreating = false;
+          this._unsavedChanges = false;
           console.log('[Pipeline] Created & saved checkpoint:', resp.name, currentStep);
           // Flush: re-save with CURRENT state (not stale queued step)
           if (this._pendingCheckpoint) {
             this._pendingCheckpoint = false;
             console.log('[Pipeline] Flushing with current state, componentStep:', this.currentStep);
-            this.saveCheckpoint();
+            this.saveCheckpoint(undefined, true);
           }
         },
         error: (e: any) => {
@@ -1281,9 +1405,10 @@ export class ModelDevelopmentComponent implements OnInit {
         const restoredStepKey = step === 'data quality' ? 'data_quality' : step;
         this._highWaterStep = restoredStepKey;
 
-        // ── 2. Restore identity ──
+        // ── 2. Restore identity & clear dirty state ──
         this.activePipelineRunId = run.id;
         this.pipelineRunName = run.name;
+        this._unsavedChanges = false;
         this.selectedPipeline = s.pipeline_type || run.pipeline_type || 'boosting';
 
         // ── 3. Restore flags (local first, then SharedService) ──
@@ -1429,8 +1554,8 @@ export class ModelDevelopmentComponent implements OnInit {
       this.currentStep = 'declaration';
       // Start pipeline
       this.sharedService.setStarted(true);
-      // Auto-save checkpoint: declaration
-      this.saveCheckpoint('declaration');
+      // Initial creation checkpoint: always force through
+      this.saveCheckpoint('declaration', true);
     }
   }
 

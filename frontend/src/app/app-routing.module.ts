@@ -8,6 +8,7 @@ import { DeploymentComponent } from './deployment/deployment.component';
 import { ModelDevelopmentComponent } from './model-development/model-development.component';
 import { HomeComponent } from './home/home.component';
 import { LoginComponent } from './login/login.component';
+import { UnsavedChangesGuard } from './guards/unsaved-changes.guard';
 
 const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
@@ -16,6 +17,7 @@ const routes: Routes = [
   {
     path: 'model-development',
     component: ModelDevelopmentComponent,
+    canDeactivate: [UnsavedChangesGuard],
     children: [
       { path: 'declaration', component: DeclarationComponent },
       { path: 'preprocessing', component: PreprocessingComponent },

@@ -648,9 +648,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   }
 
   /** Called by template when user changes any config (dropdowns, checkboxes, inputs).
-   *  Debounces to avoid spamming saves on rapid changes. */
+   *  Debounces to avoid spamming saves on rapid changes. Respects autosave flag. */
   onConfigChanged(): void {
     if (!this._currentSubstep) return; // nothing to save yet
+    if (!this.sharedService.getAutosaveEnabled()) return; // autosave off — parent tracks dirty state
     if (this._configSaveTimer) clearTimeout(this._configSaveTimer);
     this._configSaveTimer = setTimeout(() => {
       console.log('[Modeling] Config changed, auto-saving at substep:', this._currentSubstep);

@@ -109,5 +109,16 @@ export class SharedService {
   triggerCheckpoint(substep: string): void {
     this.triggerCheckpointSubject.next(substep);
   }
-  
+
+  // Autosave flag shared between parent (model-development) and child (modeling) components
+  private autosaveEnabledSubject = new BehaviorSubject<boolean>(true);
+  autosaveEnabled$: Observable<boolean> = this.autosaveEnabledSubject.asObservable();
+
+  setAutosaveEnabled(enabled: boolean): void {
+    this.autosaveEnabledSubject.next(enabled);
+  }
+
+  getAutosaveEnabled(): boolean {
+    return this.autosaveEnabledSubject.getValue();
+  }
 }
