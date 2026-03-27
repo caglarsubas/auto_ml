@@ -121,4 +121,16 @@ export class SharedService {
   getAutosaveEnabled(): boolean {
     return this.autosaveEnabledSubject.getValue();
   }
+
+  // Active process tracking for pipeline resume (preprocessing/modeling/sfs)
+  private activeProcessSubject = new BehaviorSubject<{ type: string; file_id: number } | null>(null);
+  activeProcess$: Observable<{ type: string; file_id: number } | null> = this.activeProcessSubject.asObservable();
+
+  setActiveProcess(process: { type: string; file_id: number } | null): void {
+    this.activeProcessSubject.next(process);
+  }
+
+  getActiveProcess(): { type: string; file_id: number } | null {
+    return this.activeProcessSubject.getValue();
+  }
 }

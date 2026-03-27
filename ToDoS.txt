@@ -8,7 +8,7 @@ z: bug-fix or hot-fix
 
 !CFH!
 
-- (ongoing) as a secondary defense of line of pipeline saving mechanism, if any quick exit being acted by the user, we can ask the approval of the user by asking 'exit without saving?' like question. also we can ad a on/off icon for autosaving (as we implemented already. if offed, show a saving icon which can be pushed by user to save the status of pipeline flow manually. in case of autosave functionality is offed and user tries to exit the pipeline without saving, aforementioned question ('exit without saving?') should appear with a save and a quit without save button
+- user can leave the pipeline while any of the process (preprocessing, modelling, sfs, etc.) being run. when user saves the state and comes back, the pipeline should continue from where it was left (maybe the ongoing process finished or still continues)
 - user should be able to add commentary lines. between each pre-located objects (figures, tables, menus, etc.) in the pipeline in the aim of taking decision notes about the flow for future investigations. these notes should saved as well in our autosaving or manuel-saving mechanism.
 
 

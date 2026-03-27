@@ -947,6 +947,17 @@ class PreprocessingRunView(APIView):
 
             preview = _final_sanitize(preview)
 
+            # Save full preprocessing result for resume-on-return
+            try:
+                pp_result_dir = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results')
+                os.makedirs(pp_result_dir, exist_ok=True)
+                pp_result_path = os.path.join(pp_result_dir, f'{file_id}_result.json')
+                with open(pp_result_path, 'w', encoding='utf-8') as f:
+                    json.dump(preview, f)
+                print(f"[PreprocessingRun] saved full result JSON -> {pp_result_path}")
+            except Exception as e:
+                print(f"[PreprocessingRun] failed to save full result JSON: {e}")
+
             print(f"[PreprocessingRun] completed in {time.monotonic()-t0:.3f}s")
             return Response(preview, status=status.HTTP_200_OK)
         except Exception as e:
@@ -1336,4 +1347,29 @@ class PreprocessingDatqDetailView(APIView):
         except Exception as e:
             import traceback
             print(traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingStatusView(APIView):
+    """Check if preprocessing has completed for a given file_id and return the saved result."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            pp_result_path = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results', f'{file_id}_result.json')
+            if os.path.exists(pp_result_path):
+                with open(pp_result_path, 'r', encoding='utf-8') as f:
+                    result = json.load(f)
+                return Response({
+                    'status': 'completed',
+                    'result': result
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'status': 'not_completed',
+                    'message': 'Preprocessing results not found'
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

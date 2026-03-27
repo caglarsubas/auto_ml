@@ -73,6 +73,16 @@ export class DataService {
     );
   }
 
+  // Check preprocessing completion status for a file (used for pipeline resume)
+  getPreprocessingStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}preprocessing/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting preprocessing status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get preprocessing status'));
+      })
+    );
+  }
+
   // Get detailed PSI report for a specific variable from processed file
   getDatqDetail(fileId: number, processedFile: string, column: string, split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile, column };

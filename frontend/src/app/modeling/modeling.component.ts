@@ -527,6 +527,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.isStarting = true;
     this.chartsDrawn = false;
+    // Track active process for pipeline resume
+    this.sharedService.setActiveProcess({ type: 'modeling', file_id: this.currentFileId });
     this.dataService.startModeling(this.currentFileId, this.processedFilePath!, this.selectedAlgorithm || undefined, excludedVariables).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
@@ -545,6 +547,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
         if (js === 'completed') { 
+          this.sharedService.setActiveProcess(null); // clear active process
           setTimeout(() => this.tryDrawChartsIfReady(), 0);
           // Checkpoint: modeling completed
           this.pushModelingCheckpoint('modeling_completed');
@@ -553,6 +556,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       },
       error: (err) => {
         console.error('Failed to start modeling:', err);
+        this.sharedService.setActiveProcess(null); // clear on error
       }
     });
   }
@@ -591,6 +595,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           const s = status?.job_status || status?.status;
           if (s === 'completed' || s === 'error') {
             this.stopStatusPolling();
+            this.sharedService.setActiveProcess(null); // clear active process
             // Build catLabelLookup from encoding report in completed response
             if (status?.model?.encoding_report) {
               this.buildCatLabelLookup(status.model.encoding_report);
@@ -621,6 +626,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
   ngOnDestroy(): void {
     this.stopStatusPolling();
+    this.stopSfsStatusPolling();
   }
 
   // ===== Pipeline Checkpoint =====
@@ -751,6 +757,99 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           error: (err: any) => console.warn('[Modeling] Could not re-fetch modelingStatus:', err)
         });
       }
+    }
+
+    // ── Resume active process if checkpoint indicates one was running ──
+    const activeProc = state.activeProcess || this.sharedService.getActiveProcess();
+    if (activeProc && this.currentFileId != null) {
+      this.resumeActiveProcess(activeProc);
+    }
+  }
+
+  /** Check backend status for a process that was running when user left, and resume or show results */
+  private resumeActiveProcess(proc: { type: string; file_id: number }): void {
+    console.log('[Modeling] Resuming active process:', proc);
+
+    if (proc.type === 'modeling') {
+      // Check modeling status from backend
+      this.isStarting = true;
+      this.dataService.getModelingStatus(proc.file_id).subscribe({
+        next: (status: any) => {
+          this.isStarting = false;
+          const s = status?.job_status || status?.status;
+          if (s === 'completed') {
+            console.log('[Modeling] Resume: modeling completed while away');
+            this.modelingStatus = status;
+            this.applySfSort();
+            this.sfsReady = status?.model?.sfs_ready || false;
+            this.buildCatLabelLookup(status?.model?.encoding_report);
+            this.chartsDrawn = false;
+            setTimeout(() => this.tryDrawChartsIfReady(), 100);
+            this.sharedService.setActiveProcess(null);
+            this.pushModelingCheckpoint('modeling_completed');
+          } else if (s === 'running') {
+            console.log('[Modeling] Resume: modeling still running, starting polling');
+            this.startStatusPolling();
+          } else if (s === 'error') {
+            console.warn('[Modeling] Resume: modeling failed while away');
+            this.modelingStatus = status;
+            this.sharedService.setActiveProcess(null);
+          } else {
+            console.warn('[Modeling] Resume: unknown modeling status:', s);
+            this.sharedService.setActiveProcess(null);
+          }
+        },
+        error: (err: any) => {
+          this.isStarting = false;
+          console.warn('[Modeling] Resume: could not fetch modeling status:', err);
+          this.sharedService.setActiveProcess(null);
+        }
+      });
+    } else if (proc.type === 'sfs') {
+      // Check SFS status from backend
+      this.sfsRunning = true;
+      this.sfsMessage = 'Checking SFS status...';
+      this.dataService.getSfsStatus(proc.file_id).subscribe({
+        next: (statusData: any) => {
+          const s = statusData.status;
+          if (s === 'completed') {
+            console.log('[Modeling] Resume: SFS completed while away');
+            this.sfsRunning = false;
+            this.sfsProgress = 1.0;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
+            this.sfsMessage = 'SFS completed successfully!';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchSfsResults(), 500);
+          } else if (s === 'running') {
+            console.log('[Modeling] Resume: SFS still running, starting polling');
+            this.sfsProgress = statusData.progress || 0;
+            this.sfsMessage = statusData.message || 'SFS running...';
+            this.sfsCurrentMetrics = statusData.current_metrics || {};
+            this.sfsCompletedSteps = statusData.completed_steps || [];
+            this.startSfsStatusPolling();
+          } else if (s === 'error') {
+            console.warn('[Modeling] Resume: SFS failed while away');
+            this.sfsRunning = false;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
+            this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
+            this.sharedService.setActiveProcess(null);
+          } else {
+            // not_started — SFS progress lost (server restart), results may exist
+            console.warn('[Modeling] Resume: SFS status not_started, checking for results');
+            this.sfsRunning = false;
+            this.sfsMessage = '';
+            this.sharedService.setActiveProcess(null);
+            // Try fetching results in case they were saved before server restart
+            this.fetchSfsResults();
+          }
+        },
+        error: (err: any) => {
+          console.warn('[Modeling] Resume: could not fetch SFS status:', err);
+          this.sfsRunning = false;
+          this.sfsMessage = '';
+          this.sharedService.setActiveProcess(null);
+        }
+      });
     }
   }
 
@@ -1372,6 +1471,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
     
+    // Track active process for pipeline resume
+    this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Started:', resp);
@@ -1383,6 +1484,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         console.error('[SFS] Failed to start:', err);
         this.sfsRunning = false;
         this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
+        this.sharedService.setActiveProcess(null); // clear on error
       }
     });
   }
@@ -1413,6 +1515,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
 
+    // Track active process for pipeline resume
+    this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     // Call startSfs with initial_features parameter
     this.dataService.startSfsWithInitialFeatures(
       this.currentFileId,
@@ -1431,6 +1535,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         console.error('[SFS-Chain] Failed to start:', err);
         this.sfsRunning = false;
         this.sfsMessage = 'Failed to start forward selection: ' + (err.message || err);
+        this.sharedService.setActiveProcess(null); // clear on error
       }
     });
   }
@@ -1465,6 +1570,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             this.sfsProgress = 1.0;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS completed successfully!';
+            this.sharedService.setActiveProcess(null); // clear active process
             // Fetch final results
             setTimeout(() => this.fetchSfsResults(), 500);
           } else if (status === 'error') {
@@ -1472,6 +1578,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             this.sfsRunning = false;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
+            this.sharedService.setActiveProcess(null); // clear on error
           }
         },
         error: (err: any) => {

@@ -1317,6 +1317,7 @@ export class ModelDevelopmentComponent implements OnInit {
         modeling_available: this.modelingAvailable,
       },
       modeling: this.sharedService.getModelingCheckpoint() || null,
+      active_process: this.sharedService.getActiveProcess() || null,
     };
   }
 
@@ -1456,6 +1457,13 @@ export class ModelDevelopmentComponent implements OnInit {
           this.sharedService.setModelingCheckpoint(s.modeling);
         }
 
+        // ── 6b. Restore active process tracking (for resume on return) ──
+        if (s.active_process) {
+          this.sharedService.setActiveProcess(s.active_process);
+        } else {
+          this.sharedService.setActiveProcess(null);
+        }
+
         // ── 7. NOW fire SharedService setters (subscriptions will see correct currentStep) ──
         this.sharedService.setSelectedPipeline(this.selectedPipeline);
         this.sharedService.setStarted(this.isStarted);
@@ -1474,6 +1482,11 @@ export class ModelDevelopmentComponent implements OnInit {
         this.showSavedPipelines = false;
         console.log('[Pipeline] Loaded run:', run.name, 'at step:', step);
 
+        // ── 9. Check for active process that needs resume ──
+        if (s.active_process && s.active_process.type === 'preprocessing' && s.active_process.file_id) {
+          this.resumePreprocessing(s.active_process.file_id);
+        }
+
         setTimeout(() => {
           try {
             if (step === 'data quality') {
@@ -1487,6 +1500,68 @@ export class ModelDevelopmentComponent implements OnInit {
         }, 200);
       },
       error: (e: any) => console.error('[Pipeline] Load failed:', e)
+    });
+  }
+
+  /** Resume preprocessing: check if it completed while the user was away */
+  private resumePreprocessing(fileId: number): void {
+    console.log('[Pipeline] Checking preprocessing status for resume, file_id:', fileId);
+    this.isProcessing = true;
+    this.dataService.getPreprocessingStatus(fileId).subscribe({
+      next: (resp: any) => {
+        this.isProcessing = false;
+        if (resp.status === 'completed' && resp.result) {
+          console.log('[Pipeline] Resume: preprocessing completed while away');
+          const result = resp.result;
+          // Restore all preprocessing results
+          this.sharedService.setPreprocessingRunResult(result);
+          this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
+          this.processedFilePath = result?.processed_file ?? null;
+          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step) ? result.dropped_columns_by_step : [];
+          this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
+          this.rowCountBefore = Number(result?.row_count_before ?? 0);
+          this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Restore Data Quality summary
+          this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
+          this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+          this.datqColumns = [...this.datqAllColumns];
+          this.reorderDatqColumns();
+          this.ensureFilterKeys();
+          if (this.pinnedColumns.length === 0) {
+            if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
+            else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
+          }
+          if (this.datqColumns.includes('PSI')) {
+            this.datqSortColumn = 'PSI';
+            this.datqSortDir = 'desc';
+          }
+          this.datqPage = 1;
+          // Advance to data quality step
+          if (this.datqSummary && this.datqSummary.length > 0) {
+            this.currentStep = 'data quality';
+            this._highWaterStep = 'data_quality';
+            this.preprocessingAvailable = true;
+          }
+          // Clear active process and save
+          this.sharedService.setActiveProcess(null);
+          this.saveCheckpoint('data_quality', true);
+          setTimeout(() => {
+            try {
+              const el = document.getElementById('data-quality-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch {}
+          }, 200);
+        } else {
+          console.log('[Pipeline] Resume: preprocessing not yet completed or no results');
+          this.sharedService.setActiveProcess(null);
+          this.saveCheckpoint(undefined, true);
+        }
+      },
+      error: (err: any) => {
+        this.isProcessing = false;
+        console.warn('[Pipeline] Resume: could not check preprocessing status:', err);
+        this.sharedService.setActiveProcess(null);
+      }
     });
   }
 
@@ -1548,6 +1623,7 @@ export class ModelDevelopmentComponent implements OnInit {
       this.sharedService.setPreprocessingInitiated(false);
       this.sharedService.setPreprocessingRunResult(null);
       this.sharedService.setProcessedFilePath(null);
+      this.sharedService.setActiveProcess(null); // clear any stale active process
       this.selectedOptions = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
       this.modelingAvailable = false;
       this.preprocessingAvailable = false;
@@ -1611,6 +1687,9 @@ export class ModelDevelopmentComponent implements OnInit {
     }
 
     this.isProcessing = true;
+    // Track active process for pipeline resume
+    this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
+    this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
     this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables)
       .pipe(finalize(() => { this.isProcessing = false; }))
       .subscribe(
@@ -1645,6 +1724,8 @@ export class ModelDevelopmentComponent implements OnInit {
           }
           this.datqPage = 1;
           this.saveDatqPrefs();
+          // Clear active process — preprocessing completed
+          this.sharedService.setActiveProcess(null);
           // Navigate to Data Quality section
           if (this.datqSummary && this.datqSummary.length > 0) {
             this.currentStep = 'data quality';
@@ -1660,6 +1741,7 @@ export class ModelDevelopmentComponent implements OnInit {
         },
         (err: any) => {
           console.error('Failed to run preprocessing:', err);
+          this.sharedService.setActiveProcess(null); // clear on error too
         }
       );
   }
