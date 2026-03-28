@@ -524,11 +524,17 @@
           </div>
         </div>
 
-        <!-- View Details Button -->
-        <div *ngIf="sfsCompletedSteps.length > 0" style="margin-top: 16px; text-align: center;">
-          <button (click)="openSfsProgressModal()" 
+        <!-- Stop SFS + View Details Buttons -->
+        <div style="margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 12px;">
+          <button (click)="stopSfs()" [disabled]="sfsStopping"
+                  style="padding: 10px 24px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
+                  [style.opacity]="sfsStopping ? '0.6' : '1'"
+                  [style.cursor]="sfsStopping ? 'not-allowed' : 'pointer'">
+            {{ sfsStopping ? 'Stopping...' : 'Stop SFS' }}
+          </button>
+          <button *ngIf="sfsCompletedSteps.length > 0" (click)="openSfsProgressModal()" 
                   style="padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-            📊 View Details ({{ sfsCompletedSteps.length }} steps completed)
+            View Details ({{ sfsCompletedSteps.length }} steps)
           </button>
         </div>
 
@@ -551,7 +557,14 @@
             </div>
           </div>
           <!-- Action Buttons -->
-          <div style="display: flex; gap: 12px;">
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <button *ngIf="sfsStopped" (click)="resumeSfs()"
+                    style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              ▶ Continue SFS
+            </button>
+            <span *ngIf="sfsStopped" style="font-size: 12px; color: #e65100; font-weight: 500; background: #fff3e0; padding: 4px 10px; border-radius: 4px; border: 1px solid #ffe0b2;">
+              Partial results — stopped by user
+            </span>
             <button *ngIf="sfsCompletedSteps.length > 0" 
                     (click)="openSfsProgressModal()" 
                     style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">

@@ -36,6 +36,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   // SFS (Sequential Feature Selection) configuration and results
   sfsReady: boolean = false;  // Training data saved, ready to run SFS
   sfsRunning: boolean = false;
+  sfsStopping: boolean = false;  // Stop signal sent, waiting for current step to finish
+  sfsStopped: boolean = false;  // SFS was stopped by user (partial results available)
   sfsProgress: number = 0;
   sfsMessage: string = '';
   sfsDurationSeconds: number | null = null;
@@ -734,6 +736,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       sfsBackwardCutFeatures: this.sfsBackwardCutFeatures,
       sfsForwardFromBackwardResults: this.sfsForwardFromBackwardResults,
       sfsDurationSeconds: this.sfsDurationSeconds,
+      sfsStopped: this.sfsStopped,
     };
     this.sharedService.setModelingCheckpoint(state);
     this.sharedService.triggerCheckpoint(substep);
@@ -772,6 +775,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsBackwardCutFeatures = state.sfsBackwardCutFeatures || [];
     this.sfsForwardFromBackwardResults = state.sfsForwardFromBackwardResults || [];
     this.sfsDurationSeconds = state.sfsDurationSeconds ?? null;
+    this.sfsStopped = state.sfsStopped || false;
 
     // Re-sort selected features if modeling status is present
     if (this.modelingStatus) {
@@ -867,6 +871,16 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             this.sfsCurrentMetrics = statusData.current_metrics || {};
             this.sfsCompletedSteps = statusData.completed_steps || [];
             this.startSfsStatusPolling();
+          } else if (s === 'stopped' || s === 'interrupted') {
+            console.log(`[Modeling] Resume: SFS ${s} while away`);
+            this.sfsRunning = false;
+            this.sfsStopped = true;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
+            this.sfsMessage = s === 'interrupted'
+              ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
+              : 'SFS stopped — partial results available';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchSfsResults(), 500);
           } else if (s === 'error') {
             console.warn('[Modeling] Resume: SFS failed while away');
             this.sfsRunning = false;
@@ -1428,6 +1442,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsBackwardCutStep = null;
     this.sfsBackwardCutFeatures = [];
     this.sfsRunning = false;
+    this.sfsStopping = false;
+    this.sfsStopped = false;
     this.sfsProgress = 0;
     this.sfsMessage = '';
     this.sfsDurationSeconds = null;
@@ -1506,6 +1522,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     console.log('[SFS] Starting with config:', { methods, stoppingCriteria, excludedFeatures });
     
     this.sfsRunning = true;
+    this.sfsStopping = false;
+    this.sfsStopped = false;
     this.sfsProgress = 0;
     this.sfsMessage = 'Starting SFS...';
     this.sfsCurrentMetrics = {};
@@ -1525,6 +1543,70 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsRunning = false;
         this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
         this.sharedService.setActiveProcess(null); // clear on error
+      }
+    });
+  }
+
+  /**
+   * Stop SFS gracefully — sends signal, current step finishes, then partial results are saved
+   */
+  stopSfs(): void {
+    if (!this.currentFileId || !this.sfsRunning) return;
+    this.sfsStopping = true;
+    this.sfsMessage = 'Stopping SFS after current step completes...';
+    this.dataService.stopSfs(this.currentFileId).subscribe({
+      next: (resp: any) => {
+        console.log('[SFS] Stop signal sent:', resp);
+      },
+      error: (err: any) => {
+        console.error('[SFS] Stop request failed:', err);
+        this.sfsStopping = false;
+      }
+    });
+  }
+
+  /**
+   * Resume SFS from where it was stopped (uses resume_state saved on disk)
+   */
+  resumeSfs(): void {
+    if (!this.currentFileId) return;
+
+    // Rebuild methods and stopping criteria from current config
+    const methods: string[] = [];
+    if (this.sfsMethodForward) methods.push('forward');
+    if (this.sfsMethodBackward) methods.push('backward');
+    if (methods.length === 0) methods.push('backward'); // fallback
+
+    const stoppingCriteria = {
+      metrics: this.sfsMetrics,
+      min_features: this.sfsMinFeatures,
+      max_features: this.sfsMaxFeatures
+    };
+
+    const excludedFeatures = Object.keys(this.featureUsage).filter(f => this.featureUsage[f] === 'drop');
+
+    console.log('[SFS] Resuming with config:', { methods, stoppingCriteria, excludedFeatures });
+
+    this.sfsRunning = true;
+    this.sfsStopping = false;
+    this.sfsStopped = false;
+    this.sfsMessage = 'Resuming SFS...';
+
+    this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
+    this.dataService.resumeSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK).subscribe({
+      next: (resp: any) => {
+        console.log('[SFS] Resume started:', resp);
+        this.sfsMessage = resp.message || 'SFS resuming...';
+        this.startSfsStatusPolling();
+        // Checkpoint: sfsStopped is now false, active_process is set → persists on exit
+        this.pushModelingCheckpoint('sfs_running');
+      },
+      error: (err: any) => {
+        console.error('[SFS] Resume failed:', err);
+        this.sfsRunning = false;
+        this.sfsStopped = true; // revert to stopped state on failure
+        this.sfsMessage = 'Failed to resume SFS: ' + (err.message || err);
+        this.sharedService.setActiveProcess(null);
       }
     });
   }
@@ -1607,15 +1689,32 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           if (status === 'completed') {
             this.stopSfsStatusPolling();
             this.sfsRunning = false;
+            this.sfsStopping = false;
+            this.sfsStopped = false;
             this.sfsProgress = 1.0;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS completed successfully!';
             this.sharedService.setActiveProcess(null); // clear active process
             // Fetch final results
             setTimeout(() => this.fetchSfsResults(), 500);
+          } else if (status === 'stopped' || status === 'interrupted') {
+            this.stopSfsStatusPolling();
+            this.sfsRunning = false;
+            this.sfsStopping = false;
+            this.sfsStopped = true;
+            this.sfsDurationSeconds = statusData.duration_seconds || null;
+            this.sfsMessage = status === 'interrupted'
+              ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
+              : 'SFS stopped — partial results available';
+            this.sharedService.setActiveProcess(null);
+            // Fetch partial results
+            setTimeout(() => this.fetchSfsResults(), 500);
+            // Checkpoint so stopped state persists
+            this.pushModelingCheckpoint('sfs_stopped');
           } else if (status === 'error') {
             this.stopSfsStatusPolling();
             this.sfsRunning = false;
+            this.sfsStopping = false;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
             this.sharedService.setActiveProcess(null); // clear on error

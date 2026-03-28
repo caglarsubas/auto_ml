@@ -190,6 +190,37 @@ export class DataService {
     );
   }
 
+  // Stop SFS gracefully
+  stopSfs(fileId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/sfs/stop/${fileId}/`, {}).pipe(
+      catchError((error: any) => {
+        console.error('Error stopping SFS:', error);
+        return throwError(() => new Error(error.message || 'Failed to stop SFS'));
+      })
+    );
+  }
+
+  // Resume SFS from where it was stopped
+  resumeSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3): Observable<any> {
+    const payload: any = {
+      file_id: fileId,
+      methods: methods,
+      stopping_criteria: stoppingCriteria,
+      n_jobs: nJobs,
+      top_k: topK,
+      resume: true
+    };
+    if (excludedFeatures.length > 0) {
+      payload.excluded_features = excludedFeatures;
+    }
+    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error resuming SFS:', error);
+        return throwError(() => new Error(error.message || 'Failed to resume SFS'));
+      })
+    );
+  }
+
   // Get Sequential Feature Selection (SFS) results
   getSfsResults(fileId: number): Observable<any> {
     return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`).pipe(

@@ -538,7 +538,9 @@ def run_sfs_with_progress(
     cv_folds: int = 3,
     initial_features: Optional[List[str]] = None,  # Optional: Start with specific features
     n_jobs: int = 1,  # Number of parallel workers for candidate evaluation
-    top_k: int = 3  # Number of top candidates to CV-evaluate per step
+    top_k: int = 3,  # Number of top candidates to CV-evaluate per step
+    stop_flag: Optional[Dict] = None,  # Dict with 'stop_requested' key checked each step
+    resume_state: Optional[Dict] = None  # State to resume from (forward/backward completed steps)
 ) -> Dict[str, Any]:
     """
     Run SFS with user-specified methods, stopping criteria, and progress tracking.
@@ -560,7 +562,13 @@ def run_sfs_with_progress(
     """
     results = {'forward': [], 'backward': [], 'status': 'running'}
     completed_steps = []  # Track completed steps for real-time viewing
-    
+
+    def is_stop_requested():
+        """Check if stop has been requested via the shared progress dict."""
+        if stop_flag and stop_flag.get('stop_requested'):
+            return True
+        return False
+
     # Filter by initial_features if provided
     if initial_features:
         valid_features = [f for f in initial_features if f in X_train.columns]
@@ -599,13 +607,37 @@ def run_sfs_with_progress(
         
         # Run Forward Selection
         if 'forward' in methods:
-            update_status(f'Starting forward selection (max {max_features} features)...', 0.0)
-            
             forward_results = []
             selected_features = []
             previous_metrics = {mc['metric']: 0.0 for mc in metric_criteria}
+            forward_start_step = 1
+
+            # Resume from previous state if available
+            if resume_state and resume_state.get('forward_results'):
+                forward_results = resume_state['forward_results']
+                selected_features = resume_state.get('forward_selected_features', [])
+                previous_metrics = resume_state.get('forward_previous_metrics', previous_metrics)
+                forward_start_step = resume_state.get('forward_start_step', len(forward_results) + 1)
+                completed_steps = resume_state.get('completed_steps', [])
+                print(f"[SFS] Resuming forward from step {forward_start_step}, {len(selected_features)} features selected")
+
+            update_status(f'Starting forward selection (max {max_features} features)...', 0.0)
             
-            for step in range(1, max_features + 1):
+            for step in range(forward_start_step, max_features + 1):
+                if is_stop_requested():
+                    print(f"[SFS] Stop requested at forward step {step}")
+                    results['forward'] = forward_results
+                    results['status'] = 'stopped'
+                    results['stopped_at'] = {'direction': 'forward', 'step': step}
+                    results['resume_state'] = {
+                        'forward_results': forward_results,
+                        'forward_selected_features': selected_features,
+                        'forward_previous_metrics': previous_metrics,
+                        'forward_start_step': step,
+                        'completed_steps': completed_steps.copy()
+                    }
+                    update_status(f'SFS stopped by user at forward step {step}', step / max_features)
+                    return results
                 step_progress = (step / max_features) * method_progress_weight
                 update_status(f'Forward selection: Step {step}/{max_features}', step_progress)
                 
@@ -688,14 +720,48 @@ def run_sfs_with_progress(
         # Run Backward Elimination
         if 'backward' in methods:
             base_progress = method_progress_weight if 'forward' in methods else 0.0
-            update_status(f'Starting backward elimination (min {min_features} features)...', base_progress)
             
             backward_results = []
             current_features = list(X_train.columns)
             max_drops = len(current_features) - min_features
             previous_metrics = None
+            backward_start_step = 1
+
+            # Resume from previous state if available
+            if resume_state and resume_state.get('backward_results'):
+                backward_results = resume_state['backward_results']
+                current_features = resume_state.get('backward_current_features', current_features)
+                previous_metrics = resume_state.get('backward_previous_metrics', None)
+                backward_start_step = resume_state.get('backward_start_step', len(backward_results) + 1)
+                if not completed_steps and resume_state.get('completed_steps'):
+                    completed_steps = resume_state['completed_steps']
+                max_drops = len(list(X_train.columns)) - min_features  # recalculate from full columns
+                print(f"[SFS] Resuming backward from step {backward_start_step}, {len(current_features)} features remaining")
+
+            update_status(f'Starting backward elimination (min {min_features} features)...', base_progress)
             
-            for step in range(1, max_drops + 1):
+            for step in range(backward_start_step, max_drops + 1):
+                if is_stop_requested():
+                    print(f"[SFS] Stop requested at backward step {step}")
+                    results['backward'] = backward_results
+                    if backward_results:
+                        results['backward_remaining_features'] = current_features
+                    else:
+                        results['backward_remaining_features'] = list(X_train.columns)
+                    results['status'] = 'stopped'
+                    results['stopped_at'] = {'direction': 'backward', 'step': step}
+                    results['resume_state'] = {
+                        'backward_results': backward_results,
+                        'backward_current_features': current_features,
+                        'backward_previous_metrics': previous_metrics,
+                        'backward_start_step': step,
+                        'completed_steps': completed_steps.copy()
+                    }
+                    # Also include any forward results completed earlier
+                    if results.get('forward'):
+                        results['resume_state']['forward_results'] = results['forward']
+                    update_status(f'SFS stopped by user at backward step {step}', base_progress + (step / max_drops) * method_progress_weight)
+                    return results
                 step_progress = base_progress + (step / max_drops) * method_progress_weight
                 update_status(f'Backward elimination: Step {step}/{max_drops}', step_progress)
                 

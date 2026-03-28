@@ -1342,20 +1342,120 @@ class SFSStartView(APIView):
             # Initialize progress tracking
             import time as _time
             sfs_start_time = _time.time()
+            # Load resume state if requested
+            resume = data.get('resume', False)
+            resume_state = None
+            if resume:
+                sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+                if os.path.exists(sfs_path):
+                    try:
+                        with open(sfs_path, 'r', encoding='utf-8') as rf:
+                            saved = json.load(rf)
+                        if saved.get('resume_state'):
+                            # Graceful stop — resume_state was explicitly saved
+                            resume_state = saved['resume_state']
+                            print(f"[SFS] Loaded resume_state for file_id={file_id}: keys={list(resume_state.keys())}")
+                        elif saved.get('status') in ('running', 'interrupted', 'stopped'):
+                            # Interrupted (server restart) or stopped without resume_state —
+                            # build resume_state from the intermediate results on disk
+                            resume_state = {}
+                            fwd = saved.get('forward', [])
+                            bwd = saved.get('backward', [])
+                            if fwd:
+                                last_fwd = fwd[-1]
+                                resume_state['forward_results'] = fwd
+                                resume_state['forward_selected_features'] = last_fwd.get('selected_features', [])
+                                resume_state['forward_previous_metrics'] = {
+                                    k: last_fwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_fwd
+                                }
+                                resume_state['forward_start_step'] = last_fwd['step'] + 1
+                            if bwd:
+                                last_bwd = bwd[-1]
+                                resume_state['backward_results'] = bwd
+                                resume_state['backward_current_features'] = last_bwd.get('selected_features', [])
+                                resume_state['backward_previous_metrics'] = {
+                                    k: last_bwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_bwd
+                                }
+                                resume_state['backward_start_step'] = last_bwd['step'] + 1
+                            # Rebuild completed_steps from forward + backward results
+                            resume_state['completed_steps'] = fwd + bwd
+                            print(f"[SFS] Built resume_state from intermediate results: fwd={len(fwd)}, bwd={len(bwd)}")
+                    except Exception as re_err:
+                        print(f"[SFS] Failed to load resume state: {re_err}")
+
             SFS_PROGRESS[file_id] = {
                 'status': 'running',
-                'message': 'Starting SFS...',
+                'message': 'Resuming SFS...' if resume_state else 'Starting SFS...',
                 'progress': 0.0,
                 'current_metric': None,
                 'error': None,
-                'completed_steps': [],  # Track completed steps for real-time viewing
-                'duration_seconds': None
+                'completed_steps': resume_state.get('completed_steps', []) if resume_state else [],
+                'duration_seconds': None,
+                'stop_requested': False
             }
             
+            # Prepare paths and helpers shared by callback and thread
+            sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
+            os.makedirs(sfs_dir, exist_ok=True)
+            sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
+
+            def sanitize_sfs(results_list):
+                """Sanitize step dicts for JSON serialization (numpy → float)."""
+                sanitized = []
+                for item in results_list:
+                    sanitized_item = {
+                        'step': item['step'],
+                        'direction': item['direction'],
+                        'action': item['action'],
+                        'feature_name': item['feature_name'],
+                        'selected_features': item['selected_features'],
+                        'train_roc_auc': float(item['train_roc_auc']),
+                        'train_pr_auc': float(item['train_pr_auc']),
+                        'cv_roc_auc': float(item['cv_roc_auc']),
+                        'cv_pr_auc': float(item['cv_pr_auc']),
+                        'test_roc_auc': float(item['test_roc_auc']),
+                        'test_pr_auc': float(item['test_pr_auc']),
+                        'stability_type': item['stability_type'],
+                        'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
+                        'shap_importance': float(item['shap_importance']),
+                        'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
+                        'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
+                        'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
+                    }
+                    sanitized.append(sanitized_item)
+                return sanitized
+
+            _last_saved_step_count = [0]  # mutable for closure
+
+            def _save_intermediate(completed_steps):
+                """Persist intermediate results to disk so they survive server restarts."""
+                try:
+                    fwd = [s for s in completed_steps if s.get('direction') == 'forward']
+                    bwd = [s for s in completed_steps if s.get('direction') == 'backward']
+                    # Compute backward remaining features from last backward step
+                    bwd_remaining = bwd[-1]['selected_features'] if bwd else []
+                    intermediate = {
+                        'forward': sanitize_sfs(fwd),
+                        'backward': sanitize_sfs(bwd),
+                        'backward_remaining_features': bwd_remaining,
+                        'forward_from_backward': [],
+                        'status': 'running',
+                        'error': None
+                    }
+                    with open(sfs_path, 'w', encoding='utf-8') as f:
+                        json.dump(intermediate, f, indent=2)
+                except Exception as save_err:
+                    print(f"[SFS] Intermediate save error: {save_err}")
+
             # Define status callback
             def update_progress(status_info):
                 SFS_PROGRESS[file_id].update(status_info)
-                print(f"[SFS-Progress] {status_info}")
+                # Save intermediate results to disk after each new completed step
+                completed = status_info.get('completed_steps', [])
+                if len(completed) > _last_saved_step_count[0]:
+                    _last_saved_step_count[0] = len(completed)
+                    _save_intermediate(completed)
+                print(f"[SFS-Progress] {status_info.get('message', '')}")
             
             # Run SFS in background thread
             def run_sfs_thread():
@@ -1373,41 +1473,12 @@ class SFSStartView(APIView):
                         cv_folds=3,
                         initial_features=initial_features,
                         n_jobs=n_jobs,
-                        top_k=top_k
+                        top_k=top_k,
+                        stop_flag=SFS_PROGRESS[file_id],
+                        resume_state=resume_state
                     )
                     
-                    # Save results to JSON
-                    sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
-                    os.makedirs(sfs_dir, exist_ok=True)
-                    sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
-                    
-                    # Sanitize results for JSON serialization
-                    def sanitize_sfs(results_list):
-                        sanitized = []
-                        for item in results_list:
-                            sanitized_item = {
-                                'step': item['step'],
-                                'direction': item['direction'],
-                                'action': item['action'],
-                                'feature_name': item['feature_name'],
-                                'selected_features': item['selected_features'],
-                                'train_roc_auc': float(item['train_roc_auc']),
-                                'train_pr_auc': float(item['train_pr_auc']),
-                                'cv_roc_auc': float(item['cv_roc_auc']),
-                                'cv_pr_auc': float(item['cv_pr_auc']),
-                                'test_roc_auc': float(item['test_roc_auc']),
-                                'test_pr_auc': float(item['test_pr_auc']),
-                                'stability_type': item['stability_type'],
-                                'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
-                                'shap_importance': float(item['shap_importance']),
-                                'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
-                                'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
-                                'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
-                            }
-                            sanitized.append(sanitized_item)
-                        return sanitized
-                    
-                    # Merge with existing results to preserve previous runs (e.g. backward when forward-from-backward runs)
+                    # Final save — merge with existing results to preserve previous runs
                     existing_data = {}
                     if os.path.exists(sfs_path):
                         try:
@@ -1428,17 +1499,28 @@ class SFSStartView(APIView):
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None)
                     }
+
+                    # Persist resume_state if stopped (for continue later)
+                    if results.get('status') == 'stopped' and results.get('resume_state'):
+                        sfs_data['resume_state'] = results['resume_state']
+                        sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(sfs_data, f, indent=2)
                     
                     elapsed = round(_time.time() - sfs_start_time, 1)
-                    SFS_PROGRESS[file_id]['status'] = 'completed'
-                    SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
-                    SFS_PROGRESS[file_id]['progress'] = 1.0
-                    SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
-                    
-                    print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
+
+                    if results.get('status') == 'stopped':
+                        SFS_PROGRESS[file_id]['status'] = 'stopped'
+                        SFS_PROGRESS[file_id]['message'] = 'SFS stopped by user'
+                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
+                        print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
+                    else:
+                        SFS_PROGRESS[file_id]['status'] = 'completed'
+                        SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
+                        SFS_PROGRESS[file_id]['progress'] = 1.0
+                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
+                        print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
                     
                 except Exception as e:
                     elapsed = round(_time.time() - sfs_start_time, 1)
@@ -1477,21 +1559,82 @@ class SFSStartView(APIView):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
+class SFSStopView(APIView):
+    """Request SFS to stop gracefully for a given file_id.
+    The background thread checks stop_requested flag at each step."""
+    
+    def post(self, request, file_id: int, *args, **kwargs):
+        try:
+            if file_id not in SFS_PROGRESS:
+                return Response({
+                    'error': 'No SFS process found for this file_id',
+                    'file_id': file_id
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            current_status = SFS_PROGRESS[file_id].get('status')
+            if current_status != 'running':
+                return Response({
+                    'message': f'SFS is not running (status: {current_status})',
+                    'file_id': file_id,
+                    'status': current_status
+                }, status=status.HTTP_200_OK)
+            
+            # Set the stop flag — the background thread checks this before each step
+            SFS_PROGRESS[file_id]['stop_requested'] = True
+            print(f"[SFS] Stop requested for file_id={file_id}")
+            
+            return Response({
+                'message': 'Stop signal sent. SFS will stop after the current step completes.',
+                'file_id': file_id,
+                'status': 'stop_requested'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
 class SFSStatusView(APIView):
     """Get current SFS progress/status for a file_id."""
     
     def get(self, request, file_id: int, *args, **kwargs):
         try:
             if file_id not in SFS_PROGRESS:
-                # Check if SFS results already exist
+                # No in-memory progress — check if results file exists on disk
                 sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
                 if os.path.exists(sfs_path):
-                    return Response({
-                        'status': 'completed',
-                        'message': 'SFS already completed',
-                        'progress': 1.0,
-                        'file_id': file_id
-                    }, status=status.HTTP_200_OK)
+                    try:
+                        with open(sfs_path, 'r', encoding='utf-8') as rf:
+                            file_data = json.load(rf)
+                        file_status = file_data.get('status', 'completed')
+                    except Exception:
+                        file_status = 'completed'
+
+                    if file_status == 'running':
+                        # File says "running" but no in-memory progress → process was interrupted
+                        # (e.g. server restart killed the background thread)
+                        return Response({
+                            'status': 'interrupted',
+                            'message': 'SFS was interrupted (server restart). Partial results saved — you can continue.',
+                            'progress': 0.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
+                    elif file_status == 'stopped':
+                        return Response({
+                            'status': 'stopped',
+                            'message': 'SFS was stopped by user. Partial results available.',
+                            'progress': 0.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
+                    else:
+                        return Response({
+                            'status': 'completed',
+                            'message': 'SFS already completed',
+                            'progress': 1.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
                 else:
                     return Response({
                         'status': 'not_started',
