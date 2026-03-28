@@ -372,3 +372,100 @@
 .status-badge.dropped {
   color: var(--error-600);
 }
+
+/* Per-chart fullscreen button wrapper */
+.sfs-chart-wrapper {
+  position: relative;
+}
+
+.sfs-chart-fullscreen-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--neutral-600);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+}
+
+.sfs-chart-wrapper:hover .sfs-chart-fullscreen-btn {
+  opacity: 1;
+}
+
+.sfs-chart-fullscreen-btn:hover {
+  background: var(--neutral-100);
+  color: var(--primary-700);
+  border-color: var(--primary-300);
+}
+
+/* Per-plot fullscreen overlay */
+.sfs-plot-fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.sfs-plot-fullscreen-container {
+  width: 94vw;
+  height: 90vh;
+  background: white;
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-2xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalSlideUp 0.25s ease-out;
+}
+
+.sfs-plot-fullscreen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, var(--primary-700) 0%, var(--primary-900) 100%);
+  flex-shrink: 0;
+}
+
+.sfs-plot-fullscreen-title {
+  color: white;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+}
+
+.sfs-plot-fullscreen-close {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sfs-plot-fullscreen-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

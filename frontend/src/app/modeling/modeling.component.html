@@ -820,17 +820,32 @@
               </p>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                <div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('shap')" title="View full screen">⛶</button>
                   <div id="sfs-progression-shap" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
                 </div>
-                <div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('gain')" title="View full screen">⛶</button>
                   <div id="sfs-progression-gain" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
                 </div>
-                <div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('stability')" title="View full screen">⛶</button>
                   <div id="sfs-progression-stability" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
                 </div>
-                <div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('performance')" title="View full screen">⛶</button>
                   <div id="sfs-progression-performance" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+              </div>
+
+              <!-- Per-plot fullscreen overlay -->
+              <div *ngIf="fullscreenPlotId" class="sfs-plot-fullscreen-overlay" (click)="togglePlotFullscreen(null)">
+                <div class="sfs-plot-fullscreen-container" (click)="$event.stopPropagation()">
+                  <div class="sfs-plot-fullscreen-header">
+                    <span class="sfs-plot-fullscreen-title">{{ getPlotTitle(fullscreenPlotId) }}</span>
+                    <button class="sfs-plot-fullscreen-close" (click)="togglePlotFullscreen(null)" title="Exit full screen">&times;</button>
+                  </div>
+                  <div id="sfs-fullscreen-plot" style="width: 100%; height: calc(100% - 48px);"></div>
                 </div>
               </div>
             </div>

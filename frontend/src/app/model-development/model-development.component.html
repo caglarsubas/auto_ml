@@ -99,10 +99,10 @@
       </div>
 
       <!-- Step Progress -->
-      <div style="width: 140px; flex-shrink: 0;">
-        <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center;">{{ getStepLabel(run.current_step) }}</div>
+      <div style="width: 180px; flex-shrink: 0;">
+        <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center;">{{ getDetailedStepLabel(run) }}</div>
         <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
-          <div [style.width.%]="getStepProgress(run.current_step)" style="height: 100%; background: #1565c0; border-radius: 3px; transition: width 0.3s;"></div>
+          <div [style.width.%]="getDetailedStepProgress(run)" style="height: 100%; background: #1565c0; border-radius: 3px; transition: width 0.3s;"></div>
         </div>
       </div>
 

@@ -47,6 +47,7 @@ export class ModelDevelopmentComponent implements OnInit {
   private _pendingCheckpoint: boolean = false;
   private _highWaterStep: string = 'declaration';
   private _lastModelingSubstep: string | null = null;
+  detailedStep: string = '1a_pipeline_declaration';
   private _pipelineConfigSaveTimer: any = null;
   // Autosave toggle & dirty-state tracking (persisted in localStorage)
   autosaveEnabled: boolean = true;
@@ -770,6 +771,7 @@ export class ModelDevelopmentComponent implements OnInit {
         // Only transition to preprocessing if we're still at declaration (prevent regression)
         if (initiated && this.currentStep === 'declaration') {
           this.currentStep = 'preprocessing';
+          this.detailedStep = '2a_purifier_declaration';
           // Auto-save checkpoint: preprocessing
           this.saveCheckpoint('preprocessing');
         }
@@ -800,10 +802,15 @@ export class ModelDevelopmentComponent implements OnInit {
         let step: string;
         if (substep.startsWith('decl_')) {
           step = 'declaration';
+          // Map declaration substeps to detailed taxonomy
+          if (substep === 'decl_data_imported') this.detailedStep = '1b_data_declaration';
+          else if (substep === 'decl_dictionary_generated') this.detailedStep = '1c_dictionary_declaration';
         } else if (substep.startsWith('sfs_')) {
           step = 'sfs';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
         } else {
           step = 'modeling';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
         }
         this.saveCheckpoint(step);
       })
@@ -821,6 +828,7 @@ export class ModelDevelopmentComponent implements OnInit {
           console.log(`[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`);
           this._lastModelingSubstep = substep;
           const step = substep.startsWith('sfs_') ? 'sfs' : 'modeling';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
           this.saveCheckpoint(step);
         }
       })
@@ -838,6 +846,7 @@ export class ModelDevelopmentComponent implements OnInit {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
+    this.detailedStep = '3a_encoding';
     // Auto-save checkpoint: modeling
     this.saveCheckpoint('modeling');
     // Smooth scroll to modeling section
@@ -1264,14 +1273,83 @@ export class ModelDevelopmentComponent implements OnInit {
     if (this.showSavedPipelines) this.loadSavedPipelines();
   }
 
+  // ── Granular step taxonomy ──
+  private static readonly DETAILED_STEPS: string[] = [
+    '1a_pipeline_declaration', '1b_data_declaration', '1c_dictionary_declaration',
+    '2a_purifier_declaration', '2b_data_quality_summary',
+    '3a_encoding', '3b_modeling', '3c_sfs', '3ci_sfs_backward'
+  ];
+
+  private static readonly DETAILED_LABELS: {[k: string]: string} = {
+    '1a_pipeline_declaration': 'Pipeline Declaration',
+    '1b_data_declaration': 'Data Declaration',
+    '1c_dictionary_declaration': 'Dictionary Declaration',
+    '2a_purifier_declaration': 'Data Purifier Declaration',
+    '2b_data_quality_summary': 'Data Quality Summary',
+    '3a_encoding': 'Categorical Feature Encoding',
+    '3b_modeling': 'Modeling',
+    '3c_sfs': 'SFS',
+    '3ci_sfs_backward': 'SFS Backward'
+  };
+
+  /** Map a modeling child-component substep to the detailed taxonomy */
+  private mapModelingSubstepToDetailed(substep: string): string {
+    if (substep === 'algorithm_selected' || substep === 'encoding_completed') return '3a_encoding';
+    if (substep === 'modeling_started' || substep === 'modeling_completed') return '3b_modeling';
+    if (substep === 'sfs_backward_completed') return '3ci_sfs_backward';
+    if (substep.startsWith('sfs_')) return '3c_sfs';
+    return this.detailedStep; // keep current if unknown
+  }
+
+  /** Infer detailed step from coarse step + state (for old checkpoints without detailed_step) */
+  private inferDetailedStep(coarseStep: string, state: any): string {
+    const modelingSub = (state.modeling || {}).substep || '';
+    switch (coarseStep) {
+      case 'declaration':
+        if (state.file_id) return '1b_data_declaration';
+        return '1a_pipeline_declaration';
+      case 'preprocessing':
+        return '2a_purifier_declaration';
+      case 'data_quality':
+        return '2b_data_quality_summary';
+      case 'modeling':
+        if (modelingSub) return this.mapModelingSubstepToDetailed(modelingSub);
+        return '3a_encoding';
+      case 'sfs':
+        if (modelingSub) return this.mapModelingSubstepToDetailed(modelingSub);
+        return '3c_sfs';
+      default:
+        return '1a_pipeline_declaration';
+    }
+  }
+
   getStepIndex(step: string): number {
     const steps = ['declaration', 'preprocessing', 'data_quality', 'modeling', 'sfs', 'evaluation', 'deployment'];
     const idx = steps.indexOf(step);
     return idx >= 0 ? idx : 0;
   }
 
+  getDetailedStepProgress(run: any): number {
+    const ds = run.detailed_step || run.state?.detailed_step;
+    if (ds) {
+      const idx = ModelDevelopmentComponent.DETAILED_STEPS.indexOf(ds);
+      if (idx >= 0) return Math.round(((idx + 1) / ModelDevelopmentComponent.DETAILED_STEPS.length) * 100);
+    }
+    // Fallback to coarse step
+    return Math.round(((this.getStepIndex(run.current_step) + 1) / 7) * 100);
+  }
+
   getStepProgress(step: string): number {
     return Math.round(((this.getStepIndex(step) + 1) / 7) * 100);
+  }
+
+  getDetailedStepLabel(run: any): string {
+    const ds = run.detailed_step || run.state?.detailed_step;
+    if (ds && ModelDevelopmentComponent.DETAILED_LABELS[ds]) {
+      return ModelDevelopmentComponent.DETAILED_LABELS[ds];
+    }
+    // Fallback
+    return this.getStepLabel(run.current_step);
   }
 
   getStepLabel(step: string): string {
@@ -1292,6 +1370,7 @@ export class ModelDevelopmentComponent implements OnInit {
       file_id: this.currentFileId,
       pipeline_type: this.selectedPipeline,
       current_step: this.currentStep === 'data quality' ? 'data_quality' : this.currentStep,
+      detailed_step: this.detailedStep,
       preprocessing: {
         purifier_option_ids: this.selectedOptions.map(o => o.id),
         split_strategy: this.splitStrategy,
@@ -1405,6 +1484,9 @@ export class ModelDevelopmentComponent implements OnInit {
         this.currentStep = step;
         const restoredStepKey = step === 'data quality' ? 'data_quality' : step;
         this._highWaterStep = restoredStepKey;
+
+        // ── 1b. Restore detailed step ──
+        this.detailedStep = s.detailed_step || this.inferDetailedStep(restoredStepKey, s);
 
         // ── 2. Restore identity & clear dirty state ──
         this.activePipelineRunId = run.id;
@@ -1541,6 +1623,7 @@ export class ModelDevelopmentComponent implements OnInit {
             this.currentStep = 'data quality';
             this._highWaterStep = 'data_quality';
             this.preprocessingAvailable = true;
+            this.detailedStep = '2b_data_quality_summary';
           }
           // Clear active process and save
           this.sharedService.setActiveProcess(null);
@@ -1628,6 +1711,7 @@ export class ModelDevelopmentComponent implements OnInit {
       this.modelingAvailable = false;
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
+      this.detailedStep = '1a_pipeline_declaration';
       // Start pipeline
       this.sharedService.setStarted(true);
       // Initial creation checkpoint: always force through
@@ -1689,6 +1773,7 @@ export class ModelDevelopmentComponent implements OnInit {
     this.isProcessing = true;
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
+    this.detailedStep = '2a_purifier_declaration';
     this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
     this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables)
       .pipe(finalize(() => { this.isProcessing = false; }))
@@ -1729,6 +1814,7 @@ export class ModelDevelopmentComponent implements OnInit {
           // Navigate to Data Quality section
           if (this.datqSummary && this.datqSummary.length > 0) {
             this.currentStep = 'data quality';
+            this.detailedStep = '2b_data_quality_summary';
             // Auto-save checkpoint: data_quality
             this.saveCheckpoint('data_quality');
             setTimeout(() => {
@@ -1852,6 +1938,7 @@ export class ModelDevelopmentComponent implements OnInit {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
+    this.detailedStep = '3a_encoding';
     // Auto-save checkpoint: modeling
     this.saveCheckpoint('modeling');
     setTimeout(() => {

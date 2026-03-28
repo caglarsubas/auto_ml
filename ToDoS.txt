@@ -8,11 +8,8 @@ z: bug-fix or hot-fix
 
 !CFH!
 
-- user can leave the pipeline while any of the process (preprocessing, modelling, sfs, etc.) being run. when user saves the state and comes back, the pipeline should continue from where it was left (maybe the ongoing process finished or still continues)
-- user should be able to add commentary lines. between each pre-located objects (figures, tables, menus, etc.) in the pipeline in the aim of taking decision notes about the flow for future investigations. these notes should saved as well in our autosaving or manuel-saving mechanism.
-
-
-this is the major and minor step taxonomy you should use in checkpiont saving schema:
+- (ongong)each plot in feature-impact details modal which is being opened via view buttons of details column in sfs result table can be full screen individually
+- (waiting in queue) for the attached pipeline being saved, we are currently at Modeling-SFS step but the saved-pipelines menu shows it as in modeling step. we should implement a more granular status illustration for pipelines. this is the major and minor step taxonomy you should use in checkpiont saving schema:
 1- Declaration
 1.a- Pipeline Declaration
 1.b- Data Declaration
@@ -25,9 +22,9 @@ this is the major and minor step taxonomy you should use in checkpiont saving sc
 3.b- Modeling (Start Modeling button)
 3.c- SFS
 3.c.i- SFS Backward (if firstly run before the consecutive forward selection run) 
+You can use these hierarcy and taxonomy for naming the status of pipelines in saved-pipeline list
 
-we must keep all the UI-table inputs (checkboxes or dropdown menu selections or open-text enterances) in the saved checkpoint object. so user can continue exactly where he left
-
+- user should be able to add commentary lines. between each pre-located objects (figures, tables, menus, etc.) in the pipeline in the aim of taking decision notes about the flow for future investigations. these notes should saved as well in our autosaving or manuel-saving mechanism.
 - there should be a stop sfs button under the progress bar. when pushed we should show the completed steps and the results depending only on those completed steps. then user can be click the continue button where we should keep moving the paused process of SFS from where it was being stopped
 - currently each pipeline run is stateless. hence user cannot continue where she/he left if wants to make a pause of the flow. Each pipeline run should be saved with a unique name (pipeline-type + timestamp) that can be changed by user and add checkpoints on every step completion that user can quit and come back to continue from the last checkpoint
 - in a pipeline run, user should be able to go backward (revert) between steps. for example, while in the modelling step user can walk 1 step back and can change the configuration of preprocessing step and restart it

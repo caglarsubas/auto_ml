@@ -69,6 +69,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   previousSfsStep: any | null = null;  // Previous step for comparison
   showSfsModal: boolean = false;
   sfsModalExpanded: boolean = false;
+  fullscreenPlotId: string | null = null;  // Per-plot fullscreen ('shap'|'gain'|'stability'|'performance'|null)
 
   // Utility for template
   Object = Object;
@@ -1690,6 +1691,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   closeSfsModal(): void {
     this.showSfsModal = false;
     this.sfsModalExpanded = false;
+    this.fullscreenPlotId = null;
     this.selectedSfsStep = null;
     this.previousSfsStep = null;
   }
@@ -1697,6 +1699,144 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   toggleSfsModalExpand(): void {
     this.sfsModalExpanded = !this.sfsModalExpanded;
     setTimeout(() => this.drawSfsFeatureProgressionCharts(), 100);
+  }
+
+  /** Toggle individual plot fullscreen */
+  togglePlotFullscreen(plotId: string | null): void {
+    if (this.fullscreenPlotId === plotId || plotId === null) {
+      // Closing fullscreen
+      this.fullscreenPlotId = null;
+      // Redraw original charts after overlay closes
+      setTimeout(() => this.drawSfsFeatureProgressionCharts(), 100);
+    } else {
+      // Opening fullscreen
+      this.fullscreenPlotId = plotId;
+      // Draw into fullscreen container after Angular renders it
+      setTimeout(() => this.drawFullscreenPlot(plotId), 50);
+    }
+  }
+
+  /** Get human-readable title for a plot ID */
+  getPlotTitle(plotId: string | null): string {
+    const titles: Record<string, string> = {
+      'shap': 'SHAP Impact per Feature Across Steps',
+      'gain': 'Gain Importance per Feature Across Steps',
+      'stability': 'Stability Metric (PSI/CSI) per Step',
+      'performance': 'Model Performance Across Steps'
+    };
+    return titles[plotId || ''] || '';
+  }
+
+  /** Draw a single plot into the fullscreen container */
+  private drawFullscreenPlot(plotId: string): void {
+    if (!this.isBrowser) return;
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) return;
+    const data = this.buildFeatureProgressionData();
+    if (!data) return;
+
+    const targetEl = document.getElementById('sfs-fullscreen-plot');
+    if (!targetEl) return;
+
+    const currentFeature = this.selectedSfsStep?.feature_name;
+    const currentStep = this.selectedSfsStep?.step;
+
+    const colors = [
+      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+      '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+    ];
+
+    const currentStepLine = (yMin: number, yMax: number): any => ({
+      type: 'line', x0: currentStep, x1: currentStep, y0: yMin, y1: yMax,
+      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' }
+    });
+    const currentStepAnnotation = (yPos: number): any => ({
+      x: currentStep, y: yPos, xanchor: 'left', yanchor: 'bottom',
+      text: ` Step ${currentStep}`, showarrow: false,
+      font: { size: 12, color: 'crimson' }, bgcolor: 'rgba(255,255,255,0.8)'
+    });
+    const baseLayout = {
+      margin: { l: 70, r: 30, t: 50, b: 60 },
+      hovermode: 'x unified' as const,
+      legend: { orientation: 'h' as const, x: 0, y: -0.15, xanchor: 'left' as const, yanchor: 'top' as const, font: { size: 11 } },
+      xaxis: { title: { text: 'SFS Step', font: { size: 14 } }, dtick: 1 }
+    };
+    const config = { responsive: true, displayModeBar: true } as any;
+
+    let traces: any[] = [];
+    let layout: any = {};
+
+    if (plotId === 'shap') {
+      data.featureNames.forEach((feat: string, i: number) => {
+        const isHighlighted = feat === currentFeature;
+        traces.push({
+          type: 'scatter', mode: 'lines+markers', connectgaps: false,
+          x: data.steps, y: data.shap[feat], name: feat,
+          line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
+          marker: { size: isHighlighted ? 8 : 4 },
+          opacity: isHighlighted ? 1.0 : 0.5,
+          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`
+        });
+      });
+      const allVals = Object.values(data.shap).flat().filter((v: any) => v != null) as number[];
+      const yMin = Math.min(0, ...allVals);
+      const yMax = Math.max(...allVals) * 1.1 || 1;
+      layout = { ...baseLayout, title: { text: 'SHAP Impact per Feature Across Steps', font: { size: 16 } },
+        yaxis: { title: { text: 'Mean |SHAP|', font: { size: 14 } } },
+        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+    } else if (plotId === 'gain') {
+      data.featureNames.forEach((feat: string, i: number) => {
+        const isHighlighted = feat === currentFeature;
+        traces.push({
+          type: 'scatter', mode: 'lines+markers', connectgaps: false,
+          x: data.steps, y: data.gain[feat], name: feat,
+          line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
+          marker: { size: isHighlighted ? 8 : 4 },
+          opacity: isHighlighted ? 1.0 : 0.5,
+          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`
+        });
+      });
+      const allVals = Object.values(data.gain).flat().filter((v: any) => v != null) as number[];
+      const yMin = Math.min(0, ...allVals);
+      const yMax = Math.max(...allVals) * 1.1 || 1;
+      layout = { ...baseLayout, title: { text: 'Gain Importance per Feature Across Steps', font: { size: 16 } },
+        yaxis: { title: { text: 'XGBoost Gain', font: { size: 14 } } },
+        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+    } else if (plotId === 'stability') {
+      const stabVals = data.stability.values;
+      const stabTexts = data.stability.types.map((t: string, i: number) =>
+        `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`
+      );
+      traces = [{ type: 'scatter', mode: 'lines+markers', x: data.steps, y: stabVals,
+        name: 'PSI / CSI', line: { color: '#e377c2', width: 2 }, marker: { size: 6 },
+        text: stabTexts, hovertemplate: '%{text}<extra></extra>' }];
+      const cleanVals = stabVals.filter((v: any) => v != null) as number[];
+      const yMax = cleanVals.length > 0 ? Math.max(...cleanVals) * 1.3 || 0.1 : 0.1;
+      layout = { ...baseLayout, title: { text: 'Stability Metric (PSI/CSI) per Step', font: { size: 16 } },
+        yaxis: { title: { text: 'PSI / CSI', font: { size: 14 } }, rangemode: 'tozero' as const },
+        shapes: [currentStepLine(0, yMax),
+          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.1, y1: 0.1, line: { color: '#ff9800', width: 1, dash: 'dash' } },
+          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.25, y1: 0.25, line: { color: '#f44336', width: 1, dash: 'dash' } }],
+        annotations: [currentStepAnnotation(yMax),
+          { x: data.steps[data.steps.length - 1], y: 0.1, xanchor: 'right', yanchor: 'bottom', text: 'Caution (0.1)', showarrow: false, font: { size: 10, color: '#ff9800' } },
+          { x: data.steps[data.steps.length - 1], y: 0.25, xanchor: 'right', yanchor: 'bottom', text: 'Unstable (0.25)', showarrow: false, font: { size: 10, color: '#f44336' } }] };
+    } else if (plotId === 'performance') {
+      traces = [
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvRocAuc, name: 'CV ROC-AUC', line: { color: '#1f77b4', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvPrAuc, name: 'CV PR-AUC', line: { color: '#ff7f0e', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.trainRocAuc, name: 'Train ROC-AUC', line: { color: '#1f77b4', width: 1, dash: 'dash' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.testRocAuc, name: 'Test ROC-AUC', line: { color: '#2ca02c', width: 1, dash: 'dot' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>' }
+      ];
+      const allPerf = [...data.modelMetrics.cvRocAuc, ...data.modelMetrics.cvPrAuc, ...data.modelMetrics.trainRocAuc, ...data.modelMetrics.testRocAuc].filter((v: number) => Number.isFinite(v));
+      const yMin = Math.min(...allPerf) * 0.95 || 0;
+      const yMax = Math.max(...allPerf) * 1.02 || 1;
+      layout = { ...baseLayout, title: { text: 'Model Performance Across Steps', font: { size: 16 } },
+        yaxis: { title: { text: 'Metric Value', font: { size: 14 } }, range: [yMin, yMax] },
+        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+    }
+
+    try { Plotly.newPlot(targetEl, traces, layout, config); } catch (e) { console.error('[Modeling] Fullscreen plot error:', e); }
   }
 
   /**

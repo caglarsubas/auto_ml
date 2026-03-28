@@ -1626,17 +1626,49 @@ class PipelineRunListView(APIView):
         runs = PipelineRun.objects.all()
         data = []
         for run in runs:
+            state = run.state or {}
+            detailed_step = state.get('detailed_step', None)
+            # For backward-compat: if no detailed_step, infer from coarse step + modeling substep
+            if not detailed_step:
+                modeling_sub = (state.get('modeling') or {}).get('substep', '')
+                detailed_step = self._infer_detailed_step(run.current_step, modeling_sub, state.get('file_id'))
             data.append({
                 'id': run.id,
                 'name': run.name,
                 'pipeline_type': run.pipeline_type,
                 'file_id': run.file_id,
                 'current_step': run.current_step,
+                'detailed_step': detailed_step,
                 'status': run.status,
                 'created_at': run.created_at.isoformat(),
                 'updated_at': run.updated_at.isoformat(),
             })
         return Response(data, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _infer_detailed_step(current_step, modeling_sub, file_id):
+        """Infer granular detailed_step from coarse step + modeling substep (backward compat)."""
+        _SUB_MAP = {
+            'algorithm_selected': '3a_encoding',
+            'encoding_completed': '3a_encoding',
+            'modeling_started': '3b_modeling',
+            'modeling_completed': '3b_modeling',
+            'sfs_backward_completed': '3ci_sfs_backward',
+        }
+        if current_step == 'declaration':
+            return '1b_data_declaration' if file_id else '1a_pipeline_declaration'
+        elif current_step == 'preprocessing':
+            return '2a_purifier_declaration'
+        elif current_step == 'data_quality':
+            return '2b_data_quality_summary'
+        elif current_step in ('modeling', 'sfs'):
+            if modeling_sub:
+                if modeling_sub in _SUB_MAP:
+                    return _SUB_MAP[modeling_sub]
+                if modeling_sub.startswith('sfs_'):
+                    return '3c_sfs'
+            return '3a_encoding' if current_step == 'modeling' else '3c_sfs'
+        return '1a_pipeline_declaration'
 
 
 @method_decorator(csrf_exempt, name='dispatch')
