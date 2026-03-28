@@ -36,6 +36,11 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   preprocessingInitiated: boolean = false;
   private apiBase = environment.apiBaseUrl;
 
+  // Pipeline commentary notes (synced via SharedService)
+  pipelineNotes: { [position: string]: string } = {};
+  editingNotePosition: string | null = null;
+  private _noteSaveTimer: any = null;
+
   // Split controls for PSI/CSI computation in Data Dictionary
   splitStrategy: 'random' | 'oot' = 'random';
   splitDateColumn: string | null = null;
@@ -61,6 +66,13 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       ]).subscribe(([isStarted, selectedPipeline, preprocessingInitiated]) => {
         this.showContent = isStarted && !!selectedPipeline;
         this.preprocessingInitiated = preprocessingInitiated;
+      })
+    );
+
+    // Sync pipeline notes from SharedService
+    this.subscription.add(
+      this.sharedService.pipelineNotes$.subscribe((notes) => {
+        this.pipelineNotes = notes;
       })
     );
 
@@ -94,6 +106,32 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     if (this.subscription) {
       this.subscription.unsubscribe();
     }
+  }
+
+  // ── Pipeline Commentary Notes ──
+
+  onNoteChanged(position: string, content: string): void {
+    this.pipelineNotes[position] = content;
+    this.sharedService.updatePipelineNote(position, content);
+    if (this._noteSaveTimer) clearTimeout(this._noteSaveTimer);
+    this._noteSaveTimer = setTimeout(() => {
+      this.sharedService.triggerCheckpoint('decl_note_updated');
+    }, 1000);
+  }
+
+  toggleNoteEdit(position: string): void {
+    this.editingNotePosition = this.editingNotePosition === position ? null : position;
+  }
+
+  deleteNote(position: string): void {
+    delete this.pipelineNotes[position];
+    this.sharedService.updatePipelineNote(position, '');
+    this.editingNotePosition = null;
+    this.sharedService.triggerCheckpoint('decl_note_updated');
+  }
+
+  hasNote(position: string): boolean {
+    return !!this.pipelineNotes[position]?.trim();
   }
 
   onFilesSelected(event: any): void {

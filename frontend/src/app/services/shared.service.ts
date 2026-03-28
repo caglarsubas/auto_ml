@@ -122,6 +122,28 @@ export class SharedService {
     return this.autosaveEnabledSubject.getValue();
   }
 
+  // Pipeline commentary notes (Jupyter-notebook style, keyed by position)
+  private pipelineNotesSubject = new BehaviorSubject<{ [position: string]: string }>({});
+  pipelineNotes$: Observable<{ [position: string]: string }> = this.pipelineNotesSubject.asObservable();
+
+  setPipelineNotes(notes: { [position: string]: string }): void {
+    this.pipelineNotesSubject.next(notes);
+  }
+
+  getPipelineNotes(): { [position: string]: string } {
+    return this.pipelineNotesSubject.getValue();
+  }
+
+  updatePipelineNote(position: string, content: string): void {
+    const notes = { ...this.pipelineNotesSubject.getValue() };
+    if (content.trim()) {
+      notes[position] = content;
+    } else {
+      delete notes[position];
+    }
+    this.pipelineNotesSubject.next(notes);
+  }
+
   // Active process tracking for pipeline resume (preprocessing/modeling/sfs)
   private activeProcessSubject = new BehaviorSubject<{ type: string; file_id: number } | null>(null);
   activeProcess$: Observable<{ type: string; file_id: number } | null> = this.activeProcessSubject.asObservable();

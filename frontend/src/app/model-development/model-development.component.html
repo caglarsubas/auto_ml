@@ -209,6 +209,24 @@
       </ng-container>
     </div>
 
+    <!-- Note: After Preprocessing Config -->
+    <div class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-add" (click)="toggleNoteEdit('after_preprocessing_config')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_preprocessing_config')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_preprocessing_config'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_preprocessing_config')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_preprocessing_config')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_preprocessing_config'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_preprocessing_config'] || ''" (ngModelChange)="onNoteChanged('after_preprocessing_config', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <!-- Run preprocessing to compute Data Quality summary -->
     <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
       <button mat-raised-button color="primary"
@@ -249,6 +267,24 @@
         </ng-template>
       </div>
     </div>
+    <!-- Note: After Purifier Summary -->
+    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-add" (click)="toggleNoteEdit('after_purifier_summary')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_purifier_summary')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_purifier_summary'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_purifier_summary')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_purifier_summary')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_purifier_summary'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_purifier_summary'] || ''" (ngModelChange)="onNoteChanged('after_purifier_summary', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
       <h2>Data Quality</h2>
       <h3 style="margin-top: 8px;">Data Quality Summary</h3>
@@ -443,6 +479,24 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Note: After Data Quality -->
+      <div class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_quality')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_quality')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_data_quality'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_quality')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_quality')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_data_quality'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_quality'] || ''" (ngModelChange)="onNoteChanged('after_data_quality', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
 

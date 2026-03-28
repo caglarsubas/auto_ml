@@ -48,6 +48,9 @@ export class ModelDevelopmentComponent implements OnInit {
   private _highWaterStep: string = 'declaration';
   private _lastModelingSubstep: string | null = null;
   detailedStep: string = '1a_pipeline_declaration';
+  pipelineNotes: { [position: string]: string } = {};
+  editingNotePosition: string | null = null;
+  private _noteSaveTimer: any = null;
   private _pipelineConfigSaveTimer: any = null;
   // Autosave toggle & dirty-state tracking (persisted in localStorage)
   autosaveEnabled: boolean = true;
@@ -325,6 +328,37 @@ export class ModelDevelopmentComponent implements OnInit {
       console.log('[Pipeline] Config changed, auto-saving at step:', step);
       this.saveCheckpoint(step);
     }, 800);
+  }
+
+  // ── Pipeline Commentary Notes (Jupyter-notebook style) ──
+
+  onNoteChanged(position: string, content: string): void {
+    this.pipelineNotes[position] = content;
+    this.sharedService.updatePipelineNote(position, content);
+    // Debounced auto-save
+    if (this._noteSaveTimer) clearTimeout(this._noteSaveTimer);
+    this._noteSaveTimer = setTimeout(() => {
+      this.onPipelineConfigChanged();
+    }, 1000);
+  }
+
+  toggleNoteEdit(position: string): void {
+    if (this.editingNotePosition === position) {
+      this.editingNotePosition = null;
+    } else {
+      this.editingNotePosition = position;
+    }
+  }
+
+  deleteNote(position: string): void {
+    delete this.pipelineNotes[position];
+    this.sharedService.updatePipelineNote(position, '');
+    this.editingNotePosition = null;
+    this.onPipelineConfigChanged();
+  }
+
+  hasNote(position: string): boolean {
+    return !!this.pipelineNotes[position]?.trim();
   }
 
   /** Toggle autosave on/off (persisted to localStorage) */
@@ -813,6 +847,13 @@ export class ModelDevelopmentComponent implements OnInit {
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
         }
         this.saveCheckpoint(step);
+      })
+    );
+
+    // Sync pipeline notes from SharedService (modeling child may update notes)
+    this.subscription.add(
+      this.sharedService.pipelineNotes$.subscribe((notes: { [position: string]: string }) => {
+        this.pipelineNotes = notes;
       })
     );
 
@@ -1397,6 +1438,7 @@ export class ModelDevelopmentComponent implements OnInit {
       },
       modeling: this.sharedService.getModelingCheckpoint() || null,
       active_process: this.sharedService.getActiveProcess() || null,
+      pipeline_notes: this.sharedService.getPipelineNotes() || {},
     };
   }
 
@@ -1532,6 +1574,10 @@ export class ModelDevelopmentComponent implements OnInit {
           this.variableModelUsage = dq.model_usage;
           this.saveModelUsage();
         }
+
+        // ── 5b. Restore pipeline notes ──
+        this.pipelineNotes = s.pipeline_notes || {};
+        this.sharedService.setPipelineNotes(this.pipelineNotes);
 
         // ── 6. Restore modeling inner state via SharedService (before component initializes) ──
         if (s.modeling) {

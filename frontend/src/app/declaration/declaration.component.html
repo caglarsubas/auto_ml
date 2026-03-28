@@ -63,6 +63,24 @@
       </div>
     </div>
 
+    <!-- Note: After Data Preview -->
+    <div *ngIf="previewData" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_data_preview') && editingNotePosition !== 'after_data_preview'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_preview')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_data_preview') && editingNotePosition !== 'after_data_preview'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_preview')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_data_preview'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_preview')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_preview')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_data_preview'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_preview'] || ''" (ngModelChange)="onNoteChanged('after_data_preview', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div *ngIf="showDataDictionaryCollection">
       <h3>Dictionary Declaration</h3>
       <div class="dictionary-actions">
@@ -120,6 +138,24 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Note: After Data Dictionary -->
+    <div *ngIf="dataDictionary.length > 0" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_data_dictionary') && editingNotePosition !== 'after_data_dictionary'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_dictionary')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_data_dictionary') && editingNotePosition !== 'after_data_dictionary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_dictionary')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_data_dictionary'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_dictionary')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_dictionary')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_data_dictionary'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_dictionary'] || ''" (ngModelChange)="onNoteChanged('after_data_dictionary', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
 

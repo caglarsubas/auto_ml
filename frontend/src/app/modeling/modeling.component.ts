@@ -71,6 +71,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsModalExpanded: boolean = false;
   fullscreenPlotId: string | null = null;  // Per-plot fullscreen ('shap'|'gain'|'stability'|'performance'|null)
 
+  // Pipeline commentary notes (synced via SharedService)
+  pipelineNotes: { [position: string]: string } = {};
+  editingNotePosition: string | null = null;
+  private _noteSaveTimer: any = null;
+
   // Utility for template
   Object = Object;
 
@@ -199,6 +204,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.sharedService.currentFileId$.subscribe((id) => {
       this.currentFileId = id;
+    });
+
+    // Sync pipeline notes from SharedService
+    this.sharedService.pipelineNotes$.subscribe((notes) => {
+      this.pipelineNotes = notes;
     });
 
     this.sharedService.selectedPipeline$.subscribe((p) => {
@@ -652,6 +662,35 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       }
     }
     return ms;
+  }
+
+  // ── Pipeline Commentary Notes ──
+
+  onNoteChanged(position: string, content: string): void {
+    this.pipelineNotes[position] = content;
+    this.sharedService.updatePipelineNote(position, content);
+    if (this._noteSaveTimer) clearTimeout(this._noteSaveTimer);
+    this._noteSaveTimer = setTimeout(() => {
+      // Use triggerCheckpoint to reach parent for saving (bypasses _currentSubstep guard)
+      const substep = this._currentSubstep || 'encoding_completed';
+      this.sharedService.triggerCheckpoint(substep);
+    }, 1000);
+  }
+
+  toggleNoteEdit(position: string): void {
+    this.editingNotePosition = this.editingNotePosition === position ? null : position;
+  }
+
+  deleteNote(position: string): void {
+    delete this.pipelineNotes[position];
+    this.sharedService.updatePipelineNote(position, '');
+    this.editingNotePosition = null;
+    const substep = this._currentSubstep || 'encoding_completed';
+    this.sharedService.triggerCheckpoint(substep);
+  }
+
+  hasNote(position: string): boolean {
+    return !!this.pipelineNotes[position]?.trim();
   }
 
   /** Called by template when user changes any config (dropdowns, checkboxes, inputs).

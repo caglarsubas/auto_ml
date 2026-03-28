@@ -95,6 +95,24 @@
       </div>
     </div>
 
+    <!-- Note: After Encoding -->
+    <div class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_encoding') && editingNotePosition !== 'after_encoding'" class="pipeline-note-add" (click)="toggleNoteEdit('after_encoding')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_encoding') && editingNotePosition !== 'after_encoding'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_encoding')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_encoding'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_encoding')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_encoding')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_encoding'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_encoding'] || ''" (ngModelChange)="onNoteChanged('after_encoding', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
       <button mat-raised-button color="accent"
               (click)="startModeling()"
@@ -342,6 +360,24 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Note: After Modeling Results -->
+      <div class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_modeling_results') && editingNotePosition !== 'after_modeling_results'" class="pipeline-note-add" (click)="toggleNoteEdit('after_modeling_results')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_modeling_results') && editingNotePosition !== 'after_modeling_results'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_modeling_results')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_modeling_results'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_modeling_results')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_modeling_results')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_modeling_results'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_modeling_results'] || ''" (ngModelChange)="onNoteChanged('after_modeling_results', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
 
@@ -696,6 +732,24 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Note: After SFS Results -->
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_sfs') && editingNotePosition !== 'after_sfs'" class="pipeline-note-add" (click)="toggleNoteEdit('after_sfs')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_sfs') && editingNotePosition !== 'after_sfs'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_sfs')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_sfs'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_sfs')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_sfs')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_sfs'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_sfs'] || ''" (ngModelChange)="onNoteChanged('after_sfs', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
 
