@@ -40,6 +40,20 @@
             style="font-size: 11px; color: #e65100; font-weight: 500; padding: 2px 8px; background: #fff3e0; border-radius: 10px;">
         Unsaved changes
       </span>
+
+      <!-- Report download buttons -->
+      <div style="display: flex; align-items: center; gap: 4px; margin-left: 8px; border-left: 1px solid #e0e0e0; padding-left: 10px;">
+        <button (click)="downloadReportHtml()"
+                title="Download pipeline report as HTML"
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #1565c0; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #e3f2fd; color: #1565c0; transition: all 0.2s;">
+          <span style="font-size: 14px;">&#128196;</span> HTML
+        </button>
+        <button (click)="downloadReportPdf()"
+                title="Open pipeline report for Print / Save as PDF"
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #c62828; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #ffebee; color: #c62828; transition: all 0.2s;">
+          <span style="font-size: 14px;">&#128438;</span> PDF
+        </button>
+      </div>
     </div>
   </div>
 

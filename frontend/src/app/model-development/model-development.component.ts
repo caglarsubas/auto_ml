@@ -387,6 +387,32 @@ export class ModelDevelopmentComponent implements OnInit {
     return !this.autosaveEnabled && this._unsavedChanges;
   }
 
+  // ===== Report Download =====
+
+  downloadReportHtml(): void {
+    if (!this.activePipelineRunId) return;
+    this.dataService.downloadPipelineReport(this.activePipelineRunId).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.pipelineRunName || 'pipeline'}_report.html`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err: any) => {
+        console.error('[Pipeline] Report download failed:', err);
+        alert('Failed to download report.');
+      }
+    });
+  }
+
+  downloadReportPdf(): void {
+    if (!this.activePipelineRunId) return;
+    const url = this.dataService.getPipelineReportUrl(this.activePipelineRunId, 'print');
+    window.open(url, '_blank');
+  }
+
   // ===== Exit Confirmation =====
 
   @HostListener('window:beforeunload', ['$event'])

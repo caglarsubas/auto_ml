@@ -1952,3 +1952,38 @@ class PipelineRunDetailView(APIView):
             return Response({'message': 'Pipeline run deleted'}, status=status.HTTP_200_OK)
         except PipelineRun.DoesNotExist:
             return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineReportView(APIView):
+    """Generate and download a pipeline report as HTML.
+    
+    Query params:
+      ?output=html  → attachment download (default)
+      ?output=print → inline HTML with auto-print JS (for browser Save-as-PDF)
+    """
+
+    def get(self, request, pk, *args, **kwargs):
+        from .report_generator import generate_pipeline_html
+
+        fmt = request.query_params.get('output', 'html').lower()
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        safe_name = run.name.replace(' ', '_').replace('/', '-')
+        html = generate_pipeline_html(run)
+
+        from django.http import HttpResponse as DjangoHttpResponse
+
+        if fmt == 'print':
+            # Inject auto-print script for browser Save-as-PDF workflow
+            print_script = '<script>window.onload=function(){window.print();}</script>'
+            html = html.replace('</body>', f'{print_script}</body>')
+            response = DjangoHttpResponse(html, content_type='text/html; charset=utf-8')
+            return response
+        else:
+            response = DjangoHttpResponse(html, content_type='text/html; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{safe_name}_report.html"'
+            return response

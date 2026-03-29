@@ -350,4 +350,17 @@ export class DataService {
     );
   }
 
+  getPipelineReportUrl(id: number, output: 'html' | 'print' = 'html'): string {
+    return `${this.apiUrl}pipeline/${id}/report/?output=${output}`;
+  }
+
+  downloadPipelineReport(id: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading pipeline report:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
 }
