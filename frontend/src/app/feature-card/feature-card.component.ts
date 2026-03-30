@@ -175,36 +175,42 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // ===== Modeling / Importance =====
+  private _applyModelingResponse(resp: any): void {
+    this.modelInfo = resp?.model || null;
+    const imps = this.modelInfo?.importances || {};
+    this.importanceGain = Array.isArray(imps.gain) ? imps.gain : [];
+    this.importanceShap = Array.isArray(imps.shap_mean_abs) ? imps.shap_mean_abs : [];
+    if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+    else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    this.drawImportancePlot();
+  }
+
   proceedModeling(): void {
     try {
       if (!this.isBrowser) return;
       this.modelingError = null;
-      if (!this.data.processedFile) {
-        this.modelingError = 'Processed file is required to start modelling.';
-        return;
-      }
       const fid = Number(this.data.fileId);
       if (!isFinite(fid)) {
         this.modelingError = 'Invalid file id';
         return;
       }
       this.modelingLoading = true;
-      this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
-        next: (resp: any) => {
-          this.modelInfo = resp?.model || null;
-          const imps = this.modelInfo?.importances || {};
-          this.importanceGain = Array.isArray(imps.gain) ? imps.gain : [];
-          this.importanceShap = Array.isArray(imps.shap_mean_abs) ? imps.shap_mean_abs : [];
-          if (this.importanceShap.length) this.selectedImportanceType = 'shap';
-          else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
-          this.drawImportancePlot();
+
+      // 1) Try cached results first (instant — no re-training)
+      this.dataService.getModelingStatus(fid).subscribe({
+        next: (cached: any) => {
+          if (cached?.job_status === 'completed' && cached?.model?.importances) {
+            console.log('[FeatureCard] Using cached modeling results');
+            this._applyModelingResponse(cached);
+            this.modelingLoading = false;
+            return;
+          }
+          // 2) No cache — fall back to full training
+          this._runFullModeling(fid);
         },
-        error: (err: any) => {
-          console.error('Modeling failed:', err);
-          this.modelingError = 'Failed to run modelling';
-        },
-        complete: () => {
-          this.modelingLoading = false;
+        error: () => {
+          // Status endpoint failed — fall back to full training
+          this._runFullModeling(fid);
         }
       });
     } catch (e) {
@@ -212,6 +218,26 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.modelingError = 'Failed to start modelling';
       this.modelingLoading = false;
     }
+  }
+
+  private _runFullModeling(fid: number): void {
+    if (!this.data.processedFile) {
+      this.modelingError = 'Processed file is required to start modelling.';
+      this.modelingLoading = false;
+      return;
+    }
+    this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
+      next: (resp: any) => {
+        this._applyModelingResponse(resp);
+      },
+      error: (err: any) => {
+        console.error('Modeling failed:', err);
+        this.modelingError = 'Failed to run modelling';
+      },
+      complete: () => {
+        this.modelingLoading = false;
+      }
+    });
   }
 
   onImportanceTypeChange(t: 'shap' | 'gain') {

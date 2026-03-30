@@ -599,6 +599,48 @@ class PreprocessingRunView(APIView):
                 print(f"[PreprocessingRun] Random split train_ratio={train_ratio:.2f} -> train={m.sum()} test={(~m).sum()}")
                 return frame.index[m], frame.index[~m]
 
+            # ── Split Validation: target distribution per split ──
+            split_validation = None
+            try:
+                train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
+                target_col = 'Target' if 'Target' in df_processed.columns else None
+                if target_col:
+                    y_train = df_processed.loc[train_idx_sv, target_col].dropna()
+                    y_test = df_processed.loc[test_idx_sv, target_col].dropna()
+                    y_full = df_processed[target_col].dropna()
+
+                    def _label_dist(series):
+                        vc = series.value_counts().sort_index()
+                        return {str(k): int(v) for k, v in vc.items()}
+
+                    split_validation = {
+                        'target_column': target_col,
+                        'splits': [
+                            {
+                                'name': 'Full Dataset',
+                                'count': int(len(y_full)),
+                                'target_mean': round(float(y_full.mean()), 6),
+                                'label_counts': _label_dist(y_full),
+                            },
+                            {
+                                'name': 'Train',
+                                'count': int(len(y_train)),
+                                'target_mean': round(float(y_train.mean()), 6),
+                                'label_counts': _label_dist(y_train),
+                            },
+                            {
+                                'name': 'Test',
+                                'count': int(len(y_test)),
+                                'target_mean': round(float(y_test.mean()), 6),
+                                'label_counts': _label_dist(y_test),
+                            },
+                        ],
+                        'labels': sorted([str(l) for l in y_full.unique()]),
+                    }
+                    print(f"[PreprocessingRun] split_validation computed: train={len(y_train)} test={len(y_test)} target_mean_train={split_validation['splits'][1]['target_mean']} target_mean_test={split_validation['splits'][2]['target_mean']}")
+            except Exception as sv_err:
+                print(f"[PreprocessingRun] split_validation error: {sv_err}")
+
             # Build Data Quality summary safely
             datq_summary_records = None
             try:
@@ -916,6 +958,7 @@ class PreprocessingRunView(APIView):
                 'head': df_processed.head(5).replace({np.nan: None}).to_dict(orient='records'),
                 'processed_file': out_rel,
                 'datq_summary': datq_summary_records,
+                'split_validation': split_validation,
             }
 
             # Final sanitize for JSON safety

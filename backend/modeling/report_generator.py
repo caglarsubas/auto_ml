@@ -245,6 +245,47 @@ def _section_preprocessing(state, notes):
     </div>'''
 
 
+def _section_split_validation(state, notes):
+    """Train-Test split validation: target distribution table per split."""
+    pp = state.get('preprocessing', {})
+    sv = pp.get('split_validation')
+    if not sv:
+        return ''
+
+    splits = sv.get('splits', [])
+    labels = sv.get('labels', [])
+    if not splits or not labels:
+        return ''
+
+    # Build table
+    label_headers = ''.join(f'<th>Target={l}</th>' for l in labels)
+    rows = ''
+    for sp in splits:
+        lc = sp.get('label_counts', {})
+        label_cells = ''.join(f'<td>{lc.get(l, 0):,}</td>' for l in labels)
+        mean_pct = f"{(sp.get('target_mean', 0) * 100):.2f}%"
+        rows += f'''
+        <tr>
+            <td><strong>{sp.get('name', '')}</strong></td>
+            <td>{sp.get('count', 0):,}</td>
+            {label_cells}
+            <td style="color:#2e7d32; font-weight:600;">{mean_pct}</td>
+        </tr>'''
+
+    note_html = _render_inline_note(notes, 'after_split_validation')
+
+    return f'''
+    <div class="section">
+        <h2>Train-Test Split Validation</h2>
+        <p class="note">Target distribution across splits. Consistent target means indicate a well-balanced split.</p>
+        <table>
+            <thead><tr><th>Split</th><th>Count</th>{label_headers}<th>Target Mean</th></tr></thead>
+            <tbody>{rows}</tbody>
+        </table>
+        {note_html}
+    </div>'''
+
+
 def _section_data_quality(state, notes):
     """Data Quality summary table."""
     dq = state.get('data_quality', {})
@@ -623,6 +664,7 @@ def generate_pipeline_html(run):
         _section_header(run, state),
         _section_declaration(file_id, notes),
         _section_preprocessing(state, notes),
+        _section_split_validation(state, notes),
         _section_data_quality(state, notes),
         _section_modeling(modeling_status, state, notes),
         _section_sfs(sfs_data, notes),

@@ -299,6 +299,51 @@
       </div>
     </div>
 
+    <!-- Split Validation Chart -->
+    <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafbfc;">
+      <h3 style="margin: 0 0 4px 0; font-size: 15px; color: #333;">Train-Test Split Validation</h3>
+      <p style="margin: 0 0 12px 0; font-size: 12px; color: #777;">Stacked histogram of target label distribution across splits, with target mean overlay. Consistent means across splits indicate a well-balanced split.</p>
+      <canvas #splitValidationCanvas style="width: 100%; height: 320px; display: block;"></canvas>
+      <!-- Summary table -->
+      <div style="margin-top: 12px; overflow-x: auto;">
+        <table style="border-collapse: collapse; width: auto; font-size: 12px;">
+          <thead>
+            <tr style="background: #f5f5f5;">
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: left;">Split</th>
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Count</th>
+              <th *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target={{ lbl }}</th>
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target Mean</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let sp of splitValidation.splits">
+              <td style="padding: 6px 14px; border: 1px solid #eee; font-weight: 600;">{{ sp.name }}</td>
+              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.count | number }}</td>
+              <td *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.label_counts[lbl] | number }}</td>
+              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right; color: #2e7d32; font-weight: 600;">{{ (sp.target_mean * 100).toFixed(2) }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Note: After Split Validation -->
+    <div *ngIf="splitValidation" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-add" (click)="toggleNoteEdit('after_split_validation')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_split_validation')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_split_validation'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_split_validation')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_split_validation')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_split_validation'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_split_validation'] || ''" (ngModelChange)="onNoteChanged('after_split_validation', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
       <h2>Data Quality</h2>
       <h3 style="margin-top: 8px;">Data Quality Summary</h3>

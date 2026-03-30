@@ -7,10 +7,8 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-
-- user should be able to download a pipeline flow as a html and pdf file
-- we should show the train-test split validation to the user who is expecting the declared distribution. show with a wise illustration (can be stacked histogram where stackes we have target labels, so user can easily understand that target mean is not changing over splitted datasets)
-- expand the test framework in the aim of covering recent codebase developments
+- make feature-names clickable in SFS result tables where clicks open the feature-card modal we have the importance and explainability tabs in feature-card should be updated according to the completed step (first we fill these tabs in start-modeling button click, then we will fill them by running SFSs). So, when a user clicks a feature-name and opens a feature-card, first two tabs (description and quality) never changes, but the other two (importance and explainaiblity) should correspond the step result in which the user open the feature-card via its table.
+- enhance the test framework in the aim of covering recent codebase developments
 * make pipeline interface witdh-adjustable 3 layers layout (left progress navigation (cancel current hidden-sliding one), middle pipeline-flow, right LLM based assistant chat (for now openai gpt-5.3)). add a button named 'Get AI Support' after each process output (data quality summary, categorical feature encoding, Modeling-Cross-Validation, Modeling-SHAP Beeswarm (interactive), Modeling-Selected Features (sorted by Combined Score), SFS Results) providing insights about the output being showed to the customer and answers her/him technical questions about the results, make reasonable, advisory comments. 
 - in a pipeline run, user should be able to go backward (revert) between steps. for example, while in the modelling step user can walk 1 step back and can change the configuration of preprocessing step and restart it
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Router } from '@angular/router';
 import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
@@ -20,7 +20,9 @@ interface PurifierOption {
   styleUrls: ['./model-development.component.css']
 })
 
-export class ModelDevelopmentComponent implements OnInit {
+export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
+  @ViewChild('splitValidationCanvas') splitValidationCanvas!: ElementRef<HTMLCanvasElement>;
+  private _splitChartDrawn = false;
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
@@ -86,6 +88,8 @@ export class ModelDevelopmentComponent implements OnInit {
   // Cache full data dictionary (to provide Feature_Description to Feature Card)
   dataDictionaryCache: any[] = [];
   currentSplit: { strategy?: string; date_column?: string; cutoff?: string; percent?: number } | null = null;
+  // Split validation: target distribution per split (Full, Train, Test)
+  splitValidation: any = null;
 
   // Data Quality summary from backend after preprocessing run
   datqSummary: any[] | null = null;
@@ -730,6 +734,13 @@ export class ModelDevelopmentComponent implements OnInit {
   selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
   constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
+
+  ngAfterViewChecked(): void {
+    if (this.splitValidation && !this._splitChartDrawn && this.splitValidationCanvas) {
+      this._splitChartDrawn = true;
+      setTimeout(() => this.drawSplitValidationChart(), 0);
+    }
+  }
 
   ngOnInit() {
     // Restore autosave preference from localStorage
@@ -1451,6 +1462,7 @@ export class ModelDevelopmentComponent implements OnInit {
         rows_removed_total: this.rowsRemovedTotal,
         row_count_before: this.rowCountBefore,
         row_count_after: this.rowCountAfter,
+        split_validation: this.splitValidation,
       },
       data_quality: {
         datq_summary: this.datqSummary,
@@ -1585,6 +1597,8 @@ export class ModelDevelopmentComponent implements OnInit {
         this.rowsRemovedTotal = pp.rows_removed_total || 0;
         this.rowCountBefore = pp.row_count_before || 0;
         this.rowCountAfter = pp.row_count_after || 0;
+        this.splitValidation = pp.split_validation || null;
+        this._splitChartDrawn = false;
 
         // ── 5. Restore data quality state ──
         const dq = s.data_quality || {};
@@ -1675,6 +1689,9 @@ export class ModelDevelopmentComponent implements OnInit {
           this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Restore Split Validation
+          this.splitValidation = result?.split_validation ?? null;
+          this._splitChartDrawn = false;
           // Restore Data Quality summary
           this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
           this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
@@ -1861,6 +1878,9 @@ export class ModelDevelopmentComponent implements OnInit {
           // Capture row counts before/after
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Capture Split Validation data
+          this.splitValidation = result?.split_validation ?? null;
+          this._splitChartDrawn = false;
           // Capture Data Quality summary
           this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
           this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
@@ -1902,6 +1922,208 @@ export class ModelDevelopmentComponent implements OnInit {
           this.sharedService.setActiveProcess(null); // clear on error too
         }
       );
+  }
+
+  // ── Split Validation Chart (Canvas-based stacked bar + target mean line) ──
+  drawSplitValidationChart(): void {
+    if (!this.splitValidation || !this.splitValidationCanvas) return;
+    const canvas = this.splitValidationCanvas.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 700;
+    const cssH = canvas.clientHeight || 320;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    ctx.scale(dpr, dpr);
+
+    const splits: any[] = this.splitValidation.splits || [];
+    const labels: string[] = this.splitValidation.labels || [];
+    if (!splits.length || !labels.length) return;
+
+    // Layout constants
+    const marginTop = 40, marginBottom = 70, marginLeft = 70, marginRight = 120;
+    const chartW = cssW - marginLeft - marginRight;
+    const chartH = cssH - marginTop - marginBottom;
+
+    // Color palette for target labels
+    const labelColors: string[] = ['#90a4ae', '#e57373', '#81c784', '#ffb74d', '#ba68c8', '#4dd0e1', '#f06292', '#a1887f'];
+    const labelColorMap: { [label: string]: string } = {};
+    labels.forEach((l, i) => { labelColorMap[l] = labelColors[i % labelColors.length]; });
+
+    // Max count for Y axis
+    const maxCount = Math.max(...splits.map((s: any) => s.count || 0), 1);
+
+    // Bar geometry
+    const barGroupWidth = chartW / splits.length;
+    const barWidth = Math.min(barGroupWidth * 0.55, 100);
+    const barGap = (barGroupWidth - barWidth) / 2;
+
+    // Clear
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    // Y axis: gridlines and labels (count scale)
+    const nTicks = 5;
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#888';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= nTicks; i++) {
+      const v = Math.round(maxCount * i / nTicks);
+      const y = marginTop + chartH - (chartH * i / nTicks);
+      ctx.beginPath();
+      ctx.moveTo(marginLeft, y);
+      ctx.lineTo(marginLeft + chartW, y);
+      ctx.stroke();
+      ctx.fillText(v.toLocaleString(), marginLeft - 8, y + 4);
+    }
+
+    // Y axis title
+    ctx.save();
+    ctx.translate(16, marginTop + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#555';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Count', 0, 0);
+    ctx.restore();
+
+    // Draw stacked bars
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap;
+      const lc: { [k: string]: number } = split.label_counts || {};
+      let yBottom = marginTop + chartH; // start from bottom
+
+      labels.forEach((label: string) => {
+        const count = lc[label] || 0;
+        const barH = (count / maxCount) * chartH;
+        const y = yBottom - barH;
+        ctx.fillStyle = labelColorMap[label];
+        ctx.fillRect(x, y, barWidth, barH);
+
+        // Count label inside bar if tall enough
+        if (barH > 18) {
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(count.toLocaleString(), x + barWidth / 2, y + barH / 2 + 4);
+        }
+        yBottom = y;
+      });
+
+      // X-axis label: split name
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(split.name, x + barWidth / 2, marginTop + chartH + 18);
+
+      // Count subtitle
+      ctx.fillStyle = '#888';
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(`n=${(split.count || 0).toLocaleString()}`, x + barWidth / 2, marginTop + chartH + 33);
+    });
+
+    // ── Target Mean line (secondary Y axis) ──
+    const means = splits.map((s: any) => s.target_mean ?? 0);
+    const meanMin = Math.min(...means);
+    const meanMax = Math.max(...means);
+    // Expand range slightly for visual clarity
+    const meanRange = (meanMax - meanMin) || 0.01;
+    const meanLow = Math.max(0, meanMin - meanRange * 0.5);
+    const meanHigh = Math.min(1, meanMax + meanRange * 0.5);
+    const meanScale = (v: number) => marginTop + chartH - ((v - meanLow) / (meanHigh - meanLow)) * chartH;
+
+    // Draw line
+    ctx.strokeStyle = '#2e7d32';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap + barWidth / 2;
+      const y = meanScale(split.target_mean ?? 0);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw mean dots and labels
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap + barWidth / 2;
+      const y = meanScale(split.target_mean ?? 0);
+      // Dot
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#2e7d32';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = '#2e7d32';
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      const meanPct = ((split.target_mean ?? 0) * 100).toFixed(2);
+      ctx.fillText(`${meanPct}%`, x, y - 10);
+    });
+
+    // Right Y axis: target mean scale
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#2e7d32';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    for (let i = 0; i <= 4; i++) {
+      const v = meanLow + (meanHigh - meanLow) * i / 4;
+      const y = meanScale(v);
+      ctx.fillText((v * 100).toFixed(1) + '%', marginLeft + chartW + 8, y + 4);
+    }
+    // Right axis title
+    ctx.save();
+    ctx.translate(cssW - 10, marginTop + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2e7d32';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Target Mean', 0, 0);
+    ctx.restore();
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Train-Test Split Validation: Target Distribution', cssW / 2, 20);
+
+    // Legend (bottom)
+    const legendY = cssH - 15;
+    let legendX = marginLeft;
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    labels.forEach((label: string) => {
+      ctx.fillStyle = labelColorMap[label];
+      ctx.fillRect(legendX, legendY - 9, 12, 12);
+      ctx.fillStyle = '#555';
+      ctx.fillText(`Target=${label}`, legendX + 16, legendY + 1);
+      legendX += ctx.measureText(`Target=${label}`).width + 32;
+    });
+    // Mean legend
+    ctx.strokeStyle = '#2e7d32';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.moveTo(legendX, legendY - 3);
+    ctx.lineTo(legendX + 20, legendY - 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(legendX + 10, legendY - 3, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#2e7d32';
+    ctx.fill();
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'left';
+    ctx.fillText('Target Mean', legendX + 26, legendY + 1);
   }
 
   // Helpers for UI
