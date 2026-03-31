@@ -319,7 +319,8 @@ def run_forward_sfs(
                 'stability_value': stability_metric,
                 'shap_importance': current_shap_importance.get(best_feature, 0.0),
                 'shap_changes': shap_changes,
-                'feature_importance': dict(winner_booster.get_score(importance_type='gain'))
+                'feature_importance': dict(winner_booster.get_score(importance_type='gain')),
+                'shap_importance_by_feature': dict(current_shap_importance)
             }
             
             results.append(step_result)
@@ -513,7 +514,8 @@ def run_backward_sfs(
                 'stability_value': stability_metric,
                 'shap_importance': previous_shap_importance.get(best_feature_to_drop, 0.0),
                 'shap_changes': shap_changes,
-                'feature_importance': dict(winner_booster.get_score(importance_type='gain'))
+                'feature_importance': dict(winner_booster.get_score(importance_type='gain')),
+                'shap_importance_by_feature': dict(current_shap_importance)
             }
             
             results.append(step_result)

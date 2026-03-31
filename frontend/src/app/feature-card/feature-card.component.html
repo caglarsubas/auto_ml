@@ -139,7 +139,15 @@
           <span style="font-size:12px; color:#555;">Loading importance data…</span>
         </div>
 
-        <div *ngIf="!modelingLoading && !(importanceGain?.length || importanceShap?.length)" 
+        <div *ngIf="preModelingMode" 
+             style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+          <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
+            <strong>ℹ Importance data is not yet available.</strong><br/>
+            Feature importance scores will be computed in the <strong>Modeling</strong> step when a model is trained. Please proceed to the Modeling phase first.
+          </p>
+        </div>
+
+        <div *ngIf="!preModelingMode && !modelingLoading && !(importanceGain?.length || importanceShap?.length)" 
              style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
           <p style="font-size: 13px; color: #1565c0; margin: 0;">
             <strong>ℹ No importance data available.</strong> Run modeling from the Modeling page first.
@@ -147,6 +155,27 @@
         </div>
 
         <div *ngIf="modelingError" style="color:#b71c1c; font-size:12px; margin-top: 8px;">{{ modelingError }}</div>
+
+        <!-- SFS context dropdown (Final Model Fit / Feature Added Step) -->
+        <div *ngIf="hasSfsContexts && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
+             style="margin-top: 14px; margin-bottom: -4px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
+          <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
+            <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
+              <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
+                {{ ctx.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <!-- Importance context badge (non-SFS or legacy) -->
+        <div *ngIf="!hasSfsContexts && importanceContext && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
+             style="margin-top: 14px; margin-bottom: -4px;">
+          <span style="display: inline-block; padding: 4px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 12px; font-size: 11px; font-weight: 600;">
+            {{ importanceContext }}
+          </span>
+        </div>
 
         <!-- Feature-specific importance summary -->
         <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" 
@@ -189,7 +218,28 @@
       
       <mat-tab label="Explainability">
         <div style="margin-top: 16px;">
-          <div *ngIf="explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
+          <!-- SFS context dropdown (same as Importance tab) -->
+          <div *ngIf="hasSfsContexts"
+               style="margin-bottom: 14px; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
+            <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
+              <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
+                <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
+                  {{ ctx.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div *ngIf="preModelingMode" 
+               style="margin-bottom: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+            <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
+              <strong>ℹ Explainability data is not yet available.</strong><br/>
+              SHAP explainability analysis will be available after a model is trained in the <strong>Modeling</strong> step. Please proceed to the Modeling phase first.
+            </p>
+          </div>
+
+          <div *ngIf="!preModelingMode && explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
             <mat-spinner diameter="24"></mat-spinner>
             <span style="font-size:12px; color:#555;">Loading explainability data…</span>
           </div>

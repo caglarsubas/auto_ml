@@ -28,6 +28,14 @@ interface FeatureInfo {
   Feature_Description: string;
 }
 
+interface SfsImportanceContext {
+  label: string;  // e.g. "Final Model (12 features)" or "Step 5 — Added: feature_x"
+  gain: Array<{ feature: string; score: number }>;
+  shap: Array<{ feature: string; score: number }>;
+  modelPath?: string;  // For explainability — saved SFS model path
+  selectedFeatures?: string[];  // For on-demand step explainability
+}
+
 interface FeatureCardDialogData {
   fileId: string;
   columnName: string;
@@ -36,6 +44,15 @@ interface FeatureCardDialogData {
   dateColumn?: string;
   qualitySummary?: { [key: string]: any };
   catLabelLookup?: { [feature: string]: { [encoded: string]: string } };
+  // Optional: pre-loaded importance data from SFS final model
+  importanceOverrides?: {
+    gain: Array<{ feature: string; score: number }>;
+    shap: Array<{ feature: string; score: number }>;
+  };
+  importanceContext?: string; // Label like "SFS Forward — Final Model"
+  sfsModelPath?: string; // Relative path to SFS final model for explainability
+  // SFS dual-context: Final Model Fit + Feature Added Step
+  sfsContexts?: SfsImportanceContext[];
 }
 
 
@@ -107,6 +124,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   importanceShap: Array<{ feature: string; score: number }> = [];
   selectedImportanceType: 'shap' | 'gain' = 'shap';
   importanceLimit: number = 20;
+  importanceContext: string | null = null; // e.g. "SFS Forward Step 3"
+
+  // SFS dual-context state (dropdown: Final Model Fit / Feature Added Step)
+  sfsContexts: SfsImportanceContext[] = [];
+  sfsViewMode: number = 0; // Index into sfsContexts (0 = Final Model, 1 = Step)
+  hasSfsContexts: boolean = false;
+  // True when opened before any model is trained (e.g. from Data Quality step)
+  preModelingMode: boolean = false;
 
   // Explainability state
   explainabilityData: any = null;
@@ -142,6 +167,55 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.qualitySummary = data.qualitySummary || null;
     this.initialQualitySummary = data.qualitySummary || null;
     this.catLabelLookup = data.catLabelLookup || {};
+    // SFS dual-context mode: dropdown between Final Model Fit / Feature Added Step
+    if (data.sfsContexts && data.sfsContexts.length > 0) {
+      this.sfsContexts = data.sfsContexts;
+      this.hasSfsContexts = true;
+      this.sfsViewMode = 0; // Default to first context (Final Model)
+      const ctx = this.sfsContexts[0];
+      this.importanceGain = ctx.gain || [];
+      this.importanceShap = ctx.shap || [];
+      this.importanceContext = ctx.label || null;
+      if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+      else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    } else if (data.importanceOverrides) {
+      // Legacy single-context mode (backward compat)
+      this.importanceGain = data.importanceOverrides.gain || [];
+      this.importanceShap = data.importanceOverrides.shap || [];
+      if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+      else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+      this.importanceContext = data.importanceContext || null;
+    } else {
+      this.importanceContext = data.importanceContext || null;
+      // No importance data provided — opened before modeling (e.g. Data Quality step)
+      this.preModelingMode = true;
+    }
+  }
+
+  /**
+   * Switch SFS view mode (dropdown changed) — updates importance data and resets explainability.
+   */
+  onSfsViewModeChange(index: number): void {
+    if (index < 0 || index >= this.sfsContexts.length) return;
+    this.sfsViewMode = index;
+    const ctx = this.sfsContexts[index];
+    this.importanceGain = ctx.gain || [];
+    this.importanceShap = ctx.shap || [];
+    this.importanceContext = ctx.label || null;
+    if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+    else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    // Redraw importance plot if the Importance tab is active
+    if (this.currentTabIndex === 2) {
+      setTimeout(() => this.drawImportancePlot(), 0);
+    }
+    // Reset explainability so it re-fetches with the new context
+    this.explainabilityData = null;
+    this.explainabilityFetched = false;
+    this.explainabilityError = null;
+    // If the Explainability tab is active, fetch immediately
+    if (this.currentTabIndex === 3) {
+      this.fetchFeatureExplainability();
+    }
   }
 
   // Robust description getter for dropdown display
@@ -1558,20 +1632,38 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.currentTabIndex = tabIndex;  // Track current tab
     
     // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
-    if (tabIndex === 2 && !this.importanceGain.length && !this.importanceShap.length && !this.modelingLoading) {
-      this.proceedModeling();
+    if (tabIndex === 2) {
+      if (this.preModelingMode) {
+        // No model trained yet — message shown in template
+        return;
+      }
+      if (this.importanceGain.length || this.importanceShap.length) {
+        // Data already loaded (e.g. from overrides) — just redraw
+        setTimeout(() => this.drawImportancePlot(), 0);
+      } else if (!this.modelingLoading) {
+        this.proceedModeling();
+      }
     }
-    if (tabIndex === 3 && !this.explainabilityFetched && !this.explainabilityLoading) {
-      this.fetchFeatureExplainability();
+    if (tabIndex === 3) {
+      console.log('[Explainability] Tab activated. preModelingMode=', this.preModelingMode, 'fetched=', this.explainabilityFetched, 'loading=', this.explainabilityLoading, 'hasSfsContexts=', this.hasSfsContexts, 'sfsViewMode=', this.sfsViewMode);
+      if (this.preModelingMode) {
+        // No model trained yet — message shown in template
+        return;
+      }
+      if (!this.explainabilityFetched && !this.explainabilityLoading) {
+        this.fetchFeatureExplainability();
+      }
     }
   }
 
   // ===== Explainability (SHAP beeswarm + Partial Dependence) =====
   fetchFeatureExplainability(): void {
     try {
+      console.log('[Explainability] fetchFeatureExplainability called. isBrowser=', this.isBrowser, 'processedFile=', this.data.processedFile, 'fileId=', this.data.fileId);
       if (!this.isBrowser) return;
       if (!this.data.processedFile) {
         this.explainabilityError = 'Processed file required. Please run preprocessing first.';
+        console.warn('[Explainability] No processedFile — aborting.');
         return;
       }
       const fid = Number(this.data.fileId);
@@ -1583,8 +1675,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityError = null;
       this.explainabilityFetched = true;
       
-      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500).subscribe({
+      // Determine model source: SFS context (dropdown) → legacy sfsModelPath → default
+      let explModelPath: string | undefined = this.data.sfsModelPath;
+      let explSelectedFeatures: string[] | undefined = undefined;
+      if (this.hasSfsContexts && this.sfsContexts[this.sfsViewMode]) {
+        const ctx = this.sfsContexts[this.sfsViewMode];
+        explModelPath = ctx.modelPath || undefined;
+        explSelectedFeatures = ctx.selectedFeatures || undefined;
+      }
+
+      console.log('[Explainability] API call params: fid=', fid, 'feature=', this.selectedFeatureName, 'modelPath=', explModelPath, 'selectedFeatures=', explSelectedFeatures);
+      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500, explModelPath, explSelectedFeatures).subscribe({
         next: (resp: any) => {
+          console.log('[Explainability] API response received. Keys:', Object.keys(resp || {}), 'beeswarm?', !!resp?.beeswarm, 'pdp?', !!resp?.partial_dependence);
+          if (resp?.beeswarm) console.log('[Explainability] beeswarm shap_values length:', resp.beeswarm.shap_values?.length);
           this.explainabilityData = resp;
           setTimeout(() => this.drawExplainabilityPlots(), 0);
         },
@@ -1620,7 +1724,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   drawExplainabilityPlots(): void {
+    console.log('[Explainability] drawExplainabilityPlots called. isBrowser=', this.isBrowser, 'data?', !!this.explainabilityData);
     if (!this.isBrowser || !this.explainabilityData) return;
+    const beeEl = document.getElementById('explainability-beeswarm');
+    const pdpEl = document.getElementById('explainability-pdp');
+    console.log('[Explainability] DOM elements: beeswarm=', !!beeEl, 'pdp=', !!pdpEl, 'Plotly?', !!(window as any).Plotly);
     this.drawShapBeeswarmSingle();
     this.drawPartialDependencePlot();
   }
@@ -1670,8 +1778,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   drawShapBeeswarmSingle(): void {
     try {
+      console.log('[Explainability] drawShapBeeswarmSingle: Plotly?', !!Plotly, 'beeswarm?', !!this.explainabilityData?.beeswarm);
       if (!Plotly || !this.explainabilityData?.beeswarm) return;
       const el = document.getElementById('explainability-beeswarm');
+      console.log('[Explainability] drawShapBeeswarmSingle: el?', !!el);
       if (!el) return;
 
       const beeswarm = this.explainabilityData.beeswarm;
@@ -1806,8 +1916,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   private drawPartialDependencePlot(): void {
     try {
+      console.log('[Explainability] drawPDP: Plotly?', !!Plotly, 'pdp?', !!this.explainabilityData?.partial_dependence);
       if (!Plotly || !this.explainabilityData?.partial_dependence) return;
       const el = document.getElementById('explainability-pdp');
+      console.log('[Explainability] drawPDP: el?', !!el);
       if (!el) return;
 
       const pdp = this.explainabilityData.partial_dependence;

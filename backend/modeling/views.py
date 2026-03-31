@@ -941,7 +941,10 @@ class ModelingStatusView(APIView):
 class FeatureExplainabilityView(APIView):
     """Returns SHAP explainability data for a single feature: beeswarm and partial dependence.
     
-    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number }
+    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number,
+              model_path?: string, selected_features?: string[] }
+    When selected_features is provided (without model_path), a temporary model is trained
+    on-demand with only those features — used for SFS per-step explainability.
     """
 
     def post(self, request, *args, **kwargs):
@@ -949,8 +952,10 @@ class FeatureExplainabilityView(APIView):
         feature_name = request.data.get('feature_name')
         processed_file = request.data.get('processed_file')
         n_samples = request.data.get('n_samples', 500)
+        custom_model_path = request.data.get('model_path')  # Optional: e.g. SFS final model
+        selected_features = request.data.get('selected_features')  # Optional: train on-demand with these features
 
-        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}")
+        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}, custom_model={custom_model_path or 'default'}, selected_features={len(selected_features) if selected_features else 'N/A'}")
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -958,14 +963,56 @@ class FeatureExplainabilityView(APIView):
             return Response({'error': 'feature_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Load model
-            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-            model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
-            if not os.path.exists(model_path):
-                return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
-            
-            booster = xgb.Booster()
-            booster.load_model(model_path)
+            booster = None
+
+            # Option 1: On-demand model from selected_features (SFS step context)
+            if selected_features and isinstance(selected_features, list) and not custom_model_path:
+                if feature_name not in selected_features:
+                    return Response({
+                        'error': f'Feature "{feature_name}" was not selected at this SFS step.',
+                        'reason': 'feature_not_in_model',
+                        'detail': 'This feature is not part of the model at this SFS step.'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                # Load training data to train a temporary model
+                train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+                if not os.path.exists(train_data_path):
+                    return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+                with open(train_data_path, 'rb') as f:
+                    train_data = pickle.load(f)
+                X_tr = train_data['X_train']
+                y_tr = train_data['y_train']
+                valid_sf = [f for f in selected_features if f in X_tr.columns]
+                if not valid_sf:
+                    return Response({'error': 'None of the selected_features exist in training data.'}, status=status.HTTP_400_BAD_REQUEST)
+                _has_cat_sf = any(
+                    hasattr(X_tr[c], 'cat') or X_tr[c].dtype.name == 'category' or X_tr[c].dtype == 'object'
+                    for c in valid_sf
+                )
+                dtrain_sf = xgb.DMatrix(X_tr[valid_sf], label=y_tr, enable_categorical=_has_cat_sf)
+                _params_sf = {
+                    'objective': 'binary:logistic', 'eval_metric': 'auc',
+                    'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                }
+                booster = xgb.train(
+                    _params_sf, dtrain_sf, num_boost_round=100,
+                    evals=[(dtrain_sf, 'train')], early_stopping_rounds=10,
+                    verbose_eval=False
+                )
+                print(f"[FeatureExplainability] Trained on-demand model with {len(valid_sf)} features for step explainability")
+
+            # Option 2: Load saved model (custom or default)
+            if booster is None:
+                models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                if custom_model_path:
+                    model_path = os.path.join(settings.MEDIA_ROOT, custom_model_path) if not os.path.isabs(custom_model_path) else custom_model_path
+                else:
+                    model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
+                if not os.path.exists(model_path):
+                    return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
+                
+                booster = xgb.Booster()
+                booster.load_model(model_path)
 
             # Load processed data
             if processed_file:
@@ -1434,11 +1481,24 @@ class SFSStartView(APIView):
                     bwd = [s for s in completed_steps if s.get('direction') == 'backward']
                     # Compute backward remaining features from last backward step
                     bwd_remaining = bwd[-1]['selected_features'] if bwd else []
+
+                    # Read existing data to preserve results from prior runs
+                    existing = {}
+                    if os.path.exists(sfs_path):
+                        try:
+                            with open(sfs_path, 'r', encoding='utf-8') as ef:
+                                existing = json.load(ef)
+                        except Exception:
+                            existing = {}
+
+                    # Detect forward-from-backward: new forward steps but existing backward data on disk
+                    is_fwd_from_bwd = bool(fwd and not bwd and existing.get('backward'))
+
                     intermediate = {
-                        'forward': sanitize_sfs(fwd),
-                        'backward': sanitize_sfs(bwd),
-                        'backward_remaining_features': bwd_remaining,
-                        'forward_from_backward': [],
+                        'forward': existing.get('forward', []) if is_fwd_from_bwd else sanitize_sfs(fwd),
+                        'backward': sanitize_sfs(bwd) if bwd else existing.get('backward', []),
+                        'backward_remaining_features': bwd_remaining if bwd_remaining else existing.get('backward_remaining_features', []),
+                        'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
                         'status': 'running',
                         'error': None
                     }
@@ -1491,14 +1551,52 @@ class SFSStartView(APIView):
                     new_backward = sanitize_sfs(results.get('backward', []))
                     new_backward_remaining = results.get('backward_remaining_features', [])
 
+                    # Detect forward-from-backward: new forward results AND existing backward data
+                    is_forward_from_backward = bool(new_forward and existing_data.get('backward'))
+
                     sfs_data = {
-                        'forward': new_forward if new_forward else existing_data.get('forward', []),
+                        # Preserve original forward results when this is a forward-from-backward run
+                        'forward': existing_data.get('forward', []) if is_forward_from_backward else (new_forward if new_forward else existing_data.get('forward', [])),
                         'backward': new_backward if new_backward else existing_data.get('backward', []),
                         'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
-                        'forward_from_backward': new_forward if existing_data.get('backward') and new_forward else existing_data.get('forward_from_backward', []),
+                        'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None)
                     }
+
+                    # Save the final fitted model for each completed SFS direction
+                    # so Feature Card explainability can use it instead of the initial model.
+                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                    os.makedirs(models_dir, exist_ok=True)
+                    _has_cat = any(
+                        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+                        for c in X_train.columns
+                    )
+                    _sfs_model_params = {
+                        'objective': 'binary:logistic', 'eval_metric': 'auc',
+                        'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                        'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                    }
+                    for direction_key in ('forward', 'backward', 'forward_from_backward'):
+                        steps = sfs_data.get(direction_key, [])
+                        if steps:
+                            last_step = steps[-1]
+                            final_features = last_step.get('selected_features', [])
+                            valid_features = [f for f in final_features if f in X_train.columns]
+                            if valid_features:
+                                try:
+                                    dtrain_f = xgb.DMatrix(X_train[valid_features], label=y_train, enable_categorical=_has_cat)
+                                    sfs_booster = xgb.train(
+                                        _sfs_model_params, dtrain_f, num_boost_round=100,
+                                        evals=[(dtrain_f, 'train')], early_stopping_rounds=10,
+                                        verbose_eval=False
+                                    )
+                                    sfs_model_path = os.path.join(models_dir, f'{file_id}_sfs_{direction_key}_model.json')
+                                    sfs_booster.save_model(sfs_model_path)
+                                    sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
+                                    print(f"[SFS] Saved {direction_key} final model ({len(valid_features)} features) -> {sfs_model_path}")
+                                except Exception as model_err:
+                                    print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
 
                     # Persist resume_state if stopped (for continue later)
                     if results.get('status') == 'stopped' and results.get('resume_state'):

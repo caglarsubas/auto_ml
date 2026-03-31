@@ -599,7 +599,11 @@
               <tbody>
                 <tr *ngFor="let step of sfsForwardResults">
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
@@ -655,7 +659,11 @@
                            style="cursor: pointer; accent-color: #2e7d32;" />
                   </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color: #555; font-size: 11px;">
                     {{ step.selected_features?.length || '—' }}
                   </td>
@@ -684,7 +692,9 @@
             <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
               <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                 <span *ngFor="let feature of sfsBackwardCutFeatures" 
-                      style="display: inline-block; padding: 6px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 16px; font-size: 12px; font-weight: 500;">
+                      (click)="openFeatureCardFromSfs(feature, getBackwardCutStepData(), 'backward'); $event.stopPropagation()"
+                      style="display: inline-block; padding: 6px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 16px; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                      title="Open Feature Card for {{ feature }}">
                   {{ feature }}
                 </span>
               </div>
@@ -728,7 +738,11 @@
               <tbody>
                 <tr *ngFor="let step of sfsForwardFromBackwardResults">
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step, 'forward_from_backward'); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #2e7d32;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
@@ -737,7 +751,7 @@
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
-                    <button mat-button color="primary" (click)="openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                    <button mat-button color="primary" (click)="openSfsDetailModal(step, 'forward_from_backward')" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
                       View
                     </button>
                   </td>
@@ -836,7 +850,11 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let change of getShapChangesArray(selectedSfsStep.shap_changes)">
-                      <td style="padding: 8px; border: 1px solid #ddd;">{{ change.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd;">
+                        <span (click)="openFeatureCardFromSfs(change.feature, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                              style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                              title="Open Feature Card for {{ change.feature }}">{{ change.feature }}</span>
+                      </td>
                       <td style="padding: 8px; border: 1px solid #ddd; text-align:right;" [style.color]="change.change > 0 ? '#4caf50' : '#f44336'">
                         {{ change.change > 0 ? '+' : '' }}{{ change.change | number:'1.6-6' }}
                       </td>
@@ -863,7 +881,11 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let row of getFeatureImpactRows(selectedSfsStep, previousSfsStep)">
-                      <td style="padding: 8px; border: 1px solid #ddd;">{{ row.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd;">
+                        <span (click)="openFeatureCardFromSfs(row.feature, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                              style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                              title="Open Feature Card for {{ row.feature }}">{{ row.feature }}</span>
+                      </td>
                       <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">
                         {{ row.gain | number:'1.6-6' }}
                         <span *ngIf="row.prevGain !== null" style="color: #888; font-size: 11px;"> ({{ row.prevGain | number:'1.6-6' }})</span>
@@ -924,7 +946,10 @@
                 Total: {{ selectedSfsStep.selected_features?.length || 0 }} features
               </div>
               <div style="background: #f9f9f9; padding: 12px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
-                <span *ngFor="let feat of selectedSfsStep.selected_features; let last = last" style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: white; border: 1px solid #ddd; border-radius: 3px; font-size: 12px;">
+                <span *ngFor="let feat of selectedSfsStep.selected_features; let last = last" 
+                      (click)="openFeatureCardFromSfs(feat, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                      style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: white; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                      title="Open Feature Card for {{ feat }}">
                   {{ feat }}<span *ngIf="!last">,</span>
                 </span>
               </div>

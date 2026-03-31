@@ -232,10 +232,12 @@ export class DataService {
   }
 
   // Get feature explainability data (SHAP beeswarm + partial dependence)
-  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number): Observable<any> {
+  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[]): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };
     if (processedFile) payload.processed_file = processedFile;
     if (nSamples) payload.n_samples = nSamples;
+    if (modelPath) payload.model_path = modelPath;
+    if (selectedFeatures && selectedFeatures.length) payload.selected_features = selectedFeatures;
     return this.http.post(`${this.apiUrl}modeling/feature-explainability/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error getting feature explainability:', error);

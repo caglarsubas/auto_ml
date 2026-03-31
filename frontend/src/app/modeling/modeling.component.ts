@@ -67,7 +67,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsBackwardCutStep: number | null = null;  // User-selected cutting point step in backward results
   sfsBackwardCutFeatures: string[] = [];  // Features remaining at the selected cut step
   sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward cut features
+  sfsModelPaths: { forward?: string; backward?: string; forward_from_backward?: string } = {};  // Paths to final SFS models
   selectedSfsStep: any | null = null;  // For modal display
+  selectedSfsDirection: 'forward' | 'backward' | 'forward_from_backward' | undefined = undefined;  // Source direction of selectedSfsStep
   previousSfsStep: any | null = null;  // Previous step for comparison
   showSfsModal: boolean = false;
   sfsModalExpanded: boolean = false;
@@ -735,6 +737,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       sfsBackwardCutStep: this.sfsBackwardCutStep,
       sfsBackwardCutFeatures: this.sfsBackwardCutFeatures,
       sfsForwardFromBackwardResults: this.sfsForwardFromBackwardResults,
+      sfsModelPaths: this.sfsModelPaths,
       sfsDurationSeconds: this.sfsDurationSeconds,
       sfsStopped: this.sfsStopped,
     };
@@ -774,6 +777,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsBackwardCutStep = state.sfsBackwardCutStep ?? null;
     this.sfsBackwardCutFeatures = state.sfsBackwardCutFeatures || [];
     this.sfsForwardFromBackwardResults = state.sfsForwardFromBackwardResults || [];
+    this.sfsModelPaths = state.sfsModelPaths || {};
     this.sfsDurationSeconds = state.sfsDurationSeconds ?? null;
     this.sfsStopped = state.sfsStopped || false;
 
@@ -1344,6 +1348,17 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       const processedFile = this.processedFilePath || undefined;
       const dateColumn = this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
       
+      // Extract importance data from modelingStatus if available
+      let importanceOverrides: { gain: Array<{feature: string; score: number}>; shap: Array<{feature: string; score: number}> } | undefined;
+      const importances = this.modelingStatus?.model?.importances;
+      if (importances) {
+        const gainArr = (importances.gain || []).map((g: any) => ({ feature: g.feature, score: Number(g.score || 0) }));
+        const shapArr = (importances.shap_mean_abs || []).map((s: any) => ({ feature: s.feature, score: Number(s.score || s.importance || 0) }));
+        if (gainArr.length || shapArr.length) {
+          importanceOverrides = { gain: gainArr, shap: shapArr };
+        }
+      }
+
       // Fetch data dictionary to get descriptions and other metadata
       this.dataService.getDataDictionary(fileId).subscribe({
         next: (dict: any[]) => {
@@ -1378,7 +1393,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               };
             }
           }
-          
+
           this.dialog.open(FeatureCardComponent, {
             width: '900px',
             data: {
@@ -1388,7 +1403,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               processedFile: processedFile,
               dateColumn: dateColumn,
               qualitySummary: qualitySummary || undefined,
-              catLabelLookup: this.catLabelLookup
+              catLabelLookup: this.catLabelLookup,
+              importanceOverrides: importanceOverrides
             }
           });
         },
@@ -1403,13 +1419,138 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
               processedFile: processedFile,
               dateColumn: dateColumn,
-              catLabelLookup: this.catLabelLookup
+              catLabelLookup: this.catLabelLookup,
+              importanceOverrides: importanceOverrides
             }
           });
         }
       });
     } catch (e) {
       console.warn('openFeatureCard failed:', e);
+    }
+  }
+
+  /**
+   * Open Feature Card from an SFS context — provides a dropdown with two contexts:
+   *   1. Final Model Fit (last step of the direction)
+   *   2. Feature Added Step (the specific clicked step)
+   */
+  public openFeatureCardFromSfs(featureName: string, step: any, sfsDirection?: 'forward' | 'backward' | 'forward_from_backward'): void {
+    try {
+      if (!featureName || this.currentFileId == null || !step) return;
+      const fileId = String(this.currentFileId);
+      const processedFile = this.processedFilePath || undefined;
+      const dateColumn = this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
+
+      // Determine the direction and get the LAST step of that direction
+      const directionKey: 'forward' | 'backward' | 'forward_from_backward' =
+        sfsDirection || (step.direction === 'backward' ? 'backward' : 'forward');
+      let directionResults: any[] = [];
+      if (directionKey === 'backward') {
+        directionResults = this.sfsBackwardResults;
+      } else if (directionKey === 'forward_from_backward') {
+        directionResults = this.sfsForwardFromBackwardResults;
+      } else {
+        directionResults = this.sfsForwardResults;
+      }
+      const lastStep = directionResults.length > 0 ? directionResults[directionResults.length - 1] : step;
+
+      const directionLabel = directionKey === 'forward_from_backward' ? 'Forward-from-Backward'
+                           : directionKey === 'backward' ? 'Backward' : 'Forward';
+
+      // --- Build Context 1: Final Model Fit ---
+      const finalFeatures: string[] = lastStep.selected_features || [];
+      const finalGainRaw = lastStep.feature_importance || {};
+      const finalShapRaw = lastStep.shap_importance_by_feature || {};
+      const finalNormGain = this.normalizeGainMap(finalGainRaw, finalFeatures);
+      const finalGainArr = finalFeatures
+        .map(f => ({ feature: f, score: Number(finalNormGain[f] ?? 0) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => b.score - a.score);
+      const finalShapArr = finalFeatures
+        .map(f => ({ feature: f, score: Number(finalShapRaw[f] ?? 0) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => b.score - a.score);
+      const finalModelPath = this.sfsModelPaths[directionKey] || undefined;
+
+      // --- Build Context 2: Feature Added/Dropped Step ---
+      const stepFeatures: string[] = step.selected_features || [];
+      const stepGainRaw = step.feature_importance || {};
+      const stepShapRaw = step.shap_importance_by_feature || {};
+      const stepNormGain = this.normalizeGainMap(stepGainRaw, stepFeatures);
+      const stepGainArr = stepFeatures
+        .map(f => ({ feature: f, score: Number(stepNormGain[f] ?? 0) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => b.score - a.score);
+      const stepShapArr = stepFeatures
+        .map(f => ({ feature: f, score: Number(stepShapRaw[f] ?? 0) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => b.score - a.score);
+
+      const actionLabel = step.action === 'added' ? 'Added' : 'Dropped';
+      const sfsContexts = [
+        {
+          label: `Final Model Fit — SFS ${directionLabel} (${finalFeatures.length} features)`,
+          gain: finalGainArr,
+          shap: finalShapArr,
+          modelPath: finalModelPath,
+        },
+        {
+          label: `Step ${step.step} — ${actionLabel}: ${step.feature_name} (${stepFeatures.length} features)`,
+          gain: stepGainArr,
+          shap: stepShapArr,
+          selectedFeatures: stepFeatures, // On-demand model for explainability
+        }
+      ];
+
+      this.dataService.getDataDictionary(fileId).subscribe({
+        next: (dict: any[]) => {
+          const features = Array.isArray(dict)
+            ? dict.map(item => ({
+                Feature_Name: String(item?.Feature_Name || ''),
+                Feature_Description: String(item?.Feature_Description || 'No description available')
+              })).filter(x => !!x.Feature_Name)
+            : [{ Feature_Name: featureName, Feature_Description: 'No description available' }];
+
+          let qualitySummary: any = null;
+          if (this.datqSummary && Array.isArray(this.datqSummary)) {
+            const row = this.datqSummary.find(r =>
+              String(r['Variable'] || r['variable'] || r['index']) === String(featureName)
+            );
+            qualitySummary = row ? { ...row } : null;
+          }
+
+          this.dialog.open(FeatureCardComponent, {
+            width: '900px',
+            data: {
+              fileId: fileId,
+              columnName: featureName,
+              features: features,
+              processedFile: processedFile,
+              dateColumn: dateColumn,
+              qualitySummary: qualitySummary || undefined,
+              catLabelLookup: this.catLabelLookup,
+              sfsContexts: sfsContexts
+            }
+          });
+        },
+        error: () => {
+          this.dialog.open(FeatureCardComponent, {
+            width: '900px',
+            data: {
+              fileId: fileId,
+              columnName: featureName,
+              features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
+              processedFile: processedFile,
+              dateColumn: dateColumn,
+              catLabelLookup: this.catLabelLookup,
+              sfsContexts: sfsContexts
+            }
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('openFeatureCardFromSfs failed:', e);
     }
   }
 
@@ -1754,6 +1895,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsBackwardResults = data.backward || [];
         this.sfsBackwardRemainingFeatures = data.backward_remaining_features || [];
         this.sfsForwardFromBackwardResults = data.forward_from_backward || [];
+        this.sfsModelPaths = {
+          forward: data.forward_model_path || undefined,
+          backward: data.backward_model_path || undefined,
+          forward_from_backward: data.forward_from_backward_model_path || undefined
+        };
         console.log('[SFS] Backward remaining features:', this.sfsBackwardRemainingFeatures);
         console.log('[SFS] Forward-from-backward results:', this.sfsForwardFromBackwardResults.length);
         // Initialize cut point to last backward step (default = all eliminations applied)
@@ -1796,6 +1942,15 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   }
 
   /**
+   * Get the backward step data object for the current cut step.
+   * Used to provide SFS step context when opening Feature Card from backward cut features.
+   */
+  getBackwardCutStepData(): any {
+    if (this.sfsBackwardCutStep == null) return null;
+    return this.sfsBackwardResults.find((s: any) => s.step === this.sfsBackwardCutStep) || null;
+  }
+
+  /**
    * Set the backward elimination cutting point to a specific step.
    * Features remaining at that step become the candidate set for forward selection.
    */
@@ -1808,19 +1963,27 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   /**
    * Open modal to show detailed impact of adding/dropping a feature
    */
-  openSfsDetailModal(step: any): void {
+  openSfsDetailModal(step: any, sfsDirection?: 'forward' | 'backward' | 'forward_from_backward'): void {
     this.selectedSfsStep = step;
-    this.previousSfsStep = this.findPreviousStep(step);
+    this.selectedSfsDirection = sfsDirection || (step.direction === 'backward' ? 'backward' : 'forward');
+    this.previousSfsStep = this.findPreviousStep(step, this.selectedSfsDirection);
     this.showSfsModal = true;
     setTimeout(() => this.drawSfsFeatureProgressionCharts(), 50);
   }
 
-  findPreviousStep(currentStep: any): any | null {
+  findPreviousStep(currentStep: any, sfsDirection?: string): any | null {
     if (!currentStep || currentStep.step <= 1) return null;
     const prevStepNum = currentStep.step - 1;
-    const direction = currentStep.direction;
-    const resultsArray = direction === 'forward' ? this.sfsForwardResults : this.sfsBackwardResults;
-    return resultsArray.find((s: any) => s.step === prevStepNum && s.direction === direction) || null;
+    const direction = sfsDirection || currentStep.direction;
+    let resultsArray: any[];
+    if (direction === 'forward_from_backward') {
+      resultsArray = this.sfsForwardFromBackwardResults;
+    } else if (direction === 'backward') {
+      resultsArray = this.sfsBackwardResults;
+    } else {
+      resultsArray = this.sfsForwardResults;
+    }
+    return resultsArray.find((s: any) => s.step === prevStepNum) || null;
   }
 
   /**
