@@ -700,6 +700,67 @@
               </div>
             </div>
             
+            <!-- Advanced Configuration Toggle -->
+            <div style="margin-bottom: 12px;">
+              <button (click)="showFwdFromBwdConfig = !showFwdFromBwdConfig"
+                      style="background: none; border: none; cursor: pointer; font-size: 13px; color: #1976d2; padding: 4px 0; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 10px;">{{ showFwdFromBwdConfig ? '▼' : '▶' }}</span>
+                <span>Advanced Configuration</span>
+              </button>
+
+              <div *ngIf="showFwdFromBwdConfig" style="margin-top: 8px; padding: 16px; background: white; border: 1px solid #e0e0e0; border-radius: 6px;">
+                <!-- Stopping Criteria -->
+                <h6 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Stopping Criteria - Metrics</h6>
+                <div *ngFor="let metricCriteria of sfsMetrics; let i = index"
+                     style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; padding: 10px; border: 1px solid #e8e8e8; border-radius: 4px; background: #fafafa;">
+                  <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Metric</label>
+                    <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+                      <option value="roc_auc">ROC-AUC</option>
+                      <option value="pr_auc">PR-AUC</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">
+                      Stop if change &lt; (%) <span style="color: #999;">(0 = no stop)</span>
+                    </label>
+                    <input type="number" [(ngModel)]="metricCriteria.pct_change" (ngModelChange)="onConfigChanged()" min="0" max="100" step="0.1"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;" />
+                  </div>
+                  <div>
+                    <button (click)="removeSfsMetric(i)"
+                            style="padding: 5px 10px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;"
+                            title="Remove metric">✕</button>
+                  </div>
+                </div>
+                <button (click)="addSfsMetric()"
+                        style="padding: 5px 12px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
+                  ➕ Add Metric
+                </button>
+
+                <!-- Feature Count & Parallelism -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Maximum Features</label>
+                    <input type="number" [(ngModel)]="sfsMaxFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;" />
+                  </div>
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Parallel Workers (n_jobs)</label>
+                    <input type="number" [(ngModel)]="sfsNJobs" (ngModelChange)="onConfigChanged()" min="1" max="16"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+                           title="Number of CPU cores for parallel candidate evaluation." />
+                  </div>
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Top-K CV Candidates</label>
+                    <input type="number" [(ngModel)]="sfsTopK" (ngModelChange)="onConfigChanged()" min="1" max="10"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+                           title="Number of top candidates to cross-validate per step." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Button to start forward selection on remaining features -->
             <button mat-raised-button color="primary"
                     (click)="startForwardFromBackwardFeatures()"

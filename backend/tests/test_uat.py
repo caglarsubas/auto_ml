@@ -234,3 +234,264 @@ class TestUserFeatureCardJourney:
             {'column': 'NonExistent'},
         )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Scenario 5: User manages pipeline runs
+# ---------------------------------------------------------------------------
+@pytest.mark.uat
+@pytest.mark.django_db
+class TestUserPipelineManagementJourney:
+
+    def test_user_creates_and_manages_pipeline(self, api_client, _use_tmp_media):
+        """
+        Scenario: User creates a pipeline, progresses through steps,
+        saves checkpoint state, lists saved pipelines, and deletes one.
+
+        Expected: Full CRUD lifecycle works correctly with state persistence.
+        """
+        # Create two pipelines
+        resp1 = api_client.post(
+            '/api/pipeline/create/',
+            data=json.dumps({'name': 'Credit Risk Model', 'pipeline_type': 'boosting'}),
+            content_type='application/json',
+        )
+        assert resp1.status_code == 201
+        pk1 = resp1.data['id']
+
+        resp2 = api_client.post(
+            '/api/pipeline/create/',
+            data=json.dumps({'name': 'Fraud Detection', 'pipeline_type': 'boosting'}),
+            content_type='application/json',
+        )
+        assert resp2.status_code == 201
+        pk2 = resp2.data['id']
+
+        # Progress first pipeline to modeling step with state
+        state = {
+            'declaration': {'file_id': 10},
+            'modeling': {'substep': 'modeling_completed'},
+            'detailed_step': '3b_modeling',
+            'pipeline_notes': {'after_data_preview': 'Good distribution'},
+        }
+        resp = api_client.put(
+            f'/api/pipeline/{pk1}/',
+            data=json.dumps({'current_step': 'modeling', 'state': state, 'file_id': 10}),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+
+        # List all pipelines
+        resp = api_client.get('/api/pipeline/')
+        assert resp.status_code == 200
+        names = [r['name'] for r in resp.data]
+        assert 'Credit Risk Model' in names
+        assert 'Fraud Detection' in names
+
+        # Restore first pipeline's state
+        resp = api_client.get(f'/api/pipeline/{pk1}/')
+        assert resp.status_code == 200
+        assert resp.data['current_step'] == 'modeling'
+        assert resp.data['state']['pipeline_notes']['after_data_preview'] == 'Good distribution'
+
+        # Delete second pipeline
+        resp = api_client.delete(f'/api/pipeline/{pk2}/')
+        assert resp.status_code == 200
+
+        # Verify only first remains
+        resp = api_client.get('/api/pipeline/')
+        assert resp.status_code == 200
+        remaining_names = [r['name'] for r in resp.data]
+        assert 'Credit Risk Model' in remaining_names
+        assert 'Fraud Detection' not in remaining_names
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6: User encodes categorical features
+# ---------------------------------------------------------------------------
+@pytest.mark.uat
+@pytest.mark.django_db
+class TestUserEncodingJourney:
+
+    def test_user_analyzes_and_encodes_features(self, api_client, _use_tmp_media, media_root):
+        """
+        Scenario: User has a processed CSV with categorical features.
+        They analyze the data to get an encoding plan, review it,
+        and apply encoding.
+
+        Expected: Encoding plan identifies categoricals, apply produces
+        encoded file with metadata sidecar.
+        """
+        n = 200
+        df = pd.DataFrame({
+            'Region': np.random.choice(['North', 'South', 'East', 'West'], n),
+            'Product_Type': np.random.choice(['A', 'B', 'C', 'D', 'E'], n),
+            'Amount': np.random.uniform(100, 10000, n).round(2),
+            'Score': np.random.uniform(0, 1, n).round(4),
+            'Target': np.random.choice([0, 1], n),
+        })
+        csv_dir = os.path.join(str(media_root), 'processed')
+        os.makedirs(csv_dir, exist_ok=True)
+        csv_path = os.path.join(csv_dir, 'uat_enc.csv')
+        df.to_csv(csv_path, index=False)
+        rel_path = os.path.relpath(csv_path, str(media_root))
+
+        data_dict = [
+            {'Feature_Name': 'Region', 'Level_of_Measurement': 'nominal'},
+            {'Feature_Name': 'Product_Type', 'Level_of_Measurement': 'nominal'},
+            {'Feature_Name': 'Amount', 'Level_of_Measurement': 'continuous'},
+            {'Feature_Name': 'Score', 'Level_of_Measurement': 'continuous'},
+        ]
+
+        # Step 1: Analyze
+        resp = api_client.post(
+            '/api/encoding/analyze/',
+            data=json.dumps({
+                'file_id': 1,
+                'processed_file': rel_path,
+                'data_dictionary': data_dict,
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        plan = resp.data['plan']
+        cat_features = [p['feature'] for p in plan]
+        assert 'Region' in cat_features
+        assert 'Product_Type' in cat_features
+        assert 'Amount' not in cat_features
+        assert 'Score' not in cat_features
+
+        # Step 2: Apply
+        resp = api_client.post(
+            '/api/encoding/apply/',
+            data=json.dumps({
+                'file_id': 1,
+                'processed_file': rel_path,
+                'plan': plan,
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        summary = resp.data['summary']
+        assert summary['total_encoded'] >= 2
+        assert summary['original_shape'][0] == n
+        assert summary['encoded_shape'][0] == n
+
+        # Verify report has per-feature details
+        report = resp.data['report']
+        report_features = [r['feature'] for r in report]
+        assert 'Region' in report_features
+        assert 'Product_Type' in report_features
+
+
+# ---------------------------------------------------------------------------
+# Scenario 7: User inspects SFS results
+# ---------------------------------------------------------------------------
+@pytest.mark.uat
+@pytest.mark.django_db
+class TestUserSfsInspectionJourney:
+
+    def test_user_views_backward_and_forward_from_backward_results(self, api_client, _use_tmp_media, media_root):
+        """
+        Scenario: After running backward SFS followed by forward-from-backward,
+        the user fetches SFS results and sees three distinct result sets
+        (forward, backward, forward_from_backward) without duplication.
+
+        Expected: Each result set is independent. forward_from_backward does
+        not duplicate forward. Backward results are preserved.
+        """
+        sfs_dir = os.path.join(str(media_root), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+
+        sfs_data = {
+            'forward': [
+                {'step': 1, 'direction': 'forward', 'feature_name': 'FwdVar1',
+                 'cv_roc_auc': 0.78, 'selected_features': ['FwdVar1']},
+            ],
+            'backward': [
+                {'step': 1, 'direction': 'backward', 'feature_name': 'BwdRemoved1',
+                 'cv_roc_auc': 0.90, 'selected_features': ['A', 'B', 'C']},
+                {'step': 2, 'direction': 'backward', 'feature_name': 'BwdRemoved2',
+                 'cv_roc_auc': 0.88, 'selected_features': ['A', 'B']},
+            ],
+            'forward_from_backward': [
+                {'step': 1, 'direction': 'forward', 'feature_name': 'FfbVar1',
+                 'cv_roc_auc': 0.85, 'selected_features': ['FfbVar1']},
+                {'step': 2, 'direction': 'forward', 'feature_name': 'FfbVar2',
+                 'cv_roc_auc': 0.87, 'selected_features': ['FfbVar1', 'FfbVar2']},
+            ],
+            'backward_remaining_features': ['A', 'B'],
+            'status': 'completed',
+            'error': None,
+        }
+
+        file_id = 888
+        with open(os.path.join(sfs_dir, f'{file_id}_sfs_results.json'), 'w') as f:
+            json.dump(sfs_data, f)
+
+        resp = api_client.get(f'/api/modeling/sfs/{file_id}/')
+        assert resp.status_code == 200
+        data = resp.data
+
+        # Verify all three result sets exist and are independent
+        assert len(data['forward']) == 1
+        assert len(data['backward']) == 2
+        assert len(data['forward_from_backward']) == 2
+
+        # Verify no feature name overlap between forward and forward_from_backward
+        fwd_names = {s['feature_name'] for s in data['forward']}
+        ffb_names = {s['feature_name'] for s in data['forward_from_backward']}
+        assert not fwd_names & ffb_names, "forward and forward_from_backward should not share features"
+
+        # Verify backward results are preserved
+        assert data['backward'][0]['feature_name'] == 'BwdRemoved1'
+        assert data['backward_remaining_features'] == ['A', 'B']
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8: User downloads pipeline report
+# ---------------------------------------------------------------------------
+@pytest.mark.uat
+@pytest.mark.django_db
+class TestUserPipelineReportJourney:
+
+    def test_user_generates_and_downloads_report(self, api_client, _use_tmp_media):
+        """
+        Scenario: User creates a pipeline, progresses it to completion,
+        then downloads the pipeline report as HTML.
+
+        Expected: Report contains pipeline name, is valid HTML,
+        and can be generated in both download and print formats.
+        """
+        # Create and progress pipeline
+        resp = api_client.post(
+            '/api/pipeline/create/',
+            data=json.dumps({
+                'name': 'Final Credit Model v3',
+                'pipeline_type': 'boosting',
+                'current_step': 'evaluation',
+                'state': {
+                    'declaration': {'file_id': 5},
+                    'modeling': {'substep': 'modeling_completed'},
+                    'detailed_step': '3b_modeling',
+                },
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 201
+        pk = resp.data['id']
+
+        # Download report
+        resp = api_client.get(f'/api/pipeline/{pk}/report/')
+        assert resp.status_code == 200
+        html = resp.content.decode('utf-8')
+        assert 'Final Credit Model v3' in html
+        assert '<!DOCTYPE html>' in html or '<html' in html.lower()
+        assert 'Content-Disposition' in resp
+
+        # Print-ready report
+        resp = api_client.get(f'/api/pipeline/{pk}/report/?output=print')
+        assert resp.status_code == 200
+        html = resp.content.decode('utf-8')
+        assert 'window.print()' in html
+        assert 'Content-Disposition' not in resp

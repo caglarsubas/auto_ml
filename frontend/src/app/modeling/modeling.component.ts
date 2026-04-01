@@ -54,9 +54,9 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsMetrics: Array<{ metric: string, pct_change: number }> = [
     { metric: 'roc_auc', pct_change: 1.0 }
   ];
-  sfsMinFeatures: number = 3;
-  sfsMaxFeatures: number = 10;
-  sfsNJobs: number = 1;
+  sfsMinFeatures: number = 5;
+  sfsMaxFeatures: number = 15;
+  sfsNJobs: number = 3;
   sfsTopK: number = 5;
   
   // SFS results
@@ -67,6 +67,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsBackwardCutStep: number | null = null;  // User-selected cutting point step in backward results
   sfsBackwardCutFeatures: string[] = [];  // Features remaining at the selected cut step
   sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward cut features
+  showFwdFromBwdConfig: boolean = false;  // Toggle advanced config for forward-from-backward run
   sfsModelPaths: { forward?: string; backward?: string; forward_from_backward?: string } = {};  // Paths to final SFS models
   selectedSfsStep: any | null = null;  // For modal display
   selectedSfsDirection: 'forward' | 'backward' | 'forward_from_backward' | undefined = undefined;  // Source direction of selectedSfsStep
