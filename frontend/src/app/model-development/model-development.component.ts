@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
+import { AiAssistantService } from '../services/ai-assistant.service';
 
 interface PurifierOption {
   id: number;
@@ -74,6 +75,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   rowCountBefore: number = 0;
   rowCountAfter: number = 0;
   preprocessingInitiated: boolean = false;
+  // Before/after preprocessing per-feature descriptive stats (mean, median, skewness, kurtosis, etc.)
+  featureStatsBefore: any[] | null = null;
+  featureStatsAfter: any[] | null = null;
+  // Per-step before/after stats (e.g. before/after outlier cleaning specifically)
+  preprocessingStepStats: any[] | null = null;
 
   // Split controls
   splitStrategy: 'random' | 'oot' = 'random';
@@ -128,6 +134,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   encodingApplied: boolean = false;
   encodedFilePath: string | null = null;
   encodingUseNative: boolean = true;
+
+  // ===== 3-Layer Panel Layout =====
+  showLeftPanel: boolean = true;
+  showRightPanel: boolean = false;
+  leftPanelWidth: number = 220;
+  rightPanelWidth: number = 360;
+  private _resizing: 'left' | 'right' | null = null;
+  private _resizeStartX: number = 0;
+  private _resizeStartWidth: number = 0;
 
   get datqDisplayColumns(): string[] {
     const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
@@ -733,7 +748,128 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28];
   selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
-  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
+  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog, public aiAssistant: AiAssistantService) {}
+
+  // ===== 3-Layer Panel Toggle & Resize =====
+  toggleLeftPanel(): void {
+    this.showLeftPanel = !this.showLeftPanel;
+  }
+
+  toggleRightPanel(): void {
+    this.showRightPanel = !this.showRightPanel;
+    if (this.showRightPanel) {
+      this.aiAssistant.openPanel();
+    } else {
+      this.aiAssistant.closePanel();
+    }
+  }
+
+  onLeftResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this._resizing = 'left';
+    this._resizeStartX = event.clientX;
+    this._resizeStartWidth = this.leftPanelWidth;
+    document.addEventListener('mousemove', this._onResizeMove);
+    document.addEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  onRightResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this._resizing = 'right';
+    this._resizeStartX = event.clientX;
+    this._resizeStartWidth = this.rightPanelWidth;
+    document.addEventListener('mousemove', this._onResizeMove);
+    document.addEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  private _onResizeMove = (event: MouseEvent): void => {
+    if (!this._resizing) return;
+    const dx = event.clientX - this._resizeStartX;
+    if (this._resizing === 'left') {
+      this.leftPanelWidth = Math.max(160, Math.min(400, this._resizeStartWidth + dx));
+    } else if (this._resizing === 'right') {
+      this.rightPanelWidth = Math.max(280, Math.min(600, this._resizeStartWidth - dx));
+    }
+  };
+
+  private _onResizeEnd = (): void => {
+    this._resizing = null;
+    document.removeEventListener('mousemove', this._onResizeMove);
+    document.removeEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+
+  getPipelineConfig(): any {
+    return {
+      pipeline_type: this.selectedPipeline || 'boosting',
+      current_step: this.currentStep,
+      detailed_step: this.detailedStep,
+      preprocessing_initiated: this.preprocessingInitiated,
+      modeling_available: this.modelingAvailable,
+      selected_purifier_steps: this.selectedOptions.map(o => o.name),
+      split_strategy: this.splitStrategy,
+      split_details: this.splitStrategy === 'oot'
+        ? { mode: this.ootMode, oot_percent: this.ootPercent, date_column: this.splitDateColumn, cutoff: this.splitCutoff }
+        : { oos_percent: this.oosPercent },
+      rows_before: this.rowCountBefore,
+      rows_after: this.rowCountAfter,
+      rows_removed: this.rowsRemovedTotal,
+      total_columns_dropped: this.droppedTotalCount(),
+      dropped_by_step: this.droppedColumnsByStep,
+      model_usage_exclusions: Object.entries(this.variableModelUsage || {})
+        .filter(([_, v]) => String(v).toLowerCase() === 'no')
+        .map(([k]) => k),
+      data_dictionary: (this.dataDictionaryCache || []).map((d: any) => ({
+        Feature_Name: d?.Feature_Name,
+        Data_Type: d?.Data_Type,
+        Level_of_Measurement: d?.Level_of_Measurement,
+        Unique_Values: d?.['#_of_Unique_Value'],
+        Missing_Ratio: d?.Missing_Ratio,
+        Mode_Ratio: d?.Mode_Ratio,
+        Model_Usage_YN: d?.Model_Usage_YN,
+        Feature_Description: d?.Feature_Description || null,
+      })),
+      encoding_plan: (this.encodingPlan || []).map((e: any) => ({
+        feature: e?.feature,
+        lom: e?.user_lom || e?.lom,
+        nunique: e?.nunique,
+        strategy: e?.fallback_strategy,
+        needs_ranking: e?.needs_ranking,
+      })),
+      feature_stats_before: this.featureStatsBefore,
+      feature_stats_after: this.featureStatsAfter,
+      preprocessing_step_stats: this.preprocessingStepStats,
+      pipeline_notes: this.pipelineNotes || {},
+    };
+  }
+
+  requestAiSupport(context: any, section: string, prompt: string): void {
+    this.showRightPanel = true;
+    const enriched = { ...context, pipeline_config: this.getPipelineConfig() };
+    this.aiAssistant.requestSupport(enriched, section, prompt);
+  }
+
+  requestDatqAiSupport(): void {
+    const context = {
+      summary: this.datqSummary,
+      purifier_summary: {
+        rows_before: this.rowCountBefore,
+        rows_after: this.rowCountAfter,
+        rows_removed: this.rowsRemovedTotal,
+        total_columns_dropped: this.droppedTotalCount(),
+        dropped_by_step: this.droppedColumnsByStep
+      },
+      model_usage: this.variableModelUsage,
+      split_validation: this.splitValidation
+    };
+    const prompt = 'Analyze this Data Quality Summary. Compare before vs after preprocessing treatment effects (rows removed, columns dropped per step). Highlight concerns about PSI stability, missing values, distribution shifts, and features to watch for the next encoding/modeling steps.';
+    this.requestAiSupport(context, 'data_quality', prompt);
+  }
 
   ngAfterViewChecked(): void {
     if (this.splitValidation && !this._splitChartDrawn && this.splitValidationCanvas) {
@@ -751,6 +887,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
         this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
       }
     } catch {}
+
+    // Sync AI assistant panel open state from service (e.g. when child components open panel)
+    this.subscription.add(
+      this.aiAssistant.panelOpen$.subscribe(open => {
+        this.showRightPanel = open;
+      })
+    );
 
     // Baseline reset to prevent stale state causing steps to appear out of order
     this.sharedService.setStarted(false);
@@ -1689,6 +1832,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
           this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          this.featureStatsBefore = result?.feature_stats_before ?? null;
+          this.featureStatsAfter = result?.feature_stats_after ?? null;
+          this.preprocessingStepStats = result?.preprocessing_step_stats ?? null;
           // Restore Split Validation
           this.splitValidation = result?.split_validation ?? null;
           this._splitChartDrawn = false;
@@ -1878,6 +2024,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
           // Capture row counts before/after
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Capture before/after per-feature descriptive stats
+          this.featureStatsBefore = result?.feature_stats_before ?? null;
+          this.featureStatsAfter = result?.feature_stats_after ?? null;
+          this.preprocessingStepStats = result?.preprocessing_step_stats ?? null;
           // Capture Split Validation data
           this.splitValidation = result?.split_validation ?? null;
           this._splitChartDrawn = false;

@@ -40,6 +40,9 @@ backend/media/
 # Test reports
 test-reports/
 
+# Environment variables (API keys)
+.env
+
 # User created
 get_github_context.sh
 auto_ml_context.md

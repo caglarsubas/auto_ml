@@ -481,6 +481,7 @@ class PreprocessingRunView(APIView):
 
             if not isinstance(options, list) or not all(isinstance(x, int) for x in options):
                 return Response({'error': 'options must be a list of integers'}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"[PreprocessingRun] options={sorted(options)} (outlier cleaning 28-30: {[o for o in options if o in (28,29,30)]})")
 
             file_path = decl.file.path
             if not os.path.exists(file_path):
@@ -507,16 +508,28 @@ class PreprocessingRunView(APIView):
             
             rows_before = len(df)
 
+            # Compute BEFORE-preprocessing per-feature descriptive stats
+            t_stats_before = time.monotonic()
+            try:
+                feature_stats_before = self._compute_feature_stats(df)
+                print(f"[PreprocessingRun] feature_stats_before computed in {time.monotonic()-t_stats_before:.3f}s for {len(feature_stats_before)} features")
+            except Exception as e:
+                feature_stats_before = None
+                print(f"[PreprocessingRun] feature_stats_before failed: {e}")
+
             # Apply transformations
             t_apply_start = time.monotonic()
-            preserve_cols: set[str] | None = None
+            # Always preserve Target column; also preserve date column for OOT splits
+            preserve_cols: set[str] = set()
+            if 'Target' in df.columns:
+                preserve_cols.add('Target')
             try:
                 if isinstance(split, dict) and split.get('strategy') == 'oot' and split.get('date_column'):
-                    preserve_cols = {str(split.get('date_column'))}
+                    preserve_cols.add(str(split.get('date_column')))
             except Exception:
-                preserve_cols = None
-            df_processed, dropped_columns, dropped_by_step = self._apply_options(df, set(options), preserve=preserve_cols)
-            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape}")
+                pass
+            df_processed, dropped_columns, dropped_by_step, preprocessing_step_stats = self._apply_options(df, set(options), preserve=preserve_cols)
+            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape} step_stats={len(preprocessing_step_stats)}")
             
             # Add Model_Usage='No' info to the beginning of the breakdown for transparency
             # Note: These are NOT dropped from dataframe, just excluded from model training
@@ -540,6 +553,15 @@ class PreprocessingRunView(APIView):
             t_save_start = time.monotonic()
             df_processed.to_csv(out_full, index=False)
             print(f"[PreprocessingRun] saved processed csv in {time.monotonic()-t_save_start:.3f}s -> {out_rel}")
+
+            # Compute AFTER-preprocessing per-feature descriptive stats
+            t_stats_after = time.monotonic()
+            try:
+                feature_stats_after = self._compute_feature_stats(df_processed)
+                print(f"[PreprocessingRun] feature_stats_after computed in {time.monotonic()-t_stats_after:.3f}s for {len(feature_stats_after)} features")
+            except Exception as e:
+                feature_stats_after = None
+                print(f"[PreprocessingRun] feature_stats_after failed: {e}")
 
             # Build split indices helper
             def _build_split_indices(frame: pd.DataFrame):
@@ -959,6 +981,9 @@ class PreprocessingRunView(APIView):
                 'processed_file': out_rel,
                 'datq_summary': datq_summary_records,
                 'split_validation': split_validation,
+                'feature_stats_before': feature_stats_before,
+                'feature_stats_after': feature_stats_after,
+                'preprocessing_step_stats': preprocessing_step_stats if preprocessing_step_stats else None,
             }
 
             # Final sanitize for JSON safety
@@ -1008,6 +1033,65 @@ class PreprocessingRunView(APIView):
             print("[PreprocessingRun] ERROR:\n" + traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @staticmethod
+    def _compute_feature_stats(frame: pd.DataFrame) -> list[dict]:
+        """Compute per-feature descriptive statistics for a dataframe.
+
+        Returns a list of dicts, one per column, with keys:
+        Feature_Name, Data_Type, Missing_Pct, Unique, Mean, Median, Std,
+        Min, Max, Skewness, Kurtosis, Q01, Q05, Q25, Q75, Q95, Q99,
+        Mode, Mode_Pct (for categoricals).
+        """
+        from scipy import stats as scipy_stats
+        result = []
+        for col in frame.columns:
+            series = frame[col]
+            n = len(series)
+            missing_pct = round(float(series.isna().mean()) * 100, 2) if n > 0 else 0.0
+            nunique = int(series.nunique(dropna=True))
+            entry: dict = {
+                'Feature_Name': col,
+                'Missing_Pct': missing_pct,
+                'Unique': nunique,
+                'N': n,
+            }
+            # Try numeric stats
+            numeric = pd.to_numeric(series, errors='coerce')
+            non_null = numeric.dropna()
+            if len(non_null) >= 2:
+                entry['Data_Type'] = 'numeric'
+                entry['Mean'] = round(float(non_null.mean()), 4)
+                entry['Median'] = round(float(non_null.median()), 4)
+                entry['Std'] = round(float(non_null.std()), 4)
+                entry['Min'] = round(float(non_null.min()), 4)
+                entry['Max'] = round(float(non_null.max()), 4)
+                try:
+                    entry['Skewness'] = round(float(scipy_stats.skew(non_null.values)), 4)
+                except Exception:
+                    entry['Skewness'] = None
+                try:
+                    entry['Kurtosis'] = round(float(scipy_stats.kurtosis(non_null.values)), 4)
+                except Exception:
+                    entry['Kurtosis'] = None
+                try:
+                    entry['Q01'] = round(float(non_null.quantile(0.01)), 4)
+                    entry['Q05'] = round(float(non_null.quantile(0.05)), 4)
+                    entry['Q25'] = round(float(non_null.quantile(0.25)), 4)
+                    entry['Q75'] = round(float(non_null.quantile(0.75)), 4)
+                    entry['Q95'] = round(float(non_null.quantile(0.95)), 4)
+                    entry['Q99'] = round(float(non_null.quantile(0.99)), 4)
+                except Exception:
+                    pass
+            else:
+                entry['Data_Type'] = 'categorical'
+                vc = series.value_counts(dropna=True)
+                if len(vc) > 0:
+                    entry['Mode'] = str(vc.index[0])
+                    entry['Mode_Pct'] = round(float(vc.iloc[0] / max(1, n)) * 100, 2)
+                    entry['Num_Categories'] = len(vc)
+            result.append(entry)
+        return result
+
     def _read_dataframe(self, path: str) -> pd.DataFrame:
         lower = path.lower()
         if lower.endswith('.csv'):
@@ -1025,13 +1109,24 @@ class PreprocessingRunView(APIView):
     def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None):
         dropped_cols: list[str] = []
         breakdown: list[dict] = []
+        step_stats: list[dict] = []  # per-step before/after stats for value-modifying steps
         work = df.copy()
 
         # 1: Column-wise duplicate drop
         if 1 in options:
             _rows_before = len(work)
             before_cols = list(work.columns)
+            orig_dtypes = work.dtypes.to_dict()  # save dtypes before transpose (T destroys them)
             work = work.T.drop_duplicates().T
+            # Restore only numeric dtypes (transpose converts everything to object)
+            # Non-numeric columns safely stay as object; restoring StringDtype etc. breaks downstream code
+            for col in work.columns:
+                dt = orig_dtypes.get(col)
+                if dt is not None and hasattr(dt, 'kind') and dt.kind in ('i', 'u', 'f', 'b'):
+                    try:
+                        work[col] = work[col].astype(dt)
+                    except (ValueError, TypeError):
+                        pass
             dc = [c for c in before_cols if c not in work.columns]
             if preserve:
                 dc = [c for c in dc if c not in preserve]
@@ -1176,15 +1271,44 @@ class PreprocessingRunView(APIView):
         selected_q = [q for k, q in quantiles.items() if k in options]
         if selected_q:
             lo, hi = selected_q[0]  # pick the first specified
+            selected_q_ids = [k for k in quantiles.keys() if k in options]
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
+                # Snapshot BEFORE outlier cleaning
+                try:
+                    stats_before_oc = PreprocessingRunView._compute_feature_stats(work)
+                except Exception:
+                    stats_before_oc = None
+
                 lower = num.quantile(lo)
                 upper = num.quantile(hi)
                 num_clipped = num.clip(lower=lower, upper=upper, axis=1)
                 for c in num_clipped.columns:
                     work[c] = num_clipped[c]
 
-        return work, list(dict.fromkeys(dropped_cols)), breakdown
+                # Snapshot AFTER outlier cleaning
+                try:
+                    stats_after_oc = PreprocessingRunView._compute_feature_stats(work)
+                except Exception:
+                    stats_after_oc = None
+
+                step_stats.append({
+                    'step': 'Outlier cleaning (quantile clipping)',
+                    'option_ids': selected_q_ids,
+                    'quantile_range': [lo, hi],
+                    'stats_before': stats_before_oc,
+                    'stats_after': stats_after_oc,
+                })
+                breakdown.append({
+                    'step': 'Outlier cleaning (quantile clipping)',
+                    'option_ids': selected_q_ids,
+                    'quantile_range': [lo, hi],
+                    'columns': [],
+                    'rows_removed': 0,
+                    'note': f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] quantile range'
+                })
+
+        return work, list(dict.fromkeys(dropped_cols)), breakdown, step_stats
 
     def _safe_timestamp(self) -> str:
         from datetime import datetime

@@ -7,9 +7,9 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-enhance the test framework in the aim of covering recent codebase developments
 * make pipeline interface witdh-adjustable 3 layers layout (left progress navigation (cancel current hidden-sliding one), middle pipeline-flow, right LLM based assistant chat (for now openai gpt-5.3)). add a button named 'Get AI Support' after each process output (data quality summary, categorical feature encoding, Modeling-Cross-Validation, Modeling-SHAP Beeswarm (interactive), Modeling-Selected Features (sorted by Combined Score), SFS Results) providing insights about the output being showed to the customer and answers her/him technical questions about the results, make reasonable, advisory comments. 
 
+- make navigation menu much more informative by showing intended sub-steps with a collapsable component, by adding main-step progress percentages and completed or ongoing indicator icons near them.
 - start hyperparameter
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - stopping criteria selections via %-change of metrics and min-max feature count.
@@ -27,3 +27,4 @@ After the implementation is complete and functional, here are potential future i
 - History Tracking - Save multiple SFS runs for comparison
 
 
+prepare to me a table including features in rows and metrics (mean, median, skewness and kurtosis) in columns. in cells separate the before and after outlier-cleaning values with slash

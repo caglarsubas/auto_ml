@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'feature_card',
     'modeling',
     'preprocessing',
+    'ai_assistant',
 ]
 
 MIDDLEWARE = [
@@ -169,3 +170,6 @@ LOGGING = {
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB (default is 2.5 MB)
 
 CSRF_TRUSTED_ORIGINS = ['http://localhost:4200', 'http://localhost:4300']
+
+# OpenAI API key for AI Assistant (set via environment variable)
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')

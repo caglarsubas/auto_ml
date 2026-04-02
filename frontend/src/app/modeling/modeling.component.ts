@@ -8,6 +8,7 @@ import { finalize } from 'rxjs/operators';
 import { Subscription, interval } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
+import { AiAssistantService } from '../services/ai-assistant.service';
 
 interface PurifierOption { id: number; name: string; }
 
@@ -161,8 +162,57 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]' },
   ];
 
-  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef, private dialog: MatDialog) {
+  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef, private dialog: MatDialog, private aiAssistant: AiAssistantService) {
     this.isBrowser = isPlatformBrowser(platformId);
+  }
+
+  requestAiSupport(context: any, section: string, prompt: string): void {
+    const pipelineConfig: any = {
+      pipeline_type: this.selectedPipeline || 'boosting',
+      current_step: 'modeling',
+      selected_purifier_steps: this.selectedOptionNames || [],
+      selected_algorithm: this.selectedAlgorithm,
+      model_score: this.modelingStatus?.model?.score,
+      num_features: this.modelingStatus?.model?.selected_features?.length,
+      model_usage_exclusions: Object.entries(this.variableModelUsage || {})
+        .filter(([_, v]) => String(v).toLowerCase() === 'no')
+        .map(([k]) => k),
+      data_dictionary: (this.dataDictionaryCache || []).map((d: any) => ({
+        Feature_Name: d?.Feature_Name,
+        Data_Type: d?.Data_Type,
+        Level_of_Measurement: d?.Level_of_Measurement,
+        Unique_Values: d?.['#_of_Unique_Value'],
+        Missing_Ratio: d?.Missing_Ratio,
+        Mode_Ratio: d?.Mode_Ratio,
+        Model_Usage_YN: d?.Model_Usage_YN,
+        Feature_Description: d?.Feature_Description || null,
+      })),
+      encoding_plan: (this.encodingPlan || []).map((e: any) => ({
+        feature: e?.feature,
+        lom: e?.user_lom || e?.lom,
+        nunique: e?.nunique,
+        strategy: e?.fallback_strategy,
+        needs_ranking: e?.needs_ranking,
+      })),
+      feature_stats_before: this.runPreview?.feature_stats_before ?? null,
+      feature_stats_after: this.runPreview?.feature_stats_after ?? null,
+      preprocessing_step_stats: this.runPreview?.preprocessing_step_stats ?? null,
+      pipeline_notes: this.pipelineNotes || {},
+    };
+    const enriched = { ...context, pipeline_config: pipelineConfig };
+    this.aiAssistant.requestSupport(enriched, section, prompt);
+  }
+
+  getShapContext(): any {
+    const feats = this.modelingStatus?.model?.selected_features;
+    if (!feats) return {};
+    return { features: feats.slice(0, 20).map((f: any) => ({ feature: f.feature, impact: f.shap_impact, signed_impact: f.signed_shap_impact })) };
+  }
+
+  getSelectedFeaturesContext(): any {
+    const feats = this.modelingStatus?.model?.selected_features;
+    if (!feats) return {};
+    return { features: feats.map((f: any) => ({ feature: f.feature, combined_score: f.combined_score, shap_percentile: f.shap_percentile, gain_percentile: f.gain_percentile, vif: f.vif, usage: f.usage })) };
   }
 
   ngOnInit(): void {

@@ -365,4 +365,20 @@ export class DataService {
     );
   }
 
+  // ===== AI Assistant =====
+
+  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/chat/`, {
+      message,
+      context,
+      section,
+      history,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error in AI assistant chat:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
 }

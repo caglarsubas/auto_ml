@@ -2,6 +2,190 @@
    Model Development - Modern Pipeline UI
    ============================================ */
 
+/* ===== 3-Layer Panel Layout ===== */
+:host {
+  display: block;
+  height: calc(100vh - 64px); /* subtract toolbar height */
+  overflow: hidden;
+}
+
+.panel-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 2px;
+  background: #e8e8e8;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.6);
+  color: #333;
+}
+
+.toggle-btn.active {
+  background: white;
+  color: #740505;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.toggle-btn:disabled {
+  cursor: default;
+}
+
+.toggle-icon {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.toggle-label {
+  font-size: 12px;
+}
+
+.layout-panels {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 64px - 42px); /* toolbar + toggle bar */
+}
+
+/* Left Panel */
+.panel-left {
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, #3a0202 0%, #1a0101 100%);
+  border-right: 1px solid #2a0101;
+}
+
+.left-nav {
+  padding: 0;
+}
+
+.left-nav-header {
+  padding: 16px 20px 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.left-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+}
+
+.left-nav-item {
+  padding: 10px 16px;
+  margin: 2px 0;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.left-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.left-nav-item a {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.left-nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.left-nav-item.active a {
+  color: white;
+  font-weight: 600;
+}
+
+.left-nav-item.disabled a {
+  color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+/* Resize Handle */
+.resize-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: #e8e8e8;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: #740505;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 24px;
+  border-left: 1px solid rgba(0, 0, 0, 0.15);
+  border-right: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Middle Panel */
+.panel-middle {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 400px;
+  background: #fafbfc;
+}
+
+/* Right Panel */
+.panel-right {
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
 .model-development-container {
   padding: var(--space-6);
   animation: fadeIn 0.4s ease-out;
@@ -126,72 +310,7 @@ h1::before {
   border-radius: var(--radius-full);
 }
 
-/* Side Navigation Menu */
-.side-menu {
-  position: fixed;
-  left: -180px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 230px;
-  transition: all var(--transition-slow);
-  z-index: var(--z-fixed);
-  background: linear-gradient(135deg, var(--primary-800) 0%, var(--primary-950) 100%);
-  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
-.side-menu:hover {
-  left: 0;
-}
-
-.side-menu .menu-header {
-  padding: var(--space-4) var(--space-5);
-  color: white;
-  font-weight: var(--font-semibold);
-  font-size: var(--text-base);
-  background: rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.side-menu ul {
-  list-style-type: none;
-  padding: var(--space-2);
-  margin: 0;
-}
-
-.side-menu li {
-  padding: var(--space-3) var(--space-4);
-  margin: var(--space-1) 0;
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-fast);
-}
-
-.side-menu li:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.side-menu a {
-  color: rgba(255, 255, 255, 0.9);
-  text-decoration: none;
-  display: block;
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.side-menu li.active {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.side-menu li.active a {
-  color: white;
-}
-
-.model-development-content {
-  margin-left: 60px;
-  padding: var(--space-6);
-}
+/* Old side-menu removed — replaced by .panel-left layout */
 
 /* Preprocessing Section */
 .preprocessing-declaration {
@@ -774,6 +893,36 @@ h1::before {
 .pipeline-note-textarea::placeholder {
   color: #bbb;
   font-style: italic;
+}
+
+/* AI Support Button */
+.ai-support-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid #740505;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+  color: #740505;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ai-support-btn:hover {
+  background: linear-gradient(135deg, #740505 0%, #920707 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(116, 5, 5, 0.3);
+  transform: translateY(-1px);
+}
+
+.ai-support-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
 
 /* Chip Badge */

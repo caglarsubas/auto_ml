@@ -621,3 +621,33 @@
   color: #bbb;
   font-style: italic;
 }
+
+/* AI Support Button */
+.ai-support-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid #740505;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+  color: #740505;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ai-support-btn:hover {
+  background: linear-gradient(135deg, #740505 0%, #920707 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(116, 5, 5, 0.3);
+  transform: translateY(-1px);
+}
+
+.ai-support-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}

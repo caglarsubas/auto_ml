@@ -16,6 +16,9 @@ matplotlib>=3.7
 mlxtend>=0.23
 statsmodels>=0.14
 
+# AI Assistant
+httpx>=0.27
+
 # Testing dependencies
 pytest>=8.0
 pytest-django>=4.8

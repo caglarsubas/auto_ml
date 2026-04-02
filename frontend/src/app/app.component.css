@@ -7,9 +7,9 @@
 }
 
 .content-container {
-  padding: var(--space-8) var(--space-6);
-  max-width: 1400px;
-  margin: 0 auto;
+  padding: 0;
+  max-width: 100%;
+  margin: 0;
   min-height: calc(100vh - 72px);
   animation: fadeIn 0.4s ease-out;
 }
