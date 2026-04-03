@@ -167,40 +167,58 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   }
 
   requestAiSupport(context: any, section: string, prompt: string): void {
-    const pipelineConfig: any = {
-      pipeline_type: this.selectedPipeline || 'boosting',
-      current_step: 'modeling',
-      selected_purifier_steps: this.selectedOptionNames || [],
-      selected_algorithm: this.selectedAlgorithm,
-      model_score: this.modelingStatus?.model?.score,
-      num_features: this.modelingStatus?.model?.selected_features?.length,
-      model_usage_exclusions: Object.entries(this.variableModelUsage || {})
-        .filter(([_, v]) => String(v).toLowerCase() === 'no')
-        .map(([k]) => k),
-      data_dictionary: (this.dataDictionaryCache || []).map((d: any) => ({
-        Feature_Name: d?.Feature_Name,
-        Data_Type: d?.Data_Type,
-        Level_of_Measurement: d?.Level_of_Measurement,
-        Unique_Values: d?.['#_of_Unique_Value'],
-        Missing_Ratio: d?.Missing_Ratio,
-        Mode_Ratio: d?.Mode_Ratio,
-        Model_Usage_YN: d?.Model_Usage_YN,
-        Feature_Description: d?.Feature_Description || null,
-      })),
-      encoding_plan: (this.encodingPlan || []).map((e: any) => ({
-        feature: e?.feature,
-        lom: e?.user_lom || e?.lom,
-        nunique: e?.nunique,
-        strategy: e?.fallback_strategy,
-        needs_ranking: e?.needs_ranking,
-      })),
-      feature_stats_before: this.runPreview?.feature_stats_before ?? null,
-      feature_stats_after: this.runPreview?.feature_stats_after ?? null,
-      preprocessing_step_stats: this.runPreview?.preprocessing_step_stats ?? null,
-      pipeline_notes: this.pipelineNotes || {},
+    const buildAndSend = () => {
+      const pipelineConfig: any = {
+        pipeline_type: this.selectedPipeline || 'boosting',
+        target_definition: this.sharedService.getTargetDefinition() || '',
+        current_step: 'modeling',
+        selected_purifier_steps: this.selectedOptionNames || [],
+        selected_algorithm: this.selectedAlgorithm,
+        model_score: this.modelingStatus?.model?.score,
+        num_features: this.modelingStatus?.model?.selected_features?.length,
+        model_usage_exclusions: Object.entries(this.variableModelUsage || {})
+          .filter(([_, v]) => String(v).toLowerCase() === 'no')
+          .map(([k]) => k),
+        data_dictionary: (this.dataDictionaryCache || []).map((d: any) => ({
+          Feature_Name: d?.Feature_Name,
+          Data_Type: d?.Data_Type,
+          Level_of_Measurement: d?.Level_of_Measurement,
+          Unique_Values: d?.['#_of_Unique_Value'],
+          Missing_Ratio: d?.Missing_Ratio,
+          Mode_Ratio: d?.Mode_Ratio,
+          Model_Usage_YN: d?.Model_Usage_YN,
+          Feature_Description: d?.Feature_Description || null,
+        })),
+        encoding_plan: (this.encodingPlan || []).map((e: any) => ({
+          feature: e?.feature,
+          lom: e?.user_lom || e?.lom,
+          nunique: e?.nunique,
+          strategy: e?.fallback_strategy,
+          needs_ranking: e?.needs_ranking,
+        })),
+        feature_stats_before: this.runPreview?.feature_stats_before ?? null,
+        feature_stats_after: this.runPreview?.feature_stats_after ?? null,
+        preprocessing_step_stats: this.runPreview?.preprocessing_step_stats ?? null,
+        pipeline_notes: this.pipelineNotes || {},
+      };
+      const enriched = { ...context, pipeline_config: pipelineConfig };
+      this.aiAssistant.requestSupport(enriched, section, prompt);
     };
-    const enriched = { ...context, pipeline_config: pipelineConfig };
-    this.aiAssistant.requestSupport(enriched, section, prompt);
+    // Ensure data dictionary cache has descriptions before sending to AI
+    const hasDescriptions = Array.isArray(this.dataDictionaryCache) &&
+      this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+    if (!hasDescriptions && this.currentFileId != null) {
+      this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
+        next: (list: any[]) => {
+          this.dataDictionaryCache = Array.isArray(list) ? list : [];
+          this.sharedService.setDataDictionaryCache(this.dataDictionaryCache);
+          buildAndSend();
+        },
+        error: () => buildAndSend(),
+      });
+    } else {
+      buildAndSend();
+    }
   }
 
   getShapContext(): any {
@@ -760,8 +778,62 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     }, 800);
   }
 
+  /** Push modeling-level data into the cumulative AI context in SharedService. */
+  private pushModelingAiContext(): void {
+    const existing = this.sharedService.getAiCumulativeContext() || {};
+    const modelCtx: any = {};
+    // Encoding
+    if (this.encodingPlan && this.encodingPlan.length > 0) {
+      modelCtx.encoding_plan = this.encodingPlan;
+    }
+    // CV results
+    const cv = this.modelingStatus?.model?.cv;
+    if (cv) {
+      modelCtx.cv = cv;
+      modelCtx.model_info = {
+        model_type: this.selectedAlgorithm,
+        features: this.modelingStatus?.model?.selected_features?.length,
+        score: this.modelingStatus?.model?.score,
+      };
+    }
+    // SHAP features (top 20)
+    const feats = this.modelingStatus?.model?.selected_features;
+    if (feats && feats.length > 0) {
+      modelCtx.shap_features = feats.slice(0, 20).map((f: any) => ({
+        feature: f.feature, impact: f.shap_impact, signed_impact: f.signed_shap_impact,
+      }));
+      modelCtx.selected_features = feats.map((f: any) => ({
+        feature: f.feature, combined_score: f.combined_score,
+        shap_percentile: f.shap_percentile, gain_percentile: f.gain_percentile,
+        vif: f.vif, usage: f.usage,
+      }));
+    }
+    // SFS results
+    if (this.sfsForwardResults?.length || this.sfsBackwardResults?.length || this.sfsForwardFromBackwardResults?.length) {
+      modelCtx.sfs = {
+        forward: this.sfsForwardResults,
+        backward: this.sfsBackwardResults,
+        forward_from_backward: this.sfsForwardFromBackwardResults,
+      };
+    }
+    // Merge into existing cumulative context (model-development owns pipeline_config, data quality)
+    const merged = { ...existing, ...modelCtx };
+    // Preserve pipeline_config from model-development; add modeling-specific fields
+    if (merged.pipeline_config) {
+      merged.pipeline_config = {
+        ...merged.pipeline_config,
+        selected_algorithm: this.selectedAlgorithm,
+        model_score: this.modelingStatus?.model?.score,
+        num_features: this.modelingStatus?.model?.selected_features?.length,
+      };
+    }
+    this.sharedService.setAiCumulativeContext(merged);
+  }
+
   private pushModelingCheckpoint(substep: string): void {
     this._currentSubstep = substep;
+    // Always refresh cumulative AI context on every modeling checkpoint
+    this.pushModelingAiContext();
     const state: any = {
       substep: substep,
       selectedAlgorithm: this.selectedAlgorithm,
@@ -851,12 +923,17 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               this.buildCatLabelLookup(full?.model?.encoding_report);
               this.chartsDrawn = false;
               setTimeout(() => this.tryDrawChartsIfReady(), 100);
+              // Refresh AI context with full CV/SHAP data
+              this.pushModelingAiContext();
             }
           },
           error: (err: any) => console.warn('[Modeling] Could not re-fetch modelingStatus:', err)
         });
       }
     }
+
+    // Push modeling AI context after restore
+    this.pushModelingAiContext();
 
     // ── Resume active process if checkpoint indicates one was running ──
     const activeProc = state.activeProcess || this.sharedService.getActiveProcess();

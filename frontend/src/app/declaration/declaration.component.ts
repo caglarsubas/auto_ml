@@ -90,6 +90,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
                 if (Array.isArray(data) && data.length > 0) {
                   this.dataDictionary = data;
                   this.initializeModelUsageFromBackend(data);
+                  this.pushDeclarationAiContext();
                 }
               },
               () => { /* dictionary may not exist yet — that's fine */ }
@@ -311,6 +312,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.previewData.note = "Note: First line is treated as data, generic headers are used.";
           }
           this.showDataDictionaryCollection = true;
+          // Push data preview to cumulative AI context
+          this.pushDeclarationAiContext();
         },
         error => console.error('Error getting preview:', error)
       );
@@ -343,6 +346,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.dataDictionary = data;
           // Initialize Model_Usage with backend's predetermined values (unless user has overridden)
           this.initializeModelUsageFromBackend(data);
+          // Push dictionary to cumulative AI context
+          this.pushDeclarationAiContext();
           // Checkpoint: dictionary generated
           this.sharedService.triggerCheckpoint('decl_dictionary_generated');
         },
@@ -441,6 +446,46 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     
     // Save the initialized values (merging with any existing user overrides)
     this.saveModelUsage();
+  }
+
+  /** Push declaration-level data into the cumulative AI context in SharedService. */
+  private pushDeclarationAiContext(): void {
+    const existing = this.sharedService.getAiCumulativeContext() || {};
+    const declCtx: any = {};
+    // Data preview info
+    if (this.previewData) {
+      declCtx.data_preview = {
+        total_rows: this.previewData.total_rows,
+        total_columns: this.previewData.total_columns,
+        columns: this.previewData.columns,
+        file_name: this.selectedFiles?.[0]?.name || this.existingFileName || null,
+      };
+    }
+    // Data dictionary
+    if (this.dataDictionary && this.dataDictionary.length > 0) {
+      declCtx.data_dictionary = this.dataDictionary.map((d: any) => ({
+        Feature_Name: d?.Feature_Name,
+        Data_Type: d?.Data_Type,
+        Level_of_Measurement: d?.Level_of_Measurement,
+        Unique_Values: d?.['#_of_Unique_Value'],
+        Missing_Ratio: d?.Missing_Ratio,
+        Mode_Ratio: d?.Mode_Ratio,
+        Model_Usage_YN: this.getModelUsage(d?.Feature_Name),
+        Feature_Description: d?.Feature_Description || null,
+      }));
+    }
+    // Model usage exclusions
+    const excluded = this.getExcludedFeatures();
+    if (excluded.length > 0) {
+      declCtx.model_usage_exclusions = excluded;
+    }
+    // Merge into existing cumulative context
+    const merged = { ...existing, ...declCtx };
+    // Preserve pipeline_config from other components
+    if (existing.pipeline_config) {
+      merged.pipeline_config = existing.pipeline_config;
+    }
+    this.sharedService.setAiCumulativeContext(merged);
   }
 
   // Get list of features marked as 'No' (excluded from model)

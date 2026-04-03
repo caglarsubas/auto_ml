@@ -26,6 +26,10 @@ The user is a data scientist or risk analyst building a supervised binary classi
 • Give CONCRETE, PRACTICAL, SIMPLIFIED answers — not textbook theory.
 • Always ground your response in the ACTUAL DATA provided in the context.
   Quote specific feature names, values, and numbers from the context.
+• If a TARGET DEFINITION (business goal) is provided in the context, ALWAYS tie your analysis
+  back to it. Frame recommendations in terms of the business objective the user described.
+  For example, if the target is "predict loan default within 12 months", discuss feature
+  relevance, threshold choices, and stability in terms of default prediction impact.
 • Keep answers relevant to the user's CURRENT pipeline step and ongoing flow.
   Example: if user is at Data Quality, mention what to watch for before Encoding; if at
   Modeling, reference what the next SFS step could reveal.
@@ -149,6 +153,13 @@ class AIAssistantView(APIView):
         """
         parts = []
 
+        def _fmt_val(v):
+            if v is None:
+                return '-'
+            if isinstance(v, float):
+                return f'{v:.4f}'
+            return str(v)
+
         if section == 'data_quality':
             summary = context.get('summary', [])
             if summary:
@@ -264,19 +275,82 @@ class AIAssistantView(APIView):
 
         elif section == 'cv':
             cv = context.get('cv', {})
+            model = context.get('model_info', {})
             if cv:
-                parts.append(f"Cross-Validation Results:")
+                parts.append("Cross-Validation Results:")
                 parts.append(f"  ROC-AUC (mean ± std): {cv.get('roc_auc_mean', '?')} ± {cv.get('roc_auc_std', '?')}")
                 parts.append(f"  PR-AUC (mean ± std): {cv.get('pr_auc_mean', '?')} ± {cv.get('pr_auc_std', '?')}")
-                # Include fold-level data if available
-                folds = cv.get('fold_scores', cv.get('folds', []))
+                parts.append(f"  Number of folds: {cv.get('n_splits', '?')}")
+
+                # Per-fold breakdown
+                folds = cv.get('folds', [])
                 if folds:
-                    parts.append(f"  Per-fold ROC-AUC: {folds}")
-            model = context.get('model_info', {})
+                    parts.append("\n  ── Per-Fold Metrics ──")
+                    for i, fold in enumerate(folds):
+                        parts.append(f"    Fold {i+1}: ROC-AUC={_fmt_val(fold.get('roc_auc'))}, "
+                                     f"PR-AUC={_fmt_val(fold.get('pr_auc'))}, "
+                                     f"best_iter={fold.get('best_iteration', '?')}")
+
+                # Class balance from PR baseline
+                pr_curve = cv.get('pr_curve') or {}
+                baseline = pr_curve.get('baseline')
+                if baseline is not None:
+                    parts.append(f"\n  ── Class Balance ──")
+                    parts.append(f"    Positive class rate (target rate): {baseline:.4f} ({baseline*100:.2f}%)")
+                    parts.append(f"    Class imbalance ratio: 1:{int(round(1/max(baseline, 1e-9)))}")
+
+                # ROC curve operating points — TPR at key FPR thresholds
+                roc_curve_data = cv.get('roc_curve') or {}
+                fpr_grid = roc_curve_data.get('fpr', [])
+                mean_tpr = roc_curve_data.get('mean_tpr', [])
+                if fpr_grid and mean_tpr and len(fpr_grid) == len(mean_tpr):
+                    parts.append(f"\n  ── ROC Curve Operating Points (mean across folds) ──")
+                    parts.append(f"    (Read as: at X% false positive rate, we achieve Y% true positive rate)")
+                    for target_fpr in [0.01, 0.05, 0.10, 0.20, 0.30]:
+                        # Find closest index in the fpr grid
+                        best_idx = min(range(len(fpr_grid)), key=lambda j: abs(fpr_grid[j] - target_fpr))
+                        tpr_at = mean_tpr[best_idx]
+                        parts.append(f"    FPR={target_fpr*100:.0f}% → TPR={tpr_at:.4f} ({tpr_at*100:.1f}% of positives caught)")
+
+                # PR curve operating points — Precision at key Recall levels
+                recall_grid = pr_curve.get('recall', [])
+                mean_prec = pr_curve.get('mean_precision', [])
+                if recall_grid and mean_prec and len(recall_grid) == len(mean_prec):
+                    parts.append(f"\n  ── Precision-Recall Curve Operating Points (mean across folds) ──")
+                    parts.append(f"    (Read as: to catch X% of positives, we achieve Y% precision)")
+                    for target_recall in [0.10, 0.25, 0.50, 0.75, 0.90]:
+                        best_idx = min(range(len(recall_grid)), key=lambda j: abs(recall_grid[j] - target_recall))
+                        prec_at = mean_prec[best_idx]
+                        parts.append(f"    Recall={target_recall*100:.0f}% → Precision={prec_at:.4f} ({prec_at*100:.1f}%)")
+                    # Compute approximate best F1 from the grid
+                    try:
+                        f1_scores = []
+                        for j in range(len(recall_grid)):
+                            r, p = recall_grid[j], mean_prec[j]
+                            if (r + p) > 0:
+                                f1_scores.append((2 * p * r / (p + r), r, p, j))
+                        if f1_scores:
+                            best_f1, best_r, best_p, best_j = max(f1_scores, key=lambda x: x[0])
+                            parts.append(f"\n    ** Best F1 score on PR curve: F1={best_f1:.4f} "
+                                         f"(Precision={best_p:.4f}, Recall={best_r:.4f})")
+                            if baseline is not None:
+                                # Approximate threshold: for well-calibrated models, threshold ≈ baseline * precision / (baseline * precision + (1-baseline)*(1-precision))
+                                parts.append(f"    ** Approximate optimal threshold for F1: ~{best_r:.3f} recall level "
+                                             f"(with target rate {baseline:.4f}, threshold likely near {baseline:.3f}–{min(0.5, baseline*3):.3f})")
+                    except Exception:
+                        pass
+
+                # Micro-averaged PR (pooled across all folds)
+                micro = cv.get('pr_curve_micro') or {}
+                if micro.get('ap') is not None:
+                    parts.append(f"\n  ── Micro-Averaged PR (pooled across folds) ──")
+                    parts.append(f"    Average Precision (micro): {micro['ap']:.4f}")
+
             if model:
+                parts.append(f"\n  ── Model Info ──")
                 parts.append(f"  Model type: {model.get('model_type', '?')}")
                 parts.append(f"  Number of features: {model.get('features', '?')}")
-                parts.append(f"  Score: {model.get('score', '?')}")
+                parts.append(f"  Validation AUC (hold-out): {model.get('score', '?')}")
 
         elif section == 'shap':
             features = context.get('features', [])
@@ -314,12 +388,78 @@ class AIAssistantView(APIView):
                                      f"Model PSI={s.get('model_psi', '?')}")
 
         else:
-            # Generic: dump first 3000 chars of JSON
-            try:
-                ctx_str = json.dumps(context, indent=2, default=str)
-                parts.append(ctx_str[:3000])
-            except Exception:
-                parts.append(str(context)[:3000])
+            # 'general' or unknown section: render ALL available data keys using
+            # the same formatters as specific sections (cumulative context).
+            # ── Data preview if present ──
+            data_preview = context.get('data_preview', {})
+            if data_preview:
+                parts.append(f"Dataset: {data_preview.get('file_name', '?')}")
+                parts.append(f"  Total rows: {data_preview.get('total_rows', '?')}")
+                parts.append(f"  Total columns: {data_preview.get('total_columns', '?')}")
+                cols = data_preview.get('columns', [])
+                if cols:
+                    parts.append(f"  Columns: {', '.join(str(c) for c in cols[:60])}")
+            # ── Data dictionary if present (top-level, from declaration) ──
+            dd = context.get('data_dictionary', [])
+            if dd and isinstance(dd, list):
+                parts.append(f"\nData Dictionary ({len(dd)} features):")
+                for feat in dd[:40]:
+                    fname = feat.get('Feature_Name', '?')
+                    dtype = feat.get('Data_Type', '?')
+                    lom = feat.get('Level_of_Measurement', '?')
+                    usage = feat.get('Model_Usage_YN', '?')
+                    desc = feat.get('Feature_Description') or ''
+                    parts.append(f"  {fname}: dtype={dtype}, LoM={lom}, usage={usage}" + (f", desc={desc}" if desc else ""))
+            # ── Data Quality summary if present ──
+            summary = context.get('summary', [])
+            if summary:
+                parts.append(f'Data Quality Summary ({len(summary)} features):\n')
+                for row in summary[:30]:
+                    var = row.get('Variable', row.get('variable', '?'))
+                    vtype = row.get('Variable_Type', '?')
+                    psi = row.get('PSI')
+                    decision = row.get('Datq_Decision', '?')
+                    parts.append(f"  {var}: type={vtype}, PSI={_fmt_val(psi)}, decision={decision}")
+            purifier = context.get('purifier_summary', {})
+            if purifier:
+                parts.append(f"\nPurifier Summary: rows {purifier.get('rows_before','?')}→{purifier.get('rows_after','?')} "
+                             f"(removed {purifier.get('rows_removed','?')}), cols dropped={purifier.get('total_columns_dropped','?')}")
+            # ── CV results if present ──
+            cv = context.get('cv', {})
+            if cv:
+                parts.append(f"\nCV Results: ROC-AUC={_fmt_val(cv.get('roc_auc_mean'))}±{_fmt_val(cv.get('roc_auc_std'))}, "
+                             f"PR-AUC={_fmt_val(cv.get('pr_auc_mean'))}±{_fmt_val(cv.get('pr_auc_std'))}")
+                pr_curve = cv.get('pr_curve') or {}
+                baseline = pr_curve.get('baseline')
+                if baseline is not None:
+                    parts.append(f"  Target rate: {baseline:.4f} ({baseline*100:.2f}%)")
+            model_info = context.get('model_info', {})
+            if model_info:
+                parts.append(f"  Model: {model_info.get('model_type','?')}, features={model_info.get('features','?')}, score={_fmt_val(model_info.get('score'))}")
+            # ── Selected features if present ──
+            sel_feats = context.get('selected_features', [])
+            if sel_feats:
+                parts.append(f"\nSelected Features ({len(sel_feats)} total):")
+                for f in sel_feats[:15]:
+                    parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
+            # ── SFS if present ──
+            sfs = context.get('sfs', {})
+            if sfs:
+                for direction in ['forward', 'backward', 'forward_from_backward']:
+                    steps = sfs.get(direction, [])
+                    if steps:
+                        parts.append(f"\nSFS {direction.replace('_',' ').title()} ({len(steps)} steps)")
+            # ── Encoding plan if present ──
+            enc = context.get('encoding_plan', [])
+            if enc and isinstance(enc, list) and len(enc) > 0:
+                parts.append(f"\nEncoding Plan ({len(enc)} categorical features)")
+            # Fallback: if nothing specific was rendered, dump JSON summary
+            if len(parts) == 0:
+                try:
+                    ctx_str = json.dumps(context, indent=2, default=str)
+                    parts.append(ctx_str[:3000])
+                except Exception:
+                    parts.append(str(context)[:3000])
 
         # ── Always append pipeline configuration if present ──
         pipeline_cfg = context.get('pipeline_config', {})
@@ -330,6 +470,14 @@ class AIAssistantView(APIView):
             parts.append(f"  Detailed step: {pipeline_cfg.get('detailed_step', '?')}")
             parts.append(f"  Preprocessing initiated: {pipeline_cfg.get('preprocessing_initiated', False)}")
             parts.append(f"  Modeling available: {pipeline_cfg.get('modeling_available', False)}")
+
+            # ── Target Definition (business goal) ──
+            target_def = pipeline_cfg.get('target_definition', '').strip()
+            if target_def:
+                parts.append(f"\n═══ TARGET DEFINITION (Business Goal) ═══")
+                parts.append(f"  The user defined the prediction target as:")
+                parts.append(f"  \"{target_def}\"")
+                parts.append(f"  → Use this business context to ground ALL your analysis and recommendations.")
 
             steps = pipeline_cfg.get('selected_purifier_steps', [])
             if steps:
@@ -383,7 +531,12 @@ class AIAssistantView(APIView):
             # ── Data Dictionary (raw metadata per feature) ──
             dd = pipeline_cfg.get('data_dictionary', [])
             if dd:
+                # Build a lookup for feature descriptions (used also in per-feature DQ lines above)
+                dd_desc_map = {f.get('Feature_Name', ''): f.get('Feature_Description') for f in dd}
+                has_any_desc = any(v for v in dd_desc_map.values())
                 parts.append(f"\n═══ Data Dictionary ({len(dd)} features) ═══")
+                if has_any_desc:
+                    parts.append("  (Business descriptions from uploaded data dictionary)")
                 for feat in dd:
                     fname = feat.get('Feature_Name', '?')
                     dtype = feat.get('Data_Type', '?')
@@ -395,7 +548,7 @@ class AIAssistantView(APIView):
                     desc = feat.get('Feature_Description')
                     line = f"  {fname}: type={dtype}, LOM={lom}, unique={uniq}, missing={miss}%, mode_ratio={mode_r}%, usage={usage}"
                     if desc:
-                        line += f", desc=\"{desc}\""
+                        line += f" | DESCRIPTION: \"{desc}\""
                     parts.append(line)
 
             # ── Encoding Plan ──
@@ -412,13 +565,6 @@ class AIAssistantView(APIView):
             num_metrics = ['Mean', 'Median', 'Std', 'Min', 'Max', 'Skewness', 'Kurtosis',
                            'Q01', 'Q05', 'Q25', 'Q75', 'Q95', 'Q99', 'Missing_Pct', 'Unique', 'N']
             cat_metrics = ['Mode', 'Mode_Pct', 'Num_Categories', 'Missing_Pct', 'Unique', 'N']
-
-            def _fmt_val(v):
-                if v is None:
-                    return '-'
-                if isinstance(v, float):
-                    return f'{v:.4f}'
-                return str(v)
 
             def _render_stats_comparison(before_list, after_list, title, label_before='before', label_after='after'):
                 """Render a before/after stats comparison block for a list of features."""

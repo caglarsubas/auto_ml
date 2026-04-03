@@ -27,6 +27,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
+  targetDefinition: string = '';
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
   showSteps: { [key: string]: boolean } = {
@@ -807,6 +808,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   getPipelineConfig(): any {
     return {
       pipeline_type: this.selectedPipeline || 'boosting',
+      target_definition: this.targetDefinition || '',
       current_step: this.currentStep,
       detailed_step: this.detailedStep,
       preprocessing_initiated: this.preprocessingInitiated,
@@ -848,10 +850,58 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     };
   }
 
+  /** Build a full cumulative AI context snapshot from ALL pipeline data available so far. */
+  buildFullAiContext(): any {
+    const ctx: any = {
+      pipeline_config: this.getPipelineConfig(),
+    };
+    // Data Quality summary (available after preprocessing)
+    if (this.datqSummary && this.datqSummary.length > 0) {
+      ctx.summary = this.datqSummary;
+      ctx.purifier_summary = {
+        rows_before: this.rowCountBefore,
+        rows_after: this.rowCountAfter,
+        rows_removed: this.rowsRemovedTotal,
+        total_columns_dropped: this.droppedTotalCount(),
+        dropped_by_step: this.droppedColumnsByStep,
+      };
+      ctx.model_usage = this.variableModelUsage;
+      ctx.split_validation = this.splitValidation;
+    }
+    return ctx;
+  }
+
+  /** Push current cumulative AI context to SharedService so the chat panel always has it. */
+  pushAiContext(): void {
+    // Merge model-development context with any modeling-level context already in SharedService
+    const existingCtx = this.sharedService.getAiCumulativeContext() || {};
+    const myCtx = this.buildFullAiContext();
+    // model-development owns pipeline_config and data quality; modeling owns cv, shap, sfs, etc.
+    const merged = { ...existingCtx, ...myCtx, pipeline_config: { ...(existingCtx.pipeline_config || {}), ...myCtx.pipeline_config } };
+    this.sharedService.setAiCumulativeContext(merged);
+  }
+
   requestAiSupport(context: any, section: string, prompt: string): void {
     this.showRightPanel = true;
-    const enriched = { ...context, pipeline_config: this.getPipelineConfig() };
-    this.aiAssistant.requestSupport(enriched, section, prompt);
+    const sendRequest = () => {
+      const enriched = { ...context, pipeline_config: this.getPipelineConfig() };
+      this.aiAssistant.requestSupport(enriched, section, prompt);
+    };
+    // Ensure data dictionary cache has descriptions before sending to AI
+    const hasDescriptions = Array.isArray(this.dataDictionaryCache) &&
+      this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+    if (!hasDescriptions && this.currentFileId != null) {
+      this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
+        next: (list: any[]) => {
+          this.dataDictionaryCache = Array.isArray(list) ? list : [];
+          this.sharedService.setDataDictionaryCache(this.dataDictionaryCache);
+          sendRequest();
+        },
+        error: () => sendRequest(),
+      });
+    } else {
+      sendRequest();
+    }
   }
 
   requestDatqAiSupport(): void {
@@ -1590,6 +1640,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     return {
       file_id: this.currentFileId,
       pipeline_type: this.selectedPipeline,
+      target_definition: this.targetDefinition || '',
       current_step: this.currentStep === 'data quality' ? 'data_quality' : this.currentStep,
       detailed_step: this.detailedStep,
       preprocessing: {
@@ -1629,6 +1680,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   };
 
   saveCheckpoint(step?: string, force: boolean = false): void {
+    // Always refresh cumulative AI context regardless of autosave setting
+    this.pushAiContext();
+
     // When autosave is OFF and this is NOT a forced save (manual/initial), just mark dirty
     if (!this.autosaveEnabled && !force) {
       this._unsavedChanges = true;
@@ -1716,6 +1770,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
         this.pipelineRunName = run.name;
         this._unsavedChanges = false;
         this.selectedPipeline = s.pipeline_type || run.pipeline_type || 'boosting';
+        this.targetDefinition = s.target_definition || '';
+        this.sharedService.setTargetDefinition(this.targetDefinition);
 
         // ── 3. Restore flags (local first, then SharedService) ──
         const flags = s.flags || {};
@@ -1788,6 +1844,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
           this.currentFileId = s.file_id;
           this.sharedService.setCurrentFileId(s.file_id);
         }
+
+        // ── 7b. Push cumulative AI context after full restore ──
+        this.pushAiContext();
 
         // ── 8. Close panel & scroll ──
         this.showSavedPipelines = false;
@@ -1926,6 +1985,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     this.selectedPipeline = value;
     console.log('Selected pipeline:', this.selectedPipeline);
     this.sharedService.setSelectedPipeline(this.selectedPipeline);
+  }
+
+  onTargetDefinitionChange(value: string): void {
+    this.targetDefinition = value;
+    this.sharedService.setTargetDefinition(value);
+    this.onPipelineConfigChanged();
   }
 
   onStartClick() {

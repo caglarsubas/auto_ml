@@ -188,7 +188,23 @@
         <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
       </select>
     </div>
-  
+
+    <!-- Target Definition: business meaning of the target variable -->
+    <div class="target-definition-section" *ngIf="selectedPipeline">
+      <label class="target-definition-label" for="targetDefinition">
+        Define the Target Variable
+        <span class="target-definition-hint">Describe the business meaning and prediction goal (e.g., "Predict whether a loan applicant will default within 12 months")</span>
+      </label>
+      <textarea
+        id="targetDefinition"
+        class="target-definition-input"
+        [ngModel]="targetDefinition"
+        (ngModelChange)="onTargetDefinitionChange($event)"
+        placeholder="e.g., Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."
+        rows="3"
+      ></textarea>
+    </div>
+
     <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
   </div>
   <!-- Declaration specific content (always visible at top) -->

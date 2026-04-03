@@ -42,6 +42,10 @@ export class SharedService {
     this.selectedPipelineSubject.next(pipeline);
   }
 
+  getSelectedPipeline(): string {
+    return this.selectedPipelineSubject.getValue();
+  }
+
   setPreprocessingInitiated(value: boolean): void {
     this.preprocessingInitiatedSubject.next(value);
   }
@@ -142,6 +146,30 @@ export class SharedService {
       delete notes[position];
     }
     this.pipelineNotesSubject.next(notes);
+  }
+
+  // Cumulative AI context: always-fresh snapshot of ALL pipeline data accumulated so far
+  private aiCumulativeContextSubject = new BehaviorSubject<any>({});
+  aiCumulativeContext$: Observable<any> = this.aiCumulativeContextSubject.asObservable();
+
+  setAiCumulativeContext(ctx: any): void {
+    this.aiCumulativeContextSubject.next(ctx);
+  }
+
+  getAiCumulativeContext(): any {
+    return this.aiCumulativeContextSubject.getValue();
+  }
+
+  // Target definition: user-provided description of the target variable's business meaning
+  private targetDefinitionSubject = new BehaviorSubject<string>('');
+  targetDefinition$: Observable<string> = this.targetDefinitionSubject.asObservable();
+
+  setTargetDefinition(definition: string): void {
+    this.targetDefinitionSubject.next(definition);
+  }
+
+  getTargetDefinition(): string {
+    return this.targetDefinitionSubject.getValue();
   }
 
   // Active process tracking for pipeline resume (preprocessing/modeling/sfs)

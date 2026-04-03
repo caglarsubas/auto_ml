@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked }
 import { Subscription } from 'rxjs';
 import { AiAssistantService, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
+import { SharedService } from '../services/shared.service';
 
 @Component({
   selector: 'app-ai-chat-panel',
@@ -21,7 +22,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   constructor(
     public aiService: AiAssistantService,
-    private dataService: DataService
+    private dataService: DataService,
+    private sharedService: SharedService
   ) {}
 
   ngOnInit(): void {
@@ -80,9 +82,28 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
     const history = this.aiService.getHistory().slice(0, -1);
 
+    // Always start from the cumulative context (all pipeline data accumulated so far),
+    // then overlay any section-specific context from "Get AI Support" buttons.
+    const cumulative = this.sharedService.getAiCumulativeContext() || {};
+    const sectionCtx = this.currentContext || {};
+    // Merge: cumulative is the base, section-specific overrides on top
+    const ctx = { ...cumulative, ...sectionCtx };
+    // Ensure pipeline_config is merged (not overwritten)
+    ctx.pipeline_config = {
+      ...(cumulative.pipeline_config || {}),
+      ...(sectionCtx.pipeline_config || {}),
+    };
+    // Fallback: inject target definition and pipeline type if still missing
+    if (!ctx.pipeline_config.target_definition) {
+      ctx.pipeline_config.target_definition = this.sharedService.getTargetDefinition() || '';
+    }
+    if (!ctx.pipeline_config.pipeline_type) {
+      ctx.pipeline_config.pipeline_type = this.sharedService.getSelectedPipeline() || '';
+    }
+
     this.dataService.sendAiChat(
       text,
-      this.currentContext || {},
+      ctx,
       this.currentSection || 'general',
       history
     ).subscribe({
