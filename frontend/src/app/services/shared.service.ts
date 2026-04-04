@@ -57,6 +57,10 @@ export class SharedService {
   setCurrentFileId(id: number | null): void {
     this.currentFileIdSubject.next(id);
   }
+
+  getCurrentFileId(): number | null {
+    return this.currentFileIdSubject.getValue();
+  }
   
   setPreprocessingRunResult(result: any | null): void {
     this.preprocessingRunResultSubject.next(result);
@@ -68,6 +72,10 @@ export class SharedService {
 
   setModelUsageSettings(settings: { [variable: string]: string } | null): void {
     this.modelUsageSettingsSubject.next(settings);
+  }
+
+  getModelUsageSettings(): { [variable: string]: string } | null {
+    return this.modelUsageSettingsSubject.getValue();
   }
 
   // Store encoded file path (produced by encoding step)
@@ -112,6 +120,14 @@ export class SharedService {
 
   triggerCheckpoint(substep: string): void {
     this.triggerCheckpointSubject.next(substep);
+  }
+
+  // Trigger data refresh in declaration component (e.g., after AI creates features)
+  private dataRefreshSubject = new Subject<void>();
+  dataRefresh$: Observable<void> = this.dataRefreshSubject.asObservable();
+
+  triggerDataRefresh(): void {
+    this.dataRefreshSubject.next();
   }
 
   // Autosave flag shared between parent (model-development) and child (modeling) components

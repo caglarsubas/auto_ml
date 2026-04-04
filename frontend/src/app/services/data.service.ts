@@ -365,6 +365,21 @@ export class DataService {
     );
   }
 
+  // ===== AI Action Execution (general-purpose) =====
+
+  executeAiAction(fileId: number, actionType: string, payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, {
+      file_id: fileId,
+      action_type: actionType,
+      payload,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error executing AI action:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
   // ===== AI Assistant =====
 
   sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>): Observable<any> {

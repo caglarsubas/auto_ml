@@ -7,16 +7,15 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-- at the beginning of the pipeline, after selecting the pipeline type (boosting or others) ask the definition of the target to user in order to get the ultimate aim (prediction concern) of the modeling project. AI assistant will use it thrughout the process guidance!
 - make navigation menu much more informative by showing intended sub-steps with a collapsable component, by adding main-step progress percentages and completed or ongoing indicator icons near them.
 - we need to clean the outliers in categorical features also. in preprocessing step, we need to add another prufier item named as 'Outlier Cleaning (Categorical Features) having threshold options: (0.001, 0.005, 0.01, 0.05). selected threshold value will be used as the cut-off value of determining candidate categories to be merged into one or more categories. For a nominal (LoM) feature merge the categories having a smaller volume-share in total data-point count in training dataset then the selected value as named as 'Others-Outliers'. For Ordinal feature, and they should have sortable (numerical) dtype, only the adjecent (in the rank) categories can be merged. for this ordinal case we have a different scenario than nominal one because here we can merge an outlier-category (labeled according to the selected threshold) with an adjecent non-outlier-category. the selection of 'which neighbor to merge' is totally depend on the volume-share of categories. always select the bigger adjecent category to merge in the aim of completing this iterative control. it should be iterative because after making the first adjecent merges there could still ve exist some merged-categories having smaller volume-share than the selected treshold. we should iteratively control the new category list their volume-shares whether any of them violates our outlier rule. at the at we must keep and show the final merge mapping (which original categories being merges as what label) in UI.
 - add grouping functionality for categorical encoding step. make the primary option (model native) clickable checkbox and as default opt-in. when clicked as off add a column just before the 'Fallback Strategy' named as 'Encoding Method' having each cell of rows as 'Model Native' as default selection and when clicked opening other options: 1-Model Native, 2- Label Encoding, 3- One-Hot Encoding, 4- Frequency Encoding, 5- Target Encoding, 6- Manuel Grouping as a dropdown menu. only one can be selected. In 'Frequency Encoding' technique, each category is replaced with the frequency/count-share (volume-share) of that category in the train dataset.'Target Encoding' will replace the categories with their train-data target-averages. if manuel-grouping is selected we should show the distinct categories as list one let user give numbers to each of them as manuel mapping.
+
 - start hyperparameter
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - stopping criteria selections via %-change of metrics and min-max feature count.
 - make 3 layers layout (left progress navigation, middle workspace, right assistant chat)
-- add causality features into explainability tab
-- add nonlinear VIF if necessary
+- add causality features (time based sequential analysis -two rows having very similar (same bucket) features except few ones and those are systematically changing in a pattern while time passses) into explainability tab
 
 
 After the implementation is complete and functional, here are potential future improvements:
@@ -30,3 +29,4 @@ After the implementation is complete and functional, here are potential future i
 
 please explain what is happening in SHAP Beeswarm plot with feature-wise examples.
 good/bag flag of credit applications within the 12 months period of its usage
+which features we can derive from existing ones in order to catalyze the prediction performance of boosting models

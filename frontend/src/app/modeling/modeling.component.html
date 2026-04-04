@@ -507,8 +507,8 @@
         </div>
       </div>
 
-      <!-- SFS Progress Display -->
-      <div *ngIf="sfsRunning" style="margin-top: 24px; padding: 20px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
+      <!-- SFS Progress Display (only for initial SFS runs, not forward-from-backward) -->
+      <div *ngIf="sfsRunning && sfsBackwardResults.length === 0 && sfsForwardResults.length === 0" style="margin-top: 24px; padding: 20px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
         <h3 style="color: #1976d2; margin-top: 0;">SFS Running...</h3>
         
         <!-- Progress Message -->
@@ -791,6 +791,49 @@
             <p style="margin: 8px 0 0 0; font-size: 11px; color: #666; font-style: italic;">
               Start forward feature selection using the {{ sfsBackwardCutFeatures.length }} features remaining at cut step {{ sfsBackwardCutStep }}
             </p>
+
+            <!-- Forward-from-Backward Progress (inline, shown only during chained forward run) -->
+            <div *ngIf="sfsRunning" style="margin-top: 16px; padding: 16px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
+              <h4 style="color: #1976d2; margin: 0 0 8px 0;">Forward Selection Running...</h4>
+              <div style="margin-bottom: 8px; font-size: 13px; color: #555;">{{ sfsMessage }}</div>
+              <!-- Progress Bar -->
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 3px;">Overall Progress</div>
+                <div style="background: #e0e0e0; border-radius: 4px; height: 22px; overflow: hidden;">
+                  <div [style.width.%]="sfsProgress * 100"
+                       style="background: linear-gradient(90deg, #1976d2, #42a5f5); height: 100%; transition: width 0.3s ease;
+                              display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 500;">
+                    {{ (sfsProgress * 100).toFixed(0) }}%
+                  </div>
+                </div>
+              </div>
+              <!-- Current Metrics -->
+              <div *ngIf="Object.keys(sfsCurrentMetrics).length > 0" style="margin-bottom: 8px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                  <div *ngFor="let metric of Object.keys(sfsCurrentMetrics)"
+                       style="background: #fff; border: 1px solid #1976d2; border-radius: 4px; padding: 6px 10px;">
+                    <div style="font-size: 10px; color: #666;">{{ metric === 'roc_auc' ? 'ROC-AUC' : 'PR-AUC' }}</div>
+                    <div style="font-size: 15px; font-weight: 600; color: #1976d2;">{{ sfsCurrentMetrics[metric].toFixed(4) }}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Stop + View Details -->
+              <div style="margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <button (click)="stopSfs()" [disabled]="sfsStopping"
+                        style="padding: 8px 20px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;"
+                        [style.opacity]="sfsStopping ? '0.6' : '1'"
+                        [style.cursor]="sfsStopping ? 'not-allowed' : 'pointer'">
+                  {{ sfsStopping ? 'Stopping...' : 'Stop SFS' }}
+                </button>
+                <button *ngIf="sfsCompletedSteps.length > 0" (click)="openSfsProgressModal()"
+                        style="padding: 8px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                  View Details ({{ sfsCompletedSteps.length }} steps)
+                </button>
+              </div>
+              <div style="margin-top: 8px; text-align: center;">
+                <mat-spinner diameter="32" style="margin: 0 auto;"></mat-spinner>
+              </div>
+            </div>
           </div>
         </div>
 

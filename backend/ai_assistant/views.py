@@ -48,6 +48,92 @@ The user is a data scientist or risk analyst building a supervised binary classi
 4. Categorical Feature Encoding — native categorical handling + fallback strategies, LOM assignment
 5. Modeling — cross-validation (ROC-AUC, PR-AUC), SHAP beeswarm, feature importance, selected features
 6. Sequential Feature Selection (SFS) — forward, backward, forward-from-backward search
+
+═══ SFS INTERPRETATION (CRITICAL) ═══
+BACKWARD ELIMINATION ordering:
+• Step 1 drops the LEAST important feature — the one whose removal hurts performance the LEAST.
+• Features dropped in early steps (step 1, 2, 3…) are the WEAKEST contributors.
+• Features that SURVIVE the longest (dropped in the last steps) are the MOST important.
+• When analyzing backward SFS results, the first-listed features are candidates for removal,
+  NOT top performers. The later a feature is dropped, the more critical it is.
+• Summary: early drop = low importance, late drop = high importance.
+
+FORWARD SELECTION ordering:
+• Step 1 adds the MOST important feature — the one that improves performance the MOST alone.
+• Features added in early steps are the STRONGEST individual contributors.
+• Features added later provide diminishing marginal gains.
+• Summary: early add = high importance, late add = low importance.
+
+FORWARD-FROM-BACKWARD:
+• This is forward selection run on the feature subset chosen after backward elimination.
+• Same interpretation as forward selection: early add = high importance.
+
+═══ ACTIONABLE PIPELINE OPERATIONS ═══
+You are not just an advisor — you can DIRECTLY MODIFY the user's pipeline data, metadata,
+configuration, and notes. When the user asks you to do something actionable (create features,
+drop columns, change settings, update descriptions, add notes, etc.), include an ACTION BLOCK
+in your response. The user will see an "Apply" button and can choose to execute it.
+
+GENERAL RULES:
+• Include an ACTION BLOCK when the user asks you to perform an operation, or when you
+  suggest changes and want to offer a one-click apply option.
+• ALWAYS use REAL column names from the dataset context. Never invent column names.
+• Put ACTION BLOCKs at the END of your message, after your explanation.
+• You can include MULTIPLE action blocks in one response (e.g., modify data + update notes).
+• Always explain WHAT you are about to do and WHY before the action block.
+
+─── ACTION TYPE 1: execute_code ───
+Run pandas/numpy code directly on the dataset. This is the most flexible action.
+The code runs in a sandbox with `df` (the DataFrame), `pd` (pandas), and `np` (numpy).
+You can do ANYTHING: create columns, drop columns, filter rows, fill missing values,
+rename columns, change types, merge, pivot, compute aggregations, etc.
+
+<<<ACTION:execute_code>>>
+{"code": "df['Debt_to_Income'] = df['Var_19'] / df['Var_24'].replace(0, 1)\\ndf['Is_Missing_Var6'] = df['Var_6'].isna().astype(int)\\ndf.drop(columns=['Var_3'], inplace=True)", "description": "Create Debt-to-Income ratio, missingness flag, drop Var_3"}
+<<<END_ACTION>>>
+
+Code examples you can write:
+• Create derived features: df['New'] = df['A'] / (df['B'] + 1)
+• Drop columns: df.drop(columns=['Col1', 'Col2'], inplace=True)
+• Filter rows: df = df[df['Col'] > 0]
+• Fill missing: df['Col'] = df['Col'].fillna(df['Col'].median())
+• Rename: df.rename(columns={'Old': 'New'}, inplace=True)
+• Type cast: df['Col'] = df['Col'].astype(float)
+• Clip outliers: df['Col'] = df['Col'].clip(lower=0, upper=100)
+• Log transform: df['Log_Col'] = np.log1p(df['Col'].clip(lower=0))
+• Binary flags: df['High_Risk'] = (df['Score'] < 500).astype(int)
+• Interaction terms: df['AB'] = df['A'] * df['B']
+• Binning: df['Age_Bin'] = pd.cut(df['Age'], bins=[0,25,45,65,100], labels=['Young','Mid','Senior','Elderly'])
+
+─── ACTION TYPE 2: update_metadata ───
+Update data dictionary entries: feature descriptions, Level of Measurement, etc.
+
+<<<ACTION:update_metadata>>>
+{"updates": [{"column": "Var_1", "field": "Feature_Description", "value": "Number of CC applications last month"}, {"column": "Var_4", "field": "Level_of_Measurement", "value": "continuous"}], "description": "Update feature descriptions and measurement levels"}
+<<<END_ACTION>>>
+
+Supported fields: Feature_Description, Level_of_Measurement, Data_Type, Model_Usage_YN
+
+─── ACTION TYPE 3: update_config ───
+Change pipeline decisions: which features to keep/drop, preprocessing options, split settings, etc.
+
+<<<ACTION:update_config>>>
+{"updates": [{"key": "model_usage", "column": "AppID", "value": "No"}, {"key": "model_usage", "column": "Application_Datetime", "value": "No"}, {"key": "preprocessing_options", "value": [1, 2, 3, 5]}], "description": "Exclude ID and datetime from modeling"}
+<<<END_ACTION>>>
+
+Supported keys: model_usage (with column + "Yes"/"No"), preprocessing_options, split_strategy,
+split_date_column, split_cutoff, algorithm
+
+─── ACTION TYPE 4: update_notes ───
+Add, edit, or delete pipeline commentary notes at specific positions.
+
+<<<ACTION:update_notes>>>
+{"action": "add", "position": "after_data_dictionary", "content": "AI recommendation: 3 derived features created based on domain knowledge analysis.", "description": "Add note after data dictionary"}
+<<<END_ACTION>>>
+
+Valid positions: after_data_preview, after_data_dictionary, after_preprocessing_config,
+after_purifier_summary, after_data_quality, after_encoding, after_modeling_results, after_sfs
+Actions: add, edit, delete
 """
 
 
@@ -89,7 +175,7 @@ class AIAssistantView(APIView):
 
             # Add context as a system-level injection so the model knows what the user sees
             if context:
-                context_str = self._format_context(context, section)
+                context_str = _format_context(context, section)
                 messages.append({
                     'role': 'system',
                     'content': f'The user is currently viewing the following pipeline output '
@@ -133,10 +219,17 @@ class AIAssistantView(APIView):
             result = resp.json()
             assistant_message = result['choices'][0]['message']['content']
 
-            return Response({
-                'message': assistant_message,
+            # Parse action blocks from the AI response
+            actions, clean_message = _extract_actions(assistant_message)
+
+            response_data = {
+                'message': clean_message,
                 'usage': result.get('usage', {}),
-            }, status=status.HTTP_200_OK)
+            }
+            if actions:
+                response_data['actions'] = actions
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             traceback.print_exc()
@@ -145,496 +238,554 @@ class AIAssistantView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _format_context(self, context: dict, section: str) -> str:
-        """Format pipeline context into a readable string for the LLM.
+@method_decorator(csrf_exempt, name='dispatch')
+class AIActionExecuteView(APIView):
+    """
+    POST /api/ai-assistant/execute-action/
+    Body: {
+        "file_id": 123,
+        "action_type": "execute_code" | "update_metadata" | "update_config" | "update_notes",
+        "payload": { ... action-specific data ... }
+    }
+    """
 
-        Uses the actual field names produced by the Data_Quality backend and
-        the frontend table columns so the LLM can reference concrete numbers.
-        """
-        parts = []
+    def post(self, request, *args, **kwargs):
+        from .action_executor import dispatch_action
 
-        def _fmt_val(v):
-            if v is None:
-                return '-'
-            if isinstance(v, float):
-                return f'{v:.4f}'
-            return str(v)
+        file_id = request.data.get('file_id')
+        action_type = request.data.get('action_type', '')
+        payload = request.data.get('payload', {})
 
-        if section == 'data_quality':
-            summary = context.get('summary', [])
-            if summary:
-                parts.append(f'Data Quality Summary ({len(summary)} features):\n')
-                # Build a compact per-feature table with the real column names
-                for row in summary[:50]:  # up to 50 features
-                    var = row.get('Variable', row.get('variable', row.get('index', '?')))
-                    vtype = row.get('Variable_Type', '?')
-                    psi = row.get('PSI')
-                    csi = row.get('CSI')
-                    decision = row.get('Datq_Decision', '?')
-                    model_usage = row.get('MODEL_USAGE', row.get('Model_Usage', 'Yes'))
-                    # Missing % — may be Train/Test split columns
-                    miss_tr = row.get('%_Missing_Change_Train', row.get('%_Missing_Value', None))
-                    miss_te = row.get('%_Missing_Change_Test', None)
-                    # Distribution stats (Train side)
-                    mean_tr = row.get('Mean_Change_Train', None)
-                    std_tr = row.get('STD_Change_Train', None)
-                    min_tr = row.get('Min_Change_Train', None)
-                    max_tr = row.get('Max_Change_Train', None)
-                    skew_tr = row.get('Skewness_Change_Train', None)
-                    # Alternative shift metrics
-                    ks = row.get('KS', None)
-                    jsd = row.get('JSD', None)
+        if not file_id:
+            return Response({'status': 'error', 'error': 'file_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not action_type:
+            return Response({'status': 'error', 'error': 'action_type is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-                    def _fmt(v):
-                        if v is None:
-                            return '-'
-                        if isinstance(v, float):
-                            return f'{v:.4f}'
-                        return str(v)
+        result = dispatch_action(int(file_id), action_type, payload)
 
-                    line = f"  {var} [{vtype}]:"
-                    stability = f"PSI={_fmt(psi)}" if psi is not None else f"CSI={_fmt(csi)}"
-                    line += f" {stability}, Decision={decision}"
-                    if miss_tr is not None:
-                        line += f", Missing(train)={_fmt(miss_tr)}"
-                    if miss_te is not None:
-                        line += f", Missing(test)={_fmt(miss_te)}"
-                    if mean_tr is not None:
-                        line += f", Mean(train)={_fmt(mean_tr)}"
-                    if std_tr is not None:
-                        line += f", Std(train)={_fmt(std_tr)}"
-                    if min_tr is not None and max_tr is not None:
-                        line += f", Range(train)=[{_fmt(min_tr)}, {_fmt(max_tr)}]"
-                    if skew_tr is not None:
-                        line += f", Skew(train)={_fmt(skew_tr)}"
-                    if ks is not None:
-                        line += f", KS={_fmt(ks)}"
-                    if jsd is not None:
-                        line += f", JSD={_fmt(jsd)}"
-                    if model_usage and str(model_usage).lower() == 'no':
-                        line += ", MODEL_USAGE=No (excluded)"
-                    parts.append(line)
+        http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=http_status)
 
-            purifier = context.get('purifier_summary', {})
-            if purifier:
-                rows_before = purifier.get('rows_before', '?')
-                rows_after = purifier.get('rows_after', '?')
-                rows_removed = purifier.get('rows_removed', 0)
-                total_cols_dropped = purifier.get('total_columns_dropped', purifier.get('total_dropped', '?'))
-                parts.append(f"\n═══ Preprocessing Treatment Effect ═══")
-                parts.append(f"  Rows: {rows_before} → {rows_after} ({rows_removed} removed, "
-                             f"{round(rows_removed / max(1, rows_before if isinstance(rows_before, (int, float)) else 1) * 100, 1)}% loss)")
-                parts.append(f"  Total columns dropped: {total_cols_dropped}")
-                # Per-step breakdown
-                dropped_by_step = purifier.get('dropped_by_step', [])
-                if dropped_by_step:
-                    parts.append(f"  Purifier steps:")
-                    for step in dropped_by_step:
-                        step_name = step.get('step', '?')
-                        cols = step.get('columns', [])
-                        rows_rm = step.get('rows_removed', 0)
-                        note = step.get('note', '')
-                        cols_preview = ', '.join(cols[:10])
-                        if len(cols) > 10:
-                            cols_preview += f' ... (+{len(cols) - 10} more)'
-                        line = f"    - {step_name}: {len(cols)} columns dropped"
-                        if rows_rm:
-                            line += f", {rows_rm} rows removed"
-                        if cols_preview:
-                            line += f" [{cols_preview}]"
-                        if note:
-                            line += f" — {note}"
-                        parts.append(line)
 
-            split_val = context.get('split_validation', {})
-            if split_val and isinstance(split_val, dict):
-                splits = split_val.get('splits', [])
-                if splits:
-                    parts.append(f"\n═══ Train/Test Split Validation ═══")
-                    for sp in splits:
-                        name = sp.get('name', '?')
-                        count = sp.get('count', '?')
-                        target_mean = sp.get('target_mean', '?')
-                        parts.append(f"  {name}: n={count}, target_rate={target_mean}")
+# ---------------------------------------------------------------------------
+# Shared helper — extract action blocks from AI-generated text
+# ---------------------------------------------------------------------------
 
-            model_usage = context.get('model_usage', {})
-            if model_usage:
-                excluded = [k for k, v in model_usage.items() if str(v).lower() == 'no']
-                if excluded:
-                    parts.append(f"\nExcluded from model (Model_Usage=No): {', '.join(excluded)}")
+def _extract_actions(message: str):
+    """Extract <<<ACTION:...>>>...<<<END_ACTION>>> blocks from the AI response.
 
-        elif section == 'encoding':
-            plan = context.get('plan', [])
-            if plan:
-                parts.append(f'Encoding Plan ({len(plan)} categorical features):')
-                for entry in plan[:30]:
-                    parts.append(f"  - {entry.get('feature', '?')}: "
-                                 f"LOM={entry.get('user_lom', entry.get('lom', '?'))}, "
-                                 f"unique={entry.get('nunique', '?')}, "
-                                 f"strategy={entry.get('fallback_strategy', '?')}")
+    Returns (actions_list, cleaned_message) where actions_list is a list of
+    parsed action dicts and cleaned_message has the raw blocks removed.
+    """
+    import re
+    pattern = r'<<<ACTION:(\w+)>>>\s*(.*?)\s*<<<END_ACTION>>>'
+    actions = []
+    for match in re.finditer(pattern, message, re.DOTALL):
+        action_type = match.group(1)
+        payload_str = match.group(2).strip()
+        try:
+            payload = json.loads(payload_str)
+            actions.append({'type': action_type, 'payload': payload})
+        except json.JSONDecodeError:
+            # If JSON parsing fails, skip this action block
+            print(f"[AI] Failed to parse action block: {payload_str[:200]}")
+    # Remove action blocks from the visible message
+    clean = re.sub(pattern, '', message, flags=re.DOTALL).strip()
+    return actions, clean
 
-        elif section == 'cv':
-            cv = context.get('cv', {})
-            model = context.get('model_info', {})
-            if cv:
-                parts.append("Cross-Validation Results:")
-                parts.append(f"  ROC-AUC (mean ± std): {cv.get('roc_auc_mean', '?')} ± {cv.get('roc_auc_std', '?')}")
-                parts.append(f"  PR-AUC (mean ± std): {cv.get('pr_auc_mean', '?')} ± {cv.get('pr_auc_std', '?')}")
-                parts.append(f"  Number of folds: {cv.get('n_splits', '?')}")
 
-                # Per-fold breakdown
-                folds = cv.get('folds', [])
-                if folds:
-                    parts.append("\n  ── Per-Fold Metrics ──")
-                    for i, fold in enumerate(folds):
-                        parts.append(f"    Fold {i+1}: ROC-AUC={_fmt_val(fold.get('roc_auc'))}, "
-                                     f"PR-AUC={_fmt_val(fold.get('pr_auc'))}, "
-                                     f"best_iter={fold.get('best_iteration', '?')}")
+def _format_context(context: dict, section: str) -> str:
+    """Format pipeline context into a readable string for the LLM.
 
-                # Class balance from PR baseline
-                pr_curve = cv.get('pr_curve') or {}
-                baseline = pr_curve.get('baseline')
-                if baseline is not None:
-                    parts.append(f"\n  ── Class Balance ──")
-                    parts.append(f"    Positive class rate (target rate): {baseline:.4f} ({baseline*100:.2f}%)")
-                    parts.append(f"    Class imbalance ratio: 1:{int(round(1/max(baseline, 1e-9)))}")
+    Uses the actual field names produced by the Data_Quality backend and
+    the frontend table columns so the LLM can reference concrete numbers.
+    """
+    parts = []
 
-                # ROC curve operating points — TPR at key FPR thresholds
-                roc_curve_data = cv.get('roc_curve') or {}
-                fpr_grid = roc_curve_data.get('fpr', [])
-                mean_tpr = roc_curve_data.get('mean_tpr', [])
-                if fpr_grid and mean_tpr and len(fpr_grid) == len(mean_tpr):
-                    parts.append(f"\n  ── ROC Curve Operating Points (mean across folds) ──")
-                    parts.append(f"    (Read as: at X% false positive rate, we achieve Y% true positive rate)")
-                    for target_fpr in [0.01, 0.05, 0.10, 0.20, 0.30]:
-                        # Find closest index in the fpr grid
-                        best_idx = min(range(len(fpr_grid)), key=lambda j: abs(fpr_grid[j] - target_fpr))
-                        tpr_at = mean_tpr[best_idx]
-                        parts.append(f"    FPR={target_fpr*100:.0f}% → TPR={tpr_at:.4f} ({tpr_at*100:.1f}% of positives caught)")
+    def _fmt_val(v):
+        if v is None:
+            return '-'
+        if isinstance(v, float):
+            return f'{v:.4f}'
+        return str(v)
 
-                # PR curve operating points — Precision at key Recall levels
-                recall_grid = pr_curve.get('recall', [])
-                mean_prec = pr_curve.get('mean_precision', [])
-                if recall_grid and mean_prec and len(recall_grid) == len(mean_prec):
-                    parts.append(f"\n  ── Precision-Recall Curve Operating Points (mean across folds) ──")
-                    parts.append(f"    (Read as: to catch X% of positives, we achieve Y% precision)")
-                    for target_recall in [0.10, 0.25, 0.50, 0.75, 0.90]:
-                        best_idx = min(range(len(recall_grid)), key=lambda j: abs(recall_grid[j] - target_recall))
-                        prec_at = mean_prec[best_idx]
-                        parts.append(f"    Recall={target_recall*100:.0f}% → Precision={prec_at:.4f} ({prec_at*100:.1f}%)")
-                    # Compute approximate best F1 from the grid
-                    try:
-                        f1_scores = []
-                        for j in range(len(recall_grid)):
-                            r, p = recall_grid[j], mean_prec[j]
-                            if (r + p) > 0:
-                                f1_scores.append((2 * p * r / (p + r), r, p, j))
-                        if f1_scores:
-                            best_f1, best_r, best_p, best_j = max(f1_scores, key=lambda x: x[0])
-                            parts.append(f"\n    ** Best F1 score on PR curve: F1={best_f1:.4f} "
-                                         f"(Precision={best_p:.4f}, Recall={best_r:.4f})")
-                            if baseline is not None:
-                                # Approximate threshold: for well-calibrated models, threshold ≈ baseline * precision / (baseline * precision + (1-baseline)*(1-precision))
-                                parts.append(f"    ** Approximate optimal threshold for F1: ~{best_r:.3f} recall level "
-                                             f"(with target rate {baseline:.4f}, threshold likely near {baseline:.3f}–{min(0.5, baseline*3):.3f})")
-                    except Exception:
-                        pass
+    if section == 'data_quality':
+        summary = context.get('summary', [])
+        if summary:
+            parts.append(f'Data Quality Summary ({len(summary)} features):\n')
+            # Build a compact per-feature table with the real column names
+            for row in summary[:50]:  # up to 50 features
+                var = row.get('Variable', row.get('variable', row.get('index', '?')))
+                vtype = row.get('Variable_Type', '?')
+                psi = row.get('PSI')
+                csi = row.get('CSI')
+                decision = row.get('Datq_Decision', '?')
+                model_usage = row.get('MODEL_USAGE', row.get('Model_Usage', 'Yes'))
+                # Missing % — may be Train/Test split columns
+                miss_tr = row.get('%_Missing_Change_Train', row.get('%_Missing_Value', None))
+                miss_te = row.get('%_Missing_Change_Test', None)
+                # Distribution stats (Train side)
+                mean_tr = row.get('Mean_Change_Train', None)
+                std_tr = row.get('STD_Change_Train', None)
+                min_tr = row.get('Min_Change_Train', None)
+                max_tr = row.get('Max_Change_Train', None)
+                skew_tr = row.get('Skewness_Change_Train', None)
+                # Alternative shift metrics
+                ks = row.get('KS', None)
+                jsd = row.get('JSD', None)
 
-                # Micro-averaged PR (pooled across all folds)
-                micro = cv.get('pr_curve_micro') or {}
-                if micro.get('ap') is not None:
-                    parts.append(f"\n  ── Micro-Averaged PR (pooled across folds) ──")
-                    parts.append(f"    Average Precision (micro): {micro['ap']:.4f}")
+                def _fmt(v):
+                    if v is None:
+                        return '-'
+                    if isinstance(v, float):
+                        return f'{v:.4f}'
+                    return str(v)
 
-            if model:
-                parts.append(f"\n  ── Model Info ──")
-                parts.append(f"  Model type: {model.get('model_type', '?')}")
-                parts.append(f"  Number of features: {model.get('features', '?')}")
-                parts.append(f"  Validation AUC (hold-out): {model.get('score', '?')}")
+                line = f"  {var} [{vtype}]:"
+                stability = f"PSI={_fmt(psi)}" if psi is not None else f"CSI={_fmt(csi)}"
+                line += f" {stability}, Decision={decision}"
+                if miss_tr is not None:
+                    line += f", Missing(train)={_fmt(miss_tr)}"
+                if miss_te is not None:
+                    line += f", Missing(test)={_fmt(miss_te)}"
+                if mean_tr is not None:
+                    line += f", Mean(train)={_fmt(mean_tr)}"
+                if std_tr is not None:
+                    line += f", Std(train)={_fmt(std_tr)}"
+                if min_tr is not None and max_tr is not None:
+                    line += f", Range(train)=[{_fmt(min_tr)}, {_fmt(max_tr)}]"
+                if skew_tr is not None:
+                    line += f", Skew(train)={_fmt(skew_tr)}"
+                if ks is not None:
+                    line += f", KS={_fmt(ks)}"
+                if jsd is not None:
+                    line += f", JSD={_fmt(jsd)}"
+                if model_usage and str(model_usage).lower() == 'no':
+                    line += ", MODEL_USAGE=No (excluded)"
+                parts.append(line)
 
-        elif section == 'shap':
-            features = context.get('features', [])
-            if features:
-                parts.append(f'SHAP Beeswarm — top {len(features)} features by |impact|:')
-                for f in features[:20]:
-                    parts.append(f"  - {f.get('feature', '?')}: "
-                                 f"|impact|={f.get('impact', '?')}, "
-                                 f"signed_impact={f.get('signed_impact', '?')}")
-
-        elif section == 'selected_features':
-            features = context.get('features', [])
-            if features:
-                parts.append(f'Selected Features ({len(features)} total, sorted by Combined Score):')
-                for f in features[:30]:
-                    parts.append(f"  - {f.get('feature', '?')}: "
-                                 f"combined_score={f.get('combined_score', '?')}, "
-                                 f"SHAP_percentile={f.get('shap_percentile', '?')}, "
-                                 f"Gain_percentile={f.get('gain_percentile', '?')}, "
-                                 f"VIF={f.get('vif', '?')}, "
-                                 f"usage={f.get('usage', 'keep')}")
-
-        elif section == 'sfs':
-            for direction in ['forward', 'backward', 'forward_from_backward']:
-                steps = context.get(direction, [])
-                if steps:
-                    parts.append(f'\n{direction.replace("_", " ").title()} Selection ({len(steps)} steps):')
-                    for s in steps[:20]:
-                        feat = s.get('feature_name', s.get('feature', '?'))
-                        parts.append(f"  Step {s.get('step', '?')}: "
-                                     f"{feat} — "
-                                     f"CV ROC-AUC={s.get('cv_roc_auc', s.get('roc_auc', '?'))}, "
-                                     f"Test ROC-AUC={s.get('test_roc_auc', '?')}, "
-                                     f"PR-AUC={s.get('cv_pr_auc', s.get('pr_auc', '?'))}, "
-                                     f"Model PSI={s.get('model_psi', '?')}")
-
-        else:
-            # 'general' or unknown section: render ALL available data keys using
-            # the same formatters as specific sections (cumulative context).
-            # ── Data preview if present ──
-            data_preview = context.get('data_preview', {})
-            if data_preview:
-                parts.append(f"Dataset: {data_preview.get('file_name', '?')}")
-                parts.append(f"  Total rows: {data_preview.get('total_rows', '?')}")
-                parts.append(f"  Total columns: {data_preview.get('total_columns', '?')}")
-                cols = data_preview.get('columns', [])
-                if cols:
-                    parts.append(f"  Columns: {', '.join(str(c) for c in cols[:60])}")
-            # ── Data dictionary if present (top-level, from declaration) ──
-            dd = context.get('data_dictionary', [])
-            if dd and isinstance(dd, list):
-                parts.append(f"\nData Dictionary ({len(dd)} features):")
-                for feat in dd[:40]:
-                    fname = feat.get('Feature_Name', '?')
-                    dtype = feat.get('Data_Type', '?')
-                    lom = feat.get('Level_of_Measurement', '?')
-                    usage = feat.get('Model_Usage_YN', '?')
-                    desc = feat.get('Feature_Description') or ''
-                    parts.append(f"  {fname}: dtype={dtype}, LoM={lom}, usage={usage}" + (f", desc={desc}" if desc else ""))
-            # ── Data Quality summary if present ──
-            summary = context.get('summary', [])
-            if summary:
-                parts.append(f'Data Quality Summary ({len(summary)} features):\n')
-                for row in summary[:30]:
-                    var = row.get('Variable', row.get('variable', '?'))
-                    vtype = row.get('Variable_Type', '?')
-                    psi = row.get('PSI')
-                    decision = row.get('Datq_Decision', '?')
-                    parts.append(f"  {var}: type={vtype}, PSI={_fmt_val(psi)}, decision={decision}")
-            purifier = context.get('purifier_summary', {})
-            if purifier:
-                parts.append(f"\nPurifier Summary: rows {purifier.get('rows_before','?')}→{purifier.get('rows_after','?')} "
-                             f"(removed {purifier.get('rows_removed','?')}), cols dropped={purifier.get('total_columns_dropped','?')}")
-            # ── CV results if present ──
-            cv = context.get('cv', {})
-            if cv:
-                parts.append(f"\nCV Results: ROC-AUC={_fmt_val(cv.get('roc_auc_mean'))}±{_fmt_val(cv.get('roc_auc_std'))}, "
-                             f"PR-AUC={_fmt_val(cv.get('pr_auc_mean'))}±{_fmt_val(cv.get('pr_auc_std'))}")
-                pr_curve = cv.get('pr_curve') or {}
-                baseline = pr_curve.get('baseline')
-                if baseline is not None:
-                    parts.append(f"  Target rate: {baseline:.4f} ({baseline*100:.2f}%)")
-            model_info = context.get('model_info', {})
-            if model_info:
-                parts.append(f"  Model: {model_info.get('model_type','?')}, features={model_info.get('features','?')}, score={_fmt_val(model_info.get('score'))}")
-            # ── Selected features if present ──
-            sel_feats = context.get('selected_features', [])
-            if sel_feats:
-                parts.append(f"\nSelected Features ({len(sel_feats)} total):")
-                for f in sel_feats[:15]:
-                    parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
-            # ── SFS if present ──
-            sfs = context.get('sfs', {})
-            if sfs:
-                for direction in ['forward', 'backward', 'forward_from_backward']:
-                    steps = sfs.get(direction, [])
-                    if steps:
-                        parts.append(f"\nSFS {direction.replace('_',' ').title()} ({len(steps)} steps)")
-            # ── Encoding plan if present ──
-            enc = context.get('encoding_plan', [])
-            if enc and isinstance(enc, list) and len(enc) > 0:
-                parts.append(f"\nEncoding Plan ({len(enc)} categorical features)")
-            # Fallback: if nothing specific was rendered, dump JSON summary
-            if len(parts) == 0:
-                try:
-                    ctx_str = json.dumps(context, indent=2, default=str)
-                    parts.append(ctx_str[:3000])
-                except Exception:
-                    parts.append(str(context)[:3000])
-
-        # ── Always append pipeline configuration if present ──
-        pipeline_cfg = context.get('pipeline_config', {})
-        if pipeline_cfg:
-            parts.append(f"\n═══ Pipeline Configuration ═══")
-            parts.append(f"  Pipeline type: {pipeline_cfg.get('pipeline_type', '?')}")
-            parts.append(f"  Current step: {pipeline_cfg.get('current_step', '?')}")
-            parts.append(f"  Detailed step: {pipeline_cfg.get('detailed_step', '?')}")
-            parts.append(f"  Preprocessing initiated: {pipeline_cfg.get('preprocessing_initiated', False)}")
-            parts.append(f"  Modeling available: {pipeline_cfg.get('modeling_available', False)}")
-
-            # ── Target Definition (business goal) ──
-            target_def = pipeline_cfg.get('target_definition', '').strip()
-            if target_def:
-                parts.append(f"\n═══ TARGET DEFINITION (Business Goal) ═══")
-                parts.append(f"  The user defined the prediction target as:")
-                parts.append(f"  \"{target_def}\"")
-                parts.append(f"  → Use this business context to ground ALL your analysis and recommendations.")
-
-            steps = pipeline_cfg.get('selected_purifier_steps', [])
-            if steps:
-                parts.append(f"  Selected purifier steps ({len(steps)}):")
-                for s in steps:
-                    parts.append(f"    • {s}")
-
-            split = pipeline_cfg.get('split_strategy', '?')
-            split_details = pipeline_cfg.get('split_details', {})
-            if split == 'oot':
-                parts.append(f"  Split strategy: Out-of-Time (OOT)")
-                parts.append(f"    Mode: {split_details.get('mode', '?')}, "
-                             f"OOT%: {split_details.get('oot_percent', '?')}, "
-                             f"Date column: {split_details.get('date_column', '?')}, "
-                             f"Cutoff: {split_details.get('cutoff', '?')}")
-            else:
-                parts.append(f"  Split strategy: Random")
-                parts.append(f"    OOS%: {split_details.get('oos_percent', '?')}")
-
-            rows_b = pipeline_cfg.get('rows_before', 0)
-            rows_a = pipeline_cfg.get('rows_after', 0)
-            rows_rm = pipeline_cfg.get('rows_removed', 0)
-            if rows_b:
-                pct = round(rows_rm / max(1, rows_b) * 100, 1)
-                parts.append(f"  Rows: {rows_b} → {rows_a} ({rows_rm} removed, {pct}% loss)")
-
-            total_dropped = pipeline_cfg.get('total_columns_dropped', 0)
-            parts.append(f"  Total columns dropped: {total_dropped}")
-
-            dropped_by_step = pipeline_cfg.get('dropped_by_step', [])
+        purifier = context.get('purifier_summary', {})
+        if purifier:
+            rows_before = purifier.get('rows_before', '?')
+            rows_after = purifier.get('rows_after', '?')
+            rows_removed = purifier.get('rows_removed', 0)
+            total_cols_dropped = purifier.get('total_columns_dropped', purifier.get('total_dropped', '?'))
+            parts.append(f"\n═══ Preprocessing Treatment Effect ═══")
+            parts.append(f"  Rows: {rows_before} → {rows_after} ({rows_removed} removed, "
+                         f"{round(rows_removed / max(1, rows_before if isinstance(rows_before, (int, float)) else 1) * 100, 1)}% loss)")
+            parts.append(f"  Total columns dropped: {total_cols_dropped}")
+            # Per-step breakdown
+            dropped_by_step = purifier.get('dropped_by_step', [])
             if dropped_by_step:
-                parts.append(f"  Columns dropped per purifier step:")
-                for step_info in dropped_by_step:
-                    sname = step_info.get('step', '?')
-                    cols = step_info.get('columns', [])
-                    rows_rm_s = step_info.get('rows_removed', 0)
-                    cols_preview = ', '.join(cols[:8])
-                    if len(cols) > 8:
-                        cols_preview += f' ... (+{len(cols) - 8} more)'
-                    line = f"    - {sname}: {len(cols)} cols"
-                    if rows_rm_s:
-                        line += f", {rows_rm_s} rows removed"
+                parts.append(f"  Purifier steps:")
+                for step in dropped_by_step:
+                    step_name = step.get('step', '?')
+                    cols = step.get('columns', [])
+                    rows_rm = step.get('rows_removed', 0)
+                    note = step.get('note', '')
+                    cols_preview = ', '.join(cols[:10])
+                    if len(cols) > 10:
+                        cols_preview += f' ... (+{len(cols) - 10} more)'
+                    line = f"    - {step_name}: {len(cols)} columns dropped"
+                    if rows_rm:
+                        line += f", {rows_rm} rows removed"
                     if cols_preview:
                         line += f" [{cols_preview}]"
+                    if note:
+                        line += f" — {note}"
                     parts.append(line)
 
-            exclusions = pipeline_cfg.get('model_usage_exclusions', [])
-            if exclusions:
-                parts.append(f"  Features excluded (Model_Usage=No): {', '.join(exclusions)}")
+        split_val = context.get('split_validation', {})
+        if split_val and isinstance(split_val, dict):
+            splits = split_val.get('splits', [])
+            if splits:
+                parts.append(f"\n═══ Train/Test Split Validation ═══")
+                for sp in splits:
+                    name = sp.get('name', '?')
+                    count = sp.get('count', '?')
+                    target_mean = sp.get('target_mean', '?')
+                    parts.append(f"  {name}: n={count}, target_rate={target_mean}")
 
-            # ── Data Dictionary (raw metadata per feature) ──
-            dd = pipeline_cfg.get('data_dictionary', [])
-            if dd:
-                # Build a lookup for feature descriptions (used also in per-feature DQ lines above)
-                dd_desc_map = {f.get('Feature_Name', ''): f.get('Feature_Description') for f in dd}
-                has_any_desc = any(v for v in dd_desc_map.values())
-                parts.append(f"\n═══ Data Dictionary ({len(dd)} features) ═══")
-                if has_any_desc:
-                    parts.append("  (Business descriptions from uploaded data dictionary)")
-                for feat in dd:
-                    fname = feat.get('Feature_Name', '?')
-                    dtype = feat.get('Data_Type', '?')
-                    lom = feat.get('Level_of_Measurement', '?')
-                    uniq = feat.get('Unique_Values', '?')
-                    miss = feat.get('Missing_Ratio', '?')
-                    mode_r = feat.get('Mode_Ratio', '?')
-                    usage = feat.get('Model_Usage_YN', '?')
-                    desc = feat.get('Feature_Description')
-                    line = f"  {fname}: type={dtype}, LOM={lom}, unique={uniq}, missing={miss}%, mode_ratio={mode_r}%, usage={usage}"
-                    if desc:
-                        line += f" | DESCRIPTION: \"{desc}\""
-                    parts.append(line)
+        model_usage = context.get('model_usage', {})
+        if model_usage:
+            excluded = [k for k, v in model_usage.items() if str(v).lower() == 'no']
+            if excluded:
+                parts.append(f"\nExcluded from model (Model_Usage=No): {', '.join(excluded)}")
 
-            # ── Encoding Plan ──
-            enc = pipeline_cfg.get('encoding_plan', [])
-            if enc:
-                parts.append(f"\n═══ Encoding Plan ({len(enc)} categorical features) ═══")
-                for e in enc:
-                    parts.append(f"  {e.get('feature', '?')}: LOM={e.get('lom', '?')}, "
-                                 f"unique={e.get('nunique', '?')}, "
-                                 f"strategy={e.get('strategy', '?')}, "
-                                 f"needs_ranking={e.get('needs_ranking', False)}")
+    elif section == 'encoding':
+        plan = context.get('plan', [])
+        if plan:
+            parts.append(f'Encoding Plan ({len(plan)} categorical features):')
+            for entry in plan[:30]:
+                parts.append(f"  - {entry.get('feature', '?')}: "
+                             f"LOM={entry.get('user_lom', entry.get('lom', '?'))}, "
+                             f"unique={entry.get('nunique', '?')}, "
+                             f"strategy={entry.get('fallback_strategy', '?')}")
 
-            # ── Shared helpers for stats formatting ──
-            num_metrics = ['Mean', 'Median', 'Std', 'Min', 'Max', 'Skewness', 'Kurtosis',
-                           'Q01', 'Q05', 'Q25', 'Q75', 'Q95', 'Q99', 'Missing_Pct', 'Unique', 'N']
-            cat_metrics = ['Mode', 'Mode_Pct', 'Num_Categories', 'Missing_Pct', 'Unique', 'N']
+    elif section == 'cv':
+        cv = context.get('cv', {})
+        model = context.get('model_info', {})
+        if cv:
+            parts.append("Cross-Validation Results:")
+            parts.append(f"  ROC-AUC (mean ± std): {cv.get('roc_auc_mean', '?')} ± {cv.get('roc_auc_std', '?')}")
+            parts.append(f"  PR-AUC (mean ± std): {cv.get('pr_auc_mean', '?')} ± {cv.get('pr_auc_std', '?')}")
+            parts.append(f"  Number of folds: {cv.get('n_splits', '?')}")
 
-            def _render_stats_comparison(before_list, after_list, title, label_before='before', label_after='after'):
-                """Render a before/after stats comparison block for a list of features."""
-                b_map = {s.get('Feature_Name'): s for s in before_list} if before_list else {}
-                a_map = {s.get('Feature_Name'): s for s in after_list} if after_list else {}
-                all_f = list(dict.fromkeys(
-                    [s.get('Feature_Name') for s in (before_list or [])] +
-                    [s.get('Feature_Name') for s in (after_list or [])]
-                ))
-                if not all_f:
-                    return
-                parts.append(f"\n═══ {title} ({len(all_f)} features) ═══")
-                parts.append(f"  (Format: metric={label_before}/{label_after})")
-                for fname in all_f:
-                    b = b_map.get(fname, {})
-                    a = a_map.get(fname, {})
-                    dtype = b.get('Data_Type') or a.get('Data_Type', '?')
-                    use_m = num_metrics if dtype == 'numeric' else cat_metrics
-                    line = f"  {fname} [{dtype}]:"
-                    m_parts = []
-                    for m in use_m:
-                        bv = b.get(m)
-                        av = a.get(m)
-                        if bv is None and av is None:
-                            continue
-                        m_parts.append(f"{m}={_fmt_val(bv)}/{_fmt_val(av)}")
-                    if m_parts:
-                        line += ' ' + ', '.join(m_parts)
+            # Per-fold breakdown
+            folds = cv.get('folds', [])
+            if folds:
+                parts.append("\n  ── Per-Fold Metrics ──")
+                for i, fold in enumerate(folds):
+                    parts.append(f"    Fold {i+1}: ROC-AUC={_fmt_val(fold.get('roc_auc'))}, "
+                                 f"PR-AUC={_fmt_val(fold.get('pr_auc'))}, "
+                                 f"best_iter={fold.get('best_iteration', '?')}")
+
+            # Class balance from PR baseline
+            pr_curve = cv.get('pr_curve') or {}
+            baseline = pr_curve.get('baseline')
+            if baseline is not None:
+                parts.append(f"\n  ── Class Balance ──")
+                parts.append(f"    Positive class rate (target rate): {baseline:.4f} ({baseline*100:.2f}%)")
+                parts.append(f"    Class imbalance ratio: 1:{int(round(1/max(baseline, 1e-9)))}")
+
+            # ROC curve operating points — TPR at key FPR thresholds
+            roc_curve_data = cv.get('roc_curve') or {}
+            fpr_grid = roc_curve_data.get('fpr', [])
+            mean_tpr = roc_curve_data.get('mean_tpr', [])
+            if fpr_grid and mean_tpr and len(fpr_grid) == len(mean_tpr):
+                parts.append(f"\n  ── ROC Curve Operating Points (mean across folds) ──")
+                parts.append(f"    (Read as: at X% false positive rate, we achieve Y% true positive rate)")
+                for target_fpr in [0.01, 0.05, 0.10, 0.20, 0.30]:
+                    # Find closest index in the fpr grid
+                    best_idx = min(range(len(fpr_grid)), key=lambda j: abs(fpr_grid[j] - target_fpr))
+                    tpr_at = mean_tpr[best_idx]
+                    parts.append(f"    FPR={target_fpr*100:.0f}% → TPR={tpr_at:.4f} ({tpr_at*100:.1f}% of positives caught)")
+
+            # PR curve operating points — Precision at key Recall levels
+            recall_grid = pr_curve.get('recall', [])
+            mean_prec = pr_curve.get('mean_precision', [])
+            if recall_grid and mean_prec and len(recall_grid) == len(mean_prec):
+                parts.append(f"\n  ── Precision-Recall Curve Operating Points (mean across folds) ──")
+                parts.append(f"    (Read as: to catch X% of positives, we achieve Y% precision)")
+                for target_recall in [0.10, 0.25, 0.50, 0.75, 0.90]:
+                    best_idx = min(range(len(recall_grid)), key=lambda j: abs(recall_grid[j] - target_recall))
+                    prec_at = mean_prec[best_idx]
+                    parts.append(f"    Recall={target_recall*100:.0f}% → Precision={prec_at:.4f} ({prec_at*100:.1f}%)")
+                # Compute approximate best F1 from the grid
+                try:
+                    f1_scores = []
+                    for j in range(len(recall_grid)):
+                        r, p = recall_grid[j], mean_prec[j]
+                        if (r + p) > 0:
+                            f1_scores.append((2 * p * r / (p + r), r, p, j))
+                    if f1_scores:
+                        best_f1, best_r, best_p, best_j = max(f1_scores, key=lambda x: x[0])
+                        parts.append(f"\n    ** Best F1 score on PR curve: F1={best_f1:.4f} "
+                                     f"(Precision={best_p:.4f}, Recall={best_r:.4f})")
+                        if baseline is not None:
+                            # Approximate threshold: for well-calibrated models, threshold ≈ baseline * precision / (baseline * precision + (1-baseline)*(1-precision))
+                            parts.append(f"    ** Approximate optimal threshold for F1: ~{best_r:.3f} recall level "
+                                         f"(with target rate {baseline:.4f}, threshold likely near {baseline:.3f}–{min(0.5, baseline*3):.3f})")
+                except Exception:
+                    pass
+
+            # Micro-averaged PR (pooled across all folds)
+            micro = cv.get('pr_curve_micro') or {}
+            if micro.get('ap') is not None:
+                parts.append(f"\n  ── Micro-Averaged PR (pooled across folds) ──")
+                parts.append(f"    Average Precision (micro): {micro['ap']:.4f}")
+
+        if model:
+            parts.append(f"\n  ── Model Info ──")
+            parts.append(f"  Model type: {model.get('model_type', '?')}")
+            parts.append(f"  Number of features: {model.get('features', '?')}")
+            parts.append(f"  Validation AUC (hold-out): {model.get('score', '?')}")
+
+    elif section == 'shap':
+        features = context.get('features', [])
+        if features:
+            parts.append(f'SHAP Beeswarm — top {len(features)} features by |impact|:')
+            for f in features[:20]:
+                parts.append(f"  - {f.get('feature', '?')}: "
+                             f"|impact|={f.get('impact', '?')}, "
+                             f"signed_impact={f.get('signed_impact', '?')}")
+
+    elif section == 'selected_features':
+        features = context.get('features', [])
+        if features:
+            parts.append(f'Selected Features ({len(features)} total, sorted by Combined Score):')
+            for f in features[:30]:
+                parts.append(f"  - {f.get('feature', '?')}: "
+                             f"combined_score={f.get('combined_score', '?')}, "
+                             f"SHAP_percentile={f.get('shap_percentile', '?')}, "
+                             f"Gain_percentile={f.get('gain_percentile', '?')}, "
+                             f"VIF={f.get('vif', '?')}, "
+                             f"usage={f.get('usage', 'keep')}")
+
+    elif section == 'sfs':
+        for direction in ['forward', 'backward', 'forward_from_backward']:
+            steps = context.get(direction, [])
+            if steps:
+                parts.append(f'\n{direction.replace("_", " ").title()} Selection ({len(steps)} steps):')
+                for s in steps[:20]:
+                    feat = s.get('feature_name', s.get('feature', '?'))
+                    parts.append(f"  Step {s.get('step', '?')}: "
+                                 f"{feat} — "
+                                 f"CV ROC-AUC={s.get('cv_roc_auc', s.get('roc_auc', '?'))}, "
+                                 f"Test ROC-AUC={s.get('test_roc_auc', '?')}, "
+                                 f"PR-AUC={s.get('cv_pr_auc', s.get('pr_auc', '?'))}, "
+                                 f"Model PSI={s.get('model_psi', '?')}")
+
+    else:
+        # 'general' or unknown section: render ALL available data keys using
+        # the same formatters as specific sections (cumulative context).
+        # ── Data preview if present ──
+        data_preview = context.get('data_preview', {})
+        if data_preview:
+            parts.append(f"Dataset: {data_preview.get('file_name', '?')}")
+            parts.append(f"  Total rows: {data_preview.get('total_rows', '?')}")
+            parts.append(f"  Total columns: {data_preview.get('total_columns', '?')}")
+            cols = data_preview.get('columns', [])
+            if cols:
+                parts.append(f"  Columns: {', '.join(str(c) for c in cols[:60])}")
+        # ── Data dictionary if present (top-level, from declaration) ──
+        dd = context.get('data_dictionary', [])
+        if dd and isinstance(dd, list):
+            parts.append(f"\nData Dictionary ({len(dd)} features):")
+            for feat in dd[:40]:
+                fname = feat.get('Feature_Name', '?')
+                dtype = feat.get('Data_Type', '?')
+                lom = feat.get('Level_of_Measurement', '?')
+                usage = feat.get('Model_Usage_YN', '?')
+                desc = feat.get('Feature_Description') or ''
+                parts.append(f"  {fname}: dtype={dtype}, LoM={lom}, usage={usage}" + (f", desc={desc}" if desc else ""))
+        # ── Data Quality summary if present ──
+        summary = context.get('summary', [])
+        if summary:
+            parts.append(f'Data Quality Summary ({len(summary)} features):\n')
+            for row in summary[:30]:
+                var = row.get('Variable', row.get('variable', '?'))
+                vtype = row.get('Variable_Type', '?')
+                psi = row.get('PSI')
+                decision = row.get('Datq_Decision', '?')
+                parts.append(f"  {var}: type={vtype}, PSI={_fmt_val(psi)}, decision={decision}")
+        purifier = context.get('purifier_summary', {})
+        if purifier:
+            parts.append(f"\nPurifier Summary: rows {purifier.get('rows_before','?')}→{purifier.get('rows_after','?')} "
+                         f"(removed {purifier.get('rows_removed','?')}), cols dropped={purifier.get('total_columns_dropped','?')}")
+        # ── CV results if present ──
+        cv = context.get('cv', {})
+        if cv:
+            parts.append(f"\nCV Results: ROC-AUC={_fmt_val(cv.get('roc_auc_mean'))}±{_fmt_val(cv.get('roc_auc_std'))}, "
+                         f"PR-AUC={_fmt_val(cv.get('pr_auc_mean'))}±{_fmt_val(cv.get('pr_auc_std'))}")
+            pr_curve = cv.get('pr_curve') or {}
+            baseline = pr_curve.get('baseline')
+            if baseline is not None:
+                parts.append(f"  Target rate: {baseline:.4f} ({baseline*100:.2f}%)")
+        model_info = context.get('model_info', {})
+        if model_info:
+            parts.append(f"  Model: {model_info.get('model_type','?')}, features={model_info.get('features','?')}, score={_fmt_val(model_info.get('score'))}")
+        # ── Selected features if present ──
+        sel_feats = context.get('selected_features', [])
+        if sel_feats:
+            parts.append(f"\nSelected Features ({len(sel_feats)} total):")
+            for f in sel_feats[:15]:
+                parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
+        # ── SFS if present ──
+        sfs = context.get('sfs', {})
+        if sfs:
+            for direction in ['forward', 'backward', 'forward_from_backward']:
+                steps = sfs.get(direction, [])
+                if steps:
+                    parts.append(f"\nSFS {direction.replace('_',' ').title()} ({len(steps)} steps)")
+        # ── Encoding plan if present ──
+        enc = context.get('encoding_plan', [])
+        if enc and isinstance(enc, list) and len(enc) > 0:
+            parts.append(f"\nEncoding Plan ({len(enc)} categorical features)")
+        # Fallback: if nothing specific was rendered, dump JSON summary
+        if len(parts) == 0:
+            try:
+                ctx_str = json.dumps(context, indent=2, default=str)
+                parts.append(ctx_str[:3000])
+            except Exception:
+                parts.append(str(context)[:3000])
+
+    # ── Always append pipeline configuration if present ──
+    pipeline_cfg = context.get('pipeline_config', {})
+    if pipeline_cfg:
+        parts.append(f"\n═══ Pipeline Configuration ═══")
+        parts.append(f"  Pipeline type: {pipeline_cfg.get('pipeline_type', '?')}")
+        parts.append(f"  Current step: {pipeline_cfg.get('current_step', '?')}")
+        parts.append(f"  Detailed step: {pipeline_cfg.get('detailed_step', '?')}")
+        parts.append(f"  Preprocessing initiated: {pipeline_cfg.get('preprocessing_initiated', False)}")
+        parts.append(f"  Modeling available: {pipeline_cfg.get('modeling_available', False)}")
+
+        # ── Target Definition (business goal) ──
+        target_def = pipeline_cfg.get('target_definition', '').strip()
+        if target_def:
+            parts.append(f"\n═══ TARGET DEFINITION (Business Goal) ═══")
+            parts.append(f"  The user defined the prediction target as:")
+            parts.append(f"  \"{target_def}\"")
+            parts.append(f"  → Use this business context to ground ALL your analysis and recommendations.")
+
+        steps = pipeline_cfg.get('selected_purifier_steps', [])
+        if steps:
+            parts.append(f"  Selected purifier steps ({len(steps)}):")
+            for s in steps:
+                parts.append(f"    • {s}")
+
+        split = pipeline_cfg.get('split_strategy', '?')
+        split_details = pipeline_cfg.get('split_details', {})
+        if split == 'oot':
+            parts.append(f"  Split strategy: Out-of-Time (OOT)")
+            parts.append(f"    Mode: {split_details.get('mode', '?')}, "
+                         f"OOT%: {split_details.get('oot_percent', '?')}, "
+                         f"Date column: {split_details.get('date_column', '?')}, "
+                         f"Cutoff: {split_details.get('cutoff', '?')}")
+        else:
+            parts.append(f"  Split strategy: Random")
+            parts.append(f"    OOS%: {split_details.get('oos_percent', '?')}")
+
+        rows_b = pipeline_cfg.get('rows_before', 0)
+        rows_a = pipeline_cfg.get('rows_after', 0)
+        rows_rm = pipeline_cfg.get('rows_removed', 0)
+        if rows_b:
+            pct = round(rows_rm / max(1, rows_b) * 100, 1)
+            parts.append(f"  Rows: {rows_b} → {rows_a} ({rows_rm} removed, {pct}% loss)")
+
+        total_dropped = pipeline_cfg.get('total_columns_dropped', 0)
+        parts.append(f"  Total columns dropped: {total_dropped}")
+
+        dropped_by_step = pipeline_cfg.get('dropped_by_step', [])
+        if dropped_by_step:
+            parts.append(f"  Columns dropped per purifier step:")
+            for step_info in dropped_by_step:
+                sname = step_info.get('step', '?')
+                cols = step_info.get('columns', [])
+                rows_rm_s = step_info.get('rows_removed', 0)
+                cols_preview = ', '.join(cols[:8])
+                if len(cols) > 8:
+                    cols_preview += f' ... (+{len(cols) - 8} more)'
+                line = f"    - {sname}: {len(cols)} cols"
+                if rows_rm_s:
+                    line += f", {rows_rm_s} rows removed"
+                if cols_preview:
+                    line += f" [{cols_preview}]"
+                parts.append(line)
+
+        exclusions = pipeline_cfg.get('model_usage_exclusions', [])
+        if exclusions:
+            parts.append(f"  Features excluded (Model_Usage=No): {', '.join(exclusions)}")
+
+        # ── Data Dictionary (raw metadata per feature) ──
+        dd = pipeline_cfg.get('data_dictionary', [])
+        if dd:
+            # Build a lookup for feature descriptions (used also in per-feature DQ lines above)
+            dd_desc_map = {f.get('Feature_Name', ''): f.get('Feature_Description') for f in dd}
+            has_any_desc = any(v for v in dd_desc_map.values())
+            parts.append(f"\n═══ Data Dictionary ({len(dd)} features) ═══")
+            if has_any_desc:
+                parts.append("  (Business descriptions from uploaded data dictionary)")
+            for feat in dd:
+                fname = feat.get('Feature_Name', '?')
+                dtype = feat.get('Data_Type', '?')
+                lom = feat.get('Level_of_Measurement', '?')
+                uniq = feat.get('Unique_Values', '?')
+                miss = feat.get('Missing_Ratio', '?')
+                mode_r = feat.get('Mode_Ratio', '?')
+                usage = feat.get('Model_Usage_YN', '?')
+                desc = feat.get('Feature_Description')
+                line = f"  {fname}: type={dtype}, LOM={lom}, unique={uniq}, missing={miss}%, mode_ratio={mode_r}%, usage={usage}"
+                if desc:
+                    line += f" | DESCRIPTION: \"{desc}\""
+                parts.append(line)
+
+        # ── Encoding Plan ──
+        enc = pipeline_cfg.get('encoding_plan', [])
+        if enc:
+            parts.append(f"\n═══ Encoding Plan ({len(enc)} categorical features) ═══")
+            for e in enc:
+                parts.append(f"  {e.get('feature', '?')}: LOM={e.get('lom', '?')}, "
+                             f"unique={e.get('nunique', '?')}, "
+                             f"strategy={e.get('strategy', '?')}, "
+                             f"needs_ranking={e.get('needs_ranking', False)}")
+
+        # ── Shared helpers for stats formatting ──
+        num_metrics = ['Mean', 'Median', 'Std', 'Min', 'Max', 'Skewness', 'Kurtosis',
+                       'Q01', 'Q05', 'Q25', 'Q75', 'Q95', 'Q99', 'Missing_Pct', 'Unique', 'N']
+        cat_metrics = ['Mode', 'Mode_Pct', 'Num_Categories', 'Missing_Pct', 'Unique', 'N']
+
+        def _render_stats_comparison(before_list, after_list, title, label_before='before', label_after='after'):
+            """Render a before/after stats comparison block for a list of features."""
+            b_map = {s.get('Feature_Name'): s for s in before_list} if before_list else {}
+            a_map = {s.get('Feature_Name'): s for s in after_list} if after_list else {}
+            all_f = list(dict.fromkeys(
+                [s.get('Feature_Name') for s in (before_list or [])] +
+                [s.get('Feature_Name') for s in (after_list or [])]
+            ))
+            if not all_f:
+                return
+            parts.append(f"\n═══ {title} ({len(all_f)} features) ═══")
+            parts.append(f"  (Format: metric={label_before}/{label_after})")
+            for fname in all_f:
+                b = b_map.get(fname, {})
+                a = a_map.get(fname, {})
+                dtype = b.get('Data_Type') or a.get('Data_Type', '?')
+                use_m = num_metrics if dtype == 'numeric' else cat_metrics
+                line = f"  {fname} [{dtype}]:"
+                m_parts = []
+                for m in use_m:
+                    bv = b.get(m)
+                    av = a.get(m)
+                    if bv is None and av is None:
+                        continue
+                    m_parts.append(f"{m}={_fmt_val(bv)}/{_fmt_val(av)}")
+                if m_parts:
+                    line += ' ' + ', '.join(m_parts)
+                else:
+                    if fname in b_map and fname not in a_map:
+                        line += ' [DROPPED by preprocessing]'
                     else:
-                        if fname in b_map and fname not in a_map:
-                            line += ' [DROPPED by preprocessing]'
-                        else:
-                            line += ' [no stats]'
-                    parts.append(line)
+                        line += ' [no stats]'
+                parts.append(line)
 
-            # ── Per-Step Before/After Stats (e.g. outlier cleaning) ──
-            step_stats = pipeline_cfg.get('preprocessing_step_stats') or []
-            for ss in step_stats:
-                step_name = ss.get('step', 'Unknown step')
-                sb = ss.get('stats_before') or []
-                sa = ss.get('stats_after') or []
-                extra = ''
-                qr = ss.get('quantile_range')
-                if qr and isinstance(qr, list) and len(qr) == 2:
-                    extra = f' [{qr[0]*100:.0f}%-{qr[1]*100:.0f}%]'
-                _render_stats_comparison(
-                    sb, sa,
-                    title=f"Before/After {step_name}{extra}",
-                    label_before=f'before {step_name}',
-                    label_after=f'after {step_name}',
-                )
+        # ── Per-Step Before/After Stats (e.g. outlier cleaning) ──
+        step_stats = pipeline_cfg.get('preprocessing_step_stats') or []
+        for ss in step_stats:
+            step_name = ss.get('step', 'Unknown step')
+            sb = ss.get('stats_before') or []
+            sa = ss.get('stats_after') or []
+            extra = ''
+            qr = ss.get('quantile_range')
+            if qr and isinstance(qr, list) and len(qr) == 2:
+                extra = f' [{qr[0]*100:.0f}%-{qr[1]*100:.0f}%]'
+            _render_stats_comparison(
+                sb, sa,
+                title=f"Before/After {step_name}{extra}",
+                label_before=f'before {step_name}',
+                label_after=f'after {step_name}',
+            )
 
-            # ── Overall Before/After Preprocessing Feature Stats ──
-            stats_before = pipeline_cfg.get('feature_stats_before') or []
-            stats_after = pipeline_cfg.get('feature_stats_after') or []
-            if stats_before or stats_after:
-                _render_stats_comparison(
-                    stats_before, stats_after,
-                    title='Before/After Entire Preprocessing',
-                    label_before='raw data',
-                    label_after='after all preprocessing',
-                )
+        # ── Overall Before/After Preprocessing Feature Stats ──
+        stats_before = pipeline_cfg.get('feature_stats_before') or []
+        stats_after = pipeline_cfg.get('feature_stats_after') or []
+        if stats_before or stats_after:
+            _render_stats_comparison(
+                stats_before, stats_after,
+                title='Before/After Entire Preprocessing',
+                label_before='raw data',
+                label_after='after all preprocessing',
+            )
 
-            # ── Pipeline Commentary Notes (user annotations) ──
-            notes = pipeline_cfg.get('pipeline_notes', {})
-            active_notes = {k: v for k, v in notes.items() if v and str(v).strip()}
-            if active_notes:
-                parts.append(f"\n═══ User Pipeline Notes ═══")
-                for position, content in active_notes.items():
-                    label = position.replace('_', ' ').title()
-                    parts.append(f"  [{label}]: {content}")
+        # ── Pipeline Commentary Notes (user annotations) ──
+        notes = pipeline_cfg.get('pipeline_notes', {})
+        active_notes = {k: v for k, v in notes.items() if v and str(v).strip()}
+        if active_notes:
+            parts.append(f"\n═══ User Pipeline Notes ═══")
+            for position, content in active_notes.items():
+                label = position.replace('_', ' ').title()
+                parts.append(f"  [{label}]: {content}")
 
-        return '\n'.join(parts) if parts else json.dumps(context, default=str)[:3000]
+    return '\n'.join(parts) if parts else json.dumps(context, default=str)[:3000]

@@ -377,3 +377,156 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             print(f"Error in data_dictionary: {str(e)}")
             print(traceback.format_exc())
             return Response({"error": f"Error processing file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # ─── Feature Engineering (AI-driven) ───────────────────────────────
+    @action(detail=True, methods=['post'])
+    def engineer_features(self, request, pk=None):
+        """
+        Create derived features on the uploaded dataset.
+        Body: { "features": [ { "name": str, "formula": str, "description": str, "fillna": any|null } ] }
+
+        Supported formula types:
+        - Arithmetic on columns: "Var_19 / (Var_24 + 1)"  → evaluated via df.eval()
+        - ISNA:ColName             → df['ColName'].isna().astype(int)
+        - LOG1P:ColName            → np.log1p(df['ColName'].clip(lower=0).fillna(0))
+        - ABS:ColName              → df['ColName'].abs()
+        - FLAG:expression          → (df.eval(expression)).astype(int)
+        - CLIP:ColName:lower:upper → df['ColName'].clip(lower, upper)
+        """
+        import re, traceback
+
+        data_file = self.get_object()
+        file_path = data_file.file.path
+        if not os.path.exists(file_path):
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        features = request.data.get('features', [])
+        if not features or not isinstance(features, list):
+            return Response({"error": "No features provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Load dataset
+            if file_path.lower().endswith(('.xls', '.xlsx')):
+                df = pd.read_excel(file_path, engine='openpyxl')
+            else:
+                df = pd.read_csv(file_path)
+
+            existing_cols = set(df.columns.tolist())
+            created = []
+            errors = []
+
+            for feat in features:
+                name = str(feat.get('name', '')).strip()
+                formula = str(feat.get('formula', '')).strip()
+                desc = feat.get('description', '')
+                fill = feat.get('fillna', None)
+
+                if not name or not formula:
+                    errors.append({"name": name, "error": "name and formula are required"})
+                    continue
+                # Sanitize name: replace spaces/special chars with underscore
+                safe_name = re.sub(r'[^A-Za-z0-9_]', '_', name)
+
+                try:
+                    series = self._eval_feature_formula(df, formula)
+                    if fill is not None:
+                        series = series.fillna(fill)
+                    df[safe_name] = series
+                    created.append({"name": safe_name, "description": desc, "formula": formula})
+                except Exception as fe:
+                    errors.append({"name": name, "error": str(fe)})
+
+            if not created:
+                return Response({"error": "No features could be created", "details": errors},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Save updated dataset back (always as CSV for consistency)
+            out_path = file_path
+            if file_path.lower().endswith(('.xls', '.xlsx')):
+                out_path = file_path.rsplit('.', 1)[0] + '.csv'
+                # Update the model's file field to point to CSV
+                from django.core.files.base import ContentFile
+                csv_bytes = df.to_csv(index=False).encode('utf-8')
+                data_file.file.save(os.path.basename(out_path), ContentFile(csv_bytes), save=True)
+            else:
+                df.to_csv(out_path, index=False)
+
+            # Update DataDictionary entries for new features
+            for feat_info in created:
+                DataDictionary.objects.update_or_create(
+                    data_file=data_file,
+                    column_name=feat_info['name'],
+                    defaults={'description': feat_info.get('description', '')}
+                )
+
+            df_clean = df.replace({np.nan: None})
+            preview = {
+                "total_rows": len(df),
+                "total_columns": len(df.columns),
+                "columns": df.columns.tolist(),
+                "top_rows": df_clean.head(5).to_dict(orient='records'),
+            }
+
+            return Response({
+                "status": "success",
+                "created": created,
+                "errors": errors,
+                "preview": preview,
+            })
+
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"error": f"Feature engineering failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _eval_feature_formula(self, df: pd.DataFrame, formula: str) -> pd.Series:
+        """Safely evaluate a feature formula against the dataframe."""
+        import re as _re
+
+        # Special prefix handlers
+        if formula.upper().startswith('ISNA:'):
+            col = formula[5:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return df[col].isna().astype(int)
+
+        if formula.upper().startswith('LOG1P:'):
+            col = formula[6:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return np.log1p(pd.to_numeric(df[col], errors='coerce').clip(lower=0).fillna(0))
+
+        if formula.upper().startswith('ABS:'):
+            col = formula[4:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return pd.to_numeric(df[col], errors='coerce').abs()
+
+        if formula.upper().startswith('FLAG:'):
+            expr = formula[5:].strip()
+            self._validate_expression_columns(df, expr)
+            return df.eval(expr).astype(int)
+
+        if formula.upper().startswith('CLIP:'):
+            parts = formula[5:].split(':')
+            if len(parts) != 3:
+                raise ValueError("CLIP format: CLIP:ColName:lower:upper")
+            col, lo, hi = parts[0].strip(), float(parts[1]), float(parts[2])
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return pd.to_numeric(df[col], errors='coerce').clip(lower=lo, upper=hi)
+
+        # Default: arithmetic expression via df.eval()
+        self._validate_expression_columns(df, formula)
+        return df.eval(formula)
+
+    def _validate_expression_columns(self, df: pd.DataFrame, expr: str):
+        """Check that column references in an expression exist in the dataframe."""
+        import re as _re
+        # Extract potential column names (word tokens that aren't Python keywords or numbers)
+        tokens = set(_re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', expr))
+        keywords = {'and', 'or', 'not', 'in', 'True', 'False', 'None', 'nan', 'inf'}
+        col_refs = tokens - keywords
+        missing = col_refs - set(df.columns.tolist())
+        if missing:
+            raise ValueError(f"Unknown columns: {', '.join(sorted(missing))}")

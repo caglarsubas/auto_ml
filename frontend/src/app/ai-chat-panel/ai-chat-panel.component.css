@@ -345,3 +345,300 @@
 .chat-message.assistant .chat-message-content .chat-table tr:hover {
   background: #f0f4ff;
 }
+
+/* ── Action Blocks (AI-driven feature engineering) ── */
+.chat-action-blocks {
+  margin-top: 8px;
+}
+
+.chat-action-block {
+  background: #f0f7ff;
+  border: 1px solid #b3d4fc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.action-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1565c0;
+  margin-bottom: 6px;
+}
+
+.action-icon {
+  font-size: 14px;
+}
+
+.action-features {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.action-feature-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+}
+
+.action-feature-item strong {
+  color: #1565c0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.action-formula {
+  color: #666;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Button row: Edit + Apply side by side */
+.action-btn-row {
+  display: flex;
+  gap: 6px;
+}
+
+.action-edit-btn {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  background: #455a64;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.action-edit-btn:hover:not(:disabled) {
+  background: #37474f;
+}
+
+.action-edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-apply-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.action-apply-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.action-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Editable textarea for action payloads */
+.action-edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 250px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1.5px solid #90caf9;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+  background: #fafafa;
+  color: #333;
+  box-sizing: border-box;
+}
+
+.action-edit-textarea:focus {
+  outline: none;
+  border-color: #1565c0;
+  box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.15);
+}
+
+/* Code-specific edit textarea: dark theme */
+.action-edit-code {
+  background: #1e1e2e;
+  color: #a6e3a1;
+  border-color: #45475a;
+  min-height: 120px;
+}
+
+.action-edit-code:focus {
+  border-color: #89b4fa;
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.action-applied-badge {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2e7d32;
+  padding: 6px;
+  background: #e8f5e9;
+  border-radius: 6px;
+}
+
+/* Action type color variants */
+.action-type-execute_code {
+  border-color: #b3d4fc;
+  background: #f0f7ff;
+}
+
+.action-type-update_metadata {
+  border-color: #c8e6c9;
+  background: #f1f8e9;
+}
+
+.action-type-update_config {
+  border-color: #ffe0b2;
+  background: #fff8e1;
+}
+
+.action-type-update_notes {
+  border-color: #d1c4e9;
+  background: #f3e5f5;
+}
+
+.action-type-update_metadata .action-header { color: #2e7d32; }
+.action-type-update_config .action-header { color: #e65100; }
+.action-type-update_notes .action-header { color: #6a1b9a; }
+
+.action-detail {
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.action-code {
+  background: #1e1e2e;
+  color: #a6e3a1;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.action-code code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Auto-correction collapsible one-liner */
+.auto-correction-wrapper {
+  margin: 2px 0 4px 0;
+}
+
+.auto-correction-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #fff3e0;
+  border: 1px solid #ffe0b2;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #e65100;
+  line-height: 1.4;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.auto-correction-summary:hover {
+  background: #ffe0b2;
+}
+
+.auto-correction-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.auto-correction-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.auto-correction-toggle {
+  flex-shrink: 0;
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.auto-correction-detail {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 250px;
+  overflow-y: auto;
+  color: #333;
+}
+
+.auto-correction-detail code {
+  background: #f5f5f5;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+.action-error {
+  font-size: 11px;
+  color: #c62828;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: #ffebee;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.action-success {
+  font-size: 11px;
+  color: #2e7d32;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #e8f5e9;
+  border-radius: 4px;
+}

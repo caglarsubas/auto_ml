@@ -99,6 +99,27 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       })
     );
 
+    // Listen for data refresh events (e.g., after AI creates features)
+    this.subscription.add(
+      this.sharedService.dataRefresh$.subscribe(() => {
+        if (this.currentFileId !== null) {
+          console.log('[Declaration] Data refresh triggered — re-fetching preview and dictionary');
+          this.getPreview(this.currentFileId);
+          this.http.get(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`)
+            .subscribe(
+              (data: any) => {
+                if (Array.isArray(data) && data.length > 0) {
+                  this.dataDictionary = data;
+                  this.initializeModelUsageFromBackend(data);
+                  this.pushDeclarationAiContext();
+                }
+              },
+              () => { /* dictionary may not exist yet */ }
+            );
+        }
+      })
+    );
+
     // Load saved model usage settings
     this.loadModelUsage();
   }

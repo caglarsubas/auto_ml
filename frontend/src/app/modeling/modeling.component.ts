@@ -2390,8 +2390,15 @@ export class ModelingComponent implements OnInit, AfterViewInit {
    */
   buildFeatureProgressionData(): any {
     if (!this.selectedSfsStep) return null;
-    const direction = this.selectedSfsStep.direction;
-    const allSteps = direction === 'forward' ? this.sfsForwardResults : this.sfsBackwardResults;
+    const direction = this.selectedSfsDirection || this.selectedSfsStep.direction;
+    let allSteps: any[];
+    if (direction === 'forward_from_backward') {
+      allSteps = this.sfsForwardFromBackwardResults;
+    } else if (direction === 'forward') {
+      allSteps = this.sfsForwardResults;
+    } else {
+      allSteps = this.sfsBackwardResults;
+    }
     if (!allSteps || allSteps.length === 0) return null;
 
     const sortedSteps = [...allSteps].sort((a: any, b: any) => a.step - b.step);

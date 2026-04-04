@@ -1,12 +1,23 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 
+export interface AiAction {
+  type: string;
+  payload: any;
+  applied?: boolean;
+  editing?: boolean;
+  editedPayload?: any;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
   section?: string;
   loading?: boolean;
+  actions?: AiAction[];
+  autoCorrection?: boolean;
+  autoCorrectionSummary?: string;
 }
 
 @Injectable({
@@ -47,14 +58,26 @@ export class AiAssistantService {
     this.messagesSubject.next(messages);
   }
 
-  updateLastMessage(content: string): void {
+  updateLastMessage(content: string, actions?: AiAction[]): void {
     const messages = [...this.messagesSubject.getValue()];
     if (messages.length > 0) {
       messages[messages.length - 1] = {
         ...messages[messages.length - 1],
         content,
         loading: false,
+        ...(actions && actions.length > 0 ? { actions } : {}),
       };
+      this.messagesSubject.next(messages);
+    }
+  }
+
+  /** Mark an action on a specific message as applied */
+  markActionApplied(messageIndex: number, actionIndex: number): void {
+    const messages = [...this.messagesSubject.getValue()];
+    if (messages[messageIndex]?.actions?.[actionIndex]) {
+      messages[messageIndex] = { ...messages[messageIndex] };
+      messages[messageIndex].actions = [...messages[messageIndex].actions!];
+      messages[messageIndex].actions![actionIndex] = { ...messages[messageIndex].actions![actionIndex], applied: true };
       this.messagesSubject.next(messages);
     }
   }

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { AiAssistantService, ChatMessage } from '../services/ai-assistant.service';
+import { AiAssistantService, AiAction, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
@@ -108,12 +108,293 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       history
     ).subscribe({
       next: (resp: any) => {
-        this.aiService.updateLastMessage(resp.message || 'No response received.');
+        const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
+          type: a.type,
+          payload: a.payload,
+          applied: false,
+        }));
+        this.aiService.updateLastMessage(resp.message || 'No response received.', actions);
         this.isLoading = false;
       },
       error: (err: any) => {
         const errorMsg = err?.error?.error || err?.message || 'Failed to get AI response. Please check your API key.';
         this.aiService.updateLastMessage(`Error: ${errorMsg}`);
+        this.isLoading = false;
+      }
+    });
+  }
+
+  /** Toggle edit mode for an action block */
+  toggleEdit(action: AiAction): void {
+    if (action.applied) return;
+    if (!action.editing) {
+      // Enter edit mode — seed editedPayload from current payload
+      action.editing = true;
+      action.editedPayload = JSON.parse(JSON.stringify(action.payload));
+      this.actionError = null;
+    } else {
+      // Cancel edit mode — discard changes
+      action.editing = false;
+      action.editedPayload = undefined;
+    }
+  }
+
+  /** Get the editable text representation of an action payload for the textarea */
+  getEditableText(action: AiAction): string {
+    const p = action.editedPayload ?? action.payload;
+    if (action.type === 'execute_code') {
+      return p.code || '';
+    }
+    // For structured types, serialize the whole payload as JSON
+    return JSON.stringify(p, null, 2);
+  }
+
+  /** Update the edited payload when the user types in the textarea */
+  onEditChange(action: AiAction, value: string): void {
+    if (action.type === 'execute_code') {
+      if (!action.editedPayload) action.editedPayload = { ...action.payload };
+      action.editedPayload.code = value;
+    } else {
+      try {
+        action.editedPayload = JSON.parse(value);
+        this.actionError = null;
+      } catch {
+        this.actionError = 'Invalid JSON — please fix the syntax before applying.';
+      }
+    }
+  }
+
+  /** Execute any AI action via the general-purpose backend endpoint */
+  applyAction(messageIndex: number, actionIndex: number, action: AiAction): void {
+    if (action.applied || this.actionApplying) return;
+
+    const fileId = this.sharedService.getCurrentFileId();
+    if (!fileId) {
+      this.actionError = 'No dataset loaded. Please upload data first.';
+      return;
+    }
+
+    // Use editedPayload if user modified the action, otherwise use original
+    const payload = action.editedPayload ?? action.payload;
+
+    this.actionApplying = true;
+    this.actionError = null;
+    this.actionSuccess = null;
+
+    this.dataService.executeAiAction(fileId, action.type, payload).subscribe({
+      next: (resp: any) => {
+        this.actionApplying = false;
+        action.editing = false;
+        this.aiService.markActionApplied(messageIndex, actionIndex);
+        this._handleActionResult(action.type, resp);
+      },
+      error: (err: any) => {
+        this.actionApplying = false;
+        const errMsg = err?.error?.error || err?.error?.message || 'Action failed.';
+        const traceback = err?.error?.traceback || '';
+        const fullError = traceback ? errMsg + '\n' + traceback : errMsg;
+        this.actionError = fullError;
+
+        // Auto-send the error back to the AI for self-correction
+        this._requestErrorCorrection(action.type, payload, fullError);
+      }
+    });
+  }
+
+  /** Build a human-readable confirmation message and trigger appropriate refreshes */
+  private _handleActionResult(actionType: string, resp: any): void {
+    const desc = resp.description || '';
+
+    if (actionType === 'execute_code') {
+      const changes = resp.changes || {};
+      const added = changes.columns_added || [];
+      const removed = changes.columns_removed || [];
+      const preview = resp.preview || {};
+      let msg = `✅ **Code executed successfully.**`;
+      if (desc) msg += ` ${desc}`;
+      if (added.length) msg += `\n\n**Columns added:** ${added.join(', ')}`;
+      if (removed.length) msg += `\n\n**Columns removed:** ${removed.join(', ')}`;
+      if (changes.rows_before !== changes.rows_after) {
+        msg += `\n\n**Rows:** ${changes.rows_before} → ${changes.rows_after}`;
+      }
+      msg += `\n\nDataset now has **${preview.total_columns}** columns and **${preview.total_rows}** rows.`;
+      this.actionSuccess = 'Code executed successfully.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // Refresh declaration data
+      this.sharedService.triggerDataRefresh();
+      this.sharedService.triggerCheckpoint('ai_action_execute_code');
+
+    } else if (actionType === 'update_metadata') {
+      const applied = resp.applied || [];
+      const errors = resp.errors || [];
+      let msg = `✅ **Metadata updated.** ${applied.length} field(s) changed.`;
+      if (desc) msg += ` ${desc}`;
+      if (applied.length) {
+        msg += '\n\n' + applied.map((a: any) => `- **${a.column}**.${a.field} = \`${a.value}\``).join('\n');
+      }
+      if (errors.length) {
+        msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column}: ${e.error}`).join(', ');
+      }
+      this.actionSuccess = `${applied.length} metadata field(s) updated.`;
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // Refresh declaration data (dictionary)
+      this.sharedService.triggerDataRefresh();
+      this.sharedService.triggerCheckpoint('ai_action_update_metadata');
+
+    } else if (actionType === 'update_config') {
+      const applied = resp.applied || [];
+      const errors = resp.errors || [];
+      let msg = `✅ **Configuration updated.** ${applied.length} setting(s) changed.`;
+      if (desc) msg += ` ${desc}`;
+      if (applied.length) {
+        msg += '\n\n' + applied.map((a: any) => {
+          if (a.column) return `- **${a.key}**: ${a.column} = \`${a.value}\``;
+          return `- **${a.key}** = \`${JSON.stringify(a.value)}\``;
+        }).join('\n');
+      }
+      if (errors.length) {
+        msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || e.key}: ${e.error}`).join(', ');
+      }
+      this.actionSuccess = `${applied.length} config setting(s) updated.`;
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // Apply config changes to frontend state
+      this._applyConfigChanges(applied);
+      this.sharedService.triggerCheckpoint('ai_action_update_config');
+
+    } else if (actionType === 'update_notes') {
+      const noteAction = resp.note_action || 'add';
+      const position = resp.position || '';
+      const content = resp.content || '';
+      let msg = `✅ **Note ${noteAction === 'delete' ? 'deleted' : noteAction === 'edit' ? 'edited' : 'added'}** at position \`${position}\`.`;
+      if (content) msg += `\n\n> ${content}`;
+      this.actionSuccess = `Note ${noteAction}d successfully.`;
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // Apply note change to SharedService
+      if (noteAction === 'delete') {
+        this.sharedService.updatePipelineNote(position, '');
+      } else {
+        this.sharedService.updatePipelineNote(position, content);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_update_notes');
+
+    } else {
+      this.actionSuccess = resp.description || 'Action completed.';
+      this.aiService.addMessage({
+        role: 'assistant',
+        content: `✅ **Action completed.** ${desc}`,
+        timestamp: new Date(),
+      });
+    }
+  }
+
+  /** Apply config changes returned by update_config to frontend SharedService state */
+  private _applyConfigChanges(applied: any[]): void {
+    for (const upd of applied) {
+      if (upd.key === 'model_usage' && upd.column) {
+        const current = this.sharedService.getModelUsageSettings() || {};
+        current[upd.column] = upd.value;
+        this.sharedService.setModelUsageSettings(current);
+      }
+      // Other config keys (preprocessing_options, split_strategy, etc.) are handled
+      // by triggering a checkpoint which the parent components pick up
+    }
+  }
+
+  actionApplying = false;
+  actionError: string | null = null;
+  actionSuccess: string | null = null;
+
+  /** Track which auto-correction messages are expanded (by message index) */
+  expandedCorrections = new Set<number>();
+
+  toggleCorrectionExpand(index: number): void {
+    if (this.expandedCorrections.has(index)) {
+      this.expandedCorrections.delete(index);
+    } else {
+      this.expandedCorrections.add(index);
+    }
+  }
+
+  isCorrectionExpanded(index: number): boolean {
+    return this.expandedCorrections.has(index);
+  }
+
+  /** Automatically send the failed action + error back to the AI for self-correction */
+  private _requestErrorCorrection(actionType: string, payload: any, errorText: string): void {
+    // Build a concise description of what failed
+    let codeSnippet = '';
+    if (actionType === 'execute_code') {
+      codeSnippet = payload?.code || JSON.stringify(payload, null, 2);
+    } else {
+      codeSnippet = JSON.stringify(payload, null, 2);
+    }
+
+    const correctionPrompt =
+      `The following "${actionType}" action you proposed failed with an error.\n\n` +
+      `**Failed code / payload:**\n\`\`\`\n${codeSnippet}\n\`\`\`\n\n` +
+      `**Error:**\n\`\`\`\n${errorText}\n\`\`\`\n\n` +
+      `Please analyze the error and provide a corrected action block. ` +
+      `Remember: only pandas (pd), numpy (np), and the DataFrame (df) are available in the sandbox. ` +
+      `No imports, no open(), no __import__. Fix the issue and respond with the corrected action.`;
+
+    // Extract the first line of the error for the collapsed summary
+    const firstErrorLine = errorText.split('\n')[0].trim();
+    const summary = `Action failed: ${firstErrorLine} — requesting AI correction...`;
+
+    // Add the error as a user-role message, marked as auto-correction (collapsed by default)
+    this.aiService.addMessage({
+      role: 'user',
+      content: correctionPrompt,
+      timestamp: new Date(),
+      autoCorrection: true,
+      autoCorrectionSummary: summary,
+    });
+
+    // Add a loading placeholder for the AI response
+    this.aiService.addMessage({
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      loading: true,
+    });
+
+    this.isLoading = true;
+
+    const history = this.aiService.getHistory().slice(0, -1);
+    const cumulative = this.sharedService.getAiCumulativeContext() || {};
+    const sectionCtx = this.currentContext || {};
+    const ctx = { ...cumulative, ...sectionCtx };
+    ctx.pipeline_config = {
+      ...(cumulative.pipeline_config || {}),
+      ...(sectionCtx.pipeline_config || {}),
+    };
+    if (!ctx.pipeline_config.target_definition) {
+      ctx.pipeline_config.target_definition = this.sharedService.getTargetDefinition() || '';
+    }
+    if (!ctx.pipeline_config.pipeline_type) {
+      ctx.pipeline_config.pipeline_type = this.sharedService.getSelectedPipeline() || '';
+    }
+
+    this.dataService.sendAiChat(
+      correctionPrompt,
+      ctx,
+      this.currentSection || 'general',
+      history
+    ).subscribe({
+      next: (resp: any) => {
+        const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
+          type: a.type,
+          payload: a.payload,
+          applied: false,
+        }));
+        this.aiService.updateLastMessage(resp.message || 'No response received.', actions);
+        this.isLoading = false;
+        // Clear the error since the AI has provided a correction
+        this.actionError = null;
+      },
+      error: (err: any) => {
+        const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
+        this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
         this.isLoading = false;
       }
     });
