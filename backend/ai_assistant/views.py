@@ -49,24 +49,96 @@ The user is a data scientist or risk analyst building a supervised binary classi
 5. Modeling — cross-validation (ROC-AUC, PR-AUC), SHAP beeswarm, feature importance, selected features
 6. Sequential Feature Selection (SFS) — forward, backward, forward-from-backward search
 
-═══ SFS INTERPRETATION (CRITICAL) ═══
+═══ PIPELINE STEP BEHAVIOR (CRITICAL — READ CAREFULLY) ═══
+You MUST understand exactly how each pipeline step works internally. When commenting on
+results, ALWAYS check the actual configuration parameters provided in the context
+(stopping criteria, thresholds, etc.) before making any claims.
+
+── 1. DATA DECLARATION ──
+• User uploads a CSV file and reviews a preview (first N rows).
+• A data dictionary is generated automatically: Feature_Name, Data_Type (int/float/object),
+  Level_of_Measurement (Nominal/Ordinal/Continuous/Binary), Model_Usage_YN (yes/no/target).
+• User can edit feature descriptions, LoM assignments, and Model_Usage flags.
+
+── 2. DATA PURIFIER (Preprocessing) ──
+• Runs a configurable sequence of preprocessing steps on the raw data.
+• Available purifier steps (user selects which to apply and in what order):
+  - Missing Value Imputation: median for numeric, mode for categorical
+  - Outlier Removal (Numeric): IQR-based or percentile-based with configurable thresholds
+  - Constant Column Drop: removes features with zero variance
+  - Quasi-Constant Drop: removes features where a single value dominates above a threshold
+  - High Cardinality Drop: removes categorical features with too many unique values
+• After purification, data is split into train/test (random or out-of-time split).
+• The purifier summary shows rows before/after, columns dropped, and reasons.
+
+── 3. DATA QUALITY SUMMARY ──
+• Calculates PSI (Population Stability Index) for each feature between train and test.
+• CSI (Characteristic Stability Index) for categorical features.
+• Distribution stats, missing %, and Model_Usage flags are shown.
+• PSI thresholds: < 0.1 = stable, 0.1–0.25 = moderate shift, > 0.25 = significant shift.
+
+── 4. CATEGORICAL FEATURE ENCODING ──
+• Boosting models (XGBoost/LightGBM/CatBoost) can handle categoricals natively.
+• Primary option: "Model Native" — pass categoricals directly to the model.
+• Fallback strategies configured per feature if native handling fails.
+• LoM (Level of Measurement) determines encoding appropriateness.
+
+── 5. MODELING ──
+• Trains an XGBoost/LightGBM/CatBoost model with stratified K-fold cross-validation.
+• Reports: Train/CV/Test ROC-AUC and PR-AUC, SHAP beeswarm, feature importance (gain).
+• Selected features are ranked by a combined score of SHAP percentile + Gain percentile.
+• VIF (Variance Inflation Factor) is calculated for multicollinearity detection.
+
+── 6. SEQUENTIAL FEATURE SELECTION (SFS) — DETAILED MECHANICS ──
+
+STOPPING CRITERIA (CRITICAL):
+• SFS does NOT always run until all features are added or removed!
+• The user configures STOPPING CRITERIA with these parameters:
+  - metrics: list of {metric, pct_change} — e.g., [{metric: "roc_auc", pct_change: 1.0}]
+    The process STOPS when the % change in the monitored metric falls below this threshold.
+  - min_features: minimum number of features before stopping is allowed
+  - max_features: maximum number of features (hard stop)
+• The LAST step in the results table is where the stopping criteria was triggered,
+  NOT necessarily the last possible feature. Do NOT assume "only 1 feature left" or
+  "all features removed" unless the results explicitly show that.
+• ALWAYS check the sfs_config in the context to see the actual stopping criteria values.
+
+TOP-K CANDIDATES:
+• At each step, only the top-K candidates (by quick evaluation) are fully cross-validated.
+• This is a performance optimization, not a feature selection criterion.
+
 BACKWARD ELIMINATION ordering:
 • Step 1 drops the LEAST important feature — the one whose removal hurts performance the LEAST.
 • Features dropped in early steps (step 1, 2, 3…) are the WEAKEST contributors.
 • Features that SURVIVE the longest (dropped in the last steps) are the MOST important.
-• When analyzing backward SFS results, the first-listed features are candidates for removal,
-  NOT top performers. The later a feature is dropped, the more critical it is.
 • Summary: early drop = low importance, late drop = high importance.
+• The process stops when removing the next feature would cause a performance drop exceeding
+  the configured pct_change threshold, OR when min_features is reached.
+• The LAST ROW in backward results is the step where the process stopped — the remaining
+  features at that point are the recommended feature set from backward elimination.
 
 FORWARD SELECTION ordering:
 • Step 1 adds the MOST important feature — the one that improves performance the MOST alone.
 • Features added in early steps are the STRONGEST individual contributors.
 • Features added later provide diminishing marginal gains.
 • Summary: early add = high importance, late add = low importance.
+• The process stops when adding the next feature improves performance by less than
+  the configured pct_change threshold, OR when max_features is reached.
 
-FORWARD-FROM-BACKWARD:
-• This is forward selection run on the feature subset chosen after backward elimination.
-• Same interpretation as forward selection: early add = high importance.
+FORWARD-FROM-BACKWARD (chained):
+• After backward elimination, the user selects a "cut step" — a point in the backward
+  results table to define which features to keep.
+• Forward selection then runs on ONLY those remaining features.
+• Same interpretation as forward: early add = high importance.
+• This two-stage approach finds a more robust optimal feature subset.
+
+READING SFS RESULTS:
+• Each row in the results table shows: step number, feature added/dropped, remaining count,
+  and the model performance metrics (Train/CV/Test ROC-AUC and PR-AUC) AFTER that step.
+• The "remaining" column shows how many features are in the model after the step.
+• PSI column shows model stability after each step.
+• ALWAYS reference the actual metric values and stopping config when analyzing results.
+  Never guess how many features are "left" — read it from the data.
 
 ═══ ACTIONABLE PIPELINE OPERATIONS ═══
 You are not just an advisor — you can DIRECTLY MODIFY the user's pipeline data, metadata,
@@ -525,14 +597,41 @@ def _format_context(context: dict, section: str) -> str:
                              f"usage={f.get('usage', 'keep')}")
 
     elif section == 'sfs':
+        # ── SFS Configuration (stopping criteria, etc.) ──
+        sfs_cfg = context.get('sfs_config', {})
+        if sfs_cfg:
+            parts.append('═══ SFS Configuration ═══')
+            sc = sfs_cfg.get('stopping_criteria', {})
+            metrics_cfg = sc.get('metrics', [])
+            if metrics_cfg:
+                for m in metrics_cfg:
+                    parts.append(f"  Stopping metric: {m.get('metric', '?')}, "
+                                 f"pct_change threshold: {m.get('pct_change', '?')}%")
+            parts.append(f"  Min features: {sc.get('min_features', '?')}")
+            parts.append(f"  Max features: {sc.get('max_features', '?')}")
+            parts.append(f"  Top-K candidates per step: {sfs_cfg.get('top_k', '?')}")
+            cut_step = sfs_cfg.get('backward_cut_step')
+            if cut_step is not None:
+                parts.append(f"  Backward cut step (user-selected): {cut_step} "
+                             f"({sfs_cfg.get('backward_cut_features', '?')} features remaining)")
+            if sfs_cfg.get('stopped_early'):
+                parts.append(f"  ⚠ SFS was stopped early by the user (partial results)")
+        # ── SFS Results ──
         for direction in ['forward', 'backward', 'forward_from_backward']:
             steps = context.get(direction, [])
             if steps:
-                parts.append(f'\n{direction.replace("_", " ").title()} Selection ({len(steps)} steps):')
+                last_step = steps[-1] if steps else {}
+                remaining = last_step.get('remaining', last_step.get('selected_features', []))
+                remaining_count = len(remaining) if isinstance(remaining, list) else remaining
+                parts.append(f'\n{direction.replace("_", " ").title()} Selection '
+                             f'({len(steps)} steps, {remaining_count} features remaining after last step):')
                 for s in steps[:20]:
                     feat = s.get('feature_name', s.get('feature', '?'))
+                    rem = s.get('remaining', '?')
+                    if isinstance(rem, list):
+                        rem = len(rem)
                     parts.append(f"  Step {s.get('step', '?')}: "
-                                 f"{feat} — "
+                                 f"{feat} — remaining={rem}, "
                                  f"CV ROC-AUC={s.get('cv_roc_auc', s.get('roc_auc', '?'))}, "
                                  f"Test ROC-AUC={s.get('test_roc_auc', '?')}, "
                                  f"PR-AUC={s.get('cv_pr_auc', s.get('pr_auc', '?'))}, "
@@ -593,13 +692,29 @@ def _format_context(context: dict, section: str) -> str:
             parts.append(f"\nSelected Features ({len(sel_feats)} total):")
             for f in sel_feats[:15]:
                 parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
-        # ── SFS if present ──
+        # ── SFS config if present ──
+        sfs_cfg = context.get('sfs_config', {})
+        if sfs_cfg:
+            sc = sfs_cfg.get('stopping_criteria', {})
+            metrics_cfg = sc.get('metrics', [])
+            parts.append(f"\n═══ SFS Configuration ═══")
+            for m in metrics_cfg:
+                parts.append(f"  Stopping: {m.get('metric','?')}, pct_change threshold={m.get('pct_change','?')}%")
+            parts.append(f"  Min features: {sc.get('min_features','?')}, Max features: {sc.get('max_features','?')}")
+            parts.append(f"  Top-K: {sfs_cfg.get('top_k','?')}")
+            cut_step = sfs_cfg.get('backward_cut_step')
+            if cut_step is not None:
+                parts.append(f"  Backward cut step: {cut_step} ({sfs_cfg.get('backward_cut_features','?')} features)")
+        # ── SFS results if present ──
         sfs = context.get('sfs', {})
         if sfs:
             for direction in ['forward', 'backward', 'forward_from_backward']:
                 steps = sfs.get(direction, [])
                 if steps:
-                    parts.append(f"\nSFS {direction.replace('_',' ').title()} ({len(steps)} steps)")
+                    last_step = steps[-1] if steps else {}
+                    remaining = last_step.get('remaining', last_step.get('selected_features', []))
+                    rem_count = len(remaining) if isinstance(remaining, list) else remaining
+                    parts.append(f"\nSFS {direction.replace('_',' ').title()} ({len(steps)} steps, {rem_count} features after last step)")
         # ── Encoding plan if present ──
         enc = context.get('encoding_plan', [])
         if enc and isinstance(enc, list) and len(enc) > 0:

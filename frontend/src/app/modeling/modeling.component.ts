@@ -808,12 +808,29 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         vif: f.vif, usage: f.usage,
       }));
     }
-    // SFS results
+    // SFS results + configuration
     if (this.sfsForwardResults?.length || this.sfsBackwardResults?.length || this.sfsForwardFromBackwardResults?.length) {
       modelCtx.sfs = {
         forward: this.sfsForwardResults,
         backward: this.sfsBackwardResults,
         forward_from_backward: this.sfsForwardFromBackwardResults,
+      };
+      // Include SFS configuration so AI understands stopping criteria
+      modelCtx.sfs_config = {
+        methods: {
+          forward: this.sfsMethodForward,
+          backward: this.sfsMethodBackward,
+        },
+        stopping_criteria: {
+          metrics: this.sfsMetrics,
+          min_features: this.sfsMinFeatures,
+          max_features: this.sfsMaxFeatures,
+        },
+        n_jobs: this.sfsNJobs,
+        top_k: this.sfsTopK,
+        backward_cut_step: this.sfsBackwardCutStep,
+        backward_cut_features: this.sfsBackwardCutFeatures?.length || 0,
+        stopped_early: this.sfsStopped,
       };
     }
     // Merge into existing cumulative context (model-development owns pipeline_config, data quality)
