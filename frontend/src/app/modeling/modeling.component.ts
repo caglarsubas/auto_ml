@@ -160,6 +160,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     { id: 28, name: 'Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]' },
     { id: 29, name: 'Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]' },
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]' },
+    { id: 31, name: 'Outlier Cleaning (Categorical Features) threshold = 0.001' },
+    { id: 32, name: 'Outlier Cleaning (Categorical Features) threshold = 0.005' },
+    { id: 33, name: 'Outlier Cleaning (Categorical Features) threshold = 0.01' },
+    { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05' },
   ];
 
   constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef, private dialog: MatDialog, private aiAssistant: AiAssistantService) {

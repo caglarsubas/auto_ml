@@ -528,7 +528,10 @@ class PreprocessingRunView(APIView):
                     preserve_cols.add(str(split.get('date_column')))
             except Exception:
                 pass
-            df_processed, dropped_columns, dropped_by_step, preprocessing_step_stats = self._apply_options(df, set(options), preserve=preserve_cols)
+            # Extract data_dictionary from request payload (for categorical outlier cleaning LoM lookup)
+            data_dictionary_payload = data.get('data_dictionary')
+            df_processed, dropped_columns, dropped_by_step, preprocessing_step_stats = self._apply_options(
+                df, set(options), preserve=preserve_cols, split=split, data_dictionary=data_dictionary_payload)
             print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape} step_stats={len(preprocessing_step_stats)}")
             
             # Add Model_Usage='No' info to the beginning of the breakdown for transparency
@@ -1106,7 +1109,8 @@ class PreprocessingRunView(APIView):
             # default try csv
             return pd.read_csv(path)
 
-    def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None):
+    def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None,
+                       split: dict | None = None, data_dictionary: list | None = None):
         dropped_cols: list[str] = []
         breakdown: list[dict] = []
         step_stats: list[dict] = []  # per-step before/after stats for value-modifying steps
@@ -1306,6 +1310,174 @@ class PreprocessingRunView(APIView):
                     'columns': [],
                     'rows_removed': 0,
                     'note': f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] quantile range'
+                })
+
+        # 31-34: Categorical outlier cleaning (merge rare categories)
+        cat_outlier_thresholds = {31: 0.001, 32: 0.005, 33: 0.01, 34: 0.05}
+        selected_cat_outlier = [t for k, t in cat_outlier_thresholds.items() if k in options]
+        if selected_cat_outlier:
+            threshold = selected_cat_outlier[0]  # pick the first specified
+            selected_cat_outlier_ids = [k for k in cat_outlier_thresholds.keys() if k in options]
+
+            # Build LoM lookup and Model_Usage lookup from data_dictionary
+            lom_lookup: dict[str, str] = {}
+            usage_lookup: dict[str, str] = {}
+            if data_dictionary and isinstance(data_dictionary, list):
+                for entry in data_dictionary:
+                    fname = entry.get('Feature_Name')
+                    lom = (entry.get('Level_of_Measurement') or '').lower()
+                    usage = (entry.get('Model_Usage_YN') or '').strip()
+                    if fname:
+                        lom_lookup[fname] = lom
+                        usage_lookup[fname] = usage
+
+            # Build train indices for volume-share computation
+            train_idx = None
+            try:
+                if isinstance(split, dict) and split.get('strategy') == 'oot':
+                    date_col = split.get('date_column')
+                    if date_col and date_col in work.columns:
+                        ser = pd.to_datetime(work[date_col], errors='coerce', dayfirst=True)
+                        pct = split.get('percent')
+                        if pct is not None:
+                            try:
+                                pctf = float(pct)
+                            except Exception:
+                                pctf = None
+                            if pctf is not None and 0 < pctf < 100:
+                                order = ser.sort_values(kind='mergesort').index
+                                k = int(len(order) * (1 - pctf / 100.0))
+                                k = max(0, min(len(order), k))
+                                train_idx = order[:k]
+                        if train_idx is None:
+                            cutoff = split.get('cutoff')
+                            if cutoff:
+                                mask_train = ser <= pd.to_datetime(cutoff, dayfirst=True)
+                                train_idx = work.index[mask_train]
+                if train_idx is None and isinstance(split, dict):
+                    train_ratio = 0.75
+                    pct = split.get('percent')
+                    if pct is not None:
+                        try:
+                            pctf = float(pct)
+                            if 0 < pctf < 100:
+                                train_ratio = 1.0 - pctf / 100.0
+                        except Exception:
+                            pass
+                    rng = np.random.RandomState(42)
+                    m = rng.rand(len(work)) < train_ratio
+                    train_idx = work.index[m]
+            except Exception as e:
+                print(f"[PreprocessingRun] categorical outlier: split failed: {e}")
+            if train_idx is None:
+                train_idx = work.index
+
+            merge_mapping: dict[str, dict[str, str]] = {}
+            affected_features: list[str] = []
+
+            for col in list(work.columns):
+                if col in (preserve or set()):
+                    continue
+                # Skip features with Model_Usage='No' (ID, index, time columns)
+                if usage_lookup.get(col, '').lower() == 'no':
+                    continue
+                lom = lom_lookup.get(col, '')
+
+                if lom == 'nominal':
+                    train_series = work.loc[train_idx, col].dropna()
+                    total = len(train_series)
+                    if total == 0:
+                        continue
+                    vc = train_series.value_counts()
+                    shares = vc / total
+                    outlier_cats = shares[shares < threshold].index.tolist()
+                    if len(outlier_cats) > 1:
+                        mapping = {str(cat): 'Others-Outliers' for cat in outlier_cats}
+                        merge_mapping[col] = mapping
+                        affected_features.append(col)
+                        work[col] = work[col].replace({cat: 'Others-Outliers' for cat in outlier_cats})
+
+                elif lom == 'ordinal':
+                    # Ordinal features must be sortable (numerical dtype)
+                    unique_vals = work[col].dropna().unique()
+                    try:
+                        sorted_cats = sorted(unique_vals, key=lambda x: float(x))
+                    except (ValueError, TypeError):
+                        continue  # skip non-sortable features
+
+                    train_series = work.loc[train_idx, col].dropna()
+                    total = len(train_series)
+                    if total == 0:
+                        continue
+
+                    # Build mapping: original_value -> current_label
+                    cat_map: dict = {cat: cat for cat in sorted_cats}
+                    current_cats = list(sorted_cats)
+
+                    changed = True
+                    max_iterations = len(sorted_cats) * 2  # safety guard
+                    iteration = 0
+                    while changed and iteration < max_iterations:
+                        changed = False
+                        iteration += 1
+                        # Recompute volume-shares with current mapping
+                        mapped_train = train_series.map(lambda x, cm=cat_map: cm.get(x, x))
+                        vc = mapped_train.value_counts()
+                        shares = vc / total
+
+                        for i, cat in enumerate(current_cats):
+                            share = shares.get(cat, 0)
+                            if share < threshold:
+                                # Find adjacent neighbors
+                                neighbors = []
+                                if i > 0:
+                                    neighbors.append((current_cats[i - 1], shares.get(current_cats[i - 1], 0)))
+                                if i < len(current_cats) - 1:
+                                    neighbors.append((current_cats[i + 1], shares.get(current_cats[i + 1], 0)))
+                                if not neighbors:
+                                    continue
+                                # Merge with the bigger adjacent neighbor
+                                bigger_neighbor = max(neighbors, key=lambda x: x[1])[0]
+                                # Update all entries in cat_map that pointed to this cat
+                                for orig in list(cat_map.keys()):
+                                    if cat_map[orig] == cat:
+                                        cat_map[orig] = bigger_neighbor
+                                current_cats.remove(cat)
+                                changed = True
+                                break  # restart iteration after each merge
+
+                    # Record only actual merges
+                    actual_merges = {str(k): str(v) for k, v in cat_map.items() if k != v}
+                    if actual_merges:
+                        merge_mapping[col] = actual_merges
+                        affected_features.append(col)
+                        work[col] = work[col].map(lambda x, cm=cat_map: cm.get(x, x))
+
+            if merge_mapping:
+                breakdown.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'columns': affected_features,
+                    'rows_removed': 0,
+                    'merge_mapping': merge_mapping,
+                    'note': f'Categories with volume-share < {threshold*100:.2f}% merged (Nominal→Others-Outliers, Ordinal→adjacent bigger category)'
+                })
+                step_stats.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'merge_mapping': merge_mapping,
+                })
+                print(f"[PreprocessingRun] categorical outlier cleaning: threshold={threshold}, affected_features={len(affected_features)}")
+            else:
+                breakdown.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'columns': [],
+                    'rows_removed': 0,
+                    'note': f'No categories below {threshold*100:.2f}% volume-share threshold found'
                 })
 
         return work, list(dict.fromkeys(dropped_cols)), breakdown, step_stats

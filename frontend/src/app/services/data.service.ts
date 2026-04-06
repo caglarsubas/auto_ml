@@ -60,11 +60,12 @@ export class DataService {
   // Run preprocessing. If options omitted, backend uses previously saved config.
   // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[]): Observable<any> {
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[], dataDictionary?: any[]): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options) payload.options = options;
     if (split) payload.split = split;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    if (dataDictionary && dataDictionary.length > 0) payload.data_dictionary = dataDictionary;
     return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running preprocessing:', error);

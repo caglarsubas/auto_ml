@@ -70,7 +70,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   modelingAvailable: boolean = false;
   preprocessingAvailable: boolean = false;
   // Purifier breakdown: which columns were dropped at which step, and how many rows were removed
-  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number }>= [];
+  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number; merge_mapping?: { [feature: string]: { [orig: string]: string } }; note?: string }>= [];
   // Total rows removed across all preprocessing steps
   rowsRemovedTotal: number = 0;
   // Row counts before/after preprocessing run (for summary display)
@@ -786,9 +786,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     { id: 28, name: 'Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]', group: 5 },
     { id: 29, name: 'Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]', group: 5 },
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]', group: 5 },
+    { id: 31, name: 'Outlier Cleaning (Categorical Features) threshold = 0.001', group: 6 },
+    { id: 32, name: 'Outlier Cleaning (Categorical Features) threshold = 0.005', group: 6 },
+    { id: 33, name: 'Outlier Cleaning (Categorical Features) threshold = 0.01', group: 6 },
+    { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05', group: 6 },
   ];
 
-  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28];
+  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28, 32];
   selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
   constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog, public aiAssistant: AiAssistantService) {}
@@ -2128,7 +2132,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
     this.detailedStep = '2a_purifier_declaration';
     this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
-    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables)
+    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables, this.dataDictionaryCache)
       .pipe(finalize(() => { this.isProcessing = false; }))
       .subscribe(
         (result: any) => {
@@ -2399,6 +2403,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     try {
       return (this.droppedColumnsByStep || []).reduce((acc, s) => acc + (Array.isArray(s.columns) ? s.columns.length : 0), 0);
     } catch { return 0; }
+  }
+
+  objectKeys(obj: any): string[] {
+    return obj ? Object.keys(obj) : [];
   }
 
   trackByStepIndex(_idx: number, item: any): string {

@@ -1283,3 +1283,47 @@ h1::before {
   font-weight: var(--font-medium);
   border: none;
 }
+
+/* ── Categorical Outlier Merge Mapping ── */
+.cat-merge-mapping {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.cat-merge-feature {
+  margin: 10px 0 6px 8px;
+}
+
+.cat-merge-feature-name {
+  font-weight: 600;
+  color: #37474f;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.cat-merge-table {
+  width: 100%;
+  max-width: 480px;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.cat-merge-table th {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+}
+
+.cat-merge-table td {
+  border: 1px solid #e0e0e0;
+  padding: 3px 8px;
+  color: #333;
+}
+
+.cat-merge-table tr:nth-child(even) td {
+  background: #fafafa;
+}

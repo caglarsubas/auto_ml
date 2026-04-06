@@ -421,8 +421,31 @@
             </div>
           </details>
         </div>
+        <!-- Categorical outlier merge mapping display -->
+        <div *ngIf="s.merge_mapping && objectKeys(s.merge_mapping).length" class="cat-merge-mapping">
+          <details>
+            <summary style="cursor:pointer; font-weight:500; color:#5c6bc0;">
+              Merge mapping for {{ objectKeys(s.merge_mapping).length }} feature(s)
+            </summary>
+            <div *ngFor="let feat of objectKeys(s.merge_mapping)" class="cat-merge-feature">
+              <div class="cat-merge-feature-name">{{ feat }}</div>
+              <table class="cat-merge-table">
+                <thead>
+                  <tr><th>Original Category</th><th>→</th><th>Merged Into</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let origCat of objectKeys(s.merge_mapping[feat])">
+                    <td>{{ origCat }}</td>
+                    <td style="text-align:center;">→</td>
+                    <td><strong>{{ s.merge_mapping[feat][origCat] }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
         <ng-template #noCols>
-          <div style="font-size: 12px; color: #777;">No columns dropped in this step</div>
+          <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: #777;">No columns dropped in this step</div>
         </ng-template>
       </div>
     </div>
