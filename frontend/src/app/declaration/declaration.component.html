@@ -3,7 +3,9 @@
   <div class="container">
 
     <h3>Data Declaration</h3>
-    <div class="data-import-controls">
+
+    <!-- Data import controls: shown before upload or when editing -->
+    <div class="data-import-controls" *ngIf="!previewData || editingDataImport">
       <div class="file-input-group">
         <input type="file" (change)="onFilesSelected($event)" multiple>
       </div>
@@ -29,6 +31,12 @@
       </div>
       <div class="spacer"></div>
       <button class="import-data-btn" (click)="onUpload()">IMPORT DATA</button>
+    </div>
+
+    <!-- Locked state: after upload, show Edit button -->
+    <div class="section-locked-bar" *ngIf="previewData && !editingDataImport">
+      <span class="section-locked-label">&#10003; Data imported</span>
+      <button class="section-edit-btn" (click)="onEditDataImport()">&#9998; Edit</button>
     </div>
 
     <div *ngIf="errorMessage" class="error-message">
@@ -83,12 +91,20 @@
 
     <div *ngIf="showDataDictionaryCollection">
       <h3>Dictionary Declaration</h3>
-      <div class="dictionary-actions">
+
+      <!-- Dictionary buttons: shown before generation or when editing -->
+      <div class="dictionary-actions" *ngIf="dataDictionary.length === 0 || editingDictionary">
         <div class="dictionary-upload">
           <input type="file" (change)="onDictionaryFileSelected($event)">
           <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
         </div>
         <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
+      </div>
+
+      <!-- Locked state: after dictionary generated, show Edit button -->
+      <div class="section-locked-bar" *ngIf="dataDictionary.length > 0 && !editingDictionary">
+        <span class="section-locked-label">&#10003; Data dictionary generated</span>
+        <button class="section-edit-btn" (click)="onEditDictionary()">&#9998; Edit</button>
       </div>
     </div>
 

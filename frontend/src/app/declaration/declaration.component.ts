@@ -46,6 +46,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   splitDateColumn: string | null = null;
   splitCutoff: string = '';
 
+  // Edit-mode flags for locked sections (same pattern as Start button)
+  editingDataImport: boolean = false;
+  editingDictionary: boolean = false;
+
   // Model_Usage tracking for Data Dictionary
   variableModelUsage: { [featureName: string]: string } = {};
   private readonly modelUsageKey = 'dict_model_usage_v1';
@@ -338,6 +342,14 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         },
         error => console.error('Error getting preview:', error)
       );
+  }
+
+  onEditDataImport(): void {
+    this.editingDataImport = true;
+  }
+
+  onEditDictionary(): void {
+    this.editingDictionary = true;
   }
 
   onGenerateDataDictionary(withUpload: boolean): void {

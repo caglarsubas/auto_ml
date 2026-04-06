@@ -28,6 +28,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
   targetDefinition: string = '';
+  editingTargetDefinition: boolean = false;
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
   showSteps: { [key: string]: boolean } = {
@@ -136,10 +137,51 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   encodedFilePath: string | null = null;
   encodingUseNative: boolean = true;
 
+  // ===== Enhanced Navigation: Collapsible Sub-Steps =====
+  navExpandedSteps: { [mainStep: string]: boolean } = {
+    declaration: true,
+    modeling: false,
+    evaluation: false,
+    deployment: false,
+  };
+
+  navMainSteps = [
+    {
+      id: 'declaration', label: 'Declaration',
+      subSteps: [
+        { id: '1a', label: 'Pipeline Type Selection' },
+        { id: '1b', label: 'Data Upload' },
+        { id: '1c', label: 'Data Dictionary Review' },
+        { id: '1d', label: 'Preprocessing' },
+        { id: '1e', label: 'Data Quality Summary' },
+      ]
+    },
+    {
+      id: 'modeling', label: 'Modeling',
+      subSteps: [
+        { id: '2a', label: 'Categorical Encoding' },
+        { id: '2b', label: 'Model Training & CV' },
+        { id: '2c', label: 'Feature Selection (SFS)' },
+      ]
+    },
+    {
+      id: 'evaluation', label: 'Evaluation',
+      subSteps: [
+        { id: '3a', label: 'Model Evaluation' },
+      ]
+    },
+    {
+      id: 'deployment', label: 'Deployment',
+      subSteps: [
+        { id: '4a', label: 'Model Deployment' },
+      ]
+    },
+  ];
+
   // ===== 3-Layer Panel Layout =====
   showLeftPanel: boolean = true;
   showRightPanel: boolean = false;
-  leftPanelWidth: number = 220;
+  leftPanelWidth: number = 260;
   rightPanelWidth: number = 360;
   private _resizing: 'left' | 'right' | null = null;
   private _resizeStartX: number = 0;
@@ -2012,11 +2054,22 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
       this.detailedStep = '1a_pipeline_declaration';
+      this.editingTargetDefinition = false;
       // Start pipeline
       this.sharedService.setStarted(true);
       // Initial creation checkpoint: always force through
       this.saveCheckpoint('declaration', true);
     }
+  }
+
+  onEditTargetDefinition(): void {
+    this.editingTargetDefinition = true;
+  }
+
+  onSaveTargetDefinition(): void {
+    this.editingTargetDefinition = false;
+    this.sharedService.setTargetDefinition(this.targetDefinition);
+    this.onPipelineConfigChanged();
   }
 
   onSelectionChange(event: MatSelectChange): void {
@@ -2434,6 +2487,150 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
 
   private computePreprocessingAvailable(): void {
     this.preprocessingAvailable = this.isStarted && this.preprocessingInitiated && (this.currentFileId !== null);
+  }
+
+  // ===== Enhanced Navigation Methods =====
+
+  toggleNavStep(mainStepId: string): void {
+    this.navExpandedSteps[mainStepId] = !this.navExpandedSteps[mainStepId];
+  }
+
+  /** Navigate to a main step (same as onMenuClick but for new nav) */
+  navGoToStep(event: Event, mainStepId: string): void {
+    event.stopPropagation();
+    // Map nav step id to the existing menu item names
+    const menuMap: { [k: string]: string } = {
+      declaration: 'declaration',
+      modeling: 'modeling',
+      evaluation: 'evaluation',
+      deployment: 'deployment',
+    };
+    const menuItem = menuMap[mainStepId] || mainStepId;
+    if (!this.stepEnabled(menuItem)) return;
+    this.currentStep = menuItem;
+    // Auto-expand the clicked step
+    this.navExpandedSteps[mainStepId] = true;
+    this.scrollToSection(menuItem);
+  }
+
+  /** Navigate to a sub-step and scroll to its section */
+  navGoToSubStep(event: Event, mainStepId: string, subStepId: string): void {
+    event.stopPropagation();
+    const menuMap: { [k: string]: string } = {
+      declaration: 'declaration',
+      modeling: 'modeling',
+      evaluation: 'evaluation',
+      deployment: 'deployment',
+    };
+    const menuItem = menuMap[mainStepId] || mainStepId;
+    if (!this.stepEnabled(menuItem)) return;
+    this.currentStep = menuItem;
+    // Scroll to specific sub-step anchor if available
+    setTimeout(() => {
+      const anchorMap: { [k: string]: string } = {
+        '1e': 'data-quality-anchor',
+        '2a': 'encoding-anchor',
+        '2b': 'modeling-anchor',
+        '2c': 'sfs-anchor',
+      };
+      const anchorId = anchorMap[subStepId];
+      if (anchorId) {
+        const el = document.getElementById(anchorId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  }
+
+  private scrollToSection(item: string): void {
+    setTimeout(() => {
+      try {
+        if (item === 'data quality' || item === 'preprocessing') {
+          const el = document.getElementById('data-quality-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (item === 'modeling') {
+          const el = document.getElementById('modeling-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch {}
+    }, 50);
+  }
+
+  /** Get sub-step status: 'completed', 'in_progress', or 'pending' */
+  getSubStepStatus(subStepId: string): 'completed' | 'in_progress' | 'pending' {
+    const mc = this.sharedService.getModelingCheckpoint();
+    switch (subStepId) {
+      // Declaration sub-steps
+      case '1a': // Pipeline Type
+        if (this.isStarted && this.selectedPipeline) return 'completed';
+        if (!this.selectedPipeline) return this.currentStep === 'declaration' ? 'in_progress' : 'pending';
+        return 'pending';
+      case '1b': // Data Upload
+        if (this.currentFileId != null) return 'completed';
+        if (this.isStarted && this.selectedPipeline && this.currentFileId == null) return 'in_progress';
+        return 'pending';
+      case '1c': // Data Dictionary Review
+        if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) return 'completed';
+        if (this.currentFileId != null && !(this.dataDictionaryCache && this.dataDictionaryCache.length > 0)) return 'in_progress';
+        return 'pending';
+      case '1d': // Preprocessing
+        if (this.preprocessingInitiated && this.rowCountAfter > 0) return 'completed';
+        if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0 && !(this.preprocessingInitiated && this.rowCountAfter > 0)) {
+          return this.isProcessing ? 'in_progress' : (this.preprocessingAvailable ? 'in_progress' : 'pending');
+        }
+        return 'pending';
+      case '1e': // Data Quality Summary
+        if (this.modelingAvailable) return 'completed';
+        if (this.datqSummary && this.datqSummary.length > 0) return 'in_progress';
+        if (this.preprocessingInitiated && this.rowCountAfter > 0) return 'in_progress';
+        return 'pending';
+
+      // Modeling sub-steps
+      case '2a': // Categorical Encoding
+        if (mc && mc.substep && ['encoding_completed', 'modeling_started', 'modeling_completed',
+            'sfs_running', 'sfs_stopped', 'sfs_backward_completed', 'sfs_forward_completed',
+            'sfs_completed', 'sfs_forward_from_backward_completed'].includes(mc.substep)) return 'completed';
+        if (mc && mc.substep === 'algorithm_selected') return 'in_progress';
+        if (this.modelingAvailable && !mc?.substep) return 'in_progress';
+        return 'pending';
+      case '2b': // Model Training & CV
+        if (mc && mc.modelingStatus?.model) return 'completed';
+        if (mc && (mc.substep === 'modeling_started' || mc.substep === 'encoding_completed')) return 'in_progress';
+        return 'pending';
+      case '2c': // SFS
+        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'completed';
+        if (mc && mc.modelingStatus?.model && !(mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'in_progress';
+        return 'pending';
+
+      // Future steps
+      case '3a': return 'pending';
+      case '4a': return 'pending';
+      default: return 'pending';
+    }
+  }
+
+  /** Get main step status based on sub-steps */
+  getMainStepStatus(mainStepId: string): 'completed' | 'in_progress' | 'pending' {
+    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    if (!step) return 'pending';
+    const statuses = step.subSteps.map(s => this.getSubStepStatus(s.id));
+    if (statuses.every(s => s === 'completed')) return 'completed';
+    if (statuses.some(s => s === 'in_progress' || s === 'completed')) return 'in_progress';
+    return 'pending';
+  }
+
+  /** Get main step progress percentage (0–100) */
+  getMainStepProgressPct(mainStepId: string): number {
+    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    if (!step) return 0;
+    const completed = step.subSteps.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    return Math.round((completed / step.subSteps.length) * 100);
+  }
+
+  /** Overall pipeline progress percentage */
+  getOverallProgress(): number {
+    const allSubs = this.navMainSteps.flatMap(m => m.subSteps);
+    const completed = allSubs.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    return Math.round((completed / allSubs.length) * 100);
   }
 
   // ===== Encoding Step Methods =====

@@ -20,15 +20,73 @@
   <!-- Left Panel: Progress Navigation -->
   <div class="panel-left" *ngIf="showLeftPanel" [style.width.px]="leftPanelWidth">
     <div class="left-nav">
-      <div class="left-nav-header">Pipeline Flow</div>
-      <ul class="left-nav-list">
-        <li *ngFor="let item of menuItems; let i = index"
-            class="left-nav-item"
-            [class.active]="currentStep === item"
-            [class.disabled]="!stepEnabled(item)">
-          <a href="#" (click)="onMenuClick($event, item)">{{i + 1}}. {{ item | titlecase }}</a>
-        </li>
-      </ul>
+      <div class="left-nav-header">
+        <span>Pipeline Flow</span>
+        <span class="nav-overall-pct">{{ getOverallProgress() }}%</span>
+      </div>
+      <!-- Overall progress bar -->
+      <div class="nav-overall-bar">
+        <div class="nav-overall-bar-fill" [style.width.%]="getOverallProgress()"></div>
+      </div>
+
+      <div class="nav-steps">
+        <div *ngFor="let mainStep of navMainSteps; let i = index" class="nav-main-step"
+             [class.nav-active]="currentStep === mainStep.id"
+             [class.nav-completed]="getMainStepStatus(mainStep.id) === 'completed'"
+             [class.nav-in-progress]="getMainStepStatus(mainStep.id) === 'in_progress'"
+             [class.nav-disabled]="!stepEnabled(mainStep.id)">
+
+          <!-- Main step header (clickable: toggles collapse + navigates) -->
+          <div class="nav-main-header" (click)="toggleNavStep(mainStep.id)">
+            <div class="nav-main-left">
+              <!-- Status icon -->
+              <span class="nav-status-icon"
+                    [ngClass]="{
+                      'icon-completed': getMainStepStatus(mainStep.id) === 'completed',
+                      'icon-in-progress': getMainStepStatus(mainStep.id) === 'in_progress',
+                      'icon-pending': getMainStepStatus(mainStep.id) === 'pending'
+                    }">
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'completed'">&#10003;</span>
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'in_progress'" class="icon-pulse">&#9679;</span>
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'pending'">&#9675;</span>
+              </span>
+              <span class="nav-main-label" (click)="navGoToStep($event, mainStep.id)">
+                {{ i + 1 }}. {{ mainStep.label }}
+              </span>
+            </div>
+            <div class="nav-main-right">
+              <span class="nav-pct">{{ getMainStepProgressPct(mainStep.id) }}%</span>
+              <span class="nav-chevron" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]">&#9656;</span>
+            </div>
+          </div>
+
+          <!-- Progress bar for main step -->
+          <div class="nav-step-bar">
+            <div class="nav-step-bar-fill"
+                 [style.width.%]="getMainStepProgressPct(mainStep.id)"
+                 [ngClass]="{
+                   'bar-completed': getMainStepStatus(mainStep.id) === 'completed',
+                   'bar-in-progress': getMainStepStatus(mainStep.id) === 'in_progress'
+                 }"></div>
+          </div>
+
+          <!-- Collapsible sub-steps -->
+          <div class="nav-sub-steps" *ngIf="navExpandedSteps[mainStep.id]">
+            <div *ngFor="let sub of mainStep.subSteps" class="nav-sub-step"
+                 [class.sub-completed]="getSubStepStatus(sub.id) === 'completed'"
+                 [class.sub-in-progress]="getSubStepStatus(sub.id) === 'in_progress'"
+                 [class.sub-pending]="getSubStepStatus(sub.id) === 'pending'"
+                 (click)="navGoToSubStep($event, mainStep.id, sub.id)">
+              <span class="nav-sub-icon">
+                <span *ngIf="getSubStepStatus(sub.id) === 'completed'">&#10003;</span>
+                <span *ngIf="getSubStepStatus(sub.id) === 'in_progress'" class="icon-pulse">&#8226;</span>
+                <span *ngIf="getSubStepStatus(sub.id) === 'pending'">&#8226;</span>
+              </span>
+              <span class="nav-sub-label">{{ sub.label }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -195,7 +253,10 @@
         Define the Target Variable
         <span class="target-definition-hint">Describe the business meaning and prediction goal (e.g., "Predict whether a loan applicant will default within 12 months")</span>
       </label>
+
+      <!-- Editable mode: before Start or when Edit is clicked -->
       <textarea
+        *ngIf="!isStarted || editingTargetDefinition"
         id="targetDefinition"
         class="target-definition-input"
         [ngModel]="targetDefinition"
@@ -203,9 +264,38 @@
         placeholder="e.g., Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."
         rows="3"
       ></textarea>
+
+      <!-- Read-only mode: after Start, when not editing -->
+      <div *ngIf="isStarted && !editingTargetDefinition" class="target-definition-readonly">
+        {{ targetDefinition || '(No definition provided)' }}
+      </div>
+
+      <!-- Save button when editing after start -->
+      <button *ngIf="isStarted && editingTargetDefinition"
+              class="target-definition-save-btn"
+              (click)="onSaveTargetDefinition()">
+        Save
+      </button>
+
+      <!-- AI info banner: shown after pipeline started -->
+      <div *ngIf="isStarted && !editingTargetDefinition && targetDefinition" class="target-definition-ai-info">
+        <span class="ai-info-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/>
+            <path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/>
+          </svg>
+        </span>
+        This definition is shared with the AI Assistant to provide project-specific suggestions and guidance.
+      </div>
     </div>
 
-    <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
+    <!-- Start button: only before pipeline is started -->
+    <button *ngIf="!isStarted" class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
+
+    <!-- Edit button: after pipeline is started, replaces Start -->
+    <button *ngIf="isStarted && !editingTargetDefinition" class="target-definition-edit-btn" (click)="onEditTargetDefinition()">
+      &#9998; Edit Definition
+    </button>
   </div>
   <!-- Declaration specific content (always visible at top) -->
   <app-declaration></app-declaration>

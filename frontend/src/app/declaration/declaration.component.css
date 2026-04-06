@@ -509,3 +509,52 @@ input[type="file"]:hover::before {
   color: #bbb;
   font-style: italic;
 }
+
+/* ── Section Locked Bar (Import Data / Dictionary) ── */
+.section-locked-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  border: 1px solid #a5d6a7;
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.section-locked-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d32;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary-700);
+  background: white;
+  border: 1px solid var(--primary-300);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  transform: none;
+}
+
+.section-edit-btn:hover {
+  background: var(--primary-50);
+  border-color: var(--primary-500);
+  transform: none;
+  box-shadow: none;
+}
