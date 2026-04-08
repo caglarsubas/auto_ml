@@ -18,7 +18,17 @@
     <mat-tab-group (selectedTabChange)="onTabChange($event)">
       <mat-tab label="Descriptives">
         <ng-container *ngIf="featureData">
-          <p style="font-size: 14px"><br><strong>Descriptive Statistics</strong></p>
+          <!-- Data version dropdown -->
+          <div style="display: flex; align-items: center; gap: 10px; margin: 12px 0 4px 0;">
+            <span style="font-size: 12px; font-weight: 500; color: #555;">Data Version:</span>
+            <select [ngModel]="dataVersion" (ngModelChange)="onDataVersionChange($event)"
+                    style="padding: 3px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; min-width: 130px;">
+              <option *ngFor="let opt of dataVersionOptions" [value]="opt.value" [disabled]="opt.disabled">
+                {{ opt.label }}{{ opt.disabled ? ' (not available)' : '' }}
+              </option>
+            </select>
+          </div>
+          <p style="font-size: 14px"><strong>Descriptive Statistics</strong></p>
           <div class="table-container" [class.transposed]="isFullScreen">
             <table class="descriptive-stats-table">
               <thead>
@@ -41,6 +51,31 @@
                 </ng-container>
               </tbody>
             </table>
+          </div>
+
+          <!-- Category Statistics table (shown by default for features with ≤20 unique values) -->
+          <div *ngIf="targetAverages && targetAverages.length > 0" style="margin-top: 12px;">
+            <p style="font-size: 14px; margin-bottom: 6px;"><strong>Category Statistics</strong></p>
+            <div class="table-container">
+              <table class="descriptive-stats-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Count</th>
+                    <th>Volume Share (%)</th>
+                    <th>Target Average</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of targetAverages">
+                    <td>{{ row.category }}</td>
+                    <td>{{ row.count }}</td>
+                    <td>{{ row.volume_share }}</td>
+                    <td>{{ row.target_average }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <p style="font-size: 14px"><br><strong>Distribution Plot</strong></p>

@@ -776,3 +776,286 @@ class TestAnalyzeCategoricalFeatures:
         assert 'strategy' in entry
         assert 'fallback_strategy' in entry
         assert entry['strategy'] == 'native_categorical'
+
+
+# ---------------------------------------------------------------------------
+# NumpyEncoder tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestNumpyEncoder:
+    """Test the NumpyEncoder.default() method from feature_card/views.py.
+
+    Note: np.float64 / np.int64 are subclasses of Python float / int, so
+    json.dumps handles them natively without calling default(). We test
+    default() directly for edge cases that the encoder dispatches to it.
+    """
+
+    def _default(self, obj):
+        from feature_card.views import NumpyEncoder
+        return NumpyEncoder().default(obj)
+
+    def test_numpy_int_via_default(self):
+        assert self._default(np.int64(42)) == 42
+        assert isinstance(self._default(np.int64(42)), int)
+
+    def test_numpy_float_via_default(self):
+        result = self._default(np.float64(3.14))
+        assert abs(result - 3.14) < 1e-9
+        assert isinstance(result, float)
+
+    def test_numpy_nan_returns_none_via_default(self):
+        assert self._default(np.float64('nan')) is None
+
+    def test_numpy_inf_returns_none_via_default(self):
+        assert self._default(np.float64('inf')) is None
+        assert self._default(np.float64('-inf')) is None
+
+    def test_numpy_int_serializable_via_dumps(self):
+        import json
+        from feature_card.views import NumpyEncoder
+        result = json.loads(json.dumps({'val': np.int64(7)}, cls=NumpyEncoder))
+        assert result['val'] == 7
+
+    def test_numpy_float_serializable_via_dumps(self):
+        import json
+        from feature_card.views import NumpyEncoder
+        result = json.loads(json.dumps({'val': np.float64(2.5)}, cls=NumpyEncoder))
+        assert result['val'] == 2.5
+
+    def test_dict_with_mixed_numpy_types(self):
+        import json
+        from feature_card.views import NumpyEncoder
+        data = {'a': 1, 'b': 'hello', 'c': [1, 2]}
+        result = json.loads(json.dumps(data, cls=NumpyEncoder))
+        assert result == data
+
+
+# ---------------------------------------------------------------------------
+# FeatureCardViewSet.safe_float tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestSafeFloat:
+    """Test the safe_float static method from FeatureCardViewSet."""
+
+    def _safe_float(self, value):
+        from feature_card.views import FeatureCardViewSet
+        return FeatureCardViewSet.safe_float(value)
+
+    def test_normal_float(self):
+        assert self._safe_float(3.14) == 3.14
+
+    def test_normal_int(self):
+        assert self._safe_float(42) == 42.0
+
+    def test_nan_returns_none(self):
+        assert self._safe_float(float('nan')) is None
+
+    def test_inf_returns_none(self):
+        assert self._safe_float(float('inf')) is None
+
+    def test_neg_inf_returns_none(self):
+        assert self._safe_float(float('-inf')) is None
+
+    def test_none_returns_none(self):
+        assert self._safe_float(None) is None
+
+    def test_numpy_nan_returns_none(self):
+        assert self._safe_float(np.nan) is None
+
+    def test_numpy_inf_returns_none(self):
+        assert self._safe_float(np.inf) is None
+
+    def test_numpy_float64(self):
+        result = self._safe_float(np.float64(2.5))
+        assert result == 2.5
+
+    def test_non_numeric_string_returns_none(self):
+        assert self._safe_float('abc') is None
+
+    def test_numeric_string(self):
+        assert self._safe_float('3.14') == 3.14
+
+    def test_zero(self):
+        assert self._safe_float(0) == 0.0
+        assert self._safe_float(0.0) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# FeatureCardViewSet.determine_level_of_measurement tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestFeatureCardDetermineLevel:
+    """Test the FeatureCardViewSet.determine_level_of_measurement method."""
+
+    def _determine(self, column_data):
+        from feature_card.views import FeatureCardViewSet
+        vs = FeatureCardViewSet()
+        return vs.determine_level_of_measurement(column_data)
+
+    def test_numeric_continuous(self):
+        data = pd.Series(np.random.uniform(0, 100, 200))
+        assert self._determine(data) == 'continuous'
+
+    def test_numeric_cardinal(self):
+        data = pd.Series(np.random.choice([1, 2, 3, 4, 5], 100))
+        assert self._determine(data) == 'cardinal'
+
+    def test_numeric_boundary_10(self):
+        """Exactly 10 unique numeric values → cardinal (not continuous)."""
+        data = pd.Series(list(range(10)) * 10)
+        assert self._determine(data) == 'cardinal'
+
+    def test_numeric_boundary_11(self):
+        """11 unique numeric values → continuous."""
+        data = pd.Series(list(range(11)) * 10)
+        assert self._determine(data) == 'continuous'
+
+    def test_string_nominal(self):
+        data = pd.Series(['cat', 'dog', 'bird'] * 20)
+        assert self._determine(data) == 'nominal'
+
+
+# ---------------------------------------------------------------------------
+# AI _extract_actions helper tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestExtractActions:
+    """Test the _extract_actions helper from ai_assistant/views.py."""
+
+    def _extract(self, message):
+        from ai_assistant.views import _extract_actions
+        return _extract_actions(message)
+
+    def test_no_actions(self):
+        actions, clean = self._extract('Just a normal message.')
+        assert actions == []
+        assert clean == 'Just a normal message.'
+
+    def test_single_action(self):
+        msg = 'Here is advice. <<<ACTION:update_notes>>>{"position":"after_data_preview","content":"Note"}<<<END_ACTION>>> Done.'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'update_notes'
+        assert actions[0]['payload']['content'] == 'Note'
+        assert '<<<ACTION' not in clean
+        assert 'Done.' in clean
+
+    def test_multiple_actions(self):
+        msg = '<<<ACTION:update_notes>>>{"content":"a"}<<<END_ACTION>>> text <<<ACTION:update_config>>>{"key":"x"}<<<END_ACTION>>>'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 2
+        assert actions[0]['type'] == 'update_notes'
+        assert actions[1]['type'] == 'update_config'
+
+    def test_invalid_json_skipped(self):
+        msg = '<<<ACTION:update_notes>>>not valid json<<<END_ACTION>>> ok'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 0
+        assert 'ok' in clean
+
+    def test_empty_message(self):
+        actions, clean = self._extract('')
+        assert actions == []
+        assert clean == ''
+
+
+# ---------------------------------------------------------------------------
+# AI _format_context tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestFormatContext:
+    """Test the _format_context helper from ai_assistant/views.py."""
+
+    def _format(self, context, section):
+        from ai_assistant.views import _format_context
+        return _format_context(context, section)
+
+    def test_data_quality_section(self):
+        ctx = {'summary': [{'Variable': 'Age', 'Variable_Type': 'numeric', 'PSI': 0.05, 'Datq_Decision': 'Accept'}]}
+        result = self._format(ctx, 'data_quality')
+        assert 'Age' in result
+        assert 'PSI' in result
+        assert 'Accept' in result
+
+    def test_encoding_section(self):
+        ctx = {'plan': [{'feature': 'Region', 'user_lom': 'nominal', 'nunique': 4, 'fallback_strategy': 'label_encoding'}]}
+        result = self._format(ctx, 'encoding')
+        assert 'Region' in result
+        assert 'nominal' in result
+
+    def test_cv_section(self):
+        ctx = {'cv': {'roc_auc_mean': 0.85, 'roc_auc_std': 0.02, 'pr_auc_mean': 0.70, 'pr_auc_std': 0.03, 'n_splits': 5}}
+        result = self._format(ctx, 'cv')
+        assert '0.85' in result or '0.8500' in result
+        assert 'Cross-Validation' in result
+
+    def test_shap_section(self):
+        ctx = {'features': [{'feature': 'Income', 'impact': 0.45, 'signed_impact': 0.35}]}
+        result = self._format(ctx, 'shap')
+        assert 'Income' in result
+        assert 'SHAP' in result
+
+    def test_selected_features_section(self):
+        ctx = {'features': [{'feature': 'Score', 'combined_score': 0.9, 'shap_percentile': 95, 'gain_percentile': 88, 'vif': 1.2, 'usage': 'keep'}]}
+        result = self._format(ctx, 'selected_features')
+        assert 'Score' in result
+        assert 'Selected Features' in result
+
+    def test_sfs_section(self):
+        ctx = {
+            'forward': [{'step': 1, 'feature_name': 'Var_1', 'cv_roc_auc': 0.80, 'remaining': ['Var_1']}],
+            'backward': [],
+        }
+        result = self._format(ctx, 'sfs')
+        assert 'Forward' in result
+        assert 'Var_1' in result
+
+    def test_general_section_fallback(self):
+        ctx = {'data_preview': {'file_name': 'test.csv', 'total_rows': 100, 'total_columns': 5, 'columns': ['A', 'B']}}
+        result = self._format(ctx, 'general')
+        assert 'test.csv' in result
+        assert '100' in result
+
+    def test_empty_context_returns_json(self):
+        result = self._format({}, 'unknown')
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+
+# ---------------------------------------------------------------------------
+# AI dispatch_action routing tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestDispatchAction:
+    """Test the dispatch_action router from ai_assistant/action_executor.py."""
+
+    def _dispatch(self, file_id, action_type, payload):
+        from ai_assistant.action_executor import dispatch_action
+        return dispatch_action(file_id, action_type, payload)
+
+    def test_unknown_action_returns_error(self):
+        result = self._dispatch(1, 'bogus_action', {})
+        assert result['status'] == 'error'
+        assert 'Unknown action type' in result['error']
+
+    def test_update_notes_routes_correctly(self):
+        result = self._dispatch(1, 'update_notes', {
+            'action': 'add',
+            'position': 'after_data_preview',
+            'content': 'Test',
+        })
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'update_notes'
+
+    def test_update_metadata_empty_updates_error(self):
+        result = self._dispatch(1, 'update_metadata', {'updates': []})
+        assert result['status'] == 'error'
+
+    def test_update_config_empty_updates_error(self):
+        result = self._dispatch(1, 'update_config', {'updates': []})
+        assert result['status'] == 'error'
+
+    def test_execute_code_empty_code_error(self):
+        result = self._dispatch(1, 'execute_code', {'code': '', 'description': ''})
+        assert result['status'] == 'error'
+        assert 'No code' in result['error']

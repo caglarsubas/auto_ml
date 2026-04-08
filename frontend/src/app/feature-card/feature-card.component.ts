@@ -41,6 +41,7 @@ interface FeatureCardDialogData {
   columnName: string;
   features: FeatureInfo[];
   processedFile?: string;
+  encodedFile?: string;
   dateColumn?: string;
   qualitySummary?: { [key: string]: any };
   catLabelLookup?: { [feature: string]: { [encoded: string]: string } };
@@ -89,6 +90,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
   private originalHistogramData: number[] | null = null;
   private originalStackedData: any | null = null;
+  targetAverages: any[] | null = null;
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
   catLabelLookup: { [feature: string]: { [encoded: string]: string } } = {};
@@ -143,6 +145,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
   currentTabIndex: number = 0;
+
+  // Data version dropdown state
+  dataVersion: 'raw' | 'preprocessed' | 'encoded' = 'raw';
+  dataVersionOptions: Array<{ value: 'raw' | 'preprocessed' | 'encoded'; label: string; disabled: boolean }> = [];
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -167,6 +173,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.qualitySummary = data.qualitySummary || null;
     this.initialQualitySummary = data.qualitySummary || null;
     this.catLabelLookup = data.catLabelLookup || {};
+    // Initialize data version options based on available files
+    this.dataVersionOptions = [
+      { value: 'raw', label: 'Raw', disabled: false },
+      { value: 'preprocessed', label: 'Preprocessed', disabled: !data.processedFile },
+      { value: 'encoded', label: 'Encoded/Scaled', disabled: !data.encodedFile },
+    ];
+    // Auto-select the most advanced available version
+    if (data.encodedFile) {
+      this.dataVersion = 'encoded';
+    } else if (data.processedFile) {
+      this.dataVersion = 'preprocessed';
+    }
     // SFS dual-context mode: dropdown between Final Model Fit / Feature Added Step
     if (data.sfsContexts && data.sfsContexts.length > 0) {
       this.sfsContexts = data.sfsContexts;
@@ -490,6 +508,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.fetchQualityTimeseries();
   }
 
+  // Fetch quality summary row from backend when not available locally
+  fetchQualitySummaryRow(): void {
+    const fid = Number(this.data.fileId);
+    if (!isFinite(fid)) return;
+    this.dataService.getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName).subscribe({
+      next: (resp: any) => {
+        if (resp?.row) {
+          this.qualitySummary = resp.row;
+          this.initialQualitySummary = resp.row;
+          this.fetchQualityTimeseries();
+        }
+      },
+      error: () => { /* Quality stays as placeholder */ }
+    });
+  }
+
   // Quality helpers
   hasQuality(): boolean {
     const q = this.qualitySummary ?? this.initialQualitySummary;
@@ -544,6 +578,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityFetched = false;
       this.explainabilityError = null;
       
+      // If user is currently on Quality tab, fetch quality for new feature
+      if (this.currentTabIndex === 1) {
+        this.fetchQualitySummaryRow();
+      }
       // If user is currently on Explainability tab, trigger fetch immediately
       if (this.currentTabIndex === 3) {
         this.fetchFeatureExplainability();
@@ -562,15 +600,44 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.fetchQualityTimeseries();
   }
   
+  getFileOverride(): string | undefined {
+    if (this.dataVersion === 'preprocessed' && this.data.processedFile) return this.data.processedFile;
+    if (this.dataVersion === 'encoded' && this.data.encodedFile) return this.data.encodedFile;
+    return undefined;
+  }
+
+  onDataVersionChange(version: 'raw' | 'preprocessed' | 'encoded'): void {
+    this.dataVersion = version;
+    this.originalHistogramData = null;
+    this.originalStackedData = null;
+    this.targetAverages = null;
+    this.stackedWrtTarget = false;
+    this.loadFeatureData();
+    // Refresh Quality tab data for the new data version
+    this.qualitySummary = null;
+    this.initialQualitySummary = null;
+    this.qualityTimeseries = [];
+    this.qualityTimeseriesOverall = null;
+    this.metricLockedByUser = false;
+    if (this.currentTabIndex === 1) {
+      this.fetchQualitySummaryRow();
+    }
+  }
+
   loadFeatureData() {
-    console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}`);
+    const fileOverride = this.getFileOverride();
+    console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}, version: ${this.dataVersion}`);
     forkJoin({
-      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName),
-      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName)
+      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName, fileOverride),
+      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride)
     }).subscribe({
-      next: ({ featureCard, stackedData }) => {
+      next: ({ featureCard, stackedData: stackedResp }) => {
         this.featureData = featureCard;
         if (this.featureData) {
+          // Extract stacked_data and target_averages from response
+          const stackedData = stackedResp?.stacked_data ?? stackedResp;
+          this.targetAverages = stackedResp?.target_averages ?? null;
+
           // Store the original histogram data
           this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
           this.originalStackedData = this.preprocessStackedData(stackedData);
@@ -622,6 +689,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
       error: (error: HttpErrorResponse) => {
         console.error('Error loading feature data:', error);
+        // If the encoded version 404s (column missing from encoded file), fallback to preprocessed
+        if (error.status === 404 && this.dataVersion === 'encoded' && this.data.processedFile) {
+          console.warn(`[FeatureCard] Column '${this.data.columnName}' not found in encoded file, falling back to preprocessed`);
+          this.dataVersion = 'preprocessed';
+          this.loadFeatureData();
+          return;
+        }
         if (error.status === 404) {
           this.errorMessage = `File or column not found. Please check the fileId (${this.data.fileId}) and columnName (${this.data.columnName}).`;
         } else {
@@ -759,7 +833,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   fetchQualityTimeseries(): void {
     try {
       if (!this.isBrowser) return;
-      if (!this.data.processedFile || !this.data.dateColumn) {
+      // Use the data-version-appropriate file for quality computation
+      const qualityFile = this.getFileOverride() || this.data.processedFile;
+      if (!qualityFile || !this.data.dateColumn) {
         this.qualityTimeseriesError = 'Date column or processed file not available for timeseries.';
         return;
       }
@@ -776,8 +852,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.qualityTimeseriesError = null;
       this.dataService.getDatqTimeseries(
         fid,
-        this.data.processedFile,
-        this.data.columnName,
+        qualityFile,
+        this.selectedFeatureName || this.data.columnName,
         this.data.dateColumn,
         this.qualityTimeseriesMetric,
         this.selectedQualityWindows,
@@ -806,7 +882,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             }
           } catch {}
           const overallFromApi = (resp && resp.overall != null && resp.overall !== '') ? Number(resp.overall) : null;
-          this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
+          // For non-preprocessed data versions, prefer the API-computed overall
+          // because the pre-saved summary was computed on preprocessed data only.
+          if (this.dataVersion !== 'preprocessed') {
+            this.qualityTimeseriesOverall = (overallFromApi != null) ? overallFromApi : overallFromSummary;
+          } else {
+            this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
+          }
           this.drawQualityTimeseries();
         },
         error: (err: any) => {
@@ -1101,8 +1183,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   plotCategoricalData(valueCounts: { [key: string]: number }, layout: any) {
     const Plotly = (window as any).Plotly;
-    const categories = Object.keys(valueCounts);
-    const counts = Object.values(valueCounts);
+    const categories = Object.keys(valueCounts).map(k => k === 'nan' || k === 'NaN' ? '(null)' : String(k));
+    const counts: number[] = Object.values(valueCounts);
     const total = counts.reduce((sum, val) => sum + val, 0);
 
     const trace = {
@@ -1122,6 +1204,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
     layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
     layout.xaxis.title = 'Categories';
+    // Force categorical x-axis so each distinct value gets its own tick
+    if (categories.length <= 20) {
+      layout.xaxis.type = 'category';
+    }
 
     Plotly.newPlot('visualization', [trace], layout).catch((error: Error) => {
       console.error('Error plotting categorical data:', error);
@@ -1153,7 +1239,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.errorMessage = 'Visualization library not loaded';
       return;
     }
-    if (this.isNumerical()) {
+    // Detect data shape: if any target class value is a dict (not array), use categorical bar chart
+    const firstVal = Object.values(stackedData)[0];
+    const isDictFormat = firstVal && !Array.isArray(firstVal) && typeof firstVal === 'object';
+
+    if (this.isNumerical() && !isDictFormat) {
       const histogramTraces: any[] = [];
       const boxplotTraces: any[] = [];
       //const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
@@ -1216,13 +1306,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const allCategories = new Set<string>();
       Object.values(stackedData).forEach((data: any) => {
         if (typeof data === 'object') {
-          Object.keys(data).forEach(key => allCategories.add(key));
+          Object.keys(data).forEach(key => allCategories.add(key === 'nan' || key === 'NaN' ? '(null)' : String(key)));
         }
       });
       const categories = Array.from(allCategories);
       const traces = Object.keys(stackedData).map(targetClass => {
         const data = stackedData[targetClass];
-        const values = categories.map(cat => (data[cat] || 0));
+        const values = categories.map(cat => {
+          const origKey = cat === '(null)' ? 'NaN' : cat;
+          return data[origKey] || data[cat] || 0;
+        });
         const total = values.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
         return {
           x: categories,
@@ -1235,11 +1328,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         };
       });
       layout.barmode = 'group';
-      layout.bargap = 0.15;  // Add some gap between bars
-      layout.bargroupgap = 0.1;  // Gap between bars in a group
-      layout.showlegend = true;  // Ensure the legend is shown
-      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };  // Ensure legend is visible
+      layout.bargap = 0.15;
+      layout.bargroupgap = 0.1;
+      layout.showlegend = true;
+      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
       layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
+      // Force categorical x-axis so each distinct value gets its own tick
+      if (categories.length <= 20) {
+        layout.xaxis.type = 'category';
+      }
       Plotly.newPlot('visualization', traces, layout);
       console.log('Plotly.newPlot called with:', traces, layout);
     }
@@ -1342,8 +1439,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   fetchStackedData() {
-    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
-      (stackedData: any) => {
+    const fileOverride = this.getFileOverride();
+    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride).subscribe(
+      (resp: any) => {
+        const stackedData = resp?.stacked_data ?? resp;
+        this.targetAverages = resp?.target_averages ?? null;
         this.originalStackedData = this.preprocessStackedData(stackedData);
         this.updateVisualizationAndStats();
       },
@@ -1396,7 +1496,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       if (Array.isArray(value)) {
         processedData[key] = this.cleanData(value as number[]);
       } else if (typeof value === 'object' && value !== null) {
-        processedData[key] = this.cleanData(Object.values(value) as number[]);
+        // Preserve dict structure for categorical data (category → count)
+        processedData[key] = { ...value };
       } else {
         processedData[key] = [];
       }
@@ -1632,6 +1733,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.currentTabIndex = tabIndex;  // Track current tab
     
     // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
+    if (tabIndex === 1) {
+      // Quality tab — fetch summary from backend if not available
+      if (!this.hasQuality()) {
+        this.fetchQualitySummaryRow();
+      } else {
+        this.fetchQualityTimeseries();
+      }
+    }
     if (tabIndex === 2) {
       if (this.preModelingMode) {
         // No model trained yet — message shown in template

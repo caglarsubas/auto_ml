@@ -627,6 +627,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
             columnName: String(variableName),
             features: features,
             processedFile: processedFile || undefined,
+            encodedFile: this.encodedFilePath || undefined,
             dateColumn: dateColumn || undefined,
             qualitySummary: qualitySummary || undefined,
           }

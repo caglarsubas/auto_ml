@@ -17,14 +17,19 @@
         <span style="font-size: 12px; color: #888;" *ngIf="encodingPlan.length > 0">({{ encodingPlan.length }} features)</span>
         <mat-progress-bar *ngIf="encodingAnalyzing" mode="indeterminate" style="width: 160px;"></mat-progress-bar>
       </div>
-      <p style="font-size: 12px; color: #555; margin: 0 0 10px 0;">
-        <strong>Primary:</strong> {{ getAlgorithmLabel(selectedAlgorithm) }} native categorical support
-        <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
-           target="_blank" rel="noopener noreferrer"
-           title="Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
-           style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 2px; vertical-align: middle;">i</a>.
-        <strong style="margin-left: 6px;">Fallback:</strong> strategy based on Level of Measurement and unique value count.
-      </p>
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #555; margin: 0 0 10px 0;">
+        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 500;">
+          <input type="checkbox" [checked]="encodingUseNative" (change)="toggleEncodingUseNative()"
+                 style="width: 15px; height: 15px; cursor: pointer;" />
+          Model Native
+          <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
+             target="_blank" rel="noopener noreferrer"
+             title="Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
+             style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 2px; vertical-align: middle;">i</a>
+        </label>
+        <span *ngIf="encodingUseNative" style="color: #388e3c;">All features use {{ getAlgorithmLabel(selectedAlgorithm) }} native categorical support.</span>
+        <span *ngIf="!encodingUseNative" style="color: #e65100;">Per-feature encoding method selection enabled. Fallback applies when method is Model Native.</span>
+      </div>
 
       <div *ngIf="encodingError" style="color:#b71c1c; font-size:12px; margin-bottom: 8px; padding: 6px 10px; background: #fff3f3; border-radius: 4px;">{{ encodingError }}</div>
 
@@ -44,14 +49,21 @@
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Level of Measurement</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Unique</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Missing %</th>
+              <th *ngIf="!encodingUseNative" style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Encoding Method</th>
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Fallback Strategy</th>
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Unique Values (top)</th>
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Ordinal Ranking</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let entry of encodingPlan" style="border-bottom: 1px solid #eee;">
-              <td style="padding: 8px; font-weight: 500; font-size: 12px; white-space: nowrap;">{{ entry.feature }}</td>
+            <ng-container *ngFor="let entry of encodingPlan">
+            <tr style="border-bottom: 1px solid #eee;">
+              <td style="padding: 8px; font-weight: 500; font-size: 12px; white-space: nowrap;">
+                <a href="javascript:void(0)" (click)="openFeatureCard(entry.feature)"
+                   style="color: #1976d2; text-decoration: none; cursor: pointer;"
+                   onmouseover="this.style.textDecoration='underline'"
+                   onmouseout="this.style.textDecoration='none'">{{ entry.feature }}</a>
+              </td>
               <td style="padding: 8px; font-size: 11px; color: #555; max-width: 180px; overflow: hidden; text-overflow: ellipsis;" [title]="entry.description || getFeatureDescription(entry.feature)">{{ entry.description || getFeatureDescription(entry.feature) || '—' }}</td>
               <td style="padding: 8px;">
                 <select [ngModel]="entry.user_lom" (ngModelChange)="updateEncodingLom(entry, $event); onConfigChanged()"
@@ -62,6 +74,13 @@
               </td>
               <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.nunique }}</td>
               <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.missing_ratio }}%</td>
+              <!-- Encoding Method column (visible when Model Native checkbox is OFF) -->
+              <td *ngIf="!encodingUseNative" style="padding: 8px;">
+                <select [ngModel]="entry.encoding_method || 'native'" (ngModelChange)="onEncodingMethodChange(entry, $event)"
+                        style="padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; min-width: 130px;">
+                  <option *ngFor="let opt of encodingMethodOptions" [value]="opt.value">{{ opt.label }}</option>
+                </select>
+              </td>
               <td style="padding: 8px;">
                 <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 500; color: white;"
                       [style.background]="getStrategyColor(entry.fallback_strategy)">
@@ -90,6 +109,23 @@
                 <span *ngIf="!entry.needs_ranking" style="font-size: 10px; color: #aaa;">N/A</span>
               </td>
             </tr>
+            <!-- Manual Grouping sub-row (shown when Manual Grouping is selected for this feature) -->
+            <tr *ngIf="!encodingUseNative && entry.encoding_method === 'manual_grouping'" style="background: #fafafa;">
+              <td [attr.colspan]="9" style="padding: 8px 8px 12px 32px;">
+                <div style="font-size: 11px; font-weight: 600; color: #4e342e; margin-bottom: 6px;">Manual Grouping for {{ entry.feature }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <div *ngFor="let cat of objectKeys(entry.manual_mapping)" style="display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 3px 8px;">
+                    <span style="font-size: 11px; color: #333; min-width: 60px;">{{ cat === '__NULL__' ? '(null)' : cat }}</span>
+                    <span style="color: #999; font-size: 10px;">→</span>
+                    <input type="number" [value]="entry.manual_mapping[cat]"
+                           (input)="onManualMappingChange(entry, cat, $any($event.target).value)"
+                           style="width: 50px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;"
+                           placeholder="#" />
+                  </div>
+                </div>
+              </td>
+            </tr>
+            </ng-container>
           </tbody>
         </table>
       </div>

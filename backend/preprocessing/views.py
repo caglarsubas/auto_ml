@@ -126,6 +126,11 @@ class PreprocessingDatqTimeseriesView(APIView):
                 return Response({'error': f'date_column {date_column} not in processed file'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Preserve full frame for overall PSI; build a timeseries frame filtered by valid dates
+            # Convert Pandas 3.0 StringDtype columns to object so numpy-based
+            # Data_Quality / PSI routines can process them without errors.
+            for _c in df.columns:
+                if pd.api.types.is_string_dtype(df[_c]) and df[_c].dtype != 'object':
+                    df[_c] = df[_c].astype('object')
             df_full = df.copy()
             # Prepare time axis (monthly) on a copy for rolling windows
             dt = pd.to_datetime(df[date_column], errors='coerce', dayfirst=True)
@@ -1686,6 +1691,30 @@ class PreprocessingDatqDetailView(APIView):
         except Exception as e:
             import traceback
             print(traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingDatqSummaryRowView(APIView):
+    """Return a single quality-summary row for a given file_id + column from the saved JSON."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        column = request.query_params.get('column')
+        if not column:
+            return Response({'error': 'column query param required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            datq_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
+            if not os.path.exists(datq_path):
+                return Response({'row': None}, status=status.HTTP_200_OK)
+            with open(datq_path, 'r', encoding='utf-8') as f:
+                records = json.load(f)
+            row = next(
+                (r for r in records
+                 if str(r.get('Variable', r.get('variable', r.get('index', '')))) == str(column)),
+                None,
+            )
+            return Response({'row': row}, status=status.HTTP_200_OK)
+        except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

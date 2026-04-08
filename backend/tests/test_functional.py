@@ -735,3 +735,550 @@ class TestFeatureCardStackedDataAPI:
         """GET stacked feature data for nonexistent file returns appropriate error."""
         response = api_client.get('/api/feature-card/99999/get_stacked_feature_data/', {'column': 'Age'})
         assert response.status_code in (400, 404, 500)
+
+    def test_stacked_data_success(self, api_client, _use_tmp_media):
+        """GET stacked feature data with valid file returns stacked_data and target_averages."""
+        n = 100
+        df = pd.DataFrame({
+            'Category': np.random.choice(['A', 'B', 'C'], n),
+            'Target': np.random.choice([0, 1], n),
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'stacked_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(
+            f'/api/feature-card/{file_id}/get_stacked_feature_data/',
+            {'column': 'Category'},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert 'stacked_data' in data
+        assert 'target_averages' in data
+        # stacked_data should have keys for each target class
+        assert '0' in data['stacked_data'] or '1' in data['stacked_data']
+        # target_averages should be a list with category entries
+        assert isinstance(data['target_averages'], list)
+        if data['target_averages']:
+            entry = data['target_averages'][0]
+            assert 'category' in entry
+            assert 'count' in entry
+            assert 'volume_share' in entry
+            assert 'target_average' in entry
+
+    def test_stacked_data_missing_column(self, api_client, _use_tmp_media):
+        """GET stacked feature data with missing column returns 404."""
+        df = pd.DataFrame({'X': [1, 2], 'Target': [0, 1]})
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'stacked_missing.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(
+            f'/api/feature-card/{file_id}/get_stacked_feature_data/',
+            {'column': 'NonExistent'},
+        )
+        assert response.status_code == 404
+
+    def test_stacked_data_no_column_param(self, api_client, _use_tmp_media):
+        """GET stacked feature data without column param returns 400."""
+        df = pd.DataFrame({'X': [1], 'Target': [0]})
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'stacked_no_col.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(f'/api/feature-card/{file_id}/get_stacked_feature_data/')
+        assert response.status_code == 400
+
+    def test_stacked_data_numeric_high_cardinality(self, api_client, _use_tmp_media):
+        """GET stacked data for numeric column with >20 unique returns array format."""
+        n = 100
+        df = pd.DataFrame({
+            'Score': np.random.uniform(0, 100, n),
+            'Target': np.random.choice([0, 1], n),
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'stacked_numeric.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(
+            f'/api/feature-card/{file_id}/get_stacked_feature_data/',
+            {'column': 'Score'},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # High-cardinality numeric → array format (no target_averages)
+        assert 'stacked_data' in data
+        assert data['target_averages'] is None
+
+
+# ---------------------------------------------------------------------------
+# Feature Card get_feature_info API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestFeatureCardInfoAPI:
+
+    def test_feature_info_numeric_success(self, api_client, _use_tmp_media):
+        """GET /api/feature-card/<id>/get_feature_info/ returns stats for numeric column."""
+        df = pd.DataFrame({
+            'Age': np.random.randint(18, 70, 200),
+            'Name': np.random.choice(['Alice', 'Bob'], 200),
+            'Target': np.random.choice([0, 1], 200),
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_numeric.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Age'})
+        assert response.status_code == 200
+        assert response.data['Feature_Name'] == 'Age'
+        assert 'Descriptive_Stats' in response.data
+        stats = response.data['Descriptive_Stats']
+        assert 'Mean' in stats
+        assert 'Min' in stats
+        assert 'Max' in stats
+        assert 'Std' in stats
+
+    def test_feature_info_categorical_success(self, api_client, _use_tmp_media):
+        """GET /api/feature-card/<id>/get_feature_info/ returns stats for categorical column."""
+        df = pd.DataFrame({
+            'Color': np.random.choice(['Red', 'Blue', 'Green'], 100),
+            'Target': np.random.choice([0, 1], 100),
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_categorical.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Color'})
+        assert response.status_code == 200
+        assert response.data['Feature_Name'] == 'Color'
+        stats = response.data['Descriptive_Stats']
+        assert '#_of_Categories' in stats
+        assert 'Mode_Value' in stats
+        assert 'value_counts' in stats
+
+    def test_feature_info_no_column_returns_400(self, api_client, _use_tmp_media):
+        """GET /api/feature-card/<id>/get_feature_info/ without column returns 400."""
+        df = pd.DataFrame({'X': [1], 'Target': [0]})
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_no_col.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/')
+        assert response.status_code == 400
+
+    def test_feature_info_missing_column_returns_404(self, api_client, _use_tmp_media):
+        """GET /api/feature-card/<id>/get_feature_info/ with nonexistent column returns 404."""
+        df = pd.DataFrame({'A': [1, 2], 'Target': [0, 1]})
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_bad_col.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        response = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Nonexistent'})
+        assert response.status_code == 404
+
+    def test_feature_info_file_override(self, api_client, _use_tmp_media, media_root):
+        """GET /api/feature-card/<id>/get_feature_info/ with file_override uses override file."""
+        df_orig = pd.DataFrame({'X': [1, 2], 'Target': [0, 1]})
+        buf = io.BytesIO()
+        df_orig.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_override_orig.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        # Create override file with different data
+        override_dir = os.path.join(str(media_root), 'processed')
+        os.makedirs(override_dir, exist_ok=True)
+        df_override = pd.DataFrame({'Age': np.random.randint(18, 70, 50), 'Target': np.random.choice([0, 1], 50)})
+        override_path = os.path.join(override_dir, 'override_fc.csv')
+        df_override.to_csv(override_path, index=False)
+        rel_path = os.path.relpath(override_path, str(media_root))
+
+        response = api_client.get(
+            f'/api/feature-card/{file_id}/get_feature_info/',
+            {'column': 'Age', 'file_override': rel_path},
+        )
+        assert response.status_code == 200
+        assert response.data['Feature_Name'] == 'Age'
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing DatqDetail API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestDatqDetailAPI:
+
+    def test_datq_detail_missing_file_id(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_detail/ without file_id returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'processed_file': 'x.csv', 'column': 'A'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_datq_detail_missing_processed_file(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_detail/ without processed_file returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'file_id': 1, 'column': 'A'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_datq_detail_missing_column(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_detail/ without column returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'file_id': 1, 'processed_file': 'x.csv'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_datq_detail_nonexistent_declaration(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_detail/ with nonexistent file_id returns 404."""
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'file_id': 99999, 'processed_file': 'x.csv', 'column': 'A'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 404
+
+    def test_datq_detail_nonexistent_file(self, api_client, uploaded_declaration, _use_tmp_media):
+        """POST /api/preprocessing/datq_detail/ with nonexistent processed_file returns 404."""
+        pk = uploaded_declaration['id']
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'file_id': pk, 'processed_file': 'nonexistent.csv', 'column': 'Age'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 404
+
+    def test_datq_detail_column_not_in_file(self, api_client, uploaded_declaration, _use_tmp_media, media_root):
+        """POST /api/preprocessing/datq_detail/ with column not in file returns 400."""
+        pk = uploaded_declaration['id']
+        # Create a small CSV as "processed" file
+        df = pd.DataFrame({'Score': [1, 2, 3], 'Target': [0, 1, 0]})
+        csv_dir = os.path.join(str(media_root), 'processed')
+        os.makedirs(csv_dir, exist_ok=True)
+        csv_path = os.path.join(csv_dir, 'datq_detail_test.csv')
+        df.to_csv(csv_path, index=False)
+        rel_path = os.path.relpath(csv_path, str(media_root))
+
+        response = api_client.post(
+            '/api/preprocessing/datq_detail/',
+            data=json.dumps({'file_id': pk, 'processed_file': rel_path, 'column': 'NonExistent'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing DatqTimeseries API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestDatqTimeseriesAPI:
+
+    def test_timeseries_missing_file_id(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ without file_id returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({'processed_file': 'x.csv', 'column': 'A', 'date_column': 'D'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_timeseries_missing_processed_file(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ without processed_file returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({'file_id': 1, 'column': 'A', 'date_column': 'D'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_timeseries_missing_column(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ without column returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({'file_id': 1, 'processed_file': 'x.csv', 'date_column': 'D'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_timeseries_missing_date_column(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ without date_column returns 400."""
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({'file_id': 1, 'processed_file': 'x.csv', 'column': 'A'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_timeseries_nonexistent_declaration(self, api_client, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ with nonexistent file_id returns 404."""
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({
+                'file_id': 99999, 'processed_file': 'x.csv',
+                'column': 'A', 'date_column': 'D',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 404
+
+    def test_timeseries_nonexistent_file(self, api_client, uploaded_declaration, _use_tmp_media):
+        """POST /api/preprocessing/datq_timeseries/ with nonexistent processed_file returns 404."""
+        pk = uploaded_declaration['id']
+        response = api_client.post(
+            '/api/preprocessing/datq_timeseries/',
+            data=json.dumps({
+                'file_id': pk, 'processed_file': 'nonexistent.csv',
+                'column': 'Age', 'date_column': 'Date',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing DatqSummaryRow API (functional coverage)
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestDatqSummaryRowFunctionalAPI:
+
+    def test_summary_row_missing_column_param(self, api_client, _use_tmp_media):
+        """GET /api/preprocessing/datq_summary_row/<id>/ without column returns 400."""
+        response = api_client.get('/api/preprocessing/datq_summary_row/1/')
+        assert response.status_code == 400
+
+    def test_summary_row_nonexistent_file_returns_null(self, api_client, _use_tmp_media, media_root):
+        """GET /api/preprocessing/datq_summary_row/<id>/ with no saved JSON returns {row: None}."""
+        response = api_client.get('/api/preprocessing/datq_summary_row/99999/', {'column': 'Age'})
+        assert response.status_code == 200
+        assert response.data['row'] is None
+
+    def test_summary_row_success(self, api_client, _use_tmp_media, media_root):
+        """GET /api/preprocessing/datq_summary_row/<id>/ with existing JSON returns data."""
+        dq_dir = os.path.join(str(media_root), 'data_quality')
+        os.makedirs(dq_dir, exist_ok=True)
+        summary = [
+            {'Variable': 'Age', 'PSI': 0.05, 'Datq_Decision': 'Accept'},
+            {'Variable': 'Income', 'PSI': 0.30, 'Datq_Decision': 'Review'},
+        ]
+        with open(os.path.join(dq_dir, '42_datq_summary.json'), 'w') as f:
+            json.dump(summary, f)
+
+        response = api_client.get('/api/preprocessing/datq_summary_row/42/', {'column': 'Age'})
+        assert response.status_code == 200
+        row = response.data['row']
+        assert row is not None
+        assert row['Variable'] == 'Age'
+        assert row['PSI'] == 0.05
+
+    def test_summary_row_feature_not_found_returns_null(self, api_client, _use_tmp_media, media_root):
+        """GET /api/preprocessing/datq_summary_row/<id>/ with missing feature returns {row: None}."""
+        dq_dir = os.path.join(str(media_root), 'data_quality')
+        os.makedirs(dq_dir, exist_ok=True)
+        summary = [{'Variable': 'Age', 'PSI': 0.05}]
+        with open(os.path.join(dq_dir, '43_datq_summary.json'), 'w') as f:
+            json.dump(summary, f)
+
+        response = api_client.get('/api/preprocessing/datq_summary_row/43/', {'column': 'NonExistent'})
+        assert response.status_code == 200
+        assert response.data['row'] is None
+
+
+# ---------------------------------------------------------------------------
+# AI Assistant Chat API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestAIAssistantChatAPI:
+
+    def test_chat_missing_message(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/chat/ without message returns 400."""
+        response = api_client.post(
+            '/api/ai-assistant/chat/',
+            data=json.dumps({'context': {}, 'section': 'general'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert 'error' in response.data
+
+    def test_chat_empty_message(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/chat/ with empty message returns 400."""
+        response = api_client.post(
+            '/api/ai-assistant/chat/',
+            data=json.dumps({'message': '', 'context': {}}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_chat_no_api_key_returns_503(self, api_client, _use_tmp_media, monkeypatch):
+        """POST /api/ai-assistant/chat/ without OPENAI_API_KEY returns 503."""
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        response = api_client.post(
+            '/api/ai-assistant/chat/',
+            data=json.dumps({'message': 'Hello', 'context': {}, 'section': 'general'}),
+            content_type='application/json',
+        )
+        assert response.status_code == 503
+        assert 'API key' in response.data['error']
+
+
+# ---------------------------------------------------------------------------
+# AI Action Execute API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestAIActionExecuteAPI:
+
+    def test_execute_missing_file_id(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ without file_id returns 400."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({'action_type': 'update_notes', 'payload': {}}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert response.data['status'] == 'error'
+
+    def test_execute_missing_action_type(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ without action_type returns 400."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({'file_id': 1, 'payload': {}}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_execute_unknown_action_type(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ with unknown action returns 400."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({'file_id': 1, 'action_type': 'totally_bogus', 'payload': {}}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert 'Unknown action type' in response.data['error']
+
+    def test_execute_update_notes_success(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ update_notes succeeds without DB."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': 1,
+                'action_type': 'update_notes',
+                'payload': {
+                    'action': 'add',
+                    'position': 'after_data_preview',
+                    'content': 'Test note',
+                },
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 200
+        assert response.data['status'] == 'success'
+        assert response.data['action_type'] == 'update_notes'
+        assert response.data['content'] == 'Test note'
+
+    def test_execute_update_notes_invalid_position(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ update_notes with invalid position returns error."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': 1,
+                'action_type': 'update_notes',
+                'payload': {'action': 'add', 'position': 'invalid_position', 'content': 'x'},
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert 'Invalid note position' in response.data['error']
+
+    def test_execute_update_metadata_no_updates(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ update_metadata with no updates returns error."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': 1,
+                'action_type': 'update_metadata',
+                'payload': {'updates': []},
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_execute_update_config_no_updates(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ update_config with no updates returns error."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': 1,
+                'action_type': 'update_config',
+                'payload': {'updates': []},
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_execute_code_nonexistent_file(self, api_client, _use_tmp_media):
+        """POST /api/ai-assistant/execute-action/ execute_code with missing file returns error."""
+        response = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': 99999,
+                'action_type': 'execute_code',
+                'payload': {'code': 'df["New"] = 1', 'description': 'test'},
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert 'not found' in response.data['error']

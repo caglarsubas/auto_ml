@@ -133,7 +133,18 @@ def apply_encoding(
         # Recompute fallback if user changed the LoM
         fallback, reason = _determine_fallback_strategy(user_lom, nunique)
 
-        strategy = 'native_categorical' if use_native else fallback
+        # Determine encoding strategy:
+        # 1. If use_native=True globally, all features use native_categorical
+        # 2. If use_native=False, check per-feature encoding_method from plan entry
+        #    - 'native' or missing → native_categorical
+        #    - explicit method → use that method directly
+        encoding_method = entry.get('encoding_method', 'native')
+        if use_native:
+            strategy = 'native_categorical'
+        elif encoding_method in (None, '', 'native'):
+            strategy = 'native_categorical'
+        else:
+            strategy = encoding_method  # label_encoding, one_hot_encoding, frequency_encoding, target_encoding, manual_grouping
 
         before_stats = _compute_stats(encoded[feature])
 
@@ -158,8 +169,10 @@ def apply_encoding(
             }
             feat_report['after_stats'] = _compute_stats(encoded[feature])
         else:
+            manual_mapping = entry.get('manual_mapping')
             encoded, feat_report = _apply_fallback(
-                encoded, feature, fallback, ranking, target_col, feat_report,
+                encoded, feature, strategy, ranking, target_col, feat_report,
+                manual_mapping=manual_mapping,
             )
 
         report.append(feat_report)
@@ -178,6 +191,7 @@ def _apply_fallback(
     ranking: Optional[List[str]],
     target_col: str,
     feat_report: Dict,
+    manual_mapping: Optional[Dict] = None,
 ) -> Tuple[pd.DataFrame, Dict]:
     if fallback == 'label_encoding':
         df, mapping = _label_encode(df, feature)
@@ -206,6 +220,16 @@ def _apply_fallback(
         df, mapping = _target_encode(df, feature, target_col)
         feat_report['mapping'] = mapping
         feat_report['strategy_applied'] = 'target_encoding'
+
+    elif fallback == 'frequency_encoding':
+        df, mapping = _frequency_encode(df, feature)
+        feat_report['mapping'] = mapping
+        feat_report['strategy_applied'] = 'frequency_encoding'
+
+    elif fallback == 'manual_grouping':
+        df, mapping = _manual_group_encode(df, feature, manual_mapping)
+        feat_report['mapping'] = mapping
+        feat_report['strategy_applied'] = 'manual_grouping'
 
     # After stats on the (possibly replaced) column
     if feature in df.columns:
@@ -250,12 +274,47 @@ def _target_encode(df: pd.DataFrame, feature: str, target_col: str) -> Tuple[pd.
         return _label_encode(df, feature)
 
     global_mean = float(df[target_col].mean())
-    means = df.groupby(feature)[target_col].mean()
+    # Treat nulls as a category for target encoding
+    series_filled = df[feature].fillna('__NULL__')
+    means = df.assign(**{feature: series_filled}).groupby(feature)[target_col].mean()
     mapping = {str(k): round(float(v), 6) for k, v in means.items()}
+    null_mean = mapping.get('__NULL__', global_mean)
     df[feature] = df[feature].map(
-        lambda x: mapping.get(str(x), global_mean) if pd.notna(x) else global_mean,
+        lambda x: mapping.get(str(x), global_mean) if pd.notna(x) else null_mean,
     ).astype(float)
     return df, {'type': 'target_encoding', 'mapping': mapping, 'global_mean': global_mean}
+
+
+def _frequency_encode(df: pd.DataFrame, feature: str) -> Tuple[pd.DataFrame, Dict]:
+    """Replace each category (including nulls) with its volume-share (frequency ratio)."""
+    null_ph = '__NULL__'
+    series = df[feature].fillna(null_ph)
+    total = len(series)
+    vc = series.value_counts()
+    mapping = {str(k): round(float(v) / total, 6) for k, v in vc.items()}
+    df[feature] = series.map(lambda x: mapping.get(str(x), 0.0)).astype(float)
+    return df, {'type': 'frequency_encoding', 'mapping': mapping}
+
+
+def _manual_group_encode(df: pd.DataFrame, feature: str, manual_mapping: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict]:
+    """Replace categories with user-assigned numeric group numbers."""
+    if not manual_mapping:
+        # Fallback: label encode if no mapping provided
+        return _label_encode(df, feature)
+
+    null_ph = '__NULL__'
+    series = df[feature].fillna(null_ph).astype(str)
+    # Build clean mapping: str(category) -> numeric value
+    clean_map: Dict[str, float] = {}
+    for cat, val in manual_mapping.items():
+        if val is not None:
+            try:
+                clean_map[str(cat)] = float(val)
+            except (ValueError, TypeError):
+                pass
+    # Apply mapping; unmapped categories get -1
+    df[feature] = series.map(lambda x: clean_map.get(x, -1)).astype(float)
+    return df, {'type': 'manual_grouping', 'mapping': clean_map}
 
 
 # ---------------------------------------------------------------------------

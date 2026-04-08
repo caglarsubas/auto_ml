@@ -46,6 +46,7 @@ def media_root(tmp_path):
     media.mkdir()
     (media / 'data_files').mkdir()
     (media / 'configs').mkdir()
+    (media / 'data_quality').mkdir()
     return media
 
 

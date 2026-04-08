@@ -182,7 +182,7 @@ def run_forward_sfs(
     
     # Detect categorical columns for enable_categorical support
     _has_cat = any(
-        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
         for c in X_train.columns
     )
     
@@ -369,7 +369,7 @@ def run_backward_sfs(
     
     # Detect categorical columns for enable_categorical support
     _has_cat = any(
-        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
         for c in X_train.columns
     )
     
@@ -881,7 +881,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
     """
     try:
         _has_cat = any(
-            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
             for c in X_train.columns
         )
         
@@ -1068,7 +1068,7 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
     """
     try:
         _has_cat = any(
-            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
             for c in X_train.columns
         )
         

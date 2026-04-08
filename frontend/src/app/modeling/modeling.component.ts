@@ -23,6 +23,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   runPreview: any | null = null;
   tableColumns: string[] = [];
   processedFilePath: string | null = null;
+  encodedFilePath: string | null = null;
   currentFileId: number | null = null;
   isStarting: boolean = false;
   modelingStatus: any | null = null;
@@ -103,6 +104,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   encodingAnalyzing: boolean = false;
   encodingError: string | null = null;
   dataDictionaryCache: any[] = [];
+  encodingUseNative: boolean = true;
 
   // Encoding report with category mappings (for SHAP beeswarm labels)
   encodingReport: any[] = [];
@@ -277,6 +279,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
 
     this.sharedService.processedFilePath$.subscribe((path) => {
       this.processedFilePath = path;
+    });
+
+    this.sharedService.encodedFilePath$.subscribe((path) => {
+      this.encodedFilePath = path;
     });
 
     this.sharedService.currentFileId$.subscribe((id) => {
@@ -455,6 +461,52 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     }
   }
 
+  encodingMethodOptions: { value: string; label: string }[] = [
+    { value: 'native', label: 'Model Native' },
+    { value: 'label_encoding', label: 'Label Encoding' },
+    { value: 'one_hot_encoding', label: 'One-Hot Encoding' },
+    { value: 'frequency_encoding', label: 'Frequency Encoding' },
+    { value: 'target_encoding', label: 'Target Encoding' },
+    { value: 'manual_grouping', label: 'Manual Grouping' },
+  ];
+
+  toggleEncodingUseNative(): void {
+    this.encodingUseNative = !this.encodingUseNative;
+    if (!this.encodingUseNative) {
+      for (const entry of this.encodingPlan) {
+        if (!entry.encoding_method) {
+          entry.encoding_method = 'native';
+        }
+      }
+    }
+    this.onConfigChanged();
+  }
+
+  onEncodingMethodChange(entry: any, method: string): void {
+    entry.encoding_method = method;
+    if (method === 'manual_grouping' && !entry.manual_mapping) {
+      entry.manual_mapping = {};
+      for (const v of (entry.unique_values || [])) {
+        entry.manual_mapping[v] = null;
+      }
+      if (entry.has_nulls) {
+        entry.manual_mapping['__NULL__'] = null;
+      }
+    }
+    this.onConfigChanged();
+  }
+
+  onManualMappingChange(entry: any, category: string, value: string): void {
+    if (!entry.manual_mapping) entry.manual_mapping = {};
+    const num = Number(value);
+    entry.manual_mapping[category] = isNaN(num) ? null : num;
+    this.onConfigChanged();
+  }
+
+  objectKeys(obj: any): string[] {
+    return obj ? Object.keys(obj) : [];
+  }
+
   getStrategyLabel(strategy: string): string {
     const labels: { [k: string]: string } = {
       'native_categorical': 'Native Categorical',
@@ -462,6 +514,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       'one_hot_encoding': 'One-Hot Encoding',
       'ordinal_encoding': 'Ordinal Encoding',
       'target_encoding': 'Target Encoding',
+      'frequency_encoding': 'Frequency Encoding',
+      'manual_grouping': 'Manual Grouping',
     };
     return labels[strategy] || strategy;
   }
@@ -473,6 +527,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       'one_hot_encoding': '#00796b',
       'ordinal_encoding': '#e65100',
       'target_encoding': '#c62828',
+      'frequency_encoding': '#0277bd',
+      'manual_grouping': '#4e342e',
     };
     return colors[strategy] || '#616161';
   }
@@ -617,7 +673,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.chartsDrawn = false;
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'modeling', file_id: this.currentFileId });
-    this.dataService.startModeling(this.currentFileId, this.processedFilePath!, this.selectedAlgorithm || undefined, excludedVariables).pipe(
+    this.dataService.startModeling(this.currentFileId, this.processedFilePath!, this.selectedAlgorithm || undefined, excludedVariables, this.encodingPlan, this.encodingUseNative).pipe(
       finalize(() => this.isStarting = false)
     ).subscribe({
       next: (resp) => {
@@ -632,6 +688,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         console.log('SFS ready?', this.sfsReady);
         // Build catLabelLookup from the encoding report returned by the modeling backend
         this.buildCatLabelLookup(resp?.model?.encoding_report);
+        // Propagate encoded file path if returned by backend
+        if (resp?.encoded_file) {
+          this.encodedFilePath = resp.encoded_file;
+          this.sharedService.setEncodedFilePath(resp.encoded_file);
+        }
         // If the response already indicates completion, draw charts immediately
         const js = (resp as any)?.job_status || (resp as any)?.status;
         if (js === 'completed') { 
@@ -687,6 +748,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             // Build catLabelLookup from encoding report in completed response
             if (status?.model?.encoding_report) {
               this.buildCatLabelLookup(status.model.encoding_report);
+            }
+            // Propagate encoded file path if returned by backend
+            if (status?.encoded_file) {
+              this.encodedFilePath = status.encoded_file;
+              this.sharedService.setEncodedFilePath(status.encoded_file);
             }
             // draw CV charts when available
             this.chartsDrawn = false;
@@ -942,6 +1008,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               this.modelingStatus = full;
               this.applySfSort();
               this.buildCatLabelLookup(full?.model?.encoding_report);
+              // Propagate encoded file path on pipeline restore
+              if (full?.encoded_file) {
+                this.encodedFilePath = full.encoded_file;
+                this.sharedService.setEncodedFilePath(full.encoded_file);
+              }
               this.chartsDrawn = false;
               setTimeout(() => this.tryDrawChartsIfReady(), 100);
               // Refresh AI context with full CV/SHAP data
@@ -980,6 +1051,11 @@ export class ModelingComponent implements OnInit, AfterViewInit {
             this.applySfSort();
             this.sfsReady = status?.model?.sfs_ready || false;
             this.buildCatLabelLookup(status?.model?.encoding_report);
+            // Propagate encoded file path on resume
+            if (status?.encoded_file) {
+              this.encodedFilePath = status.encoded_file;
+              this.sharedService.setEncodedFilePath(status.encoded_file);
+            }
             this.chartsDrawn = false;
             setTimeout(() => this.tryDrawChartsIfReady(), 100);
             this.sharedService.setActiveProcess(null);
@@ -1550,6 +1626,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               columnName: featureName,
               features: features,
               processedFile: processedFile,
+              encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               qualitySummary: qualitySummary || undefined,
               catLabelLookup: this.catLabelLookup,
@@ -1567,6 +1644,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               columnName: featureName,
               features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
               processedFile: processedFile,
+              encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               catLabelLookup: this.catLabelLookup,
               importanceOverrides: importanceOverrides
@@ -1676,6 +1754,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               columnName: featureName,
               features: features,
               processedFile: processedFile,
+              encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               qualitySummary: qualitySummary || undefined,
               catLabelLookup: this.catLabelLookup,
@@ -1691,6 +1770,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               columnName: featureName,
               features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
               processedFile: processedFile,
+              encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               catLabelLookup: this.catLabelLookup,
               sfsContexts: sfsContexts

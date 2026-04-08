@@ -388,3 +388,170 @@ class TestPipelineReportWorkflow:
         assert resp.status_code == 200
         html = resp.content.decode('utf-8')
         assert 'window.print()' in html
+
+
+# ---------------------------------------------------------------------------
+# Upload → Feature Card → Stacked Data workflow
+# ---------------------------------------------------------------------------
+@pytest.mark.integration
+@pytest.mark.django_db
+class TestUploadFeatureCardStackedWorkflow:
+
+    def test_upload_feature_info_stacked_data(self, api_client, _use_tmp_media):
+        """Upload CSV → get feature info → get stacked data for same column."""
+        n = 200
+        df = pd.DataFrame({
+            'Region': np.random.choice(['North', 'South', 'East', 'West'], n),
+            'Score': np.random.uniform(0, 100, n).round(2),
+            'Target': np.random.choice([0, 1], n),
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'fc_stacked_workflow.csv'
+
+        # Step 1: Upload
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        # Step 2: Feature info for categorical
+        resp = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Region'})
+        assert resp.status_code == 200
+        assert resp.data['Feature_Name'] == 'Region'
+        assert resp.data['Level_of_Measurement'] == 'nominal'
+        assert '#_of_Categories' in resp.data['Descriptive_Stats']
+
+        # Step 3: Stacked data for same column
+        resp = api_client.get(f'/api/feature-card/{file_id}/get_stacked_feature_data/', {'column': 'Region'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 'stacked_data' in data
+        assert 'target_averages' in data
+        assert isinstance(data['target_averages'], list)
+        assert len(data['target_averages']) == 4  # North, South, East, West
+
+        # Step 4: Feature info for numeric
+        resp = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Score'})
+        assert resp.status_code == 200
+        assert resp.data['Level_of_Measurement'] == 'continuous'
+        assert 'Mean' in resp.data['Descriptive_Stats']
+
+    def test_upload_feature_card_with_file_override(self, api_client, _use_tmp_media, media_root):
+        """Upload CSV → create processed file → use file_override to switch data versions."""
+        n = 100
+        # Original (raw) data
+        df_raw = pd.DataFrame({
+            'Income': np.random.uniform(20000, 150000, n).round(2),
+            'Region': np.random.choice(['A', 'B', 'C'], n),
+            'Target': np.random.choice([0, 1], n),
+        })
+        buf = io.BytesIO()
+        df_raw.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'version_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        # Create "processed" version with different stats
+        proc_dir = os.path.join(str(media_root), 'processed')
+        os.makedirs(proc_dir, exist_ok=True)
+        df_proc = df_raw.copy()
+        df_proc['Income'] = df_proc['Income'] / 1000  # scale down
+        proc_path = os.path.join(proc_dir, 'processed_version.csv')
+        df_proc.to_csv(proc_path, index=False)
+        rel_path = os.path.relpath(proc_path, str(media_root))
+
+        # Get feature info from RAW
+        resp_raw = api_client.get(f'/api/feature-card/{file_id}/get_feature_info/', {'column': 'Income'})
+        assert resp_raw.status_code == 200
+        mean_raw = resp_raw.data['Descriptive_Stats']['Mean']
+
+        # Get feature info from PROCESSED via file_override
+        resp_proc = api_client.get(
+            f'/api/feature-card/{file_id}/get_feature_info/',
+            {'column': 'Income', 'file_override': rel_path},
+        )
+        assert resp_proc.status_code == 200
+        mean_proc = resp_proc.data['Descriptive_Stats']['Mean']
+
+        # Processed should have ~1000x smaller mean
+        assert mean_raw > mean_proc * 500, "file_override should produce different stats"
+
+
+# ---------------------------------------------------------------------------
+# AI Action Execute end-to-end workflow
+# ---------------------------------------------------------------------------
+@pytest.mark.integration
+@pytest.mark.django_db
+class TestAIActionExecuteWorkflow:
+
+    def test_upload_then_execute_code(self, api_client, _use_tmp_media):
+        """Upload CSV → execute AI code action → verify changes."""
+        df = pd.DataFrame({
+            'A': [10, 20, 30, 40, 50],
+            'B': [1, 2, 3, 4, 5],
+            'Target': [0, 1, 0, 1, 0],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'ai_code_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        # Execute code to add a new column
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'execute_code',
+                'payload': {
+                    'code': 'df["Ratio"] = df["A"] / df["B"]',
+                    'description': 'Add A/B ratio column',
+                },
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+        assert 'Ratio' in resp.data['changes']['columns_added']
+        assert resp.data['changes']['rows_before'] == 5
+        assert resp.data['changes']['rows_after'] == 5
+
+        # Verify the new column is visible via preview
+        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
+        assert resp.status_code == 200
+        assert 'Ratio' in resp.data['columns']
+
+    def test_upload_then_update_metadata(self, api_client, _use_tmp_media):
+        """Upload CSV → update metadata description via AI action."""
+        df = pd.DataFrame({'Age': [25, 30], 'Target': [0, 1]})
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'ai_meta_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'update_metadata',
+                'payload': {
+                    'updates': [{'column': 'Age', 'field': 'Feature_Description', 'value': 'Customer age in years'}],
+                },
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+        assert len(resp.data['applied']) == 1
+        assert resp.data['applied'][0]['value'] == 'Customer age in years'

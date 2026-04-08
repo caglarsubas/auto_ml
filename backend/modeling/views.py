@@ -41,6 +41,8 @@ class ModelingStartView(APIView):
         processed_file = request.data.get('processed_file')
         algorithm = request.data.get('algorithm')  # optional, e.g., 'xgboost', 'lightgbm', 'catboost'
         excluded_variables = request.data.get('excluded_variables', [])  # Variables with Model_Usage='No'
+        encoding_plan_raw = request.data.get('encoding_plan', [])
+        encoding_use_native = request.data.get('encoding_use_native', True)
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -75,6 +77,19 @@ class ModelingStartView(APIView):
         model_info = {}
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+
+            # ── Parse encoding plan (if provided by frontend) ──
+            encoding_plan = []
+            if encoding_plan_raw and isinstance(encoding_plan_raw, list):
+                encoding_plan = encoding_plan_raw
+            elif isinstance(encoding_plan_raw, str):
+                try:
+                    encoding_plan = json.loads(encoding_plan_raw)
+                except Exception:
+                    encoding_plan = []
+            use_native = bool(encoding_use_native) if encoding_use_native is not None else True
+            has_encoding_plan = len(encoding_plan) > 0
+            print(f"[ModelingStart] encoding_plan entries={len(encoding_plan)}, use_native={use_native}")
 
             # ── Load encoding sidecar metadata (if available) ──
             # CSV serialization loses pd.Categorical dtype.  The encoding step
@@ -129,31 +144,68 @@ class ModelingStartView(APIView):
                 X_raw = df.drop(columns=cols_to_exclude)
                 # Detect categorical columns:
                 #   1) from encoding sidecar metadata (authoritative)
-                #   2) fallback: dtype 'category' or 'object'
+                #   2) fallback: dtype 'category', 'object', or string (Pandas 3.0+ StringDtype)
                 cat_cols = []
                 for c in X_raw.columns:
                     if c in meta_cat_cols:
                         cat_cols.append(c)
                     elif hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
                         cat_cols.append(c)
-                    elif X_raw[c].dtype == 'object':
+                    elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
                         cat_cols.append(c)
                 # Keep numeric + categorical columns; drop anything else
                 keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
                 X_raw = X_raw[keep_cols].copy()
-                # Convert detected categorical columns to pd.Categorical for XGBoost native support
-                enable_cat = len(cat_cols) > 0
+
+                # ── Apply encoding via plan (if provided) or fallback to native ──
                 encoding_report = []
-                for c in cat_cols:
-                    if c in X_raw.columns:
-                        X_raw[c] = X_raw[c].astype('category')
-                        cats = [str(v) for v in X_raw[c].cat.categories]
-                        encoding_report.append({
-                            'feature': c,
-                            'strategy': 'native_categorical',
-                            'categories': cats,
-                            'nunique': len(cats),
-                        })
+                encoded_file_rel = None
+                if has_encoding_plan:
+                    from encoding.encoding_utils import apply_encoding as _apply_enc
+                    # Temporarily attach Target for target_encoding, then drop it
+                    X_with_target = X_raw.copy()
+                    X_with_target[target_col] = y.values
+                    X_with_target, enc_report_list = _apply_enc(X_with_target, encoding_plan, target_col=target_col, use_native=use_native)
+                    if target_col in X_with_target.columns:
+                        X_with_target = X_with_target.drop(columns=[target_col])
+                    X_raw = X_with_target
+                    encoding_report = enc_report_list
+                    # After apply_encoding, some columns may now be numeric (encoded)
+                    # Refresh cat_cols: only those that are still pd.Categorical
+                    cat_cols = [c for c in X_raw.columns if hasattr(X_raw[c], 'cat') and X_raw[c].dtype.name == 'category']
+                    enable_cat = len(cat_cols) > 0
+                    print(f"[ModelingStart] Encoding via plan: {len(enc_report_list)} features encoded, native_cat remaining={len(cat_cols)}")
+                    # Save encoded CSV to disk so Feature Card can display the encoded data version
+                    # Use the full processed DataFrame and overlay encoded columns so ALL features are preserved
+                    try:
+                        from datetime import datetime as _dt
+                        encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
+                        os.makedirs(encoded_dir, exist_ok=True)
+                        encoded_filename = f'encoded_{file_id}_{_dt.now().strftime("%Y%m%d%H%M%S")}.csv'
+                        encoded_abs = os.path.join(encoded_dir, encoded_filename)
+                        encoded_save_df = df.copy()
+                        for col in X_raw.columns:
+                            if col in encoded_save_df.columns:
+                                encoded_save_df[col] = X_raw[col].values
+                        encoded_save_df.to_csv(encoded_abs, index=False)
+                        encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
+                        print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
+                    except Exception as enc_save_err:
+                        encoded_file_rel = None
+                        print(f"[ModelingStart] Could not save encoded CSV: {enc_save_err}")
+                else:
+                    # Default behavior: convert all categorical columns to pd.Categorical for native support
+                    enable_cat = len(cat_cols) > 0
+                    for c in cat_cols:
+                        if c in X_raw.columns:
+                            X_raw[c] = X_raw[c].astype('category')
+                            cats = [str(v) for v in X_raw[c].cat.categories]
+                            encoding_report.append({
+                                'feature': c,
+                                'strategy': 'native_categorical',
+                                'categories': cats,
+                                'nunique': len(cats),
+                            })
                 print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
                 print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
@@ -905,6 +957,7 @@ class ModelingStartView(APIView):
             'job_status': 'completed',
             'file_id': file_id,
             'processed_file': processed_file,
+            'encoded_file': encoded_file_rel,
             'metrics': metrics,
             'model': model_info,
             'algorithm': algorithm
@@ -985,7 +1038,7 @@ class FeatureExplainabilityView(APIView):
                 if not valid_sf:
                     return Response({'error': 'None of the selected_features exist in training data.'}, status=status.HTTP_400_BAD_REQUEST)
                 _has_cat_sf = any(
-                    hasattr(X_tr[c], 'cat') or X_tr[c].dtype.name == 'category' or X_tr[c].dtype == 'object'
+                    hasattr(X_tr[c], 'cat') or X_tr[c].dtype.name == 'category' or X_tr[c].dtype == 'object' or pd.api.types.is_string_dtype(X_tr[c])
                     for c in valid_sf
                 )
                 dtrain_sf = xgb.DMatrix(X_tr[valid_sf], label=y_tr, enable_categorical=_has_cat_sf)
@@ -1057,7 +1110,7 @@ class FeatureExplainabilityView(APIView):
             for c in X_raw.columns:
                 if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
                     _cat_cols_expl.append(c)
-                elif X_raw[c].dtype == 'object':
+                elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
                     _cat_cols_expl.append(c)
             _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
             X_raw = X_raw[_keep_expl].copy()
@@ -1122,7 +1175,7 @@ class FeatureExplainabilityView(APIView):
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
                 explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
-            shap_vals = explainer.shap_values(X_sampled)
+            shap_vals = explainer.shap_values(dmatrix)
             if isinstance(shap_vals, list):
                 try:
                     shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
@@ -1198,13 +1251,24 @@ class FeatureExplainabilityView(APIView):
                 import base64
                 
                 # Create wrapper function for model prediction that SHAP expects
+                # Capture the categorical column names so we can restore their dtype
+                # after SHAP passes numpy arrays (which lose dtype info).
+                _cat_col_names_pdp = [c for c in _cat_cols_expl if c in feature_names]
+
                 def model_predict(data_array):
                     """Wrapper for XGBoost predict that returns raw margin output"""
                     if isinstance(data_array, np.ndarray):
-                        # Convert to DataFrame with proper column names
                         data_df = pd.DataFrame(data_array, columns=feature_names)
                     else:
                         data_df = data_array
+                    # Restore category dtype for categorical columns (lost when
+                    # SHAP passes numpy arrays) and convert any remaining
+                    # str/object columns to numeric so XGBoost accepts them.
+                    for c in data_df.columns:
+                        if c in _cat_col_names_pdp:
+                            data_df[c] = data_df[c].astype('category')
+                        elif not pd.api.types.is_numeric_dtype(data_df[c]):
+                            data_df[c] = pd.to_numeric(data_df[c], errors='coerce')
                     dmat = xgb.DMatrix(data_df, feature_names=feature_names, enable_categorical=_enable_cat_expl)
                     return booster.predict(dmat, output_margin=True)
                 
@@ -1569,7 +1633,7 @@ class SFSStartView(APIView):
                     models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
                     os.makedirs(models_dir, exist_ok=True)
                     _has_cat = any(
-                        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object'
+                        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
                         for c in X_train.columns
                     )
                     _sfs_model_params = {

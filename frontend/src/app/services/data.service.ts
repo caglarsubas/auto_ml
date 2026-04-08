@@ -26,16 +26,23 @@ export class DataService {
     return this.http.get(`${this.apiUrl}declaration/${fileId}/data_dictionary/`);
   }
 
-  getFeatureCard(fileId: string, columnName: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}feature-card/${fileId}/get_feature_info/?column=${encodeURIComponent(columnName)}`);
+  getFeatureCard(fileId: string, columnName: string, fileOverride?: string): Observable<any> {
+    let url = `${this.apiUrl}feature-card/${fileId}/get_feature_info/?column=${encodeURIComponent(columnName)}`;
+    if (fileOverride) url += `&file_override=${encodeURIComponent(fileOverride)}`;
+    return this.http.get(url);
   }
 
-  getStackedFeatureData(fileId: string, columnName: string): Observable<any> {
-    const url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
+  getStackedFeatureData(fileId: string, columnName: string, fileOverride?: string): Observable<any> {
+    let url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
+    if (fileOverride) url += `&file_override=${encodeURIComponent(fileOverride)}`;
     console.log('Requesting URL:', url);
     return this.http.get(url).pipe(
       tap((data: any) => console.log('Raw response:', data)),
-      map((data: any) => this.preprocessStackedData(data)),
+      map((data: any) => {
+        // Backend now returns { stacked_data, target_averages }
+        const raw = data?.stacked_data ?? data;
+        return { stacked_data: this.preprocessStackedData(raw), target_averages: data?.target_averages ?? null };
+      }),
       catchError((error: any) => {
         console.error('Error in getStackedFeatureData:', error);
         if (error instanceof SyntaxError) {
@@ -84,6 +91,16 @@ export class DataService {
     );
   }
 
+  // Get quality summary row for a specific variable from saved datq_summary JSON
+  getDatqSummaryRow(fileId: number, column: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params: { column } }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting datq summary row:', error);
+        return throwError(() => new Error(error.message || 'Failed to get quality summary'));
+      })
+    );
+  }
+
   // Get detailed PSI report for a specific variable from processed file
   getDatqDetail(fileId: number, processedFile: string, column: string, split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile, column };
@@ -121,10 +138,12 @@ export class DataService {
 
   // Start modeling with the processed file path and optional algorithm
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[]): Observable<any> {
+  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[], encodingPlan?: any[], encodingUseNative?: boolean): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };
     if (algorithm) payload.algorithm = algorithm;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    if (encodingPlan && encodingPlan.length > 0) payload.encoding_plan = encodingPlan;
+    if (encodingUseNative !== undefined) payload.encoding_use_native = encodingUseNative;
     return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting modeling:', error);
