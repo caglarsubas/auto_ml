@@ -926,6 +926,44 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     // model-development owns pipeline_config and data quality; modeling owns cv, shap, sfs, etc.
     const merged = { ...existingCtx, ...myCtx, pipeline_config: { ...(existingCtx.pipeline_config || {}), ...myCtx.pipeline_config } };
     this.sharedService.setAiCumulativeContext(merged);
+    // Also push to Redis cache for on-demand tool calling
+    this.pushToAiCache();
+  }
+
+  /** Push pipeline artifacts to the backend Redis cache for LLM tool calls. */
+  private pushToAiCache(): void {
+    if (this.currentFileId == null) return;
+    const artifacts: { [key: string]: any } = {};
+    // Pipeline config
+    artifacts['pipeline_config'] = this.getPipelineConfig();
+    // Split validation
+    if (this.splitValidation) {
+      artifacts['split_validation'] = this.splitValidation;
+    }
+    // Data quality summary
+    if (this.datqSummary && this.datqSummary.length > 0) {
+      artifacts['dq_summary'] = this.datqSummary;
+    }
+    // Feature stats (before/after preprocessing)
+    if (this.featureStatsBefore || this.featureStatsAfter) {
+      artifacts['feature_stats'] = {
+        before: this.featureStatsBefore || {},
+        after: this.featureStatsAfter || {},
+      };
+    }
+    // Data dictionary
+    if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) {
+      artifacts['data_dictionary'] = this.dataDictionaryCache;
+    }
+    // Pipeline notes
+    const notes = this.sharedService.getPipelineNotes();
+    if (notes && Object.keys(notes).length > 0) {
+      artifacts['pipeline_notes'] = notes;
+    }
+    // Fire and forget — cache push is best-effort
+    this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
+      error: (err: any) => console.warn('[AI Cache] push failed:', err),
+    });
   }
 
   requestAiSupport(context: any, section: string, prompt: string): void {
@@ -1019,6 +1057,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
                 // Cache full dictionary for FeatureCard (Feature_Description, Level_of_Measurement, etc.)
                 this.dataDictionaryCache = rows;
                 this.sharedService.setDataDictionaryCache(rows);
+                // Push data dictionary to Redis cache for AI tool calls
+                if (rows.length > 0 && this.currentFileId != null) {
+                  this.dataService.pushAiCache(this.currentFileId, { data_dictionary: rows }).subscribe({
+                    error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+                  });
+                }
                 const dtCols = rows
                   .filter(item => {
                     const lom = String(item?.Level_of_Measurement || '').toLowerCase();

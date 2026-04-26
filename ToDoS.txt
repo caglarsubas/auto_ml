@@ -22,6 +22,6 @@ After the implementation is complete and functional, here are potential future i
 - History Tracking - Save multiple SFS runs for comparison
 
 
-please explain what is happening in SHAP Beeswarm plot with feature-wise examples.
 good/bag flag of credit applications within the 12 months period of its usage
-which features we can derive from existing ones in order to catalyze the prediction performance of boosting models
+according to the project goal and the feature descriptions we have, which new features can be derived from others in the aim of increasing the predictive performance of boosting algorithms. create these suggested features in our dataset.
+please explain what is happening in SHAP Beeswarm plot with feature-wise examples.

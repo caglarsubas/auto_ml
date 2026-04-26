@@ -366,6 +366,23 @@ describe('DataService', () => {
       expect(req.request.body.section).toBe('data_quality');
       req.flush({ message: 'Response' });
     });
+
+    it('sendAiChat should include file_id when provided', () => {
+      service.sendAiChat('Hello', {}, 'general', [], 42).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
+      expect(req.request.body.file_id).toBe(42);
+      req.flush({ message: 'Response' });
+    });
+
+    it('pushAiCache should POST artifacts with file_id', () => {
+      service.pushAiCache(1, { split_validation: { splits: [] } }).subscribe(res => {
+        expect(res.status).toBe('success');
+      });
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/cache/`);
+      expect(req.request.body.file_id).toBe(1);
+      expect(req.request.body.artifacts.split_validation).toBeDefined();
+      req.flush({ status: 'success', cached: ['split_validation'] });
+    });
   });
 
   // ── VIF detail ──────────────────────────────────────────────────────

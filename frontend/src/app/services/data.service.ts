@@ -402,15 +402,26 @@ export class DataService {
 
   // ===== AI Assistant =====
 
-  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>): Observable<any> {
-    return this.http.post(`${this.apiUrl}ai-assistant/chat/`, {
-      message,
-      context,
-      section,
-      history,
-    }).pipe(
+  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>, fileId?: number): Observable<any> {
+    const body: any = { message, context, section, history };
+    if (fileId != null) {
+      body.file_id = fileId;
+    }
+    return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
       catchError((err: any) => {
         console.error('Error in AI assistant chat:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  pushAiCache(fileId: number, artifacts: { [key: string]: any }): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/cache/`, {
+      file_id: fileId,
+      artifacts,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error pushing AI cache:', err);
         return throwError(() => err);
       })
     );

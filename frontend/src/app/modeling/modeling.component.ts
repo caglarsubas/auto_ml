@@ -129,6 +129,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   vifDetailError: string | null = null;
   vifDetailSortColumn: string = 'correlation';
   vifDetailSortDirection: 'asc' | 'desc' = 'desc';
+  // Cache of VIF decomposition data per feature (for AI context)
+  vifDecompositionCache: { [feature: string]: { vif: number; top_correlations: { feature: string; correlation: number; signed_correlation: number; vif_drop: number }[] } } = {};
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -609,6 +611,18 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.vifDetailVif = resp.vif;
         this.vifDetailContributions = resp.contributions || [];
         this.vifDetailLoading = false;
+        // Cache top 5 correlations for AI context
+        const sorted = [...this.vifDetailContributions].sort((a: any, b: any) => (b.correlation || 0) - (a.correlation || 0));
+        this.vifDecompositionCache[featureName] = {
+          vif: resp.vif,
+          top_correlations: sorted.slice(0, 5).map((c: any) => ({
+            feature: c.feature,
+            correlation: c.correlation,
+            signed_correlation: c.signed_correlation,
+            vif_drop: c.vif_drop,
+          })),
+        };
+        this.pushModelingAiContext();
       },
       error: (err: any) => {
         this.vifDetailError = err?.error?.error || 'Failed to load VIF detail';
@@ -878,6 +892,10 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         vif: f.vif, usage: f.usage,
       }));
     }
+    // VIF decomposition cache (pairwise correlations for features the user has inspected)
+    if (Object.keys(this.vifDecompositionCache).length > 0) {
+      modelCtx.vif_decomposition = this.vifDecompositionCache;
+    }
     // SFS results + configuration
     if (this.sfsForwardResults?.length || this.sfsBackwardResults?.length || this.sfsForwardFromBackwardResults?.length) {
       modelCtx.sfs = {
@@ -915,6 +933,44 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       };
     }
     this.sharedService.setAiCumulativeContext(merged);
+    // Also push modeling artifacts to Redis cache for on-demand tool calling
+    this.pushModelingToAiCache(modelCtx);
+  }
+
+  /** Push modeling-level artifacts to the backend Redis cache. */
+  private pushModelingToAiCache(modelCtx: any): void {
+    const fileId = this.sharedService.getCurrentFileId();
+    if (fileId == null) return;
+    const artifacts: { [key: string]: any } = {};
+    if (modelCtx.cv) {
+      artifacts['cv_results'] = modelCtx.cv;
+    }
+    if (modelCtx.model_info) {
+      artifacts['model_info'] = modelCtx.model_info;
+    }
+    if (modelCtx.selected_features) {
+      artifacts['selected_features'] = modelCtx.selected_features;
+    }
+    if (modelCtx.shap_features) {
+      artifacts['shap_details'] = modelCtx.shap_features;
+    }
+    if (modelCtx.encoding_plan) {
+      artifacts['encoding_plan'] = modelCtx.encoding_plan;
+    }
+    if (modelCtx.vif_decomposition) {
+      artifacts['vif_decomposition'] = modelCtx.vif_decomposition;
+    }
+    if (modelCtx.sfs || modelCtx.sfs_config) {
+      artifacts['sfs_results'] = {
+        ...(modelCtx.sfs || {}),
+        config: modelCtx.sfs_config || {},
+      };
+    }
+    if (Object.keys(artifacts).length > 0) {
+      this.dataService.pushAiCache(fileId, artifacts).subscribe({
+        error: (err: any) => console.warn('[Modeling AI Cache] push failed:', err),
+      });
+    }
   }
 
   private pushModelingCheckpoint(substep: string): void {

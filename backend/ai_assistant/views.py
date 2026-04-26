@@ -12,6 +12,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_span_attr, set_session_id
+from .tool_definitions import PIPELINE_TOOLS
+from .tool_executor import execute_tool_call
+from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
+
 # ---------------------------------------------------------------------------
 # System prompt that shapes the assistant persona
 # ---------------------------------------------------------------------------
@@ -26,6 +31,10 @@ The user is a data scientist or risk analyst building a supervised binary classi
 • Give CONCRETE, PRACTICAL, SIMPLIFIED answers — not textbook theory.
 • Always ground your response in the ACTUAL DATA provided in the context.
   Quote specific feature names, values, and numbers from the context.
+• NEVER use placeholders like "X%", "Y%", "N rows", or "some value" when the actual numbers
+  are available in the context. ALWAYS look up and cite the real values. For example, if the
+  Train/Test Split Validation shows target_rate=0.0474 for Train and target_rate=0.0486 for
+  Test, write "4.74%" and "4.86%" — never "X%" and "Y%".
 • If a TARGET DEFINITION (business goal) is provided in the context, ALWAYS tie your analysis
   back to it. Frame recommendations in terms of the business objective the user described.
   For example, if the target is "predict loan default within 12 months", discuss feature
@@ -153,6 +162,10 @@ GENERAL RULES:
 • Put ACTION BLOCKs at the END of your message, after your explanation.
 • You can include MULTIPLE action blocks in one response (e.g., modify data + update notes).
 • Always explain WHAT you are about to do and WHY before the action block.
+• IMPORTANT: When the user asks you to CREATE or EXECUTE something (e.g., derive features,
+  drop columns, create flags), keep your explanation brief — a short summary table or bullet
+  list — then IMMEDIATELY produce the ACTION BLOCK. Do NOT write a long essay of suggestions
+  and then run out of space for the action. The action block IS the deliverable.
 
 ─── ACTION TYPE 1: execute_code ───
 Run pandas/numpy code directly on the dataset. This is the most flexible action.
@@ -209,6 +222,210 @@ Actions: add, edit, delete
 """
 
 
+# ---------------------------------------------------------------------------
+# Prometa-traced helper functions
+# ---------------------------------------------------------------------------
+
+@agent(name="gpt-advisor")
+def _call_openai(api_key: str, messages: list, tools: list = None) -> dict:
+    """Call OpenAI chat completions API via the official openai SDK.
+
+    Traced as a Prometa agent span.  GenAI attributes (model, tokens,
+    prompt, completion, cost) are captured automatically by the
+    prometa-sdk v0.3.2+ OpenAI auto-instrumentation.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key, timeout=90.0)
+
+    kwargs = {
+        'model': 'gpt-4.1',
+        'messages': messages,
+        'temperature': 0.4,
+        'max_tokens': 8192,
+    }
+    if tools:
+        kwargs['tools'] = tools
+        kwargs['tool_choice'] = 'auto'
+
+    response = client.chat.completions.create(**kwargs)
+    return response.model_dump()
+
+
+def _build_slim_context(file_id: int, section: str) -> str:
+    """Build a compact context manifest from cached artifacts (~500 tokens).
+
+    This replaces the old approach of dumping the entire pipeline context.
+    The LLM can request detailed data via tool calls when needed.
+    """
+    parts = []
+
+    # Pipeline config (always include)
+    config = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
+    if config:
+        parts.append(f"Pipeline: {config.get('pipeline_type', '?')}")
+        td = config.get('target_definition', '')
+        if td:
+            parts.append(f"Target: {td}")
+        parts.append(f"Rows: {config.get('row_count_before', '?')} → {config.get('row_count_after', '?')} "
+                      f"(removed: {config.get('rows_removed', 0)})")
+        parts.append(f"Split: {config.get('split_strategy', '?')}")
+
+    # Data dictionary (feature names so LLM knows what's available)
+    dd = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
+    if dd:
+        dd_list = dd if isinstance(dd, list) else dd.get('features', [])
+        dd_names = [f.get('Feature_Name', f.get('feature', '?')) for f in dd_list]
+        parts.append(f"Data dictionary ({len(dd_list)} features): {', '.join(dd_names[:50])}")
+        parts.append("Use get_data_dictionary tool for feature descriptions and details.")
+
+    # Feature list (names + VIF flags only)
+    sel_feats = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
+    if sel_feats:
+        feat_list = sel_feats if isinstance(sel_feats, list) else sel_feats.get('features', [])
+        names = [f.get('feature', '?') for f in feat_list[:40]]
+        high_vif = [f.get('feature', '?') for f in feat_list if (f.get('vif') or 0) > 5]
+        parts.append(f"Selected features ({len(feat_list)}): {', '.join(names)}")
+        if high_vif:
+            parts.append(f"High-VIF features (>5): {', '.join(high_vif)}")
+
+    # Available data (so the LLM knows which tools will return data)
+    available = cache_list_artifacts(file_id)
+    if available:
+        parts.append(f"Cached artifacts available: {', '.join(available)}")
+
+    parts.append(f"Current section: {section or 'general'}")
+    parts.append("Use the provided tools to fetch detailed pipeline data when needed.")
+
+    return '\n'.join(parts)
+
+
+# Maximum number of tool-call rounds before forcing a final response
+_MAX_TOOL_ROUNDS = 5
+
+
+@workflow(name="declarai-chat")
+def _chat_workflow(user_message: str, context: dict, section: str, history: list,
+                   file_id: int = None) -> dict:
+    """Core chat workflow with multi-turn tool calling.
+
+    If file_id is provided and Redis has cached artifacts, uses the slim context
+    + tool calling approach. Otherwise falls back to the legacy _format_context.
+    """
+    api_key = os.environ.get('OPENAI_API_KEY', '')
+    if not api_key:
+        raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
+
+    # ── Workflow-level tracing attributes ──
+    set_span_attr('declarai.section', section or 'general')
+    if file_id is not None:
+        set_span_attr('declarai.file_id', file_id)
+        set_session_id(f'declarai-file-{file_id}')
+
+    # Build messages array for OpenAI
+    messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+
+    # Decide: tool-calling mode (slim context) vs legacy mode (full context dump)
+    use_tools = False
+    if file_id is not None:
+        available = cache_list_artifacts(file_id)
+        if available:
+            use_tools = True
+
+    if use_tools:
+        slim = _build_slim_context(file_id, section)
+        messages.append({
+            'role': 'system',
+            'content': f'Pipeline context summary (use tools for details):\n\n{slim}',
+        })
+    elif context:
+        context_str = _format_context(context, section)
+        messages.append({
+            'role': 'system',
+            'content': f'The user is currently viewing the following pipeline output '
+                       f'(section: {section}):\n\n{context_str}',
+        })
+
+    # Add conversation history (last 20 messages to stay within token limits)
+    for msg in history[-20:]:
+        role = msg.get('role', 'user')
+        content = msg.get('content', '')
+        if role in ('user', 'assistant') and content:
+            messages.append({'role': role, 'content': content})
+
+    # Add current user message
+    messages.append({'role': 'user', 'content': user_message})
+
+    # Tool-calling loop
+    tools = PIPELINE_TOOLS if use_tools else None
+    total_usage = {}
+
+    for _round in range(_MAX_TOOL_ROUNDS + 1):
+        result = _call_openai(api_key, messages, tools=tools)
+        _merge_usage(total_usage, result.get('usage', {}))
+
+        choice = result['choices'][0]
+        finish_reason = choice.get('finish_reason', '')
+        msg_obj = choice.get('message', {})
+
+        # If no tool calls, we're done
+        if finish_reason != 'tool_calls' and not msg_obj.get('tool_calls'):
+            break
+
+        # Resolve tool calls
+        tool_calls = msg_obj.get('tool_calls', [])
+        if not tool_calls:
+            break
+
+        # Append the assistant message with tool_calls to the conversation
+        messages.append(msg_obj)
+
+        # Execute each tool call and append results
+        for tc in tool_calls:
+            fn = tc.get('function', {})
+            tool_name = fn.get('name', '')
+            try:
+                tool_args = json.loads(fn.get('arguments', '{}'))
+            except json.JSONDecodeError:
+                tool_args = {}
+
+            tool_result = execute_tool_call(file_id, tool_name, tool_args)
+            messages.append({
+                'role': 'tool',
+                'tool_call_id': tc.get('id', ''),
+                'content': tool_result,
+            })
+
+        # On the last round, disable tools to force a text response
+        if _round >= _MAX_TOOL_ROUNDS - 1:
+            tools = None
+
+    # Extract final response
+    assistant_message = msg_obj.get('content', '') or ''
+
+    # Cost, tokens, and conversation turns are handled by auto-instrumentation (v0.3.3+).
+    # The Conversation panel reads gen_ai.prompt.user (pre-extracted by the SDK) and
+    # gen_ai.completion from each LLM span.  No manual stamping needed.
+
+    # Parse action blocks from the AI response
+    actions, clean_message = _extract_actions(assistant_message)
+
+    response_data = {
+        'message': clean_message,
+        'usage': total_usage,
+    }
+    if actions:
+        response_data['actions'] = actions
+
+    return response_data
+
+
+def _merge_usage(total: dict, new: dict):
+    """Accumulate token usage across multiple LLM calls."""
+    for key in ('prompt_tokens', 'completion_tokens', 'total_tokens'):
+        if key in new:
+            total[key] = total.get(key, 0) + new[key]
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class AIAssistantView(APIView):
     """
@@ -228,6 +445,7 @@ class AIAssistantView(APIView):
             context = data.get('context', {})
             section = data.get('section', '')
             history = data.get('history', [])
+            file_id = data.get('file_id')  # enables Redis-backed tool calling
 
             if not user_message:
                 return Response(
@@ -235,80 +453,68 @@ class AIAssistantView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            api_key = os.environ.get('OPENAI_API_KEY', '')
-            if not api_key:
-                return Response(
-                    {'error': 'OpenAI API key not configured. Set OPENAI_API_KEY environment variable.'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-
-            # Build messages array for OpenAI
-            messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
-
-            # Add context as a system-level injection so the model knows what the user sees
-            if context:
-                context_str = _format_context(context, section)
-                messages.append({
-                    'role': 'system',
-                    'content': f'The user is currently viewing the following pipeline output '
-                               f'(section: {section}):\n\n{context_str}',
-                })
-
-            # Add conversation history (last 20 messages to stay within token limits)
-            for msg in history[-20:]:
-                role = msg.get('role', 'user')
-                content = msg.get('content', '')
-                if role in ('user', 'assistant') and content:
-                    messages.append({'role': role, 'content': content})
-
-            # Add current user message
-            messages.append({'role': 'user', 'content': user_message})
-
-            # Call OpenAI API
-            import httpx
-            resp = httpx.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'Content-Type': 'application/json',
-                },
-                json={
-                    'model': 'gpt-4.1',
-                    'messages': messages,
-                    'temperature': 0.4,
-                    'max_tokens': 4096,
-                },
-                timeout=60.0,
-            )
-
-            if resp.status_code != 200:
-                error_body = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else resp.text
-                return Response(
-                    {'error': f'OpenAI API error: {error_body}'},
-                    status=status.HTTP_502_BAD_GATEWAY,
-                )
-
-            result = resp.json()
-            assistant_message = result['choices'][0]['message']['content']
-
-            # Parse action blocks from the AI response
-            actions, clean_message = _extract_actions(assistant_message)
-
-            response_data = {
-                'message': clean_message,
-                'usage': result.get('usage', {}),
-            }
-            if actions:
-                response_data['actions'] = actions
-
+            response_data = _chat_workflow(user_message, context, section, history,
+                                           file_id=int(file_id) if file_id else None)
             return Response(response_data, status=status.HTTP_200_OK)
 
+        except EnvironmentError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         except Exception as e:
             traceback.print_exc()
             return Response(
                 {'error': f'AI Assistant error: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        finally:
+            prometa_flush()
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AICachePushView(APIView):
+    """
+    POST /api/ai-assistant/cache/
+    Body: {
+        "file_id": 123,
+        "artifacts": {
+            "split_validation": { ... },
+            "dq_summary": [ ... ],
+            "pipeline_config": { ... },
+            ...
+        }
+    }
+
+    Pushes pipeline artifacts into the Redis cache so the AI assistant
+    can retrieve them on demand via tool calls.
+    """
+
+    def post(self, request, *args, **kwargs):
+        from .cache import cache_put_bulk, ALL_ARTIFACTS
+
+        file_id = request.data.get('file_id')
+        artifacts = request.data.get('artifacts', {})
+
+        if not file_id:
+            return Response({'status': 'error', 'error': 'file_id is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not artifacts:
+            return Response({'status': 'error', 'error': 'artifacts dict is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Filter to known artifact types
+        valid = {k: v for k, v in artifacts.items() if k in ALL_ARTIFACTS and v is not None}
+        if not valid:
+            return Response({'status': 'error', 'error': f'No valid artifact types. Known: {ALL_ARTIFACTS}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        success = cache_put_bulk(int(file_id), valid)
+        return Response({
+            'status': 'success' if success else 'warning',
+            'cached': list(valid.keys()),
+            'message': 'Artifacts cached' if success else 'Redis unavailable — artifacts not cached',
+        })
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AIActionExecuteView(APIView):
@@ -324,21 +530,24 @@ class AIActionExecuteView(APIView):
     def post(self, request, *args, **kwargs):
         from .action_executor import dispatch_action
 
-        file_id = request.data.get('file_id')
-        action_type = request.data.get('action_type', '')
-        payload = request.data.get('payload', {})
+        try:
+            file_id = request.data.get('file_id')
+            action_type = request.data.get('action_type', '')
+            payload = request.data.get('payload', {})
 
-        if not file_id:
-            return Response({'status': 'error', 'error': 'file_id is required'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        if not action_type:
-            return Response({'status': 'error', 'error': 'action_type is required'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            if not file_id:
+                return Response({'status': 'error', 'error': 'file_id is required'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not action_type:
+                return Response({'status': 'error', 'error': 'action_type is required'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-        result = dispatch_action(int(file_id), action_type, payload)
+            result = dispatch_action(int(file_id), action_type, payload)
 
-        http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
-        return Response(result, status=http_status)
+            http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
+            return Response(result, status=http_status)
+        finally:
+            prometa_flush()
 
 
 # ---------------------------------------------------------------------------
@@ -350,13 +559,21 @@ def _extract_actions(message: str):
 
     Returns (actions_list, cleaned_message) where actions_list is a list of
     parsed action dicts and cleaned_message has the raw blocks removed.
+
+    The regex is intentionally lenient to tolerate common LLM formatting
+    variations: 2-3 angle brackets, optional colons, trailing whitespace,
+    code-fence wrappers around the JSON payload, etc.
     """
     import re
-    pattern = r'<<<ACTION:(\w+)>>>\s*(.*?)\s*<<<END_ACTION>>>'
+    # Match 2-3 angle brackets on each delimiter, optional whitespace/newlines
+    pattern = r'<{2,3}\s*ACTION\s*:\s*(\w+)\s*>{2,3}\s*(.*?)\s*<{2,3}\s*/?\s*END_ACTION\s*>{2,3}'
     actions = []
     for match in re.finditer(pattern, message, re.DOTALL):
         action_type = match.group(1)
         payload_str = match.group(2).strip()
+        # Strip optional code-fence wrapper (```json ... ```)
+        payload_str = re.sub(r'^```(?:json)?\s*', '', payload_str)
+        payload_str = re.sub(r'\s*```$', '', payload_str)
         try:
             payload = json.loads(payload_str)
             actions.append({'type': action_type, 'payload': payload})
@@ -595,6 +812,16 @@ def _format_context(context: dict, section: str) -> str:
                              f"Gain_percentile={f.get('gain_percentile', '?')}, "
                              f"VIF={f.get('vif', '?')}, "
                              f"usage={f.get('usage', 'keep')}")
+        # VIF decomposition (pairwise correlations the user has inspected)
+        vif_decomp = context.get('vif_decomposition', {})
+        if vif_decomp:
+            parts.append(f'\n═══ VIF Decomposition (pairwise correlations) ═══')
+            for feat_name, decomp in vif_decomp.items():
+                parts.append(f'  {feat_name} (overall VIF={_fmt_val(decomp.get("vif"))}):')
+                for c in decomp.get('top_correlations', []):
+                    parts.append(f"    ↔ {c.get('feature','?')}: |corr|={_fmt_val(c.get('correlation'))}, "
+                                 f"signed_r={_fmt_val(c.get('signed_correlation'))}, "
+                                 f"vif_drop={_fmt_val(c.get('vif_drop'))}")
 
     elif section == 'sfs':
         # ── SFS Configuration (stopping criteria, etc.) ──
@@ -692,6 +919,16 @@ def _format_context(context: dict, section: str) -> str:
             parts.append(f"\nSelected Features ({len(sel_feats)} total):")
             for f in sel_feats[:15]:
                 parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
+        # ── VIF decomposition (pairwise correlations the user has inspected) ──
+        vif_decomp = context.get('vif_decomposition', {})
+        if vif_decomp:
+            parts.append(f'\n═══ VIF Decomposition (pairwise correlations) ═══')
+            for feat_name, decomp in vif_decomp.items():
+                parts.append(f'  {feat_name} (overall VIF={_fmt_val(decomp.get("vif"))}):')
+                for c in decomp.get('top_correlations', []):
+                    parts.append(f"    ↔ {c.get('feature','?')}: |corr|={_fmt_val(c.get('correlation'))}, "
+                                 f"signed_r={_fmt_val(c.get('signed_correlation'))}, "
+                                 f"vif_drop={_fmt_val(c.get('vif_drop'))}")
         # ── SFS config if present ──
         sfs_cfg = context.get('sfs_config', {})
         if sfs_cfg:

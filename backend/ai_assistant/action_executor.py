@@ -18,6 +18,8 @@ import pandas as pd
 from django.conf import settings
 from declaration.models import Declaration, DataDictionary
 
+from .prometa_config import workflow, tool, set_span_attr, set_session_id
+
 
 # ---------------------------------------------------------------------------
 # Safe code execution sandbox
@@ -98,6 +100,7 @@ def _build_preview(df: pd.DataFrame) -> dict:
 # ACTION: execute_code — run arbitrary pandas code on the dataset
 # ---------------------------------------------------------------------------
 
+@tool(name="execute-code")
 def execute_code(file_id: int, payload: dict) -> dict:
     """
     Run user/AI-authored pandas code on the dataset in a safe sandbox.
@@ -175,6 +178,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
 # ACTION: update_metadata — modify data dictionary entries
 # ---------------------------------------------------------------------------
 
+@tool(name="update-metadata")
 def update_metadata(file_id: int, payload: dict) -> dict:
     """
     Update data dictionary entries (Feature_Description, Level_of_Measurement, etc.).
@@ -231,6 +235,7 @@ def update_metadata(file_id: int, payload: dict) -> dict:
 # ACTION: update_config — change pipeline decisions
 # ---------------------------------------------------------------------------
 
+@tool(name="update-config")
 def update_config(file_id: int, payload: dict) -> dict:
     """
     Change pipeline decisions. The backend validates and returns the changes;
@@ -291,6 +296,7 @@ def update_config(file_id: int, payload: dict) -> dict:
 # ACTION: update_notes — add/edit/delete pipeline commentary notes
 # ---------------------------------------------------------------------------
 
+@tool(name="update-notes")
 def update_notes(file_id: int, payload: dict) -> dict:
     """
     Manage pipeline commentary notes.
@@ -338,15 +344,62 @@ HANDLERS = {
 }
 
 
+def _build_completion_message(result: dict, action_type: str) -> str:
+    """Build a human-readable completion message from an action handler result."""
+    if not isinstance(result, dict):
+        return str(result)
+
+    status = result.get('status', '')
+    if status == 'error':
+        return f"Error: {result.get('error', 'unknown error')}"
+
+    desc = result.get('description', '')
+    parts = [f"{action_type} completed successfully."]
+    if desc:
+        parts.append(desc)
+
+    changes = result.get('changes', {})
+    if changes:
+        added = changes.get('columns_added', [])
+        removed = changes.get('columns_removed', [])
+        if added:
+            parts.append(f"Columns added: {', '.join(added)}")
+        if removed:
+            parts.append(f"Columns removed: {', '.join(removed)}")
+        rows_after = changes.get('rows_after')
+        cols = result.get('preview', {}).get('total_columns')
+        if rows_after is not None and cols is not None:
+            parts.append(f"Dataset now has {cols} columns and {rows_after} rows.")
+
+    updated = result.get('updated_count')
+    if updated is not None:
+        parts.append(f"{updated} entries updated.")
+
+    return ' '.join(parts) if parts else str(result)
+
+
+@workflow(name="declarai-action")
 def dispatch_action(file_id: int, action_type: str, payload: dict) -> dict:
     """Route an action to the correct handler."""
+    # Set prompt attribute so Prometa Conversation panel shows the action request
+    description = payload.get('description', '') if isinstance(payload, dict) else ''
+    set_span_attr('gen_ai.prompt', f"[Action: {action_type}] {description}")
+    set_span_attr('declarai.file_id', file_id)
+    set_session_id(f'declarai-file-{file_id}')
+
     handler = HANDLERS.get(action_type)
     if not handler:
         return {'status': 'error', 'error': f'Unknown action type: {action_type}'}
     try:
-        return handler(file_id, payload)
+        result = handler(file_id, payload)
+        # Set completion attribute so the action result appears in the Conversation panel
+        msg = _build_completion_message(result, action_type)
+        set_span_attr('gen_ai.completion', msg[:2000])
+        return result
     except Declaration.DoesNotExist:
+        set_span_attr('gen_ai.completion', f'Dataset with id={file_id} not found')
         return {'status': 'error', 'error': f'Dataset with id={file_id} not found'}
     except Exception as e:
         traceback.print_exc()
+        set_span_attr('gen_ai.completion', f'Error: {e}')
         return {'status': 'error', 'error': str(e)}

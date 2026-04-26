@@ -101,11 +101,13 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       ctx.pipeline_config.pipeline_type = this.sharedService.getSelectedPipeline() || '';
     }
 
+    const fileId = this.sharedService.getCurrentFileId();
     this.dataService.sendAiChat(
       text,
       ctx,
       this.currentSection || 'general',
-      history
+      history,
+      fileId ?? undefined
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
@@ -379,7 +381,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       correctionPrompt,
       ctx,
       this.currentSection || 'general',
-      history
+      history,
+      this.sharedService.getCurrentFileId() ?? undefined
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({

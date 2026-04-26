@@ -958,6 +958,44 @@ class TestExtractActions:
         assert actions == []
         assert clean == ''
 
+    def test_two_angle_brackets(self):
+        """LLM sometimes generates << >> instead of <<< >>>."""
+        msg = 'Advice. <<ACTION:update_notes>>{"content":"note"}<<END_ACTION>> Done.'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['payload']['content'] == 'note'
+        assert '<<ACTION' not in clean
+
+    def test_mixed_angle_brackets(self):
+        """LLM uses 3 opening but 2 closing brackets."""
+        msg = '<<<ACTION:execute_code>>>{"code":"x=1","description":"test"}<<END_ACTION>>'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+
+    def test_code_fence_wrapped_json(self):
+        """LLM wraps the JSON payload in a code fence."""
+        msg = '<<<ACTION:execute_code>>>```json\n{"code":"x=1","description":"test"}\n```<<<END_ACTION>>>'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['payload']['code'] == 'x=1'
+
+    def test_multiline_execute_code(self):
+        """Real-world: multiline code in execute_code action block."""
+        code = "import pandas as pd\\ndf['New'] = df['A'] / df['B'].replace(0, 1)"
+        msg = f'Creating features.\n<<<ACTION:execute_code>>>\n{{"code": "{code}", "description": "derive"}}\n<<<END_ACTION>>>\nDone.'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert 'pandas' in actions[0]['payload']['code']
+        assert '<<<ACTION' not in clean
+
+    def test_extra_whitespace_in_delimiters(self):
+        """LLM adds spaces inside the angle brackets."""
+        msg = '<<< ACTION : update_notes >>>{"content":"a"}<<< END_ACTION >>>'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+
 
 # ---------------------------------------------------------------------------
 # AI _format_context tests
@@ -1059,3 +1097,220 @@ class TestDispatchAction:
         result = self._dispatch(1, 'execute_code', {'code': '', 'description': ''})
         assert result['status'] == 'error'
         assert 'No code' in result['error']
+
+
+# ---------------------------------------------------------------------------
+# Prometa SDK integration tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestPrometaConfig:
+    """Test prometa_config lazy decorators and flush when SDK is not configured."""
+
+    def test_workflow_decorator_noop_without_endpoint(self, monkeypatch):
+        """Without PROMETA_ENDPOINT, @workflow should be a transparent no-op."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        # Force re-initialization
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+
+        @pc.workflow(name='test-workflow')
+        def sample_workflow(x):
+            return x * 2
+
+        assert sample_workflow(5) == 10
+
+    def test_agent_decorator_noop_without_endpoint(self, monkeypatch):
+        """Without PROMETA_ENDPOINT, @agent should be a transparent no-op."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+
+        @pc.agent(name='test-agent')
+        def sample_agent(msg):
+            return f'reply: {msg}'
+
+        assert sample_agent('hello') == 'reply: hello'
+
+    def test_tool_decorator_noop_without_endpoint(self, monkeypatch):
+        """Without PROMETA_ENDPOINT, @tool should be a transparent no-op."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+
+        @pc.tool(name='test-tool')
+        def sample_tool(q):
+            return [q]
+
+        assert sample_tool('search') == ['search']
+
+    def test_flush_safe_without_endpoint(self, monkeypatch):
+        """flush() should not raise when Prometa is not configured."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+        pc.flush()  # should not raise
+
+    def test_get_prometa_returns_none_without_endpoint(self, monkeypatch):
+        """get_prometa() returns None when no PROMETA_ENDPOINT* vars are set."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        monkeypatch.delenv('PROMETA_ENDPOINT_STAGING', raising=False)
+        monkeypatch.delenv('PROMETA_ENDPOINT_PRODUCTION', raising=False)
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+        assert pc.get_prometa() is None
+
+    def test_decorated_functions_preserve_name(self, monkeypatch):
+        """Lazy decorators should preserve function __name__ via functools.wraps."""
+        monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+
+        @pc.workflow(name='named-wf')
+        def my_workflow():
+            pass
+
+        assert my_workflow.__name__ == 'my_workflow'
+
+    def test_set_span_attr_noop_without_active_span(self):
+        """set_span_attr is a no-op when no Prometa span is active."""
+        from ai_assistant.prometa_config import set_span_attr
+        # Should not raise even with no active span
+        set_span_attr('gen_ai.prompt', 'test prompt')
+        set_span_attr('gen_ai.usage.total_tokens', 42)
+
+
+# ---------------------------------------------------------------------------
+# AI Assistant cache layer tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestAiCache:
+    """Test the Redis-backed cache helpers from ai_assistant/cache.py."""
+
+    def test_cache_put_and_get(self):
+        """cache_put + cache_get round-trip when Redis is available."""
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        assert cache_put(99999, 'test_artifact', {'foo': 'bar'})
+        result = cache_get(99999, 'test_artifact')
+        assert result == {'foo': 'bar'}
+        # Cleanup
+        r.delete('ai:pipeline:99999:test_artifact')
+
+    def test_cache_get_missing_returns_none(self):
+        """cache_get returns None for missing keys."""
+        from ai_assistant.cache import cache_get
+        assert cache_get(99999, 'nonexistent_artifact') is None
+
+    def test_cache_put_bulk(self):
+        """cache_put_bulk stores multiple artifacts at once."""
+        from ai_assistant.cache import cache_put_bulk, cache_get, _get_redis
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        ok = cache_put_bulk(99999, {
+            'art_a': [1, 2, 3],
+            'art_b': {'key': 'value'},
+        })
+        assert ok is True
+        assert cache_get(99999, 'art_a') == [1, 2, 3]
+        assert cache_get(99999, 'art_b') == {'key': 'value'}
+        r.delete('ai:pipeline:99999:art_a', 'ai:pipeline:99999:art_b')
+
+    def test_cache_list_artifacts(self):
+        """cache_list_artifacts lists cached artifact types."""
+        from ai_assistant.cache import cache_put, cache_list_artifacts, _get_redis
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        cache_put(99998, 'alpha', 'val')
+        cache_put(99998, 'beta', 'val')
+        arts = cache_list_artifacts(99998)
+        assert 'alpha' in arts
+        assert 'beta' in arts
+        r.delete('ai:pipeline:99998:alpha', 'ai:pipeline:99998:beta')
+
+
+# ---------------------------------------------------------------------------
+# AI Tool executor tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestToolExecutor:
+    """Test tool_executor.execute_tool_call resolves from cache."""
+
+    def test_unknown_tool(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        result = execute_tool_call(1, 'nonexistent_tool', {})
+        assert 'Unknown tool' in result
+
+    def test_get_split_validation_with_data(self):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import execute_tool_call
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        cache_put(99997, 'split_validation', {
+            'target_column': 'Target',
+            'splits': [
+                {'name': 'Full', 'count': 1000, 'target_mean': 0.05, 'label_counts': {'0': 950, '1': 50}},
+                {'name': 'Train', 'count': 750, 'target_mean': 0.048, 'label_counts': {'0': 714, '1': 36}},
+                {'name': 'Test', 'count': 250, 'target_mean': 0.056, 'label_counts': {'0': 236, '1': 14}},
+            ],
+        })
+        result = execute_tool_call(99997, 'get_split_validation', {})
+        assert 'Target' in result
+        assert '0.0480' in result
+        assert 'Train' in result
+        r.delete('ai:pipeline:99997:split_validation')
+
+    def test_get_split_validation_missing(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        result = execute_tool_call(99996, 'get_split_validation', {})
+        assert 'not available' in result.lower() or 'No' in result
+
+    def test_get_vif_decomposition_with_data(self):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import execute_tool_call
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        cache_put(99995, 'vif_decomposition', {
+            'Var_2': {
+                'vif': 12.58,
+                'top_correlations': [
+                    {'feature': 'Var_3', 'correlation': 0.924, 'signed_correlation': 0.924, 'vif_drop': 9.11},
+                ],
+            },
+        })
+        result = execute_tool_call(99995, 'get_vif_decomposition', {'feature': 'Var_2'})
+        assert 'Var_3' in result
+        assert '0.9240' in result
+        assert '12.58' in result
+        r.delete('ai:pipeline:99995:vif_decomposition')
+
+    def test_get_dq_summary_with_filter(self):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import execute_tool_call
+        r = _get_redis()
+        if r is None:
+            pytest.skip("Redis not available")
+        cache_put(99994, 'dq_summary', [
+            {'Variable': 'Age', 'Variable_Type': 'numeric', 'PSI': 0.03, 'Datq_Decision': 'Accept'},
+            {'Variable': 'Income', 'Variable_Type': 'numeric', 'PSI': 0.15, 'Datq_Decision': 'Watch'},
+        ])
+        # Filtered
+        result = execute_tool_call(99994, 'get_dq_summary', {'feature': 'Income'})
+        assert 'Income' in result
+        assert 'Age' not in result
+        # Unfiltered
+        result_all = execute_tool_call(99994, 'get_dq_summary', {})
+        assert 'Age' in result_all
+        assert 'Income' in result_all
+        r.delete('ai:pipeline:99994:dq_summary')
