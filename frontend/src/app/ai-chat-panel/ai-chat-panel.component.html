@@ -6,6 +6,25 @@
       <span>AI Assistant</span>
     </div>
     <div class="chat-header-actions">
+      <!-- Model selector -->
+      <div class="model-selector-wrapper">
+        <button class="chat-action-btn model-selector-btn" (click)="toggleModelSelector()" title="Select model">
+          <span class="model-selector-label">{{ getSelectedModelName() }}</span>
+          <span class="model-selector-caret">&#9660;</span>
+        </button>
+        <div class="model-selector-dropdown" *ngIf="showModelSelector">
+          <button
+            *ngFor="let m of availableModels"
+            class="model-option"
+            [class.active]="m.key === selectedModel"
+            (click)="selectModel(m.key)"
+          >
+            <span class="model-option-name">{{ m.display_name }}</span>
+            <span class="model-option-provider">{{ m.provider }}</span>
+            <span class="model-option-check" *ngIf="m.key === selectedModel">&#10003;</span>
+          </button>
+        </div>
+      </div>
       <button class="chat-action-btn" (click)="clearChat()" title="Clear chat">
         <span>&#128465;</span>
       </button>

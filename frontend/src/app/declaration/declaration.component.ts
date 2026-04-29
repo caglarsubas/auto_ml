@@ -176,8 +176,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         this.isExcelFile = true;
         this.checkExcelSheets();
+        this.detectExcelHeader(this.selectedFiles[0]);
       } else if (fileName.endsWith('.csv') || fileName.endsWith('.txt') || fileName.endsWith('.tsv')) {
         this.detectCsvSeparator(this.selectedFiles[0]);
+        // Header detection runs after separator is detected (inside detectCsvSeparator callback)
       }
     }
     // Reset mergeColumnWise when only one file is selected
@@ -231,10 +233,117 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
       this.columnSeparator = bestKey;
       console.log(`[CSV Auto-detect] Detected separator: ${bestKey}`);
+
+      // Run header detection using the detected separator
+      this.detectCsvHeader(text, bestKey);
     };
     // Read only first 8KB — enough for header detection
     const slice = file.slice(0, 8192);
     reader.readAsText(slice);
+  }
+
+  private detectCsvHeader(text: string, separatorKey: string): void {
+    const sepMap: { [key: string]: string } = {
+      'comma': ',', 'semicolon': ';', 'tab': '\t', 'space': ' '
+    };
+    const sep = sepMap[separatorKey] || ';';
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 21);
+    if (lines.length < 2) return;
+
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuote = false;
+      for (const ch of line) {
+        if (ch === '"') { inQuote = !inQuote; }
+        else if (!inQuote && ch === sep) { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const firstRow = parseLine(lines[0]);
+    const dataRows = lines.slice(1, 21).map(parseLine);
+
+    let headerSignals = 0;
+    let dataSignals = 0;
+
+    for (let col = 0; col < firstRow.length; col++) {
+      const firstVal = firstRow[col];
+      const colVals = dataRows.map(r => r[col] || '').filter(v => v !== '');
+
+      // Is column data predominantly numeric?
+      const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+      const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
+
+      const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
+
+      if (dataIsNumeric && !firstIsNumeric && firstVal.length > 1) {
+        headerSignals++;
+      } else if (dataIsNumeric && firstIsNumeric) {
+        dataSignals++;
+      } else if (!dataIsNumeric) {
+        const dataValsSet = new Set(colVals);
+        if (!dataValsSet.has(firstVal) && firstVal.length > 1) {
+          headerSignals++;
+        } else if (dataValsSet.has(firstVal)) {
+          dataSignals++;
+        } else {
+          dataSignals++;
+        }
+      }
+    }
+
+    const hasHeader = headerSignals >= dataSignals;
+    this.firstLineIsNotHeader = !hasHeader;
+    console.log(`[CSV Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+  }
+
+  private detectExcelHeader(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      // Read as array of arrays (no header assumption)
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      if (rows.length < 2) return;
+
+      const firstRow = rows[0];
+      const dataRows = rows.slice(1, 21);
+
+      let headerSignals = 0;
+      let dataSignals = 0;
+
+      for (let col = 0; col < firstRow.length; col++) {
+        const firstVal = String(firstRow[col] ?? '').trim();
+        const colVals = dataRows.map(r => String(r[col] ?? '').trim()).filter(v => v !== '');
+
+        const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+        const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
+        const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
+
+        if (dataIsNumeric && !firstIsNumeric && firstVal.length > 1) {
+          headerSignals++;
+        } else if (dataIsNumeric && firstIsNumeric) {
+          dataSignals++;
+        } else if (!dataIsNumeric) {
+          const dataValsSet = new Set(colVals);
+          if (!dataValsSet.has(firstVal) && firstVal.length > 1) {
+            headerSignals++;
+          } else {
+            dataSignals++;
+          }
+        }
+      }
+
+      const hasHeader = headerSignals >= dataSignals;
+      this.firstLineIsNotHeader = !hasHeader;
+      console.log(`[Excel Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   checkExcelSheets(): void {

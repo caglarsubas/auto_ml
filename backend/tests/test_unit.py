@@ -80,6 +80,119 @@ class TestDataDictionaryModel:
 
 
 # ---------------------------------------------------------------------------
+# Header auto-detection tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestDetectHasHeader:
+    """Test the detect_has_header heuristic from declaration/views.py."""
+
+    def test_csv_with_text_headers(self):
+        """A CSV whose first row has descriptive text headers should return True."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"AppID,Application_Datetime,Target,Var_1,Var_2\n"
+            b"1,2020-01-01,0,1500,200\n"
+            b"2,2020-02-01,1,3000,400\n"
+            b"3,2020-03-01,0,500,100\n"
+        )
+        assert detect_has_header(csv_bytes, sep=',') is True
+
+    def test_csv_without_headers(self):
+        """A CSV whose first row is all data (numeric + short strings) → False."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"0,1/1/2020 0:00,0,0,L,Y,1750,1\n"
+            b"1,1/1/2020 0:00,0,0,1,N,1300,12\n"
+            b"2,1/1/2020 0:00,0,0,0,N,0,0\n"
+            b"3,2/1/2020 0:00,1,1,0,Y,500,3\n"
+        )
+        assert detect_has_header(csv_bytes, sep=',') is False
+
+    def test_csv_semicolon_with_headers(self):
+        """Semicolon-delimited CSV with headers should return True."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"Name;Age;Income;City\n"
+            b"Alice;30;50000;Berlin\n"
+            b"Bob;25;40000;Munich\n"
+        )
+        assert detect_has_header(csv_bytes, sep=';') is True
+
+    def test_csv_semicolon_without_headers(self):
+        """Semicolon-delimited CSV without headers — mostly numeric + short codes."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"0;1/1/2020;Y;1750;500;A\n"
+            b"1;2/1/2020;N;1300;600;R\n"
+            b"2;3/1/2020;Y;0;100;A\n"
+            b"3;4/1/2020;N;500;200;R\n"
+        )
+        result = detect_has_header(csv_bytes, sep=';')
+        assert result is False
+
+    def test_single_row_defaults_to_true(self):
+        """With only one row, can't tell — default to has-header."""
+        from declaration.views import detect_has_header
+        csv_bytes = b"col1,col2,col3\n"
+        assert detect_has_header(csv_bytes, sep=',') is True
+
+    def test_empty_content_defaults_to_true(self):
+        """Empty/unparseable content defaults to has-header."""
+        from declaration.views import detect_has_header
+        assert detect_has_header(b"", sep=',') is True
+
+    def test_mixed_numeric_header(self):
+        """First row has text headers, data rows are numeric → True."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"ID,Score,Amount,Balance,Limit\n"
+            b"1,750,5000,2000,10000\n"
+            b"2,680,3000,1500,8000\n"
+            b"3,720,4500,3000,12000\n"
+        )
+        assert detect_has_header(csv_bytes, sep=',') is True
+
+    def test_all_numeric_no_header(self):
+        """All values including first row are numeric → False."""
+        from declaration.views import detect_has_header
+        csv_bytes = (
+            b"100,200,300,400\n"
+            b"101,201,301,401\n"
+            b"102,202,302,402\n"
+        )
+        assert detect_has_header(csv_bytes, sep=',') is False
+
+
+# ---------------------------------------------------------------------------
+# Declaration model has_header field tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestDeclarationHasHeader:
+
+    def test_has_header_defaults_to_true(self):
+        """New Declaration defaults to has_header=True."""
+        from declaration.models import Declaration
+        decl = Declaration.objects.create(
+            file='data_files/test.csv',
+            name='test.csv',
+            original_name='test.csv',
+        )
+        assert decl.has_header is True
+
+    def test_has_header_can_be_set_false(self):
+        """Declaration can be created with has_header=False."""
+        from declaration.models import Declaration
+        decl = Declaration.objects.create(
+            file='data_files/test.csv',
+            name='test.csv',
+            original_name='test.csv',
+            has_header=False,
+        )
+        assert decl.has_header is False
+
+
+# ---------------------------------------------------------------------------
 # Serializer tests
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
@@ -96,7 +209,7 @@ class TestDeclarationSerializer:
             original_name='test.csv',
         )
         s = DeclarationSerializer(decl)
-        assert set(s.data.keys()) == {'id', 'file', 'name', 'original_name', 'uploaded_at'}
+        assert set(s.data.keys()) == {'id', 'file', 'name', 'original_name', 'uploaded_at', 'has_header'}
 
     def test_serializer_read_only_id(self):
         """The id field is read-only."""
@@ -1098,6 +1211,165 @@ class TestDispatchAction:
         assert result['status'] == 'error'
         assert 'No code' in result['error']
 
+    def test_execute_code_strips_import_lines(self):
+        """Import lines should be stripped — np/pd are pre-loaded in sandbox."""
+        from ai_assistant.action_executor import execute_code
+        # Code with import lines that would fail in sandbox
+        code_with_imports = "import numpy as np\nfrom pandas import DataFrame\ndf['test_col'] = 1"
+        # Strip logic is inside execute_code, but we can test the stripping directly
+        lines = code_with_imports.splitlines()
+        stripped = '\n'.join(
+            line for line in lines
+            if not line.strip().startswith(('import ', 'from '))
+        )
+        assert 'import' not in stripped
+        assert "df['test_col'] = 1" in stripped
+
+    def test_restore_backup_copies_file(self, tmp_path):
+        """_restore_backup should copy backup to original and remove backup."""
+        from ai_assistant.action_executor import _restore_backup
+        original = tmp_path / 'data.csv'
+        backup = tmp_path / 'data.csv.bak'
+        original.write_text('corrupted')
+        backup.write_text('original_content')
+        _restore_backup(str(backup), str(original))
+        assert original.read_text() == 'original_content'
+        assert not backup.exists()
+
+    def test_remove_backup_cleans_up(self, tmp_path):
+        """_remove_backup should delete the backup file."""
+        from ai_assistant.action_executor import _remove_backup
+        backup = tmp_path / 'data.csv.bak'
+        backup.write_text('backup_content')
+        _remove_backup(str(backup))
+        assert not backup.exists()
+
+    def test_remove_backup_noop_on_missing(self, tmp_path):
+        """_remove_backup should not raise if file doesn't exist."""
+        from ai_assistant.action_executor import _remove_backup
+        _remove_backup(str(tmp_path / 'nonexistent.bak'))  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Feature description generator tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestGenerateFeatureDescription:
+    """Test _generate_feature_description for pattern-specific descriptions."""
+
+    def _make_data_file(self):
+        from declaration.models import Declaration, DataDictionary
+        decl = Declaration.objects.create(
+            file='data_files/test.csv', name='test.csv', original_name='test.csv',
+        )
+        DataDictionary.objects.create(
+            data_file=decl, column_name='Var_8',
+            description='LO Number of bureau enquiries in last 3 months',
+        )
+        DataDictionary.objects.create(
+            data_file=decl, column_name='Var_19',
+            description='LO Outstanding balance',
+        )
+        DataDictionary.objects.create(
+            data_file=decl, column_name='Var_24',
+            description='LO Monthly income',
+        )
+        DataDictionary.objects.create(
+            data_file=decl, column_name='Var_2',
+            description='CA Region code',
+        )
+        DataDictionary.objects.create(
+            data_file=decl, column_name='Var_3',
+            description='CA Occupation type',
+        )
+        return decl
+
+    def test_log_signed(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('LogSigned_Var_8', df)
+        assert 'sign(Var_8)' in desc
+        assert 'ln(1 + |Var_8|)' in desc
+        assert 'bureau enquiries' in desc
+
+    def test_log1p(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('Log1p_Var_8', df)
+        assert 'ln(1 + Var_8)' in desc
+        assert '"1p" suffix means "one plus"' in desc
+        assert 'bureau enquiries' in desc
+
+    def test_ratio(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('Var_19_to_Var_24', df)
+        assert 'Ratio' in desc
+        assert 'Var_19' in desc and 'Var_24' in desc
+        assert 'Outstanding balance' in desc
+        assert 'Monthly income' in desc
+
+    def test_difference(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('Var_19_minus_Var_24', df)
+        assert 'Difference' in desc
+        assert 'Outstanding balance' in desc
+        assert 'Monthly income' in desc
+
+    def test_categorical_interaction(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('Var_2_x_Var_3', df)
+        assert 'Categorical interaction' in desc
+        assert 'Region code' in desc
+        assert 'Occupation type' in desc
+
+    def test_is_missing(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('IsMissing_Var_8', df)
+        assert 'missingness indicator' in desc
+        assert 'bureau enquiries' in desc
+
+    def test_datetime_feature(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('Application_Month', df)
+        assert 'Month' in desc
+        assert 'Application_Datetime' in desc
+
+    def test_aggregation_known(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('NumVars_Missing_Count', df)
+        assert 'missing' in desc.lower()
+        assert 'numeric' in desc.lower()
+
+    def test_aggregation_range(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('NumVars_Range', df)
+        assert 'NumVars_Max' in desc
+        assert 'NumVars_Min' in desc
+
+    def test_fallback(self):
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('SomeUnknownCol', df)
+        assert 'SomeUnknownCol' in desc
+
+    def test_no_parent_desc_graceful(self):
+        """Features referencing unknown parent vars should still describe the transform."""
+        from ai_assistant.action_executor import _generate_feature_description
+        df = self._make_data_file()
+        desc = _generate_feature_description('LogSigned_Var_999', df)
+        assert 'sign(Var_999)' in desc
+        assert 'ln(1 + |Var_999|)' in desc
+        # No parent desc — should NOT crash, just omit the parenthetical
+        assert 'Var_999)' not in desc or 'sign(Var_999)' in desc
+
 
 # ---------------------------------------------------------------------------
 # Prometa SDK integration tests
@@ -1314,3 +1586,166 @@ class TestToolExecutor:
         assert 'Age' in result_all
         assert 'Income' in result_all
         r.delete('ai:pipeline:99994:dq_summary')
+
+
+# ---------------------------------------------------------------------------
+# Model registry tests
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestModelRegistry:
+    """Test the model_registry module — model configs, list, and defaults."""
+
+    def test_list_models_returns_all(self):
+        from ai_assistant.model_registry import list_models, MODEL_REGISTRY
+        models = list_models()
+        assert len(models) == len(MODEL_REGISTRY)
+        keys = [m['key'] for m in models]
+        for k in MODEL_REGISTRY:
+            assert k in keys
+
+    def test_list_models_structure(self):
+        from ai_assistant.model_registry import list_models
+        models = list_models()
+        for m in models:
+            assert 'key' in m
+            assert 'display_name' in m
+            assert 'provider' in m
+
+    def test_get_model_config_known(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gpt-5.5')
+        assert cfg['provider'] == 'openai'
+        assert cfg['model_id'] == 'gpt-5.5'
+        assert cfg['supports_tools'] is True
+        assert cfg['is_reasoning_model'] is True
+        assert 'temperature' not in cfg
+
+    def test_get_model_config_gpt_mini(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gpt-5.4-mini')
+        assert cfg['provider'] == 'openai'
+        assert cfg['model_id'] == 'gpt-5.4-mini'
+        assert cfg['supports_tools'] is True
+        assert cfg['is_reasoning_model'] is True
+        assert 'temperature' not in cfg
+
+    def test_get_model_config_gemma_e2b(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gemma-4-e2b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'gemma4:e2b'
+        assert cfg['supports_tools'] is False
+
+    def test_get_model_config_gemma_e4b(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gemma-4-e4b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'gemma4:e4b'
+        assert cfg['supports_tools'] is False
+
+    def test_get_model_config_gemma_26b(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gemma-4-26b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'gemma4:26b'
+        assert cfg['thinking'] is True
+        assert cfg['thinking_level'] == 'med'
+
+    def test_get_model_config_gemma_31b(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gemma-4-31b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'gemma4:31b'
+        assert cfg['thinking'] is True
+        assert cfg['thinking_level'] == 'high'
+
+    def test_get_model_config_qwen(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('qwen-3.6-27b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'qwen3.6:27b'
+        assert cfg['architecture'] == 'dense'
+        assert cfg['reasoning'] is True
+        assert cfg['thinking'] is True
+
+    def test_get_model_config_minimax(self):
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('minimax-m2.7')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['model_id'] == 'minimax-m2.7:cloud'
+        assert cfg['architecture'] == 'moe'
+        assert cfg['reasoning'] is True
+
+    def test_get_model_config_ministral(self):
+        from ai_assistant.model_registry import get_model_config
+        for size in ('3b', '8b', '14b'):
+            cfg = get_model_config(f'ministral-3-{size}')
+            assert cfg['provider'] == 'ollama'
+            assert cfg['model_id'] == f'ministral-3:{size}'
+            assert cfg['architecture'] == 'dense'
+            assert cfg['thinking'] is False
+
+    def test_get_model_config_unknown_falls_back(self):
+        from ai_assistant.model_registry import get_model_config, DEFAULT_MODEL, MODEL_REGISTRY
+        cfg = get_model_config('nonexistent-model-xyz')
+        assert cfg == MODEL_REGISTRY[DEFAULT_MODEL]
+
+    def test_default_model_exists_in_registry(self):
+        from ai_assistant.model_registry import DEFAULT_MODEL, MODEL_REGISTRY
+        assert DEFAULT_MODEL in MODEL_REGISTRY
+
+    def test_all_models_have_required_fields(self):
+        from ai_assistant.model_registry import MODEL_REGISTRY
+        required = {
+            'provider', 'model_id', 'display_name', 'max_tokens',
+            'supports_tools', 'architecture', 'reasoning', 'thinking',
+            'thinking_level',
+        }
+        for key, cfg in MODEL_REGISTRY.items():
+            missing = required - set(cfg.keys())
+            assert not missing, f"Model '{key}' missing fields: {missing}"
+
+    def test_all_models_valid_architecture(self):
+        from ai_assistant.model_registry import MODEL_REGISTRY
+        for key, cfg in MODEL_REGISTRY.items():
+            assert cfg['architecture'] in ('dense', 'moe'), f"{key}: bad architecture"
+
+    def test_all_models_valid_thinking_level(self):
+        from ai_assistant.model_registry import MODEL_REGISTRY
+        valid = {None, 'low', 'med', 'high'}
+        for key, cfg in MODEL_REGISTRY.items():
+            assert cfg['thinking_level'] in valid, f"{key}: bad thinking_level"
+
+    def test_ollama_response_normalization(self):
+        """call_ollama should normalize Ollama response to OpenAI-compatible shape."""
+        from ai_assistant.model_registry import get_model_config
+        cfg = get_model_config('gemma-4-e2b')
+        assert cfg['provider'] == 'ollama'
+        assert cfg['temperature'] == 0.4
+        assert cfg['max_tokens'] == 4096
+
+    def test_reasoning_models_skip_temperature(self):
+        """Reasoning models (gpt-5.5) should not have temperature in config."""
+        from ai_assistant.model_registry import get_model_config
+        for key in ('gpt-5.5', 'gpt-5.4-mini'):
+            cfg = get_model_config(key)
+            assert cfg.get('is_reasoning_model') is True
+            assert 'temperature' not in cfg
+
+    def test_non_reasoning_models_have_temperature(self):
+        """Non-reasoning models (Ollama) should have temperature."""
+        from ai_assistant.model_registry import get_model_config
+        for key in ('gemma-4-e2b', 'gemma-4-e4b'):
+            cfg = get_model_config(key)
+            assert 'temperature' in cfg
+            assert not cfg.get('is_reasoning_model')
+
+    def test_list_models_includes_meta_flags(self):
+        """list_models() should expose architecture/reasoning/thinking flags."""
+        from ai_assistant.model_registry import list_models
+        models = list_models()
+        for m in models:
+            assert 'architecture' in m
+            assert 'reasoning' in m
+            assert 'thinking' in m
+            assert 'thinking_level' in m

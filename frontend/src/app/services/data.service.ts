@@ -402,14 +402,26 @@ export class DataService {
 
   // ===== AI Assistant =====
 
-  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>, fileId?: number): Observable<any> {
+  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>, fileId?: number, model?: string): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {
       body.file_id = fileId;
     }
+    if (model) {
+      body.model = model;
+    }
     return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
       catchError((err: any) => {
         console.error('Error in AI assistant chat:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getAiModels(): Observable<any> {
+    return this.http.get(`${this.apiUrl}ai-assistant/models/`).pipe(
+      catchError((err: any) => {
+        console.error('Error fetching AI models:', err);
         return throwError(() => err);
       })
     );

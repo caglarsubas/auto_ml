@@ -12,11 +12,24 @@ services:
       - DATQ_MAX_CELLS=20000000
       - DATQ_SAMPLE_ROWS=10000
       - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
       - redis
+      - ollama
     # Mount project root for live-reload development (Django autoreload)
     volumes:
       - .:/app
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   redis:
     image: redis:7-alpine
     ports:
@@ -37,3 +50,4 @@ services:
       - /app/node_modules
 volumes:
   redis-data:
+  ollama-models:

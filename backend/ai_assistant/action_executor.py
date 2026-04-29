@@ -12,6 +12,8 @@ and the executor runs it inside a restricted sandbox.
 """
 
 import os
+import re
+import shutil
 import traceback
 import numpy as np
 import pandas as pd
@@ -85,6 +87,23 @@ def _save_dataframe(df: pd.DataFrame, data_file, file_path: str):
         df.to_csv(file_path, index=False)
 
 
+def _restore_backup(backup_path: str, file_path: str):
+    """Restore dataset from backup after corruption."""
+    try:
+        shutil.copy2(backup_path, file_path)
+        os.remove(backup_path)
+    except Exception:
+        pass
+
+
+def _remove_backup(backup_path: str):
+    """Remove backup file after successful execution."""
+    try:
+        os.remove(backup_path)
+    except Exception:
+        pass
+
+
 def _build_preview(df: pd.DataFrame) -> dict:
     """Build a preview dict from a dataframe."""
     df_clean = df.replace({np.nan: None})
@@ -94,6 +113,210 @@ def _build_preview(df: pd.DataFrame) -> dict:
         'columns': df.columns.tolist(),
         'top_rows': df_clean.head(5).to_dict(orient='records'),
     }
+
+
+# ---------------------------------------------------------------------------
+# Feature description generator
+# ---------------------------------------------------------------------------
+
+def _generate_feature_description(col_name: str, data_file) -> str:
+    """
+    Generate a specific, informative description for an AI-created feature
+    based on its name pattern and parent feature descriptions from the
+    DataDictionary.
+    """
+
+    def _parent_desc(var_name: str) -> str:
+        desc = DataDictionary.get_description(data_file.pk, var_name)
+        return f' ({desc})' if desc else ''
+
+    def _parent_desc_short(var_name: str) -> str:
+        desc = DataDictionary.get_description(data_file.pk, var_name)
+        return desc or var_name
+
+    # --- LogSigned_<Var> --------------------------------------------------
+    m = re.match(r'^LogSigned_(.+)$', col_name)
+    if m:
+        p = m.group(1)
+        return (
+            f'Signed log transform of {p}{_parent_desc(p)}. '
+            f'Formula: sign({p}) × ln(1 + |{p}|). '
+            f'Compresses large magnitudes while preserving sign; '
+            f'handles negative values safely.'
+        )
+
+    # --- Log1p_<Var>  (numpy log1p) ---------------------------------------
+    m = re.match(r'^Log1p_(.+)$', col_name)
+    if m:
+        p = m.group(1)
+        return (
+            f'Log-plus-one transform of {p}{_parent_desc(p)}. '
+            f'Formula: ln(1 + {p}). The "1p" suffix means "one plus": '
+            f'adds 1 before taking the natural logarithm to avoid log(0). '
+            f'Compresses right-skewed distributions.'
+        )
+
+    # --- Log_<Var>  (plain log) -------------------------------------------
+    m = re.match(r'^Log_(.+)$', col_name)
+    if m:
+        p = m.group(1)
+        return (
+            f'Natural-log transform of {p}{_parent_desc(p)}. '
+            f'Formula: ln({p}). Compresses right-skewed distributions; '
+            f'undefined for zero / negative values.'
+        )
+
+    # --- <A>_to_<B>  (ratio) ---------------------------------------------
+    m = re.match(r'^(.+?)_to_(.+)$', col_name)
+    if m:
+        a, b = m.group(1), m.group(2)
+        return (
+            f'Ratio of {a}{_parent_desc(a)} to {b}{_parent_desc(b)}. '
+            f'Formula: {a} ÷ {b} (denominator zeros replaced with NaN '
+            f'to avoid division by zero).'
+        )
+
+    # --- <A>_minus_<B>  (difference) --------------------------------------
+    m = re.match(r'^(.+?)_minus_(.+)$', col_name)
+    if m:
+        a, b = m.group(1), m.group(2)
+        return (
+            f'Difference: {a}{_parent_desc(a)} minus {b}{_parent_desc(b)}. '
+            f'Formula: {a} − {b}.'
+        )
+
+    # --- <A>_x_<B>  (categorical interaction) -----------------------------
+    m = re.match(r'^(.+?)_x_(.+)$', col_name)
+    if m:
+        a, b = m.group(1), m.group(2)
+        return (
+            f'Categorical interaction of {a}{_parent_desc(a)} and '
+            f'{b}{_parent_desc(b)}. Values are concatenated as '
+            f'"{a}_value__{b}_value" to capture joint category combinations.'
+        )
+
+    # --- <A>_times_<B> or <A>_mult_<B> (product) -------------------------
+    m = re.match(r'^(.+?)_(times|mult)_(.+)$', col_name)
+    if m:
+        a, b = m.group(1), m.group(3)
+        return (
+            f'Product of {a}{_parent_desc(a)} and {b}{_parent_desc(b)}. '
+            f'Formula: {a} × {b}.'
+        )
+
+    # --- Is_Missing_<Var> or IsMissing_<Var> (missingness flag) -----------
+    m = re.match(r'^Is_?Missing_(.+)$', col_name)
+    if m:
+        p = m.group(1)
+        return (
+            f'Binary missingness indicator for {p}{_parent_desc(p)}. '
+            f'1 if {p} is NaN/missing, 0 otherwise.'
+        )
+
+    # --- Datetime-derived features ----------------------------------------
+    _DT_DESCRIPTIONS = {
+        'Application_Month':
+            'Month extracted from Application_Datetime (1–12). '
+            'Captures seasonal application patterns.',
+        'Application_Quarter':
+            'Quarter extracted from Application_Datetime (1–4). '
+            'Captures quarterly trends.',
+        'Application_DayOfWeek':
+            'Day of week from Application_Datetime (0 = Monday … 6 = Sunday). '
+            'Captures weekday vs. weekend behaviour.',
+        'Application_DayOfMonth':
+            'Day of month from Application_Datetime (1–31). '
+            'Captures intra-month timing effects.',
+        'Application_IsWeekend':
+            'Binary flag: 1 if the application was submitted on Saturday or '
+            'Sunday, 0 otherwise.',
+        'Application_Hour':
+            'Hour of day from Application_Datetime (0–23). '
+            'Captures time-of-day application behaviour.',
+        'Application_IsMonthStart':
+            'Binary flag: 1 if the application date is the first day of the '
+            'month, 0 otherwise.',
+        'Application_IsMonthEnd':
+            'Binary flag: 1 if the application date is the last day of the '
+            'month, 0 otherwise.',
+    }
+    if col_name in _DT_DESCRIPTIONS:
+        return _DT_DESCRIPTIONS[col_name]
+
+    # --- Row-wise numeric aggregations ------------------------------------
+    _AGG_DESCRIPTIONS = {
+        'NumVars_Missing_Count':
+            'Count of missing (NaN) values across all numeric variables for '
+            'this row. Higher values may indicate incomplete applications.',
+        'NumVars_Missing_Rate':
+            'Proportion of missing values across numeric variables (0.0–1.0).',
+        'NumVars_Zero_Count':
+            'Count of numeric variables with value exactly 0. May indicate '
+            'inactive accounts or zero-balance features.',
+        'NumVars_Positive_Count':
+            'Count of numeric variables with positive values for this row.',
+        'NumVars_Negative_Count':
+            'Count of numeric variables with negative values for this row.',
+        'NumVars_Mean':
+            'Row-wise mean across all numeric variables. Summarises overall '
+            'numeric profile magnitude.',
+        'NumVars_Std':
+            'Row-wise standard deviation across numeric variables. Captures '
+            'variability in the applicant\'s numeric profile.',
+        'NumVars_Min':
+            'Row-wise minimum across all numeric variables.',
+        'NumVars_Max':
+            'Row-wise maximum across all numeric variables.',
+        'NumVars_Range':
+            'Row-wise range across numeric variables. '
+            'Formula: NumVars_Max − NumVars_Min.',
+        'NumVars_Max_to_Mean':
+            'Ratio of row-wise max to row-wise mean across numeric variables. '
+            'Formula: NumVars_Max ÷ NumVars_Mean. Detects outlier-dominated '
+            'profiles.',
+        'NumVars_Min_to_Mean':
+            'Ratio of row-wise min to row-wise mean across numeric variables. '
+            'Formula: NumVars_Min ÷ NumVars_Mean.',
+        'ContVars_Mean':
+            'Row-wise mean across selected continuous variables.',
+        'ContVars_Std':
+            'Row-wise standard deviation across selected continuous variables.',
+        'ContVars_Min':
+            'Row-wise minimum across selected continuous variables.',
+        'ContVars_Max':
+            'Row-wise maximum across selected continuous variables.',
+        'ContVars_Range':
+            'Row-wise range across continuous variables. '
+            'Formula: ContVars_Max − ContVars_Min.',
+        'ContVars_Missing_Count':
+            'Count of missing values across continuous variables for this row.',
+        'ContVars_Zero_Count':
+            'Count of continuous variables with value exactly 0 for this row.',
+        'CatVars_Missing_Count':
+            'Count of missing values across categorical variables for this row.',
+        'CatVars_Missing_Rate':
+            'Proportion of missing values across categorical variables '
+            '(0.0–1.0).',
+    }
+    if col_name in _AGG_DESCRIPTIONS:
+        return _AGG_DESCRIPTIONS[col_name]
+
+    # --- Generic aggregation suffix patterns ------------------------------
+    agg_suffix = re.match(
+        r'^(.+?)_(Missing_Count|Missing_Rate|Zero_Count|Positive_Count|'
+        r'Negative_Count|Mean|Std|Min|Max|Range|Sum|Median|Skew|Kurt)$',
+        col_name,
+    )
+    if agg_suffix:
+        prefix, stat = agg_suffix.group(1), agg_suffix.group(2)
+        stat_label = stat.replace('_', ' ').lower()
+        return (
+            f'Row-wise {stat_label} computed across the {prefix} variable '
+            f'group.'
+        )
+
+    # --- Fallback: derive what we can from the name -----------------------
+    return f'AI-derived feature. Column name: {col_name}.'
 
 
 # ---------------------------------------------------------------------------
@@ -115,46 +338,104 @@ def execute_code(file_id: int, payload: dict) -> dict:
     if not code:
         return {'status': 'error', 'error': 'No code provided'}
 
+    # Strip import lines — np and pd are already in the sandbox
+    code = '\n'.join(
+        line for line in code.splitlines()
+        if not line.strip().startswith(('import ', 'from '))
+    )
+
     df, data_file, file_path = _load_dataframe(file_id)
-    cols_before = set(df.columns.tolist())
+    cols_before = list(df.columns)
+    cols_before_set = set(cols_before)
     rows_before = len(df)
 
-    # Build restricted global namespace
-    safe_globals = {
+    # Create backup before execution so we can rollback on corruption
+    backup_path = file_path + '.bak'
+    shutil.copy2(file_path, backup_path)
+
+    # Build a single namespace so nested functions (closures) can see `df`.
+    # When exec() receives separate globals / locals, closures only close
+    # over globals — putting df only in locals made it invisible inside
+    # helper functions like safe_ratio().
+    sandbox = {
         '__builtins__': _SAFE_BUILTINS,
         'pd': pd,
         'np': np,
+        'df': df.copy(),
     }
-    safe_locals = {'df': df}
 
     try:
-        exec(code, safe_globals, safe_locals)
+        exec(code, sandbox)
     except Exception as e:
+        _remove_backup(backup_path)
         return {
             'status': 'error',
             'error': f'Code execution failed: {str(e)}',
             'traceback': traceback.format_exc(),
         }
 
-    df_result = safe_locals.get('df', df)
+    df_result = sandbox.get('df', df)
     if not isinstance(df_result, pd.DataFrame):
+        _remove_backup(backup_path)
         return {'status': 'error', 'error': 'Result is not a DataFrame — did you reassign `df`?'}
 
+    # --- Structural validation: original columns must survive ---
+    cols_after = set(df_result.columns)
+    missing_original = cols_before_set - cols_after
+    # Allow intentional drops (up to 30% of originals), but flag total corruption
+    if missing_original and len(missing_original) > len(cols_before) * 0.3:
+        _restore_backup(backup_path, file_path)
+        return {
+            'status': 'error',
+            'error': (
+                f'Code execution corrupted the DataFrame — '
+                f'{len(missing_original)} of {len(cols_before)} original columns disappeared. '
+                f'Dataset has been restored from backup.'
+            ),
+        }
+
+    # Verify column names are plausible (not auto-generated ints from lost headers)
+    sample_cols = list(df_result.columns)[:10]
+    int_like_count = sum(1 for c in sample_cols if isinstance(c, int) or (isinstance(c, str) and c.isdigit() and len(c) <= 3))
+    if int_like_count > len(sample_cols) * 0.5 and not any(isinstance(c, int) or (isinstance(c, str) and c.isdigit() and len(c) <= 3) for c in cols_before[:10]):
+        _restore_backup(backup_path, file_path)
+        return {
+            'status': 'error',
+            'error': (
+                'Code execution corrupted column headers (got auto-generated integer names). '
+                'Dataset has been restored from backup.'
+            ),
+        }
+
     # Compute what changed
-    cols_after = set(df_result.columns.tolist())
-    added = sorted(cols_after - cols_before)
-    removed = sorted(cols_before - cols_after)
+    added = sorted(cols_after - cols_before_set)
+    removed = sorted(cols_before_set - cols_after)
     rows_after = len(df_result)
 
     # Save
     _save_dataframe(df_result, data_file, file_path)
 
-    # Update DataDictionary for new columns
+    # Verify the saved file can be re-read with correct structure
+    try:
+        df_verify = pd.read_csv(file_path) if not file_path.lower().endswith(('.xls', '.xlsx')) else df_result
+        if set(df_verify.columns) != cols_after:
+            raise ValueError("Column mismatch after save/reload")
+    except Exception:
+        _restore_backup(backup_path, file_path)
+        return {
+            'status': 'error',
+            'error': 'File save verification failed — columns corrupted during write. Dataset restored from backup.',
+        }
+
+    _remove_backup(backup_path)
+
+    # Update DataDictionary for new columns with feature-specific descriptions
     for col_name in added:
+        feat_desc = _generate_feature_description(col_name, data_file)
         DataDictionary.objects.update_or_create(
             data_file=data_file,
             column_name=col_name,
-            defaults={'description': f'AI-created: {description}'}
+            defaults={'description': feat_desc}
         )
     # Remove DataDictionary entries for dropped columns
     if removed:

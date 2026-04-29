@@ -528,6 +528,83 @@ class TestAIActionExecuteWorkflow:
         assert resp.status_code == 200
         assert 'Ratio' in resp.data['columns']
 
+    def test_execute_code_new_cols_appear_in_dictionary(self, api_client, _use_tmp_media):
+        """After AI creates columns, data_dictionary GET must return them all."""
+        df = pd.DataFrame({
+            'A': [10, 20, 30, 40, 50],
+            'B': [1, 2, 3, 4, 5],
+            'Target': [0, 1, 0, 1, 0],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'dict_sync_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        # Execute code that adds a new column
+        code = 'df["Log1p_A"] = np.log1p(df["A"])\ndf["A_to_B"] = df["A"] / df["B"].replace(0, np.nan)'
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'execute_code',
+                'payload': {'code': code, 'description': 'Add features'},
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+
+        # Data dictionary must now return all 5 columns
+        resp = api_client.get(f'/api/declaration/{file_id}/data_dictionary/')
+        assert resp.status_code == 200
+        names = [d['Feature_Name'] for d in resp.data]
+        assert len(names) == 5  # A, B, Target, Log1p_A, A_to_B
+        assert 'Log1p_A' in names
+        assert 'A_to_B' in names
+
+        # New columns should have feature-specific descriptions from DataDictionary
+        dd_map = {d['Feature_Name']: d for d in resp.data}
+        log1p_desc = dd_map['Log1p_A'].get('Feature_Description', '')
+        assert 'ln(1 + A)' in log1p_desc or 'log' in log1p_desc.lower()
+
+    def test_execute_code_with_nested_function(self, api_client, _use_tmp_media):
+        """Nested functions (closures) inside executed code must see `df`."""
+        df = pd.DataFrame({
+            'A': [10, 20, 30, 40, 50],
+            'B': [1, 2, 3, 4, 5],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'closure_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        code = (
+            'def safe_ratio(a, b):\n'
+            '    return pd.to_numeric(df[a], errors="coerce") / pd.to_numeric(df[b], errors="coerce").replace(0, np.nan)\n'
+            'df["A_to_B"] = safe_ratio("A", "B")\n'
+        )
+
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'execute_code',
+                'payload': {'code': code, 'description': 'Nested closure test'},
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+        assert 'A_to_B' in resp.data['changes']['columns_added']
+
     def test_upload_then_update_metadata(self, api_client, _use_tmp_media):
         """Upload CSV → update metadata description via AI action."""
         df = pd.DataFrame({'Age': [25, 30], 'Target': [0, 1]})

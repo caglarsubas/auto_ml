@@ -115,6 +115,32 @@ test.describe('Declaration (Data Upload) Journey', () => {
     await expect(page.locator('button.import-data-btn')).toBeVisible();
   });
 
+  test('should auto-detect CSV without headers and check the checkbox', async ({ page }) => {
+    const fileInput = page.locator('input[type="file"]');
+    const noHeaderFile = path.resolve(__dirname, 'fixtures/test_data_no_header.csv');
+    await fileInput.setInputFiles(noHeaderFile);
+
+    // Wait for auto-detection to process the file
+    await page.waitForTimeout(500);
+
+    // The checkbox should be automatically checked since the file has no header
+    const checkbox = page.locator('#firstLineHeader');
+    await expect(checkbox).toBeChecked();
+  });
+
+  test('should keep checkbox unchecked for CSV with headers', async ({ page }) => {
+    const fileInput = page.locator('input[type="file"]');
+    const headerFile = path.resolve(__dirname, 'fixtures/test_data.csv');
+    await fileInput.setInputFiles(headerFile);
+
+    // Wait for auto-detection
+    await page.waitForTimeout(500);
+
+    // The checkbox should remain unchecked since the file has proper headers
+    const checkbox = page.locator('#firstLineHeader');
+    await expect(checkbox).not.toBeChecked();
+  });
+
   test('should show "Add note" button after data preview', async ({ page }) => {
     const fileInput = page.locator('input[type="file"]');
     const testFile = path.resolve(__dirname, 'fixtures/test_data.csv');

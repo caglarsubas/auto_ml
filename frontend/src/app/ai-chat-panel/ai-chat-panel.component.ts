@@ -20,6 +20,11 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private subscriptions = new Subscription();
   private shouldScrollToBottom = false;
 
+  // Model selector
+  availableModels: Array<{key: string; display_name: string; provider: string}> = [];
+  selectedModel: string = 'gpt-5.5';
+  showModelSelector: boolean = false;
+
   constructor(
     public aiService: AiAssistantService,
     private dataService: DataService,
@@ -27,6 +32,18 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   ) {}
 
   ngOnInit(): void {
+    // Fetch available models
+    this.dataService.getAiModels().subscribe({
+      next: (resp: any) => {
+        this.availableModels = resp.models || [];
+        this.selectedModel = resp.default || 'gpt-5.5';
+      },
+      error: () => {
+        // Fallback — just show OpenAI
+        this.availableModels = [{key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'}];
+      }
+    });
+
     this.subscriptions.add(
       this.aiService.messages$.subscribe(msgs => {
         this.messages = msgs;
@@ -107,7 +124,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       ctx,
       this.currentSection || 'general',
       history,
-      fileId ?? undefined
+      fileId ?? undefined,
+      this.selectedModel
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
@@ -382,7 +400,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       ctx,
       this.currentSection || 'general',
       history,
-      this.sharedService.getCurrentFileId() ?? undefined
+      this.sharedService.getCurrentFileId() ?? undefined,
+      this.selectedModel
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
@@ -408,6 +427,20 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       event.preventDefault();
       this.sendMessage();
     }
+  }
+
+  toggleModelSelector(): void {
+    this.showModelSelector = !this.showModelSelector;
+  }
+
+  selectModel(modelKey: string): void {
+    this.selectedModel = modelKey;
+    this.showModelSelector = false;
+  }
+
+  getSelectedModelName(): string {
+    const model = this.availableModels.find(m => m.key === this.selectedModel);
+    return model ? model.display_name : this.selectedModel;
   }
 
   clearChat(): void {

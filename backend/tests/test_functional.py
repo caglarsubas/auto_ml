@@ -62,6 +62,28 @@ class TestDeclarationAPI:
         assert response.status_code == 201
         assert 'id' in response.data
 
+    def test_upload_csv_with_headers_sets_has_header_true(self, api_client, _use_tmp_media):
+        """CSV with text headers should result in has_header=True."""
+        buf = io.BytesIO(b"AppID,Age,Income,Target\n1,25,50000,0\n2,30,60000,1\n")
+        buf.name = 'with_header.csv'
+        response = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert response.status_code == 201
+        assert response.data['has_header'] is True
+        assert 'auto_detected_no_header' not in response.data
+
+    def test_upload_csv_without_headers_auto_detects(self, api_client, _use_tmp_media):
+        """CSV without headers should auto-detect and set has_header=False."""
+        buf = io.BytesIO(
+            b"0,1/1/2020,0,0,1750,1\n"
+            b"1,2/1/2020,0,0,1300,12\n"
+            b"2,3/1/2020,1,1,0,0\n"
+        )
+        buf.name = 'no_header.csv'
+        response = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert response.status_code == 201
+        assert response.data['has_header'] is False
+        assert response.data.get('auto_detected_no_header') is True
+
     def test_upload_no_file_returns_400(self, api_client, _use_tmp_media):
         """POST /api/declaration/ without a file returns 400."""
         response = api_client.post('/api/declaration/', {}, format='multipart')
@@ -141,6 +163,37 @@ class TestDataDictionaryAPI:
             assert 'Missing_Ratio' in entry
             assert 'Mode_Ratio' in entry
             assert 'Model_Usage_YN' in entry
+
+    def test_data_dictionary_handles_inf_and_nan_columns(self, api_client, _use_tmp_media):
+        """Columns with inf or all-NaN values must not crash the data_dictionary endpoint."""
+        df = pd.DataFrame({
+            'Normal': [1, 2, 3, 4, 5],
+            'Has_Inf': [1.0, float('inf'), -float('inf'), 4.0, 5.0],
+            'All_NaN': [float('nan')] * 5,
+            'LogSigned_X': [0.0, 0.693, -0.693, 1.386, float('nan')],
+            'A_to_B': [2.0, float('inf'), 0.5, float('nan'), 1.0],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'inf_nan_test.csv'
+
+        resp = api_client.post(
+            '/api/declaration/',
+            {'file': buf, 'column_separator': 'comma'},
+            format='multipart',
+        )
+        assert resp.status_code == 201
+        pk = resp.data['id']
+
+        resp = api_client.get(f'/api/declaration/{pk}/data_dictionary/')
+        assert resp.status_code == 200
+        names = [d['Feature_Name'] for d in resp.data]
+        assert len(names) == 5
+        assert 'Has_Inf' in names
+        assert 'All_NaN' in names
+        assert 'LogSigned_X' in names
+        assert 'A_to_B' in names
 
 
 # ---------------------------------------------------------------------------
@@ -1282,3 +1335,71 @@ class TestAIActionExecuteAPI:
         )
         assert response.status_code == 400
         assert 'not found' in response.data['error']
+
+
+# ---------------------------------------------------------------------------
+# AI Model List Endpoint Tests
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestAIModelListAPI:
+
+    def test_models_endpoint_returns_200(self, api_client, _use_tmp_media):
+        """GET /api/ai-assistant/models/ returns 200."""
+        response = api_client.get('/api/ai-assistant/models/')
+        assert response.status_code == 200
+
+    def test_models_endpoint_returns_list(self, api_client, _use_tmp_media):
+        """GET /api/ai-assistant/models/ returns a list of models."""
+        response = api_client.get('/api/ai-assistant/models/')
+        assert 'models' in response.data
+        assert isinstance(response.data['models'], list)
+        assert len(response.data['models']) >= 12  # 3 OpenAI + 4 Gemma + Qwen + MiniMax + 3 Ministral
+
+    def test_models_endpoint_returns_default(self, api_client, _use_tmp_media):
+        """GET /api/ai-assistant/models/ returns a default model key."""
+        response = api_client.get('/api/ai-assistant/models/')
+        assert 'default' in response.data
+        assert response.data['default'] == 'gpt-5.5'
+
+    def test_models_have_expected_keys(self, api_client, _use_tmp_media):
+        """Each model in the response has key, display_name, and provider."""
+        response = api_client.get('/api/ai-assistant/models/')
+        for m in response.data['models']:
+            assert 'key' in m
+            assert 'display_name' in m
+            assert 'provider' in m
+
+    def test_gemma_models_present(self, api_client, _use_tmp_media):
+        """Gemma 4 models are included in the response."""
+        response = api_client.get('/api/ai-assistant/models/')
+        keys = [m['key'] for m in response.data['models']]
+        assert 'gemma-4-e2b' in keys
+        assert 'gemma-4-e4b' in keys
+        assert 'gemma-4-26b' in keys
+        assert 'gemma-4-31b' in keys
+
+    def test_models_include_meta_flags(self, api_client, _use_tmp_media):
+        """Each model in the response includes architecture/reasoning/thinking flags."""
+        response = api_client.get('/api/ai-assistant/models/')
+        for m in response.data['models']:
+            assert 'architecture' in m
+            assert 'reasoning' in m
+            assert 'thinking' in m
+            assert 'thinking_level' in m
+
+    def test_chat_with_model_param_missing_key(self, api_client, _use_tmp_media, monkeypatch):
+        """POST /api/ai-assistant/chat/ with unknown model falls back to default (503 without key)."""
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        response = api_client.post(
+            '/api/ai-assistant/chat/',
+            data=json.dumps({
+                'message': 'Hello',
+                'context': {},
+                'section': 'general',
+                'model': 'unknown-model-xyz',
+            }),
+            content_type='application/json',
+        )
+        # Falls back to gpt-4.1 which requires OPENAI_API_KEY
+        assert response.status_code == 503

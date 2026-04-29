@@ -1,5 +1,5 @@
 """
-AI Assistant endpoint — proxies user questions + pipeline context to OpenAI GPT-5.3
+AI Assistant endpoint — proxies user questions + pipeline context to OpenAI GPT-5.5
 and returns advisory, insight-rich responses.
 """
 import json
@@ -16,6 +16,10 @@ from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_s
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call
 from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
+from .model_registry import (
+    get_model_config, list_models, DEFAULT_MODEL,
+    call_openai, call_ollama, ensure_ollama_model,
+)
 
 # ---------------------------------------------------------------------------
 # System prompt that shapes the assistant persona
@@ -170,6 +174,7 @@ GENERAL RULES:
 ─── ACTION TYPE 1: execute_code ───
 Run pandas/numpy code directly on the dataset. This is the most flexible action.
 The code runs in a sandbox with `df` (the DataFrame), `pd` (pandas), and `np` (numpy).
+NEVER use `import` statements — pd and np are already available. No other libraries allowed.
 You can do ANYTHING: create columns, drop columns, filter rows, fill missing values,
 rename columns, change types, merge, pivot, compute aggregations, etc.
 
@@ -226,29 +231,30 @@ Actions: add, edit, delete
 # Prometa-traced helper functions
 # ---------------------------------------------------------------------------
 
-@agent(name="gpt-advisor")
-def _call_openai(api_key: str, messages: list, tools: list = None) -> dict:
-    """Call OpenAI chat completions API via the official openai SDK.
+@agent(name="llm-advisor")
+def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
+    """Unified LLM caller — dispatches to OpenAI or Ollama based on model config.
 
-    Traced as a Prometa agent span.  GenAI attributes (model, tokens,
-    prompt, completion, cost) are captured automatically by the
-    prometa-sdk v0.3.2+ OpenAI auto-instrumentation.
+    Traced as a Prometa agent span.  For OpenAI models, GenAI attributes
+    (model, tokens, prompt, completion, cost) are captured automatically
+    by the prometa-sdk v0.3.3+ auto-instrumentation.
     """
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key, timeout=90.0)
+    model_cfg = get_model_config(model_key)
+    provider = model_cfg['provider']
+    set_span_attr('gen_ai.request.model', model_cfg['model_id'])
 
-    kwargs = {
-        'model': 'gpt-4.1',
-        'messages': messages,
-        'temperature': 0.4,
-        'max_tokens': 8192,
-    }
-    if tools:
-        kwargs['tools'] = tools
-        kwargs['tool_choice'] = 'auto'
+    if provider == 'openai':
+        api_key = os.environ.get('OPENAI_API_KEY', '')
+        if not api_key:
+            raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
+        return call_openai(api_key, messages, model_cfg, tools=tools)
 
-    response = client.chat.completions.create(**kwargs)
-    return response.model_dump()
+    elif provider == 'ollama':
+        ensure_ollama_model(model_cfg['model_id'])
+        return call_ollama(messages, model_cfg)
+
+    else:
+        raise ValueError(f'Unknown provider: {provider}')
 
 
 def _build_slim_context(file_id: int, section: str) -> str:
@@ -305,18 +311,19 @@ _MAX_TOOL_ROUNDS = 5
 
 @workflow(name="declarai-chat")
 def _chat_workflow(user_message: str, context: dict, section: str, history: list,
-                   file_id: int = None) -> dict:
+                   file_id: int = None, model: str = None) -> dict:
     """Core chat workflow with multi-turn tool calling.
 
     If file_id is provided and Redis has cached artifacts, uses the slim context
     + tool calling approach. Otherwise falls back to the legacy _format_context.
+    Supports multiple LLM providers via model_key.
     """
-    api_key = os.environ.get('OPENAI_API_KEY', '')
-    if not api_key:
-        raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
+    model_key = model or DEFAULT_MODEL
+    model_cfg = get_model_config(model_key)
 
     # ── Workflow-level tracing attributes ──
     set_span_attr('declarai.section', section or 'general')
+    set_span_attr('declarai.model', model_key)
     if file_id is not None:
         set_span_attr('declarai.file_id', file_id)
         set_session_id(f'declarai-file-{file_id}')
@@ -355,12 +362,12 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})
 
-    # Tool-calling loop
-    tools = PIPELINE_TOOLS if use_tools else None
+    # Tool-calling loop (only for models that support function calling)
+    tools = PIPELINE_TOOLS if (use_tools and model_cfg.get('supports_tools')) else None
     total_usage = {}
 
     for _round in range(_MAX_TOOL_ROUNDS + 1):
-        result = _call_openai(api_key, messages, tools=tools)
+        result = _call_llm(messages, model_key, tools=tools)
         _merge_usage(total_usage, result.get('usage', {}))
 
         choice = result['choices'][0]
@@ -453,8 +460,11 @@ class AIAssistantView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            model = data.get('model')  # optional model selector
+
             response_data = _chat_workflow(user_message, context, section, history,
-                                           file_id=int(file_id) if file_id else None)
+                                           file_id=int(file_id) if file_id else None,
+                                           model=model)
             return Response(response_data, status=status.HTTP_200_OK)
 
         except EnvironmentError as e:
@@ -1141,3 +1151,20 @@ def _format_context(context: dict, section: str) -> str:
                 parts.append(f"  [{label}]: {content}")
 
     return '\n'.join(parts) if parts else json.dumps(context, default=str)[:3000]
+
+
+# ---------------------------------------------------------------------------
+# Model list endpoint
+# ---------------------------------------------------------------------------
+
+class AIModelListView(APIView):
+    """
+    GET /api/ai-assistant/models/
+    Returns available LLM models for the frontend selector.
+    """
+
+    def get(self, request, *args, **kwargs):
+        return Response({
+            'models': list_models(),
+            'default': DEFAULT_MODEL,
+        })
