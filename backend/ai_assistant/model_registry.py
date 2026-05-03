@@ -11,9 +11,19 @@ via its OpenAI-compatible ``/v1/chat/completions`` endpoint. We intentionally
 talk to it through the OpenAI Python SDK so the prometa-sdk's openai
 auto-instrumentation captures gen_ai.* spans on the assistant side — agentic-
 hook-v2 stays decoupled from any specific inference backend.
+
+Engine models are **discovered dynamically** from the engine's
+``GET /v1/models`` endpoint rather than hard-coded.  The engine itself
+probe-loads each GGUF and only lists ones llama.cpp can actually open, so
+DeclarAI's UI surfaces only models that will actually answer.  A small
+in-process TTL cache keeps Django request latency unaffected by the extra
+RTT.
 """
 
+import logging
 import os
+import threading
+import time
 
 # ---------------------------------------------------------------------------
 # Registry: model_key → config
@@ -62,36 +72,10 @@ MODEL_REGISTRY = {
         'thinking': False,
         'thinking_level': None,
     },
-    # ── Local Inference Engine (llm-inference-engine) ─────────────────
-    # Routes through the engine's OpenAI-compatible /v1/chat/completions.
-    # The model_id is the engine's qualified name (backend-agnostic — the
-    # engine resolves it to llama_cpp / mlx / vllm internally).
-    'engine-llama-3.2-3b': {
-        'provider': 'engine',
-        'model_id': 'llama3.2:3b',
-        'display_name': 'Llama 3.2 — 3B (Inference Engine)',
-        'temperature': 0.4,
-        'max_tokens': 4096,
-        'supports_tools': True,
-        'architecture': 'dense',
-        'reasoning': False,
-        'thinking': False,
-        'thinking_level': None,
-        'ram_gb': 3,
-    },
-    'engine-llama-3.2-1b': {
-        'provider': 'engine',
-        'model_id': 'llama3.2:1b',
-        'display_name': 'Llama 3.2 — 1B (Inference Engine)',
-        'temperature': 0.4,
-        'max_tokens': 4096,
-        'supports_tools': True,
-        'architecture': 'dense',
-        'reasoning': False,
-        'thinking': False,
-        'thinking_level': None,
-        'ram_gb': 2,
-    },
+    # Engine entries (provider='engine') are populated dynamically from
+    # ``GET {LLM_ENGINE_BASE_URL}/models`` — see ``_refresh_engine_models()``.
+    # Keys follow the convention ``engine-{engine_id_with_colons_dashed}``,
+    # so ``llama3.2:3b`` becomes ``engine-llama3.2-3b``.
 }
 
 DEFAULT_MODEL = 'gpt-5.5'
@@ -101,14 +85,173 @@ _MODEL_META_KEYS = (
     'architecture', 'reasoning', 'thinking', 'thinking_level', 'ram_gb',
 )
 
+# Registry shape kept identical to the static entries above so the rest of
+# the code (views, tests, frontend payloads) doesn't need to know whether a
+# given engine entry was hard-coded or fetched.
+_logger = logging.getLogger(__name__)
+
+# TTL controls how often we re-poll the engine's /v1/models endpoint.  Long
+# enough to make repeated Django requests free, short enough that pulling a
+# new ollama model becomes visible to DeclarAI within a minute without a
+# server restart.  Override via env for tests.
+_ENGINE_MODELS_TTL_SECONDS = float(os.environ.get('LLM_ENGINE_MODELS_TTL', '60'))
+_ENGINE_MODELS_TIMEOUT = float(os.environ.get('LLM_ENGINE_MODELS_TIMEOUT', '5.0'))
+
+_engine_cache_lock = threading.Lock()
+_engine_cache: dict[str, dict] = {}
+_engine_cache_expires_at: float = 0.0
+
+
+def _engine_key(engine_id: str) -> str:
+    """Map an engine model id (e.g. ``llama3.2:3b``) to a DeclarAI key.
+
+    Convention: prefix with ``engine-`` and replace ``:`` separators with
+    ``-`` so the key is URL/path safe, while preserving the original ``id``
+    structure so the round-trip is unambiguous (no two distinct ollama tags
+    can collide after the substitution because ``-`` is otherwise legal).
+    """
+    return f"engine-{engine_id.replace(':', '-')}"
+
+
+def _display_name_for(engine_id: str) -> str:
+    """Pretty label shown in the model selector — derived, not configured.
+
+    Operators can pull arbitrary models into ollama; we don't get to write a
+    bespoke display string for each one.  Keeping the engine id verbatim is
+    honest and makes provenance obvious to users (they can grep it against
+    ``ollama list``).
+    """
+    return f"{engine_id} (Inference Engine)"
+
+
+def _ram_gb_estimate(size_bytes: int) -> int:
+    """Coarse RAM hint shown in the UI.
+
+    The engine reports ``size_bytes`` (the GGUF blob size).  Resident
+    footprint at runtime is dominated by weights + KV cache; for a quick UI
+    hint we use ceil(size_bytes / 1 GB) which over-estimates slightly on
+    quantised weights — preferable to under-estimating and OOM-ing the host.
+    """
+    if size_bytes <= 0:
+        return 0
+    gb = size_bytes / (1024 ** 3)
+    return max(1, int(gb + 0.999))
+
+
+def _build_engine_entry(model_data: dict) -> dict:
+    """Translate one entry from the engine's ``/v1/models`` payload.
+
+    Capability metadata (architecture, reasoning, thinking_level) isn't
+    surfaced by the engine today, so we fill safe defaults that match the
+    historical hard-coded entries: dense, non-reasoning, non-thinking, tools
+    on (the engine routes tool calls through the same code path regardless
+    of whether the underlying model supports them).
+    """
+    engine_id = model_data['id']
+    return {
+        'provider': 'engine',
+        'model_id': engine_id,
+        'display_name': _display_name_for(engine_id),
+        'temperature': 0.4,
+        'max_tokens': 4096,
+        'supports_tools': True,
+        'architecture': 'dense',
+        'reasoning': False,
+        'thinking': False,
+        'thinking_level': None,
+        'ram_gb': _ram_gb_estimate(int(model_data.get('size_bytes', 0))),
+    }
+
+
+def _fetch_engine_models() -> dict[str, dict] | None:
+    """Hit ``GET {LLM_ENGINE_BASE_URL}/models`` and translate the response.
+
+    Returns ``None`` (not ``{}``) on failure so the caller can keep serving
+    the previous cached snapshot rather than wiping the UI when the engine
+    is briefly unreachable.
+    """
+    base_url = os.environ.get('LLM_ENGINE_BASE_URL', 'http://llm-engine:8080/v1')
+    api_key = os.environ.get('LLM_ENGINE_API_KEY', 'sk-engine-local')
+    url = base_url.rstrip('/') + '/models'
+
+    # Use the stdlib HTTP client to avoid pulling httpx into Django's import
+    # graph — DeclarAI already imports openai for the actual chat path.
+    import urllib.request
+    import urllib.error
+    import json
+    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {api_key}'})
+    try:
+        with urllib.request.urlopen(req, timeout=_ENGINE_MODELS_TIMEOUT) as resp:
+            payload = json.loads(resp.read().decode('utf-8'))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        _logger.warning("engine /v1/models fetch failed: %s", exc)
+        return None
+
+    out: dict[str, dict] = {}
+    for entry in payload.get('data') or []:
+        try:
+            cfg = _build_engine_entry(entry)
+        except (KeyError, TypeError, ValueError) as exc:
+            _logger.warning("engine model entry malformed (%s): %r", exc, entry)
+            continue
+        out[_engine_key(cfg['model_id'])] = cfg
+
+    unavailable = payload.get('unavailable') or []
+    if unavailable:
+        _logger.info(
+            "engine reports %d unavailable model(s): %s",
+            len(unavailable),
+            ", ".join(f"{u.get('id')} ({u.get('reason')})" for u in unavailable),
+        )
+    return out
+
+
+def _refresh_engine_models(force: bool = False) -> dict[str, dict]:
+    """Return the engine entries, refreshing the cache if the TTL elapsed.
+
+    On a fetch failure we return the previous snapshot (possibly empty on
+    cold boot) — DeclarAI degrades to "no engine models" but stays up.  The
+    OpenAI block in ``MODEL_REGISTRY`` keeps the assistant usable.
+    """
+    global _engine_cache, _engine_cache_expires_at
+    now = time.monotonic()
+    with _engine_cache_lock:
+        if not force and now < _engine_cache_expires_at:
+            return _engine_cache
+
+        fetched = _fetch_engine_models()
+        if fetched is None:
+            # Keep the old cache but back off briefly so we don't hammer a
+            # restarting engine on every Django request.
+            _engine_cache_expires_at = now + min(_ENGINE_MODELS_TTL_SECONDS, 5.0)
+            return _engine_cache
+
+        _engine_cache = fetched
+        _engine_cache_expires_at = now + _ENGINE_MODELS_TTL_SECONDS
+        return _engine_cache
+
+
+def _registry_snapshot() -> dict[str, dict]:
+    """Merged view: static cloud entries + dynamic engine entries.
+
+    Keyed by DeclarAI key.  Cloud entries always win on collision since the
+    engine is unlikely to ever advertise a key starting with ``gpt-``; we
+    enforce it anyway as defense-in-depth.
+    """
+    snapshot = dict(_refresh_engine_models())
+    snapshot.update(MODEL_REGISTRY)
+    return snapshot
+
 
 def get_model_config(model_key: str) -> dict:
     """Return config for a model key, falling back to default."""
-    return MODEL_REGISTRY.get(model_key, MODEL_REGISTRY[DEFAULT_MODEL])
+    snapshot = _registry_snapshot()
+    return snapshot.get(model_key, snapshot[DEFAULT_MODEL])
 
 
 def list_models() -> list:
     """Return list of available models for the frontend selector."""
+    snapshot = _registry_snapshot()
     return [
         {
             'key': k,
@@ -116,8 +259,15 @@ def list_models() -> list:
             'provider': v['provider'],
             **{mk: v.get(mk) for mk in _MODEL_META_KEYS},
         }
-        for k, v in MODEL_REGISTRY.items()
+        for k, v in snapshot.items()
     ]
+
+
+def invalidate_engine_cache() -> None:
+    """Drop the engine model cache — useful for tests and ops poking."""
+    global _engine_cache_expires_at
+    with _engine_cache_lock:
+        _engine_cache_expires_at = 0.0
 
 
 # ---------------------------------------------------------------------------

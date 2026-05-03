@@ -21,7 +21,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private shouldScrollToBottom = false;
 
   // Model selector
-  availableModels: Array<{key: string; display_name: string; provider: string}> = [];
+  availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number}> = [];
   selectedModel: string = 'gpt-5.5';
   showModelSelector: boolean = false;
 
@@ -133,7 +133,10 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           payload: a.payload,
           applied: false,
         }));
-        this.aiService.updateLastMessage(resp.message || 'No response received.', actions);
+        const fallbackMsg = actions.length > 0
+          ? 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
+          : 'No response received.';
+        this.aiService.updateLastMessage(resp.message || fallbackMsg, actions);
         this.isLoading = false;
       },
       error: (err: any) => {
@@ -409,7 +412,10 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           payload: a.payload,
           applied: false,
         }));
-        this.aiService.updateLastMessage(resp.message || 'No response received.', actions);
+        const correctionFallback = actions.length > 0
+          ? 'I\'ve prepared a corrected operation. Review the details below and click **Apply** to execute.'
+          : 'No response received.';
+        this.aiService.updateLastMessage(resp.message || correctionFallback, actions);
         this.isLoading = false;
         // Clear the error since the AI has provided a correction
         this.actionError = null;

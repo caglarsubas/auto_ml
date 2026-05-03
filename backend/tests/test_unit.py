@@ -1660,19 +1660,64 @@ class TestToolExecutor:
 # ---------------------------------------------------------------------------
 # Model registry tests
 # ---------------------------------------------------------------------------
+@pytest.fixture
+def _stub_engine_models(monkeypatch):
+    """Inject a deterministic engine /v1/models payload so tests don't need a
+    live engine.  Mirrors the previous hard-coded ``llama3.2:3b`` /
+    ``llama3.2:1b`` pair so historical assertions still mean something —
+    just routed through the dynamic-discovery code path."""
+    from ai_assistant import model_registry as mr
+    fake = {
+        'engine-llama3.2-3b': {
+            'provider': 'engine',
+            'model_id': 'llama3.2:3b',
+            'display_name': 'llama3.2:3b (Inference Engine)',
+            'temperature': 0.4,
+            'max_tokens': 4096,
+            'supports_tools': True,
+            'architecture': 'dense',
+            'reasoning': False,
+            'thinking': False,
+            'thinking_level': None,
+            'ram_gb': 3,
+        },
+        'engine-llama3.2-1b': {
+            'provider': 'engine',
+            'model_id': 'llama3.2:1b',
+            'display_name': 'llama3.2:1b (Inference Engine)',
+            'temperature': 0.4,
+            'max_tokens': 4096,
+            'supports_tools': True,
+            'architecture': 'dense',
+            'reasoning': False,
+            'thinking': False,
+            'thinking_level': None,
+            'ram_gb': 2,
+        },
+    }
+    monkeypatch.setattr(mr, '_fetch_engine_models', lambda: fake)
+    mr.invalidate_engine_cache()
+    yield fake
+    mr.invalidate_engine_cache()
+
+
 @pytest.mark.unit
 class TestModelRegistry:
     """Test the model_registry module — model configs, list, and defaults."""
 
-    def test_list_models_returns_all(self):
+    def test_list_models_returns_all(self, _stub_engine_models):
         from ai_assistant.model_registry import list_models, MODEL_REGISTRY
         models = list_models()
-        assert len(models) == len(MODEL_REGISTRY)
+        # Cloud entries (static) + engine entries (dynamic stub)
+        expected_count = len(MODEL_REGISTRY) + len(_stub_engine_models)
+        assert len(models) == expected_count
         keys = [m['key'] for m in models]
         for k in MODEL_REGISTRY:
             assert k in keys
+        for k in _stub_engine_models:
+            assert k in keys
 
-    def test_list_models_structure(self):
+    def test_list_models_structure(self, _stub_engine_models):
         from ai_assistant.model_registry import list_models
         models = list_models()
         for m in models:
@@ -1698,9 +1743,10 @@ class TestModelRegistry:
         assert cfg['is_reasoning_model'] is True
         assert 'temperature' not in cfg
 
-    def test_get_model_config_engine_llama_3b(self):
+    def test_get_model_config_engine_llama_3b(self, _stub_engine_models):
         from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('engine-llama-3.2-3b')
+        # Dynamic-discovery key: engine-{id with ':' replaced by '-'}
+        cfg = get_model_config('engine-llama3.2-3b')
         assert cfg['provider'] == 'engine'
         assert cfg['model_id'] == 'llama3.2:3b'
         assert cfg['supports_tools'] is True
@@ -1744,10 +1790,10 @@ class TestModelRegistry:
             assert cfg.get('is_reasoning_model') is True
             assert 'temperature' not in cfg
 
-    def test_engine_models_have_temperature(self):
+    def test_engine_models_have_temperature(self, _stub_engine_models):
         """Engine-routed models should expose temperature for inference control."""
         from ai_assistant.model_registry import get_model_config
-        for key in ('engine-llama-3.2-1b', 'engine-llama-3.2-3b'):
+        for key in ('engine-llama3.2-1b', 'engine-llama3.2-3b'):
             cfg = get_model_config(key)
             assert 'temperature' in cfg
             assert not cfg.get('is_reasoning_model')
@@ -1762,16 +1808,16 @@ class TestModelRegistry:
             assert 'thinking' in m
             assert 'thinking_level' in m
 
-    def test_engine_models_have_ram_gb(self):
+    def test_engine_models_have_ram_gb(self, _stub_engine_models):
         """All engine-routed models should declare their ram_gb requirement."""
-        from ai_assistant.model_registry import MODEL_REGISTRY
-        for key, cfg in MODEL_REGISTRY.items():
+        from ai_assistant.model_registry import _registry_snapshot
+        for key, cfg in _registry_snapshot().items():
             if cfg['provider'] == 'engine':
                 assert 'ram_gb' in cfg, f"Engine model '{key}' missing ram_gb"
                 assert isinstance(cfg['ram_gb'], (int, float)), f"{key}: ram_gb must be numeric"
                 assert cfg['ram_gb'] > 0, f"{key}: ram_gb must be positive"
 
-    def test_list_models_includes_ram_gb(self):
+    def test_list_models_includes_ram_gb(self, _stub_engine_models):
         """list_models() should expose ram_gb for engine-routed models."""
         from ai_assistant.model_registry import list_models
         models = list_models()
