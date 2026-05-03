@@ -29,6 +29,39 @@ class NumpyEncoder(json.JSONEncoder):
         return super(NumpyEncoder, self).default(obj)
     
 class FeatureCardViewSet(viewsets.ViewSet):
+    def _resolve_file_path(self, request, file_id):
+        """Resolve the file path, respecting optional file_override query param."""
+        file_override = request.query_params.get('file_override', None)
+        if file_override:
+            override_path = os.path.join(settings.MEDIA_ROOT, file_override) if not os.path.isabs(file_override) else file_override
+            if os.path.exists(override_path):
+                logger.info(f"Using file override: {override_path}")
+                return override_path, None
+            else:
+                return None, Response({"error": f"Override file not found: {file_override}"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            data_file = Declaration.objects.get(id=file_id)
+        except Declaration.DoesNotExist:
+            return None, Response({"error": f"File not found for ID: {file_id}"}, status=status.HTTP_404_NOT_FOUND)
+
+        file_path = data_file.get_file_path()
+        if not file_path:
+            return None, Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not os.path.exists(file_path):
+            data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
+            for filename in os.listdir(data_files_dir):
+                if filename.startswith('processed_') and filename.endswith(data_file.original_name):
+                    file_path = os.path.join(data_files_dir, filename)
+                    data_file.file.name = os.path.join('data_files', filename)
+                    data_file.save()
+                    break
+            else:
+                return None, Response({"error": "Processed file not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        return file_path, None
+
     @action(detail=True, methods=['get'])
     def get_feature_info(self, request, pk=None):
         file_id = pk
@@ -40,33 +73,10 @@ class FeatureCardViewSet(viewsets.ViewSet):
             logger.error("Column name is missing in the request")
             return Response({"error": "Column name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            data_file = Declaration.objects.get(id=file_id)
-        except Declaration.DoesNotExist:
-            logger.error(f"DataFile with id {file_id} not found")
-            return Response({"error": f"File not found for ID: {file_id}"}, status=status.HTTP_404_NOT_FOUND)
-
-        #file_path = data_file.file.path
-        file_path = data_file.get_file_path()
-        if not file_path:
-            logger.error(f"File not found for {data_file.original_name}")
-            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
-        logger.info(f"Stored file path: {file_path}")
-
-        if not os.path.exists(file_path):
-            # Search for the file in the data_files directory
-            data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
-            for filename in os.listdir(data_files_dir):
-                if filename.startswith('processed_') and filename.endswith(data_file.original_name):
-                    file_path = os.path.join(data_files_dir, filename)
-                    logger.info(f"Found processed file: {file_path}")
-                    # Update the database with the correct file path
-                    data_file.file.name = os.path.join('data_files', filename)
-                    data_file.save()
-                    break
-            else:
-                logger.error(f"Processed file not found for {data_file.original_name}")
-                return Response({"error": "Processed file not found"}, status=status.HTTP_404_NOT_FOUND)
+        file_path, err_resp = self._resolve_file_path(request, file_id)
+        if err_resp:
+            return err_resp
+        logger.info(f"Resolved file path: {file_path}")
 
         try:
             df = pd.read_csv(file_path)
@@ -205,8 +215,9 @@ class FeatureCardViewSet(viewsets.ViewSet):
             return Response({"error": "Column name is required"}, status=400)
 
         try:
-            data_file = Declaration.objects.get(id=file_id)
-            file_path = data_file.file.path
+            file_path, err_resp = self._resolve_file_path(request, file_id)
+            if err_resp:
+                return err_resp
             df = pd.read_csv(file_path)
             
             target_column = 'Target'
@@ -220,17 +231,45 @@ class FeatureCardViewSet(viewsets.ViewSet):
             target_data = df[target_column]
             
             stacked_data = {}
+            feat_nunique = feature_data.nunique(dropna=False)
+            # Low-cardinality numeric features (e.g. encoded categoricals) get
+            # value_counts format so the frontend renders grouped bar charts.
+            use_value_counts = (not pd.api.types.is_numeric_dtype(feature_data)) or feat_nunique <= 20
             for target_class in target_data.unique():
-                if pd.api.types.is_numeric_dtype(feature_data):
-                    class_data = feature_data[target_data == target_class].tolist()
-                    stacked_data[str(target_class)] = [x if not pd.isna(x) else None for x in class_data]
-                else:
-                    # For object (categorical) type, include NaN as a category
+                if use_value_counts:
                     class_data = feature_data[target_data == target_class].fillna('NaN')
                     value_counts = class_data.value_counts(dropna=False)
-                    stacked_data[str(target_class)] = value_counts.to_dict()
+                    stacked_data[str(target_class)] = {str(k): int(v) for k, v in value_counts.items()}
+                else:
+                    class_data = feature_data[target_data == target_class].tolist()
+                    stacked_data[str(target_class)] = [x if not pd.isna(x) else None for x in class_data]
 
-            json_data = json.dumps(stacked_data, default=self.json_default)
+            # Compute target averages per category (for features with <= 20 unique values)
+            nunique = feature_data.nunique(dropna=False)
+            target_averages = None
+            if nunique <= 20:
+                filled = feature_data.fillna('__NULL__')
+                grouped = df.assign(__feat__=filled).groupby('__feat__')[target_column]
+                ta_mean = grouped.mean()
+                ta_count = grouped.count()
+                total = len(df)
+                target_averages = []
+                for cat in ta_mean.index:
+                    cnt = int(ta_count.get(cat, 0))
+                    target_averages.append({
+                        'category': str(cat) if str(cat) != '__NULL__' else '(null)',
+                        'count': cnt,
+                        'volume_share': round(cnt / total * 100, 2) if total > 0 else 0,
+                        'target_average': round(float(ta_mean.get(cat, 0)), 6),
+                    })
+                # Sort by target_average descending
+                target_averages.sort(key=lambda x: x['target_average'], reverse=True)
+
+            response_payload = {
+                'stacked_data': stacked_data,
+                'target_averages': target_averages,
+            }
+            json_data = json.dumps(response_payload, default=self.json_default)
             return JsonResponse(json.loads(json_data), safe=False)
 
         except Exception as e:

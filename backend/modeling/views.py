@@ -17,6 +17,7 @@ from joblib import dump as joblib_dump
 import xgboost as xgb
 import shap
 from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
+from modeling.models import PipelineRun
 import threading
 import pickle
 
@@ -40,6 +41,8 @@ class ModelingStartView(APIView):
         processed_file = request.data.get('processed_file')
         algorithm = request.data.get('algorithm')  # optional, e.g., 'xgboost', 'lightgbm', 'catboost'
         excluded_variables = request.data.get('excluded_variables', [])  # Variables with Model_Usage='No'
+        encoding_plan_raw = request.data.get('encoding_plan', [])
+        encoding_use_native = request.data.get('encoding_use_native', True)
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -74,7 +77,39 @@ class ModelingStartView(APIView):
         model_info = {}
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
-            
+
+            # ── Parse encoding plan (if provided by frontend) ──
+            encoding_plan = []
+            if encoding_plan_raw and isinstance(encoding_plan_raw, list):
+                encoding_plan = encoding_plan_raw
+            elif isinstance(encoding_plan_raw, str):
+                try:
+                    encoding_plan = json.loads(encoding_plan_raw)
+                except Exception:
+                    encoding_plan = []
+            use_native = bool(encoding_use_native) if encoding_use_native is not None else True
+            has_encoding_plan = len(encoding_plan) > 0
+            print(f"[ModelingStart] encoding_plan entries={len(encoding_plan)}, use_native={use_native}")
+
+            # ── Load encoding sidecar metadata (if available) ──
+            # CSV serialization loses pd.Categorical dtype.  The encoding step
+            # saves a `.meta.json` sidecar listing which columns are categorical.
+            meta_cat_cols = set()
+            meta_path = full_path.replace('.csv', '.meta.json') if full_path.lower().endswith('.csv') else None
+            if meta_path and os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as mf:
+                        meta = json.load(mf)
+                    for entry in meta.get('categorical_columns', []):
+                        feat = entry.get('feature', '')
+                        if feat and feat in df.columns:
+                            meta_cat_cols.add(feat)
+                    print(f"[ModelingStart] Loaded encoding metadata: {len(meta_cat_cols)} categorical cols from sidecar: {sorted(meta_cat_cols)}")
+                except Exception as me:
+                    print(f"[ModelingStart] Warning: failed to read encoding metadata: {me}")
+            else:
+                print(f"[ModelingStart] No encoding sidecar metadata found at {meta_path}")
+
             # Track excluded variables (Model_Usage='No') but keep them in dataframe
             # They will be excluded when creating feature matrix X
             excluded_cols_for_modeling = []
@@ -107,12 +142,79 @@ class ModelingStartView(APIView):
                 # Exclude both target and excluded variables from feature matrix
                 cols_to_exclude = [target_col] + excluded_cols_for_modeling
                 X_raw = df.drop(columns=cols_to_exclude)
-                # Use only numeric features for simplicity
-                X_raw = X_raw.select_dtypes(include=['number']).copy()
+                # Detect categorical columns:
+                #   1) from encoding sidecar metadata (authoritative)
+                #   2) fallback: dtype 'category', 'object', or string (Pandas 3.0+ StringDtype)
+                cat_cols = []
+                for c in X_raw.columns:
+                    if c in meta_cat_cols:
+                        cat_cols.append(c)
+                    elif hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                        cat_cols.append(c)
+                    elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
+                        cat_cols.append(c)
+                # Keep numeric + categorical columns; drop anything else
+                keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
+                X_raw = X_raw[keep_cols].copy()
+
+                # ── Apply encoding via plan (if provided) or fallback to native ──
+                encoding_report = []
+                encoded_file_rel = None
+                if has_encoding_plan:
+                    from encoding.encoding_utils import apply_encoding as _apply_enc
+                    # Temporarily attach Target for target_encoding, then drop it
+                    X_with_target = X_raw.copy()
+                    X_with_target[target_col] = y.values
+                    X_with_target, enc_report_list = _apply_enc(X_with_target, encoding_plan, target_col=target_col, use_native=use_native)
+                    if target_col in X_with_target.columns:
+                        X_with_target = X_with_target.drop(columns=[target_col])
+                    X_raw = X_with_target
+                    encoding_report = enc_report_list
+                    # After apply_encoding, some columns may now be numeric (encoded)
+                    # Refresh cat_cols: only those that are still pd.Categorical
+                    cat_cols = [c for c in X_raw.columns if hasattr(X_raw[c], 'cat') and X_raw[c].dtype.name == 'category']
+                    enable_cat = len(cat_cols) > 0
+                    print(f"[ModelingStart] Encoding via plan: {len(enc_report_list)} features encoded, native_cat remaining={len(cat_cols)}")
+                    # Save encoded CSV to disk so Feature Card can display the encoded data version
+                    # Use the full processed DataFrame and overlay encoded columns so ALL features are preserved
+                    try:
+                        from datetime import datetime as _dt
+                        encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
+                        os.makedirs(encoded_dir, exist_ok=True)
+                        encoded_filename = f'encoded_{file_id}_{_dt.now().strftime("%Y%m%d%H%M%S")}.csv'
+                        encoded_abs = os.path.join(encoded_dir, encoded_filename)
+                        encoded_save_df = df.copy()
+                        for col in X_raw.columns:
+                            if col in encoded_save_df.columns:
+                                encoded_save_df[col] = X_raw[col].values
+                        encoded_save_df.to_csv(encoded_abs, index=False)
+                        encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
+                        print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
+                    except Exception as enc_save_err:
+                        encoded_file_rel = None
+                        print(f"[ModelingStart] Could not save encoded CSV: {enc_save_err}")
+                else:
+                    # Default behavior: convert all categorical columns to pd.Categorical for native support
+                    enable_cat = len(cat_cols) > 0
+                    for c in cat_cols:
+                        if c in X_raw.columns:
+                            X_raw[c] = X_raw[c].astype('category')
+                            cats = [str(v) for v in X_raw[c].cat.categories]
+                            encoding_report.append({
+                                'feature': c,
+                                'strategy': 'native_categorical',
+                                'categories': cats,
+                                'nunique': len(cats),
+                            })
+                print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
+                print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
                 X_raw = X_raw.dropna(axis=1, how='all')
-                # Filled copy for modeling
-                X = X_raw.fillna(X_raw.mean(numeric_only=True))
+                # Filled copy for modeling: fill numeric NaNs with mean, categorical NaNs are handled natively
+                X = X_raw.copy()
+                num_cols_for_fill = X.select_dtypes(include=['number']).columns
+                if len(num_cols_for_fill) > 0:
+                    X[num_cols_for_fill] = X[num_cols_for_fill].fillna(X[num_cols_for_fill].mean())
 
                 # If no features remain, skip training
                 if X.shape[1] >= 1 and len(y) >= 5:
@@ -182,8 +284,8 @@ class ModelingStartView(APIView):
 
                         # DMatrix with feature names for consistent importances/SHAP
                         feature_names = list(map(str, X.columns.tolist()))
-                        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names)
-                        dvalid = xgb.DMatrix(X_valid, label=y_valid, feature_names=feature_names)
+                        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names, enable_categorical=enable_cat)
+                        dvalid = xgb.DMatrix(X_valid, label=y_valid, feature_names=feature_names, enable_categorical=enable_cat)
 
                         booster = xgb.train(
                             params,
@@ -249,7 +351,16 @@ class ModelingStartView(APIView):
                                     Xv_raw = Xv_raw.loc[Xv.index]
                                 except Exception:
                                     Xv_raw = Xv.copy()
-                            shap_vals = explainer.shap_values(Xv)
+                            # SHAP's internal DMatrix doesn't pass enable_categorical,
+                            # so convert categorical columns to their numeric codes
+                            # before computing SHAP values.
+                            Xv_shap = Xv.copy()
+                            for c in cat_cols:
+                                if c in Xv_shap.columns and hasattr(Xv_shap[c], 'cat'):
+                                    Xv_shap[c] = Xv_shap[c].cat.codes.astype(float)
+                                    # Replace -1 (NaN sentinel from .cat.codes) with NaN
+                                    Xv_shap[c] = Xv_shap[c].replace(-1, np.nan)
+                            shap_vals = explainer.shap_values(Xv_shap)
                             if isinstance(shap_vals, list):
                                 try:
                                     shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
@@ -316,12 +427,59 @@ class ModelingStartView(APIView):
                                 if item['mean_abs'] > 0
                             ]
 
+                            # Build gain lookup from already-computed gain_importance
+                            gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
+
+                            # Compute VIF (Variance Inflation Factor) for multicollinearity
+                            vif_lookup: dict[str, float] = {}
+                            try:
+                                from statsmodels.stats.outliers_influence import variance_inflation_factor
+                                # Build numeric-only matrix for VIF (convert categoricals to codes)
+                                X_vif = X_train.copy()
+                                for c in X_vif.columns:
+                                    if hasattr(X_vif[c], 'cat'):
+                                        X_vif[c] = X_vif[c].cat.codes.astype(float)
+                                        X_vif[c] = X_vif[c].replace(-1, np.nan)
+                                X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
+                                X_vif = X_vif.fillna(X_vif.mean())
+                                # Drop zero-variance columns to avoid inf VIF
+                                nonzero_var = X_vif.columns[X_vif.var() > 0]
+                                X_vif = X_vif[nonzero_var]
+                                X_vif_arr = X_vif.values.astype(float)
+                                for i, col_name in enumerate(X_vif.columns):
+                                    try:
+                                        v = variance_inflation_factor(X_vif_arr, i)
+                                        vif_lookup[col_name] = round(float(v), 2) if np.isfinite(v) else None
+                                    except Exception:
+                                        vif_lookup[col_name] = None
+                                print(f"[ModelingStart] VIF computed for {len(vif_lookup)} features")
+                            except Exception as vif_err:
+                                print(f"[ModelingStart] VIF computation failed: {vif_err}")
+
+                            # --- ECDF-rank percentile normalization & combined score ---
+                            # Collect raw SHAP |impact| and gain for features with impact > 0
+                            _active_items = [it for it in shap_details_sorted if it['mean_abs'] > 0]
+                            _shap_vals = np.array([it['mean_abs'] for it in _active_items])
+                            _gain_vals = np.array([gain_lookup.get(it['feature'], 0.0) for it in _active_items])
+
+                            def _ecdf_rank(arr):
+                                """Return ECDF-based percentile ranks in [0, 1] — full precision."""
+                                n = len(arr)
+                                if n == 0:
+                                    return arr.copy()
+                                order = np.argsort(arr)
+                                ranks = np.empty_like(order, dtype=float)
+                                ranks[order] = np.arange(1, n + 1) / n
+                                return ranks
+
+                            _shap_pct = _ecdf_rank(_shap_vals)
+                            _gain_pct = _ecdf_rank(_gain_vals)
+                            _combined = np.sqrt(_shap_pct * _gain_pct)
+
                             try:
                                 from declaration.models import DataDictionary
                                 selected_features = []
-                                for item in shap_details_sorted:
-                                    if item['mean_abs'] <= 0:
-                                        continue
+                                for idx, item in enumerate(_active_items):
                                     desc = DataDictionary.get_description(file_id, item['feature']) or ''
                                     selected_features.append({
                                         'feature': item['feature'],
@@ -329,19 +487,29 @@ class ModelingStartView(APIView):
                                         'impact': item['mean_abs'],
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
+                                        'gain': gain_lookup.get(item['feature'], 0.0),
+                                        'vif': vif_lookup.get(item['feature']),
+                                        'shap_percentile': float(_shap_pct[idx]),
+                                        'gain_percentile': float(_gain_pct[idx]),
+                                        'combined_score': float(_combined[idx]),
                                     })
                             except Exception:
                                 selected_features = []
-                                for item in shap_details_sorted:
-                                    if item['mean_abs'] <= 0:
-                                        continue
+                                for idx, item in enumerate(_active_items):
                                     selected_features.append({
                                         'feature': item['feature'],
                                         'description': '',
                                         'impact': item['mean_abs'],
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
+                                        'gain': gain_lookup.get(item['feature'], 0.0),
+                                        'vif': vif_lookup.get(item['feature']),
+                                        'shap_percentile': float(_shap_pct[idx]),
+                                        'gain_percentile': float(_gain_pct[idx]),
+                                        'combined_score': float(_combined[idx]),
                                     })
+                            # Sort by combined score descending
+                            selected_features.sort(key=lambda x: x['combined_score'], reverse=True)
 
                             try:
                                 import matplotlib
@@ -349,7 +517,7 @@ class ModelingStartView(APIView):
                                 import matplotlib.pyplot as plt
                                 import io, base64
                                 # Draw beeswarm and save the current figure
-                                shap.summary_plot(shap_matrix, Xv, plot_type='dot', show=False, max_display=40)
+                                shap.summary_plot(shap_matrix, Xv_shap, plot_type='dot', show=False, max_display=40)
                                 fig = plt.gcf()
                                 buf = io.BytesIO()
                                 fig.tight_layout()
@@ -382,8 +550,12 @@ class ModelingStartView(APIView):
                                 # Index alignment for shap_matrix when we sampled rows above
                                 if shap_matrix.shape[0] != Xv_compact.shape[0]:
                                     # Recompute shap on the compact subset to stay aligned
-                                    dsub = xgb.DMatrix(Xv_compact.values, feature_names=feature_names)
-                                    shap_sub = explainer.shap_values(Xv_compact)
+                                    Xv_compact_shap = Xv_compact.copy()
+                                    for c in cat_cols:
+                                        if c in Xv_compact_shap.columns and hasattr(Xv_compact_shap[c], 'cat'):
+                                            Xv_compact_shap[c] = Xv_compact_shap[c].cat.codes.astype(float)
+                                            Xv_compact_shap[c] = Xv_compact_shap[c].replace(-1, np.nan)
+                                    shap_sub = explainer.shap_values(Xv_compact_shap)
                                     if isinstance(shap_sub, list):
                                         try:
                                             shap_matrix_compact = np.mean(np.stack(shap_sub, axis=0), axis=0)
@@ -540,8 +712,8 @@ class ModelingStartView(APIView):
                             for tr_idx, va_idx in skf.split(X.values, y_encoded):
                                 X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
                                 y_tr, y_va = y_encoded[tr_idx], y_encoded[va_idx]
-                                dtr = xgb.DMatrix(X_tr, label=y_tr, feature_names=feature_names)
-                                dva = xgb.DMatrix(X_va, label=y_va, feature_names=feature_names)
+                                dtr = xgb.DMatrix(X_tr, label=y_tr, feature_names=feature_names, enable_categorical=enable_cat)
+                                dva = xgb.DMatrix(X_va, label=y_va, feature_names=feature_names, enable_categorical=enable_cat)
                                 bst = xgb.train(params, dtr, num_boost_round=500, evals=[(dva, 'valid')], early_stopping_rounds=50, verbose_eval=False)
                                 # predict proba of positive class
                                 try:
@@ -686,12 +858,22 @@ class ModelingStartView(APIView):
                             pickle.dump(train_data, f)
                         print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
                         
+                        # Log categorical feature gain importances for validation
+                        cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
+                        if cat_in_gain:
+                            print(f"[ModelingStart] Categorical features with gain > 0: {[(g['feature'], round(g['score'], 4)) for g in cat_in_gain]}")
+                        else:
+                            print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
+
                         model_info = {
                             'model_type': 'xgboost_classifier',
                             'valid_auc': valid_auc,
                             'best_iteration': int(getattr(booster, 'best_iteration', getattr(booster, 'best_ntree_limit', 0))),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
                             'feature_count': int(X.shape[1]),
+                            'categorical_features_used': cat_cols,
+                            'enable_categorical': enable_cat,
+                            'encoding_report': encoding_report,
                             'importances': {
                                 'gain': gain_importance,
                                 'shap_mean_abs': shap_importance,
@@ -775,6 +957,7 @@ class ModelingStartView(APIView):
             'job_status': 'completed',
             'file_id': file_id,
             'processed_file': processed_file,
+            'encoded_file': encoded_file_rel,
             'metrics': metrics,
             'model': model_info,
             'algorithm': algorithm
@@ -811,7 +994,10 @@ class ModelingStatusView(APIView):
 class FeatureExplainabilityView(APIView):
     """Returns SHAP explainability data for a single feature: beeswarm and partial dependence.
     
-    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number }
+    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number,
+              model_path?: string, selected_features?: string[] }
+    When selected_features is provided (without model_path), a temporary model is trained
+    on-demand with only those features — used for SFS per-step explainability.
     """
 
     def post(self, request, *args, **kwargs):
@@ -819,8 +1005,10 @@ class FeatureExplainabilityView(APIView):
         feature_name = request.data.get('feature_name')
         processed_file = request.data.get('processed_file')
         n_samples = request.data.get('n_samples', 500)
+        custom_model_path = request.data.get('model_path')  # Optional: e.g. SFS final model
+        selected_features = request.data.get('selected_features')  # Optional: train on-demand with these features
 
-        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}")
+        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}, custom_model={custom_model_path or 'default'}, selected_features={len(selected_features) if selected_features else 'N/A'}")
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -828,14 +1016,56 @@ class FeatureExplainabilityView(APIView):
             return Response({'error': 'feature_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Load model
-            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-            model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
-            if not os.path.exists(model_path):
-                return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
-            
-            booster = xgb.Booster()
-            booster.load_model(model_path)
+            booster = None
+
+            # Option 1: On-demand model from selected_features (SFS step context)
+            if selected_features and isinstance(selected_features, list) and not custom_model_path:
+                if feature_name not in selected_features:
+                    return Response({
+                        'error': f'Feature "{feature_name}" was not selected at this SFS step.',
+                        'reason': 'feature_not_in_model',
+                        'detail': 'This feature is not part of the model at this SFS step.'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                # Load training data to train a temporary model
+                train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+                if not os.path.exists(train_data_path):
+                    return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+                with open(train_data_path, 'rb') as f:
+                    train_data = pickle.load(f)
+                X_tr = train_data['X_train']
+                y_tr = train_data['y_train']
+                valid_sf = [f for f in selected_features if f in X_tr.columns]
+                if not valid_sf:
+                    return Response({'error': 'None of the selected_features exist in training data.'}, status=status.HTTP_400_BAD_REQUEST)
+                _has_cat_sf = any(
+                    hasattr(X_tr[c], 'cat') or X_tr[c].dtype.name == 'category' or X_tr[c].dtype == 'object' or pd.api.types.is_string_dtype(X_tr[c])
+                    for c in valid_sf
+                )
+                dtrain_sf = xgb.DMatrix(X_tr[valid_sf], label=y_tr, enable_categorical=_has_cat_sf)
+                _params_sf = {
+                    'objective': 'binary:logistic', 'eval_metric': 'auc',
+                    'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                }
+                booster = xgb.train(
+                    _params_sf, dtrain_sf, num_boost_round=100,
+                    evals=[(dtrain_sf, 'train')], early_stopping_rounds=10,
+                    verbose_eval=False
+                )
+                print(f"[FeatureExplainability] Trained on-demand model with {len(valid_sf)} features for step explainability")
+
+            # Option 2: Load saved model (custom or default)
+            if booster is None:
+                models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                if custom_model_path:
+                    model_path = os.path.join(settings.MEDIA_ROOT, custom_model_path) if not os.path.isabs(custom_model_path) else custom_model_path
+                else:
+                    model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
+                if not os.path.exists(model_path):
+                    return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
+                
+                booster = xgb.Booster()
+                booster.load_model(model_path)
 
             # Load processed data
             if processed_file:
@@ -875,9 +1105,24 @@ class FeatureExplainabilityView(APIView):
 
             y = df[target_col]
             X_raw = df.drop(columns=[target_col])
-            X_raw = X_raw.select_dtypes(include=['number']).copy()
+            # Detect categorical columns for enable_categorical support
+            _cat_cols_expl = []
+            for c in X_raw.columns:
+                if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                    _cat_cols_expl.append(c)
+                elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
+                    _cat_cols_expl.append(c)
+            _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
+            X_raw = X_raw[_keep_expl].copy()
+            _enable_cat_expl = len(_cat_cols_expl) > 0
+            for c in _cat_cols_expl:
+                if c in X_raw.columns:
+                    X_raw[c] = X_raw[c].astype('category')
             X_raw = X_raw.dropna(axis=1, how='all')
-            X = X_raw.fillna(X_raw.mean(numeric_only=True))
+            X = X_raw.copy()
+            _num_expl = X.select_dtypes(include=['number']).columns
+            if len(_num_expl) > 0:
+                X[_num_expl] = X[_num_expl].fillna(X[_num_expl].mean())
 
             # Check if feature was used in the trained model FIRST (before checking data)
             # This ensures we give the correct message for features excluded during modeling
@@ -904,6 +1149,15 @@ class FeatureExplainabilityView(APIView):
                     'detail': 'This feature is in the model but not available in the current processed dataset. Please ensure preprocessing was completed correctly.'
                 }, status=status.HTTP_404_NOT_FOUND)
 
+            # Filter X and X_raw to only include model features (model may have been
+            # trained on a subset due to excluded_variables / Model_Usage settings).
+            # Without this, DMatrix dimensions won't match the model's expected features.
+            if model_features:
+                available_model_features = [c for c in model_features if c in X.columns]
+                print(f"[FeatureExplainability] Filtering data from {X.shape[1]} cols to {len(available_model_features)} model features")
+                X = X[available_model_features]
+                X_raw = X_raw[[c for c in available_model_features if c in X_raw.columns]]
+
             # Sample for performance
             if X.shape[0] > n_samples:
                 sample_idx = X.sample(n_samples, random_state=42).index
@@ -915,13 +1169,13 @@ class FeatureExplainabilityView(APIView):
 
             # Compute SHAP values
             feature_names = list(map(str, X.columns.tolist()))
-            dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            dmatrix = xgb.DMatrix(X_sampled, feature_names=feature_names, enable_categorical=_enable_cat_expl)
             # Suppress SHAP FutureWarning about feature_perturbation
             import warnings
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
                 explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
-            shap_vals = explainer.shap_values(X_sampled)
+            shap_vals = explainer.shap_values(dmatrix)
             if isinstance(shap_vals, list):
                 try:
                     shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
@@ -940,7 +1194,7 @@ class FeatureExplainabilityView(APIView):
 
             # Partial dependence plot (SHAP-aligned: use raw output margin)
             # Compute base value (expected value of model output on the dataset)
-            dmatrix_base = xgb.DMatrix(X_sampled, feature_names=feature_names)
+            dmatrix_base = xgb.DMatrix(X_sampled, feature_names=feature_names, enable_categorical=_enable_cat_expl)
             base_preds = booster.predict(dmatrix_base, output_margin=True)
             base_value = float(np.mean(base_preds))
             
@@ -976,7 +1230,7 @@ class FeatureExplainabilityView(APIView):
             
             for grid_val in grid:
                 X_pd[feature_name] = grid_val
-                dmatrix_pd = xgb.DMatrix(X_pd, feature_names=feature_names)
+                dmatrix_pd = xgb.DMatrix(X_pd, feature_names=feature_names, enable_categorical=_enable_cat_expl)
                 # Use output_margin=True to get raw predictions (before sigmoid)
                 # This aligns with SHAP values which are in logit space
                 preds_margin = booster.predict(dmatrix_pd, output_margin=True)
@@ -997,14 +1251,25 @@ class FeatureExplainabilityView(APIView):
                 import base64
                 
                 # Create wrapper function for model prediction that SHAP expects
+                # Capture the categorical column names so we can restore their dtype
+                # after SHAP passes numpy arrays (which lose dtype info).
+                _cat_col_names_pdp = [c for c in _cat_cols_expl if c in feature_names]
+
                 def model_predict(data_array):
                     """Wrapper for XGBoost predict that returns raw margin output"""
                     if isinstance(data_array, np.ndarray):
-                        # Convert to DataFrame with proper column names
                         data_df = pd.DataFrame(data_array, columns=feature_names)
                     else:
                         data_df = data_array
-                    dmat = xgb.DMatrix(data_df, feature_names=feature_names)
+                    # Restore category dtype for categorical columns (lost when
+                    # SHAP passes numpy arrays) and convert any remaining
+                    # str/object columns to numeric so XGBoost accepts them.
+                    for c in data_df.columns:
+                        if c in _cat_col_names_pdp:
+                            data_df[c] = data_df[c].astype('category')
+                        elif not pd.api.types.is_numeric_dtype(data_df[c]):
+                            data_df[c] = pd.to_numeric(data_df[c], errors='coerce')
+                    dmat = xgb.DMatrix(data_df, feature_names=feature_names, enable_categorical=_enable_cat_expl)
                     return booster.predict(dmat, output_margin=True)
                 
                 # Create figure for SHAP's partial_dependence_plot
@@ -1124,6 +1389,7 @@ class SFSResultsView(APIView):
                 'forward': sfs_data.get('forward', []),
                 'backward': sfs_data.get('backward', []),
                 'backward_remaining_features': sfs_data.get('backward_remaining_features', []),
+                'forward_from_backward': sfs_data.get('forward_from_backward', []),
                 'error': sfs_data.get('error', None)
             }, status=status.HTTP_200_OK)
             
@@ -1144,6 +1410,9 @@ class SFSStartView(APIView):
             methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
             stopping_criteria = data.get('stopping_criteria', {})
             initial_features = data.get('initial_features', None)  # Optional: Start with specific features
+            excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
+            n_jobs = int(data.get('n_jobs', 1))  # Parallel workers for candidate evaluation
+            top_k = int(data.get('top_k', 3))  # Top-K candidates to CV-evaluate per step
             
             # Validate required parameters
             if not file_id:
@@ -1171,20 +1440,146 @@ class SFSStartView(APIView):
             X_train_raw = train_data['X_train_raw']
             X_valid_raw = train_data['X_valid_raw']
             
+            # Remove features marked as "drop" by user from all feature matrices
+            if excluded_features and isinstance(excluded_features, list):
+                cols_to_drop = [c for c in excluded_features if c in X_train.columns]
+                if cols_to_drop:
+                    print(f"[SFS] Excluding {len(cols_to_drop)} user-dropped features from SFS: {cols_to_drop}")
+                    X_train = X_train.drop(columns=cols_to_drop)
+                    X_valid = X_valid.drop(columns=cols_to_drop)
+                    X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
+                    X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
+            
             # Initialize progress tracking
+            import time as _time
+            sfs_start_time = _time.time()
+            # Load resume state if requested
+            resume = data.get('resume', False)
+            resume_state = None
+            if resume:
+                sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+                if os.path.exists(sfs_path):
+                    try:
+                        with open(sfs_path, 'r', encoding='utf-8') as rf:
+                            saved = json.load(rf)
+                        if saved.get('resume_state'):
+                            # Graceful stop — resume_state was explicitly saved
+                            resume_state = saved['resume_state']
+                            print(f"[SFS] Loaded resume_state for file_id={file_id}: keys={list(resume_state.keys())}")
+                        elif saved.get('status') in ('running', 'interrupted', 'stopped'):
+                            # Interrupted (server restart) or stopped without resume_state —
+                            # build resume_state from the intermediate results on disk
+                            resume_state = {}
+                            fwd = saved.get('forward', [])
+                            bwd = saved.get('backward', [])
+                            if fwd:
+                                last_fwd = fwd[-1]
+                                resume_state['forward_results'] = fwd
+                                resume_state['forward_selected_features'] = last_fwd.get('selected_features', [])
+                                resume_state['forward_previous_metrics'] = {
+                                    k: last_fwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_fwd
+                                }
+                                resume_state['forward_start_step'] = last_fwd['step'] + 1
+                            if bwd:
+                                last_bwd = bwd[-1]
+                                resume_state['backward_results'] = bwd
+                                resume_state['backward_current_features'] = last_bwd.get('selected_features', [])
+                                resume_state['backward_previous_metrics'] = {
+                                    k: last_bwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_bwd
+                                }
+                                resume_state['backward_start_step'] = last_bwd['step'] + 1
+                            # Rebuild completed_steps from forward + backward results
+                            resume_state['completed_steps'] = fwd + bwd
+                            print(f"[SFS] Built resume_state from intermediate results: fwd={len(fwd)}, bwd={len(bwd)}")
+                    except Exception as re_err:
+                        print(f"[SFS] Failed to load resume state: {re_err}")
+
             SFS_PROGRESS[file_id] = {
                 'status': 'running',
-                'message': 'Starting SFS...',
+                'message': 'Resuming SFS...' if resume_state else 'Starting SFS...',
                 'progress': 0.0,
                 'current_metric': None,
                 'error': None,
-                'completed_steps': []  # Track completed steps for real-time viewing
+                'completed_steps': resume_state.get('completed_steps', []) if resume_state else [],
+                'duration_seconds': None,
+                'stop_requested': False
             }
             
+            # Prepare paths and helpers shared by callback and thread
+            sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
+            os.makedirs(sfs_dir, exist_ok=True)
+            sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
+
+            def sanitize_sfs(results_list):
+                """Sanitize step dicts for JSON serialization (numpy → float)."""
+                sanitized = []
+                for item in results_list:
+                    sanitized_item = {
+                        'step': item['step'],
+                        'direction': item['direction'],
+                        'action': item['action'],
+                        'feature_name': item['feature_name'],
+                        'selected_features': item['selected_features'],
+                        'train_roc_auc': float(item['train_roc_auc']),
+                        'train_pr_auc': float(item['train_pr_auc']),
+                        'cv_roc_auc': float(item['cv_roc_auc']),
+                        'cv_pr_auc': float(item['cv_pr_auc']),
+                        'test_roc_auc': float(item['test_roc_auc']),
+                        'test_pr_auc': float(item['test_pr_auc']),
+                        'stability_type': item['stability_type'],
+                        'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
+                        'shap_importance': float(item['shap_importance']),
+                        'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
+                        'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
+                        'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
+                    }
+                    sanitized.append(sanitized_item)
+                return sanitized
+
+            _last_saved_step_count = [0]  # mutable for closure
+
+            def _save_intermediate(completed_steps):
+                """Persist intermediate results to disk so they survive server restarts."""
+                try:
+                    fwd = [s for s in completed_steps if s.get('direction') == 'forward']
+                    bwd = [s for s in completed_steps if s.get('direction') == 'backward']
+                    # Compute backward remaining features from last backward step
+                    bwd_remaining = bwd[-1]['selected_features'] if bwd else []
+
+                    # Read existing data to preserve results from prior runs
+                    existing = {}
+                    if os.path.exists(sfs_path):
+                        try:
+                            with open(sfs_path, 'r', encoding='utf-8') as ef:
+                                existing = json.load(ef)
+                        except Exception:
+                            existing = {}
+
+                    # Detect forward-from-backward: new forward steps but existing backward data on disk
+                    is_fwd_from_bwd = bool(fwd and not bwd and existing.get('backward'))
+
+                    intermediate = {
+                        'forward': existing.get('forward', []) if is_fwd_from_bwd else sanitize_sfs(fwd),
+                        'backward': sanitize_sfs(bwd) if bwd else existing.get('backward', []),
+                        'backward_remaining_features': bwd_remaining if bwd_remaining else existing.get('backward_remaining_features', []),
+                        'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
+                        'status': 'running',
+                        'error': None
+                    }
+                    with open(sfs_path, 'w', encoding='utf-8') as f:
+                        json.dump(intermediate, f, indent=2)
+                except Exception as save_err:
+                    print(f"[SFS] Intermediate save error: {save_err}")
+
             # Define status callback
             def update_progress(status_info):
                 SFS_PROGRESS[file_id].update(status_info)
-                print(f"[SFS-Progress] {status_info}")
+                # Save intermediate results to disk after each new completed step
+                completed = status_info.get('completed_steps', [])
+                if len(completed) > _last_saved_step_count[0]:
+                    _last_saved_step_count[0] = len(completed)
+                    _save_intermediate(completed)
+                print(f"[SFS-Progress] {status_info.get('message', '')}")
             
             # Run SFS in background thread
             def run_sfs_thread():
@@ -1200,61 +1595,101 @@ class SFSStartView(APIView):
                         stopping_criteria=stopping_criteria,
                         status_callback=update_progress,
                         cv_folds=3,
-                        initial_features=initial_features
+                        initial_features=initial_features,
+                        n_jobs=n_jobs,
+                        top_k=top_k,
+                        stop_flag=SFS_PROGRESS[file_id],
+                        resume_state=resume_state
                     )
                     
-                    # Save results to JSON
-                    sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
-                    os.makedirs(sfs_dir, exist_ok=True)
-                    sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
-                    
-                    # Sanitize results for JSON serialization
-                    def sanitize_sfs(results_list):
-                        sanitized = []
-                        for item in results_list:
-                            sanitized_item = {
-                                'step': item['step'],
-                                'direction': item['direction'],
-                                'action': item['action'],
-                                'feature_name': item['feature_name'],
-                                'selected_features': item['selected_features'],
-                                'train_roc_auc': float(item['train_roc_auc']),
-                                'train_pr_auc': float(item['train_pr_auc']),
-                                'cv_roc_auc': float(item['cv_roc_auc']),
-                                'cv_pr_auc': float(item['cv_pr_auc']),
-                                'test_roc_auc': float(item['test_roc_auc']),
-                                'test_pr_auc': float(item['test_pr_auc']),
-                                'stability_type': item['stability_type'],
-                                'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
-                                'shap_importance': float(item['shap_importance']),
-                                'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
-                                'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
-                                'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
-                            }
-                            sanitized.append(sanitized_item)
-                        return sanitized
-                    
+                    # Final save — merge with existing results to preserve previous runs
+                    existing_data = {}
+                    if os.path.exists(sfs_path):
+                        try:
+                            with open(sfs_path, 'r', encoding='utf-8') as ef:
+                                existing_data = json.load(ef)
+                        except Exception:
+                            existing_data = {}
+
+                    new_forward = sanitize_sfs(results.get('forward', []))
+                    new_backward = sanitize_sfs(results.get('backward', []))
+                    new_backward_remaining = results.get('backward_remaining_features', [])
+
+                    # Detect forward-from-backward: new forward results AND existing backward data
+                    is_forward_from_backward = bool(new_forward and existing_data.get('backward'))
+
                     sfs_data = {
-                        'forward': sanitize_sfs(results.get('forward', [])),
-                        'backward': sanitize_sfs(results.get('backward', [])),
-                        'backward_remaining_features': results.get('backward_remaining_features', []),
+                        # Preserve original forward results when this is a forward-from-backward run
+                        'forward': existing_data.get('forward', []) if is_forward_from_backward else (new_forward if new_forward else existing_data.get('forward', [])),
+                        'backward': new_backward if new_backward else existing_data.get('backward', []),
+                        'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
+                        'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None)
                     }
+
+                    # Save the final fitted model for each completed SFS direction
+                    # so Feature Card explainability can use it instead of the initial model.
+                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                    os.makedirs(models_dir, exist_ok=True)
+                    _has_cat = any(
+                        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
+                        for c in X_train.columns
+                    )
+                    _sfs_model_params = {
+                        'objective': 'binary:logistic', 'eval_metric': 'auc',
+                        'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                        'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                    }
+                    for direction_key in ('forward', 'backward', 'forward_from_backward'):
+                        steps = sfs_data.get(direction_key, [])
+                        if steps:
+                            last_step = steps[-1]
+                            final_features = last_step.get('selected_features', [])
+                            valid_features = [f for f in final_features if f in X_train.columns]
+                            if valid_features:
+                                try:
+                                    dtrain_f = xgb.DMatrix(X_train[valid_features], label=y_train, enable_categorical=_has_cat)
+                                    sfs_booster = xgb.train(
+                                        _sfs_model_params, dtrain_f, num_boost_round=100,
+                                        evals=[(dtrain_f, 'train')], early_stopping_rounds=10,
+                                        verbose_eval=False
+                                    )
+                                    sfs_model_path = os.path.join(models_dir, f'{file_id}_sfs_{direction_key}_model.json')
+                                    sfs_booster.save_model(sfs_model_path)
+                                    sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
+                                    print(f"[SFS] Saved {direction_key} final model ({len(valid_features)} features) -> {sfs_model_path}")
+                                except Exception as model_err:
+                                    print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
+
+                    # Persist resume_state if stopped (for continue later)
+                    if results.get('status') == 'stopped' and results.get('resume_state'):
+                        sfs_data['resume_state'] = results['resume_state']
+                        sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(sfs_data, f, indent=2)
                     
-                    SFS_PROGRESS[file_id]['status'] = 'completed'
-                    SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
-                    SFS_PROGRESS[file_id]['progress'] = 1.0
-                    
-                    print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
+                    elapsed = round(_time.time() - sfs_start_time, 1)
+
+                    if results.get('status') == 'stopped':
+                        SFS_PROGRESS[file_id]['status'] = 'stopped'
+                        SFS_PROGRESS[file_id]['message'] = 'SFS stopped by user'
+                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
+                        print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
+                    else:
+                        SFS_PROGRESS[file_id]['status'] = 'completed'
+                        SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
+                        SFS_PROGRESS[file_id]['progress'] = 1.0
+                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
+                        print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
                     
                 except Exception as e:
+                    elapsed = round(_time.time() - sfs_start_time, 1)
                     SFS_PROGRESS[file_id]['status'] = 'error'
                     SFS_PROGRESS[file_id]['message'] = f'SFS failed: {str(e)}'
                     SFS_PROGRESS[file_id]['error'] = str(e)
+                    SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
                     print(f"[SFS] Error for file_id={file_id}: {e}")
                     import traceback
                     traceback.print_exc()
@@ -1264,12 +1699,56 @@ class SFSStartView(APIView):
             thread.daemon = True
             thread.start()
             
+            excluded_count = len([c for c in (excluded_features or []) if c in train_data['X_train'].columns])
+            msg = f'SFS started in background ({X_train.shape[1]} features'
+            if excluded_count > 0:
+                msg += f', {excluded_count} excluded by user'
+            msg += ')'
+            
             return Response({
                 'status': 'started',
-                'message': 'SFS started in background',
+                'message': msg,
                 'file_id': file_id,
                 'methods': methods,
-                'stopping_criteria': stopping_criteria
+                'stopping_criteria': stopping_criteria,
+                'excluded_features': excluded_features or []
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SFSStopView(APIView):
+    """Request SFS to stop gracefully for a given file_id.
+    The background thread checks stop_requested flag at each step."""
+    
+    def post(self, request, file_id: int, *args, **kwargs):
+        try:
+            if file_id not in SFS_PROGRESS:
+                return Response({
+                    'error': 'No SFS process found for this file_id',
+                    'file_id': file_id
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            current_status = SFS_PROGRESS[file_id].get('status')
+            if current_status != 'running':
+                return Response({
+                    'message': f'SFS is not running (status: {current_status})',
+                    'file_id': file_id,
+                    'status': current_status
+                }, status=status.HTTP_200_OK)
+            
+            # Set the stop flag — the background thread checks this before each step
+            SFS_PROGRESS[file_id]['stop_requested'] = True
+            print(f"[SFS] Stop requested for file_id={file_id}")
+            
+            return Response({
+                'message': 'Stop signal sent. SFS will stop after the current step completes.',
+                'file_id': file_id,
+                'status': 'stop_requested'
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -1285,15 +1764,39 @@ class SFSStatusView(APIView):
     def get(self, request, file_id: int, *args, **kwargs):
         try:
             if file_id not in SFS_PROGRESS:
-                # Check if SFS results already exist
+                # No in-memory progress — check if results file exists on disk
                 sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
                 if os.path.exists(sfs_path):
-                    return Response({
-                        'status': 'completed',
-                        'message': 'SFS already completed',
-                        'progress': 1.0,
-                        'file_id': file_id
-                    }, status=status.HTTP_200_OK)
+                    try:
+                        with open(sfs_path, 'r', encoding='utf-8') as rf:
+                            file_data = json.load(rf)
+                        file_status = file_data.get('status', 'completed')
+                    except Exception:
+                        file_status = 'completed'
+
+                    if file_status == 'running':
+                        # File says "running" but no in-memory progress → process was interrupted
+                        # (e.g. server restart killed the background thread)
+                        return Response({
+                            'status': 'interrupted',
+                            'message': 'SFS was interrupted (server restart). Partial results saved — you can continue.',
+                            'progress': 0.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
+                    elif file_status == 'stopped':
+                        return Response({
+                            'status': 'stopped',
+                            'message': 'SFS was stopped by user. Partial results available.',
+                            'progress': 0.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
+                    else:
+                        return Response({
+                            'status': 'completed',
+                            'message': 'SFS already completed',
+                            'progress': 1.0,
+                            'file_id': file_id
+                        }, status=status.HTTP_200_OK)
                 else:
                     return Response({
                         'status': 'not_started',
@@ -1312,3 +1815,337 @@ class SFSStatusView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VifDetailView(APIView):
+    """Return per-feature VIF decomposition for a given feature.
+
+    POST payload: { file_id: int, feature: str }
+    Returns:
+      - feature: the queried feature
+      - vif: its overall VIF
+      - contributions: list of { feature, correlation, vif_without } sorted by |correlation| desc
+        where 'correlation' is pairwise Pearson |r| and 'vif_without' is VIF of the queried
+        feature when the other feature is removed from the regression matrix.
+    """
+
+    def post(self, request, *args, **kwargs):
+        file_id = request.data.get('file_id')
+        feature_name = request.data.get('feature')
+
+        if file_id is None or not feature_name:
+            return Response({'error': 'file_id and feature are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+        if not os.path.exists(train_data_path):
+            return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with open(train_data_path, 'rb') as f:
+                train_data = pickle.load(f)
+
+            X_train = train_data['X_train']
+
+            # Build numeric VIF matrix (same logic as in ModelingStartView)
+            X_vif = X_train.copy()
+            for c in X_vif.columns:
+                if hasattr(X_vif[c], 'cat'):
+                    X_vif[c] = X_vif[c].cat.codes.astype(float)
+                    X_vif[c] = X_vif[c].replace(-1, np.nan)
+            X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
+            X_vif = X_vif.fillna(X_vif.mean())
+            nonzero_var = X_vif.columns[X_vif.var() > 0]
+            X_vif = X_vif[nonzero_var]
+
+            if feature_name not in X_vif.columns:
+                return Response({'error': f'Feature "{feature_name}" not found in numeric training data.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+            # Overall VIF for the queried feature
+            all_cols = list(X_vif.columns)
+            feat_idx = all_cols.index(feature_name)
+            X_arr = X_vif.values.astype(float)
+            overall_vif = variance_inflation_factor(X_arr, feat_idx)
+            overall_vif = round(float(overall_vif), 2) if np.isfinite(overall_vif) else None
+
+            # Pairwise correlations + VIF-without-each-feature
+            target_series = X_vif[feature_name]
+            other_cols = [c for c in all_cols if c != feature_name]
+            contributions = []
+
+            for other in other_cols:
+                # Pairwise |correlation|
+                corr_val = target_series.corr(X_vif[other])
+                abs_corr = abs(corr_val) if (corr_val is not None and np.isfinite(corr_val)) else 0.0
+
+                # VIF without this other feature
+                reduced_cols = [c for c in all_cols if c != other]
+                reduced_idx = reduced_cols.index(feature_name)
+                X_reduced = X_vif[reduced_cols].values.astype(float)
+                try:
+                    vif_without = variance_inflation_factor(X_reduced, reduced_idx)
+                    vif_without = round(float(vif_without), 2) if np.isfinite(vif_without) else None
+                except Exception:
+                    vif_without = None
+
+                # VIF drop = how much VIF decreases when this feature is removed
+                vif_drop = None
+                if overall_vif is not None and vif_without is not None:
+                    vif_drop = round(overall_vif - vif_without, 2)
+
+                contributions.append({
+                    'feature': other,
+                    'correlation': round(abs_corr, 4),
+                    'signed_correlation': round(float(corr_val), 4) if (corr_val is not None and np.isfinite(corr_val)) else 0.0,
+                    'vif_without': vif_without,
+                    'vif_drop': vif_drop,
+                })
+
+            # Sort by |correlation| descending
+            contributions.sort(key=lambda x: x['correlation'], reverse=True)
+
+            return Response({
+                'feature': feature_name,
+                'vif': overall_vif,
+                'contributions': contributions,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import traceback as tb
+            tb.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================
+# Pipeline Run CRUD Views
+# ============================================================
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunListView(APIView):
+    """List all pipeline runs, ordered by most recently updated."""
+
+    def get(self, request, *args, **kwargs):
+        runs = PipelineRun.objects.all()
+        data = []
+        for run in runs:
+            state = run.state or {}
+            detailed_step = state.get('detailed_step', None)
+            # For backward-compat: if no detailed_step, infer from coarse step + modeling substep
+            if not detailed_step:
+                modeling_sub = (state.get('modeling') or {}).get('substep', '')
+                detailed_step = self._infer_detailed_step(run.current_step, modeling_sub, state.get('file_id'))
+            data.append({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'detailed_step': detailed_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _infer_detailed_step(current_step, modeling_sub, file_id):
+        """Infer granular detailed_step from coarse step + modeling substep (backward compat)."""
+        _SUB_MAP = {
+            'algorithm_selected': '3a_encoding',
+            'encoding_completed': '3a_encoding',
+            'modeling_started': '3b_modeling',
+            'modeling_completed': '3b_modeling',
+            'sfs_backward_completed': '3ci_sfs_backward',
+        }
+        if current_step == 'declaration':
+            return '1b_data_declaration' if file_id else '1a_pipeline_declaration'
+        elif current_step == 'preprocessing':
+            return '2a_purifier_declaration'
+        elif current_step == 'data_quality':
+            return '2b_data_quality_summary'
+        elif current_step in ('modeling', 'sfs'):
+            if modeling_sub:
+                if modeling_sub in _SUB_MAP:
+                    return _SUB_MAP[modeling_sub]
+                if modeling_sub.startswith('sfs_'):
+                    return '3c_sfs'
+            return '3a_encoding' if current_step == 'modeling' else '3c_sfs'
+        return '1a_pipeline_declaration'
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunCreateView(APIView):
+    """Create a new pipeline run."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            body = json.loads(request.body)
+            name = body.get('name', '')
+            pipeline_type = body.get('pipeline_type', 'boosting')
+            file_id = body.get('file_id')
+            current_step = body.get('current_step', 'declaration')
+            state = body.get('state', {})
+
+            if not name:
+                from datetime import datetime
+                name = f"{pipeline_type}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+            run = PipelineRun.objects.create(
+                name=name,
+                pipeline_type=pipeline_type,
+                file_id=file_id,
+                current_step=current_step,
+                status='active',
+                state=state,
+            )
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineRunDetailView(APIView):
+    """Get, update, or delete a single pipeline run."""
+
+    def get(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'state': run.state,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    STEP_ORDER = {
+        'declaration': 0,
+        'preprocessing': 1,
+        'data_quality': 2,
+        'modeling': 3,
+        'sfs': 4,
+        'evaluation': 5,
+        'deployment': 6,
+    }
+
+    def put(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            body = json.loads(request.body)
+            old_step = run.current_step
+            new_step = body.get('current_step', old_step)
+            state_substep = (body.get('state', {}).get('modeling') or {}).get('substep', '-')
+            old_order = self.STEP_ORDER.get(old_step, 0)
+            new_order = self.STEP_ORDER.get(new_step, 0)
+            print(f"[PipelineRun PUT id={pk}] {old_step}({old_order}) -> {new_step}({new_order}) substep={state_substep}", flush=True)
+
+            if 'name' in body:
+                run.name = body['name']
+            # Step regression guard: never allow step to go backwards
+            # When blocked, skip the entire update (state included) to prevent stale overwrites
+            if 'current_step' in body:
+                if new_order >= old_order:
+                    run.current_step = body['current_step']
+                    if 'status' in body:
+                        run.status = body['status']
+                    if 'state' in body:
+                        run.state = body['state']
+                    if 'file_id' in body:
+                        run.file_id = body['file_id']
+                    run.save()
+                else:
+                    print(f"[PipelineRun PUT id={pk}] BLOCKED step regression {old_step} -> {new_step} (entire update skipped)", flush=True)
+                    return Response({
+                        'id': run.id,
+                        'name': run.name,
+                        'pipeline_type': run.pipeline_type,
+                        'file_id': run.file_id,
+                        'current_step': run.current_step,
+                        'status': run.status,
+                        'state': run.state,
+                        'created_at': run.created_at.isoformat(),
+                        'updated_at': run.updated_at.isoformat(),
+                    }, status=status.HTTP_200_OK)
+            else:
+                if 'status' in body:
+                    run.status = body['status']
+                if 'state' in body:
+                    run.state = body['state']
+                if 'file_id' in body:
+                    run.file_id = body['file_id']
+                run.save()
+            return Response({
+                'id': run.id,
+                'name': run.name,
+                'pipeline_type': run.pipeline_type,
+                'file_id': run.file_id,
+                'current_step': run.current_step,
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'updated_at': run.updated_at.isoformat(),
+            }, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+            run.delete()
+            return Response({'message': 'Pipeline run deleted'}, status=status.HTTP_200_OK)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PipelineReportView(APIView):
+    """Generate and download a pipeline report as HTML.
+    
+    Query params:
+      ?output=html  → attachment download (default)
+      ?output=print → inline HTML with auto-print JS (for browser Save-as-PDF)
+    """
+
+    def get(self, request, pk, *args, **kwargs):
+        from .report_generator import generate_pipeline_html
+
+        fmt = request.query_params.get('output', 'html').lower()
+        try:
+            run = PipelineRun.objects.get(pk=pk)
+        except PipelineRun.DoesNotExist:
+            return Response({'error': 'Pipeline run not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        safe_name = run.name.replace(' ', '_').replace('/', '-')
+        html = generate_pipeline_html(run)
+
+        from django.http import HttpResponse as DjangoHttpResponse
+
+        if fmt == 'print':
+            # Inject auto-print script for browser Save-as-PDF workflow
+            print_script = '<script>window.onload=function(){window.print();}</script>'
+            html = html.replace('</body>', f'{print_script}</body>')
+            response = DjangoHttpResponse(html, content_type='text/html; charset=utf-8')
+            return response
+        else:
+            response = DjangoHttpResponse(html, content_type='text/html; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{safe_name}_report.html"'
+            return response

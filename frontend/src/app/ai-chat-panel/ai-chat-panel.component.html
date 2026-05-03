@@ -1,0 +1,216 @@
+<div class="ai-chat-panel">
+  <!-- Header -->
+  <div class="chat-header">
+    <div class="chat-header-title">
+      <span class="chat-header-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span>
+      <span>AI Assistant</span>
+    </div>
+    <div class="chat-header-actions">
+      <!-- Model selector -->
+      <div class="model-selector-wrapper">
+        <button class="chat-action-btn model-selector-btn" (click)="toggleModelSelector()" title="Select model">
+          <span class="model-selector-label">{{ getSelectedModelName() }}</span>
+          <span class="model-selector-caret">&#9660;</span>
+        </button>
+        <div class="model-selector-dropdown" *ngIf="showModelSelector">
+          <button
+            *ngFor="let m of availableModels"
+            class="model-option"
+            [class.active]="m.key === selectedModel"
+            (click)="selectModel(m.key)"
+          >
+            <span class="model-option-name">{{ m.display_name }}</span>
+            <span class="model-option-provider">{{ m.provider }}</span>
+            <span class="model-option-check" *ngIf="m.key === selectedModel">&#10003;</span>
+          </button>
+        </div>
+      </div>
+      <button class="chat-action-btn" (click)="clearChat()" title="Clear chat">
+        <span>&#128465;</span>
+      </button>
+      <button class="chat-action-btn" (click)="aiService.closePanel()" title="Close panel">
+        <span>&times;</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="chat-messages" #chatContainer>
+    <div *ngIf="messages.length === 0" class="chat-empty">
+      <div class="chat-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></div>
+      <div class="chat-empty-title">DeclarAI Assistant</div>
+      <div class="chat-empty-text">
+        Ask questions about your pipeline results, or click
+        <strong>"Get AI Support"</strong> on any output section to get instant insights.
+      </div>
+    </div>
+
+    <div *ngFor="let msg of messages; let mi = index" class="chat-message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
+      <div class="chat-message-avatar">
+        <span *ngIf="msg.role === 'user'">&#128100;</span>
+        <span *ngIf="msg.role === 'assistant'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span>
+      </div>
+      <div class="chat-message-body">
+        <div class="chat-message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
+
+        <!-- Auto-correction messages: collapsed one-liner by default -->
+        <div *ngIf="msg.autoCorrection && !msg.loading" class="auto-correction-wrapper">
+          <div class="auto-correction-summary" (click)="toggleCorrectionExpand(mi)">
+            <span class="auto-correction-icon">&#9888;</span>
+            <span class="auto-correction-text">{{ msg.autoCorrectionSummary }}</span>
+            <span class="auto-correction-toggle">{{ isCorrectionExpanded(mi) ? '&#9650;' : '&#9660;' }}</span>
+          </div>
+          <div class="auto-correction-detail" *ngIf="isCorrectionExpanded(mi)">
+            <div [innerHTML]="formatMessage(msg.content)"></div>
+          </div>
+        </div>
+
+        <!-- Normal messages -->
+        <div class="chat-message-content" *ngIf="!msg.loading && !msg.autoCorrection">
+          <div [innerHTML]="formatMessage(msg.content)"></div>
+        </div>
+        <div class="chat-message-content loading" *ngIf="msg.loading">
+          <div class="typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+        <!-- Action blocks — general-purpose AI operations -->
+        <div *ngIf="msg.actions && msg.actions.length > 0" class="chat-action-blocks">
+          <div *ngFor="let act of msg.actions; let ai = index" class="chat-action-block" [ngClass]="'action-type-' + act.type">
+
+            <!-- ── execute_code ── -->
+            <ng-container *ngIf="act.type === 'execute_code'">
+              <div class="action-header">
+                <span class="action-icon">&#128187;</span>
+                <span class="action-title">Data Operation</span>
+              </div>
+              <div class="action-detail" *ngIf="act.payload?.description && !act.applied">{{ act.editing ? (act.editedPayload?.description || act.payload.description) : act.payload.description }}</div>
+              <!-- Read-only code view -->
+              <div class="action-code" *ngIf="!act.editing && act.payload?.code && !act.applied">
+                <code>{{ act.payload.code }}</code>
+              </div>
+              <!-- Editable code textarea -->
+              <textarea
+                *ngIf="act.editing && !act.applied"
+                class="action-edit-textarea action-edit-code"
+                [value]="getEditableText(act)"
+                (input)="onEditChange(act, $any($event.target).value)"
+                spellcheck="false"
+              ></textarea>
+            </ng-container>
+
+            <!-- ── update_metadata ── -->
+            <ng-container *ngIf="act.type === 'update_metadata'">
+              <div class="action-header">
+                <span class="action-icon">&#128221;</span>
+                <span class="action-title">Update Metadata ({{ act.payload?.updates?.length }} field(s))</span>
+              </div>
+              <!-- Read-only view -->
+              <div class="action-features" *ngIf="!act.editing && !act.applied">
+                <div *ngFor="let upd of act.payload?.updates" class="action-feature-item">
+                  <strong>{{ upd.column }}</strong>
+                  <span class="action-formula">{{ upd.field }} = {{ upd.value }}</span>
+                </div>
+              </div>
+              <!-- Editable JSON textarea -->
+              <textarea
+                *ngIf="act.editing && !act.applied"
+                class="action-edit-textarea"
+                [value]="getEditableText(act)"
+                (input)="onEditChange(act, $any($event.target).value)"
+                spellcheck="false"
+              ></textarea>
+            </ng-container>
+
+            <!-- ── update_config ── -->
+            <ng-container *ngIf="act.type === 'update_config'">
+              <div class="action-header">
+                <span class="action-icon">&#9881;</span>
+                <span class="action-title">Update Configuration ({{ act.payload?.updates?.length }} setting(s))</span>
+              </div>
+              <!-- Read-only view -->
+              <div class="action-features" *ngIf="!act.editing && !act.applied">
+                <div *ngFor="let upd of act.payload?.updates" class="action-feature-item">
+                  <strong>{{ upd.key }}</strong>
+                  <span class="action-formula" *ngIf="upd.column">{{ upd.column }} = {{ upd.value }}</span>
+                  <span class="action-formula" *ngIf="!upd.column">{{ upd.value }}</span>
+                </div>
+              </div>
+              <!-- Editable JSON textarea -->
+              <textarea
+                *ngIf="act.editing && !act.applied"
+                class="action-edit-textarea"
+                [value]="getEditableText(act)"
+                (input)="onEditChange(act, $any($event.target).value)"
+                spellcheck="false"
+              ></textarea>
+            </ng-container>
+
+            <!-- ── update_notes ── -->
+            <ng-container *ngIf="act.type === 'update_notes'">
+              <div class="action-header">
+                <span class="action-icon">&#128203;</span>
+                <span class="action-title">{{ act.payload?.action | titlecase }} Note</span>
+              </div>
+              <!-- Read-only view -->
+              <div class="action-detail" *ngIf="!act.editing && !act.applied">
+                <em>{{ act.payload?.position }}</em>: {{ act.payload?.content }}
+              </div>
+              <!-- Editable JSON textarea -->
+              <textarea
+                *ngIf="act.editing && !act.applied"
+                class="action-edit-textarea"
+                [value]="getEditableText(act)"
+                (input)="onEditChange(act, $any($event.target).value)"
+                spellcheck="false"
+              ></textarea>
+            </ng-container>
+
+            <!-- Button row: Edit + Apply / Applied badge -->
+            <div *ngIf="!act.applied" class="action-btn-row">
+              <button
+                class="action-edit-btn"
+                [disabled]="actionApplying"
+                (click)="toggleEdit(act)"
+              >
+                <span *ngIf="!act.editing">&#9998; Edit</span>
+                <span *ngIf="act.editing">&#10005; Cancel</span>
+              </button>
+              <button
+                class="action-apply-btn"
+                [disabled]="actionApplying"
+                (click)="applyAction(mi, ai, act)"
+              >
+                <span *ngIf="!actionApplying">&#9654; Apply</span>
+                <span *ngIf="actionApplying">Applying...</span>
+              </button>
+            </div>
+            <div *ngIf="act.applied" class="action-applied-badge">
+              &#10003; Applied
+            </div>
+          </div>
+          <div *ngIf="actionError" class="action-error">{{ actionError }}</div>
+          <div *ngIf="actionSuccess" class="action-success">{{ actionSuccess }}</div>
+        </div>
+        <div class="chat-message-section" *ngIf="msg.section">
+          {{ getSectionLabel(msg.section) }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="chat-input-area">
+    <textarea
+      class="chat-input"
+      [(ngModel)]="userInput"
+      (keydown)="onKeyDown($event)"
+      placeholder="Ask about your results..."
+      rows="1"
+      [disabled]="isLoading"
+    ></textarea>
+    <button class="chat-send-btn" (click)="sendMessage()" [disabled]="!userInput.trim() || isLoading" title="Send">
+      <span>&#10148;</span>
+    </button>
+  </div>
+</div>

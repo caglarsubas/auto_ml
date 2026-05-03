@@ -3,18 +3,22 @@
   <div class="container">
 
     <h3>Data Declaration</h3>
-    <div class="data-import-controls">
-      <input type="file" (change)="onFilesSelected($event)" multiple>
-      <div>
+
+    <!-- Data import controls: shown before upload or when editing -->
+    <div class="data-import-controls" *ngIf="!previewData || editingDataImport">
+      <div class="file-input-group">
+        <input type="file" (change)="onFilesSelected($event)" multiple>
+      </div>
+      <div class="checkbox-group">
         <input type="checkbox" [(ngModel)]="firstLineIsNotHeader" id="firstLineHeader">
         <label for="firstLineHeader">First line is not header</label>
       </div>
-      <div *ngIf="isExcelFile && hasMultipleSheets">
+      <div *ngIf="isExcelFile && hasMultipleSheets" class="checkbox-group">
         <input type="checkbox" [(ngModel)]="firstSheetHasNotDataset" id="firstSheetDataset">
         <label for="firstSheetDataset">First sheet has not the dataset</label>
       </div>
       <div *ngIf="selectedFiles[0] && selectedFiles[0].name.toLowerCase().endsWith('.csv')" class="column-separator-container">
-        <label for="columnSeparator" class="column-separator-label">Column Separator</label>
+        <label for="columnSeparator" class="column-separator-label">COLUMN SEPARATOR</label>
         <select id="columnSeparator" [(ngModel)]="columnSeparator" class="column-separator-select">
           <option value="semicolon">Semicolon</option>
           <option value="comma">Comma</option>
@@ -22,10 +26,17 @@
           <option value="space">Space</option>
         </select>
       </div>
-      <div *ngIf="selectedFiles.length > 1">
+      <div *ngIf="selectedFiles.length > 1" class="checkbox-group">
         <mat-checkbox [(ngModel)]="mergeColumnWise">Merge column-wise</mat-checkbox>
       </div>
-      <button class="import-data-btn" (click)="onUpload()">Import Data</button>
+      <div class="spacer"></div>
+      <button class="import-data-btn" (click)="onUpload()">IMPORT DATA</button>
+    </div>
+
+    <!-- Locked state: after upload, show Edit button -->
+    <div class="section-locked-bar" *ngIf="previewData && !editingDataImport">
+      <span class="section-locked-label">&#10003; Data imported</span>
+      <button class="section-edit-btn" (click)="onEditDataImport()">&#9998; Edit</button>
     </div>
 
     <div *ngIf="errorMessage" class="error-message">
@@ -60,14 +71,40 @@
       </div>
     </div>
 
+    <!-- Note: After Data Preview -->
+    <div *ngIf="previewData" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_data_preview') && editingNotePosition !== 'after_data_preview'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_preview')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_data_preview') && editingNotePosition !== 'after_data_preview'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_preview')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_data_preview'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_preview')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_preview')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_data_preview'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_preview'] || ''" (ngModelChange)="onNoteChanged('after_data_preview', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div *ngIf="showDataDictionaryCollection">
       <h3>Dictionary Declaration</h3>
-      <div class="dictionary-actions">
+
+      <!-- Dictionary buttons: shown before generation or when editing -->
+      <div class="dictionary-actions" *ngIf="dataDictionary.length === 0 || editingDictionary">
         <div class="dictionary-upload">
           <input type="file" (change)="onDictionaryFileSelected($event)">
           <button (click)="onGenerateDataDictionary(true)">Generate Data Dictionary</button>
         </div>
         <button (click)="onGenerateDataDictionary(false)">Generate without Uploading</button>
+      </div>
+
+      <!-- Locked state: after dictionary generated, show Edit button -->
+      <div class="section-locked-bar" *ngIf="dataDictionary.length > 0 && !editingDictionary">
+        <span class="section-locked-label">&#10003; Data dictionary generated</span>
+        <button class="section-edit-btn" (click)="onEditDictionary()">&#9998; Edit</button>
       </div>
     </div>
 
@@ -117,6 +154,24 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Note: After Data Dictionary -->
+    <div *ngIf="dataDictionary.length > 0" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_data_dictionary') && editingNotePosition !== 'after_data_dictionary'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_dictionary')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_data_dictionary') && editingNotePosition !== 'after_data_dictionary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_dictionary')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_data_dictionary'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_dictionary')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_dictionary')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_data_dictionary'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_dictionary'] || ''" (ngModelChange)="onNoteChanged('after_data_dictionary', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
 

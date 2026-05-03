@@ -1,123 +1,240 @@
-/* home.component.css */
+/* ============================================
+   Home Page - Modern Dashboard Design
+   ============================================ */
+
 .home-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 2rem;
-  }
-  
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-8) var(--space-6);
+  min-height: calc(100vh - 72px);
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Hero Section */
+h1 {
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
+  color: var(--neutral-900);
+  margin-bottom: var(--space-3);
+  text-align: center;
+  animation: slideDown 0.6s ease-out;
+}
+
+h1 strong {
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--accent-600) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline {
+  font-size: var(--text-lg);
+  color: var(--neutral-500);
+  font-style: italic;
+  margin-bottom: var(--space-12);
+  text-align: center;
+  animation: slideDown 0.7s ease-out;
+}
+
+/* Menu Grid */
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1200px;
+}
+
+/* Menu Card */
+.menu-item {
+  background: white;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--neutral-100);
+  transition: all var(--transition-base);
+  animation: slideUp 0.5s ease-out backwards;
+}
+
+.menu-item:nth-child(1) { animation-delay: 0.1s; }
+.menu-item:nth-child(2) { animation-delay: 0.2s; }
+.menu-item:nth-child(3) { animation-delay: 0.3s; }
+.menu-item:nth-child(4) { animation-delay: 0.4s; }
+
+.menu-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary-500), var(--accent-500));
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.menu-item:hover::before {
+  opacity: 1;
+}
+
+.menu-item:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-xl);
+  border-color: transparent;
+}
+
+/* Icon Container */
+.icon-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto var(--space-5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+  transition: all var(--transition-base);
+}
+
+.menu-item:hover .icon-container {
+  background: linear-gradient(135deg, var(--primary-50) 0%, var(--accent-50) 100%);
+  transform: scale(1.05);
+}
+
+.menu-icon {
+  max-width: 70%;
+  max-height: 70%;
+  object-fit: contain;
+  transition: all var(--transition-base);
+  filter: grayscale(20%);
+}
+
+.menu-item:hover .menu-icon {
+  filter: grayscale(0%);
+  transform: scale(1.1);
+}
+
+.icon-container:hover .menu-icon {
+  opacity: 0;
+}
+
+.icon-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.icon-container:hover::after {
+  opacity: 1;
+}
+
+.menu-item:hover .icon-container::after {
+  background-image: var(--gif-src);
+}
+
+.icon-placeholder {
+  width: 50px;
+  height: 50px;
+  background: var(--neutral-200);
+  border-radius: var(--radius-full);
+}
+
+/* Card Title */
+h4 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--neutral-800);
+  margin-bottom: var(--space-4);
+  transition: color var(--transition-fast);
+}
+
+.menu-item:hover h4 {
+  color: var(--primary-700);
+}
+
+/* Menu List */
+ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  margin-bottom: var(--space-2);
+}
+
+.menu-item li {
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  color: var(--neutral-600);
+  background: var(--neutral-50);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.menu-item li:hover {
+  background: linear-gradient(135deg, var(--primary-50) 0%, var(--accent-50) 100%);
+  border-color: var(--primary-200);
+  color: var(--primary-700);
+  transform: translateX(4px);
+}
+
+.menu-item li a {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  font-weight: var(--font-medium);
+}
+
+.menu-item li a:hover {
+  text-decoration: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
   h1 {
-    color: #740505;
-    margin-bottom: 2rem;
+    font-size: var(--text-3xl);
   }
   
   .menu-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 2rem;
-    width: 100%;
-    max-width: 1200px;
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
   }
   
   .menu-item {
-    background-color: #f5f5f5;
-    border-radius: 8px;
-    padding: 1rem;
-    text-align: center;
-    transition: all 0.3s ease;
-    cursor: pointer; /* Add this line to change the cursor to a pointer on hover */
+    padding: var(--space-6) var(--space-5);
   }
-  
-  .menu-item li {
-    padding: 0.5rem;
-    margin: 0.25rem 0;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-  }
-  
-  .menu-item li:hover {
-    background-color: #d0d0d0;
-    transform: translateX(5px);
-  }
-  
-  .menu-item:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    transform: translateY(-5px);
-    background-color: #e6e5e5; /* Add this line to change the background color on hover */
-  }
-
-  .menu-item li a {
-    text-decoration: none;
-    color: inherit;
-  }
-  
-  .menu-item li a:hover {
-    text-decoration: none;
-  }
-  
-  .icon-container {
-    position: relative;
-    width: 125px;
-    height: 125px;
-    margin: 0 auto 1rem;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-  }
-  
-  .menu-icon {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    transition: opacity 0.3s ease-in-out;
-  }
-  
-  .icon-placeholder {
-    width: 50px;
-    height: 50px;
-    background-color: #ddd;
-    border-radius: 50%;
-  }
-  
-  h4 {
-    color: #740505;
-    margin-bottom: 1rem;
-    font-size: 24px;
-    font-weight: bold
-  }
-  
-  ul {
-    list-style-type: none;
-    padding: 0;
-  }
-  
-  li {
-    margin-bottom: 0.5rem;
-  }
-
-  .icon-container:hover .menu-icon {
-    opacity: 0;
-  }
-  
-  .icon-container::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-  }
-  
-  .icon-container:hover::after {
-    opacity: 1;
-  }
-  
-  .menu-item:hover .icon-container::after {
-    background-image: var(--gif-src);
-  }
+}

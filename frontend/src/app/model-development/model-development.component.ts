@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Router } from '@angular/router';
 import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
+import { AiAssistantService } from '../services/ai-assistant.service';
 
 interface PurifierOption {
   id: number;
@@ -20,10 +21,14 @@ interface PurifierOption {
   styleUrls: ['./model-development.component.css']
 })
 
-export class ModelDevelopmentComponent implements OnInit {
+export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
+  @ViewChild('splitValidationCanvas') splitValidationCanvas!: ElementRef<HTMLCanvasElement>;
+  private _splitChartDrawn = false;
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
+  targetDefinition: string = '';
+  editingTargetDefinition: boolean = false;
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
   showSteps: { [key: string]: boolean } = {
@@ -35,6 +40,29 @@ export class ModelDevelopmentComponent implements OnInit {
   };
   private subscription: Subscription = new Subscription();
   currentFileId: number | null = null;
+
+  // ===== Pipeline Persistence =====
+  savedPipelines: any[] = [];
+  showSavedPipelines: boolean = false;
+  activePipelineRunId: number | null = null;
+  pipelineRunName: string = '';
+  renamingPipelineId: number | null = null;
+  renamingPipelineName: string = '';
+  private _checkpointCreating: boolean = false;
+  private _pendingCheckpoint: boolean = false;
+  private _highWaterStep: string = 'declaration';
+  private _lastModelingSubstep: string | null = null;
+  detailedStep: string = '1a_pipeline_declaration';
+  pipelineNotes: { [position: string]: string } = {};
+  editingNotePosition: string | null = null;
+  private _noteSaveTimer: any = null;
+  private _pipelineConfigSaveTimer: any = null;
+  // Autosave toggle & dirty-state tracking (persisted in localStorage)
+  autosaveEnabled: boolean = true;
+  _unsavedChanges: boolean = false;
+  showExitDialog: boolean = false;
+  private _pendingNavUrl: string | null = null;
+  private readonly _autosaveKey = 'pipeline_autosave_enabled';
   processedFilePath: string | null = null;
   isProcessing: boolean = false;
   // New state flags for progressive reveal
@@ -42,13 +70,18 @@ export class ModelDevelopmentComponent implements OnInit {
   modelingAvailable: boolean = false;
   preprocessingAvailable: boolean = false;
   // Purifier breakdown: which columns were dropped at which step, and how many rows were removed
-  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number }>= [];
+  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number; merge_mapping?: { [feature: string]: { [orig: string]: string } }; note?: string }>= [];
   // Total rows removed across all preprocessing steps
   rowsRemovedTotal: number = 0;
   // Row counts before/after preprocessing run (for summary display)
   rowCountBefore: number = 0;
   rowCountAfter: number = 0;
   preprocessingInitiated: boolean = false;
+  // Before/after preprocessing per-feature descriptive stats (mean, median, skewness, kurtosis, etc.)
+  featureStatsBefore: any[] | null = null;
+  featureStatsAfter: any[] | null = null;
+  // Per-step before/after stats (e.g. before/after outlier cleaning specifically)
+  preprocessingStepStats: any[] | null = null;
 
   // Split controls
   splitStrategy: 'random' | 'oot' = 'random';
@@ -57,10 +90,14 @@ export class ModelDevelopmentComponent implements OnInit {
   // OOT mode: cutoff vs percent; default cutoff; percent default 25 (last % as test)
   ootMode: 'cutoff' | 'percent' = 'percent';
   ootPercent: number = 25;
+  // Random split OOS percent (default 25% goes to test)
+  oosPercent: number = 25;
   dateColumns: string[] = [];
   // Cache full data dictionary (to provide Feature_Description to Feature Card)
   dataDictionaryCache: any[] = [];
   currentSplit: { strategy?: string; date_column?: string; cutoff?: string; percent?: number } | null = null;
+  // Split validation: target distribution per split (Full, Train, Test)
+  splitValidation: any = null;
 
   // Data Quality summary from backend after preprocessing run
   datqSummary: any[] | null = null;
@@ -88,6 +125,67 @@ export class ModelDevelopmentComponent implements OnInit {
   // Model_Usage column: track which variables to use in model (variableName -> 'Yes'/'No')
   variableModelUsage: { [variable: string]: string } = {};
   private readonly modelUsageKey = 'datq_model_usage_v1';
+
+  // ===== Encoding step state =====
+  encodingPlan: any[] = [];
+  encodingReport: any[] = [];
+  encodingSummary: any = null;
+  encodingAnalyzing: boolean = false;
+  encodingApplying: boolean = false;
+  encodingError: string | null = null;
+  encodingApplied: boolean = false;
+  encodedFilePath: string | null = null;
+  encodingUseNative: boolean = true;
+
+  // ===== Enhanced Navigation: Collapsible Sub-Steps =====
+  navExpandedSteps: { [mainStep: string]: boolean } = {
+    declaration: true,
+    modeling: false,
+    evaluation: false,
+    deployment: false,
+  };
+
+  navMainSteps = [
+    {
+      id: 'declaration', label: 'Declaration',
+      subSteps: [
+        { id: '1a', label: 'Pipeline Type Selection' },
+        { id: '1b', label: 'Data Upload' },
+        { id: '1c', label: 'Data Dictionary Review' },
+        { id: '1d', label: 'Preprocessing' },
+        { id: '1e', label: 'Data Quality Summary' },
+      ]
+    },
+    {
+      id: 'modeling', label: 'Modeling',
+      subSteps: [
+        { id: '2a', label: 'Categorical Encoding' },
+        { id: '2b', label: 'Model Training & CV' },
+        { id: '2c', label: 'Feature Selection (SFS)' },
+      ]
+    },
+    {
+      id: 'evaluation', label: 'Evaluation',
+      subSteps: [
+        { id: '3a', label: 'Model Evaluation' },
+      ]
+    },
+    {
+      id: 'deployment', label: 'Deployment',
+      subSteps: [
+        { id: '4a', label: 'Model Deployment' },
+      ]
+    },
+  ];
+
+  // ===== 3-Layer Panel Layout =====
+  showLeftPanel: boolean = true;
+  showRightPanel: boolean = false;
+  leftPanelWidth: number = 260;
+  rightPanelWidth: number = 360;
+  private _resizing: 'left' | 'right' | null = null;
+  private _resizeStartX: number = 0;
+  private _resizeStartWidth: number = 0;
 
   get datqDisplayColumns(): string[] {
     const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
@@ -275,6 +373,155 @@ export class ModelDevelopmentComponent implements OnInit {
     const varName = String(variable);
     this.variableModelUsage[varName] = value;
     this.saveModelUsage();
+    this.onPipelineConfigChanged();
+  }
+
+  /** Debounced auto-save when user modifies any pipeline config
+   *  (purifier options, split settings, Model_Usage, encoding LOM, etc.) */
+  onPipelineConfigChanged(): void {
+    if (!this.activePipelineRunId) return; // no pipeline to save to yet
+    if (!this.autosaveEnabled) {
+      this._unsavedChanges = true;
+      return;
+    }
+    if (this._pipelineConfigSaveTimer) clearTimeout(this._pipelineConfigSaveTimer);
+    this._pipelineConfigSaveTimer = setTimeout(() => {
+      const step = this.currentStep === 'data quality' ? 'data_quality' : this.currentStep;
+      console.log('[Pipeline] Config changed, auto-saving at step:', step);
+      this.saveCheckpoint(step);
+    }, 800);
+  }
+
+  // ── Pipeline Commentary Notes (Jupyter-notebook style) ──
+
+  onNoteChanged(position: string, content: string): void {
+    this.pipelineNotes[position] = content;
+    this.sharedService.updatePipelineNote(position, content);
+    // Debounced auto-save
+    if (this._noteSaveTimer) clearTimeout(this._noteSaveTimer);
+    this._noteSaveTimer = setTimeout(() => {
+      this.onPipelineConfigChanged();
+    }, 1000);
+  }
+
+  toggleNoteEdit(position: string): void {
+    if (this.editingNotePosition === position) {
+      this.editingNotePosition = null;
+    } else {
+      this.editingNotePosition = position;
+    }
+  }
+
+  deleteNote(position: string): void {
+    delete this.pipelineNotes[position];
+    this.sharedService.updatePipelineNote(position, '');
+    this.editingNotePosition = null;
+    this.onPipelineConfigChanged();
+  }
+
+  hasNote(position: string): boolean {
+    return !!this.pipelineNotes[position]?.trim();
+  }
+
+  /** Toggle autosave on/off (persisted to localStorage) */
+  toggleAutosave(): void {
+    this.autosaveEnabled = !this.autosaveEnabled;
+    this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
+    try { localStorage.setItem(this._autosaveKey, String(this.autosaveEnabled)); } catch {}
+    console.log('[Pipeline] Autosave:', this.autosaveEnabled ? 'ON' : 'OFF');
+    // If just turned on and there are unsaved changes, save immediately
+    if (this.autosaveEnabled && this._unsavedChanges) {
+      this.manualSave();
+    }
+  }
+
+  /** Manual save — called by user clicking the save icon */
+  manualSave(): void {
+    if (!this.activePipelineRunId) return;
+    const step = this.currentStep === 'data quality' ? 'data_quality' : this.currentStep;
+    console.log('[Pipeline] Manual save at step:', step);
+    this.saveCheckpoint(step, true);
+    this._unsavedChanges = false;
+  }
+
+  /** Check if there are unsaved changes that need confirmation */
+  hasUnsavedChanges(): boolean {
+    return !this.autosaveEnabled && this._unsavedChanges;
+  }
+
+  // ===== Report Download =====
+
+  downloadReportHtml(): void {
+    if (!this.activePipelineRunId) return;
+    this.dataService.downloadPipelineReport(this.activePipelineRunId).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.pipelineRunName || 'pipeline'}_report.html`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err: any) => {
+        console.error('[Pipeline] Report download failed:', err);
+        alert('Failed to download report.');
+      }
+    });
+  }
+
+  downloadReportPdf(): void {
+    if (!this.activePipelineRunId) return;
+    const url = this.dataService.getPipelineReportUrl(this.activePipelineRunId, 'print');
+    window.open(url, '_blank');
+  }
+
+  // ===== Exit Confirmation =====
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasUnsavedChanges()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  /** Called when user tries to navigate away (e.g. clicking Home, Login, etc.) */
+  confirmExit(url: string): boolean {
+    if (this.hasUnsavedChanges()) {
+      this._pendingNavUrl = url;
+      this.showExitDialog = true;
+      return false; // block navigation
+    }
+    return true; // allow navigation
+  }
+
+  /** User chose 'Save & Exit' in the exit dialog */
+  exitWithSave(): void {
+    this.manualSave();
+    this._unsavedChanges = false; // ensure dirty flag cleared before navigation
+    this.showExitDialog = false;
+    const url = this._pendingNavUrl;
+    this._pendingNavUrl = null;
+    if (url) {
+      this.router.navigateByUrl(url);
+    }
+  }
+
+  /** User chose 'Exit Without Saving' in the exit dialog */
+  exitWithoutSave(): void {
+    this._unsavedChanges = false; // clear dirty flag to allow navigation
+    this.showExitDialog = false;
+    const url = this._pendingNavUrl;
+    this._pendingNavUrl = null;
+    if (url) {
+      this.router.navigateByUrl(url);
+    }
+  }
+
+  /** User cancelled the exit dialog */
+  cancelExit(): void {
+    this.showExitDialog = false;
+    this._pendingNavUrl = null;
   }
 
   // Save model usage to localStorage
@@ -380,6 +627,7 @@ export class ModelDevelopmentComponent implements OnInit {
             columnName: String(variableName),
             features: features,
             processedFile: processedFile || undefined,
+            encodedFile: this.encodedFilePath || undefined,
             dateColumn: dateColumn || undefined,
             qualitySummary: qualitySummary || undefined,
           }
@@ -410,6 +658,7 @@ export class ModelDevelopmentComponent implements OnInit {
         this.dataService.getDataDictionary(fileId).subscribe({
           next: (list: any[]) => {
             this.dataDictionaryCache = Array.isArray(list) ? list : [];
+            this.sharedService.setDataDictionaryCache(this.dataDictionaryCache);
             openWithFeatures(buildFromCache());
           },
           error: () => {
@@ -538,13 +787,249 @@ export class ModelDevelopmentComponent implements OnInit {
     { id: 28, name: 'Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]', group: 5 },
     { id: 29, name: 'Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]', group: 5 },
     { id: 30, name: 'Outlier-cleaning [lower-upper] quantiles = [0.10-0.90]', group: 5 },
+    { id: 31, name: 'Outlier Cleaning (Categorical Features) threshold = 0.001', group: 6 },
+    { id: 32, name: 'Outlier Cleaning (Categorical Features) threshold = 0.005', group: 6 },
+    { id: 33, name: 'Outlier Cleaning (Categorical Features) threshold = 0.01', group: 6 },
+    { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05', group: 6 },
   ];
 
-  selectedOptions: PurifierOption[] = [];
+  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28, 32];
+  selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
-  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog) {}
+  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog, public aiAssistant: AiAssistantService) {}
+
+  // ===== 3-Layer Panel Toggle & Resize =====
+  toggleLeftPanel(): void {
+    this.showLeftPanel = !this.showLeftPanel;
+  }
+
+  toggleRightPanel(): void {
+    this.showRightPanel = !this.showRightPanel;
+    if (this.showRightPanel) {
+      this.aiAssistant.openPanel();
+    } else {
+      this.aiAssistant.closePanel();
+    }
+  }
+
+  onLeftResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this._resizing = 'left';
+    this._resizeStartX = event.clientX;
+    this._resizeStartWidth = this.leftPanelWidth;
+    document.addEventListener('mousemove', this._onResizeMove);
+    document.addEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  onRightResizeStart(event: MouseEvent): void {
+    event.preventDefault();
+    this._resizing = 'right';
+    this._resizeStartX = event.clientX;
+    this._resizeStartWidth = this.rightPanelWidth;
+    document.addEventListener('mousemove', this._onResizeMove);
+    document.addEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  private _onResizeMove = (event: MouseEvent): void => {
+    if (!this._resizing) return;
+    const dx = event.clientX - this._resizeStartX;
+    if (this._resizing === 'left') {
+      this.leftPanelWidth = Math.max(160, Math.min(400, this._resizeStartWidth + dx));
+    } else if (this._resizing === 'right') {
+      this.rightPanelWidth = Math.max(280, Math.min(600, this._resizeStartWidth - dx));
+    }
+  };
+
+  private _onResizeEnd = (): void => {
+    this._resizing = null;
+    document.removeEventListener('mousemove', this._onResizeMove);
+    document.removeEventListener('mouseup', this._onResizeEnd);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+
+  getPipelineConfig(): any {
+    return {
+      pipeline_type: this.selectedPipeline || 'boosting',
+      target_definition: this.targetDefinition || '',
+      current_step: this.currentStep,
+      detailed_step: this.detailedStep,
+      preprocessing_initiated: this.preprocessingInitiated,
+      modeling_available: this.modelingAvailable,
+      selected_purifier_steps: this.selectedOptions.map(o => o.name),
+      split_strategy: this.splitStrategy,
+      split_details: this.splitStrategy === 'oot'
+        ? { mode: this.ootMode, oot_percent: this.ootPercent, date_column: this.splitDateColumn, cutoff: this.splitCutoff }
+        : { oos_percent: this.oosPercent },
+      rows_before: this.rowCountBefore,
+      rows_after: this.rowCountAfter,
+      rows_removed: this.rowsRemovedTotal,
+      total_columns_dropped: this.droppedTotalCount(),
+      dropped_by_step: this.droppedColumnsByStep,
+      model_usage_exclusions: Object.entries(this.variableModelUsage || {})
+        .filter(([_, v]) => String(v).toLowerCase() === 'no')
+        .map(([k]) => k),
+      data_dictionary: (this.dataDictionaryCache || []).map((d: any) => ({
+        Feature_Name: d?.Feature_Name,
+        Data_Type: d?.Data_Type,
+        Level_of_Measurement: d?.Level_of_Measurement,
+        Unique_Values: d?.['#_of_Unique_Value'],
+        Missing_Ratio: d?.Missing_Ratio,
+        Mode_Ratio: d?.Mode_Ratio,
+        Model_Usage_YN: d?.Model_Usage_YN,
+        Feature_Description: d?.Feature_Description || null,
+      })),
+      encoding_plan: (this.encodingPlan || []).map((e: any) => ({
+        feature: e?.feature,
+        lom: e?.user_lom || e?.lom,
+        nunique: e?.nunique,
+        strategy: e?.fallback_strategy,
+        needs_ranking: e?.needs_ranking,
+      })),
+      feature_stats_before: this.featureStatsBefore,
+      feature_stats_after: this.featureStatsAfter,
+      preprocessing_step_stats: this.preprocessingStepStats,
+      pipeline_notes: this.pipelineNotes || {},
+    };
+  }
+
+  /** Build a full cumulative AI context snapshot from ALL pipeline data available so far. */
+  buildFullAiContext(): any {
+    const ctx: any = {
+      pipeline_config: this.getPipelineConfig(),
+    };
+    // Data Quality summary (available after preprocessing)
+    if (this.datqSummary && this.datqSummary.length > 0) {
+      ctx.summary = this.datqSummary;
+      ctx.purifier_summary = {
+        rows_before: this.rowCountBefore,
+        rows_after: this.rowCountAfter,
+        rows_removed: this.rowsRemovedTotal,
+        total_columns_dropped: this.droppedTotalCount(),
+        dropped_by_step: this.droppedColumnsByStep,
+      };
+      ctx.model_usage = this.variableModelUsage;
+      ctx.split_validation = this.splitValidation;
+    }
+    return ctx;
+  }
+
+  /** Push current cumulative AI context to SharedService so the chat panel always has it. */
+  pushAiContext(): void {
+    // Merge model-development context with any modeling-level context already in SharedService
+    const existingCtx = this.sharedService.getAiCumulativeContext() || {};
+    const myCtx = this.buildFullAiContext();
+    // model-development owns pipeline_config and data quality; modeling owns cv, shap, sfs, etc.
+    const merged = { ...existingCtx, ...myCtx, pipeline_config: { ...(existingCtx.pipeline_config || {}), ...myCtx.pipeline_config } };
+    this.sharedService.setAiCumulativeContext(merged);
+    // Also push to Redis cache for on-demand tool calling
+    this.pushToAiCache();
+  }
+
+  /** Push pipeline artifacts to the backend Redis cache for LLM tool calls. */
+  private pushToAiCache(): void {
+    if (this.currentFileId == null) return;
+    const artifacts: { [key: string]: any } = {};
+    // Pipeline config
+    artifacts['pipeline_config'] = this.getPipelineConfig();
+    // Split validation
+    if (this.splitValidation) {
+      artifacts['split_validation'] = this.splitValidation;
+    }
+    // Data quality summary
+    if (this.datqSummary && this.datqSummary.length > 0) {
+      artifacts['dq_summary'] = this.datqSummary;
+    }
+    // Feature stats (before/after preprocessing)
+    if (this.featureStatsBefore || this.featureStatsAfter) {
+      artifacts['feature_stats'] = {
+        before: this.featureStatsBefore || {},
+        after: this.featureStatsAfter || {},
+      };
+    }
+    // Data dictionary
+    if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) {
+      artifacts['data_dictionary'] = this.dataDictionaryCache;
+    }
+    // Pipeline notes
+    const notes = this.sharedService.getPipelineNotes();
+    if (notes && Object.keys(notes).length > 0) {
+      artifacts['pipeline_notes'] = notes;
+    }
+    // Fire and forget — cache push is best-effort
+    this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
+      error: (err: any) => console.warn('[AI Cache] push failed:', err),
+    });
+  }
+
+  requestAiSupport(context: any, section: string, prompt: string): void {
+    this.showRightPanel = true;
+    const sendRequest = () => {
+      const enriched = { ...context, pipeline_config: this.getPipelineConfig() };
+      this.aiAssistant.requestSupport(enriched, section, prompt);
+    };
+    // Ensure data dictionary cache has descriptions before sending to AI
+    const hasDescriptions = Array.isArray(this.dataDictionaryCache) &&
+      this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+    if (!hasDescriptions && this.currentFileId != null) {
+      this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
+        next: (list: any[]) => {
+          this.dataDictionaryCache = Array.isArray(list) ? list : [];
+          this.sharedService.setDataDictionaryCache(this.dataDictionaryCache);
+          sendRequest();
+        },
+        error: () => sendRequest(),
+      });
+    } else {
+      sendRequest();
+    }
+  }
+
+  requestDatqAiSupport(): void {
+    const context = {
+      summary: this.datqSummary,
+      purifier_summary: {
+        rows_before: this.rowCountBefore,
+        rows_after: this.rowCountAfter,
+        rows_removed: this.rowsRemovedTotal,
+        total_columns_dropped: this.droppedTotalCount(),
+        dropped_by_step: this.droppedColumnsByStep
+      },
+      model_usage: this.variableModelUsage,
+      split_validation: this.splitValidation
+    };
+    const prompt = 'Analyze this Data Quality Summary. Compare before vs after preprocessing treatment effects (rows removed, columns dropped per step). Highlight concerns about PSI stability, missing values, distribution shifts, and features to watch for the next encoding/modeling steps.';
+    this.requestAiSupport(context, 'data_quality', prompt);
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.splitValidation && !this._splitChartDrawn && this.splitValidationCanvas) {
+      this._splitChartDrawn = true;
+      setTimeout(() => this.drawSplitValidationChart(), 0);
+    }
+  }
 
   ngOnInit() {
+    // Restore autosave preference from localStorage
+    try {
+      const stored = localStorage.getItem(this._autosaveKey);
+      if (stored !== null) {
+        this.autosaveEnabled = stored === 'true';
+        this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
+      }
+    } catch {}
+
+    // Sync AI assistant panel open state from service (e.g. when child components open panel)
+    this.subscription.add(
+      this.aiAssistant.panelOpen$.subscribe(open => {
+        this.showRightPanel = open;
+      })
+    );
+
     // Baseline reset to prevent stale state causing steps to appear out of order
     this.sharedService.setStarted(false);
     this.sharedService.setPreprocessingInitiated(false);
@@ -557,6 +1042,10 @@ export class ModelDevelopmentComponent implements OnInit {
 
     this.subscription.add(
       this.sharedService.currentFileId$.subscribe((id: number | null) => {
+        // Mark dirty when file changes while autosave is off
+        if (id !== null && id !== this.currentFileId && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.currentFileId = id;
         this.computePreprocessingAvailable();
         // Load datetime columns from data dictionary (preferred)
@@ -567,6 +1056,13 @@ export class ModelDevelopmentComponent implements OnInit {
                 const rows = Array.isArray(list) ? list : [];
                 // Cache full dictionary for FeatureCard (Feature_Description, Level_of_Measurement, etc.)
                 this.dataDictionaryCache = rows;
+                this.sharedService.setDataDictionaryCache(rows);
+                // Push data dictionary to Redis cache for AI tool calls
+                if (rows.length > 0 && this.currentFileId != null) {
+                  this.dataService.pushAiCache(this.currentFileId, { data_dictionary: rows }).subscribe({
+                    error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+                  });
+                }
                 const dtCols = rows
                   .filter(item => {
                     const lom = String(item?.Level_of_Measurement || '').toLowerCase();
@@ -599,26 +1095,40 @@ export class ModelDevelopmentComponent implements OnInit {
     // Track pipeline start
     this.subscription.add(
       this.sharedService.isStarted$.subscribe((started: boolean) => {
+        // Mark dirty when pipeline starts while autosave is off
+        if (started && !this.isStarted && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.isStarted = started;
         this.computePreprocessingAvailable();
       })
     );
 
     // Do not auto-enable modeling on preprocessing result; user will click "Proceed to Modeling"
+    // Guard: only reset modelingAvailable if we haven't already entered modeling
     this.subscription.add(
       this.sharedService.preprocessingRunResult$.subscribe((_result: any) => {
-        this.modelingAvailable = false;
+        if (this.currentStep !== 'modeling' && this.currentStep !== 'sfs') {
+          this.modelingAvailable = false;
+        }
       })
     );
 
     // Track when user explicitly moves from Declaration to Preprocessing
     this.subscription.add(
       this.sharedService.preprocessingInitiated$.subscribe((initiated: boolean) => {
+        // Mark dirty when preprocessing initiated while autosave is off
+        if (initiated && !this.preprocessingInitiated && !this.autosaveEnabled) {
+          this._unsavedChanges = true;
+        }
         this.preprocessingInitiated = initiated;
         this.computePreprocessingAvailable();
-        // Update flow indicator to preprocessing step when user clicks preprocessing button
-        if (initiated) {
+        // Only transition to preprocessing if we're still at declaration (prevent regression)
+        if (initiated && this.currentStep === 'declaration') {
           this.currentStep = 'preprocessing';
+          this.detailedStep = '2a_purifier_declaration';
+          // Auto-save checkpoint: preprocessing
+          this.saveCheckpoint('preprocessing');
         }
       })
     );
@@ -640,6 +1150,52 @@ export class ModelDevelopmentComponent implements OnInit {
       })
     );
 
+    // Subscribe to checkpoint triggers from child components (declaration + modeling)
+    this.subscription.add(
+      this.sharedService.triggerCheckpoint$.subscribe((substep: string) => {
+        console.log('[Pipeline] Checkpoint trigger (Subject):', substep);
+        let step: string;
+        if (substep.startsWith('decl_')) {
+          step = 'declaration';
+          // Map declaration substeps to detailed taxonomy
+          if (substep === 'decl_data_imported') this.detailedStep = '1b_data_declaration';
+          else if (substep === 'decl_dictionary_generated') this.detailedStep = '1c_dictionary_declaration';
+        } else if (substep.startsWith('sfs_')) {
+          step = 'sfs';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
+        } else {
+          step = 'modeling';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
+        }
+        this.saveCheckpoint(step);
+      })
+    );
+
+    // Sync pipeline notes from SharedService (modeling child may update notes)
+    this.subscription.add(
+      this.sharedService.pipelineNotes$.subscribe((notes: { [position: string]: string }) => {
+        this.pipelineNotes = notes;
+      })
+    );
+
+    // Belt-and-suspenders: also subscribe to modelingCheckpoint$ BehaviorSubject
+    // and auto-save whenever the modeling substep advances.
+    // This catches cases where the Subject trigger might be missed.
+    this.subscription.add(
+      this.sharedService.modelingCheckpoint$.subscribe((state: any) => {
+        if (!state || !state.substep || !this.activePipelineRunId) return;
+        const substep = state.substep;
+        // Only save if substep actually changed (avoid duplicate saves)
+        if (substep !== this._lastModelingSubstep) {
+          console.log(`[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`);
+          this._lastModelingSubstep = substep;
+          const step = substep.startsWith('sfs_') ? 'sfs' : 'modeling';
+          this.detailedStep = this.mapModelingSubstepToDetailed(substep);
+          this.saveCheckpoint(step);
+        }
+      })
+    );
+
     // Load persisted preferences (page size, pinned columns, sort) and widths
     this.loadDatqPrefs();
     this.loadDatqWidths();
@@ -652,6 +1208,9 @@ export class ModelDevelopmentComponent implements OnInit {
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';
+    this.detailedStep = '3a_encoding';
+    // Auto-save checkpoint: modeling
+    this.saveCheckpoint('modeling');
     // Smooth scroll to modeling section
     setTimeout(() => {
       try {
@@ -1048,32 +1607,518 @@ export class ModelDevelopmentComponent implements OnInit {
     return v;
   }
 
+  /** canDeactivate hook — called by the route guard with the target URL */
+  canDeactivate(nextUrl?: string): boolean {
+    if (this.hasUnsavedChanges()) {
+      this._pendingNavUrl = nextUrl || '/home';
+      this.showExitDialog = true;
+      return false;
+    }
+    return true;
+  }
+
   ngOnDestroy() {
     this.subscription.unsubscribe();
+  }
+
+  // ===== Pipeline Persistence Methods =====
+
+  loadSavedPipelines(): void {
+    this.dataService.listPipelineRuns().subscribe({
+      next: (runs: any[]) => { this.savedPipelines = runs || []; },
+      error: () => { this.savedPipelines = []; }
+    });
+  }
+
+  toggleSavedPipelines(): void {
+    this.showSavedPipelines = !this.showSavedPipelines;
+    if (this.showSavedPipelines) this.loadSavedPipelines();
+  }
+
+  // ── Granular step taxonomy ──
+  private static readonly DETAILED_STEPS: string[] = [
+    '1a_pipeline_declaration', '1b_data_declaration', '1c_dictionary_declaration',
+    '2a_purifier_declaration', '2b_data_quality_summary',
+    '3a_encoding', '3b_modeling', '3c_sfs', '3ci_sfs_backward'
+  ];
+
+  private static readonly DETAILED_LABELS: {[k: string]: string} = {
+    '1a_pipeline_declaration': 'Pipeline Declaration',
+    '1b_data_declaration': 'Data Declaration',
+    '1c_dictionary_declaration': 'Dictionary Declaration',
+    '2a_purifier_declaration': 'Data Purifier Declaration',
+    '2b_data_quality_summary': 'Data Quality Summary',
+    '3a_encoding': 'Categorical Feature Encoding',
+    '3b_modeling': 'Modeling',
+    '3c_sfs': 'SFS',
+    '3ci_sfs_backward': 'SFS Backward'
+  };
+
+  /** Map a modeling child-component substep to the detailed taxonomy */
+  private mapModelingSubstepToDetailed(substep: string): string {
+    if (substep === 'algorithm_selected' || substep === 'encoding_completed') return '3a_encoding';
+    if (substep === 'modeling_started' || substep === 'modeling_completed') return '3b_modeling';
+    if (substep === 'sfs_backward_completed') return '3ci_sfs_backward';
+    if (substep.startsWith('sfs_')) return '3c_sfs';
+    return this.detailedStep; // keep current if unknown
+  }
+
+  /** Infer detailed step from coarse step + state (for old checkpoints without detailed_step) */
+  private inferDetailedStep(coarseStep: string, state: any): string {
+    const modelingSub = (state.modeling || {}).substep || '';
+    switch (coarseStep) {
+      case 'declaration':
+        if (state.file_id) return '1b_data_declaration';
+        return '1a_pipeline_declaration';
+      case 'preprocessing':
+        return '2a_purifier_declaration';
+      case 'data_quality':
+        return '2b_data_quality_summary';
+      case 'modeling':
+        if (modelingSub) return this.mapModelingSubstepToDetailed(modelingSub);
+        return '3a_encoding';
+      case 'sfs':
+        if (modelingSub) return this.mapModelingSubstepToDetailed(modelingSub);
+        return '3c_sfs';
+      default:
+        return '1a_pipeline_declaration';
+    }
+  }
+
+  getStepIndex(step: string): number {
+    const steps = ['declaration', 'preprocessing', 'data_quality', 'modeling', 'sfs', 'evaluation', 'deployment'];
+    const idx = steps.indexOf(step);
+    return idx >= 0 ? idx : 0;
+  }
+
+  getDetailedStepProgress(run: any): number {
+    const ds = run.detailed_step || run.state?.detailed_step;
+    if (ds) {
+      const idx = ModelDevelopmentComponent.DETAILED_STEPS.indexOf(ds);
+      if (idx >= 0) return Math.round(((idx + 1) / ModelDevelopmentComponent.DETAILED_STEPS.length) * 100);
+    }
+    // Fallback to coarse step
+    return Math.round(((this.getStepIndex(run.current_step) + 1) / 7) * 100);
+  }
+
+  getStepProgress(step: string): number {
+    return Math.round(((this.getStepIndex(step) + 1) / 7) * 100);
+  }
+
+  getDetailedStepLabel(run: any): string {
+    const ds = run.detailed_step || run.state?.detailed_step;
+    if (ds && ModelDevelopmentComponent.DETAILED_LABELS[ds]) {
+      return ModelDevelopmentComponent.DETAILED_LABELS[ds];
+    }
+    // Fallback
+    return this.getStepLabel(run.current_step);
+  }
+
+  getStepLabel(step: string): string {
+    const labels: {[k: string]: string} = {
+      'declaration': 'Declaration',
+      'preprocessing': 'Preprocessing',
+      'data_quality': 'Data Quality',
+      'modeling': 'Modeling',
+      'sfs': 'SFS',
+      'evaluation': 'Evaluation',
+      'deployment': 'Deployment'
+    };
+    return labels[step] || step;
+  }
+
+  buildCheckpointState(): any {
+    return {
+      file_id: this.currentFileId,
+      pipeline_type: this.selectedPipeline,
+      target_definition: this.targetDefinition || '',
+      current_step: this.currentStep === 'data quality' ? 'data_quality' : this.currentStep,
+      detailed_step: this.detailedStep,
+      preprocessing: {
+        purifier_option_ids: this.selectedOptions.map(o => o.id),
+        split_strategy: this.splitStrategy,
+        split_date_column: this.splitDateColumn,
+        split_cutoff: this.splitCutoff,
+        oot_mode: this.ootMode,
+        oot_percent: this.ootPercent,
+        oos_percent: this.oosPercent,
+        processed_file_path: this.processedFilePath,
+        dropped_columns_by_step: this.droppedColumnsByStep,
+        rows_removed_total: this.rowsRemovedTotal,
+        row_count_before: this.rowCountBefore,
+        row_count_after: this.rowCountAfter,
+        split_validation: this.splitValidation,
+      },
+      data_quality: {
+        datq_summary: this.datqSummary,
+        model_usage: this.variableModelUsage,
+      },
+      flags: {
+        is_started: this.isStarted,
+        preprocessing_initiated: this.preprocessingInitiated,
+        preprocessing_available: this.preprocessingAvailable,
+        modeling_available: this.modelingAvailable,
+      },
+      modeling: this.sharedService.getModelingCheckpoint() || null,
+      active_process: this.sharedService.getActiveProcess() || null,
+      pipeline_notes: this.sharedService.getPipelineNotes() || {},
+    };
+  }
+
+  private static readonly STEP_ORDER: {[k: string]: number} = {
+    'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
+    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6
+  };
+
+  saveCheckpoint(step?: string, force: boolean = false): void {
+    // Always refresh cumulative AI context regardless of autosave setting
+    this.pushAiContext();
+
+    // When autosave is OFF and this is NOT a forced save (manual/initial), just mark dirty
+    if (!this.autosaveEnabled && !force) {
+      this._unsavedChanges = true;
+      console.log(`[Pipeline] saveCheckpoint SKIPPED (autosave OFF): step=${step}, componentStep=${this.currentStep}`);
+      return;
+    }
+
+    const state = this.buildCheckpointState();
+    const currentStep = step || state.current_step;
+    console.log(`[Pipeline] saveCheckpoint called: step=${step}, currentStep=${currentStep}, componentStep=${this.currentStep}, highWater=${this._highWaterStep}, id=${this.activePipelineRunId}, creating=${this._checkpointCreating}`);
+
+    // Frontend step regression guard: never send a PUT that would regress the step
+    const newOrder = ModelDevelopmentComponent.STEP_ORDER[currentStep] ?? 0;
+    const hwOrder = ModelDevelopmentComponent.STEP_ORDER[this._highWaterStep] ?? 0;
+    if (newOrder < hwOrder) {
+      console.warn(`[Pipeline] BLOCKED frontend regression: ${this._highWaterStep}(${hwOrder}) -> ${currentStep}(${newOrder})`, new Error().stack);
+      return;
+    }
+    this._highWaterStep = currentStep;
+
+    if (this.activePipelineRunId) {
+      // Already have an ID — safe to update directly
+      this.dataService.updatePipelineRun(this.activePipelineRunId, {
+        current_step: currentStep,
+        state: state,
+        file_id: this.currentFileId,
+      }).subscribe({
+        next: () => { this._unsavedChanges = false; console.log('[Pipeline] Checkpoint saved:', currentStep); },
+        error: (e: any) => console.error('[Pipeline] Checkpoint save failed:', e)
+      });
+    } else if (this._checkpointCreating) {
+      // A create is already in flight — just flag that we need a flush
+      this._pendingCheckpoint = true;
+      console.log('[Pipeline] Queued checkpoint (create in flight), componentStep:', this.currentStep);
+    } else {
+      // No ID yet, no create in flight — fire the create
+      this._checkpointCreating = true;
+      const name = this.pipelineRunName || `${this.selectedPipeline || 'pipeline'}-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}`;
+      this.dataService.createPipelineRun({
+        name: name,
+        pipeline_type: this.selectedPipeline || 'boosting',
+        file_id: this.currentFileId,
+        current_step: currentStep,
+        state: state,
+      }).subscribe({
+        next: (resp: any) => {
+          this.activePipelineRunId = resp.id;
+          this.pipelineRunName = resp.name;
+          this._checkpointCreating = false;
+          this._unsavedChanges = false;
+          console.log('[Pipeline] Created & saved checkpoint:', resp.name, currentStep);
+          // Flush: re-save with CURRENT state (not stale queued step)
+          if (this._pendingCheckpoint) {
+            this._pendingCheckpoint = false;
+            console.log('[Pipeline] Flushing with current state, componentStep:', this.currentStep);
+            this.saveCheckpoint(undefined, true);
+          }
+        },
+        error: (e: any) => {
+          this._checkpointCreating = false;
+          this._pendingCheckpoint = false;
+          console.error('[Pipeline] Create failed:', e);
+        }
+      });
+    }
+  }
+
+  loadPipelineRun(id: number): void {
+    this.dataService.getPipelineRun(id).subscribe({
+      next: (run: any) => {
+        const s = run.state || {};
+
+        // ── 1. Set step & high-water FIRST (before any SharedService calls) ──
+        //    This prevents subscription guards from mis-firing during restore.
+        const step = run.current_step === 'data_quality' ? 'data quality' : (run.current_step === 'sfs' ? 'modeling' : run.current_step);
+        this.currentStep = step;
+        const restoredStepKey = step === 'data quality' ? 'data_quality' : step;
+        this._highWaterStep = restoredStepKey;
+
+        // ── 1b. Restore detailed step ──
+        this.detailedStep = s.detailed_step || this.inferDetailedStep(restoredStepKey, s);
+
+        // ── 2. Restore identity & clear dirty state ──
+        this.activePipelineRunId = run.id;
+        this.pipelineRunName = run.name;
+        this._unsavedChanges = false;
+        this.selectedPipeline = s.pipeline_type || run.pipeline_type || 'boosting';
+        this.targetDefinition = s.target_definition || '';
+        this.sharedService.setTargetDefinition(this.targetDefinition);
+
+        // ── 3. Restore flags (local first, then SharedService) ──
+        const flags = s.flags || {};
+        this.isStarted = flags.is_started !== false;
+        this.preprocessingInitiated = !!flags.preprocessing_initiated;
+        this.preprocessingAvailable = !!flags.preprocessing_available;
+        this.modelingAvailable = !!flags.modeling_available;
+
+        // ── 4. Restore preprocessing state ──
+        const pp = s.preprocessing || {};
+        if (pp.purifier_option_ids && pp.purifier_option_ids.length) {
+          this.selectedOptions = this.purifierOptions.filter(o => pp.purifier_option_ids.includes(o.id));
+        }
+        this.splitStrategy = pp.split_strategy || 'random';
+        this.splitDateColumn = pp.split_date_column || null;
+        this.splitCutoff = pp.split_cutoff || '';
+        this.ootMode = pp.oot_mode || 'percent';
+        this.ootPercent = pp.oot_percent ?? 25;
+        this.oosPercent = pp.oos_percent ?? 25;
+        this.processedFilePath = pp.processed_file_path || null;
+        this.droppedColumnsByStep = pp.dropped_columns_by_step || [];
+        this.rowsRemovedTotal = pp.rows_removed_total || 0;
+        this.rowCountBefore = pp.row_count_before || 0;
+        this.rowCountAfter = pp.row_count_after || 0;
+        this.splitValidation = pp.split_validation || null;
+        this._splitChartDrawn = false;
+
+        // ── 5. Restore data quality state ──
+        const dq = s.data_quality || {};
+        if (dq.datq_summary && dq.datq_summary.length) {
+          this.datqSummary = dq.datq_summary;
+          this.datqAllColumns = Object.keys(this.datqSummary![0]);
+          this.datqColumns = [...this.datqAllColumns];
+          this.reorderDatqColumns();
+          this.ensureFilterKeys();
+          this.datqPage = 1;
+        }
+        if (dq.model_usage) {
+          this.variableModelUsage = dq.model_usage;
+          this.saveModelUsage();
+        }
+
+        // ── 5b. Restore pipeline notes ──
+        this.pipelineNotes = s.pipeline_notes || {};
+        this.sharedService.setPipelineNotes(this.pipelineNotes);
+
+        // ── 6. Restore modeling inner state via SharedService (before component initializes) ──
+        if (s.modeling) {
+          this._lastModelingSubstep = s.modeling.substep || null;
+          this.sharedService.setModelingCheckpoint(s.modeling);
+        }
+
+        // ── 6b. Restore active process tracking (for resume on return) ──
+        if (s.active_process) {
+          this.sharedService.setActiveProcess(s.active_process);
+        } else {
+          this.sharedService.setActiveProcess(null);
+        }
+
+        // ── 7. NOW fire SharedService setters (subscriptions will see correct currentStep) ──
+        this.sharedService.setSelectedPipeline(this.selectedPipeline);
+        this.sharedService.setStarted(this.isStarted);
+        this.sharedService.setPreprocessingInitiated(this.preprocessingInitiated);
+        this.sharedService.setProcessedFilePath(this.processedFilePath);
+        if (dq.model_usage) {
+          this.sharedService.setModelUsageSettings(dq.model_usage);
+        }
+        // Set file ID last — triggers declaration hydration (preview + dictionary fetch)
+        if (s.file_id != null) {
+          this.currentFileId = s.file_id;
+          this.sharedService.setCurrentFileId(s.file_id);
+        }
+
+        // ── 7b. Push cumulative AI context after full restore ──
+        this.pushAiContext();
+
+        // ── 8. Close panel & scroll ──
+        this.showSavedPipelines = false;
+        console.log('[Pipeline] Loaded run:', run.name, 'at step:', step);
+
+        // ── 9. Check for active process that needs resume ──
+        if (s.active_process && s.active_process.type === 'preprocessing' && s.active_process.file_id) {
+          this.resumePreprocessing(s.active_process.file_id);
+        }
+
+        setTimeout(() => {
+          try {
+            if (step === 'data quality') {
+              const el = document.getElementById('data-quality-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else if (step === 'modeling' || step === 'sfs') {
+              const el = document.getElementById('modeling-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          } catch {}
+        }, 200);
+      },
+      error: (e: any) => console.error('[Pipeline] Load failed:', e)
+    });
+  }
+
+  /** Resume preprocessing: check if it completed while the user was away */
+  private resumePreprocessing(fileId: number): void {
+    console.log('[Pipeline] Checking preprocessing status for resume, file_id:', fileId);
+    this.isProcessing = true;
+    this.dataService.getPreprocessingStatus(fileId).subscribe({
+      next: (resp: any) => {
+        this.isProcessing = false;
+        if (resp.status === 'completed' && resp.result) {
+          console.log('[Pipeline] Resume: preprocessing completed while away');
+          const result = resp.result;
+          // Restore all preprocessing results
+          this.sharedService.setPreprocessingRunResult(result);
+          this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
+          this.processedFilePath = result?.processed_file ?? null;
+          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step) ? result.dropped_columns_by_step : [];
+          this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
+          this.rowCountBefore = Number(result?.row_count_before ?? 0);
+          this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          this.featureStatsBefore = result?.feature_stats_before ?? null;
+          this.featureStatsAfter = result?.feature_stats_after ?? null;
+          this.preprocessingStepStats = result?.preprocessing_step_stats ?? null;
+          // Restore Split Validation
+          this.splitValidation = result?.split_validation ?? null;
+          this._splitChartDrawn = false;
+          // Restore Data Quality summary
+          this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
+          this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+          this.datqColumns = [...this.datqAllColumns];
+          this.reorderDatqColumns();
+          this.ensureFilterKeys();
+          if (this.pinnedColumns.length === 0) {
+            if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
+            else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
+          }
+          if (this.datqColumns.includes('PSI')) {
+            this.datqSortColumn = 'PSI';
+            this.datqSortDir = 'desc';
+          }
+          this.datqPage = 1;
+          // Advance to data quality step
+          if (this.datqSummary && this.datqSummary.length > 0) {
+            this.currentStep = 'data quality';
+            this._highWaterStep = 'data_quality';
+            this.preprocessingAvailable = true;
+            this.detailedStep = '2b_data_quality_summary';
+          }
+          // Clear active process and save
+          this.sharedService.setActiveProcess(null);
+          this.saveCheckpoint('data_quality', true);
+          setTimeout(() => {
+            try {
+              const el = document.getElementById('data-quality-anchor');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch {}
+          }, 200);
+        } else {
+          console.log('[Pipeline] Resume: preprocessing not yet completed or no results');
+          this.sharedService.setActiveProcess(null);
+          this.saveCheckpoint(undefined, true);
+        }
+      },
+      error: (err: any) => {
+        this.isProcessing = false;
+        console.warn('[Pipeline] Resume: could not check preprocessing status:', err);
+        this.sharedService.setActiveProcess(null);
+      }
+    });
+  }
+
+  deletePipelineRun(id: number): void {
+    if (!confirm('Delete this pipeline run?')) return;
+    this.dataService.deletePipelineRun(id).subscribe({
+      next: () => {
+        this.savedPipelines = this.savedPipelines.filter(r => r.id !== id);
+        if (this.activePipelineRunId === id) this.activePipelineRunId = null;
+      },
+      error: (e: any) => console.error('[Pipeline] Delete failed:', e)
+    });
+  }
+
+  startRenamePipeline(run: any): void {
+    this.renamingPipelineId = run.id;
+    this.renamingPipelineName = run.name;
+  }
+
+  confirmRenamePipeline(run: any): void {
+    if (!this.renamingPipelineName.trim()) return;
+    this.dataService.updatePipelineRun(run.id, { name: this.renamingPipelineName.trim() }).subscribe({
+      next: () => {
+        run.name = this.renamingPipelineName.trim();
+        if (this.activePipelineRunId === run.id) this.pipelineRunName = run.name;
+        this.renamingPipelineId = null;
+      },
+      error: (e: any) => console.error('[Pipeline] Rename failed:', e)
+    });
+  }
+
+  cancelRenamePipeline(): void {
+    this.renamingPipelineId = null;
   }
   
   onPipelineChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     this.selectedPipeline = select.value;
-    // Here you can add logic to handle the pipeline change
     console.log('Selected pipeline:', this.selectedPipeline);
     this.sharedService.setSelectedPipeline(this.selectedPipeline);
+  }
+
+  onPipelineChange2(value: string) {
+    this.selectedPipeline = value;
+    console.log('Selected pipeline:', this.selectedPipeline);
+    this.sharedService.setSelectedPipeline(this.selectedPipeline);
+  }
+
+  onTargetDefinitionChange(value: string): void {
+    this.targetDefinition = value;
+    this.sharedService.setTargetDefinition(value);
+    this.onPipelineConfigChanged();
   }
 
   onStartClick() {
     if (this.selectedPipeline) {
       // Reset state for a clean run
+      this.activePipelineRunId = null;
+      this.pipelineRunName = '';
+      this._checkpointCreating = false;
+      this._pendingCheckpoint = false;
+      this._highWaterStep = 'declaration';
+      this._lastModelingSubstep = null;
       this.sharedService.setCurrentFileId(null);
       this.sharedService.setPreprocessingInitiated(false);
       this.sharedService.setPreprocessingRunResult(null);
       this.sharedService.setProcessedFilePath(null);
-      this.selectedOptions = [];
+      this.sharedService.setActiveProcess(null); // clear any stale active process
+      this.selectedOptions = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
       this.modelingAvailable = false;
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
+      this.detailedStep = '1a_pipeline_declaration';
+      this.editingTargetDefinition = false;
       // Start pipeline
       this.sharedService.setStarted(true);
+      // Initial creation checkpoint: always force through
+      this.saveCheckpoint('declaration', true);
     }
+  }
+
+  onEditTargetDefinition(): void {
+    this.editingTargetDefinition = true;
+  }
+
+  onSaveTargetDefinition(): void {
+    this.editingTargetDefinition = false;
+    this.sharedService.setTargetDefinition(this.targetDefinition);
+    this.onPipelineConfigChanged();
   }
 
   onSelectionChange(event: MatSelectChange): void {
@@ -1099,8 +2144,10 @@ export class ModelDevelopmentComponent implements OnInit {
       console.error('No file ID found. Please upload/select a data file first.');
       return;
     }
-    // Validate OOT params if selected
-    let split: any = { strategy: 'random' };
+    // Build split config
+    const oosPct = Number(this.oosPercent);
+    const oosValid = isFinite(oosPct) && oosPct > 0 && oosPct < 100;
+    let split: any = { strategy: 'random', percent: oosValid ? oosPct : 25 };
     if (this.splitStrategy === 'oot') {
       if (!this.splitDateColumn) {
         console.error('Please select a date column for OOT split.');
@@ -1126,7 +2173,11 @@ export class ModelDevelopmentComponent implements OnInit {
     }
 
     this.isProcessing = true;
-    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables)
+    // Track active process for pipeline resume
+    this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
+    this.detailedStep = '2a_purifier_declaration';
+    this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
+    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables, this.dataDictionaryCache)
       .pipe(finalize(() => { this.isProcessing = false; }))
       .subscribe(
         (result: any) => {
@@ -1140,6 +2191,13 @@ export class ModelDevelopmentComponent implements OnInit {
           // Capture row counts before/after
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
+          // Capture before/after per-feature descriptive stats
+          this.featureStatsBefore = result?.feature_stats_before ?? null;
+          this.featureStatsAfter = result?.feature_stats_after ?? null;
+          this.preprocessingStepStats = result?.preprocessing_step_stats ?? null;
+          // Capture Split Validation data
+          this.splitValidation = result?.split_validation ?? null;
+          this._splitChartDrawn = false;
           // Capture Data Quality summary
           this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
           this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
@@ -1160,9 +2218,14 @@ export class ModelDevelopmentComponent implements OnInit {
           }
           this.datqPage = 1;
           this.saveDatqPrefs();
+          // Clear active process — preprocessing completed
+          this.sharedService.setActiveProcess(null);
           // Navigate to Data Quality section
           if (this.datqSummary && this.datqSummary.length > 0) {
             this.currentStep = 'data quality';
+            this.detailedStep = '2b_data_quality_summary';
+            // Auto-save checkpoint: data_quality
+            this.saveCheckpoint('data_quality');
             setTimeout(() => {
               try {
                 const el = document.getElementById('data-quality-anchor');
@@ -1173,8 +2236,211 @@ export class ModelDevelopmentComponent implements OnInit {
         },
         (err: any) => {
           console.error('Failed to run preprocessing:', err);
+          this.sharedService.setActiveProcess(null); // clear on error too
         }
       );
+  }
+
+  // ── Split Validation Chart (Canvas-based stacked bar + target mean line) ──
+  drawSplitValidationChart(): void {
+    if (!this.splitValidation || !this.splitValidationCanvas) return;
+    const canvas = this.splitValidationCanvas.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 700;
+    const cssH = canvas.clientHeight || 320;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    ctx.scale(dpr, dpr);
+
+    const splits: any[] = this.splitValidation.splits || [];
+    const labels: string[] = this.splitValidation.labels || [];
+    if (!splits.length || !labels.length) return;
+
+    // Layout constants
+    const marginTop = 40, marginBottom = 70, marginLeft = 70, marginRight = 120;
+    const chartW = cssW - marginLeft - marginRight;
+    const chartH = cssH - marginTop - marginBottom;
+
+    // Color palette for target labels
+    const labelColors: string[] = ['#90a4ae', '#e57373', '#81c784', '#ffb74d', '#ba68c8', '#4dd0e1', '#f06292', '#a1887f'];
+    const labelColorMap: { [label: string]: string } = {};
+    labels.forEach((l, i) => { labelColorMap[l] = labelColors[i % labelColors.length]; });
+
+    // Max count for Y axis
+    const maxCount = Math.max(...splits.map((s: any) => s.count || 0), 1);
+
+    // Bar geometry
+    const barGroupWidth = chartW / splits.length;
+    const barWidth = Math.min(barGroupWidth * 0.55, 100);
+    const barGap = (barGroupWidth - barWidth) / 2;
+
+    // Clear
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    // Y axis: gridlines and labels (count scale)
+    const nTicks = 5;
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#888';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= nTicks; i++) {
+      const v = Math.round(maxCount * i / nTicks);
+      const y = marginTop + chartH - (chartH * i / nTicks);
+      ctx.beginPath();
+      ctx.moveTo(marginLeft, y);
+      ctx.lineTo(marginLeft + chartW, y);
+      ctx.stroke();
+      ctx.fillText(v.toLocaleString(), marginLeft - 8, y + 4);
+    }
+
+    // Y axis title
+    ctx.save();
+    ctx.translate(16, marginTop + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#555';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Count', 0, 0);
+    ctx.restore();
+
+    // Draw stacked bars
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap;
+      const lc: { [k: string]: number } = split.label_counts || {};
+      let yBottom = marginTop + chartH; // start from bottom
+
+      labels.forEach((label: string) => {
+        const count = lc[label] || 0;
+        const barH = (count / maxCount) * chartH;
+        const y = yBottom - barH;
+        ctx.fillStyle = labelColorMap[label];
+        ctx.fillRect(x, y, barWidth, barH);
+
+        // Count label inside bar if tall enough
+        if (barH > 18) {
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(count.toLocaleString(), x + barWidth / 2, y + barH / 2 + 4);
+        }
+        yBottom = y;
+      });
+
+      // X-axis label: split name
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(split.name, x + barWidth / 2, marginTop + chartH + 18);
+
+      // Count subtitle
+      ctx.fillStyle = '#888';
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(`n=${(split.count || 0).toLocaleString()}`, x + barWidth / 2, marginTop + chartH + 33);
+    });
+
+    // ── Target Mean line (secondary Y axis) ──
+    const means = splits.map((s: any) => s.target_mean ?? 0);
+    const meanMin = Math.min(...means);
+    const meanMax = Math.max(...means);
+    // Expand range slightly for visual clarity
+    const meanRange = (meanMax - meanMin) || 0.01;
+    const meanLow = Math.max(0, meanMin - meanRange * 0.5);
+    const meanHigh = Math.min(1, meanMax + meanRange * 0.5);
+    const meanScale = (v: number) => marginTop + chartH - ((v - meanLow) / (meanHigh - meanLow)) * chartH;
+
+    // Draw line
+    ctx.strokeStyle = '#2e7d32';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap + barWidth / 2;
+      const y = meanScale(split.target_mean ?? 0);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw mean dots and labels
+    splits.forEach((split: any, idx: number) => {
+      const x = marginLeft + idx * barGroupWidth + barGap + barWidth / 2;
+      const y = meanScale(split.target_mean ?? 0);
+      // Dot
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#2e7d32';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = '#2e7d32';
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      const meanPct = ((split.target_mean ?? 0) * 100).toFixed(2);
+      ctx.fillText(`${meanPct}%`, x, y - 10);
+    });
+
+    // Right Y axis: target mean scale
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#2e7d32';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    for (let i = 0; i <= 4; i++) {
+      const v = meanLow + (meanHigh - meanLow) * i / 4;
+      const y = meanScale(v);
+      ctx.fillText((v * 100).toFixed(1) + '%', marginLeft + chartW + 8, y + 4);
+    }
+    // Right axis title
+    ctx.save();
+    ctx.translate(cssW - 10, marginTop + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2e7d32';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText('Target Mean', 0, 0);
+    ctx.restore();
+
+    // Title
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Train-Test Split Validation: Target Distribution', cssW / 2, 20);
+
+    // Legend (bottom)
+    const legendY = cssH - 15;
+    let legendX = marginLeft;
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    labels.forEach((label: string) => {
+      ctx.fillStyle = labelColorMap[label];
+      ctx.fillRect(legendX, legendY - 9, 12, 12);
+      ctx.fillStyle = '#555';
+      ctx.fillText(`Target=${label}`, legendX + 16, legendY + 1);
+      legendX += ctx.measureText(`Target=${label}`).width + 32;
+    });
+    // Mean legend
+    ctx.strokeStyle = '#2e7d32';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.moveTo(legendX, legendY - 3);
+    ctx.lineTo(legendX + 20, legendY - 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(legendX + 10, legendY - 3, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#2e7d32';
+    ctx.fill();
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'left';
+    ctx.fillText('Target Mean', legendX + 26, legendY + 1);
   }
 
   // Helpers for UI
@@ -1182,6 +2448,10 @@ export class ModelDevelopmentComponent implements OnInit {
     try {
       return (this.droppedColumnsByStep || []).reduce((acc, s) => acc + (Array.isArray(s.columns) ? s.columns.length : 0), 0);
     } catch { return 0; }
+  }
+
+  objectKeys(obj: any): string[] {
+    return obj ? Object.keys(obj) : [];
   }
 
   trackByStepIndex(_idx: number, item: any): string {
@@ -1270,5 +2540,335 @@ export class ModelDevelopmentComponent implements OnInit {
 
   private computePreprocessingAvailable(): void {
     this.preprocessingAvailable = this.isStarted && this.preprocessingInitiated && (this.currentFileId !== null);
+  }
+
+  // ===== Enhanced Navigation Methods =====
+
+  toggleNavStep(mainStepId: string): void {
+    this.navExpandedSteps[mainStepId] = !this.navExpandedSteps[mainStepId];
+  }
+
+  /** Navigate to a main step (same as onMenuClick but for new nav) */
+  navGoToStep(event: Event, mainStepId: string): void {
+    event.stopPropagation();
+    // Map nav step id to the existing menu item names
+    const menuMap: { [k: string]: string } = {
+      declaration: 'declaration',
+      modeling: 'modeling',
+      evaluation: 'evaluation',
+      deployment: 'deployment',
+    };
+    const menuItem = menuMap[mainStepId] || mainStepId;
+    if (!this.stepEnabled(menuItem)) return;
+    this.currentStep = menuItem;
+    // Auto-expand the clicked step
+    this.navExpandedSteps[mainStepId] = true;
+    this.scrollToSection(menuItem);
+  }
+
+  /** Navigate to a sub-step and scroll to its section */
+  navGoToSubStep(event: Event, mainStepId: string, subStepId: string): void {
+    event.stopPropagation();
+    const menuMap: { [k: string]: string } = {
+      declaration: 'declaration',
+      modeling: 'modeling',
+      evaluation: 'evaluation',
+      deployment: 'deployment',
+    };
+    const menuItem = menuMap[mainStepId] || mainStepId;
+    if (!this.stepEnabled(menuItem)) return;
+    this.currentStep = menuItem;
+    // Scroll to specific sub-step anchor if available
+    setTimeout(() => {
+      const anchorMap: { [k: string]: string } = {
+        '1e': 'data-quality-anchor',
+        '2a': 'encoding-anchor',
+        '2b': 'modeling-anchor',
+        '2c': 'sfs-anchor',
+      };
+      const anchorId = anchorMap[subStepId];
+      if (anchorId) {
+        const el = document.getElementById(anchorId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  }
+
+  private scrollToSection(item: string): void {
+    setTimeout(() => {
+      try {
+        if (item === 'data quality' || item === 'preprocessing') {
+          const el = document.getElementById('data-quality-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (item === 'modeling') {
+          const el = document.getElementById('modeling-anchor');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch {}
+    }, 50);
+  }
+
+  /** Get sub-step status: 'completed', 'in_progress', or 'pending' */
+  getSubStepStatus(subStepId: string): 'completed' | 'in_progress' | 'pending' {
+    const mc = this.sharedService.getModelingCheckpoint();
+    switch (subStepId) {
+      // Declaration sub-steps
+      case '1a': // Pipeline Type
+        if (this.isStarted && this.selectedPipeline) return 'completed';
+        if (!this.selectedPipeline) return this.currentStep === 'declaration' ? 'in_progress' : 'pending';
+        return 'pending';
+      case '1b': // Data Upload
+        if (this.currentFileId != null) return 'completed';
+        if (this.isStarted && this.selectedPipeline && this.currentFileId == null) return 'in_progress';
+        return 'pending';
+      case '1c': // Data Dictionary Review
+        if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) return 'completed';
+        if (this.currentFileId != null && !(this.dataDictionaryCache && this.dataDictionaryCache.length > 0)) return 'in_progress';
+        return 'pending';
+      case '1d': // Preprocessing
+        if (this.preprocessingInitiated && this.rowCountAfter > 0) return 'completed';
+        if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0 && !(this.preprocessingInitiated && this.rowCountAfter > 0)) {
+          return this.isProcessing ? 'in_progress' : (this.preprocessingAvailable ? 'in_progress' : 'pending');
+        }
+        return 'pending';
+      case '1e': // Data Quality Summary
+        if (this.modelingAvailable) return 'completed';
+        if (this.datqSummary && this.datqSummary.length > 0) return 'in_progress';
+        if (this.preprocessingInitiated && this.rowCountAfter > 0) return 'in_progress';
+        return 'pending';
+
+      // Modeling sub-steps
+      case '2a': // Categorical Encoding
+        if (mc && mc.substep && ['encoding_completed', 'modeling_started', 'modeling_completed',
+            'sfs_running', 'sfs_stopped', 'sfs_backward_completed', 'sfs_forward_completed',
+            'sfs_completed', 'sfs_forward_from_backward_completed'].includes(mc.substep)) return 'completed';
+        if (mc && mc.substep === 'algorithm_selected') return 'in_progress';
+        if (this.modelingAvailable && !mc?.substep) return 'in_progress';
+        return 'pending';
+      case '2b': // Model Training & CV
+        if (mc && mc.modelingStatus?.model) return 'completed';
+        if (mc && (mc.substep === 'modeling_started' || mc.substep === 'encoding_completed')) return 'in_progress';
+        return 'pending';
+      case '2c': // SFS
+        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'completed';
+        if (mc && mc.modelingStatus?.model && !(mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'in_progress';
+        return 'pending';
+
+      // Future steps
+      case '3a': return 'pending';
+      case '4a': return 'pending';
+      default: return 'pending';
+    }
+  }
+
+  /** Get main step status based on sub-steps */
+  getMainStepStatus(mainStepId: string): 'completed' | 'in_progress' | 'pending' {
+    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    if (!step) return 'pending';
+    const statuses = step.subSteps.map(s => this.getSubStepStatus(s.id));
+    if (statuses.every(s => s === 'completed')) return 'completed';
+    if (statuses.some(s => s === 'in_progress' || s === 'completed')) return 'in_progress';
+    return 'pending';
+  }
+
+  /** Get main step progress percentage (0–100) */
+  getMainStepProgressPct(mainStepId: string): number {
+    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    if (!step) return 0;
+    const completed = step.subSteps.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    return Math.round((completed / step.subSteps.length) * 100);
+  }
+
+  /** Overall pipeline progress percentage */
+  getOverallProgress(): number {
+    const allSubs = this.navMainSteps.flatMap(m => m.subSteps);
+    const completed = allSubs.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    return Math.round((completed / allSubs.length) * 100);
+  }
+
+  // ===== Encoding Step Methods =====
+
+  goToEncoding(): void {
+    // For boosting pipeline, skip encoding and go directly to modeling
+    this.goToModelingFromDQ();
+  }
+
+  goToModelingFromDQ(): void {
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
+    this.modelingAvailable = true;
+    this.currentStep = 'modeling';
+    this.detailedStep = '3a_encoding';
+    // Auto-save checkpoint: modeling
+    this.saveCheckpoint('modeling');
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('modeling-anchor');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }, 100);
+  }
+
+  analyzeEncoding(): void {
+    if (!this.currentFileId || !this.processedFilePath) return;
+    this.encodingAnalyzing = true;
+    this.encodingError = null;
+    const excluded = this.getExcludedVariables();
+    this.dataService.analyzeEncoding(
+      this.currentFileId, this.processedFilePath, this.dataDictionaryCache, excluded
+    ).subscribe({
+      next: (resp: any) => {
+        this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
+        this.encodingAnalyzing = false;
+      },
+      error: (err: any) => {
+        this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
+        this.encodingAnalyzing = false;
+      }
+    });
+  }
+
+  updateEncodingLom(entry: any, newLom: string): void {
+    entry.user_lom = newLom;
+    const nunique = entry.nunique || 0;
+    if (newLom === 'ordinal') {
+      if (nunique < 5) {
+        entry.fallback_strategy = 'one_hot_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (<5) → One-Hot Encoding`;
+        entry.needs_ranking = false;
+      } else if (nunique <= 10) {
+        entry.fallback_strategy = 'ordinal_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (5–10) → Ordinal Encoding (user ranking)`;
+        entry.needs_ranking = true;
+      } else {
+        entry.fallback_strategy = 'target_encoding';
+        entry.fallback_reason = `Ordinal with ${nunique} unique (>10) → Target Encoding`;
+        entry.needs_ranking = false;
+      }
+    } else {
+      entry.fallback_strategy = 'label_encoding';
+      entry.fallback_reason = 'Nominal feature → Label Encoding';
+      entry.needs_ranking = false;
+      entry.ranking = null;
+    }
+  }
+
+  moveRankingUp(entry: any, idx: number): void {
+    if (!entry.ranking || idx <= 0) return;
+    const tmp = entry.ranking[idx - 1];
+    entry.ranking[idx - 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  moveRankingDown(entry: any, idx: number): void {
+    if (!entry.ranking || idx >= entry.ranking.length - 1) return;
+    const tmp = entry.ranking[idx + 1];
+    entry.ranking[idx + 1] = entry.ranking[idx];
+    entry.ranking[idx] = tmp;
+  }
+
+  initRanking(entry: any): void {
+    if (!entry.ranking || !entry.ranking.length) {
+      entry.ranking = [...(entry.unique_values || [])];
+    }
+  }
+
+  applyEncoding(): void {
+    if (!this.currentFileId || !this.processedFilePath) return;
+    this.encodingApplying = true;
+    this.encodingError = null;
+    // Init rankings for ordinal features that need them
+    for (const e of this.encodingPlan) {
+      if (e.needs_ranking && (!e.ranking || !e.ranking.length)) {
+        e.ranking = [...(e.unique_values || [])];
+      }
+    }
+    this.dataService.applyEncoding(
+      this.currentFileId, this.processedFilePath, this.encodingPlan, this.encodingUseNative
+    ).subscribe({
+      next: (resp: any) => {
+        this.encodingReport = Array.isArray(resp.report) ? resp.report : [];
+        this.encodingSummary = resp.summary || null;
+        this.encodedFilePath = resp.encoded_file || null;
+        this.encodingApplied = true;
+        this.encodingApplying = false;
+        // Share encoded file path and encoding report for modeling
+        this.sharedService.setEncodedFilePath(this.encodedFilePath);
+        this.sharedService.setEncodingReport(this.encodingReport);
+      },
+      error: (err: any) => {
+        this.encodingError = 'Failed to apply encoding: ' + (err?.message || err);
+        this.encodingApplying = false;
+      }
+    });
+  }
+
+  goToModelingFromEncoding(): void {
+    this.sharedService.setModelUsageSettings(this.variableModelUsage);
+    this.modelingAvailable = true;
+    this.currentStep = 'modeling';
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('modeling-anchor');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }, 100);
+  }
+
+  getFeatureDescription(featureName: string): string {
+    if (!this.dataDictionaryCache || !this.dataDictionaryCache.length) return '';
+    const entry = this.dataDictionaryCache.find((d: any) => d?.Feature_Name === featureName);
+    return entry?.Feature_Description || '';
+  }
+
+  isNativeCategorical(mapping: any): boolean {
+    return mapping?.type === 'native_categorical';
+  }
+
+  getNativeCategories(mapping: any): string[] {
+    if (!mapping || mapping.type !== 'native_categorical') return [];
+    return mapping.categories || [];
+  }
+
+  formatMappingPairs(mapping: any): { original: string; encoded: string }[] {
+    if (!mapping) return [];
+    const type = mapping.type || '';
+    if (type === 'native_categorical') {
+      return [];
+    }
+    if (type === 'label_encoding' || type === 'ordinal_encoding') {
+      const m = mapping.mapping || {};
+      return Object.entries(m).map(([k, v]) => ({ original: k, encoded: String(v) }));
+    }
+    if (type === 'target_encoding') {
+      const m = mapping.mapping || {};
+      return Object.entries(m).map(([k, v]) => ({ original: k, encoded: String(v) }));
+    }
+    if (type === 'one_hot_encoding') {
+      const cols: string[] = mapping.columns || [];
+      return cols.map((c: string) => ({ original: c, encoded: '0/1' }));
+    }
+    return [];
+  }
+
+  getStrategyLabel(strategy: string): string {
+    const labels: { [k: string]: string } = {
+      'native_categorical': 'XGBoost Native Categorical',
+      'label_encoding': 'Label Encoding',
+      'one_hot_encoding': 'One-Hot Encoding',
+      'ordinal_encoding': 'Ordinal Encoding',
+      'target_encoding': 'Target Encoding',
+    };
+    return labels[strategy] || strategy;
+  }
+
+  getStrategyColor(strategy: string): string {
+    const colors: { [k: string]: string } = {
+      'native_categorical': '#1976d2',
+      'label_encoding': '#7b1fa2',
+      'one_hot_encoding': '#388e3c',
+      'ordinal_encoding': '#f57c00',
+      'target_encoding': '#c62828',
+    };
+    return colors[strategy] || '#555';
   }
 }

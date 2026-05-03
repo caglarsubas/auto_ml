@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { PreprocessingComponent } from './preprocessing.component';
 
 describe('PreprocessingComponent', () => {
@@ -8,9 +8,9 @@ describe('PreprocessingComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [PreprocessingComponent]
-    })
-    .compileComponents();
+      declarations: [PreprocessingComponent],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+    }).compileComponents();
 
     fixture = TestBed.createComponent(PreprocessingComponent);
     component = fixture.componentInstance;

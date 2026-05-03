@@ -126,6 +126,11 @@ class PreprocessingDatqTimeseriesView(APIView):
                 return Response({'error': f'date_column {date_column} not in processed file'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Preserve full frame for overall PSI; build a timeseries frame filtered by valid dates
+            # Convert Pandas 3.0 StringDtype columns to object so numpy-based
+            # Data_Quality / PSI routines can process them without errors.
+            for _c in df.columns:
+                if pd.api.types.is_string_dtype(df[_c]) and df[_c].dtype != 'object':
+                    df[_c] = df[_c].astype('object')
             df_full = df.copy()
             # Prepare time axis (monthly) on a copy for rolling windows
             dt = pd.to_datetime(df[date_column], errors='coerce', dayfirst=True)
@@ -240,8 +245,17 @@ class PreprocessingDatqTimeseriesView(APIView):
                                 return frame.index[mask_train], frame.index[~mask_train]
                 except Exception as e:
                     print(f"[DatqTimeseries] OOT split failed: {e}, falling back to random")
+                # random split — use percent from split config if available
+                train_ratio = 0.75
+                if isinstance(split, dict) and split.get('percent') is not None:
+                    try:
+                        pctf = float(split['percent'])
+                        if 0 < pctf < 100:
+                            train_ratio = 1.0 - pctf / 100.0
+                    except Exception:
+                        pass
                 rng = np.random.RandomState(42)
-                m = rng.rand(len(frame)) < 0.7
+                m = rng.rand(len(frame)) < train_ratio
                 return frame.index[m], frame.index[~m]
 
             def _psi_between(frame: pd.DataFrame, train_idx, test_idx) -> float | None:
@@ -472,6 +486,7 @@ class PreprocessingRunView(APIView):
 
             if not isinstance(options, list) or not all(isinstance(x, int) for x in options):
                 return Response({'error': 'options must be a list of integers'}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"[PreprocessingRun] options={sorted(options)} (outlier cleaning 28-30: {[o for o in options if o in (28,29,30)]})")
 
             file_path = decl.file.path
             if not os.path.exists(file_path):
@@ -498,16 +513,31 @@ class PreprocessingRunView(APIView):
             
             rows_before = len(df)
 
+            # Compute BEFORE-preprocessing per-feature descriptive stats
+            t_stats_before = time.monotonic()
+            try:
+                feature_stats_before = self._compute_feature_stats(df)
+                print(f"[PreprocessingRun] feature_stats_before computed in {time.monotonic()-t_stats_before:.3f}s for {len(feature_stats_before)} features")
+            except Exception as e:
+                feature_stats_before = None
+                print(f"[PreprocessingRun] feature_stats_before failed: {e}")
+
             # Apply transformations
             t_apply_start = time.monotonic()
-            preserve_cols: set[str] | None = None
+            # Always preserve Target column; also preserve date column for OOT splits
+            preserve_cols: set[str] = set()
+            if 'Target' in df.columns:
+                preserve_cols.add('Target')
             try:
                 if isinstance(split, dict) and split.get('strategy') == 'oot' and split.get('date_column'):
-                    preserve_cols = {str(split.get('date_column'))}
+                    preserve_cols.add(str(split.get('date_column')))
             except Exception:
-                preserve_cols = None
-            df_processed, dropped_columns, dropped_by_step = self._apply_options(df, set(options), preserve=preserve_cols)
-            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape}")
+                pass
+            # Extract data_dictionary from request payload (for categorical outlier cleaning LoM lookup)
+            data_dictionary_payload = data.get('data_dictionary')
+            df_processed, dropped_columns, dropped_by_step, preprocessing_step_stats = self._apply_options(
+                df, set(options), preserve=preserve_cols, split=split, data_dictionary=data_dictionary_payload)
+            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape} step_stats={len(preprocessing_step_stats)}")
             
             # Add Model_Usage='No' info to the beginning of the breakdown for transparency
             # Note: These are NOT dropped from dataframe, just excluded from model training
@@ -531,6 +561,15 @@ class PreprocessingRunView(APIView):
             t_save_start = time.monotonic()
             df_processed.to_csv(out_full, index=False)
             print(f"[PreprocessingRun] saved processed csv in {time.monotonic()-t_save_start:.3f}s -> {out_rel}")
+
+            # Compute AFTER-preprocessing per-feature descriptive stats
+            t_stats_after = time.monotonic()
+            try:
+                feature_stats_after = self._compute_feature_stats(df_processed)
+                print(f"[PreprocessingRun] feature_stats_after computed in {time.monotonic()-t_stats_after:.3f}s for {len(feature_stats_after)} features")
+            except Exception as e:
+                feature_stats_after = None
+                print(f"[PreprocessingRun] feature_stats_after failed: {e}")
 
             # Build split indices helper
             def _build_split_indices(frame: pd.DataFrame):
@@ -576,10 +615,61 @@ class PreprocessingRunView(APIView):
                                 return train_idx, test_idx
                 except Exception as e:
                     print(f"[PreprocessingRun] OOT split failed: {e}, falling back to random")
-                # random default
+                # random split — use percent from split config if available
+                train_ratio = 0.75  # default 75/25
+                if isinstance(split, dict) and split.get('percent') is not None:
+                    try:
+                        pctf = float(split['percent'])
+                        if 0 < pctf < 100:
+                            train_ratio = 1.0 - pctf / 100.0
+                    except Exception:
+                        pass
                 rng = np.random.RandomState(42)
-                m = rng.rand(len(frame)) < 0.7
+                m = rng.rand(len(frame)) < train_ratio
+                print(f"[PreprocessingRun] Random split train_ratio={train_ratio:.2f} -> train={m.sum()} test={(~m).sum()}")
                 return frame.index[m], frame.index[~m]
+
+            # ── Split Validation: target distribution per split ──
+            split_validation = None
+            try:
+                train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
+                target_col = 'Target' if 'Target' in df_processed.columns else None
+                if target_col:
+                    y_train = df_processed.loc[train_idx_sv, target_col].dropna()
+                    y_test = df_processed.loc[test_idx_sv, target_col].dropna()
+                    y_full = df_processed[target_col].dropna()
+
+                    def _label_dist(series):
+                        vc = series.value_counts().sort_index()
+                        return {str(k): int(v) for k, v in vc.items()}
+
+                    split_validation = {
+                        'target_column': target_col,
+                        'splits': [
+                            {
+                                'name': 'Full Dataset',
+                                'count': int(len(y_full)),
+                                'target_mean': round(float(y_full.mean()), 6),
+                                'label_counts': _label_dist(y_full),
+                            },
+                            {
+                                'name': 'Train',
+                                'count': int(len(y_train)),
+                                'target_mean': round(float(y_train.mean()), 6),
+                                'label_counts': _label_dist(y_train),
+                            },
+                            {
+                                'name': 'Test',
+                                'count': int(len(y_test)),
+                                'target_mean': round(float(y_test.mean()), 6),
+                                'label_counts': _label_dist(y_test),
+                            },
+                        ],
+                        'labels': sorted([str(l) for l in y_full.unique()]),
+                    }
+                    print(f"[PreprocessingRun] split_validation computed: train={len(y_train)} test={len(y_test)} target_mean_train={split_validation['splits'][1]['target_mean']} target_mean_test={split_validation['splits'][2]['target_mean']}")
+            except Exception as sv_err:
+                print(f"[PreprocessingRun] split_validation error: {sv_err}")
 
             # Build Data Quality summary safely
             datq_summary_records = None
@@ -898,6 +988,10 @@ class PreprocessingRunView(APIView):
                 'head': df_processed.head(5).replace({np.nan: None}).to_dict(orient='records'),
                 'processed_file': out_rel,
                 'datq_summary': datq_summary_records,
+                'split_validation': split_validation,
+                'feature_stats_before': feature_stats_before,
+                'feature_stats_after': feature_stats_after,
+                'preprocessing_step_stats': preprocessing_step_stats if preprocessing_step_stats else None,
             }
 
             # Final sanitize for JSON safety
@@ -929,12 +1023,82 @@ class PreprocessingRunView(APIView):
 
             preview = _final_sanitize(preview)
 
+            # Save full preprocessing result for resume-on-return
+            try:
+                pp_result_dir = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results')
+                os.makedirs(pp_result_dir, exist_ok=True)
+                pp_result_path = os.path.join(pp_result_dir, f'{file_id}_result.json')
+                with open(pp_result_path, 'w', encoding='utf-8') as f:
+                    json.dump(preview, f)
+                print(f"[PreprocessingRun] saved full result JSON -> {pp_result_path}")
+            except Exception as e:
+                print(f"[PreprocessingRun] failed to save full result JSON: {e}")
+
             print(f"[PreprocessingRun] completed in {time.monotonic()-t0:.3f}s")
             return Response(preview, status=status.HTTP_200_OK)
         except Exception as e:
             import traceback
             print("[PreprocessingRun] ERROR:\n" + traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @staticmethod
+    def _compute_feature_stats(frame: pd.DataFrame) -> list[dict]:
+        """Compute per-feature descriptive statistics for a dataframe.
+
+        Returns a list of dicts, one per column, with keys:
+        Feature_Name, Data_Type, Missing_Pct, Unique, Mean, Median, Std,
+        Min, Max, Skewness, Kurtosis, Q01, Q05, Q25, Q75, Q95, Q99,
+        Mode, Mode_Pct (for categoricals).
+        """
+        from scipy import stats as scipy_stats
+        result = []
+        for col in frame.columns:
+            series = frame[col]
+            n = len(series)
+            missing_pct = round(float(series.isna().mean()) * 100, 2) if n > 0 else 0.0
+            nunique = int(series.nunique(dropna=True))
+            entry: dict = {
+                'Feature_Name': col,
+                'Missing_Pct': missing_pct,
+                'Unique': nunique,
+                'N': n,
+            }
+            # Try numeric stats
+            numeric = pd.to_numeric(series, errors='coerce')
+            non_null = numeric.dropna()
+            if len(non_null) >= 2:
+                entry['Data_Type'] = 'numeric'
+                entry['Mean'] = round(float(non_null.mean()), 4)
+                entry['Median'] = round(float(non_null.median()), 4)
+                entry['Std'] = round(float(non_null.std()), 4)
+                entry['Min'] = round(float(non_null.min()), 4)
+                entry['Max'] = round(float(non_null.max()), 4)
+                try:
+                    entry['Skewness'] = round(float(scipy_stats.skew(non_null.values)), 4)
+                except Exception:
+                    entry['Skewness'] = None
+                try:
+                    entry['Kurtosis'] = round(float(scipy_stats.kurtosis(non_null.values)), 4)
+                except Exception:
+                    entry['Kurtosis'] = None
+                try:
+                    entry['Q01'] = round(float(non_null.quantile(0.01)), 4)
+                    entry['Q05'] = round(float(non_null.quantile(0.05)), 4)
+                    entry['Q25'] = round(float(non_null.quantile(0.25)), 4)
+                    entry['Q75'] = round(float(non_null.quantile(0.75)), 4)
+                    entry['Q95'] = round(float(non_null.quantile(0.95)), 4)
+                    entry['Q99'] = round(float(non_null.quantile(0.99)), 4)
+                except Exception:
+                    pass
+            else:
+                entry['Data_Type'] = 'categorical'
+                vc = series.value_counts(dropna=True)
+                if len(vc) > 0:
+                    entry['Mode'] = str(vc.index[0])
+                    entry['Mode_Pct'] = round(float(vc.iloc[0] / max(1, n)) * 100, 2)
+                    entry['Num_Categories'] = len(vc)
+            result.append(entry)
+        return result
 
     def _read_dataframe(self, path: str) -> pd.DataFrame:
         lower = path.lower()
@@ -950,16 +1114,28 @@ class PreprocessingRunView(APIView):
             # default try csv
             return pd.read_csv(path)
 
-    def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None):
+    def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None,
+                       split: dict | None = None, data_dictionary: list | None = None):
         dropped_cols: list[str] = []
         breakdown: list[dict] = []
+        step_stats: list[dict] = []  # per-step before/after stats for value-modifying steps
         work = df.copy()
 
         # 1: Column-wise duplicate drop
         if 1 in options:
             _rows_before = len(work)
             before_cols = list(work.columns)
+            orig_dtypes = work.dtypes.to_dict()  # save dtypes before transpose (T destroys them)
             work = work.T.drop_duplicates().T
+            # Restore only numeric dtypes (transpose converts everything to object)
+            # Non-numeric columns safely stay as object; restoring StringDtype etc. breaks downstream code
+            for col in work.columns:
+                dt = orig_dtypes.get(col)
+                if dt is not None and hasattr(dt, 'kind') and dt.kind in ('i', 'u', 'f', 'b'):
+                    try:
+                        work[col] = work[col].astype(dt)
+                    except (ValueError, TypeError):
+                        pass
             dc = [c for c in before_cols if c not in work.columns]
             if preserve:
                 dc = [c for c in dc if c not in preserve]
@@ -1104,15 +1280,212 @@ class PreprocessingRunView(APIView):
         selected_q = [q for k, q in quantiles.items() if k in options]
         if selected_q:
             lo, hi = selected_q[0]  # pick the first specified
+            selected_q_ids = [k for k in quantiles.keys() if k in options]
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
+                # Snapshot BEFORE outlier cleaning
+                try:
+                    stats_before_oc = PreprocessingRunView._compute_feature_stats(work)
+                except Exception:
+                    stats_before_oc = None
+
                 lower = num.quantile(lo)
                 upper = num.quantile(hi)
                 num_clipped = num.clip(lower=lower, upper=upper, axis=1)
                 for c in num_clipped.columns:
                     work[c] = num_clipped[c]
 
-        return work, list(dict.fromkeys(dropped_cols)), breakdown
+                # Snapshot AFTER outlier cleaning
+                try:
+                    stats_after_oc = PreprocessingRunView._compute_feature_stats(work)
+                except Exception:
+                    stats_after_oc = None
+
+                step_stats.append({
+                    'step': 'Outlier cleaning (quantile clipping)',
+                    'option_ids': selected_q_ids,
+                    'quantile_range': [lo, hi],
+                    'stats_before': stats_before_oc,
+                    'stats_after': stats_after_oc,
+                })
+                breakdown.append({
+                    'step': 'Outlier cleaning (quantile clipping)',
+                    'option_ids': selected_q_ids,
+                    'quantile_range': [lo, hi],
+                    'columns': [],
+                    'rows_removed': 0,
+                    'note': f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] quantile range'
+                })
+
+        # 31-34: Categorical outlier cleaning (merge rare categories)
+        cat_outlier_thresholds = {31: 0.001, 32: 0.005, 33: 0.01, 34: 0.05}
+        selected_cat_outlier = [t for k, t in cat_outlier_thresholds.items() if k in options]
+        if selected_cat_outlier:
+            threshold = selected_cat_outlier[0]  # pick the first specified
+            selected_cat_outlier_ids = [k for k in cat_outlier_thresholds.keys() if k in options]
+
+            # Build LoM lookup and Model_Usage lookup from data_dictionary
+            lom_lookup: dict[str, str] = {}
+            usage_lookup: dict[str, str] = {}
+            if data_dictionary and isinstance(data_dictionary, list):
+                for entry in data_dictionary:
+                    fname = entry.get('Feature_Name')
+                    lom = (entry.get('Level_of_Measurement') or '').lower()
+                    usage = (entry.get('Model_Usage_YN') or '').strip()
+                    if fname:
+                        lom_lookup[fname] = lom
+                        usage_lookup[fname] = usage
+
+            # Build train indices for volume-share computation
+            train_idx = None
+            try:
+                if isinstance(split, dict) and split.get('strategy') == 'oot':
+                    date_col = split.get('date_column')
+                    if date_col and date_col in work.columns:
+                        ser = pd.to_datetime(work[date_col], errors='coerce', dayfirst=True)
+                        pct = split.get('percent')
+                        if pct is not None:
+                            try:
+                                pctf = float(pct)
+                            except Exception:
+                                pctf = None
+                            if pctf is not None and 0 < pctf < 100:
+                                order = ser.sort_values(kind='mergesort').index
+                                k = int(len(order) * (1 - pctf / 100.0))
+                                k = max(0, min(len(order), k))
+                                train_idx = order[:k]
+                        if train_idx is None:
+                            cutoff = split.get('cutoff')
+                            if cutoff:
+                                mask_train = ser <= pd.to_datetime(cutoff, dayfirst=True)
+                                train_idx = work.index[mask_train]
+                if train_idx is None and isinstance(split, dict):
+                    train_ratio = 0.75
+                    pct = split.get('percent')
+                    if pct is not None:
+                        try:
+                            pctf = float(pct)
+                            if 0 < pctf < 100:
+                                train_ratio = 1.0 - pctf / 100.0
+                        except Exception:
+                            pass
+                    rng = np.random.RandomState(42)
+                    m = rng.rand(len(work)) < train_ratio
+                    train_idx = work.index[m]
+            except Exception as e:
+                print(f"[PreprocessingRun] categorical outlier: split failed: {e}")
+            if train_idx is None:
+                train_idx = work.index
+
+            merge_mapping: dict[str, dict[str, str]] = {}
+            affected_features: list[str] = []
+
+            for col in list(work.columns):
+                if col in (preserve or set()):
+                    continue
+                # Skip features with Model_Usage='No' (ID, index, time columns)
+                if usage_lookup.get(col, '').lower() == 'no':
+                    continue
+                lom = lom_lookup.get(col, '')
+
+                if lom == 'nominal':
+                    train_series = work.loc[train_idx, col].dropna()
+                    total = len(train_series)
+                    if total == 0:
+                        continue
+                    vc = train_series.value_counts()
+                    shares = vc / total
+                    outlier_cats = shares[shares < threshold].index.tolist()
+                    if len(outlier_cats) > 1:
+                        mapping = {str(cat): 'Others-Outliers' for cat in outlier_cats}
+                        merge_mapping[col] = mapping
+                        affected_features.append(col)
+                        work[col] = work[col].replace({cat: 'Others-Outliers' for cat in outlier_cats})
+
+                elif lom == 'ordinal':
+                    # Ordinal features must be sortable (numerical dtype)
+                    unique_vals = work[col].dropna().unique()
+                    try:
+                        sorted_cats = sorted(unique_vals, key=lambda x: float(x))
+                    except (ValueError, TypeError):
+                        continue  # skip non-sortable features
+
+                    train_series = work.loc[train_idx, col].dropna()
+                    total = len(train_series)
+                    if total == 0:
+                        continue
+
+                    # Build mapping: original_value -> current_label
+                    cat_map: dict = {cat: cat for cat in sorted_cats}
+                    current_cats = list(sorted_cats)
+
+                    changed = True
+                    max_iterations = len(sorted_cats) * 2  # safety guard
+                    iteration = 0
+                    while changed and iteration < max_iterations:
+                        changed = False
+                        iteration += 1
+                        # Recompute volume-shares with current mapping
+                        mapped_train = train_series.map(lambda x, cm=cat_map: cm.get(x, x))
+                        vc = mapped_train.value_counts()
+                        shares = vc / total
+
+                        for i, cat in enumerate(current_cats):
+                            share = shares.get(cat, 0)
+                            if share < threshold:
+                                # Find adjacent neighbors
+                                neighbors = []
+                                if i > 0:
+                                    neighbors.append((current_cats[i - 1], shares.get(current_cats[i - 1], 0)))
+                                if i < len(current_cats) - 1:
+                                    neighbors.append((current_cats[i + 1], shares.get(current_cats[i + 1], 0)))
+                                if not neighbors:
+                                    continue
+                                # Merge with the bigger adjacent neighbor
+                                bigger_neighbor = max(neighbors, key=lambda x: x[1])[0]
+                                # Update all entries in cat_map that pointed to this cat
+                                for orig in list(cat_map.keys()):
+                                    if cat_map[orig] == cat:
+                                        cat_map[orig] = bigger_neighbor
+                                current_cats.remove(cat)
+                                changed = True
+                                break  # restart iteration after each merge
+
+                    # Record only actual merges
+                    actual_merges = {str(k): str(v) for k, v in cat_map.items() if k != v}
+                    if actual_merges:
+                        merge_mapping[col] = actual_merges
+                        affected_features.append(col)
+                        work[col] = work[col].map(lambda x, cm=cat_map: cm.get(x, x))
+
+            if merge_mapping:
+                breakdown.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'columns': affected_features,
+                    'rows_removed': 0,
+                    'merge_mapping': merge_mapping,
+                    'note': f'Categories with volume-share < {threshold*100:.2f}% merged (Nominal→Others-Outliers, Ordinal→adjacent bigger category)'
+                })
+                step_stats.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'merge_mapping': merge_mapping,
+                })
+                print(f"[PreprocessingRun] categorical outlier cleaning: threshold={threshold}, affected_features={len(affected_features)}")
+            else:
+                breakdown.append({
+                    'step': 'Categorical outlier cleaning',
+                    'option_ids': selected_cat_outlier_ids,
+                    'threshold': threshold,
+                    'columns': [],
+                    'rows_removed': 0,
+                    'note': f'No categories below {threshold*100:.2f}% volume-share threshold found'
+                })
+
+        return work, list(dict.fromkeys(dropped_cols)), breakdown, step_stats
 
     def _safe_timestamp(self) -> str:
         from datetime import datetime
@@ -1318,4 +1691,53 @@ class PreprocessingDatqDetailView(APIView):
         except Exception as e:
             import traceback
             print(traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingDatqSummaryRowView(APIView):
+    """Return a single quality-summary row for a given file_id + column from the saved JSON."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        column = request.query_params.get('column')
+        if not column:
+            return Response({'error': 'column query param required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            datq_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
+            if not os.path.exists(datq_path):
+                return Response({'row': None}, status=status.HTTP_200_OK)
+            with open(datq_path, 'r', encoding='utf-8') as f:
+                records = json.load(f)
+            row = next(
+                (r for r in records
+                 if str(r.get('Variable', r.get('variable', r.get('index', '')))) == str(column)),
+                None,
+            )
+            return Response({'row': row}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingStatusView(APIView):
+    """Check if preprocessing has completed for a given file_id and return the saved result."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            pp_result_path = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results', f'{file_id}_result.json')
+            if os.path.exists(pp_result_path):
+                with open(pp_result_path, 'r', encoding='utf-8') as f:
+                    result = json.load(f)
+                return Response({
+                    'status': 'completed',
+                    'result': result
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'status': 'not_completed',
+                    'message': 'Preprocessing results not found'
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

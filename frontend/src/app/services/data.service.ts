@@ -26,16 +26,23 @@ export class DataService {
     return this.http.get(`${this.apiUrl}declaration/${fileId}/data_dictionary/`);
   }
 
-  getFeatureCard(fileId: string, columnName: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}feature-card/${fileId}/get_feature_info/?column=${encodeURIComponent(columnName)}`);
+  getFeatureCard(fileId: string, columnName: string, fileOverride?: string): Observable<any> {
+    let url = `${this.apiUrl}feature-card/${fileId}/get_feature_info/?column=${encodeURIComponent(columnName)}`;
+    if (fileOverride) url += `&file_override=${encodeURIComponent(fileOverride)}`;
+    return this.http.get(url);
   }
 
-  getStackedFeatureData(fileId: string, columnName: string): Observable<any> {
-    const url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
+  getStackedFeatureData(fileId: string, columnName: string, fileOverride?: string): Observable<any> {
+    let url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
+    if (fileOverride) url += `&file_override=${encodeURIComponent(fileOverride)}`;
     console.log('Requesting URL:', url);
     return this.http.get(url).pipe(
       tap((data: any) => console.log('Raw response:', data)),
-      map((data: any) => this.preprocessStackedData(data)),
+      map((data: any) => {
+        // Backend now returns { stacked_data, target_averages }
+        const raw = data?.stacked_data ?? data;
+        return { stacked_data: this.preprocessStackedData(raw), target_averages: data?.target_averages ?? null };
+      }),
       catchError((error: any) => {
         console.error('Error in getStackedFeatureData:', error);
         if (error instanceof SyntaxError) {
@@ -60,15 +67,36 @@ export class DataService {
   // Run preprocessing. If options omitted, backend uses previously saved config.
   // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[]): Observable<any> {
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[], dataDictionary?: any[]): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options) payload.options = options;
     if (split) payload.split = split;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    if (dataDictionary && dataDictionary.length > 0) payload.data_dictionary = dataDictionary;
     return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running preprocessing:', error);
         return throwError(() => new Error(error.message || 'Failed to run preprocessing'));
+      })
+    );
+  }
+
+  // Check preprocessing completion status for a file (used for pipeline resume)
+  getPreprocessingStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}preprocessing/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting preprocessing status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get preprocessing status'));
+      })
+    );
+  }
+
+  // Get quality summary row for a specific variable from saved datq_summary JSON
+  getDatqSummaryRow(fileId: number, column: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params: { column } }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting datq summary row:', error);
+        return throwError(() => new Error(error.message || 'Failed to get quality summary'));
       })
     );
   }
@@ -110,10 +138,12 @@ export class DataService {
 
   // Start modeling with the processed file path and optional algorithm
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[]): Observable<any> {
+  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[], encodingPlan?: any[], encodingUseNative?: boolean): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };
     if (algorithm) payload.algorithm = algorithm;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    if (encodingPlan && encodingPlan.length > 0) payload.encoding_plan = encodingPlan;
+    if (encodingUseNative !== undefined) payload.encoding_use_native = encodingUseNative;
     return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting modeling:', error);
@@ -133,12 +163,17 @@ export class DataService {
   }
 
   // Start Sequential Feature Selection (SFS) with user parameters
-  startSfs(fileId: number, methods: string[], stoppingCriteria: any): Observable<any> {
-    const payload = {
+  startSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3): Observable<any> {
+    const payload: any = {
       file_id: fileId,
       methods: methods,
-      stopping_criteria: stoppingCriteria
+      stopping_criteria: stoppingCriteria,
+      n_jobs: nJobs,
+      top_k: topK
     };
+    if (excludedFeatures.length > 0) {
+      payload.excluded_features = excludedFeatures;
+    }
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS:', error);
@@ -148,12 +183,14 @@ export class DataService {
   }
 
   // Start SFS with initial features (for chained backward→forward SFS)
-  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[]): Observable<any> {
+  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[], nJobs: number = 1, topK: number = 3): Observable<any> {
     const payload = {
       file_id: fileId,
       methods: methods,
       stopping_criteria: stoppingCriteria,
-      initial_features: initialFeatures
+      initial_features: initialFeatures,
+      n_jobs: nJobs,
+      top_k: topK
     };
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
@@ -173,6 +210,37 @@ export class DataService {
     );
   }
 
+  // Stop SFS gracefully
+  stopSfs(fileId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/sfs/stop/${fileId}/`, {}).pipe(
+      catchError((error: any) => {
+        console.error('Error stopping SFS:', error);
+        return throwError(() => new Error(error.message || 'Failed to stop SFS'));
+      })
+    );
+  }
+
+  // Resume SFS from where it was stopped
+  resumeSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3): Observable<any> {
+    const payload: any = {
+      file_id: fileId,
+      methods: methods,
+      stopping_criteria: stoppingCriteria,
+      n_jobs: nJobs,
+      top_k: topK,
+      resume: true
+    };
+    if (excludedFeatures.length > 0) {
+      payload.excluded_features = excludedFeatures;
+    }
+    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error resuming SFS:', error);
+        return throwError(() => new Error(error.message || 'Failed to resume SFS'));
+      })
+    );
+  }
+
   // Get Sequential Feature Selection (SFS) results
   getSfsResults(fileId: number): Observable<any> {
     return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`).pipe(
@@ -184,10 +252,12 @@ export class DataService {
   }
 
   // Get feature explainability data (SHAP beeswarm + partial dependence)
-  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number): Observable<any> {
+  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[]): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };
     if (processedFile) payload.processed_file = processedFile;
     if (nSamples) payload.n_samples = nSamples;
+    if (modelPath) payload.model_path = modelPath;
+    if (selectedFeatures && selectedFeatures.length) payload.selected_features = selectedFeatures;
     return this.http.post(`${this.apiUrl}modeling/feature-explainability/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error getting feature explainability:', error);
@@ -197,6 +267,29 @@ export class DataService {
     );
   }
   
+  // Analyze categorical features and return encoding plan
+  analyzeEncoding(fileId: number, processedFile: string, dataDictionary: any[], excludedVariables?: string[]): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile, data_dictionary: dataDictionary };
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
+    return this.http.post(`${this.apiUrl}encoding/analyze/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error analyzing encoding:', error);
+        return throwError(() => new Error(error.message || 'Failed to analyze encoding'));
+      })
+    );
+  }
+
+  // Apply encoding based on user-adjusted plan
+  applyEncoding(fileId: number, processedFile: string, plan: any[], useNative: boolean = true): Observable<any> {
+    const payload = { file_id: fileId, processed_file: processedFile, plan, use_native: useNative };
+    return this.http.post(`${this.apiUrl}encoding/apply/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error applying encoding:', error);
+        return throwError(() => new Error(error.message || 'Failed to apply encoding'));
+      })
+    );
+  }
+
   private handleError(error: HttpErrorResponse) {
     console.error('An error occurred:', error);
     let errorMessage = 'An unknown error occurred';
@@ -220,6 +313,130 @@ export class DataService {
       }
       return acc;
     }, {});
+  }
+
+  // Get VIF decomposition detail for a specific feature
+  getVifDetail(fileId: number, feature: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting VIF detail:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  // ===== Pipeline Run CRUD =====
+
+  listPipelineRuns(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}pipeline/`).pipe(
+      catchError((err: any) => {
+        console.error('Error listing pipeline runs:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  createPipelineRun(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}pipeline/create/`, payload).pipe(
+      catchError((err: any) => {
+        console.error('Error creating pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getPipelineRun(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}pipeline/${id}/`).pipe(
+      catchError((err: any) => {
+        console.error('Error getting pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  updatePipelineRun(id: number, payload: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}pipeline/${id}/`, payload).pipe(
+      catchError((err: any) => {
+        console.error('Error updating pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  deletePipelineRun(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}pipeline/${id}/`).pipe(
+      catchError((err: any) => {
+        console.error('Error deleting pipeline run:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getPipelineReportUrl(id: number, output: 'html' | 'print' = 'html'): string {
+    return `${this.apiUrl}pipeline/${id}/report/?output=${output}`;
+  }
+
+  downloadPipelineReport(id: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading pipeline report:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  // ===== AI Action Execution (general-purpose) =====
+
+  executeAiAction(fileId: number, actionType: string, payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, {
+      file_id: fileId,
+      action_type: actionType,
+      payload,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error executing AI action:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  // ===== AI Assistant =====
+
+  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>, fileId?: number, model?: string): Observable<any> {
+    const body: any = { message, context, section, history };
+    if (fileId != null) {
+      body.file_id = fileId;
+    }
+    if (model) {
+      body.model = model;
+    }
+    return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
+      catchError((err: any) => {
+        console.error('Error in AI assistant chat:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getAiModels(): Observable<any> {
+    return this.http.get(`${this.apiUrl}ai-assistant/models/`).pipe(
+      catchError((err: any) => {
+        console.error('Error fetching AI models:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  pushAiCache(fileId: number, artifacts: { [key: string]: any }): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/cache/`, {
+      file_id: fileId,
+      artifacts,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error pushing AI cache:', err);
+        return throwError(() => err);
+      })
+    );
   }
 
 }

@@ -34,6 +34,8 @@ import { ModelDevelopmentComponent } from './model-development/model-development
 import { HomeComponent } from './home/home.component';
 import { SharedService } from './services/shared.service';
 import { LoginComponent } from './login/login.component';
+import { AiChatPanelComponent } from './ai-chat-panel/ai-chat-panel.component';
+import { AiAssistantService } from './services/ai-assistant.service';
 
 @NgModule({
   declarations: [
@@ -46,7 +48,8 @@ import { LoginComponent } from './login/login.component';
     DeploymentComponent,
     ModelDevelopmentComponent,
     HomeComponent,
-    LoginComponent
+    LoginComponent,
+    AiChatPanelComponent
   ],
   imports: [
     BrowserModule,
@@ -75,6 +78,7 @@ import { LoginComponent } from './login/login.component';
   ],
   providers: [
     SharedService,
+    AiAssistantService,
   ],
   bootstrap: [AppComponent]
 })

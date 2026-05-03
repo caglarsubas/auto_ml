@@ -1,21 +1,301 @@
-<div class="model-development-container">
-  <!-- Always show the header -->
-  <br><br>
-  <h1>Model Development</h1>
+<!-- Panel Toggle Bar -->
+<div class="panel-toggle-bar">
+  <div class="toggle-group">
+    <button class="toggle-btn" [class.active]="showLeftPanel" (click)="toggleLeftPanel()" title="Toggle Progress Navigation">
+      <span class="toggle-icon">&#9776;</span>
+      <span class="toggle-label">Navigation</span>
+    </button>
+    <button class="toggle-btn" [class.active]="true" disabled title="Pipeline Flow (always visible)">
+      <span class="toggle-icon">&#9881;</span>
+      <span class="toggle-label">Pipeline</span>
+    </button>
+    <button class="toggle-btn" [class.active]="showRightPanel" (click)="toggleRightPanel()" title="Toggle AI Assistant">
+      <span class="toggle-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span>
+      <span class="toggle-label">AI Assistant</span>
+    </button>
+  </div>
+</div>
+
+<div class="layout-panels">
+  <!-- Left Panel: Progress Navigation -->
+  <div class="panel-left" *ngIf="showLeftPanel" [style.width.px]="leftPanelWidth">
+    <div class="left-nav">
+      <div class="left-nav-header">
+        <span>Pipeline Flow</span>
+        <span class="nav-overall-pct">{{ getOverallProgress() }}%</span>
+      </div>
+      <!-- Overall progress bar -->
+      <div class="nav-overall-bar">
+        <div class="nav-overall-bar-fill" [style.width.%]="getOverallProgress()"></div>
+      </div>
+
+      <div class="nav-steps">
+        <div *ngFor="let mainStep of navMainSteps; let i = index" class="nav-main-step"
+             [class.nav-active]="currentStep === mainStep.id"
+             [class.nav-completed]="getMainStepStatus(mainStep.id) === 'completed'"
+             [class.nav-in-progress]="getMainStepStatus(mainStep.id) === 'in_progress'"
+             [class.nav-disabled]="!stepEnabled(mainStep.id)">
+
+          <!-- Main step header (clickable: toggles collapse + navigates) -->
+          <div class="nav-main-header" (click)="toggleNavStep(mainStep.id)">
+            <div class="nav-main-left">
+              <!-- Status icon -->
+              <span class="nav-status-icon"
+                    [ngClass]="{
+                      'icon-completed': getMainStepStatus(mainStep.id) === 'completed',
+                      'icon-in-progress': getMainStepStatus(mainStep.id) === 'in_progress',
+                      'icon-pending': getMainStepStatus(mainStep.id) === 'pending'
+                    }">
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'completed'">&#10003;</span>
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'in_progress'" class="icon-pulse">&#9679;</span>
+                <span *ngIf="getMainStepStatus(mainStep.id) === 'pending'">&#9675;</span>
+              </span>
+              <span class="nav-main-label" (click)="navGoToStep($event, mainStep.id)">
+                {{ i + 1 }}. {{ mainStep.label }}
+              </span>
+            </div>
+            <div class="nav-main-right">
+              <span class="nav-pct">{{ getMainStepProgressPct(mainStep.id) }}%</span>
+              <span class="nav-chevron" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]">&#9656;</span>
+            </div>
+          </div>
+
+          <!-- Progress bar for main step -->
+          <div class="nav-step-bar">
+            <div class="nav-step-bar-fill"
+                 [style.width.%]="getMainStepProgressPct(mainStep.id)"
+                 [ngClass]="{
+                   'bar-completed': getMainStepStatus(mainStep.id) === 'completed',
+                   'bar-in-progress': getMainStepStatus(mainStep.id) === 'in_progress'
+                 }"></div>
+          </div>
+
+          <!-- Collapsible sub-steps -->
+          <div class="nav-sub-steps" *ngIf="navExpandedSteps[mainStep.id]">
+            <div *ngFor="let sub of mainStep.subSteps" class="nav-sub-step"
+                 [class.sub-completed]="getSubStepStatus(sub.id) === 'completed'"
+                 [class.sub-in-progress]="getSubStepStatus(sub.id) === 'in_progress'"
+                 [class.sub-pending]="getSubStepStatus(sub.id) === 'pending'"
+                 (click)="navGoToSubStep($event, mainStep.id, sub.id)">
+              <span class="nav-sub-icon">
+                <span *ngIf="getSubStepStatus(sub.id) === 'completed'">&#10003;</span>
+                <span *ngIf="getSubStepStatus(sub.id) === 'in_progress'" class="icon-pulse">&#8226;</span>
+                <span *ngIf="getSubStepStatus(sub.id) === 'pending'">&#8226;</span>
+              </span>
+              <span class="nav-sub-label">{{ sub.label }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left Resize Handle -->
+  <div class="resize-handle" *ngIf="showLeftPanel" (mousedown)="onLeftResizeStart($event)"></div>
+
+  <!-- Middle Panel: Pipeline Content -->
+  <div class="panel-middle">
+    <div class="model-development-container">
+      <!-- Always show the header -->
+      <br><br>
+  <div style="display: flex; align-items: center; gap: 16px;">
+    <h1 style="margin: 0;">Model Development</h1>
+    <button (click)="toggleSavedPipelines()"
+            style="padding: 8px 16px; background: #1565c0; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+      <span style="font-size: 16px;">&#128193;</span> Saved Pipelines
+    </button>
+    <span *ngIf="activePipelineRunId" style="font-size: 13px; color: #555; background: #e3f2fd; padding: 4px 10px; border-radius: 12px;">
+      Active: <strong>{{ pipelineRunName }}</strong>
+    </span>
+
+    <!-- Autosave toggle + Manual save -->
+    <div *ngIf="activePipelineRunId" style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+      <!-- Autosave toggle -->
+      <button (click)="toggleAutosave()"
+              [title]="autosaveEnabled ? 'Autosave ON — click to disable' : 'Autosave OFF — click to enable'"
+              style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s;"
+              [style.background]="autosaveEnabled ? '#e8f5e9' : '#fff3e0'"
+              [style.borderColor]="autosaveEnabled ? '#4caf50' : '#ff9800'"
+              [style.color]="autosaveEnabled ? '#2e7d32' : '#e65100'">
+        <span style="font-size: 15px;">{{ autosaveEnabled ? '&#9889;' : '&#9888;' }}</span>
+        {{ autosaveEnabled ? 'Autosave' : 'Manual' }}
+      </button>
+
+      <!-- Manual save button (visible when autosave is OFF) -->
+      <button *ngIf="!autosaveEnabled"
+              (click)="manualSave()"
+              [disabled]="!_unsavedChanges"
+              title="Save pipeline now"
+              style="display: flex; align-items: center; gap: 4px; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;"
+              [style.background]="_unsavedChanges ? '#1565c0' : '#bdbdbd'"
+              [style.color]="'white'">
+        <span style="font-size: 15px;">&#128190;</span> Save
+      </button>
+
+      <!-- Unsaved indicator -->
+      <span *ngIf="!autosaveEnabled && _unsavedChanges"
+            style="font-size: 11px; color: #e65100; font-weight: 500; padding: 2px 8px; background: #fff3e0; border-radius: 10px;">
+        Unsaved changes
+      </span>
+
+      <!-- Report download buttons -->
+      <div style="display: flex; align-items: center; gap: 4px; margin-left: 8px; border-left: 1px solid #e0e0e0; padding-left: 10px;">
+        <button (click)="downloadReportHtml()"
+                title="Download pipeline report as HTML"
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #1565c0; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #e3f2fd; color: #1565c0; transition: all 0.2s;">
+          <span style="font-size: 14px;">&#128196;</span> HTML
+        </button>
+        <button (click)="downloadReportPdf()"
+                title="Open pipeline report for Print / Save as PDF"
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #c62828; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #ffebee; color: #c62828; transition: all 0.2s;">
+          <span style="font-size: 14px;">&#128438;</span> PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exit Without Saving Dialog -->
+  <div *ngIf="showExitDialog"
+       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;"
+       (click)="cancelExit()">
+    <div style="background: white; border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); text-align: center;"
+         (click)="$event.stopPropagation()">
+      <div style="font-size: 40px; margin-bottom: 12px;">&#9888;&#65039;</div>
+      <h3 style="margin: 0 0 8px 0; color: #333;">Unsaved Changes</h3>
+      <p style="color: #666; font-size: 14px; margin: 0 0 24px 0;">
+        You have unsaved pipeline changes. Would you like to save before leaving?
+      </p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button (click)="exitWithSave()"
+                style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+          &#128190; Save &amp; Exit
+        </button>
+        <button (click)="exitWithoutSave()"
+                style="padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+          Exit Without Saving
+        </button>
+        <button (click)="cancelExit()"
+                style="padding: 10px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Pipelines Panel -->
+  <div *ngIf="showSavedPipelines" style="margin: 16px 0; padding: 16px; border: 1px solid #1565c0; border-radius: 8px; background: #f5f9ff; max-height: 400px; overflow-y: auto;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <h3 style="margin: 0; color: #1565c0;">Saved Pipeline Runs</h3>
+      <button (click)="showSavedPipelines = false" style="background: none; border: none; cursor: pointer; font-size: 18px; color: #999;">&times;</button>
+    </div>
+
+    <div *ngIf="savedPipelines.length === 0" style="color: #777; font-size: 13px; padding: 12px 0;">
+      No saved pipeline runs yet. Start a pipeline and checkpoints will be saved automatically.
+    </div>
+
+    <div *ngFor="let run of savedPipelines" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; background: white; border: 1px solid #e0e0e0; border-radius: 6px;">
+      <!-- Name (editable) -->
+      <div style="flex: 1; min-width: 0;">
+        <div *ngIf="renamingPipelineId !== run.id" style="font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" [title]="run.name">
+          {{ run.name }}
+        </div>
+        <div *ngIf="renamingPipelineId === run.id" style="display: flex; gap: 4px;">
+          <input [(ngModel)]="renamingPipelineName" style="flex: 1; padding: 4px 8px; border: 1px solid #1565c0; border-radius: 4px; font-size: 13px;" (keyup.enter)="confirmRenamePipeline(run)" />
+          <button (click)="confirmRenamePipeline(run)" style="padding: 4px 8px; background: #1565c0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&#10003;</button>
+          <button (click)="cancelRenamePipeline()" style="padding: 4px 8px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&times;</button>
+        </div>
+        <div style="font-size: 11px; color: #888; margin-top: 2px;">
+          {{ run.pipeline_type | titlecase }} &middot; {{ run.updated_at | date:'short' }}
+        </div>
+      </div>
+
+      <!-- Step Progress -->
+      <div style="width: 180px; flex-shrink: 0;">
+        <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center;">{{ getDetailedStepLabel(run) }}</div>
+        <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
+          <div [style.width.%]="getDetailedStepProgress(run)" style="height: 100%; background: #1565c0; border-radius: 3px; transition: width 0.3s;"></div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; gap: 4px; flex-shrink: 0;">
+        <button (click)="loadPipelineRun(run.id)" title="Load & Continue"
+                style="padding: 6px 12px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+          Load
+        </button>
+        <button (click)="startRenamePipeline(run)" title="Rename"
+                style="padding: 6px 8px; background: #f57c00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+          &#9998;
+        </button>
+        <button (click)="deletePipelineRun(run.id)" title="Delete"
+                style="padding: 6px 8px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+          &#128465;
+        </button>
+      </div>
+    </div>
+  </div>
 
   <div class="pipeline-declaration">  
     <div class="pipeline-type-dropdown">
       <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
-      <select (change)="onPipelineChange($event)">
-        <option value="" disabled selected>Select Pipeline</option>
+      <select [ngModel]="selectedPipeline" (ngModelChange)="selectedPipeline = $event; onPipelineChange2($event)">
+        <option value="" disabled>Select Pipeline</option>
         <option value="boosting">1- Boosting Pipeline</option>
         <option value="logit">2- Logit Pipeline</option>
         <option value="credit-scoring">3- Credit Scoring Pipeline</option>
         <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
       </select>
     </div>
-  
-    <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
+
+    <!-- Target Definition: business meaning of the target variable -->
+    <div class="target-definition-section" *ngIf="selectedPipeline">
+      <label class="target-definition-label" for="targetDefinition">
+        Define the Target Variable
+        <span class="target-definition-hint">Describe the business meaning and prediction goal (e.g., "Predict whether a loan applicant will default within 12 months")</span>
+      </label>
+
+      <!-- Editable mode: before Start or when Edit is clicked -->
+      <textarea
+        *ngIf="!isStarted || editingTargetDefinition"
+        id="targetDefinition"
+        class="target-definition-input"
+        [ngModel]="targetDefinition"
+        (ngModelChange)="onTargetDefinitionChange($event)"
+        placeholder="e.g., Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."
+        rows="3"
+      ></textarea>
+
+      <!-- Read-only mode: after Start, when not editing -->
+      <div *ngIf="isStarted && !editingTargetDefinition" class="target-definition-readonly">
+        {{ targetDefinition || '(No definition provided)' }}
+      </div>
+
+      <!-- Save button when editing after start -->
+      <button *ngIf="isStarted && editingTargetDefinition"
+              class="target-definition-save-btn"
+              (click)="onSaveTargetDefinition()">
+        Save
+      </button>
+
+      <!-- AI info banner: shown after pipeline started -->
+      <div *ngIf="isStarted && !editingTargetDefinition && targetDefinition" class="target-definition-ai-info">
+        <span class="ai-info-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/>
+            <path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/>
+          </svg>
+        </span>
+        This definition is shared with the AI Assistant to provide project-specific suggestions and guidance.
+      </div>
+    </div>
+
+    <!-- Start button: only before pipeline is started -->
+    <button *ngIf="!isStarted" class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
+
+    <!-- Edit button: after pipeline is started, replaces Start -->
+    <button *ngIf="isStarted && !editingTargetDefinition" class="target-definition-edit-btn" (click)="onEditTargetDefinition()">
+      &#9998; Edit Definition
+    </button>
   </div>
   <!-- Declaration specific content (always visible at top) -->
   <app-declaration></app-declaration>
@@ -33,7 +313,7 @@
     </div>
     <mat-form-field appearance="fill">
       <mat-label>Select Data Purification Options</mat-label>
-      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event)">
+      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event); onPipelineConfigChanged()">
         <mat-option *ngFor="let option of purifierOptions" [value]="option" [disabled]="isOptionDisabled(option)">
           {{ option.id }}. {{ option.name }}
         </mat-option>
@@ -44,22 +324,29 @@
     <div style="margin-top: 12px; display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
       <label style="display:flex; align-items:center; gap:6px;">
         <span>Split Strategy:</span>
-        <select [ngModel]="splitStrategy" (ngModelChange)="splitStrategy = $event">
+        <select [ngModel]="splitStrategy" (ngModelChange)="splitStrategy = $event; onPipelineConfigChanged()">
           <option value="random">Random</option>
           <option value="oot">Out-of-Time (OOT)</option>
         </select>
       </label>
+      <ng-container *ngIf="splitStrategy === 'random'">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span>OOS Percent:</span>
+          <input type="number" min="1" max="99" [ngModel]="oosPercent" (ngModelChange)="oosPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
+        </label>
+        <small style="color:#666;">Random {{100 - oosPercent}}/{{oosPercent}} train/test split.</small>
+      </ng-container>
       <ng-container *ngIf="splitStrategy === 'oot'">
         <label style="display:flex; align-items:center; gap:6px;">
           <span>Date Column:</span>
-          <select [ngModel]="splitDateColumn" (ngModelChange)="splitDateColumn = $event">
+          <select [ngModel]="splitDateColumn" (ngModelChange)="splitDateColumn = $event; onPipelineConfigChanged()">
             <option [ngValue]="null" disabled>Select date column</option>
             <option *ngFor="let c of dateColumns" [ngValue]="c">{{ c }}</option>
           </select>
         </label>
         <label style="display:flex; align-items:center; gap:6px;">
           <span>OOT Mode:</span>
-          <select [ngModel]="ootMode" (ngModelChange)="ootMode = $event">
+          <select [ngModel]="ootMode" (ngModelChange)="ootMode = $event; onPipelineConfigChanged()">
             <option value="percent">Percent (default 75/25)</option>
             <option value="cutoff">Time Cutoff</option>
           </select>
@@ -67,18 +354,36 @@
         <ng-container *ngIf="ootMode === 'percent'">
           <label style="display:flex; align-items:center; gap:6px;">
             <span>OOT Percent:</span>
-            <input type="number" min="1" max="99" [ngModel]="ootPercent" (ngModelChange)="ootPercent = $event" style="width:80px;" />
+            <input type="number" min="1" max="99" [ngModel]="ootPercent" (ngModelChange)="ootPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
           </label>
           <small style="color:#666;">Sorted by time ascending; last {{ootPercent}}% goes to OOT (test).</small>
         </ng-container>
         <ng-container *ngIf="ootMode === 'cutoff'">
           <label style="display:flex; align-items:center; gap:6px;">
             <span>Cutoff:</span>
-            <input type="datetime-local" [ngModel]="splitCutoff" (ngModelChange)="splitCutoff = $event" />
+            <input type="datetime-local" [ngModel]="splitCutoff" (ngModelChange)="splitCutoff = $event; onPipelineConfigChanged()" />
           </label>
           <small style="color:#666;">Train ≤ cutoff, Test &gt; cutoff</small>
         </ng-container>
       </ng-container>
+    </div>
+
+    <!-- Note: After Preprocessing Config -->
+    <div class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-add" (click)="toggleNoteEdit('after_preprocessing_config')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_preprocessing_config')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_preprocessing_config'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_preprocessing_config')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_preprocessing_config')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_preprocessing_config'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_preprocessing_config'] || ''" (ngModelChange)="onNoteChanged('after_preprocessing_config', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
     </div>
 
     <!-- Run preprocessing to compute Data Quality summary -->
@@ -116,11 +421,97 @@
             </div>
           </details>
         </div>
+        <!-- Categorical outlier merge mapping display -->
+        <div *ngIf="s.merge_mapping && objectKeys(s.merge_mapping).length" class="cat-merge-mapping">
+          <details>
+            <summary style="cursor:pointer; font-weight:500; color:#5c6bc0;">
+              Merge mapping for {{ objectKeys(s.merge_mapping).length }} feature(s)
+            </summary>
+            <div *ngFor="let feat of objectKeys(s.merge_mapping)" class="cat-merge-feature">
+              <div class="cat-merge-feature-name">{{ feat }}</div>
+              <table class="cat-merge-table">
+                <thead>
+                  <tr><th>Original Category</th><th>→</th><th>Merged Into</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let origCat of objectKeys(s.merge_mapping[feat])">
+                    <td>{{ origCat }}</td>
+                    <td style="text-align:center;">→</td>
+                    <td><strong>{{ s.merge_mapping[feat][origCat] }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
         <ng-template #noCols>
-          <div style="font-size: 12px; color: #777;">No columns dropped in this step</div>
+          <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: #777;">No columns dropped in this step</div>
         </ng-template>
       </div>
     </div>
+    <!-- Note: After Purifier Summary -->
+    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-add" (click)="toggleNoteEdit('after_purifier_summary')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_purifier_summary')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_purifier_summary'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_purifier_summary')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_purifier_summary')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_purifier_summary'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_purifier_summary'] || ''" (ngModelChange)="onNoteChanged('after_purifier_summary', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
+    <!-- Split Validation Chart -->
+    <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafbfc;">
+      <h3 style="margin: 0 0 4px 0; font-size: 15px; color: #333;">Train-Test Split Validation</h3>
+      <p style="margin: 0 0 12px 0; font-size: 12px; color: #777;">Stacked histogram of target label distribution across splits, with target mean overlay. Consistent means across splits indicate a well-balanced split.</p>
+      <canvas #splitValidationCanvas style="width: 100%; height: 320px; display: block;"></canvas>
+      <!-- Summary table -->
+      <div style="margin-top: 12px; overflow-x: auto;">
+        <table style="border-collapse: collapse; width: auto; font-size: 12px;">
+          <thead>
+            <tr style="background: #f5f5f5;">
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: left;">Split</th>
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Count</th>
+              <th *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target={{ lbl }}</th>
+              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target Mean</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let sp of splitValidation.splits">
+              <td style="padding: 6px 14px; border: 1px solid #eee; font-weight: 600;">{{ sp.name }}</td>
+              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.count | number }}</td>
+              <td *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.label_counts[lbl] | number }}</td>
+              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right; color: #2e7d32; font-weight: 600;">{{ (sp.target_mean * 100).toFixed(2) }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Note: After Split Validation -->
+    <div *ngIf="splitValidation" class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-add" (click)="toggleNoteEdit('after_split_validation')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_split_validation')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_split_validation'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_split_validation')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_split_validation')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_split_validation'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_split_validation'] || ''" (ngModelChange)="onNoteChanged('after_split_validation', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
       <h2>Data Quality</h2>
       <h3 style="margin-top: 8px;">Data Quality Summary</h3>
@@ -251,6 +642,10 @@
         <button mat-button (click)="prevDatqPage()" [disabled]="datqPage <= 1">Prev</button>
         <span>Page {{ datqPage }} of {{ datqTotalPages }}</span>
         <button mat-button (click)="nextDatqPage()" [disabled]="datqPage >= datqTotalPages">Next</button>
+        <span style="flex: 1 1 auto;"></span>
+        <button class="ai-support-btn" (click)="requestDatqAiSupport()">
+          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+        </button>
       </div>
 
       <!-- Detail section -->
@@ -318,32 +713,52 @@
         </div>
       </div>
 
+      <!-- Note: After Data Quality -->
+      <div class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_quality')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_quality')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_data_quality'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_quality')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_quality')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_data_quality'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_quality'] || ''" (ngModelChange)="onNoteChanged('after_data_quality', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+        </div>
+      </div>
+
       <div style="margin-top: 12px; margin-bottom: 30px; display: flex; gap: 12px; align-items: center;">
-        <button class="next-button" (click)="goToModeling()" [disabled]="!(datqSummary && datqSummary.length)">
+        <button class="next-button" (click)="goToModelingFromDQ()" [disabled]="!(datqSummary && datqSummary.length)">
           <span class="next-icon">&#9654;</span> MODELING
         </button>
         <small style="color:#666;" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
-        <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue.</small>
+        <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue to modeling. Categorical encoding is handled automatically.</small>
       </div>
     </div>
   </div>
-  
+
+  <!-- Encoding step removed — encoding is now handled automatically by the modeling backend
+       based on the selected algorithm (XGBoost/LightGBM/CatBoost native categorical). -->
+
   <div class="model-development-line"></div>
 
-  <!-- Always show the side menu -->
-  <div class="content-wrapper">
-    <nav class="side-menu">
-      <div class="menu-header">Pipeline Flow</div>
-      <ul>
-        <li *ngFor="let item of menuItems; let i = index" [class.active]="currentStep  === item" [class.disabled]="!stepEnabled(item)">
-          <a href="#" (click)="onMenuClick($event, item)">{{i + 1}}- {{ item | titlecase }}</a>
-        </li>
-      </ul>
-    </nav>
-  </div>
 
   <!-- Modeling step appears after preprocessing run completes and remains visible -->
   <div id="modeling-anchor"></div>
   <app-modeling *ngIf="modelingAvailable"></app-modeling>
 
-</div>
+    </div><!-- end .model-development-container -->
+  </div><!-- end .panel-middle -->
+
+  <!-- Right Resize Handle -->
+  <div class="resize-handle" *ngIf="showRightPanel" (mousedown)="onRightResizeStart($event)"></div>
+
+  <!-- Right Panel: AI Assistant Chat -->
+  <div class="panel-right" *ngIf="showRightPanel" [style.width.px]="rightPanelWidth">
+    <app-ai-chat-panel></app-ai-chat-panel>
+  </div>
+</div><!-- end .layout-panels -->

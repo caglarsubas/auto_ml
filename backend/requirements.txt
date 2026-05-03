@@ -14,3 +14,14 @@ xgboost>=2.0,<3.0
 shap>=0.42
 matplotlib>=3.7
 mlxtend>=0.23
+statsmodels>=0.14
+
+# AI Assistant
+openai>=1.0
+prometa-sdk>=0.3.3
+redis>=5.0
+
+# Testing dependencies
+pytest>=8.0
+pytest-django>=4.8
+pytest-html>=4.1

@@ -21,6 +21,76 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+
+def detect_has_header(raw_bytes: bytes, sep: str = ',', is_excel: bool = False,
+                      sheet_name=0) -> bool:
+    """
+    Heuristic: decide whether the first row is a header or data.
+
+    Strategy — read first 20 rows with header=None and compare the first row
+    against subsequent rows column-by-column:
+      • If a column's data is predominantly numeric but the first-row value is
+        a non-numeric string longer than 1 char → header signal.
+      • If a column's data AND first-row value are both numeric → data signal.
+      • For text columns: if the first-row value never appears in the data
+        rows and is a plausible label → header signal, else data signal.
+
+    Returns True if the first row looks like a header.
+    """
+    try:
+        sample_rows = 20
+        buf = io.BytesIO(raw_bytes)
+        if is_excel:
+            df_raw = pd.read_excel(buf, header=None, nrows=sample_rows + 1,
+                                   sheet_name=sheet_name, engine='openpyxl')
+        else:
+            df_raw = pd.read_csv(buf, header=None, nrows=sample_rows + 1, sep=sep)
+
+        if len(df_raw) < 2:
+            return True  # can't tell with only one row
+
+        first_row = df_raw.iloc[0]
+        data_rows = df_raw.iloc[1:]
+
+        header_signals = 0
+        data_signals = 0
+
+        for col_idx in range(len(df_raw.columns)):
+            first_val = str(first_row.iloc[col_idx]).strip()
+            col_data = data_rows.iloc[:, col_idx].dropna()
+
+            # Is the column data predominantly numeric?
+            numeric_data = pd.to_numeric(col_data, errors='coerce')
+            data_is_numeric = numeric_data.notna().mean() > 0.5
+
+            # Is the first-row value numeric?
+            first_is_numeric = False
+            try:
+                float(first_val)
+                first_is_numeric = True
+            except (ValueError, TypeError):
+                pass
+
+            if data_is_numeric and not first_is_numeric and len(first_val) > 1:
+                header_signals += 1
+            elif data_is_numeric and first_is_numeric:
+                data_signals += 1
+            elif not data_is_numeric:
+                # Text column — check if first value is unique / label-like
+                data_vals = set(str(v) for v in col_data.values)
+                if first_val not in data_vals and len(first_val) > 1:
+                    header_signals += 1
+                elif first_val in data_vals:
+                    data_signals += 1
+                else:
+                    # Single-char first value could be data (e.g. 'Y', 'N', 'A')
+                    data_signals += 1
+
+        return header_signals >= data_signals
+    except Exception:
+        return True  # default to has-header on error
+
+
 class DeclarationViewSet(viewsets.ModelViewSet):
     queryset = Declaration.objects.all()
     serializer_class = DeclarationSerializer
@@ -37,13 +107,32 @@ class DeclarationViewSet(viewsets.ModelViewSet):
 
         try:
             dataframes = []
+            auto_detected_no_header = False
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
-                
-                if file.name.lower().endswith('.csv'):
-                    df = pd.read_csv(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, sep=self.get_separator(column_separator))
-                elif file.name.lower().endswith(('.xls', '.xlsx')):
+
+                is_csv = file.name.lower().endswith('.csv')
+                is_excel = file.name.lower().endswith(('.xls', '.xlsx'))
+                sep = self.get_separator(column_separator)
+
+                # Auto-detect header if user didn't explicitly check the box
+                if not first_line_is_not_header:
+                    sheet = 0
+                    if is_excel and first_sheet_has_not_dataset:
+                        wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
+                        sheet = wb.sheetnames[1] if len(wb.sheetnames) > 1 else 0
+                    has_header = detect_has_header(
+                        file_content, sep=sep, is_excel=is_excel, sheet_name=sheet
+                    )
+                    if not has_header:
+                        first_line_is_not_header = True
+                        auto_detected_no_header = True
+                        logger.info("Auto-detected: first row is data, not header (%s)", file.name)
+
+                if is_csv:
+                    df = pd.read_csv(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, sep=sep)
+                elif is_excel:
                     if first_sheet_has_not_dataset:
                         wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
                         sheet_to_read = wb.sheetnames[1] if len(wb.sheetnames) > 1 else wb.sheetnames[0]
@@ -85,12 +174,16 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             declaration = Declaration.objects.create(
                 file=merged_file_path,
                 name=merged_file_name,
-                original_name=merged_file_name
+                original_name=merged_file_name,
+                has_header=not first_line_is_not_header,
             )
 
             serializer = self.get_serializer(declaration)
+            response_data = serializer.data
+            if auto_detected_no_header:
+                response_data['auto_detected_no_header'] = True
             headers = self.get_success_headers(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
         except Exception as e:
             import traceback
@@ -176,7 +269,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 "bottom_rows": df.tail(5).to_dict(orient='records'),
                 "data_types": df.dtypes.apply(lambda x: x.name).to_dict(),
                 "non_null_counts": df.count().to_dict(),
-                "first_line_is_not_header": any(col.startswith('Col_') for col in df.columns)
+                "first_line_is_not_header": not data_file.has_header
             }
 
             return Response(preview)
@@ -261,9 +354,9 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             def determine_level_of_measurement(column_data, data_type, unique_count):
                 if unique_count == len(column_data):
                     return 'id'
-                elif (data_type == 'float64')&(unique_count>1000):
+                elif (data_type in ('float64', 'float', 'float32'))&(unique_count>1000):
                     return 'continuous'
-                elif (data_type == 'float64')&(unique_count<=1000):
+                elif (data_type in ('float64', 'float', 'float32'))&(unique_count<=1000):
                     return 'cardinal'
                 elif data_type == 'integer':
                     if unique_count > 1000 or unique_count / len(column_data) > 0.1:
@@ -273,7 +366,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                             return 'cardinal'
                         else:
                             return 'nominal'
-                elif data_type == 'object':
+                elif data_type in ('object', 'str', 'string'):
                     try:
                         pd.to_datetime(column_data, errors='raise', format='%d/%m/%Y %I:%M:%S %p')
                         return 'datetime'
@@ -283,11 +376,13 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                     return 'unknown'
 
             data_dict = []
+            n_rows = len(df)
             for column in df.columns:
+              try:
                 column_data = df[column]
                 numeric_data = pd.to_numeric(column_data, errors='coerce')
                 
-                if numeric_data.notna().all():
+                if numeric_data.notna().all() and np.isfinite(numeric_data).all():
                     if all(numeric_data.astype(float) == numeric_data.astype(int)):
                         data_type = 'integer'
                     else:
@@ -299,14 +394,15 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 level_of_measurement = determine_level_of_measurement(column_data, data_type, unique_count)
 
                 # Calculate Missing_Ratio and Mode_Ratio
-                missing_ratio = (column_data.isnull().sum() / len(column_data)) * 100
-                mode_count = column_data.value_counts().iloc[0] if len(column_data) > 0 else 0
-                mode_ratio = (mode_count / len(column_data)) * 100
+                missing_ratio = (column_data.isnull().sum() / n_rows) * 100 if n_rows > 0 else 0
+                vc = column_data.value_counts()
+                mode_count = vc.iloc[0] if len(vc) > 0 else 0
+                mode_ratio = (mode_count / n_rows) * 100 if n_rows > 0 else 0
 
                 # Determine Model_Usage_YN
                 model_usage_yn = ('No' if level_of_measurement in ['id', 'date', 'datetime', 'timestamp'] or 
                                 column in ['Target'] or 'date' in data_type.lower() or 
-                                (unique_count/len(column_data))>0.90 
+                                (n_rows > 0 and unique_count/n_rows > 0.90) 
                                 else 'Yes')
 
                 # Calculate descriptive statistics
@@ -321,6 +417,18 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                     'Mode_Ratio': round(mode_ratio, 2),
                     'Model_Usage_YN': model_usage_yn,
                     'Descriptive_Stats': descriptive_stats
+                })
+              except Exception as col_err:
+                print(f"Warning: data_dictionary skipped column '{column}': {col_err}")
+                data_dict.append({
+                    'Feature_Name': column,
+                    'Data_Type': str(df[column].dtype),
+                    '#_of_Unique_Value': 0,
+                    'Level_of_Measurement': 'unknown',
+                    'Missing_Ratio': 0,
+                    'Mode_Ratio': 0,
+                    'Model_Usage_YN': 'Yes',
+                    'Descriptive_Stats': {}
                 })
 
             # Process dictionary file if provided
@@ -377,3 +485,156 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             print(f"Error in data_dictionary: {str(e)}")
             print(traceback.format_exc())
             return Response({"error": f"Error processing file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # ─── Feature Engineering (AI-driven) ───────────────────────────────
+    @action(detail=True, methods=['post'])
+    def engineer_features(self, request, pk=None):
+        """
+        Create derived features on the uploaded dataset.
+        Body: { "features": [ { "name": str, "formula": str, "description": str, "fillna": any|null } ] }
+
+        Supported formula types:
+        - Arithmetic on columns: "Var_19 / (Var_24 + 1)"  → evaluated via df.eval()
+        - ISNA:ColName             → df['ColName'].isna().astype(int)
+        - LOG1P:ColName            → np.log1p(df['ColName'].clip(lower=0).fillna(0))
+        - ABS:ColName              → df['ColName'].abs()
+        - FLAG:expression          → (df.eval(expression)).astype(int)
+        - CLIP:ColName:lower:upper → df['ColName'].clip(lower, upper)
+        """
+        import re, traceback
+
+        data_file = self.get_object()
+        file_path = data_file.file.path
+        if not os.path.exists(file_path):
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        features = request.data.get('features', [])
+        if not features or not isinstance(features, list):
+            return Response({"error": "No features provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Load dataset
+            if file_path.lower().endswith(('.xls', '.xlsx')):
+                df = pd.read_excel(file_path, engine='openpyxl')
+            else:
+                df = pd.read_csv(file_path)
+
+            existing_cols = set(df.columns.tolist())
+            created = []
+            errors = []
+
+            for feat in features:
+                name = str(feat.get('name', '')).strip()
+                formula = str(feat.get('formula', '')).strip()
+                desc = feat.get('description', '')
+                fill = feat.get('fillna', None)
+
+                if not name or not formula:
+                    errors.append({"name": name, "error": "name and formula are required"})
+                    continue
+                # Sanitize name: replace spaces/special chars with underscore
+                safe_name = re.sub(r'[^A-Za-z0-9_]', '_', name)
+
+                try:
+                    series = self._eval_feature_formula(df, formula)
+                    if fill is not None:
+                        series = series.fillna(fill)
+                    df[safe_name] = series
+                    created.append({"name": safe_name, "description": desc, "formula": formula})
+                except Exception as fe:
+                    errors.append({"name": name, "error": str(fe)})
+
+            if not created:
+                return Response({"error": "No features could be created", "details": errors},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Save updated dataset back (always as CSV for consistency)
+            out_path = file_path
+            if file_path.lower().endswith(('.xls', '.xlsx')):
+                out_path = file_path.rsplit('.', 1)[0] + '.csv'
+                # Update the model's file field to point to CSV
+                from django.core.files.base import ContentFile
+                csv_bytes = df.to_csv(index=False).encode('utf-8')
+                data_file.file.save(os.path.basename(out_path), ContentFile(csv_bytes), save=True)
+            else:
+                df.to_csv(out_path, index=False)
+
+            # Update DataDictionary entries for new features
+            for feat_info in created:
+                DataDictionary.objects.update_or_create(
+                    data_file=data_file,
+                    column_name=feat_info['name'],
+                    defaults={'description': feat_info.get('description', '')}
+                )
+
+            df_clean = df.replace({np.nan: None})
+            preview = {
+                "total_rows": len(df),
+                "total_columns": len(df.columns),
+                "columns": df.columns.tolist(),
+                "top_rows": df_clean.head(5).to_dict(orient='records'),
+            }
+
+            return Response({
+                "status": "success",
+                "created": created,
+                "errors": errors,
+                "preview": preview,
+            })
+
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"error": f"Feature engineering failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _eval_feature_formula(self, df: pd.DataFrame, formula: str) -> pd.Series:
+        """Safely evaluate a feature formula against the dataframe."""
+        import re as _re
+
+        # Special prefix handlers
+        if formula.upper().startswith('ISNA:'):
+            col = formula[5:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return df[col].isna().astype(int)
+
+        if formula.upper().startswith('LOG1P:'):
+            col = formula[6:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return np.log1p(pd.to_numeric(df[col], errors='coerce').clip(lower=0).fillna(0))
+
+        if formula.upper().startswith('ABS:'):
+            col = formula[4:].strip()
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return pd.to_numeric(df[col], errors='coerce').abs()
+
+        if formula.upper().startswith('FLAG:'):
+            expr = formula[5:].strip()
+            self._validate_expression_columns(df, expr)
+            return df.eval(expr).astype(int)
+
+        if formula.upper().startswith('CLIP:'):
+            parts = formula[5:].split(':')
+            if len(parts) != 3:
+                raise ValueError("CLIP format: CLIP:ColName:lower:upper")
+            col, lo, hi = parts[0].strip(), float(parts[1]), float(parts[2])
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            return pd.to_numeric(df[col], errors='coerce').clip(lower=lo, upper=hi)
+
+        # Default: arithmetic expression via df.eval()
+        self._validate_expression_columns(df, formula)
+        return df.eval(formula)
+
+    def _validate_expression_columns(self, df: pd.DataFrame, expr: str):
+        """Check that column references in an expression exist in the dataframe."""
+        import re as _re
+        # Extract potential column names (word tokens that aren't Python keywords or numbers)
+        tokens = set(_re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', expr))
+        keywords = {'and', 'or', 'not', 'in', 'True', 'False', 'None', 'nan', 'inf'}
+        col_refs = tokens - keywords
+        missing = col_refs - set(df.columns.tolist())
+        if missing:
+            raise ValueError(f"Unknown columns: {', '.join(sorted(missing))}")

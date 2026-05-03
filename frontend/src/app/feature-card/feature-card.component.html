@@ -18,7 +18,17 @@
     <mat-tab-group (selectedTabChange)="onTabChange($event)">
       <mat-tab label="Descriptives">
         <ng-container *ngIf="featureData">
-          <p style="font-size: 14px"><br><strong>Descriptive Statistics</strong></p>
+          <!-- Data version dropdown -->
+          <div style="display: flex; align-items: center; gap: 10px; margin: 12px 0 4px 0;">
+            <span style="font-size: 12px; font-weight: 500; color: #555;">Data Version:</span>
+            <select [ngModel]="dataVersion" (ngModelChange)="onDataVersionChange($event)"
+                    style="padding: 3px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; min-width: 130px;">
+              <option *ngFor="let opt of dataVersionOptions" [value]="opt.value" [disabled]="opt.disabled">
+                {{ opt.label }}{{ opt.disabled ? ' (not available)' : '' }}
+              </option>
+            </select>
+          </div>
+          <p style="font-size: 14px"><strong>Descriptive Statistics</strong></p>
           <div class="table-container" [class.transposed]="isFullScreen">
             <table class="descriptive-stats-table">
               <thead>
@@ -41,6 +51,31 @@
                 </ng-container>
               </tbody>
             </table>
+          </div>
+
+          <!-- Category Statistics table (shown by default for features with ≤20 unique values) -->
+          <div *ngIf="targetAverages && targetAverages.length > 0" style="margin-top: 12px;">
+            <p style="font-size: 14px; margin-bottom: 6px;"><strong>Category Statistics</strong></p>
+            <div class="table-container">
+              <table class="descriptive-stats-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Count</th>
+                    <th>Volume Share (%)</th>
+                    <th>Target Average</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of targetAverages">
+                    <td>{{ row.category }}</td>
+                    <td>{{ row.count }}</td>
+                    <td>{{ row.volume_share }}</td>
+                    <td>{{ row.target_average }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <p style="font-size: 14px"><br><strong>Distribution Plot</strong></p>
@@ -134,16 +169,65 @@
       </mat-tab>
       
       <mat-tab label="Importance">
-        <div style="margin-top: 16px; display:flex; gap:12px; align-items:center; flex-wrap: wrap;">
-          <button mat-raised-button color="primary" (click)="proceedModeling()" [disabled]="modelingLoading || !data.processedFile">
-            {{ modelingLoading ? 'Training…' : 'Proceed Modelling' }}
-          </button>
-          <span *ngIf="!data.processedFile" style="color:#888; font-size:12px;">Processed file is required to start modelling.</span>
-          <span *ngIf="modelInfo?.valid_auc != null" style="font-size:12px; color:#555;">Valid AUC: {{ modelInfo.valid_auc | number:'1.3-3' }}</span>
-          <span *ngIf="modelInfo?.feature_count != null" style="font-size:12px; color:#555;">Features: {{ modelInfo.feature_count }}</span>
+        <div *ngIf="modelingLoading" style="margin-top: 16px; display:flex; gap:12px; align-items:center;">
+          <mat-spinner diameter="24"></mat-spinner>
+          <span style="font-size:12px; color:#555;">Loading importance data…</span>
+        </div>
+
+        <div *ngIf="preModelingMode" 
+             style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+          <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
+            <strong>ℹ Importance data is not yet available.</strong><br/>
+            Feature importance scores will be computed in the <strong>Modeling</strong> step when a model is trained. Please proceed to the Modeling phase first.
+          </p>
+        </div>
+
+        <div *ngIf="!preModelingMode && !modelingLoading && !(importanceGain?.length || importanceShap?.length)" 
+             style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+          <p style="font-size: 13px; color: #1565c0; margin: 0;">
+            <strong>ℹ No importance data available.</strong> Run modeling from the Modeling page first.
+          </p>
         </div>
 
         <div *ngIf="modelingError" style="color:#b71c1c; font-size:12px; margin-top: 8px;">{{ modelingError }}</div>
+
+        <!-- SFS context dropdown (Final Model Fit / Feature Added Step) -->
+        <div *ngIf="hasSfsContexts && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
+             style="margin-top: 14px; margin-bottom: -4px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
+          <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
+            <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
+              <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
+                {{ ctx.label }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <!-- Importance context badge (non-SFS or legacy) -->
+        <div *ngIf="!hasSfsContexts && importanceContext && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
+             style="margin-top: 14px; margin-bottom: -4px;">
+          <span style="display: inline-block; padding: 4px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 12px; font-size: 11px; font-weight: 600;">
+            {{ importanceContext }}
+          </span>
+        </div>
+
+        <!-- Feature-specific importance summary -->
+        <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" 
+             style="margin-top: 16px; display: flex; gap: 16px; flex-wrap: wrap;">
+          <div *ngIf="getFeatureImportanceRank('gain') as gainRank"
+               style="flex: 1; min-width: 200px; padding: 14px 18px; background: #f8f9fa; border-left: 4px solid #C02942; border-radius: 4px;">
+            <div style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">XGBoost Gain</div>
+            <div style="font-size: 22px; font-weight: 700; color: #C02942;">{{ gainRank.score | number:'1.4-4' }}</div>
+            <div style="font-size: 12px; color: #555; margin-top: 2px;">Rank <strong>{{ gainRank.rank }}</strong> of {{ gainRank.total }} features</div>
+          </div>
+          <div *ngIf="getFeatureImportanceRank('shap') as shapRank"
+               style="flex: 1; min-width: 200px; padding: 14px 18px; background: #f8f9fa; border-left: 4px solid #4E79A7; border-radius: 4px;">
+            <div style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">SHAP Mean |Impact|</div>
+            <div style="font-size: 22px; font-weight: 700; color: #4E79A7;">{{ shapRank.score | number:'1.6-6' }}</div>
+            <div style="font-size: 12px; color: #555; margin-top: 2px;">Rank <strong>{{ shapRank.rank }}</strong> of {{ shapRank.total }} features</div>
+          </div>
+        </div>
 
         <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" style="margin-top: 12px; display:flex; align-items:center; gap:16px; flex-wrap: wrap;">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -161,6 +245,7 @@
               <input matInput type="number" min="5" max="100" [(ngModel)]="importanceLimit" (ngModelChange)="drawImportancePlot()">
             </mat-form-field>
           </div>
+          <span style="font-size: 11px; color: #888; font-style: italic;">Selected feature highlighted in red.</span>
         </div>
 
         <div id="importance-plot" style="width:100%; height: 520px; margin-top: 8px;"></div>
@@ -168,7 +253,28 @@
       
       <mat-tab label="Explainability">
         <div style="margin-top: 16px;">
-          <div *ngIf="explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
+          <!-- SFS context dropdown (same as Importance tab) -->
+          <div *ngIf="hasSfsContexts"
+               style="margin-bottom: 14px; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
+            <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
+              <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
+                <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
+                  {{ ctx.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div *ngIf="preModelingMode" 
+               style="margin-bottom: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
+            <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
+              <strong>ℹ Explainability data is not yet available.</strong><br/>
+              SHAP explainability analysis will be available after a model is trained in the <strong>Modeling</strong> step. Please proceed to the Modeling phase first.
+            </p>
+          </div>
+
+          <div *ngIf="!preModelingMode && explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
             <mat-spinner diameter="24"></mat-spinner>
             <span style="font-size:12px; color:#555;">Loading explainability data…</span>
           </div>

@@ -28,13 +28,32 @@ interface FeatureInfo {
   Feature_Description: string;
 }
 
+interface SfsImportanceContext {
+  label: string;  // e.g. "Final Model (12 features)" or "Step 5 — Added: feature_x"
+  gain: Array<{ feature: string; score: number }>;
+  shap: Array<{ feature: string; score: number }>;
+  modelPath?: string;  // For explainability — saved SFS model path
+  selectedFeatures?: string[];  // For on-demand step explainability
+}
+
 interface FeatureCardDialogData {
   fileId: string;
   columnName: string;
   features: FeatureInfo[];
   processedFile?: string;
+  encodedFile?: string;
   dateColumn?: string;
   qualitySummary?: { [key: string]: any };
+  catLabelLookup?: { [feature: string]: { [encoded: string]: string } };
+  // Optional: pre-loaded importance data from SFS final model
+  importanceOverrides?: {
+    gain: Array<{ feature: string; score: number }>;
+    shap: Array<{ feature: string; score: number }>;
+  };
+  importanceContext?: string; // Label like "SFS Forward — Final Model"
+  sfsModelPath?: string; // Relative path to SFS final model for explainability
+  // SFS dual-context: Final Model Fit + Feature Added Step
+  sfsContexts?: SfsImportanceContext[];
 }
 
 
@@ -71,8 +90,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   tooltipPosition: 'above' | 'below' | 'left' | 'right' = 'above';
   private originalHistogramData: number[] | null = null;
   private originalStackedData: any | null = null;
+  targetAverages: any[] | null = null;
   features: FeatureInfo[] = [];
   selectedFeatureName: string;
+  catLabelLookup: { [feature: string]: { [encoded: string]: string } } = {};
   qualitySummary: { [key: string]: any } | null = null;
   // Preserve the initially provided quality row so the Quality tab is not empty on first open
   private initialQualitySummary: { [key: string]: any } | null = null;
@@ -105,6 +126,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   importanceShap: Array<{ feature: string; score: number }> = [];
   selectedImportanceType: 'shap' | 'gain' = 'shap';
   importanceLimit: number = 20;
+  importanceContext: string | null = null; // e.g. "SFS Forward Step 3"
+
+  // SFS dual-context state (dropdown: Final Model Fit / Feature Added Step)
+  sfsContexts: SfsImportanceContext[] = [];
+  sfsViewMode: number = 0; // Index into sfsContexts (0 = Final Model, 1 = Step)
+  hasSfsContexts: boolean = false;
+  // True when opened before any model is trained (e.g. from Data Quality step)
+  preModelingMode: boolean = false;
 
   // Explainability state
   explainabilityData: any = null;
@@ -116,6 +145,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
   currentTabIndex: number = 0;
+
+  // Data version dropdown state
+  dataVersion: 'raw' | 'preprocessed' | 'encoded' = 'raw';
+  dataVersionOptions: Array<{ value: 'raw' | 'preprocessed' | 'encoded'; label: string; disabled: boolean }> = [];
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
@@ -139,6 +172,68 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.selectedFeatureName = data.columnName;
     this.qualitySummary = data.qualitySummary || null;
     this.initialQualitySummary = data.qualitySummary || null;
+    this.catLabelLookup = data.catLabelLookup || {};
+    // Initialize data version options based on available files
+    this.dataVersionOptions = [
+      { value: 'raw', label: 'Raw', disabled: false },
+      { value: 'preprocessed', label: 'Preprocessed', disabled: !data.processedFile },
+      { value: 'encoded', label: 'Encoded/Scaled', disabled: !data.encodedFile },
+    ];
+    // Auto-select the most advanced available version
+    if (data.encodedFile) {
+      this.dataVersion = 'encoded';
+    } else if (data.processedFile) {
+      this.dataVersion = 'preprocessed';
+    }
+    // SFS dual-context mode: dropdown between Final Model Fit / Feature Added Step
+    if (data.sfsContexts && data.sfsContexts.length > 0) {
+      this.sfsContexts = data.sfsContexts;
+      this.hasSfsContexts = true;
+      this.sfsViewMode = 0; // Default to first context (Final Model)
+      const ctx = this.sfsContexts[0];
+      this.importanceGain = ctx.gain || [];
+      this.importanceShap = ctx.shap || [];
+      this.importanceContext = ctx.label || null;
+      if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+      else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    } else if (data.importanceOverrides) {
+      // Legacy single-context mode (backward compat)
+      this.importanceGain = data.importanceOverrides.gain || [];
+      this.importanceShap = data.importanceOverrides.shap || [];
+      if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+      else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+      this.importanceContext = data.importanceContext || null;
+    } else {
+      this.importanceContext = data.importanceContext || null;
+      // No importance data provided — opened before modeling (e.g. Data Quality step)
+      this.preModelingMode = true;
+    }
+  }
+
+  /**
+   * Switch SFS view mode (dropdown changed) — updates importance data and resets explainability.
+   */
+  onSfsViewModeChange(index: number): void {
+    if (index < 0 || index >= this.sfsContexts.length) return;
+    this.sfsViewMode = index;
+    const ctx = this.sfsContexts[index];
+    this.importanceGain = ctx.gain || [];
+    this.importanceShap = ctx.shap || [];
+    this.importanceContext = ctx.label || null;
+    if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+    else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    // Redraw importance plot if the Importance tab is active
+    if (this.currentTabIndex === 2) {
+      setTimeout(() => this.drawImportancePlot(), 0);
+    }
+    // Reset explainability so it re-fetches with the new context
+    this.explainabilityData = null;
+    this.explainabilityFetched = false;
+    this.explainabilityError = null;
+    // If the Explainability tab is active, fetch immediately
+    if (this.currentTabIndex === 3) {
+      this.fetchFeatureExplainability();
+    }
   }
 
   // Robust description getter for dropdown display
@@ -172,36 +267,42 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // ===== Modeling / Importance =====
+  private _applyModelingResponse(resp: any): void {
+    this.modelInfo = resp?.model || null;
+    const imps = this.modelInfo?.importances || {};
+    this.importanceGain = Array.isArray(imps.gain) ? imps.gain : [];
+    this.importanceShap = Array.isArray(imps.shap_mean_abs) ? imps.shap_mean_abs : [];
+    if (this.importanceShap.length) this.selectedImportanceType = 'shap';
+    else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
+    this.drawImportancePlot();
+  }
+
   proceedModeling(): void {
     try {
       if (!this.isBrowser) return;
       this.modelingError = null;
-      if (!this.data.processedFile) {
-        this.modelingError = 'Processed file is required to start modelling.';
-        return;
-      }
       const fid = Number(this.data.fileId);
       if (!isFinite(fid)) {
         this.modelingError = 'Invalid file id';
         return;
       }
       this.modelingLoading = true;
-      this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
-        next: (resp: any) => {
-          this.modelInfo = resp?.model || null;
-          const imps = this.modelInfo?.importances || {};
-          this.importanceGain = Array.isArray(imps.gain) ? imps.gain : [];
-          this.importanceShap = Array.isArray(imps.shap_mean_abs) ? imps.shap_mean_abs : [];
-          if (this.importanceShap.length) this.selectedImportanceType = 'shap';
-          else if (this.importanceGain.length) this.selectedImportanceType = 'gain';
-          this.drawImportancePlot();
+
+      // 1) Try cached results first (instant — no re-training)
+      this.dataService.getModelingStatus(fid).subscribe({
+        next: (cached: any) => {
+          if (cached?.job_status === 'completed' && cached?.model?.importances) {
+            console.log('[FeatureCard] Using cached modeling results');
+            this._applyModelingResponse(cached);
+            this.modelingLoading = false;
+            return;
+          }
+          // 2) No cache — fall back to full training
+          this._runFullModeling(fid);
         },
-        error: (err: any) => {
-          console.error('Modeling failed:', err);
-          this.modelingError = 'Failed to run modelling';
-        },
-        complete: () => {
-          this.modelingLoading = false;
+        error: () => {
+          // Status endpoint failed — fall back to full training
+          this._runFullModeling(fid);
         }
       });
     } catch (e) {
@@ -209,6 +310,26 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.modelingError = 'Failed to start modelling';
       this.modelingLoading = false;
     }
+  }
+
+  private _runFullModeling(fid: number): void {
+    if (!this.data.processedFile) {
+      this.modelingError = 'Processed file is required to start modelling.';
+      this.modelingLoading = false;
+      return;
+    }
+    this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
+      next: (resp: any) => {
+        this._applyModelingResponse(resp);
+      },
+      error: (err: any) => {
+        console.error('Modeling failed:', err);
+        this.modelingError = 'Failed to run modelling';
+      },
+      complete: () => {
+        this.modelingLoading = false;
+      }
+    });
   }
 
   onImportanceTypeChange(t: 'shap' | 'gain') {
@@ -235,21 +356,40 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const x = top.map(d => d.score).reverse();
       const title = this.selectedImportanceType === 'shap' ? 'SHAP mean |impact|' : 'XGBoost gain';
 
+      // Highlight the selected feature
+      const selFeat = this.selectedFeatureName;
+      const barColors = y.map(f => f === selFeat ? '#C02942' : '#4E79A7');
+
       const trace = {
         x,
         y,
         type: 'bar',
         orientation: 'h',
-        marker: { color: '#4E79A7' },
+        marker: { color: barColors },
         hovertemplate: '%{y}: %{x:.6f}<extra></extra>'
       } as any;
+
+      // Annotation arrow pointing to the selected feature bar
+      const annotations: any[] = [];
+      const selIdx = y.indexOf(selFeat);
+      if (selIdx >= 0) {
+        annotations.push({
+          x: x[selIdx], y: y[selIdx],
+          xanchor: 'left', yanchor: 'middle',
+          text: ` ← ${selFeat}`,
+          showarrow: false,
+          font: { size: 11, color: '#C02942', weight: 'bold' }
+        });
+      }
+
       const layout = {
         margin: { l: 180, r: 24, t: 36, b: 36 },
         height: Math.max(320, 28 * top.length + 120),
         title: { text: title, font: { size: 14 } },
         xaxis: { title: 'Score' },
         yaxis: { automargin: true },
-        showlegend: false
+        showlegend: false,
+        annotations
       } as any;
       const config = { responsive: true, displayModeBar: false } as any;
       try { (window as any).Plotly.react(el, [trace], layout, config); }
@@ -257,6 +397,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     } catch (e) {
       console.warn('drawImportancePlot failed:', e);
     }
+  }
+
+  /**
+   * Get the selected feature's rank and score for a given importance type
+   */
+  getFeatureImportanceRank(type: 'gain' | 'shap'): { rank: number; score: number; total: number } | null {
+    const items = type === 'shap' ? this.importanceShap : this.importanceGain;
+    if (!Array.isArray(items) || items.length === 0) return null;
+    const sorted = [...items].sort((a, b) => b.score - a.score);
+    const idx = sorted.findIndex(d => d.feature === this.selectedFeatureName);
+    if (idx < 0) return null;
+    return { rank: idx + 1, score: sorted[idx].score, total: sorted.length };
   }
 
   // Determine if current feature is numerical
@@ -356,6 +508,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.fetchQualityTimeseries();
   }
 
+  // Fetch quality summary row from backend when not available locally
+  fetchQualitySummaryRow(): void {
+    const fid = Number(this.data.fileId);
+    if (!isFinite(fid)) return;
+    this.dataService.getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName).subscribe({
+      next: (resp: any) => {
+        if (resp?.row) {
+          this.qualitySummary = resp.row;
+          this.initialQualitySummary = resp.row;
+          this.fetchQualityTimeseries();
+        }
+      },
+      error: () => { /* Quality stays as placeholder */ }
+    });
+  }
+
   // Quality helpers
   hasQuality(): boolean {
     const q = this.qualitySummary ?? this.initialQualitySummary;
@@ -410,6 +578,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityFetched = false;
       this.explainabilityError = null;
       
+      // If user is currently on Quality tab, fetch quality for new feature
+      if (this.currentTabIndex === 1) {
+        this.fetchQualitySummaryRow();
+      }
       // If user is currently on Explainability tab, trigger fetch immediately
       if (this.currentTabIndex === 3) {
         this.fetchFeatureExplainability();
@@ -428,15 +600,44 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.fetchQualityTimeseries();
   }
   
+  getFileOverride(): string | undefined {
+    if (this.dataVersion === 'preprocessed' && this.data.processedFile) return this.data.processedFile;
+    if (this.dataVersion === 'encoded' && this.data.encodedFile) return this.data.encodedFile;
+    return undefined;
+  }
+
+  onDataVersionChange(version: 'raw' | 'preprocessed' | 'encoded'): void {
+    this.dataVersion = version;
+    this.originalHistogramData = null;
+    this.originalStackedData = null;
+    this.targetAverages = null;
+    this.stackedWrtTarget = false;
+    this.loadFeatureData();
+    // Refresh Quality tab data for the new data version
+    this.qualitySummary = null;
+    this.initialQualitySummary = null;
+    this.qualityTimeseries = [];
+    this.qualityTimeseriesOverall = null;
+    this.metricLockedByUser = false;
+    if (this.currentTabIndex === 1) {
+      this.fetchQualitySummaryRow();
+    }
+  }
+
   loadFeatureData() {
-    console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}`);
+    const fileOverride = this.getFileOverride();
+    console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}, version: ${this.dataVersion}`);
     forkJoin({
-      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName),
-      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName)
+      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName, fileOverride),
+      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride)
     }).subscribe({
-      next: ({ featureCard, stackedData }) => {
+      next: ({ featureCard, stackedData: stackedResp }) => {
         this.featureData = featureCard;
         if (this.featureData) {
+          // Extract stacked_data and target_averages from response
+          const stackedData = stackedResp?.stacked_data ?? stackedResp;
+          this.targetAverages = stackedResp?.target_averages ?? null;
+
           // Store the original histogram data
           this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
           this.originalStackedData = this.preprocessStackedData(stackedData);
@@ -488,6 +689,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
       error: (error: HttpErrorResponse) => {
         console.error('Error loading feature data:', error);
+        // If the encoded version 404s (column missing from encoded file), fallback to preprocessed
+        if (error.status === 404 && this.dataVersion === 'encoded' && this.data.processedFile) {
+          console.warn(`[FeatureCard] Column '${this.data.columnName}' not found in encoded file, falling back to preprocessed`);
+          this.dataVersion = 'preprocessed';
+          this.loadFeatureData();
+          return;
+        }
         if (error.status === 404) {
           this.errorMessage = `File or column not found. Please check the fileId (${this.data.fileId}) and columnName (${this.data.columnName}).`;
         } else {
@@ -625,7 +833,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   fetchQualityTimeseries(): void {
     try {
       if (!this.isBrowser) return;
-      if (!this.data.processedFile || !this.data.dateColumn) {
+      // Use the data-version-appropriate file for quality computation
+      const qualityFile = this.getFileOverride() || this.data.processedFile;
+      if (!qualityFile || !this.data.dateColumn) {
         this.qualityTimeseriesError = 'Date column or processed file not available for timeseries.';
         return;
       }
@@ -642,8 +852,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.qualityTimeseriesError = null;
       this.dataService.getDatqTimeseries(
         fid,
-        this.data.processedFile,
-        this.data.columnName,
+        qualityFile,
+        this.selectedFeatureName || this.data.columnName,
         this.data.dateColumn,
         this.qualityTimeseriesMetric,
         this.selectedQualityWindows,
@@ -672,7 +882,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             }
           } catch {}
           const overallFromApi = (resp && resp.overall != null && resp.overall !== '') ? Number(resp.overall) : null;
-          this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
+          // For non-preprocessed data versions, prefer the API-computed overall
+          // because the pre-saved summary was computed on preprocessed data only.
+          if (this.dataVersion !== 'preprocessed') {
+            this.qualityTimeseriesOverall = (overallFromApi != null) ? overallFromApi : overallFromSummary;
+          } else {
+            this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
+          }
           this.drawQualityTimeseries();
         },
         error: (err: any) => {
@@ -967,8 +1183,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   plotCategoricalData(valueCounts: { [key: string]: number }, layout: any) {
     const Plotly = (window as any).Plotly;
-    const categories = Object.keys(valueCounts);
-    const counts = Object.values(valueCounts);
+    const categories = Object.keys(valueCounts).map(k => k === 'nan' || k === 'NaN' ? '(null)' : String(k));
+    const counts: number[] = Object.values(valueCounts);
     const total = counts.reduce((sum, val) => sum + val, 0);
 
     const trace = {
@@ -988,6 +1204,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
     layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
     layout.xaxis.title = 'Categories';
+    // Force categorical x-axis so each distinct value gets its own tick
+    if (categories.length <= 20) {
+      layout.xaxis.type = 'category';
+    }
 
     Plotly.newPlot('visualization', [trace], layout).catch((error: Error) => {
       console.error('Error plotting categorical data:', error);
@@ -1019,7 +1239,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.errorMessage = 'Visualization library not loaded';
       return;
     }
-    if (this.isNumerical()) {
+    // Detect data shape: if any target class value is a dict (not array), use categorical bar chart
+    const firstVal = Object.values(stackedData)[0];
+    const isDictFormat = firstVal && !Array.isArray(firstVal) && typeof firstVal === 'object';
+
+    if (this.isNumerical() && !isDictFormat) {
       const histogramTraces: any[] = [];
       const boxplotTraces: any[] = [];
       //const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
@@ -1082,13 +1306,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const allCategories = new Set<string>();
       Object.values(stackedData).forEach((data: any) => {
         if (typeof data === 'object') {
-          Object.keys(data).forEach(key => allCategories.add(key));
+          Object.keys(data).forEach(key => allCategories.add(key === 'nan' || key === 'NaN' ? '(null)' : String(key)));
         }
       });
       const categories = Array.from(allCategories);
       const traces = Object.keys(stackedData).map(targetClass => {
         const data = stackedData[targetClass];
-        const values = categories.map(cat => (data[cat] || 0));
+        const values = categories.map(cat => {
+          const origKey = cat === '(null)' ? 'NaN' : cat;
+          return data[origKey] || data[cat] || 0;
+        });
         const total = values.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
         return {
           x: categories,
@@ -1101,11 +1328,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         };
       });
       layout.barmode = 'group';
-      layout.bargap = 0.15;  // Add some gap between bars
-      layout.bargroupgap = 0.1;  // Gap between bars in a group
-      layout.showlegend = true;  // Ensure the legend is shown
-      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };  // Ensure legend is visible
+      layout.bargap = 0.15;
+      layout.bargroupgap = 0.1;
+      layout.showlegend = true;
+      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
       layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
+      // Force categorical x-axis so each distinct value gets its own tick
+      if (categories.length <= 20) {
+        layout.xaxis.type = 'category';
+      }
       Plotly.newPlot('visualization', traces, layout);
       console.log('Plotly.newPlot called with:', traces, layout);
     }
@@ -1208,8 +1439,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   fetchStackedData() {
-    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName).subscribe(
-      (stackedData: any) => {
+    const fileOverride = this.getFileOverride();
+    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride).subscribe(
+      (resp: any) => {
+        const stackedData = resp?.stacked_data ?? resp;
+        this.targetAverages = resp?.target_averages ?? null;
         this.originalStackedData = this.preprocessStackedData(stackedData);
         this.updateVisualizationAndStats();
       },
@@ -1262,7 +1496,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       if (Array.isArray(value)) {
         processedData[key] = this.cleanData(value as number[]);
       } else if (typeof value === 'object' && value !== null) {
-        processedData[key] = this.cleanData(Object.values(value) as number[]);
+        // Preserve dict structure for categorical data (category → count)
+        processedData[key] = { ...value };
       } else {
         processedData[key] = [];
       }
@@ -1498,17 +1733,46 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.currentTabIndex = tabIndex;  // Track current tab
     
     // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
-    if (tabIndex === 3 && !this.explainabilityFetched && !this.explainabilityLoading) {
-      this.fetchFeatureExplainability();
+    if (tabIndex === 1) {
+      // Quality tab — fetch summary from backend if not available
+      if (!this.hasQuality()) {
+        this.fetchQualitySummaryRow();
+      } else {
+        this.fetchQualityTimeseries();
+      }
+    }
+    if (tabIndex === 2) {
+      if (this.preModelingMode) {
+        // No model trained yet — message shown in template
+        return;
+      }
+      if (this.importanceGain.length || this.importanceShap.length) {
+        // Data already loaded (e.g. from overrides) — just redraw
+        setTimeout(() => this.drawImportancePlot(), 0);
+      } else if (!this.modelingLoading) {
+        this.proceedModeling();
+      }
+    }
+    if (tabIndex === 3) {
+      console.log('[Explainability] Tab activated. preModelingMode=', this.preModelingMode, 'fetched=', this.explainabilityFetched, 'loading=', this.explainabilityLoading, 'hasSfsContexts=', this.hasSfsContexts, 'sfsViewMode=', this.sfsViewMode);
+      if (this.preModelingMode) {
+        // No model trained yet — message shown in template
+        return;
+      }
+      if (!this.explainabilityFetched && !this.explainabilityLoading) {
+        this.fetchFeatureExplainability();
+      }
     }
   }
 
   // ===== Explainability (SHAP beeswarm + Partial Dependence) =====
   fetchFeatureExplainability(): void {
     try {
+      console.log('[Explainability] fetchFeatureExplainability called. isBrowser=', this.isBrowser, 'processedFile=', this.data.processedFile, 'fileId=', this.data.fileId);
       if (!this.isBrowser) return;
       if (!this.data.processedFile) {
         this.explainabilityError = 'Processed file required. Please run preprocessing first.';
+        console.warn('[Explainability] No processedFile — aborting.');
         return;
       }
       const fid = Number(this.data.fileId);
@@ -1520,8 +1784,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityError = null;
       this.explainabilityFetched = true;
       
-      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500).subscribe({
+      // Determine model source: SFS context (dropdown) → legacy sfsModelPath → default
+      let explModelPath: string | undefined = this.data.sfsModelPath;
+      let explSelectedFeatures: string[] | undefined = undefined;
+      if (this.hasSfsContexts && this.sfsContexts[this.sfsViewMode]) {
+        const ctx = this.sfsContexts[this.sfsViewMode];
+        explModelPath = ctx.modelPath || undefined;
+        explSelectedFeatures = ctx.selectedFeatures || undefined;
+      }
+
+      console.log('[Explainability] API call params: fid=', fid, 'feature=', this.selectedFeatureName, 'modelPath=', explModelPath, 'selectedFeatures=', explSelectedFeatures);
+      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500, explModelPath, explSelectedFeatures).subscribe({
         next: (resp: any) => {
+          console.log('[Explainability] API response received. Keys:', Object.keys(resp || {}), 'beeswarm?', !!resp?.beeswarm, 'pdp?', !!resp?.partial_dependence);
+          if (resp?.beeswarm) console.log('[Explainability] beeswarm shap_values length:', resp.beeswarm.shap_values?.length);
           this.explainabilityData = resp;
           setTimeout(() => this.drawExplainabilityPlots(), 0);
         },
@@ -1557,7 +1833,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   drawExplainabilityPlots(): void {
+    console.log('[Explainability] drawExplainabilityPlots called. isBrowser=', this.isBrowser, 'data?', !!this.explainabilityData);
     if (!this.isBrowser || !this.explainabilityData) return;
+    const beeEl = document.getElementById('explainability-beeswarm');
+    const pdpEl = document.getElementById('explainability-pdp');
+    console.log('[Explainability] DOM elements: beeswarm=', !!beeEl, 'pdp=', !!pdpEl, 'Plotly?', !!(window as any).Plotly);
     this.drawShapBeeswarmSingle();
     this.drawPartialDependencePlot();
   }
@@ -1607,8 +1887,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   drawShapBeeswarmSingle(): void {
     try {
+      console.log('[Explainability] drawShapBeeswarmSingle: Plotly?', !!Plotly, 'beeswarm?', !!this.explainabilityData?.beeswarm);
       if (!Plotly || !this.explainabilityData?.beeswarm) return;
       const el = document.getElementById('explainability-beeswarm');
+      console.log('[Explainability] drawShapBeeswarmSingle: el?', !!el);
       if (!el) return;
 
       const beeswarm = this.explainabilityData.beeswarm;
@@ -1671,12 +1953,29 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           const u = (v - vmin) / denom;
           return u < 0 ? 0 : (u > 1 ? 1 : u);
         });
+
+        // Check if this feature has a categorical encoding mapping
+        const singleCatLookup = this.catLabelLookup[featName];
+        let customdata: any[];
+        let hovertemplate: string;
+        if (singleCatLookup) {
+          customdata = idxNonNull.map(i => {
+            const enc = String(Math.round(Number(featValsRaw[i])));
+            const label = singleCatLookup[enc] || featValsRaw[i];
+            return [featValsRaw[i], label];
+          });
+          hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Encoded=%{customdata[0]}<br>Original=%{customdata[1]}<extra></extra>`;
+        } else {
+          customdata = idxNonNull.map(i => featValsRaw[i]);
+          hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`;
+        }
+
         traces.push({
           type: 'scatter',
           mode: 'markers',
           x: xVals,
           y: yVals,
-          customdata: idxNonNull.map(i => featValsRaw[i]),
+          customdata,
           marker: {
             color: colors,
             colorscale: colorscale,
@@ -1687,7 +1986,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             size: 8,
             opacity: 0.85
           },
-          hovertemplate: `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`,
+          hovertemplate,
           showlegend: false
         });
       }
@@ -1726,8 +2025,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   private drawPartialDependencePlot(): void {
     try {
+      console.log('[Explainability] drawPDP: Plotly?', !!Plotly, 'pdp?', !!this.explainabilityData?.partial_dependence);
       if (!Plotly || !this.explainabilityData?.partial_dependence) return;
       const el = document.getElementById('explainability-pdp');
+      console.log('[Explainability] drawPDP: el?', !!el);
       if (!el) return;
 
       const pdp = this.explainabilityData.partial_dependence;

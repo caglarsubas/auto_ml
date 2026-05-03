@@ -31,6 +31,18 @@ node_modules
 ehthumbs.db
 Thumbs.db
 
+# Datasets (never push to repo)
+datasets/
+
+# Media / data files (generated at runtime)
+backend/media/
+
+# Test reports
+test-reports/
+
+# Environment variables (API keys)
+.env
+
 # User created
 get_github_context.sh
 auto_ml_context.md

@@ -36,10 +36,19 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   preprocessingInitiated: boolean = false;
   private apiBase = environment.apiBaseUrl;
 
+  // Pipeline commentary notes (synced via SharedService)
+  pipelineNotes: { [position: string]: string } = {};
+  editingNotePosition: string | null = null;
+  private _noteSaveTimer: any = null;
+
   // Split controls for PSI/CSI computation in Data Dictionary
   splitStrategy: 'random' | 'oot' = 'random';
   splitDateColumn: string | null = null;
   splitCutoff: string = '';
+
+  // Edit-mode flags for locked sections (same pattern as Start button)
+  editingDataImport: boolean = false;
+  editingDictionary: boolean = false;
 
   // Model_Usage tracking for Data Dictionary
   variableModelUsage: { [featureName: string]: string } = {};
@@ -63,6 +72,58 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.preprocessingInitiated = preprocessingInitiated;
       })
     );
+
+    // Sync pipeline notes from SharedService
+    this.subscription.add(
+      this.sharedService.pipelineNotes$.subscribe((notes) => {
+        this.pipelineNotes = notes;
+      })
+    );
+
+    // Auto-hydrate when file ID is set externally (e.g., from loadPipelineRun restore)
+    this.subscription.add(
+      this.sharedService.currentFileId$.subscribe((id: number | null) => {
+        if (id !== null && id !== this.currentFileId) {
+          this.currentFileId = id;
+          this.getPreview(id);
+          this.showDataDictionaryCollection = true;
+          // Fetch existing data dictionary
+          this.http.get(`${this.apiBase}declaration/${id}/data_dictionary/`)
+            .subscribe(
+              (data: any) => {
+                if (Array.isArray(data) && data.length > 0) {
+                  this.dataDictionary = data;
+                  this.initializeModelUsageFromBackend(data);
+                  this.pushDeclarationAiContext();
+                }
+              },
+              () => { /* dictionary may not exist yet — that's fine */ }
+            );
+        }
+      })
+    );
+
+    // Listen for data refresh events (e.g., after AI creates features)
+    this.subscription.add(
+      this.sharedService.dataRefresh$.subscribe(() => {
+        if (this.currentFileId !== null) {
+          console.log('[Declaration] Data refresh triggered — re-fetching preview and dictionary');
+          this.getPreview(this.currentFileId);
+          this.http.get(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`)
+            .subscribe(
+              (data: any) => {
+                if (Array.isArray(data) && data.length > 0) {
+                  this.dataDictionary = data;
+                  this.initializeModelUsageFromBackend(data);
+                  this.pushDeclarationAiContext();
+                }
+              },
+              () => { /* dictionary may not exist yet */ }
+            );
+        }
+      })
+    );
+
     // Load saved model usage settings
     this.loadModelUsage();
   }
@@ -71,6 +132,32 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     if (this.subscription) {
       this.subscription.unsubscribe();
     }
+  }
+
+  // ── Pipeline Commentary Notes ──
+
+  onNoteChanged(position: string, content: string): void {
+    this.pipelineNotes[position] = content;
+    this.sharedService.updatePipelineNote(position, content);
+    if (this._noteSaveTimer) clearTimeout(this._noteSaveTimer);
+    this._noteSaveTimer = setTimeout(() => {
+      this.sharedService.triggerCheckpoint('decl_note_updated');
+    }, 1000);
+  }
+
+  toggleNoteEdit(position: string): void {
+    this.editingNotePosition = this.editingNotePosition === position ? null : position;
+  }
+
+  deleteNote(position: string): void {
+    delete this.pipelineNotes[position];
+    this.sharedService.updatePipelineNote(position, '');
+    this.editingNotePosition = null;
+    this.sharedService.triggerCheckpoint('decl_note_updated');
+  }
+
+  hasNote(position: string): boolean {
+    return !!this.pipelineNotes[position]?.trim();
   }
 
   onFilesSelected(event: any): void {
@@ -89,12 +176,174 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         this.isExcelFile = true;
         this.checkExcelSheets();
+        this.detectExcelHeader(this.selectedFiles[0]);
+      } else if (fileName.endsWith('.csv') || fileName.endsWith('.txt') || fileName.endsWith('.tsv')) {
+        this.detectCsvSeparator(this.selectedFiles[0]);
+        // Header detection runs after separator is detected (inside detectCsvSeparator callback)
       }
     }
     // Reset mergeColumnWise when only one file is selected
     if (this.selectedFiles.length <= 1) {
       this.mergeColumnWise = false;
     }
+  }
+
+  private detectCsvSeparator(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const text: string = e.target.result;
+      // Take first 5 lines for analysis
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 5);
+      if (lines.length === 0) return;
+
+      const candidates: { char: string; key: string }[] = [
+        { char: ',', key: 'comma' },
+        { char: ';', key: 'semicolon' },
+        { char: '\t', key: 'tab' },
+        { char: ' ', key: 'space' }
+      ];
+
+      // For each candidate, count occurrences per line and check consistency
+      let bestKey = 'semicolon';
+      let bestScore = -1;
+
+      for (const sep of candidates) {
+        const counts = lines.map(line => {
+          // Count separators outside quoted strings
+          let count = 0;
+          let inQuote = false;
+          for (const ch of line) {
+            if (ch === '"') { inQuote = !inQuote; }
+            else if (!inQuote && ch === sep.char) { count++; }
+          }
+          return count;
+        });
+        // All lines should have > 0 and roughly the same count
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        if (minCount <= 0) continue;
+        // Score: higher min count is better; penalize inconsistency
+        const consistency = minCount / (maxCount || 1);
+        const score = minCount * consistency;
+        if (score > bestScore) {
+          bestScore = score;
+          bestKey = sep.key;
+        }
+      }
+
+      this.columnSeparator = bestKey;
+      console.log(`[CSV Auto-detect] Detected separator: ${bestKey}`);
+
+      // Run header detection using the detected separator
+      this.detectCsvHeader(text, bestKey);
+    };
+    // Read only first 8KB — enough for header detection
+    const slice = file.slice(0, 8192);
+    reader.readAsText(slice);
+  }
+
+  private detectCsvHeader(text: string, separatorKey: string): void {
+    const sepMap: { [key: string]: string } = {
+      'comma': ',', 'semicolon': ';', 'tab': '\t', 'space': ' '
+    };
+    const sep = sepMap[separatorKey] || ';';
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 21);
+    if (lines.length < 2) return;
+
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuote = false;
+      for (const ch of line) {
+        if (ch === '"') { inQuote = !inQuote; }
+        else if (!inQuote && ch === sep) { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const firstRow = parseLine(lines[0]);
+    const dataRows = lines.slice(1, 21).map(parseLine);
+
+    let headerSignals = 0;
+    let dataSignals = 0;
+
+    for (let col = 0; col < firstRow.length; col++) {
+      const firstVal = firstRow[col];
+      const colVals = dataRows.map(r => r[col] || '').filter(v => v !== '');
+
+      // Is column data predominantly numeric?
+      const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+      const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
+
+      const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
+
+      if (dataIsNumeric && !firstIsNumeric && firstVal.length > 1) {
+        headerSignals++;
+      } else if (dataIsNumeric && firstIsNumeric) {
+        dataSignals++;
+      } else if (!dataIsNumeric) {
+        const dataValsSet = new Set(colVals);
+        if (!dataValsSet.has(firstVal) && firstVal.length > 1) {
+          headerSignals++;
+        } else if (dataValsSet.has(firstVal)) {
+          dataSignals++;
+        } else {
+          dataSignals++;
+        }
+      }
+    }
+
+    const hasHeader = headerSignals >= dataSignals;
+    this.firstLineIsNotHeader = !hasHeader;
+    console.log(`[CSV Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+  }
+
+  private detectExcelHeader(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      // Read as array of arrays (no header assumption)
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      if (rows.length < 2) return;
+
+      const firstRow = rows[0];
+      const dataRows = rows.slice(1, 21);
+
+      let headerSignals = 0;
+      let dataSignals = 0;
+
+      for (let col = 0; col < firstRow.length; col++) {
+        const firstVal = String(firstRow[col] ?? '').trim();
+        const colVals = dataRows.map(r => String(r[col] ?? '').trim()).filter(v => v !== '');
+
+        const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+        const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
+        const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
+
+        if (dataIsNumeric && !firstIsNumeric && firstVal.length > 1) {
+          headerSignals++;
+        } else if (dataIsNumeric && firstIsNumeric) {
+          dataSignals++;
+        } else if (!dataIsNumeric) {
+          const dataValsSet = new Set(colVals);
+          if (!dataValsSet.has(firstVal) && firstVal.length > 1) {
+            headerSignals++;
+          } else {
+            dataSignals++;
+          }
+        }
+      }
+
+      const hasHeader = headerSignals >= dataSignals;
+      this.firstLineIsNotHeader = !hasHeader;
+      console.log(`[Excel Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   checkExcelSheets(): void {
@@ -134,6 +383,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.errorMessage = null;
             this.showUseExistingButton = false;
             this.showDataDictionaryCollection = true;
+            // Checkpoint: data imported
+            this.sharedService.triggerCheckpoint('decl_data_imported');
           },
           (error: HttpErrorResponse) => {
             console.error('Error uploading file:', error);
@@ -169,6 +420,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.showUseExistingButton = false;
             // Show Data Dictionary Collection after using existing file
             this.showDataDictionaryCollection = true;
+            // Checkpoint: data imported (via existing file)
+            this.sharedService.triggerCheckpoint('decl_data_imported');
           },
           error => {
             console.error('Error fetching existing file:', error);
@@ -193,9 +446,19 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             this.previewData.note = "Note: First line is treated as data, generic headers are used.";
           }
           this.showDataDictionaryCollection = true;
+          // Push data preview to cumulative AI context
+          this.pushDeclarationAiContext();
         },
         error => console.error('Error getting preview:', error)
       );
+  }
+
+  onEditDataImport(): void {
+    this.editingDataImport = true;
+  }
+
+  onEditDictionary(): void {
+    this.editingDictionary = true;
   }
 
   onGenerateDataDictionary(withUpload: boolean): void {
@@ -225,6 +488,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.dataDictionary = data;
           // Initialize Model_Usage with backend's predetermined values (unless user has overridden)
           this.initializeModelUsageFromBackend(data);
+          // Push dictionary to cumulative AI context
+          this.pushDeclarationAiContext();
+          // Checkpoint: dictionary generated
+          this.sharedService.triggerCheckpoint('decl_dictionary_generated');
         },
         error => console.error('Error generating data dictionary:', error)
       );
@@ -321,6 +588,46 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     
     // Save the initialized values (merging with any existing user overrides)
     this.saveModelUsage();
+  }
+
+  /** Push declaration-level data into the cumulative AI context in SharedService. */
+  private pushDeclarationAiContext(): void {
+    const existing = this.sharedService.getAiCumulativeContext() || {};
+    const declCtx: any = {};
+    // Data preview info
+    if (this.previewData) {
+      declCtx.data_preview = {
+        total_rows: this.previewData.total_rows,
+        total_columns: this.previewData.total_columns,
+        columns: this.previewData.columns,
+        file_name: this.selectedFiles?.[0]?.name || this.existingFileName || null,
+      };
+    }
+    // Data dictionary
+    if (this.dataDictionary && this.dataDictionary.length > 0) {
+      declCtx.data_dictionary = this.dataDictionary.map((d: any) => ({
+        Feature_Name: d?.Feature_Name,
+        Data_Type: d?.Data_Type,
+        Level_of_Measurement: d?.Level_of_Measurement,
+        Unique_Values: d?.['#_of_Unique_Value'],
+        Missing_Ratio: d?.Missing_Ratio,
+        Mode_Ratio: d?.Mode_Ratio,
+        Model_Usage_YN: this.getModelUsage(d?.Feature_Name),
+        Feature_Description: d?.Feature_Description || null,
+      }));
+    }
+    // Model usage exclusions
+    const excluded = this.getExcludedFeatures();
+    if (excluded.length > 0) {
+      declCtx.model_usage_exclusions = excluded;
+    }
+    // Merge into existing cumulative context
+    const merged = { ...existing, ...declCtx };
+    // Preserve pipeline_config from other components
+    if (existing.pipeline_config) {
+      merged.pipeline_config = existing.pipeline_config;
+    }
+    this.sharedService.setAiCumulativeContext(merged);
   }
 
   // Get list of features marked as 'No' (excluded from model)

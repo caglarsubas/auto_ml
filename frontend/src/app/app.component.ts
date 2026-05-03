@@ -15,7 +15,10 @@ export class AppComponent implements OnInit {
   showMagnifier = false;
   magnifierX = 0;
   magnifierY = 0;
-  readonly magnifierSize = 100; // Diameter of the magnifier in pixels
+  bgPosX = 0;
+  bgPosY = 0;
+  readonly magnifierSize = 120; // Diameter of the magnifier in pixels
+  readonly zoomLevel = 2.5; // Magnification level
   isLoginPage = false;
   isHomePage = false;
   isBrowser: boolean;
@@ -41,9 +44,21 @@ export class AppComponent implements OnInit {
 
   updateMagnifier(event: MouseEvent) {
     if (this.isBrowser) {
-      const rect = (event.target as HTMLElement).getBoundingClientRect();
-      this.magnifierX = event.clientX - rect.left - this.magnifierSize / 2;
-      this.magnifierY = event.clientY - rect.top - this.magnifierSize / 2;
+      const img = event.target as HTMLImageElement;
+      const rect = img.getBoundingClientRect();
+      
+      // Cursor position relative to image
+      const cursorX = event.clientX - rect.left;
+      const cursorY = event.clientY - rect.top;
+      
+      // Position magnifier centered on cursor
+      this.magnifierX = cursorX - this.magnifierSize / 2;
+      this.magnifierY = cursorY - this.magnifierSize / 2;
+      
+      // Calculate background position to center the zoomed area on cursor
+      // The zoomed image is zoomLevel times larger, so we offset accordingly
+      this.bgPosX = (cursorX * this.zoomLevel) - (this.magnifierSize / 2);
+      this.bgPosY = (cursorY * this.zoomLevel) - (this.magnifierSize / 2);
     }
   }
   

@@ -4,11 +4,156 @@
     <div *ngIf="availableAlgorithms.length > 0" style="max-width: 320px;">
       <mat-form-field appearance="fill" style="width: 100%;">
         <mat-label>Select Algorithm</mat-label>
-        <mat-select [(ngModel)]="selectedAlgorithm">
+        <mat-select [(ngModel)]="selectedAlgorithm" (ngModelChange)="onAlgorithmChange($event)">
           <mat-option *ngFor="let algo of availableAlgorithms" [value]="algo">{{ algo }}</mat-option>
         </mat-select>
       </mat-form-field>
     </div>
+
+    <!-- Encoding Plan (auto-loaded after algorithm selection) -->
+    <div *ngIf="selectedAlgorithm && (encodingPlan.length > 0 || encodingAnalyzing || encodingError)" style="margin-top: 16px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 15px;">Categorical Feature Encoding</h3>
+        <span style="font-size: 12px; color: #888;" *ngIf="encodingPlan.length > 0">({{ encodingPlan.length }} features)</span>
+        <mat-progress-bar *ngIf="encodingAnalyzing" mode="indeterminate" style="width: 160px;"></mat-progress-bar>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #555; margin: 0 0 10px 0;">
+        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 500;">
+          <input type="checkbox" [checked]="encodingUseNative" (change)="toggleEncodingUseNative()"
+                 style="width: 15px; height: 15px; cursor: pointer;" />
+          Model Native
+          <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
+             target="_blank" rel="noopener noreferrer"
+             title="Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
+             style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 2px; vertical-align: middle;">i</a>
+        </label>
+        <span *ngIf="encodingUseNative" style="color: #388e3c;">All features use {{ getAlgorithmLabel(selectedAlgorithm) }} native categorical support.</span>
+        <span *ngIf="!encodingUseNative" style="color: #e65100;">Per-feature encoding method selection enabled. Fallback applies when method is Model Native.</span>
+      </div>
+
+      <div *ngIf="encodingError" style="color:#b71c1c; font-size:12px; margin-bottom: 8px; padding: 6px 10px; background: #fff3f3; border-radius: 4px;">{{ encodingError }}</div>
+
+      <!-- No categorical features -->
+      <div *ngIf="!encodingAnalyzing && encodingPlan.length === 0 && !encodingError"
+           style="padding: 12px 16px; background: #e8f5e9; border-left: 3px solid #4caf50; border-radius: 4px; margin-bottom: 12px;">
+        <span style="font-size: 13px; color: #2e7d32;"><strong>No categorical features detected.</strong> All features are numeric.</span>
+      </div>
+
+      <!-- Encoding Plan Table -->
+      <div *ngIf="encodingPlan.length > 0" style="overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+        <table style="border-collapse: collapse; width: 100%; min-width: 820px;">
+          <thead>
+            <tr style="background: #f5f5f5;">
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px; white-space: nowrap;">Feature</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Description</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Level of Measurement</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Unique</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd; font-size: 11px;">Missing %</th>
+              <th *ngIf="!encodingUseNative" style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Encoding Method</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Fallback Strategy</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Unique Values (top)</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd; font-size: 11px;">Ordinal Ranking</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngFor="let entry of encodingPlan">
+            <tr style="border-bottom: 1px solid #eee;">
+              <td style="padding: 8px; font-weight: 500; font-size: 12px; white-space: nowrap;">
+                <a href="javascript:void(0)" (click)="openFeatureCard(entry.feature)"
+                   style="color: #1976d2; text-decoration: none; cursor: pointer;"
+                   onmouseover="this.style.textDecoration='underline'"
+                   onmouseout="this.style.textDecoration='none'">{{ entry.feature }}</a>
+              </td>
+              <td style="padding: 8px; font-size: 11px; color: #555; max-width: 180px; overflow: hidden; text-overflow: ellipsis;" [title]="entry.description || getFeatureDescription(entry.feature)">{{ entry.description || getFeatureDescription(entry.feature) || '—' }}</td>
+              <td style="padding: 8px;">
+                <select [ngModel]="entry.user_lom" (ngModelChange)="updateEncodingLom(entry, $event); onConfigChanged()"
+                        style="padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px;">
+                  <option value="nominal">Nominal</option>
+                  <option value="ordinal">Ordinal</option>
+                </select>
+              </td>
+              <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.nunique }}</td>
+              <td style="padding: 8px; text-align: center; font-size: 12px;">{{ entry.missing_ratio }}%</td>
+              <!-- Encoding Method column (visible when Model Native checkbox is OFF) -->
+              <td *ngIf="!encodingUseNative" style="padding: 8px;">
+                <select [ngModel]="entry.encoding_method || 'native'" (ngModelChange)="onEncodingMethodChange(entry, $event)"
+                        style="padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; min-width: 130px;">
+                  <option *ngFor="let opt of encodingMethodOptions" [value]="opt.value">{{ opt.label }}</option>
+                </select>
+              </td>
+              <td style="padding: 8px;">
+                <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 500; color: white;"
+                      [style.background]="getStrategyColor(entry.fallback_strategy)">
+                  {{ getStrategyLabel(entry.fallback_strategy) }}
+                </span>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">{{ entry.fallback_reason }}</div>
+              </td>
+              <td style="padding: 8px; font-size: 10px; color: #555; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                <span *ngFor="let v of entry.unique_values?.slice(0, 8); let last = last">{{ v }}<span *ngIf="!last">, </span></span>
+                <span *ngIf="entry.unique_values?.length > 8" style="color: #999;">… +{{ entry.unique_values.length - 8 }}</span>
+              </td>
+              <td style="padding: 8px;">
+                <div *ngIf="entry.needs_ranking && entry.user_lom === 'ordinal'">
+                  <button mat-stroked-button (click)="initRanking(entry)" *ngIf="!entry.ranking?.length" style="font-size: 10px;">
+                    Set Ranking
+                  </button>
+                  <div *ngIf="entry.ranking?.length" style="display: flex; flex-direction: column; gap: 2px;">
+                    <div *ngFor="let val of entry.ranking; let i = index" style="display: flex; align-items: center; gap: 3px; font-size: 10px;">
+                      <span style="width: 16px; text-align: right; color: #888;">{{ i }}.</span>
+                      <span style="flex: 1; padding: 1px 5px; background: #f5f5f5; border-radius: 3px;">{{ val }}</span>
+                      <button type="button" (click)="moveRankingUp(entry, i)" [disabled]="i === 0" style="border:none; background:transparent; cursor:pointer; font-size:12px; padding:0;">▲</button>
+                      <button type="button" (click)="moveRankingDown(entry, i)" [disabled]="i === entry.ranking.length - 1" style="border:none; background:transparent; cursor:pointer; font-size:12px; padding:0;">▼</button>
+                    </div>
+                  </div>
+                </div>
+                <span *ngIf="!entry.needs_ranking" style="font-size: 10px; color: #aaa;">N/A</span>
+              </td>
+            </tr>
+            <!-- Manual Grouping sub-row (shown when Manual Grouping is selected for this feature) -->
+            <tr *ngIf="!encodingUseNative && entry.encoding_method === 'manual_grouping'" style="background: #fafafa;">
+              <td [attr.colspan]="9" style="padding: 8px 8px 12px 32px;">
+                <div style="font-size: 11px; font-weight: 600; color: #4e342e; margin-bottom: 6px;">Manual Grouping for {{ entry.feature }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <div *ngFor="let cat of objectKeys(entry.manual_mapping)" style="display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 3px 8px;">
+                    <span style="font-size: 11px; color: #333; min-width: 60px;">{{ cat === '__NULL__' ? '(null)' : cat }}</span>
+                    <span style="color: #999; font-size: 10px;">→</span>
+                    <input type="number" [value]="entry.manual_mapping[cat]"
+                           (input)="onManualMappingChange(entry, cat, $any($event.target).value)"
+                           style="width: 50px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; text-align: center;"
+                           placeholder="#" />
+                  </div>
+                </div>
+              </td>
+            </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div *ngIf="encodingPlan.length > 0" style="margin-top: 10px; text-align: right;">
+      <button class="ai-support-btn" (click)="requestAiSupport({plan: encodingPlan}, 'encoding', 'Review the categorical feature encoding plan. Are the encoding strategies appropriate? Flag any features with unusual cardinality or LOM assignments that could cause issues.')">
+        <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+      </button>
+    </div>
+
+    <!-- Note: After Encoding -->
+    <div class="pipeline-note-slot">
+      <div *ngIf="!hasNote('after_encoding') && editingNotePosition !== 'after_encoding'" class="pipeline-note-add" (click)="toggleNoteEdit('after_encoding')">
+        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+      </div>
+      <div *ngIf="hasNote('after_encoding') && editingNotePosition !== 'after_encoding'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_encoding')">
+        <div class="pipeline-note-content">{{ pipelineNotes['after_encoding'] }}</div>
+        <div class="pipeline-note-actions">
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_encoding')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn delete" (click)="deleteNote('after_encoding')" title="Delete">&times;</button>
+        </div>
+      </div>
+      <div *ngIf="editingNotePosition === 'after_encoding'" class="pipeline-note-editor">
+        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_encoding'] || ''" (ngModelChange)="onNoteChanged('after_encoding', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
+      </div>
+    </div>
+
     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
       <button mat-raised-button color="accent"
               (click)="startModeling()"
@@ -32,7 +177,26 @@
       <div *ngIf="modelingStatus.model?.model_path">Saved model: {{ modelingStatus.model?.model_path }}</div>
       <div *ngIf="modelingStatus.model?.warning" style="color: #a67c00;">Warning: {{ modelingStatus.model?.warning }}</div>
       <div *ngIf="modelingStatus.model?.error" style="color: #b00020;">Error: {{ modelingStatus.model?.error }}</div>
-      
+
+      <!-- Categorical Features (auto-detected by modeling backend) -->
+      <div *ngIf="modelingStatus.model?.encoding_report?.length > 0" style="margin-top: 12px; padding: 10px 14px; background: #f0f7ff; border-left: 3px solid #1976d2; border-radius: 4px;">
+        <div style="font-size: 12px; font-weight: 600; color: #1565c0; margin-bottom: 6px;">
+          Categorical Features ({{ modelingStatus.model.encoding_report.length }}) — handled via
+          <span style="font-weight: 700;">{{ selectedAlgorithm || 'XGBoost' }}</span> native support
+          <a href="https://xgboost.readthedocs.io/en/stable/tutorials/categorical.html#optimal-partitioning"
+             target="_blank" rel="noopener noreferrer"
+             title="XGBoost Optimal Partitioning: Instead of encoding categories to numbers, the algorithm natively evaluates all possible category subsets at each tree split to find the optimal partition."
+             style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #1976d2; color: #fff; font-size: 8px; font-weight: 700; text-decoration: none; cursor: pointer; margin-left: 4px; vertical-align: middle;">i</a>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <span *ngFor="let r of modelingStatus.model.encoding_report"
+                style="display: inline-block; padding: 2px 8px; background: #e8eaf6; border-radius: 12px; font-size: 11px; color: #333; font-weight: 500;"
+                [title]="r.nunique + ' categories: ' + (r.categories?.slice(0, 10)?.join(', ') || '')">
+            {{ r.feature }} <span style="color: #888; font-weight: 400;">({{ r.nunique }})</span>
+          </span>
+        </div>
+      </div>
+
       <!-- Cross-Validation summary -->
       <div *ngIf="modelingStatus.model?.cv" style="margin-top: 16px;">
         <h4>Cross-Validation</h4>
@@ -58,6 +222,11 @@
             <div id="cv-pr-plot" style="width:100%; height: 420px;"></div>
           </div>
         </div>
+        <div style="margin-top: 10px; text-align: right;">
+          <button class="ai-support-btn" (click)="requestAiSupport({cv: modelingStatus.model?.cv, model_info: {model_type: selectedAlgorithm, features: modelingStatus.model?.selected_features?.length, score: modelingStatus.model?.score}}, 'cv', 'Analyze the cross-validation results. Are ROC-AUC and PR-AUC scores healthy? Is there evidence of overfitting between train and CV? What do the ROC and PR curves suggest about model performance?')">
+            <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+          </button>
+        </div>
       </div>
 
       <!-- SHAP Beeswarm (interactive) -->
@@ -76,33 +245,195 @@
           </label>
         </div>
         <div id="shap-beeswarm" style="width: 100%; height: 540px;"></div>
+        <div style="margin-top: 10px; text-align: right;">
+          <button class="ai-support-btn" (click)="requestAiSupport(getShapContext(), 'shap', 'Interpret the SHAP beeswarm plot. Which features have the strongest impact? Are there any features with unexpected direction of impact? Are there potential multicollinearity concerns?')">
+            <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+          </button>
+        </div>
       </div>
 
       <!-- Selected features table (sorted by SHAP |impact|) -->
       <div *ngIf="modelingStatus.model?.selected_features?.length" style="margin-top: 16px;">
-        <h4>Selected Features (sorted by |impact|)</h4>
+        <h4>Selected Features (sorted by Combined Score)</h4>
         <div style="font-size: 12px; color:#666; margin-bottom:6px;">Total: {{ modelingStatus.model.selected_features.length }}</div>
         <div style="overflow:auto; max-height: 360px; border: 1px solid #eee;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
               <tr style="background: #fafafa; text-align: left;">
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 28%;">Feature</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee;">Description</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">|Impact|</th>
-                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 18%; text-align:right;">Signed impact</th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 14%; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('feature')">Feature <span style="font-size:10px; color:#999;">{{ getSfSortIcon('feature') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('description')">Description <span style="font-size:10px; color:#999;">{{ getSfSortIcon('description') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('impact')">|Impact| <span style="font-size:10px; color:#999;">{{ getSfSortIcon('impact') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 10%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('signed_impact')">Signed <span style="font-size:10px; color:#999;">{{ getSfSortIcon('signed_impact') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;" (click)="sortSelectedFeatures('gain')">Gain <span style="font-size:10px; color:#999;">{{ getSfSortIcon('gain') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 6%; text-align:right; cursor:pointer; user-select:none;"
+                    title="Variance Inflation Factor — measures multicollinearity. VIF=1: no correlation, 1–5: moderate, 5–10: high, >10: severe multicollinearity."
+                    (click)="sortSelectedFeatures('vif')">VIF <span style="font-size:10px; color:#999;">{{ getSfSortIcon('vif') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="ECDF-rank percentile of SHAP |impact| across all features [0–1]"
+                    (click)="sortSelectedFeatures('shap_percentile')">SHAP % <span style="font-size:10px; color:#999;">{{ getSfSortIcon('shap_percentile') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="ECDF-rank percentile of Gain importance across all features [0–1]"
+                    (click)="sortSelectedFeatures('gain_percentile')">Gain % <span style="font-size:10px; color:#999;">{{ getSfSortIcon('gain_percentile') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 7%; text-align:right; cursor:pointer; user-select:none;"
+                    title="Geometric mean of SHAP percentile and Gain percentile: C = √(SHAP% × Gain%)"
+                    (click)="sortSelectedFeatures('combined_score')">Combined <span style="font-size:10px; color:#999;">{{ getSfSortIcon('combined_score') }}</span></th>
+                <th style="padding: 8px; border-bottom: 1px solid #eee; width: 16%;">Usage</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let f of modelingStatus.model.selected_features">
+              <tr *ngFor="let f of sortedSelectedFeatures"
+                  [style.background]="featureUsage[f.feature] === 'drop' ? '#fff5f5' : 'transparent'">
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">
                   <a href="javascript:void(0)" (click)="openFeatureCard(f.feature)" style="color: #1976d2; text-decoration: underline; cursor: pointer;">{{ f.feature }}</a>
                 </td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ f.description || '—' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.impact | number:'1.6-6' }}</td>
                 <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.signed_impact | number:'1.6-6' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ f.gain | number:'1.2-2' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;"
+                    [style.color]="f.vif != null && f.vif > 10 ? '#b71c1c' : (f.vif != null && f.vif > 5 ? '#e65100' : '#333')">
+                  <a *ngIf="f.vif != null" href="javascript:void(0)" (click)="openVifDetail(f.feature, $event)"
+                     style="text-decoration: underline; cursor: pointer;"
+                     [style.color]="f.vif > 10 ? '#b71c1c' : (f.vif > 5 ? '#e65100' : '#1976d2')"
+                     title="Click to see VIF decomposition">{{ f.vif | number:'1.2-2' }}</a>
+                  <span *ngIf="f.vif == null" style="color:#aaa;">—</span>
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color:#555;">{{ f.shap_percentile | number:'1.4-4' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color:#555;">{{ f.gain_percentile | number:'1.4-4' }}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight:600;"
+                    [style.color]="f.combined_score >= 0.8 ? '#2e7d32' : (f.combined_score >= 0.5 ? '#1565c0' : '#555')">
+                  {{ f.combined_score | number:'1.4-4' }}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <select
+                      [ngModel]="featureUsage[f.feature] || 'keep'"
+                      (ngModelChange)="featureUsage[f.feature] = $event; $event === 'keep' && (featureDropReason[f.feature] = ''); onConfigChanged()"
+                      style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; background: #fff;">
+                      <option value="keep">Keep</option>
+                      <option value="drop">Drop</option>
+                    </select>
+                    <input
+                      *ngIf="featureUsage[f.feature] === 'drop'"
+                      type="text"
+                      placeholder="Reason for dropping..."
+                      [(ngModel)]="featureDropReason[f.feature]" (ngModelChange)="onConfigChanged()"
+                      style="flex: 1; padding: 4px 8px; border: 1px solid #e57373; border-radius: 4px; font-size: 12px; min-width: 120px;" />
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- VIF Detail Modal -->
+      <div *ngIf="showVifDetailModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;"
+           (click)="closeVifDetail()">
+        <div style="background: #fff; border-radius: 8px; padding: 24px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.3);"
+             (click)="$event.stopPropagation()">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0;">VIF Decomposition: <span style="color: #1976d2;">{{ vifDetailFeature }}</span></h3>
+            <button (click)="closeVifDetail()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;">✕</button>
+          </div>
+
+          <div *ngIf="vifDetailVif != null" style="margin-bottom: 12px; font-size: 14px;">
+            Overall VIF: <strong
+              [style.color]="vifDetailVif > 10 ? '#b71c1c' : (vifDetailVif > 5 ? '#e65100' : '#2e7d32')">{{ vifDetailVif | number:'1.2-2' }}</strong>
+            <span style="color: #888; margin-left: 8px; font-size: 12px;">
+              (1 = no collinearity, 1–5 = moderate, 5–10 = high, >10 = severe)
+            </span>
+          </div>
+          <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+            Each row shows how removing a single other feature would change the VIF of <strong>{{ vifDetailFeature }}</strong>.
+            "VIF Drop" = decrease in VIF when that feature is excluded from the regression.
+          </div>
+
+          <div *ngIf="vifDetailLoading" style="text-align: center; padding: 24px; color: #888;">
+            Loading VIF decomposition...
+          </div>
+
+          <div *ngIf="vifDetailError" style="text-align: center; padding: 24px; color: #b71c1c;">
+            {{ vifDetailError }}
+          </div>
+
+          <div *ngIf="!vifDetailLoading && !vifDetailError && vifDetailContributions.length > 0" style="overflow: auto; max-height: 55vh; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: #fafafa; text-align: left; position: sticky; top: 0; z-index: 1;">
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; cursor: pointer; user-select: none;" (click)="sortVifDetail('feature')">
+                    Feature <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('feature') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="Absolute Pearson correlation between this feature and the selected feature"
+                      (click)="sortVifDetail('correlation')">
+                    |Corr| <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('correlation') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="Signed Pearson correlation"
+                      (click)="sortVifDetail('signed_correlation')">
+                    Signed r <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('signed_correlation') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="VIF of the selected feature when this feature is removed from the model"
+                      (click)="sortVifDetail('vif_without')">
+                    VIF w/o <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('vif_without') }}</span>
+                  </th>
+                  <th style="padding: 8px; border-bottom: 2px solid #ddd; text-align: right; cursor: pointer; user-select: none;"
+                      title="VIF decrease when this feature is removed (positive = this feature inflates VIF)"
+                      (click)="sortVifDetail('vif_drop')">
+                    VIF Drop <span style="font-size:10px; color:#999;">{{ getVifDetailSortIcon('vif_drop') }}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let c of vifDetailContributions"
+                    [style.background]="c.correlation >= 0.7 ? '#fff3e0' : (c.correlation >= 0.5 ? '#fff8e1' : 'transparent')">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; white-space: nowrap;">{{ c.feature }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right; font-weight: 600;"
+                      [style.color]="c.correlation >= 0.7 ? '#e65100' : (c.correlation >= 0.5 ? '#f57f17' : '#555')">
+                    {{ c.correlation | number:'1.4-4' }}
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right;"
+                      [style.color]="c.signed_correlation >= 0 ? '#2e7d32' : '#b71c1c'">
+                    {{ c.signed_correlation | number:'1.4-4' }}
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right;">
+                    <span *ngIf="c.vif_without != null">{{ c.vif_without | number:'1.2-2' }}</span>
+                    <span *ngIf="c.vif_without == null" style="color:#aaa;">—</span>
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right; font-weight: 600;"
+                      [style.color]="c.vif_drop != null && c.vif_drop > 1 ? '#b71c1c' : (c.vif_drop != null && c.vif_drop > 0.3 ? '#e65100' : '#555')">
+                    <span *ngIf="c.vif_drop != null">{{ c.vif_drop | number:'1.2-2' }}</span>
+                    <span *ngIf="c.vif_drop == null" style="color:#aaa;">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div *ngIf="modelingStatus.model?.selected_features?.length" style="margin-top: 10px; text-align: right;">
+        <button class="ai-support-btn" (click)="requestAiSupport(getSelectedFeaturesContext(), 'selected_features', 'Review the selected features ranked by Combined Score. Are there features with high VIF that suggest multicollinearity? Which features contribute most to the model? Are there any features that should be reconsidered?')">
+          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+        </button>
+      </div>
+
+      <!-- Note: After Modeling Results -->
+      <div class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_modeling_results') && editingNotePosition !== 'after_modeling_results'" class="pipeline-note-add" (click)="toggleNoteEdit('after_modeling_results')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_modeling_results') && editingNotePosition !== 'after_modeling_results'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_modeling_results')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_modeling_results'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_modeling_results')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_modeling_results')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_modeling_results'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_modeling_results'] || ''" (ngModelChange)="onNoteChanged('after_modeling_results', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
 
@@ -118,11 +449,11 @@
           <h4 style="margin-bottom: 8px; font-size: 14px;">Selection Method (at least one required)</h4>
           <div style="display: flex; gap: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" [(ngModel)]="sfsMethodForward" />
+              <input type="checkbox" [(ngModel)]="sfsMethodForward" (ngModelChange)="onConfigChanged()" />
               <span>Forward Selection (add features incrementally)</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-              <input type="checkbox" [(ngModel)]="sfsMethodBackward" />
+              <input type="checkbox" [(ngModel)]="sfsMethodBackward" (ngModelChange)="onConfigChanged()" />
               <span>Backward Elimination (remove features incrementally)</span>
             </label>
           </div>
@@ -139,7 +470,7 @@
             <!-- Metric Selection -->
             <div style="flex: 1;">
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Metric</label>
-              <select [(ngModel)]="metricCriteria.metric" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+              <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
                 <option value="roc_auc">ROC-AUC</option>
                 <option value="pr_auc">PR-AUC</option>
               </select>
@@ -148,9 +479,9 @@
             <!-- Percentage Change Threshold -->
             <div style="flex: 1;">
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">
-                Stop if change &lt; (%) <span style="color: #999;">(0 = no stop)</span>
+                Stop if <span *ngIf="sfsMethodBackward && !sfsMethodForward">|change| &gt;</span><span *ngIf="sfsMethodForward && !sfsMethodBackward">change &lt;</span><span *ngIf="sfsMethodForward && sfsMethodBackward">change &lt; / |change| &gt;</span><span *ngIf="!sfsMethodForward && !sfsMethodBackward">change &lt;</span> (%) <span style="color: #999;">(0 = no stop)</span>
               </label>
-              <input type="number" [(ngModel)]="metricCriteria.pct_change" min="0" max="100" step="0.1"
+              <input type="number" [(ngModel)]="metricCriteria.pct_change" (ngModelChange)="onConfigChanged()" min="0" max="100" step="0.1"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
             </div>
 
@@ -170,35 +501,50 @@
             ➕ Add Metric
           </button>
 
-          <!-- Feature Count Limits -->
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
+          <!-- Feature Count Limits & Parallelism -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;">
             <!-- Min Features (Backward) -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Minimum Features (Backward)</label>
-              <input type="number" [(ngModel)]="sfsMinFeatures" min="1" max="50"
+              <input type="number" [(ngModel)]="sfsMinFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
             </div>
 
             <!-- Max Features (Forward) -->
             <div>
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Maximum Features (Forward)</label>
-              <input type="number" [(ngModel)]="sfsMaxFeatures" min="1" max="50"
+              <input type="number" [(ngModel)]="sfsMaxFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
                      style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+
+            <!-- Parallel Workers -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Parallel Workers (n_jobs)</label>
+              <input type="number" [(ngModel)]="sfsNJobs" (ngModelChange)="onConfigChanged()" min="1" max="16"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
+                     title="Number of CPU cores for parallel candidate evaluation. Higher = faster but more memory." />
+            </div>
+
+            <!-- Top-K CV Candidates -->
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Top-K CV Candidates</label>
+              <input type="number" [(ngModel)]="sfsTopK" (ngModelChange)="onConfigChanged()" min="1" max="10"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
+                     title="Number of top candidates (ranked by test AUC) to cross-validate per step. Higher = more accurate but slower." />
             </div>
           </div>
         </div>
 
         <!-- Start Button -->
         <div style="margin-top: 20px;">
-          <button mat-raised-button color="primary" (click)="startSfs()" 
-                  style="background-color: #740505 !important; color: white; padding: 10px 24px;">
-            <span style="font-size: 14px;">▶ Proceed to SFS</span>
+          <button mat-raised-button color="primary" (click)="startSfs()">
+            ▶ Proceed to SFS
           </button>
         </div>
       </div>
 
-      <!-- SFS Progress Display -->
-      <div *ngIf="sfsRunning" style="margin-top: 24px; padding: 20px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
+      <!-- SFS Progress Display (only for initial SFS runs, not forward-from-backward) -->
+      <div *ngIf="sfsRunning && sfsBackwardResults.length === 0 && sfsForwardResults.length === 0" style="margin-top: 24px; padding: 20px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
         <h3 style="color: #1976d2; margin-top: 0;">SFS Running...</h3>
         
         <!-- Progress Message -->
@@ -234,11 +580,17 @@
           </div>
         </div>
 
-        <!-- View Details Button -->
-        <div *ngIf="sfsCompletedSteps.length > 0" style="margin-top: 16px; text-align: center;">
-          <button (click)="openSfsProgressModal()" 
+        <!-- Stop SFS + View Details Buttons -->
+        <div style="margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 12px;">
+          <button (click)="stopSfs()" [disabled]="sfsStopping"
+                  style="padding: 10px 24px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
+                  [style.opacity]="sfsStopping ? '0.6' : '1'"
+                  [style.cursor]="sfsStopping ? 'not-allowed' : 'pointer'">
+            {{ sfsStopping ? 'Stopping...' : 'Stop SFS' }}
+          </button>
+          <button *ngIf="sfsCompletedSteps.length > 0" (click)="openSfsProgressModal()" 
                   style="padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-            📊 View Details ({{ sfsCompletedSteps.length }} steps completed)
+            View Details ({{ sfsCompletedSteps.length }} steps)
           </button>
         </div>
 
@@ -249,16 +601,26 @@
       </div>
 
       <!-- Sequential Feature Selection (SFS) Results -->
-      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0" style="margin-top: 24px;">
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" style="margin-top: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div>
             <h3 style="color: #740505; margin: 0;">Sequential Feature Selection (SFS)</h3>
             <div style="font-size: 13px; color:#666; margin-top: 4px;">
               Systematic feature selection showing performance impact of adding/removing features using cross-validation.
+              <span *ngIf="sfsDurationSeconds !== null" style="margin-left: 8px; color: #1976d2; font-weight: 500;">
+                ⏱ Completed in {{ formatDuration(sfsDurationSeconds) }}
+              </span>
             </div>
           </div>
           <!-- Action Buttons -->
-          <div style="display: flex; gap: 12px;">
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <button *ngIf="sfsStopped" (click)="resumeSfs()"
+                    style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              ▶ Continue SFS
+            </button>
+            <span *ngIf="sfsStopped" style="font-size: 12px; color: #e65100; font-weight: 500; background: #fff3e0; padding: 4px 10px; border-radius: 4px; border: 1px solid #ffe0b2;">
+              Partial results — stopped by user
+            </span>
             <button *ngIf="sfsCompletedSteps.length > 0" 
                     (click)="openSfsProgressModal()" 
                     style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
@@ -286,14 +648,18 @@
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
               </thead>
               <tbody>
                 <tr *ngFor="let step of sfsForwardResults">
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
@@ -315,26 +681,48 @@
         <!-- Backward Elimination Results -->
         <div *ngIf="sfsBackwardResults.length > 0">
           <h4>Backward Elimination (removing features incrementally)</h4>
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            Select a cutting point to choose which features to keep for forward selection.
+          </div>
           <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
               <thead>
                 <tr style="background: #f5f5f5; text-align: left;">
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; width: 40px;"
+                      title="Select cutting point — features remaining at this step will be used for forward selection">Cut</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature Dropped</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Remaining</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Stability</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let step of sfsBackwardResults">
+                <tr *ngFor="let step of sfsBackwardResults"
+                    [style.background]="sfsBackwardCutStep === step.step ? '#e8f5e9' : 'transparent'"
+                    style="cursor: pointer; transition: background 0.15s;"
+                    (click)="setBackwardCutStep(step)">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: center;">
+                    <input type="radio" name="backwardCut"
+                           [checked]="sfsBackwardCutStep === step.step"
+                           (click)="$event.stopPropagation(); setBackwardCutStep(step)"
+                           style="cursor: pointer; accent-color: #2e7d32;" />
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">{{ step.feature_name }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color: #555; font-size: 11px;">
+                    {{ step.selected_features?.length || '—' }}
+                  </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
@@ -343,7 +731,7 @@
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
-                    <button mat-button color="primary" (click)="openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                    <button mat-button color="primary" (click)="$event.stopPropagation(); openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
                       View
                     </button>
                   </td>
@@ -352,43 +740,224 @@
             </table>
           </div>
           
-          <!-- Remaining Features after Backward Elimination -->
-          <div *ngIf="sfsBackwardRemainingFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #740505;">
-            <h5 style="margin: 0 0 12px 0; color: #740505; font-size: 14px; font-weight: 600;">
-              📋 Remaining Features ({{ sfsBackwardRemainingFeatures.length }})
+          <!-- Remaining Features at Selected Cut Point -->
+          <div *ngIf="sfsBackwardCutFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2e7d32;">
+            <h5 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 14px; font-weight: 600;">
+              📋 Remaining Features at Step {{ sfsBackwardCutStep }} ({{ sfsBackwardCutFeatures.length }} features)
             </h5>
             <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
               <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <span *ngFor="let feature of sfsBackwardRemainingFeatures" 
-                      style="display: inline-block; padding: 6px 12px; background: #e3f2fd; color: #1976d2; border-radius: 16px; font-size: 12px; font-weight: 500;">
+                <span *ngFor="let feature of sfsBackwardCutFeatures" 
+                      (click)="openFeatureCardFromSfs(feature, getBackwardCutStepData(), 'backward'); $event.stopPropagation()"
+                      style="display: inline-block; padding: 6px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 16px; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                      title="Open Feature Card for {{ feature }}">
                   {{ feature }}
                 </span>
               </div>
             </div>
             
+            <!-- Advanced Configuration Toggle -->
+            <div style="margin-bottom: 12px;">
+              <button (click)="showFwdFromBwdConfig = !showFwdFromBwdConfig"
+                      style="background: none; border: none; cursor: pointer; font-size: 13px; color: #1976d2; padding: 4px 0; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 10px;">{{ showFwdFromBwdConfig ? '▼' : '▶' }}</span>
+                <span>Advanced Configuration</span>
+              </button>
+
+              <div *ngIf="showFwdFromBwdConfig" style="margin-top: 8px; padding: 16px; background: white; border: 1px solid #e0e0e0; border-radius: 6px;">
+                <!-- Stopping Criteria -->
+                <h6 style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Stopping Criteria - Metrics</h6>
+                <div *ngFor="let metricCriteria of sfsMetrics; let i = index"
+                     style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; padding: 10px; border: 1px solid #e8e8e8; border-radius: 4px; background: #fafafa;">
+                  <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Metric</label>
+                    <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+                      <option value="roc_auc">ROC-AUC</option>
+                      <option value="pr_auc">PR-AUC</option>
+                    </select>
+                  </div>
+                  <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">
+                      Stop if change &lt; (%) <span style="color: #999;">(0 = no stop)</span>
+                    </label>
+                    <input type="number" [(ngModel)]="metricCriteria.pct_change" (ngModelChange)="onConfigChanged()" min="0" max="100" step="0.1"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;" />
+                  </div>
+                  <div>
+                    <button (click)="removeSfsMetric(i)"
+                            style="padding: 5px 10px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;"
+                            title="Remove metric">✕</button>
+                  </div>
+                </div>
+                <button (click)="addSfsMetric()"
+                        style="padding: 5px 12px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
+                  ➕ Add Metric
+                </button>
+
+                <!-- Feature Count & Parallelism -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Maximum Features</label>
+                    <input type="number" [(ngModel)]="sfsMaxFeatures" (ngModelChange)="onConfigChanged()" min="1" max="50"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;" />
+                  </div>
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Parallel Workers (n_jobs)</label>
+                    <input type="number" [(ngModel)]="sfsNJobs" (ngModelChange)="onConfigChanged()" min="1" max="16"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+                           title="Number of CPU cores for parallel candidate evaluation." />
+                  </div>
+                  <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Top-K CV Candidates</label>
+                    <input type="number" [(ngModel)]="sfsTopK" (ngModelChange)="onConfigChanged()" min="1" max="10"
+                           style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;"
+                           title="Number of top candidates to cross-validate per step." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Button to start forward selection on remaining features -->
-            <button mat-raised-button 
+            <button mat-raised-button color="primary"
                     (click)="startForwardFromBackwardFeatures()"
-                    [disabled]="sfsRunning"
-                    style="background-color: #1976d2 !important; color: white; padding: 10px 20px; font-size: 13px; font-weight: 500;">
-              <span *ngIf="!sfsRunning">▶ Run Forward Selection on These Features</span>
+                    [disabled]="sfsRunning">
+              <span *ngIf="!sfsRunning">▶ Run Forward Selection on These {{ sfsBackwardCutFeatures.length }} Features</span>
               <span *ngIf="sfsRunning">⏳ Running...</span>
             </button>
             <p style="margin: 8px 0 0 0; font-size: 11px; color: #666; font-style: italic;">
-              Start forward feature selection using only the remaining features from backward elimination
+              Start forward feature selection using the {{ sfsBackwardCutFeatures.length }} features remaining at cut step {{ sfsBackwardCutStep }}
             </p>
+
+            <!-- Forward-from-Backward Progress (inline, shown only during chained forward run) -->
+            <div *ngIf="sfsRunning" style="margin-top: 16px; padding: 16px; border: 2px solid #1976d2; border-radius: 8px; background: #f0f7ff;">
+              <h4 style="color: #1976d2; margin: 0 0 8px 0;">Forward Selection Running...</h4>
+              <div style="margin-bottom: 8px; font-size: 13px; color: #555;">{{ sfsMessage }}</div>
+              <!-- Progress Bar -->
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 3px;">Overall Progress</div>
+                <div style="background: #e0e0e0; border-radius: 4px; height: 22px; overflow: hidden;">
+                  <div [style.width.%]="sfsProgress * 100"
+                       style="background: linear-gradient(90deg, #1976d2, #42a5f5); height: 100%; transition: width 0.3s ease;
+                              display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 500;">
+                    {{ (sfsProgress * 100).toFixed(0) }}%
+                  </div>
+                </div>
+              </div>
+              <!-- Current Metrics -->
+              <div *ngIf="Object.keys(sfsCurrentMetrics).length > 0" style="margin-bottom: 8px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                  <div *ngFor="let metric of Object.keys(sfsCurrentMetrics)"
+                       style="background: #fff; border: 1px solid #1976d2; border-radius: 4px; padding: 6px 10px;">
+                    <div style="font-size: 10px; color: #666;">{{ metric === 'roc_auc' ? 'ROC-AUC' : 'PR-AUC' }}</div>
+                    <div style="font-size: 15px; font-weight: 600; color: #1976d2;">{{ sfsCurrentMetrics[metric].toFixed(4) }}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Stop + View Details -->
+              <div style="margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <button (click)="stopSfs()" [disabled]="sfsStopping"
+                        style="padding: 8px 20px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;"
+                        [style.opacity]="sfsStopping ? '0.6' : '1'"
+                        [style.cursor]="sfsStopping ? 'not-allowed' : 'pointer'">
+                  {{ sfsStopping ? 'Stopping...' : 'Stop SFS' }}
+                </button>
+                <button *ngIf="sfsCompletedSteps.length > 0" (click)="openSfsProgressModal()"
+                        style="padding: 8px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                  View Details ({{ sfsCompletedSteps.length }} steps)
+                </button>
+              </div>
+              <div style="margin-top: 8px; text-align: center;">
+                <mat-spinner diameter="32" style="margin: 0 auto;"></mat-spinner>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <!-- Forward from Backward Results -->
+        <div *ngIf="sfsForwardFromBackwardResults.length > 0" style="margin-top: 24px;">
+          <h4 style="color: #2e7d32;">Forward Selection from Backward Cut (adding features incrementally)</h4>
+          <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+            Forward selection results using the {{ sfsBackwardCutFeatures.length || sfsBackwardRemainingFeatures.length || '?' }} features from backward elimination cut point.
+          </div>
+          <div style="overflow:auto; max-height: 400px; border: 1px solid #eee;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #e8f5e9; text-align: left;">
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let step of sfsForwardFromBackwardResults">
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2;">{{ step.step }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-weight: 500;">
+                    <span (click)="openFeatureCardFromSfs(step.feature_name, step, 'forward_from_backward'); $event.stopPropagation()"
+                          style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                          title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #2e7d32;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
+                    <button mat-button color="primary" (click)="openSfsDetailModal(step, 'forward_from_backward')" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
+                      View
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" style="margin-top: 10px; text-align: right;">
+        <button class="ai-support-btn" (click)="requestAiSupport({forward: sfsForwardResults, backward: sfsBackwardResults, forward_from_backward: sfsForwardFromBackwardResults}, 'sfs', 'Analyze the Sequential Feature Selection results. Which features consistently improve performance? Is there a clear optimal feature count? Compare forward vs backward results. Are there features that should definitely be included or excluded?')">
+          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+        </button>
+      </div>
+
+      <!-- Note: After SFS Results -->
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" class="pipeline-note-slot">
+        <div *ngIf="!hasNote('after_sfs') && editingNotePosition !== 'after_sfs'" class="pipeline-note-add" (click)="toggleNoteEdit('after_sfs')">
+          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        </div>
+        <div *ngIf="hasNote('after_sfs') && editingNotePosition !== 'after_sfs'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_sfs')">
+          <div class="pipeline-note-content">{{ pipelineNotes['after_sfs'] }}</div>
+          <div class="pipeline-note-actions">
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_sfs')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn delete" (click)="deleteNote('after_sfs')" title="Delete">&times;</button>
+          </div>
+        </div>
+        <div *ngIf="editingNotePosition === 'after_sfs'" class="pipeline-note-editor">
+          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_sfs'] || ''" (ngModelChange)="onNoteChanged('after_sfs', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
+          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
 
       <!-- SFS Detail Modal -->
       <div *ngIf="showSfsModal && selectedSfsStep" class="sfs-modal-overlay" (click)="closeSfsModal()">
-        <div class="sfs-modal-content" (click)="$event.stopPropagation()">
+        <div class="sfs-modal-content" [class.expanded]="sfsModalExpanded" (click)="$event.stopPropagation()">
           <div class="sfs-modal-header">
             <h3>Feature Impact Details: {{ selectedSfsStep.feature_name }}</h3>
-            <button mat-icon-button (click)="closeSfsModal()" class="close-button">
-              <span style="font-size: 24px;">&times;</span>
-            </button>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button (click)="toggleSfsModalExpand()" class="close-button" title="{{ sfsModalExpanded ? 'Collapse' : 'Expand to full screen' }}">
+                <span style="font-size: 18px;">{{ sfsModalExpanded ? '⊙' : '⛶' }}</span>
+              </button>
+              <button mat-icon-button (click)="closeSfsModal()" class="close-button">
+                <span style="font-size: 24px;">&times;</span>
+              </button>
+            </div>
           </div>
           
           <div class="sfs-modal-body">
@@ -446,7 +1015,11 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let change of getShapChangesArray(selectedSfsStep.shap_changes)">
-                      <td style="padding: 8px; border: 1px solid #ddd;">{{ change.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd;">
+                        <span (click)="openFeatureCardFromSfs(change.feature, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                              style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                              title="Open Feature Card for {{ change.feature }}">{{ change.feature }}</span>
+                      </td>
                       <td style="padding: 8px; border: 1px solid #ddd; text-align:right;" [style.color]="change.change > 0 ? '#4caf50' : '#f44336'">
                         {{ change.change > 0 ? '+' : '' }}{{ change.change | number:'1.6-6' }}
                       </td>
@@ -473,7 +1046,11 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let row of getFeatureImpactRows(selectedSfsStep, previousSfsStep)">
-                      <td style="padding: 8px; border: 1px solid #ddd;">{{ row.feature }}</td>
+                      <td style="padding: 8px; border: 1px solid #ddd;">
+                        <span (click)="openFeatureCardFromSfs(row.feature, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                              style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                              title="Open Feature Card for {{ row.feature }}">{{ row.feature }}</span>
+                      </td>
                       <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">
                         {{ row.gain | number:'1.6-6' }}
                         <span *ngIf="row.prevGain !== null" style="color: #888; font-size: 11px;"> ({{ row.prevGain | number:'1.6-6' }})</span>
@@ -488,6 +1065,45 @@
               </div>
             </div>
 
+            <!-- Feature Progression Charts -->
+            <div style="margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px;">
+              <h4 style="margin-bottom: 4px;">Feature Progression Across SFS Steps</h4>
+              <p style="font-size: 12px; color:#666; margin-bottom: 12px;">
+                Track how each feature's importance and model performance evolve across all {{ selectedSfsStep.direction }} selection steps. 
+                The current step is marked with a red dotted line. The selected feature (<strong>{{ selectedSfsStep.feature_name }}</strong>) is highlighted.
+              </p>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('shap')" title="View full screen">⛶</button>
+                  <div id="sfs-progression-shap" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('gain')" title="View full screen">⛶</button>
+                  <div id="sfs-progression-gain" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('stability')" title="View full screen">⛶</button>
+                  <div id="sfs-progression-stability" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+                <div class="sfs-chart-wrapper">
+                  <button class="sfs-chart-fullscreen-btn" (click)="togglePlotFullscreen('performance')" title="View full screen">⛶</button>
+                  <div id="sfs-progression-performance" style="width:100%; height: 300px; border: 1px solid #eee; border-radius: 4px;"></div>
+                </div>
+              </div>
+
+              <!-- Per-plot fullscreen overlay -->
+              <div *ngIf="fullscreenPlotId" class="sfs-plot-fullscreen-overlay" (click)="togglePlotFullscreen(null)">
+                <div class="sfs-plot-fullscreen-container" (click)="$event.stopPropagation()">
+                  <div class="sfs-plot-fullscreen-header">
+                    <span class="sfs-plot-fullscreen-title">{{ getPlotTitle(fullscreenPlotId) }}</span>
+                    <button class="sfs-plot-fullscreen-close" (click)="togglePlotFullscreen(null)" title="Exit full screen">&times;</button>
+                  </div>
+                  <div id="sfs-fullscreen-plot" style="width: 100%; height: calc(100% - 48px);"></div>
+                </div>
+              </div>
+            </div>
+
             <!-- Selected Features List -->
             <div style="margin-top: 20px;">
               <h4>Features in Model After This Step</h4>
@@ -495,7 +1111,10 @@
                 Total: {{ selectedSfsStep.selected_features?.length || 0 }} features
               </div>
               <div style="background: #f9f9f9; padding: 12px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
-                <span *ngFor="let feat of selectedSfsStep.selected_features; let last = last" style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: white; border: 1px solid #ddd; border-radius: 3px; font-size: 12px;">
+                <span *ngFor="let feat of selectedSfsStep.selected_features; let last = last" 
+                      (click)="openFeatureCardFromSfs(feat, selectedSfsStep, selectedSfsDirection); $event.stopPropagation()"
+                      style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: white; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
+                      title="Open Feature Card for {{ feat }}">
                   {{ feat }}<span *ngIf="!last">,</span>
                 </span>
               </div>
