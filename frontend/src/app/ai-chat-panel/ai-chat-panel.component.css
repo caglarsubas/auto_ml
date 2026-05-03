@@ -129,6 +129,15 @@
   font-weight: 500;
 }
 
+.model-option-ram {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
 .model-option-provider {
   font-size: 10px;
   opacity: 0.5;

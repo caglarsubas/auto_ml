@@ -1354,9 +1354,10 @@ class TestAIModelListAPI:
         response = api_client.get('/api/ai-assistant/models/')
         assert 'models' in response.data
         assert isinstance(response.data['models'], list)
-        # 3 OpenAI (gpt-5.5, gpt-5.4-mini, gpt-4.1-mini)
-        # + 2 engine-routed local models (llama3.2 1b/3b)
-        assert len(response.data['models']) >= 5
+        # 3 OpenAI (gpt-5.5, gpt-5.4-mini, gpt-4.1-mini) — engine entries are
+        # now discovered dynamically and may or may not be present in the
+        # test environment depending on whether the engine is reachable.
+        assert len(response.data['models']) >= 3
 
     def test_models_endpoint_returns_default(self, api_client, _use_tmp_media):
         """GET /api/ai-assistant/models/ returns a default model key."""
@@ -1373,11 +1374,21 @@ class TestAIModelListAPI:
             assert 'provider' in m
 
     def test_engine_models_present(self, api_client, _use_tmp_media):
-        """Engine-routed local models are included in the response."""
+        """Engine-routed local models are included in the response.
+
+        Engine entries are now discovered dynamically from the engine's
+        ``/v1/models`` endpoint, so this test only asserts that *some*
+        engine-routed models show up — naming follows the
+        ``engine-{id with ':' → '-'}`` convention.  Asserting specific keys
+        would couple the test to whichever ollama models happen to be on
+        the engine's disk in CI.
+        """
         response = api_client.get('/api/ai-assistant/models/')
-        keys = [m['key'] for m in response.data['models']]
-        assert 'engine-llama-3.2-1b' in keys
-        assert 'engine-llama-3.2-3b' in keys
+        engine_keys = [m['key'] for m in response.data['models']
+                       if m['provider'] == 'engine']
+        assert engine_keys, "expected at least one engine-routed model"
+        for k in engine_keys:
+            assert k.startswith('engine-')
 
     def test_models_include_meta_flags(self, api_client, _use_tmp_media):
         """Each model in the response includes architecture/reasoning/thinking flags."""

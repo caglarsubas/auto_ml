@@ -20,6 +20,7 @@
             (click)="selectModel(m.key)"
           >
             <span class="model-option-name">{{ m.display_name }}</span>
+            <span class="model-option-ram" *ngIf="m.ram_gb">{{ m.ram_gb }} GB</span>
             <span class="model-option-provider">{{ m.provider }}</span>
             <span class="model-option-check" *ngIf="m.key === selectedModel">&#10003;</span>
           </button>
