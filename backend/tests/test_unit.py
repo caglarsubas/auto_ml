@@ -1109,6 +1109,75 @@ class TestExtractActions:
         actions, clean = self._extract(msg)
         assert len(actions) == 1
 
+    # ── Truncated action block tests ──────────────────────────────────
+
+    def test_truncated_action_complete_json_no_end_tag(self):
+        """Model hit token limit: JSON is complete but END_ACTION was never emitted."""
+        msg = 'Creating features.\n<<<ACTION:execute_code>>>\n{"code":"x=1","description":"test"}'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert actions[0]['payload']['code'] == 'x=1'
+        assert '<<<ACTION' not in clean
+        assert 'Creating features.' in clean
+
+    def test_truncated_action_json_cut_mid_string(self):
+        """Model hit token limit: JSON is truncated mid-value."""
+        msg = 'Here we go.\n<<<ACTION:execute_code>>>\n{"code":"a=1","description":"create fea'
+        actions, clean = self._extract(msg)
+        # _try_parse_truncated_json attempts to repair by closing string + brace.
+        # Either it salvages it or returns nothing — either way, no crash.
+        if actions:
+            assert actions[0]['type'] == 'execute_code'
+        assert '<<<ACTION' not in clean
+
+    def test_truncated_action_garbage_after_json(self):
+        """Complete JSON followed by garbage text (no END_ACTION)."""
+        msg = 'Advice.\n<<<ACTION:execute_code>>>{"code":"x=1","description":"ok"}some trailing text'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['payload']['code'] == 'x=1'
+
+    def test_truncated_fallback_only_when_no_complete_match(self):
+        """Normal blocks are preferred; truncated fallback only fires when needed."""
+        msg = '<<<ACTION:execute_code>>>{"code":"a=1","description":"x"}<<<END_ACTION>>> Done.'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert 'Done.' in clean
+
+    def test_truncated_action_preserves_post_json_explanation(self):
+        """Real trace: model emits action JSON then continues with explanation, no END_ACTION.
+
+        The explanation text after the JSON must appear in clean_message so the
+        user sees 'What was added:' in the chat bubble.
+        """
+        explanation = (
+            'Created the suggested features.\n\n'
+            'What was added:\n'
+            '- Time features from Application_Datetime\n'
+            '  - App_Month\n'
+            '  - App_DayOfWeek\n'
+            '- Ratio features\n'
+            '  - Var_19_to_Var_24'
+        )
+        msg = f'<<<ACTION:execute_code>>>\n{{"code":"x=1","description":"derive"}}\n{explanation}'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['payload']['code'] == 'x=1'
+        # The explanation text must be preserved in clean_message
+        assert 'What was added:' in clean
+        assert 'App_Month' in clean
+        assert 'Var_19_to_Var_24' in clean
+        assert '<<<ACTION' not in clean
+
+    def test_truncated_action_preserves_text_before_and_after(self):
+        """Text before the action tag AND after the JSON are both preserved."""
+        msg = 'I will create features.\n<<<ACTION:execute_code>>>{"code":"x=1","description":"d"}\nDone creating.'
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert 'I will create features.' in clean
+        assert 'Done creating.' in clean
+
 
 # ---------------------------------------------------------------------------
 # AI _format_context tests
@@ -1629,61 +1698,12 @@ class TestModelRegistry:
         assert cfg['is_reasoning_model'] is True
         assert 'temperature' not in cfg
 
-    def test_get_model_config_gemma_e2b(self):
+    def test_get_model_config_engine_llama_3b(self):
         from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('gemma-4-e2b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'gemma4:e2b'
-        assert cfg['supports_tools'] is False
-
-    def test_get_model_config_gemma_e4b(self):
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('gemma-4-e4b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'gemma4:e4b'
-        assert cfg['supports_tools'] is False
-
-    def test_get_model_config_gemma_26b(self):
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('gemma-4-26b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'gemma4:26b'
-        assert cfg['thinking'] is True
-        assert cfg['thinking_level'] == 'med'
-
-    def test_get_model_config_gemma_31b(self):
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('gemma-4-31b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'gemma4:31b'
-        assert cfg['thinking'] is True
-        assert cfg['thinking_level'] == 'high'
-
-    def test_get_model_config_qwen(self):
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('qwen-3.6-27b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'qwen3.6:27b'
-        assert cfg['architecture'] == 'dense'
-        assert cfg['reasoning'] is True
-        assert cfg['thinking'] is True
-
-    def test_get_model_config_minimax(self):
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('minimax-m2.7')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['model_id'] == 'minimax-m2.7:cloud'
-        assert cfg['architecture'] == 'moe'
-        assert cfg['reasoning'] is True
-
-    def test_get_model_config_ministral(self):
-        from ai_assistant.model_registry import get_model_config
-        for size in ('3b', '8b', '14b'):
-            cfg = get_model_config(f'ministral-3-{size}')
-            assert cfg['provider'] == 'ollama'
-            assert cfg['model_id'] == f'ministral-3:{size}'
-            assert cfg['architecture'] == 'dense'
-            assert cfg['thinking'] is False
+        cfg = get_model_config('engine-llama-3.2-3b')
+        assert cfg['provider'] == 'engine'
+        assert cfg['model_id'] == 'llama3.2:3b'
+        assert cfg['supports_tools'] is True
 
     def test_get_model_config_unknown_falls_back(self):
         from ai_assistant.model_registry import get_model_config, DEFAULT_MODEL, MODEL_REGISTRY
@@ -1716,14 +1736,6 @@ class TestModelRegistry:
         for key, cfg in MODEL_REGISTRY.items():
             assert cfg['thinking_level'] in valid, f"{key}: bad thinking_level"
 
-    def test_ollama_response_normalization(self):
-        """call_ollama should normalize Ollama response to OpenAI-compatible shape."""
-        from ai_assistant.model_registry import get_model_config
-        cfg = get_model_config('gemma-4-e2b')
-        assert cfg['provider'] == 'ollama'
-        assert cfg['temperature'] == 0.4
-        assert cfg['max_tokens'] == 4096
-
     def test_reasoning_models_skip_temperature(self):
         """Reasoning models (gpt-5.5) should not have temperature in config."""
         from ai_assistant.model_registry import get_model_config
@@ -1732,10 +1744,10 @@ class TestModelRegistry:
             assert cfg.get('is_reasoning_model') is True
             assert 'temperature' not in cfg
 
-    def test_non_reasoning_models_have_temperature(self):
-        """Non-reasoning models (Ollama) should have temperature."""
+    def test_engine_models_have_temperature(self):
+        """Engine-routed models should expose temperature for inference control."""
         from ai_assistant.model_registry import get_model_config
-        for key in ('gemma-4-e2b', 'gemma-4-e4b'):
+        for key in ('engine-llama-3.2-1b', 'engine-llama-3.2-3b'):
             cfg = get_model_config(key)
             assert 'temperature' in cfg
             assert not cfg.get('is_reasoning_model')
@@ -1749,3 +1761,21 @@ class TestModelRegistry:
             assert 'reasoning' in m
             assert 'thinking' in m
             assert 'thinking_level' in m
+
+    def test_engine_models_have_ram_gb(self):
+        """All engine-routed models should declare their ram_gb requirement."""
+        from ai_assistant.model_registry import MODEL_REGISTRY
+        for key, cfg in MODEL_REGISTRY.items():
+            if cfg['provider'] == 'engine':
+                assert 'ram_gb' in cfg, f"Engine model '{key}' missing ram_gb"
+                assert isinstance(cfg['ram_gb'], (int, float)), f"{key}: ram_gb must be numeric"
+                assert cfg['ram_gb'] > 0, f"{key}: ram_gb must be positive"
+
+    def test_list_models_includes_ram_gb(self):
+        """list_models() should expose ram_gb for engine-routed models."""
+        from ai_assistant.model_registry import list_models
+        models = list_models()
+        engine_models = [m for m in models if m['provider'] == 'engine']
+        assert len(engine_models) > 0
+        for m in engine_models:
+            assert 'ram_gb' in m, f"Model '{m['key']}' missing ram_gb in list output"

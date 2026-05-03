@@ -18,7 +18,7 @@ from .tool_executor import execute_tool_call
 from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
-    call_openai, call_ollama, call_engine, ensure_ollama_model,
+    call_openai, call_engine,
 )
 
 # ---------------------------------------------------------------------------
@@ -233,22 +233,22 @@ Actions: add, edit, delete
 
 @agent(name="llm-advisor")
 def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
-    """Unified LLM caller — dispatches to OpenAI, the local Inference Engine,
-    or Ollama based on the resolved model config.
+    """Unified LLM caller — dispatches to OpenAI or the local Inference Engine
+    based on the resolved model config.
 
-    Traced as a Prometa agent span. For ``openai`` and ``engine`` providers,
-    GenAI attributes (model, tokens, prompt, completion, cost) are captured
-    automatically by the prometa-sdk openai auto-instrumentation — the
-    engine path uses the OpenAI client with a custom ``base_url`` so the
-    same patch applies. agentic-hook-v2 receives all observability data via
-    this assistant-side instrumentation; the engine itself has no direct
-    coupling to the platform.
+    Traced as a Prometa agent span. For both providers, GenAI attributes
+    (model, tokens, prompt, completion, cost) are captured automatically by
+    the prometa-sdk openai auto-instrumentation — the engine path uses the
+    OpenAI client with a custom ``base_url`` so the same patch applies.
+    agentic-hook-v2 receives all observability data via this assistant-side
+    instrumentation; the engine itself has no direct coupling to the
+    platform.
     """
     model_cfg = get_model_config(model_key)
     provider = model_cfg['provider']
     set_span_attr('gen_ai.request.model', model_cfg['model_id'])
     # Tag the routing target on the parent agent span so the platform UI
-    # can distinguish engine-routed calls from direct cloud / ollama calls.
+    # can distinguish engine-routed calls from direct cloud calls.
     # The child openai-instrumented span still carries gen_ai.system="openai"
     # because the SDK speaks OpenAI protocol regardless of the upstream.
     set_span_attr('declarai.llm.backend', provider)
@@ -264,14 +264,6 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
         # See model_registry.call_engine() for the rationale on routing through
         # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
         return call_engine(messages, model_cfg, tools=tools)
-
-    elif provider == 'ollama':
-        if not ensure_ollama_model(model_cfg['model_id']):
-            raise EnvironmentError(
-                f"Ollama model '{model_cfg['model_id']}' is not available and could not be downloaded. "
-                f"Please pull it manually: docker exec auto-ml-ollama-1 ollama pull {model_cfg['model_id']}"
-            )
-        return call_ollama(messages, model_cfg)
 
     else:
         raise ValueError(f'Unknown provider: {provider}')
