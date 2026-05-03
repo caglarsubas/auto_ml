@@ -13,6 +13,13 @@ services:
       - DATQ_SAMPLE_ROWS=10000
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
+      # Local llm-inference-engine — used by DeclarAI when a model is
+      # registered with provider='engine'. The engine runs as a separate
+      # service (see llm_inference_engine_v1/); host.docker.internal points
+      # the container at the engine on the developer host. Override via .env
+      # for production / CI deployments.
+      - LLM_ENGINE_BASE_URL=${LLM_ENGINE_BASE_URL:-http://host.docker.internal:8080/v1}
+      - LLM_ENGINE_API_KEY=${LLM_ENGINE_API_KEY:-sk-engine-local}
     depends_on:
       - redis
       - ollama
@@ -24,7 +31,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ollama-models:/root/.ollama
+      - ./ollama-models:/root/.ollama
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 10s
@@ -50,4 +57,3 @@ services:
       - /app/node_modules
 volumes:
   redis-data:
-  ollama-models:

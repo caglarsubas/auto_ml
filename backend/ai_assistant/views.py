@@ -18,7 +18,7 @@ from .tool_executor import execute_tool_call
 from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
-    call_openai, call_ollama, ensure_ollama_model,
+    call_openai, call_ollama, call_engine, ensure_ollama_model,
 )
 
 # ---------------------------------------------------------------------------
@@ -233,15 +233,25 @@ Actions: add, edit, delete
 
 @agent(name="llm-advisor")
 def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
-    """Unified LLM caller — dispatches to OpenAI or Ollama based on model config.
+    """Unified LLM caller — dispatches to OpenAI, the local Inference Engine,
+    or Ollama based on the resolved model config.
 
-    Traced as a Prometa agent span.  For OpenAI models, GenAI attributes
-    (model, tokens, prompt, completion, cost) are captured automatically
-    by the prometa-sdk v0.3.3+ auto-instrumentation.
+    Traced as a Prometa agent span. For ``openai`` and ``engine`` providers,
+    GenAI attributes (model, tokens, prompt, completion, cost) are captured
+    automatically by the prometa-sdk openai auto-instrumentation — the
+    engine path uses the OpenAI client with a custom ``base_url`` so the
+    same patch applies. agentic-hook-v2 receives all observability data via
+    this assistant-side instrumentation; the engine itself has no direct
+    coupling to the platform.
     """
     model_cfg = get_model_config(model_key)
     provider = model_cfg['provider']
     set_span_attr('gen_ai.request.model', model_cfg['model_id'])
+    # Tag the routing target on the parent agent span so the platform UI
+    # can distinguish engine-routed calls from direct cloud / ollama calls.
+    # The child openai-instrumented span still carries gen_ai.system="openai"
+    # because the SDK speaks OpenAI protocol regardless of the upstream.
+    set_span_attr('declarai.llm.backend', provider)
 
     if provider == 'openai':
         api_key = os.environ.get('OPENAI_API_KEY', '')
@@ -249,8 +259,18 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
             raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
         return call_openai(api_key, messages, model_cfg, tools=tools)
 
+    elif provider == 'engine':
+        # Local llm-inference-engine via OpenAI-compatible /v1/chat/completions.
+        # See model_registry.call_engine() for the rationale on routing through
+        # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
+        return call_engine(messages, model_cfg, tools=tools)
+
     elif provider == 'ollama':
-        ensure_ollama_model(model_cfg['model_id'])
+        if not ensure_ollama_model(model_cfg['model_id']):
+            raise EnvironmentError(
+                f"Ollama model '{model_cfg['model_id']}' is not available and could not be downloaded. "
+                f"Please pull it manually: docker exec auto-ml-ollama-1 ollama pull {model_cfg['model_id']}"
+            )
         return call_ollama(messages, model_cfg)
 
     else:
@@ -416,6 +436,15 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Parse action blocks from the AI response
     actions, clean_message = _extract_actions(assistant_message)
 
+    # If the model's entire reply was the action block, synthesize a brief message
+    if not clean_message.strip() and actions:
+        descs = [a['payload'].get('description', '') for a in actions if a.get('payload')]
+        descs = [d for d in descs if d]
+        if descs:
+            clean_message = 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
+        else:
+            clean_message = 'I\'ve prepared an action for you. Review it below and click **Apply** to execute.'
+
     response_data = {
         'message': clean_message,
         'usage': total_usage,
@@ -573,6 +602,9 @@ def _extract_actions(message: str):
     The regex is intentionally lenient to tolerate common LLM formatting
     variations: 2-3 angle brackets, optional colons, trailing whitespace,
     code-fence wrappers around the JSON payload, etc.
+
+    Also handles **truncated** responses where the model hit its token limit
+    and the closing <<<END_ACTION>>> was never emitted.
     """
     import re
     # Match 2-3 angle brackets on each delimiter, optional whitespace/newlines
@@ -592,7 +624,92 @@ def _extract_actions(message: str):
             print(f"[AI] Failed to parse action block: {payload_str[:200]}")
     # Remove action blocks from the visible message
     clean = re.sub(pattern, '', message, flags=re.DOTALL).strip()
+
+    # ── Fallback: truncated action blocks (no END_ACTION) ────────────
+    # If no actions were found, the model may have omitted END_ACTION.
+    # Try to salvage the action AND preserve any explanation text that
+    # appears after the JSON payload (e.g., "What was added: ...").
+    if not actions:
+        trunc_pattern = r'<{2,3}\s*ACTION\s*:\s*(\w+)\s*>{2,3}\s*([\s\S]*)'
+        trunc_match = re.search(trunc_pattern, clean)
+        if trunc_match:
+            action_type = trunc_match.group(1)
+            tail = trunc_match.group(2).strip()
+            # Strip optional code-fence wrapper
+            tail = re.sub(r'^```(?:json)?\s*', '', tail)
+            tail = re.sub(r'\s*```$', '', tail)
+            # Try to find a complete JSON object by matching braces
+            payload, json_end = _try_parse_truncated_json(tail)
+            before_block = clean[:trunc_match.start()].strip()
+            if payload is not None:
+                actions.append({'type': action_type, 'payload': payload})
+                # Preserve explanation text that comes after the JSON payload
+                after_json = tail[json_end:].strip() if json_end is not None else ''
+                parts = [p for p in (before_block, after_json) if p]
+                clean = '\n\n'.join(parts)
+            else:
+                clean = before_block
+
     return actions, clean
+
+
+def _try_parse_truncated_json(text: str):
+    """Attempt to extract a valid JSON object from potentially truncated text.
+
+    Scans for the first '{' and finds the matching '}' by counting brace
+    depth.  If the text is truncated mid-JSON, tries to repair it by
+    closing open strings and appending the missing '}'.
+
+    Returns (payload, end_position) where end_position is the index in
+    *text* just past the closing '}' of the extracted JSON, or None if
+    parsing failed.  The caller uses end_position to preserve any
+    explanation text that follows the JSON payload.
+    """
+    start = text.find('{')
+    if start == -1:
+        return None, None
+
+    # First try: brace-counting to find the exact closing brace
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_str:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1]), i + 1
+                except json.JSONDecodeError:
+                    return None, None
+
+    # Fallback: truncated — try closing open strings and braces
+    fragment = text[start:]
+    # Close any unclosed string
+    if fragment.count('"') % 2 == 1:
+        fragment += '"'
+    # Close open braces
+    open_braces = fragment.count('{') - fragment.count('}')
+    if open_braces > 0:
+        fragment += '}' * open_braces
+    try:
+        return json.loads(fragment), len(text)
+    except json.JSONDecodeError:
+        print(f"[AI] Could not salvage truncated action JSON: {fragment[:200]}")
+        return None, None
 
 
 def _format_context(context: dict, section: str) -> str:
