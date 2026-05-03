@@ -1354,7 +1354,9 @@ class TestAIModelListAPI:
         response = api_client.get('/api/ai-assistant/models/')
         assert 'models' in response.data
         assert isinstance(response.data['models'], list)
-        assert len(response.data['models']) >= 12  # 3 OpenAI + 4 Gemma + Qwen + MiniMax + 3 Ministral
+        # 3 OpenAI (gpt-5.5, gpt-5.4-mini, gpt-4.1-mini)
+        # + 2 engine-routed local models (llama3.2 1b/3b)
+        assert len(response.data['models']) >= 5
 
     def test_models_endpoint_returns_default(self, api_client, _use_tmp_media):
         """GET /api/ai-assistant/models/ returns a default model key."""
@@ -1370,14 +1372,12 @@ class TestAIModelListAPI:
             assert 'display_name' in m
             assert 'provider' in m
 
-    def test_gemma_models_present(self, api_client, _use_tmp_media):
-        """Gemma 4 models are included in the response."""
+    def test_engine_models_present(self, api_client, _use_tmp_media):
+        """Engine-routed local models are included in the response."""
         response = api_client.get('/api/ai-assistant/models/')
         keys = [m['key'] for m in response.data['models']]
-        assert 'gemma-4-e2b' in keys
-        assert 'gemma-4-e4b' in keys
-        assert 'gemma-4-26b' in keys
-        assert 'gemma-4-31b' in keys
+        assert 'engine-llama-3.2-1b' in keys
+        assert 'engine-llama-3.2-3b' in keys
 
     def test_models_include_meta_flags(self, api_client, _use_tmp_media):
         """Each model in the response includes architecture/reasoning/thinking flags."""
