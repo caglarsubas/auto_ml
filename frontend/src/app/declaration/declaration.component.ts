@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import * as XLSX from 'xlsx';
 import { SharedService } from '../services/shared.service';
+import { DataService } from '../services/data.service';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Router } from '@angular/router';
@@ -58,7 +59,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     private http: HttpClient,
     private dialog: MatDialog,
     private sharedService: SharedService,
-    private router: Router
+    private router: Router,
+    private dataService: DataService
   ) {}
 
   ngOnInit() {
@@ -95,6 +97,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
                   this.dataDictionary = data;
                   this.initializeModelUsageFromBackend(data);
                   this.pushDeclarationAiContext();
+                  // Push to Redis cache for AI assistant
+                  this.dataService.pushAiCache(id, { data_dictionary: data }).subscribe({
+                    error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+                  });
                 }
               },
               () => { /* dictionary may not exist yet — that's fine */ }
@@ -116,6 +122,12 @@ export class DeclarationComponent implements OnInit, OnDestroy {
                   this.dataDictionary = data;
                   this.initializeModelUsageFromBackend(data);
                   this.pushDeclarationAiContext();
+                  // Push to Redis cache for AI assistant
+                  if (this.currentFileId !== null) {
+                    this.dataService.pushAiCache(this.currentFileId, { data_dictionary: data }).subscribe({
+                      error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+                    });
+                  }
                 }
               },
               () => { /* dictionary may not exist yet */ }
@@ -490,6 +502,12 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.initializeModelUsageFromBackend(data);
           // Push dictionary to cumulative AI context
           this.pushDeclarationAiContext();
+          // Push data dictionary to Redis cache for AI assistant tool calls
+          if (this.currentFileId !== null && Array.isArray(data) && data.length > 0) {
+            this.dataService.pushAiCache(this.currentFileId, { data_dictionary: data }).subscribe({
+              error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+            });
+          }
           // Checkpoint: dictionary generated
           this.sharedService.triggerCheckpoint('decl_dictionary_generated');
         },

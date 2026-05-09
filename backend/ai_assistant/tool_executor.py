@@ -10,7 +10,8 @@ import json
 import logging
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool
+from .prometa_config import tool as prometa_tool, set_span_attr
+from .skill_registry import get_skill, list_skills
 
 from .cache import (
     cache_get,
@@ -271,6 +272,14 @@ def _handle_get_data_dictionary(file_id: int, args: dict) -> str:
     if not data:
         return _not_available("data dictionary")
     features = data if isinstance(data, list) else data.get('features', [])
+    # Backfill missing Feature_Description from the DataDictionary DB
+    # (single source of truth) so stale cache entries don't hide
+    # business descriptions from the assistant.
+    try:
+        from ai_assistant.views import _enrich_dd_with_descriptions
+        features = _enrich_dd_with_descriptions(file_id, features)
+    except Exception:
+        pass  # Non-fatal: continue with whatever cache had
     feature_filter = args.get('feature')
     if feature_filter:
         features = [f for f in features if f.get('Feature_Name', f.get('feature', '')) == feature_filter]
@@ -287,6 +296,100 @@ def _handle_get_data_dictionary(file_id: int, args: dict) -> str:
         usage = 'EXCLUDED' if excluded else 'included'
         lines.append(f"  {name}: {desc} (type={dtype}, nunique={nunique}, lom={lom}, {usage})")
     return '\n'.join(lines)
+
+
+@prometa_tool(name="skill-invoke")
+def _load_skill_traced(skill_name: str) -> str:
+    """Load a skill's markdown body inside its own Prometa tool span.
+
+    Each invocation produces a distinct child span in the trace so platform
+    operators can see exactly when (and which) skill the assistant pulled.
+    Span attributes:
+      - declarai.skill.name         requested skill name
+      - declarai.skill.found        whether the skill resolved
+      - declarai.skill.body_chars   payload size when found
+      - declarai.skill.path         on-disk location when found
+      - declarai.skill.file_count   number of supplementary files discovered
+    """
+    set_span_attr('declarai.skill.name', skill_name)
+    skill = get_skill(skill_name)
+    if not skill:
+        set_span_attr('declarai.skill.found', False)
+        available = ', '.join(sorted(list_skills().keys())) or '(none)'
+        return (f"Skill '{skill_name}' is not bundled. "
+                f"Available skills: {available}.")
+    body = skill.body()
+    files = skill.list_files()
+    set_span_attr('declarai.skill.found', True)
+    set_span_attr('declarai.skill.path', skill.path)
+    set_span_attr('declarai.skill.body_chars', len(body))
+    set_span_attr('declarai.skill.file_count', len(files))
+    if not body:
+        return f"Skill '{skill.name}' is registered but its body is empty."
+    file_list = ''
+    if files:
+        file_list = (
+            "\n\nSupplementary files (request via get_skill_file when needed):\n"
+            + '\n'.join(f"  - {p}" for p in files)
+        )
+    return (
+        f"Skill: {skill.name}\n"
+        f"Description: {skill.description}\n"
+        f"--- BEGIN SKILL CONTENT ---\n"
+        f"{body}\n"
+        f"--- END SKILL CONTENT ---"
+        f"{file_list}"
+    )
+
+
+def _handle_invoke_skill(file_id: int, args: dict) -> str:
+    skill_name = (args.get('skill_name') or args.get('name') or '').strip()
+    if not skill_name:
+        available = ', '.join(sorted(list_skills().keys())) or '(none)'
+        return f"invoke_skill requires 'skill_name'. Available skills: {available}."
+    return _load_skill_traced(skill_name)
+
+
+@prometa_tool(name="skill-file-read")
+def _load_skill_file_traced(skill_name: str, rel_path: str) -> str:
+    """Read a supplementary file from a skill bundle, in its own span.
+
+    Span attributes:
+      - declarai.skill.name           skill name requested
+      - declarai.skill.file_path      relative path requested
+      - declarai.skill.file_found     whether the read succeeded
+      - declarai.skill.file_chars     payload size when found
+    """
+    set_span_attr('declarai.skill.name', skill_name)
+    set_span_attr('declarai.skill.file_path', rel_path)
+    skill = get_skill(skill_name)
+    if not skill:
+        set_span_attr('declarai.skill.file_found', False)
+        available = ', '.join(sorted(list_skills().keys())) or '(none)'
+        return f"Skill '{skill_name}' is not bundled. Available skills: {available}."
+    text, err = skill.read_file(rel_path)
+    if err:
+        set_span_attr('declarai.skill.file_found', False)
+        listing = ', '.join(skill.list_files()) or '(none)'
+        return f"Cannot read '{rel_path}' from skill '{skill.name}': {err}. Available files: {listing}."
+    set_span_attr('declarai.skill.file_found', True)
+    set_span_attr('declarai.skill.file_chars', len(text))
+    return (
+        f"Skill: {skill.name}\n"
+        f"File: {rel_path}\n"
+        f"--- BEGIN FILE CONTENT ---\n"
+        f"{text}\n"
+        f"--- END FILE CONTENT ---"
+    )
+
+
+def _handle_get_skill_file(file_id: int, args: dict) -> str:
+    skill_name = (args.get('skill_name') or args.get('name') or '').strip()
+    rel_path = (args.get('path') or args.get('file_path') or args.get('rel_path') or '').strip()
+    if not skill_name or not rel_path:
+        return ("get_skill_file requires both 'skill_name' and 'path'. "
+                "Call invoke_skill first to see the file listing.")
+    return _load_skill_file_traced(skill_name, rel_path)
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +409,8 @@ _HANDLERS = {
     'get_pipeline_notes': _handle_get_pipeline_notes,
     'get_pipeline_config': _handle_get_pipeline_config,
     'get_data_dictionary': _handle_get_data_dictionary,
+    'invoke_skill': _handle_invoke_skill,
+    'get_skill_file': _handle_get_skill_file,
 }
 
 

@@ -138,6 +138,15 @@
   white-space: nowrap;
 }
 
+.model-option-tcm {
+  font-size: 9px;
+  background: rgba(100, 200, 255, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
 .model-option-provider {
   font-size: 10px;
   opacity: 0.5;

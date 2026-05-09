@@ -21,7 +21,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private shouldScrollToBottom = false;
 
   // Model selector
-  availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number}> = [];
+  availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number; tool_calling_mode?: string}> = [];
   selectedModel: string = 'gpt-5.5';
   showModelSelector: boolean = false;
 
