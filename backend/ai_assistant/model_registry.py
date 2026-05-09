@@ -47,6 +47,7 @@ MODEL_REGISTRY = {
         'reasoning': True,
         'thinking': True,
         'thinking_level': 'high',
+        'tool_calling_mode': 'native',
     },
     'gpt-5.4-mini': {
         'provider': 'openai',
@@ -59,6 +60,7 @@ MODEL_REGISTRY = {
         'reasoning': True,
         'thinking': True,
         'thinking_level': 'med',
+        'tool_calling_mode': 'native',
     },
     'gpt-4.1-mini': {
         'provider': 'openai',
@@ -71,6 +73,7 @@ MODEL_REGISTRY = {
         'reasoning': False,
         'thinking': False,
         'thinking_level': None,
+        'tool_calling_mode': 'native',
     },
     # Engine entries (provider='engine') are populated dynamically from
     # ``GET {LLM_ENGINE_BASE_URL}/models`` — see ``_refresh_engine_models()``.
@@ -83,6 +86,7 @@ DEFAULT_MODEL = 'gpt-5.5'
 # Metadata keys surfaced to the frontend model selector
 _MODEL_META_KEYS = (
     'architecture', 'reasoning', 'thinking', 'thinking_level', 'ram_gb',
+    'tool_calling_mode',
 )
 
 # Registry shape kept identical to the static entries above so the rest of
@@ -148,6 +152,9 @@ def _build_engine_entry(model_data: dict) -> dict:
     of whether the underlying model supports them).
     """
     engine_id = model_data['id']
+    # The engine may surface tool_calling_mode per model; default to 'text'
+    # since most open-source models use text-based action blocks.
+    tcm = model_data.get('tool_calling_mode', 'text')
     return {
         'provider': 'engine',
         'model_id': engine_id,
@@ -160,6 +167,7 @@ def _build_engine_entry(model_data: dict) -> dict:
         'thinking': False,
         'thinking_level': None,
         'ram_gb': _ram_gb_estimate(int(model_data.get('size_bytes', 0))),
+        'tool_calling_mode': tcm,
     }
 
 

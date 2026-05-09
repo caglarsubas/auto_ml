@@ -4,7 +4,111 @@ OpenAI function-calling tool definitions for the AI Assistant.
 Each tool maps to a pipeline artifact stored in Redis.  The LLM decides
 which tools to call based on the user's question and the slim context
 manifest it receives.
+
+The list also exposes ``invoke_skill`` which returns the markdown body of
+a bundled domain-knowledge skill (see :mod:`ai_assistant.skill_registry`).
+Skill bodies are large authoritative references (e.g. a feature-engineering
+playbook) that the LLM should consult on demand rather than carry in every
+system prompt.
 """
+
+from .skill_registry import list_skills
+
+
+def _invoke_skill_definition() -> dict:
+    """Build the OpenAI tool definition for ``invoke_skill``.
+
+    The description enumerates the discovered skills so the LLM knows which
+    names are valid even without seeing the registry directly.
+    """
+    skills = list_skills()
+    if skills:
+        catalogue = '; '.join(f"{name}: {sk.description}" for name, sk in skills.items())
+        skill_names = sorted(skills.keys())
+    else:
+        catalogue = '(no skills bundled yet)'
+        skill_names = []
+    return {
+        "type": "function",
+        "function": {
+            "name": "invoke_skill",
+            "description": (
+                "Invoke a bundled domain-knowledge skill and receive its full "
+                "guidance text plus a listing of supplementary files.  Skills "
+                "encode best practices that are too long to ship in every "
+                "system prompt.  Call this BEFORE proposing domain-specific "
+                "feature engineering, encoding strategies, or anti-leakage "
+                "rules so your suggestions reflect the latest playbook.  "
+                "After this returns, call ``get_skill_file`` to fetch any "
+                "supplementary file you need.  Available skills — " + catalogue
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Name of the skill to invoke.",
+                        **({"enum": skill_names} if skill_names else {}),
+                    },
+                },
+                "required": ["skill_name"],
+            },
+        },
+    }
+
+
+def _get_skill_file_definition() -> dict:
+    """Build the OpenAI tool definition for ``get_skill_file``.
+
+    The description lists every supplementary file that ships with each
+    bundled skill so the LLM can pick a file in one shot — without having
+    to call ``invoke_skill`` first if it already knows what it needs.
+    """
+    skills = list_skills()
+    file_catalogue_lines = []
+    skill_names = sorted(skills.keys())
+    for name in skill_names:
+        files = skills[name].list_files()
+        if files:
+            file_catalogue_lines.append(f"  • {name}: {', '.join(files)}")
+        else:
+            file_catalogue_lines.append(f"  • {name}: (no supplementary files)")
+    catalogue = '\n'.join(file_catalogue_lines) if file_catalogue_lines else '  (no skills bundled yet)'
+    return {
+        "type": "function",
+        "function": {
+            "name": "get_skill_file",
+            "description": (
+                "Read a supplementary file from a bundled skill (e.g., a "
+                "best-practices reference, an example pipeline script, an "
+                "error-handling guide).  Use this AFTER ``invoke_skill`` to "
+                "pull deeper material on demand without bloating the system "
+                "prompt.  Path is the relative path inside the skill "
+                "directory; only files ending in .md, .txt, .py, .json, "
+                ".yml, .yaml are exposed.\n\n"
+                f"Available files per skill:\n{catalogue}"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Name of the skill that owns the file.",
+                        **({"enum": skill_names} if skill_names else {}),
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Relative path of the file inside the skill "
+                            "directory (e.g., 'references/feature_engineering_best_practices.md')."
+                        ),
+                    },
+                },
+                "required": ["skill_name", "path"],
+            },
+        },
+    }
+
 
 PIPELINE_TOOLS = [
     {
@@ -243,4 +347,6 @@ PIPELINE_TOOLS = [
             },
         },
     },
+    _invoke_skill_definition(),
+    _get_skill_file_definition(),
 ]

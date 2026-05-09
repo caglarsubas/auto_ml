@@ -478,6 +478,14 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                     pass
 
             data_dict = self.replace_nan_with_none(data_dict)
+
+            # Push to AI assistant Redis cache so tool calls see descriptions immediately
+            try:
+                from ai_assistant.cache import cache_put, ARTIFACT_DATA_DICTIONARY
+                cache_put(data_file.id, ARTIFACT_DATA_DICTIONARY, data_dict)
+            except Exception:
+                pass  # Non-fatal: AI cache is best-effort
+
             return Response(data_dict)
 
         except Exception as e:

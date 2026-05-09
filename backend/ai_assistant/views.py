@@ -4,7 +4,9 @@ and returns advisory, insight-rich responses.
 """
 import json
 import os
+import re as _re
 import traceback
+from typing import Optional
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -14,7 +16,8 @@ from rest_framework.views import APIView
 
 from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_span_attr, set_session_id
 from .tool_definitions import PIPELINE_TOOLS
-from .tool_executor import execute_tool_call
+from .tool_executor import execute_tool_call, _load_skill_traced
+from .skill_registry import get_skill
 from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
@@ -153,6 +156,33 @@ READING SFS RESULTS:
 • ALWAYS reference the actual metric values and stopping config when analyzing results.
   Never guess how many features are "left" — read it from the data.
 
+═══ DOMAIN SKILLS (invoke_skill / get_skill_file tools) ═══
+You have access to bundled domain-knowledge skills via two tools:
+• ``invoke_skill(skill_name)`` — returns the skill's main playbook PLUS a
+  listing of supplementary files (references, scripts, templates).
+• ``get_skill_file(skill_name, path)`` — returns the contents of one of those
+  supplementary files (e.g., ``references/feature_engineering_best_practices.md``,
+  ``scripts/feature_engineering_pipeline.py``).  Only call this if you actually
+  need the deeper material; the main playbook is usually enough.
+
+WHEN TO INVOKE A SKILL:
+• ``feature-engineering`` — Call this skill BEFORE proposing or executing any
+  feature-engineering action (creating new columns, ratios, aggregations,
+  WOE/IV bins, RFM, velocity features, etc.).  The skill ships authoritative
+  patterns by domain (banking/credit, fraud, telecom, insurance, trading,
+  healthcare) and a leakage-prevention checklist.  After receiving the skill
+  body, ground your suggestions in the patterns it lists and cite the
+  domain-specific section you're applying.  Use ``get_skill_file`` when you
+  need a longer reference or an example implementation script.
+
+GENERAL RULES:
+• A single ``invoke_skill`` call per user turn is enough — its content stays
+  in the conversation for the rest of the multi-turn loop.
+• Prefer ``get_skill_file`` over speculating; the file you ask for is small
+  and bounded.  If the user explicitly asks for a different methodology,
+  follow the user.
+• Prefer skills over your own intuition when they conflict.
+
 ═══ ACTIONABLE PIPELINE OPERATIONS ═══
 You are not just an advisor — you can DIRECTLY MODIFY the user's pipeline data, metadata,
 configuration, and notes. When the user asks you to do something actionable (create features,
@@ -269,6 +299,47 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
         raise ValueError(f'Unknown provider: {provider}')
 
 
+def _enrich_dd_with_descriptions(file_id: int, dd_list: list) -> list:
+    """Backfill missing ``Feature_Description`` entries from the DataDictionary DB.
+
+    The Redis cache for the data dictionary can be written by multiple paths
+    (the declaration endpoint enriches descriptions, but the frontend bulk-push
+    in some components may overwrite the cache with description-less rows).
+    The DB (DataDictionary table) is the source of truth; use it as a fallback
+    so every consumer — slim system context AND the get_data_dictionary tool —
+    sees descriptions whenever they exist.
+
+    Cheap (single DB query for the file_id), idempotent, and safe to call
+    on every chat turn.
+    """
+    if not dd_list:
+        return dd_list
+    needs = [
+        (f.get('Feature_Name') or f.get('feature'))
+        for f in dd_list
+        if not (f.get('Feature_Description') or f.get('description'))
+    ]
+    if not needs:
+        return dd_list
+    try:
+        from declaration.models import DataDictionary
+        rows = DataDictionary.objects.filter(
+            data_file_id=file_id, column_name__in=[n for n in needs if n]
+        ).values_list('column_name', 'description')
+        desc_map = {col: desc for col, desc in rows if desc}
+    except Exception:
+        return dd_list
+    if not desc_map:
+        return dd_list
+    for f in dd_list:
+        name = f.get('Feature_Name') or f.get('feature')
+        if name and not (f.get('Feature_Description') or f.get('description')):
+            d = desc_map.get(name)
+            if d:
+                f['Feature_Description'] = d
+    return dd_list
+
+
 def _build_slim_context(file_id: int, section: str) -> str:
     """Build a compact context manifest from cached artifacts (~500 tokens).
 
@@ -288,13 +359,29 @@ def _build_slim_context(file_id: int, section: str) -> str:
                       f"(removed: {config.get('rows_removed', 0)})")
         parts.append(f"Split: {config.get('split_strategy', '?')}")
 
-    # Data dictionary (feature names so LLM knows what's available)
+    # Data dictionary — embed feature descriptions inline so every model
+    # (native tool-callers AND text-mode models that may skip tool calls)
+    # sees the business context without needing a follow-up call.
     dd = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
     if dd:
         dd_list = dd if isinstance(dd, list) else dd.get('features', [])
-        dd_names = [f.get('Feature_Name', f.get('feature', '?')) for f in dd_list]
-        parts.append(f"Data dictionary ({len(dd_list)} features): {', '.join(dd_names[:50])}")
-        parts.append("Use get_data_dictionary tool for feature descriptions and details.")
+        dd_list = _enrich_dd_with_descriptions(file_id, dd_list)
+        described = [(f.get('Feature_Name') or f.get('feature') or '?',
+                      (f.get('Feature_Description') or f.get('description') or '').strip())
+                     for f in dd_list]
+        any_desc = any(d for _, d in described)
+        if any_desc:
+            parts.append(f"Data dictionary ({len(dd_list)} features) — business descriptions:")
+            for name, desc in described[:60]:
+                parts.append(f"  • {name}: {desc}" if desc else f"  • {name}: (no description)")
+            if len(dd_list) > 60:
+                parts.append(f"  … and {len(dd_list) - 60} more (use get_data_dictionary for the rest).")
+        else:
+            names = [n for n, _ in described]
+            parts.append(f"Data dictionary ({len(dd_list)} features): {', '.join(names[:50])}")
+            parts.append("No business descriptions found for these features. "
+                         "Tell the user that uploading a dictionary file (or editing descriptions in the UI) "
+                         "would unlock domain-aware feature engineering.")
 
     # Feature list (names + VIF flags only)
     sel_feats = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
@@ -319,6 +406,36 @@ def _build_slim_context(file_id: int, section: str) -> str:
 
 # Maximum number of tool-call rounds before forcing a final response
 _MAX_TOOL_ROUNDS = 5
+
+# ---------------------------------------------------------------------------
+# Skill auto-routing — map user intent to a bundled skill
+# ---------------------------------------------------------------------------
+# Conservative keyword/phrase matching.  Designed to fire on clear intent
+# (\"derive new features\", \"feature engineering\", \"create features\", etc.)
+# while NOT firing on pure analytical questions (\"why is feature X important?\").
+
+_FEATURE_ENGINEERING_PATTERNS = [
+    r'\bfeature[\s\-]?engineer\w*\b',
+    r'\b(derive|derived|deriving|generate|generating|create|creating|engineer|engineering|construct|build)\b'
+        r'.{0,40}\b(new\s+)?features?\b',
+    r'\bnew\s+features?\b.{0,40}\b(from|out\s+of|based\s+on)\b',
+    r'\b(ratio|interaction|aggregation|aggregate|woe|iv|rfm|velocity|rolling\s+window|lag\s+features?)\b',
+]
+_FEATURE_ENGINEERING_RE = _re.compile('|'.join(_FEATURE_ENGINEERING_PATTERNS), _re.IGNORECASE)
+
+
+def _auto_route_skill(user_message: str) -> Optional[str]:
+    """Return the name of a skill to auto-load for this user message, or None.
+
+    Currently only the ``feature-engineering`` skill is auto-routed.  The
+    function is the single source of truth for intent detection so tests
+    can pin behaviour without mocking the LLM.
+    """
+    if not user_message:
+        return None
+    if get_skill('feature-engineering') and _FEATURE_ENGINEERING_RE.search(user_message):
+        return 'feature-engineering'
+    return None
 
 
 @workflow(name="declarai-chat")
@@ -370,6 +487,25 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         content = msg.get('content', '')
         if role in ('user', 'assistant') and content:
             messages.append({'role': role, 'content': content})
+
+    # ── Skill auto-routing (model-agnostic) ──
+    # Native function-callers can hit invoke_skill themselves, but text-mode
+    # models (e.g., Gemma in text tool-calling mode) often skip tool calls.
+    # Detect feature-engineering intent in the user message and pre-load the
+    # skill body so EVERY model sees the playbook before answering.
+    # The skill loader is a @prometa_tool span itself, so the auto-route is
+    # still visible in the trace chain.
+    auto_skill = _auto_route_skill(user_message)
+    if auto_skill:
+        skill_body = _load_skill_traced(auto_skill)
+        messages.append({
+            'role': 'system',
+            'content': (f"The user's question matched the '{auto_skill}' skill — "
+                        f"its playbook has been pre-loaded below.  Ground your "
+                        f"answer in these patterns and cite the relevant section.\n\n"
+                        f"{skill_body}"),
+        })
+        set_span_attr('declarai.skill.auto_routed', auto_skill)
 
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})
