@@ -18,7 +18,7 @@ from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_s
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
-from .cache import cache_get, cache_list_artifacts, ARTIFACT_PIPELINE_CONFIG, ARTIFACT_SELECTED_FEATURES, ARTIFACT_DATA_DICTIONARY
+from .cache import cache_list_artifacts
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
     call_openai, call_engine,
@@ -345,11 +345,24 @@ def _build_slim_context(file_id: int, section: str) -> str:
 
     This replaces the old approach of dumping the entire pipeline context.
     The LLM can request detailed data via tool calls when needed.
+
+    Every underlying Redis read is performed through an instrumented raw
+    reader (``read_pipeline_config``/``read_data_dictionary``/...) so each
+    fetch appears as its own ``cache-read:<artifact>`` span in the trace
+    waterfall — symmetric with the spans emitted when the LLM itself
+    invokes a tool via ``rag-tool-dispatch``.
     """
+    # Local import to avoid circular dependency at module load time.
+    from .tool_executor import (
+        read_pipeline_config,
+        read_data_dictionary,
+        read_selected_features,
+    )
+
     parts = []
 
     # Pipeline config (always include)
-    config = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
+    config = read_pipeline_config(file_id)
     if config:
         parts.append(f"Pipeline: {config.get('pipeline_type', '?')}")
         td = config.get('target_definition', '')
@@ -362,10 +375,9 @@ def _build_slim_context(file_id: int, section: str) -> str:
     # Data dictionary — embed feature descriptions inline so every model
     # (native tool-callers AND text-mode models that may skip tool calls)
     # sees the business context without needing a follow-up call.
-    dd = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
-    if dd:
-        dd_list = dd if isinstance(dd, list) else dd.get('features', [])
-        dd_list = _enrich_dd_with_descriptions(file_id, dd_list)
+    # The raw reader already performs the DB backfill for missing descriptions.
+    dd_list = read_data_dictionary(file_id)
+    if dd_list:
         described = [(f.get('Feature_Name') or f.get('feature') or '?',
                       (f.get('Feature_Description') or f.get('description') or '').strip())
                      for f in dd_list]
@@ -384,7 +396,7 @@ def _build_slim_context(file_id: int, section: str) -> str:
                          "would unlock domain-aware feature engineering.")
 
     # Feature list (names + VIF flags only)
-    sel_feats = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
+    sel_feats = read_selected_features(file_id)
     if sel_feats:
         feat_list = sel_feats if isinstance(sel_feats, list) else sel_feats.get('features', [])
         names = [f.get('feature', '?') for f in feat_list[:40]]
@@ -393,7 +405,8 @@ def _build_slim_context(file_id: int, section: str) -> str:
         if high_vif:
             parts.append(f"High-VIF features (>5): {', '.join(high_vif)}")
 
-    # Available data (so the LLM knows which tools will return data)
+    # Available data (so the LLM knows which tools will return data).
+    # ``cache_list_artifacts`` is already instrumented with ``redis-list``.
     available = cache_list_artifacts(file_id)
     if available:
         parts.append(f"Cached artifacts available: {', '.join(available)}")

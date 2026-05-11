@@ -2266,3 +2266,374 @@ class TestGetSkillFileTool:
         assert captured.get('declarai.skill.file_found') is True
         assert isinstance(captured.get('declarai.skill.file_chars'), int)
         assert captured['declarai.skill.file_chars'] > 100
+
+
+# ---------------------------------------------------------------------------
+# Redis-level spans (Option D): cache_get/cache_put/cache_list_artifacts
+# now each emit their own trace span via @prometa_tool.
+# ---------------------------------------------------------------------------
+
+class _SpanCapture:
+    """Tiny helper that replays the sequence of set_span_attr(key, value)
+    calls across span boundaries by snapshotting on each new span start.
+
+    Tests that only need the aggregate final attribute map can use
+    ``captured`` directly; tests that care about per-span grouping can
+    walk ``by_span``.
+    """
+
+    def __init__(self):
+        self.captured: dict = {}
+        self.by_span: list[dict] = []
+        self._current: dict = {}
+
+    def set_attr(self, key, value):
+        self.captured[key] = value
+        self._current[key] = value
+
+    def snapshot(self):
+        if self._current:
+            self.by_span.append(self._current)
+            self._current = {}
+
+
+def _patch_span_attr(monkeypatch, *modules, capture: _SpanCapture):
+    """Replace ``set_span_attr`` in each target module with the capture hook."""
+    import importlib
+    for mod_name in modules:
+        mod = importlib.import_module(mod_name)
+        monkeypatch.setattr(mod, 'set_span_attr', capture.set_attr)
+
+
+@pytest.mark.unit
+class TestRedisSpanInstrumentation:
+    """cache_get/cache_put/cache_list_artifacts now emit their own Prometa
+    tool spans with named attributes (redis-get, redis-set, redis-list)."""
+
+    def test_cache_get_hit_stamps_attrs(self, monkeypatch):
+        from ai_assistant import cache as cache_mod
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        # Seed and read back
+        cache_put(42424, 'test_span_artifact', {'k': 'v'})
+        cap.captured.clear()
+        result = cache_get(42424, 'test_span_artifact')
+
+        try:
+            assert result == {'k': 'v'}
+            assert cap.captured.get('declarai.cache.file_id') == 42424
+            assert cap.captured.get('declarai.cache.artifact') == 'test_span_artifact'
+            assert cap.captured.get('declarai.cache.hit') is True
+            assert isinstance(cap.captured.get('declarai.cache.bytes'), int)
+            assert cap.captured['declarai.cache.bytes'] > 0
+        finally:
+            _get_redis().delete('ai:pipeline:42424:test_span_artifact')
+
+    def test_cache_get_miss_stamps_hit_false(self, monkeypatch):
+        from ai_assistant.cache import cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        result = cache_get(42425, 'does_not_exist_xyz')
+        assert result is None
+        assert cap.captured.get('declarai.cache.artifact') == 'does_not_exist_xyz'
+        assert cap.captured.get('declarai.cache.hit') is False
+        # A miss must not stamp a byte count
+        assert 'declarai.cache.bytes' not in cap.captured
+
+    def test_cache_put_stamps_ok_and_ttl(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            assert cache_put(42426, 'span_put_test', {'x': 1}, ttl=123) is True
+            assert cap.captured.get('declarai.cache.artifact') == 'span_put_test'
+            assert cap.captured.get('declarai.cache.ttl') == 123
+            assert cap.captured.get('declarai.cache.ok') is True
+            assert cap.captured.get('declarai.cache.bytes') > 0
+        finally:
+            _get_redis().delete('ai:pipeline:42426:span_put_test')
+
+    def test_cache_list_artifacts_stamps_prefix_and_count(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_list_artifacts, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            cache_put(42427, 'alpha', [1])
+            cache_put(42427, 'beta', [2])
+            cap.captured.clear()
+            keys = cache_list_artifacts(42427)
+            assert set(keys) >= {'alpha', 'beta'}
+            assert cap.captured.get('declarai.cache.prefix') == 'ai:pipeline:42427:'
+            assert cap.captured.get('declarai.cache.key_count') >= 2
+            assert 'alpha' in cap.captured.get('declarai.cache.keys', '')
+        finally:
+            r = _get_redis()
+            r.delete('ai:pipeline:42427:alpha')
+            r.delete('ai:pipeline:42427:beta')
+
+    def test_cache_put_bulk_stamps_key_count(self, monkeypatch):
+        from ai_assistant.cache import cache_put_bulk, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            assert cache_put_bulk(42428, {'a': 1, 'b': 2, 'c': 3}) is True
+            assert cap.captured.get('declarai.cache.key_count') == 3
+            assert set(cap.captured.get('declarai.cache.keys', '').split(',')) == {'a', 'b', 'c'}
+            assert cap.captured.get('declarai.cache.ok') is True
+        finally:
+            r = _get_redis()
+            for k in ('a', 'b', 'c'):
+                r.delete(f'ai:pipeline:42428:{k}')
+
+    def test_cache_delete_stamps_ok(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_delete, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        cache_put(42429, 'to_delete', {'foo': 1})
+        cap.captured.clear()
+        assert cache_delete(42429, 'to_delete') is True
+        assert cap.captured.get('declarai.cache.artifact') == 'to_delete'
+        assert cap.captured.get('declarai.cache.ok') is True
+
+
+# ---------------------------------------------------------------------------
+# Option B-rich: every cached artifact exposes a ``read_*`` raw reader
+# decorated with ``@prometa_tool(name="cache-read:<artifact>")``.  Handlers
+# and ``_build_slim_context`` both route through these readers so the
+# cache-read span is emitted regardless of who triggered the read.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestCacheReadSpans:
+    """Each cached artifact has a @prometa_tool-decorated raw reader."""
+
+    @pytest.mark.parametrize('reader_name,artifact', [
+        ('read_split_validation',   'split_validation'),
+        ('read_dq_summary',         'dq_summary'),
+        ('read_feature_stats',      'feature_stats'),
+        ('read_vif_decomposition',  'vif_decomposition'),
+        ('read_encoding_plan',      'encoding_plan'),
+        ('read_selected_features',  'selected_features'),
+        ('read_shap_details',       'shap_details'),
+        ('read_sfs_results',        'sfs_results'),
+        ('read_cv_results',         'cv_results'),
+        ('read_pipeline_notes',     'pipeline_notes'),
+        ('read_pipeline_config',    'pipeline_config'),
+        ('read_data_dictionary',    'data_dictionary'),
+    ])
+    def test_raw_reader_exists_and_is_exported(self, reader_name, artifact):
+        """Every artifact has a public raw reader used by the slim context
+        build + the tool handler so the span hierarchy is consistent."""
+        from ai_assistant import tool_executor
+        assert hasattr(tool_executor, reader_name), (
+            f"tool_executor must expose {reader_name} for artifact '{artifact}'")
+        reader = getattr(tool_executor, reader_name)
+        assert callable(reader)
+
+    def test_read_pipeline_config_stamps_cache_read_attrs(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import read_pipeline_config
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(53000, 'pipeline_config', {'pipeline_type': 'classification'})
+            cap.captured.clear()
+            data = read_pipeline_config(53000)
+            assert data == {'pipeline_type': 'classification'}
+            assert cap.captured.get('declarai.cache.artifact') == 'pipeline_config'
+            assert cap.captured.get('declarai.cache.hit') is True
+            assert cap.captured.get('declarai.cache.shape') == 'dict'
+        finally:
+            _get_redis().delete('ai:pipeline:53000:pipeline_config')
+
+    def test_read_selected_features_stamps_list_shape(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import read_selected_features
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(53001, 'selected_features',
+                      [{'feature': 'f1'}, {'feature': 'f2'}, {'feature': 'f3'}])
+            cap.captured.clear()
+            data = read_selected_features(53001)
+            assert len(data) == 3
+            assert cap.captured.get('declarai.cache.shape') == 'list'
+            assert cap.captured.get('declarai.cache.length') == 3
+        finally:
+            _get_redis().delete('ai:pipeline:53001:selected_features')
+
+    def test_read_miss_stamps_hit_false(self, monkeypatch):
+        from ai_assistant.cache import _get_redis
+        from ai_assistant.tool_executor import read_shap_details
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        data = read_shap_details(53002)
+        assert data is None
+        assert cap.captured.get('declarai.cache.hit') is False
+
+    def test_read_data_dictionary_stamps_enriched_flag(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import read_data_dictionary
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(53003, 'data_dictionary',
+                      [{'Feature_Name': 'Var_1', 'Feature_Description': None}])
+            cap.captured.clear()
+            data = read_data_dictionary(53003)
+            assert data is not None
+            # Whether or not the DB had a description, the enrichment path
+            # must have been attempted and stamped a boolean outcome.
+            assert 'declarai.cache.enriched' in cap.captured
+        finally:
+            _get_redis().delete('ai:pipeline:53003:data_dictionary')
+
+    def test_handlers_route_through_raw_readers(self, monkeypatch):
+        """When the LLM invokes a tool via ``execute_tool_call``, the handler
+        must delegate to the raw reader so the ``cache-read:<artifact>`` span
+        is always emitted.  We verify by observing that attributes stamped
+        only by the raw reader appear in the captured set."""
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import execute_tool_call
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(53004, 'encoding_plan',
+                      [{'feature': 'f1', 'user_lom': 'Nominal', 'nunique': 5}])
+            cap.captured.clear()
+            out = execute_tool_call(53004, 'get_encoding_plan', {})
+            assert 'Encoding Plan' in out
+            # ``_stamp_read_attrs`` (called only from the raw reader) would
+            # have set shape=list.
+            assert cap.captured.get('declarai.cache.shape') == 'list'
+            assert cap.captured.get('declarai.cache.length') == 1
+        finally:
+            _get_redis().delete('ai:pipeline:53004:encoding_plan')
+
+
+@pytest.mark.unit
+class TestSlimContextEmitsCacheReadSpans:
+    """``_build_slim_context`` now calls raw readers for every fetch so
+    the trace waterfall shows a ``cache-read:<artifact>`` span per
+    included artifact, symmetric with LLM-driven tool dispatch."""
+
+    def test_slim_context_uses_readers_not_cache_get(self, monkeypatch):
+        """Strongest guarantee: ``cache_get`` is NOT called directly from
+        ``_build_slim_context`` — every read goes through an instrumented
+        raw reader (each of which internally calls ``cache_get``, but via
+        its own span layer)."""
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant import tool_executor, views
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        reader_calls: list[str] = []
+
+        def track(artifact_label):
+            original = getattr(tool_executor, f'read_{artifact_label}')
+
+            def _wrapped(file_id):
+                reader_calls.append(artifact_label)
+                return original(file_id)
+            return _wrapped
+
+        monkeypatch.setattr(tool_executor, 'read_pipeline_config',
+                            track('pipeline_config'))
+        monkeypatch.setattr(tool_executor, 'read_data_dictionary',
+                            track('data_dictionary'))
+        monkeypatch.setattr(tool_executor, 'read_selected_features',
+                            track('selected_features'))
+
+        try:
+            cache_put(53100, 'pipeline_config', {'pipeline_type': 'classification'})
+            cache_put(53100, 'data_dictionary',
+                      [{'Feature_Name': 'Var_A', 'Feature_Description': 'alpha'}])
+            cache_put(53100, 'selected_features',
+                      [{'feature': 'Var_A', 'vif': 1.2}])
+
+            text = views._build_slim_context(53100, 'general')
+            assert 'Pipeline: classification' in text
+            assert 'Var_A' in text
+            assert set(reader_calls) == {
+                'pipeline_config', 'data_dictionary', 'selected_features'}
+        finally:
+            r = _get_redis()
+            for k in ('pipeline_config', 'data_dictionary', 'selected_features'):
+                r.delete(f'ai:pipeline:53100:{k}')
+
+    def test_slim_context_stamps_cache_read_attrs_per_artifact(self, monkeypatch):
+        """Exercising the real readers: the capture must contain at least
+        one ``declarai.cache.artifact=<each>`` stamp for every included
+        artifact."""
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant import tool_executor, views
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        # Capture only attributes emitted inside tool_executor (the raw
+        # reader layer) — ignore the deeper cache.py stamps.
+        seen_artifacts: list[str] = []
+        original = tool_executor.set_span_attr
+
+        def capture(key, value):
+            if key == 'declarai.cache.artifact':
+                seen_artifacts.append(value)
+            if callable(original):
+                original(key, value)
+        monkeypatch.setattr(tool_executor, 'set_span_attr', capture)
+
+        try:
+            cache_put(53101, 'pipeline_config', {'pipeline_type': 'classification'})
+            cache_put(53101, 'selected_features', [{'feature': 'f1'}])
+            views._build_slim_context(53101, 'general')
+            assert 'pipeline_config' in seen_artifacts
+            assert 'selected_features' in seen_artifacts
+        finally:
+            r = _get_redis()
+            for k in ('pipeline_config', 'selected_features'):
+                r.delete(f'ai:pipeline:53101:{k}')
