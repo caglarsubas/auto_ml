@@ -17,7 +17,24 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr
+from .prometa_config import tool as prometa_tool, set_span_attr, set_session_id
+
+
+def _stamp_session(file_id: int) -> None:
+    """Tag the current cache span with the file's session id.
+
+    Cache helpers are called from two contexts: inside the chat workflow
+    (child span — session already set, this is an idempotent re-set) and
+    from the standalone /api/ai/cache_push/ endpoint (root span — without
+    this call the span lands in Trace Explorer with no session and
+    pollutes the view next to real user traces).
+    """
+    if file_id is None:
+        return
+    try:
+        set_session_id(f'declarai-file-{int(file_id)}')
+    except (TypeError, ValueError):
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +85,7 @@ def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) ->
       - declarai.cache.ttl       ttl seconds
       - declarai.cache.ok        whether the write succeeded
     """
+    _stamp_session(file_id)
     set_span_attr('declarai.cache.file_id', file_id)
     set_span_attr('declarai.cache.artifact', artifact)
     set_span_attr('declarai.cache.ttl', ttl)
@@ -100,6 +118,7 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
       - declarai.cache.bytes     raw payload size on hit
       - declarai.cache.reason    error / miss reason (when applicable)
     """
+    _stamp_session(file_id)
     set_span_attr('declarai.cache.file_id', file_id)
     set_span_attr('declarai.cache.artifact', artifact)
     r = _get_redis()
@@ -134,6 +153,7 @@ def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_T
       - declarai.cache.ttl          ttl seconds
       - declarai.cache.ok           whether the pipelined write succeeded
     """
+    _stamp_session(file_id)
     set_span_attr('declarai.cache.file_id', file_id)
     set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
     set_span_attr('declarai.cache.key_count', len(artifacts))
@@ -170,6 +190,7 @@ def cache_delete(file_id: int, artifact: str) -> bool:
       - declarai.cache.artifact  artifact key being evicted
       - declarai.cache.ok        whether the delete succeeded
     """
+    _stamp_session(file_id)
     set_span_attr('declarai.cache.file_id', file_id)
     set_span_attr('declarai.cache.artifact', artifact)
     r = _get_redis()
@@ -198,6 +219,7 @@ def cache_list_artifacts(file_id: int) -> list[str]:
       - declarai.cache.key_count   number of matching keys
       - declarai.cache.keys        matching artifact names (comma separated)
     """
+    _stamp_session(file_id)
     set_span_attr('declarai.cache.file_id', file_id)
     prefix = f"ai:pipeline:{file_id}:"
     set_span_attr('declarai.cache.prefix', prefix)

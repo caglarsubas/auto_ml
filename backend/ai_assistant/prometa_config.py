@@ -33,6 +33,14 @@ def get_prometa():
         return _prometa
     _initialized = True
 
+    # Disable tracing under pytest so test runs (especially the file_id=99999
+    # "missing resource" cases) don't pollute the Session Explorer with
+    # sessions like `declarai-file-99999`. `PROMETA_DISABLE=1` is the explicit
+    # kill-switch; `PYTEST_CURRENT_TEST` is set by pytest while a test runs.
+    if os.environ.get('PROMETA_DISABLE') == '1' or os.environ.get('PYTEST_CURRENT_TEST'):
+        logger.info("Prometa tracing disabled (test/PROMETA_DISABLE).")
+        return None
+
     stage = os.environ.get('PROMETA_STAGE', 'staging').lower()
     stage_upper = stage.upper()
 
