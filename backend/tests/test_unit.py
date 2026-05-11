@@ -2870,3 +2870,113 @@ class TestPrometaConfigTimerHelpers:
         # The finally block of span_timer must have run despite the raise.
         assert 'myns.bar.elapsed_us' in captured
         assert 'myns.bar.elapsed_ms' in captured
+
+
+# ---------------------------------------------------------------------------
+# Session-tagging hygiene (v2.22.2+).
+#
+# Cache helpers must NEVER call ``set_session_id`` themselves — the
+# user-facing root span (chat workflow / action executor) owns the
+# session id and the OTLP trace context propagates it down.  Re-stamping
+# from inside ``cache_put``/``cache_get``/etc. pollutes the platform's
+# Session Explorer with:
+#   * server-side pipeline writes (declaration dd push, /cache_push/
+#     bulk-write, DQ/FE/CV runners) appearing alongside chats
+#   * ad-hoc verification scripts leaking synthetic file_ids like
+#     ``declarai-file-99002`` (the exact bug observed on 2026-05-11).
+# This class guards against the regression.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestCacheHelpersDoNotStampSession:
+    """Cache helpers must not invoke ``set_session_id`` for any op."""
+
+    def _capture_session_calls(self, monkeypatch) -> list[str]:
+        """Patch ``set_session_id`` everywhere it's reachable and record
+        every invocation.  Returns the recorded list (mutable)."""
+        from ai_assistant import cache as cache_mod
+        from ai_assistant import prometa_config
+        calls: list[str] = []
+        recorder = lambda sid: calls.append(sid)
+        # The cache module is the surface under test — it must not
+        # import or use set_session_id at all.  We patch prometa_config
+        # so even an accidental ``prometa_config.set_session_id(...)``
+        # call from inside cache.py would still get caught.
+        monkeypatch.setattr(prometa_config, 'set_session_id', recorder)
+        # Defensive: if a future refactor reintroduces a local alias
+        # in cache.py, this catches it too.
+        if hasattr(cache_mod, 'set_session_id'):
+            monkeypatch.setattr(cache_mod, 'set_session_id', recorder)
+        return calls
+
+    def test_cache_put_does_not_stamp_session(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        calls = self._capture_session_calls(monkeypatch)
+        try:
+            cache_put(70000, 'no_session_test', {'x': 1})
+            assert calls == [], (
+                f"cache_put must not call set_session_id; got: {calls}")
+        finally:
+            _get_redis().delete('ai:pipeline:70000:no_session_test')
+
+    def test_cache_get_does_not_stamp_session(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        cache_put(70001, 'no_session_test', {'x': 1})
+        calls = self._capture_session_calls(monkeypatch)
+        try:
+            cache_get(70001, 'no_session_test')
+            assert calls == [], (
+                f"cache_get must not call set_session_id; got: {calls}")
+        finally:
+            _get_redis().delete('ai:pipeline:70001:no_session_test')
+
+    def test_cache_put_bulk_does_not_stamp_session(self, monkeypatch):
+        from ai_assistant.cache import cache_put_bulk, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        calls = self._capture_session_calls(monkeypatch)
+        try:
+            cache_put_bulk(70002, {'a': 1, 'b': 2})
+            assert calls == [], (
+                f"cache_put_bulk must not call set_session_id; got: {calls}")
+        finally:
+            r = _get_redis()
+            for k in ('a', 'b'):
+                r.delete(f'ai:pipeline:70002:{k}')
+
+    def test_cache_delete_does_not_stamp_session(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_delete, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        cache_put(70003, 'to_remove', {'k': 1})
+        calls = self._capture_session_calls(monkeypatch)
+        cache_delete(70003, 'to_remove')
+        assert calls == [], (
+            f"cache_delete must not call set_session_id; got: {calls}")
+
+    def test_cache_list_artifacts_does_not_stamp_session(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_list_artifacts, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        cache_put(70004, 'one', [1])
+        calls = self._capture_session_calls(monkeypatch)
+        try:
+            cache_list_artifacts(70004)
+            assert calls == [], (
+                f"cache_list_artifacts must not call set_session_id; got: {calls}")
+        finally:
+            _get_redis().delete('ai:pipeline:70004:one')
+
+    def test_cache_module_does_not_import_set_session_id(self):
+        """Belt-and-suspenders: the cache module must not even import
+        ``set_session_id`` — this catches a future ``from .prometa_config
+        import set_session_id`` regression before any runtime call."""
+        from ai_assistant import cache as cache_mod
+        assert not hasattr(cache_mod, 'set_session_id'), (
+            "ai_assistant.cache must not import set_session_id — "
+            "session-tagging is the chat/action workflow's responsibility, "
+            "not the infrastructure layer's (see v2.22.2 comment block).")

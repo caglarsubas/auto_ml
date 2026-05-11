@@ -17,24 +17,35 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr, set_session_id, span_timer
+from .prometa_config import tool as prometa_tool, set_span_attr, span_timer
 
-
-def _stamp_session(file_id: int) -> None:
-    """Tag the current cache span with the file's session id.
-
-    Cache helpers are called from two contexts: inside the chat workflow
-    (child span — session already set, this is an idempotent re-set) and
-    from the standalone /api/ai/cache_push/ endpoint (root span — without
-    this call the span lands in Trace Explorer with no session and
-    pollutes the view next to real user traces).
-    """
-    if file_id is None:
-        return
-    try:
-        set_session_id(f'declarai-file-{int(file_id)}')
-    except (TypeError, ValueError):
-        pass
+# ---------------------------------------------------------------------------
+# Session-tagging policy (v2.22.2+)
+# ---------------------------------------------------------------------------
+# Cache helpers deliberately do NOT call ``set_session_id`` themselves.
+# Session ids belong on the *user-facing root span* (the chat turn in
+# ``ai_assistant.views`` or the action handler in
+# ``ai_assistant.action_executor``), and the OTLP trace context propagates
+# them to all child spans within the same trace automatically.
+#
+# Stamping a session on every cache op was the original behaviour (pre-2.22.2)
+# but it caused two distinct types of Session Explorer pollution:
+#
+#   1. Server-side pipeline writes (declaration data-dict push,
+#      ``/api/ai/cache_push/`` bulk-write, DQ/FE/CV runners) became
+#      root spans tagged with ``declarai-file-<id>`` and showed up
+#      next to real chat conversations.
+#   2. Ad-hoc verification scripts (``docker exec ... manage.py shell``
+#      with ``cache_put(synthetic_id, ...)``) leaked synthetic session
+#      ids like ``declarai-file-99002`` into the platform.
+#
+# When a cache op runs as a root span now it lands in Trace Explorer
+# (correct), still keyed by ``declarai.cache.file_id`` for filtering.
+# When it runs as a child of a chat / action workflow it inherits that
+# trace's session id (also correct).
+#
+# For ad-hoc scripts that need to call cache helpers without polluting
+# the platform at all, set ``PROMETA_DISABLE=1`` before running.
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +99,6 @@ def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) ->
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
-        _stamp_session(file_id)
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.artifact', artifact)
         set_span_attr('declarai.cache.ttl', ttl)
@@ -124,7 +134,6 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
-        _stamp_session(file_id)
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.artifact', artifact)
         r = _get_redis()
@@ -162,7 +171,6 @@ def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_T
       - declarai.cache.elapsed_ms   elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
-        _stamp_session(file_id)
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
         set_span_attr('declarai.cache.key_count', len(artifacts))
@@ -202,7 +210,6 @@ def cache_delete(file_id: int, artifact: str) -> bool:
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
-        _stamp_session(file_id)
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.artifact', artifact)
         r = _get_redis()
@@ -234,7 +241,6 @@ def cache_list_artifacts(file_id: int) -> list[str]:
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
-        _stamp_session(file_id)
         set_span_attr('declarai.cache.file_id', file_id)
         prefix = f"ai:pipeline:{file_id}:"
         set_span_attr('declarai.cache.prefix', prefix)
