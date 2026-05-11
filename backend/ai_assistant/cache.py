@@ -17,35 +17,37 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr, span_timer
+from .prometa_config import child_only_tool, set_span_attr, span_timer
 
 # ---------------------------------------------------------------------------
-# Session-tagging policy (v2.22.2+)
+# Tracing policy for cache ops (v2.22.3+)
 # ---------------------------------------------------------------------------
-# Cache helpers deliberately do NOT call ``set_session_id`` themselves.
-# Session ids belong on the *user-facing root span* (the chat turn in
-# ``ai_assistant.views`` or the action handler in
-# ``ai_assistant.action_executor``), and the OTLP trace context propagates
-# them to all child spans within the same trace automatically.
+# Cache helpers use ``@child_only_tool`` instead of ``@prometa_tool``: they
+# emit a Prometa span only when called from inside an active parent span
+# (the chat workflow in ``ai_assistant.views`` or the action handler in
+# ``ai_assistant.action_executor``).  When called standalone — from the
+# ``/api/ai/cache_push/`` REST endpoint, the ``declaration/views.py``
+# data-dictionary push hook, or an ad-hoc shell script — they run plain,
+# producing NO trace at all.
 #
-# Stamping a session on every cache op was the original behaviour (pre-2.22.2)
-# but it caused two distinct types of Session Explorer pollution:
+# Two complementary cleanups arrived together:
 #
-#   1. Server-side pipeline writes (declaration data-dict push,
-#      ``/api/ai/cache_push/`` bulk-write, DQ/FE/CV runners) became
-#      root spans tagged with ``declarai-file-<id>`` and showed up
-#      next to real chat conversations.
-#   2. Ad-hoc verification scripts (``docker exec ... manage.py shell``
-#      with ``cache_put(synthetic_id, ...)``) leaked synthetic session
-#      ids like ``declarai-file-99002`` into the platform.
+#   * v2.22.2 removed ``_stamp_session`` from every cache op so they
+#     stopped tagging server-side writes with ``declarai-file-<id>``
+#     (which had been polluting Session Explorer).
+#   * v2.22.3 stops cache ops from creating standalone root traces in
+#     Trace Explorer when there's no user-facing parent workflow.
 #
-# When a cache op runs as a root span now it lands in Trace Explorer
-# (correct), still keyed by ``declarai.cache.file_id`` for filtering.
-# When it runs as a child of a chat / action workflow it inherits that
-# trace's session id (also correct).
+# Together: cache I/O is fully visible WITHIN a chat or action trace
+# (child ``redis-*`` spans inside ``declarai-chat`` / ``declarai-action``)
+# but completely invisible OUTSIDE one (no clutter from background
+# writes the user never initiated).
 #
-# For ad-hoc scripts that need to call cache helpers without polluting
-# the platform at all, set ``PROMETA_DISABLE=1`` before running.
+# Session ids continue to live on the user-facing root span only and
+# propagate to children via OTLP trace context.
+#
+# For ad-hoc scripts that should not touch Prometa at all, set
+# ``PROMETA_DISABLE=1`` before running.
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +87,15 @@ def _key(file_id: int, artifact: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-@prometa_tool(name="redis-set")
+@child_only_tool(name="redis-set")
 def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) -> bool:
     """Store a pipeline artifact in the cache. Returns True on success.
 
-    Emits a ``redis-set`` span with attributes:
+    Emits a ``redis-set`` child span when called inside an active parent
+    workflow (chat / action).  When called standalone (cache_push REST
+    endpoint, declaration data-dict push, ad-hoc scripts) it runs plain
+    — no trace, no Trace Explorer clutter.  See the policy note at the
+    top of this module.  Span attributes when emitted:
       - declarai.cache.file_id     pipeline file id
       - declarai.cache.artifact    artifact key (e.g. 'data_dictionary')
       - declarai.cache.bytes       serialized payload size
@@ -120,11 +126,13 @@ def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) ->
             return False
 
 
-@prometa_tool(name="redis-get")
+@child_only_tool(name="redis-get")
 def cache_get(file_id: int, artifact: str) -> Optional[Any]:
     """Retrieve a pipeline artifact from the cache. Returns None if missing.
 
-    Emits a ``redis-get`` span with attributes:
+    Emits a ``redis-get`` child span only when called inside an active
+    parent workflow.  See the policy note at the top of this module.
+    Span attributes when emitted:
       - declarai.cache.file_id     pipeline file id
       - declarai.cache.artifact    artifact key (e.g. 'pipeline_config')
       - declarai.cache.hit         True when a value was returned
@@ -156,11 +164,15 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
             return None
 
 
-@prometa_tool(name="redis-set-bulk")
+@child_only_tool(name="redis-set-bulk")
 def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_TTL) -> bool:
     """Store multiple artifacts at once using a Redis pipeline.
 
-    Emits a ``redis-set-bulk`` span with attributes:
+    Emits a ``redis-set-bulk`` child span only when called inside an
+    active parent workflow.  The ``/api/ai/cache_push/`` REST endpoint
+    invokes this from a non-chat context and therefore produces no
+    trace — which is the entire point of v2.22.3.  Span attributes
+    when emitted:
       - declarai.cache.file_id      pipeline file id
       - declarai.cache.keys         artifact keys written (comma separated)
       - declarai.cache.key_count    number of keys written
@@ -198,11 +210,13 @@ def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_T
             return False
 
 
-@prometa_tool(name="redis-delete")
+@child_only_tool(name="redis-delete")
 def cache_delete(file_id: int, artifact: str) -> bool:
     """Remove a specific artifact from the cache.
 
-    Emits a ``redis-delete`` span with attributes:
+    Emits a ``redis-delete`` child span only when called inside an
+    active parent workflow.  See the policy note at the top of this
+    module.  Span attributes when emitted:
       - declarai.cache.file_id     pipeline file id
       - declarai.cache.artifact    artifact key being evicted
       - declarai.cache.ok          whether the delete succeeded
@@ -228,11 +242,14 @@ def cache_delete(file_id: int, artifact: str) -> bool:
             return False
 
 
-@prometa_tool(name="redis-list")
+@child_only_tool(name="redis-list")
 def cache_list_artifacts(file_id: int) -> list[str]:
     """List all cached artifact types for a given file_id.
 
-    Emits a ``redis-list`` span with attributes:
+    Emits a ``redis-list`` child span only when called inside an
+    active parent workflow.  The ``/api/ai/cache_status/`` REST
+    endpoint invokes this standalone and therefore produces no trace.
+    Span attributes when emitted:
       - declarai.cache.file_id     pipeline file id
       - declarai.cache.prefix      key prefix scanned
       - declarai.cache.key_count   number of matching keys

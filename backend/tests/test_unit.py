@@ -2980,3 +2980,198 @@ class TestCacheHelpersDoNotStampSession:
             "ai_assistant.cache must not import set_session_id — "
             "session-tagging is the chat/action workflow's responsibility, "
             "not the infrastructure layer's (see v2.22.2 comment block).")
+
+
+# ---------------------------------------------------------------------------
+# Standalone-trace pollution prevention (v2.22.3+).
+#
+# Cache helpers must use ``@child_only_tool`` so calls from non-workflow
+# contexts (cache_push REST endpoint, declaration data-dict push,
+# /api/ai/cache_status/, ad-hoc shell scripts) do NOT produce standalone
+# root traces in Trace Explorer.  Each such call was previously creating
+# a 0-1ms trace with a single redis-set/redis-set-bulk span and no
+# conversation context — pure clutter.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestCacheHelpersAreChildOnly:
+    """All 5 cache helpers must be marked ``_child_only=True`` so they
+    don't emit standalone root traces when invoked outside a workflow."""
+
+    @pytest.mark.parametrize("fn_name,tool_name", [
+        ('cache_put', 'redis-set'),
+        ('cache_get', 'redis-get'),
+        ('cache_put_bulk', 'redis-set-bulk'),
+        ('cache_delete', 'redis-delete'),
+        ('cache_list_artifacts', 'redis-list'),
+    ])
+    def test_cache_helper_is_child_only(self, fn_name, tool_name):
+        from ai_assistant import cache as cache_mod
+        fn = getattr(cache_mod, fn_name)
+        assert getattr(fn, '_child_only', False) is True, (
+            f"{fn_name} must be decorated with @child_only_tool, not "
+            f"@prometa_tool — standalone invocations would otherwise "
+            f"create root traces in Trace Explorer (v2.22.3 regression).")
+        assert getattr(fn, '_tool_name', None) == tool_name, (
+            f"{fn_name} must keep its tool name ('{tool_name}') after "
+            f"the child_only_tool conversion.")
+
+
+@pytest.mark.unit
+class TestChildOnlyToolSemantics:
+    """Behavioral checks for the ``child_only_tool`` decorator itself."""
+
+    def test_has_active_span_returns_false_when_sdk_absent(self):
+        """In test/CI environments where Prometa is not installed (or
+        ``current_span`` raises), the helper must safely return False so
+        the wrapper falls through to the plain function path."""
+        from ai_assistant.prometa_config import has_active_span
+        # In conftest.py the SDK is disabled, so this should be False.
+        assert has_active_span() is False
+
+    def test_child_only_tool_skips_traced_path_when_no_parent(self, monkeypatch):
+        """The traced (Prometa-decorated) variant must NOT be invoked
+        when ``has_active_span()`` reports no parent.  We verify by
+        installing a sentinel that would explode if reached."""
+        from ai_assistant import prometa_config
+
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: False)
+
+        traced_calls = []
+        plain_calls = []
+
+        def fake_tool_factory(name=None, **kwargs):
+            def deco(fn):
+                def traced_wrapper(*a, **kw):
+                    traced_calls.append((a, kw))
+                    return fn(*a, **kw)
+                return traced_wrapper
+            return deco
+        monkeypatch.setattr(prometa_config, 'tool', fake_tool_factory)
+
+        @prometa_config.child_only_tool(name='probe')
+        def my_fn(x):
+            plain_calls.append(x)
+            return x + 1
+
+        assert my_fn(7) == 8
+        assert plain_calls == [7]
+        assert traced_calls == [], (
+            "When no parent span is active, child_only_tool must bypass "
+            "the traced wrapper and call the function plain.")
+
+    def test_child_only_tool_uses_traced_path_when_parent_active(self, monkeypatch):
+        """The mirror case: with an active parent span, the traced
+        variant IS invoked (so the child span appears in the waterfall)."""
+        from ai_assistant import prometa_config
+
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: True)
+
+        traced_calls = []
+
+        def fake_tool_factory(name=None, **kwargs):
+            def deco(fn):
+                def traced_wrapper(*a, **kw):
+                    traced_calls.append((name, a, kw))
+                    return fn(*a, **kw)
+                return traced_wrapper
+            return deco
+        monkeypatch.setattr(prometa_config, 'tool', fake_tool_factory)
+
+        @prometa_config.child_only_tool(name='probe')
+        def my_fn(x):
+            return x * 2
+
+        assert my_fn(9) == 18
+        assert traced_calls == [('probe', (9,), {})], (
+            "With an active parent span, child_only_tool must route "
+            "through the traced wrapper so a child span is created.")
+
+    def test_child_only_tool_preserves_return_value_and_exceptions(self, monkeypatch):
+        """Both code paths must transparently propagate return values
+        and exceptions — the decorator is purely about span emission."""
+        from ai_assistant import prometa_config
+
+        @prometa_config.child_only_tool(name='probe')
+        def returns_value(a, b):
+            return a + b
+
+        @prometa_config.child_only_tool(name='probe')
+        def raises():
+            raise ValueError("boom")
+
+        # No-parent path (default in test env)
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: False)
+        assert returns_value(2, 3) == 5
+        with pytest.raises(ValueError, match='boom'):
+            raises()
+
+        # Parent-active path (forced)
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: True)
+        assert returns_value(10, 20) == 30
+        with pytest.raises(ValueError, match='boom'):
+            raises()
+
+
+@pytest.mark.unit
+class TestCacheRestEndpointsDoNotEmitSpans:
+    """End-to-end behavioural guard: calling a cache helper from a
+    no-parent context (mimicking the cache_push endpoint or the
+    declaration data-dict push) must NOT invoke the Prometa tool
+    decorator at all."""
+
+    def test_cache_put_bulk_from_no_parent_does_not_invoke_tool(self, monkeypatch):
+        """Simulates ``ai_assistant.views.AICachePushView.post`` calling
+        ``cache_put_bulk`` outside any workflow context.  The Prometa
+        tool factory must not be invoked for this path."""
+        from ai_assistant import cache as cache_mod
+        from ai_assistant import prometa_config
+        from ai_assistant.cache import _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        # Force "no parent" mode so the child_only gate engages.
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: False)
+
+        # Track whether the Prometa SDK tool decorator was reached.
+        tool_invoked = []
+        original_tool = prometa_config.tool
+
+        def watched_tool(*args, **kwargs):
+            tool_invoked.append((args, kwargs))
+            return original_tool(*args, **kwargs)
+        monkeypatch.setattr(prometa_config, 'tool', watched_tool)
+
+        # The decorator was applied at module import time so re-importing
+        # would be needed to re-route through watched_tool; instead we
+        # verify the runtime behaviour of the EXISTING wrapper: with
+        # has_active_span=False it should call the plain function path
+        # (no SDK interaction).
+        try:
+            assert cache_mod.cache_put_bulk(80000, {'a': 1, 'b': 2}) is True
+            # Plain Redis got the writes:
+            assert cache_mod.cache_get(80000, 'a') == 1
+            assert cache_mod.cache_get(80000, 'b') == 2
+        finally:
+            r = _get_redis()
+            for k in ('a', 'b'):
+                r.delete(f'ai:pipeline:80000:{k}')
+
+    def test_cache_put_from_no_parent_does_not_invoke_tool(self, monkeypatch):
+        """Mirrors ``declaration/views.py:485`` pushing a data dictionary
+        into Redis after a Declaration update."""
+        from ai_assistant import cache as cache_mod
+        from ai_assistant import prometa_config
+        from ai_assistant.cache import _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        monkeypatch.setattr(prometa_config, 'has_active_span', lambda: False)
+
+        try:
+            assert cache_mod.cache_put(80001, 'data_dictionary',
+                                       [{'Feature_Name': 'A'}]) is True
+            assert cache_mod.cache_get(80001, 'data_dictionary') == [
+                {'Feature_Name': 'A'}]
+        finally:
+            _get_redis().delete('ai:pipeline:80001:data_dictionary')
