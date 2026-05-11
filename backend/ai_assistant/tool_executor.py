@@ -45,12 +45,142 @@ def _not_available(name: str) -> str:
     return f"No {name} data is available in the cache. The user may not have completed this pipeline step yet."
 
 
+def _stamp_read_attrs(artifact: str, data: Any) -> None:
+    """Stamp common attributes on a ``cache-read:<artifact>`` span."""
+    set_span_attr('declarai.cache.artifact', artifact)
+    if data is None:
+        set_span_attr('declarai.cache.hit', False)
+        return
+    set_span_attr('declarai.cache.hit', True)
+    if isinstance(data, list):
+        set_span_attr('declarai.cache.shape', 'list')
+        set_span_attr('declarai.cache.length', len(data))
+    elif isinstance(data, dict):
+        set_span_attr('declarai.cache.shape', 'dict')
+        set_span_attr('declarai.cache.keys', ','.join(list(data.keys())[:20]))
+
+
+# ---------------------------------------------------------------------------
+# Raw readers (server-side + LLM-initiated callers share these)
+# ---------------------------------------------------------------------------
+# Each raw reader wraps a ``cache_get`` with its own ``cache-read:<artifact>``
+# span.  This gives the trace waterfall a visible, named row per artifact
+# regardless of whether the read was triggered by the LLM (via
+# ``rag-tool-dispatch`` -> handler -> reader) or by the server prefetch path
+# (``_build_slim_context`` -> reader).  The underlying ``cache_get`` call
+# produces a nested ``redis-get`` child span.
+
+@prometa_tool(name="cache-read:split_validation")
+def read_split_validation(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_SPLIT_VALIDATION)
+    _stamp_read_attrs(ARTIFACT_SPLIT_VALIDATION, data)
+    return data
+
+
+@prometa_tool(name="cache-read:dq_summary")
+def read_dq_summary(file_id: int) -> Optional[Any]:
+    data = cache_get(file_id, ARTIFACT_DQ_SUMMARY)
+    _stamp_read_attrs(ARTIFACT_DQ_SUMMARY, data)
+    return data
+
+
+@prometa_tool(name="cache-read:feature_stats")
+def read_feature_stats(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_FEATURE_STATS)
+    _stamp_read_attrs(ARTIFACT_FEATURE_STATS, data)
+    return data
+
+
+@prometa_tool(name="cache-read:vif_decomposition")
+def read_vif_decomposition(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_VIF_DECOMPOSITION)
+    _stamp_read_attrs(ARTIFACT_VIF_DECOMPOSITION, data)
+    return data
+
+
+@prometa_tool(name="cache-read:encoding_plan")
+def read_encoding_plan(file_id: int) -> Optional[Any]:
+    data = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
+    _stamp_read_attrs(ARTIFACT_ENCODING_PLAN, data)
+    return data
+
+
+@prometa_tool(name="cache-read:selected_features")
+def read_selected_features(file_id: int) -> Optional[Any]:
+    data = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
+    _stamp_read_attrs(ARTIFACT_SELECTED_FEATURES, data)
+    return data
+
+
+@prometa_tool(name="cache-read:shap_details")
+def read_shap_details(file_id: int) -> Optional[Any]:
+    data = cache_get(file_id, ARTIFACT_SHAP_DETAILS)
+    _stamp_read_attrs(ARTIFACT_SHAP_DETAILS, data)
+    return data
+
+
+@prometa_tool(name="cache-read:sfs_results")
+def read_sfs_results(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_SFS_RESULTS)
+    _stamp_read_attrs(ARTIFACT_SFS_RESULTS, data)
+    return data
+
+
+@prometa_tool(name="cache-read:cv_results")
+def read_cv_results(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_CV_RESULTS)
+    _stamp_read_attrs(ARTIFACT_CV_RESULTS, data)
+    return data
+
+
+@prometa_tool(name="cache-read:pipeline_notes")
+def read_pipeline_notes(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_PIPELINE_NOTES)
+    _stamp_read_attrs(ARTIFACT_PIPELINE_NOTES, data)
+    return data
+
+
+@prometa_tool(name="cache-read:pipeline_config")
+def read_pipeline_config(file_id: int) -> Optional[dict]:
+    data = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
+    _stamp_read_attrs(ARTIFACT_PIPELINE_CONFIG, data)
+    return data
+
+
+@prometa_tool(name="cache-read:data_dictionary")
+def read_data_dictionary(file_id: int) -> Optional[list]:
+    """Read the data dictionary and backfill missing Feature_Description
+    entries from the ``DataDictionary`` DB (the single source of truth).
+
+    The DB backfill is performed here (inside the ``cache-read:data_dictionary``
+    span) rather than in every caller so that the returned value is always
+    the enriched list regardless of whether the LLM dispatched the read or
+    the slim-context prefetch did.  The span covers both the cache hit and
+    the optional DB enrichment for easy latency attribution.
+    """
+    raw = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
+    if raw is None:
+        _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, None)
+        return None
+    features = raw if isinstance(raw, list) else raw.get('features', [])
+    try:
+        from ai_assistant.views import _enrich_dd_with_descriptions
+        enriched = _enrich_dd_with_descriptions(file_id, features)
+        set_span_attr('declarai.cache.enriched', True)
+    except Exception as exc:
+        set_span_attr('declarai.cache.enriched', False)
+        set_span_attr('declarai.cache.enrich_error', str(exc)[:200])
+        enriched = features
+    _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, enriched)
+    return enriched
+
+
 # ---------------------------------------------------------------------------
 # Individual tool handlers
 # ---------------------------------------------------------------------------
 
 def _handle_get_split_validation(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_SPLIT_VALIDATION)
+    data = read_split_validation(file_id)
     if not data:
         return _not_available("split validation")
     splits = data.get('splits', [])
@@ -66,7 +196,7 @@ def _handle_get_split_validation(file_id: int, args: dict) -> str:
 
 
 def _handle_get_dq_summary(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_DQ_SUMMARY)
+    data = read_dq_summary(file_id)
     if not data:
         return _not_available("data quality summary")
     features = data if isinstance(data, list) else data.get('summary', [])
@@ -89,7 +219,7 @@ def _handle_get_dq_summary(file_id: int, args: dict) -> str:
 
 
 def _handle_get_feature_stats(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_FEATURE_STATS)
+    data = read_feature_stats(file_id)
     if not data:
         return _not_available("feature statistics")
     feature = args.get('feature', '')
@@ -112,7 +242,7 @@ def _handle_get_feature_stats(file_id: int, args: dict) -> str:
 
 
 def _handle_get_vif_decomposition(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_VIF_DECOMPOSITION)
+    data = read_vif_decomposition(file_id)
     if not data:
         return _not_available("VIF decomposition")
     feature = args.get('feature', '')
@@ -135,7 +265,7 @@ def _handle_get_vif_decomposition(file_id: int, args: dict) -> str:
 
 
 def _handle_get_encoding_plan(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
+    data = read_encoding_plan(file_id)
     if not data:
         return _not_available("encoding plan")
     features = data if isinstance(data, list) else data.get('plan', [])
@@ -150,7 +280,7 @@ def _handle_get_encoding_plan(file_id: int, args: dict) -> str:
 
 
 def _handle_get_selected_features(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
+    data = read_selected_features(file_id)
     if not data:
         return _not_available("selected features")
     features = data if isinstance(data, list) else data.get('features', [])
@@ -170,7 +300,7 @@ def _handle_get_selected_features(file_id: int, args: dict) -> str:
 
 
 def _handle_get_shap_details(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_SHAP_DETAILS)
+    data = read_shap_details(file_id)
     if not data:
         return _not_available("SHAP details")
     features = data if isinstance(data, list) else data.get('features', [])
@@ -187,7 +317,7 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
 
 
 def _handle_get_sfs_results(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_SFS_RESULTS)
+    data = read_sfs_results(file_id)
     if not data:
         return _not_available("SFS results")
     direction_filter = args.get('direction')
@@ -222,7 +352,7 @@ def _handle_get_sfs_results(file_id: int, args: dict) -> str:
 
 
 def _handle_get_cv_results(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_CV_RESULTS)
+    data = read_cv_results(file_id)
     if not data:
         return _not_available("cross-validation results")
     lines = [
@@ -239,7 +369,7 @@ def _handle_get_cv_results(file_id: int, args: dict) -> str:
 
 
 def _handle_get_pipeline_notes(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_PIPELINE_NOTES)
+    data = read_pipeline_notes(file_id)
     if not data:
         return "No pipeline notes have been saved."
     lines = ["Pipeline Notes:"]
@@ -250,7 +380,7 @@ def _handle_get_pipeline_notes(file_id: int, args: dict) -> str:
 
 
 def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
+    data = read_pipeline_config(file_id)
     if not data:
         return _not_available("pipeline configuration")
     lines = [
@@ -268,18 +398,11 @@ def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
 
 
 def _handle_get_data_dictionary(file_id: int, args: dict) -> str:
-    data = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
-    if not data:
+    # ``read_data_dictionary`` already does cache read + DB backfill inside
+    # its own ``cache-read:data_dictionary`` span.
+    features = read_data_dictionary(file_id)
+    if features is None:
         return _not_available("data dictionary")
-    features = data if isinstance(data, list) else data.get('features', [])
-    # Backfill missing Feature_Description from the DataDictionary DB
-    # (single source of truth) so stale cache entries don't hide
-    # business descriptions from the assistant.
-    try:
-        from ai_assistant.views import _enrich_dd_with_descriptions
-        features = _enrich_dd_with_descriptions(file_id, features)
-    except Exception:
-        pass  # Non-fatal: continue with whatever cache had
     feature_filter = args.get('feature')
     if feature_filter:
         features = [f for f in features if f.get('Feature_Name', f.get('feature', '')) == feature_filter]

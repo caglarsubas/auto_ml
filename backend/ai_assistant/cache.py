@@ -17,6 +17,25 @@ import logging
 import os
 from typing import Any, Optional
 
+from .prometa_config import tool as prometa_tool, set_span_attr, set_session_id
+
+
+def _stamp_session(file_id: int) -> None:
+    """Tag the current cache span with the file's session id.
+
+    Cache helpers are called from two contexts: inside the chat workflow
+    (child span — session already set, this is an idempotent re-set) and
+    from the standalone /api/ai/cache_push/ endpoint (root span — without
+    this call the span lands in Trace Explorer with no session and
+    pollutes the view next to real user traces).
+    """
+    if file_id is None:
+        return
+    try:
+        set_session_id(f'declarai-file-{int(file_id)}')
+    except (TypeError, ValueError):
+        pass
+
 logger = logging.getLogger(__name__)
 
 _redis_client = None
@@ -55,73 +74,169 @@ def _key(file_id: int, artifact: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+@prometa_tool(name="redis-set")
 def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) -> bool:
-    """Store a pipeline artifact in the cache. Returns True on success."""
+    """Store a pipeline artifact in the cache. Returns True on success.
+
+    Emits a ``redis-set`` span with attributes:
+      - declarai.cache.file_id   pipeline file id
+      - declarai.cache.artifact  artifact key (e.g. 'data_dictionary')
+      - declarai.cache.bytes     serialized payload size
+      - declarai.cache.ttl       ttl seconds
+      - declarai.cache.ok        whether the write succeeded
+    """
+    _stamp_session(file_id)
+    set_span_attr('declarai.cache.file_id', file_id)
+    set_span_attr('declarai.cache.artifact', artifact)
+    set_span_attr('declarai.cache.ttl', ttl)
     r = _get_redis()
     if not r:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', 'redis-unavailable')
         return False
     try:
-        r.setex(_key(file_id, artifact), ttl, json.dumps(data, default=str))
+        payload = json.dumps(data, default=str)
+        set_span_attr('declarai.cache.bytes', len(payload))
+        r.setex(_key(file_id, artifact), ttl, payload)
+        set_span_attr('declarai.cache.ok', True)
         return True
     except Exception as exc:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', str(exc)[:200])
         logger.warning("cache_put failed (%s/%s): %s", file_id, artifact, exc)
         return False
 
 
+@prometa_tool(name="redis-get")
 def cache_get(file_id: int, artifact: str) -> Optional[Any]:
-    """Retrieve a pipeline artifact from the cache. Returns None if missing."""
+    """Retrieve a pipeline artifact from the cache. Returns None if missing.
+
+    Emits a ``redis-get`` span with attributes:
+      - declarai.cache.file_id   pipeline file id
+      - declarai.cache.artifact  artifact key (e.g. 'pipeline_config')
+      - declarai.cache.hit       True when a value was returned
+      - declarai.cache.bytes     raw payload size on hit
+      - declarai.cache.reason    error / miss reason (when applicable)
+    """
+    _stamp_session(file_id)
+    set_span_attr('declarai.cache.file_id', file_id)
+    set_span_attr('declarai.cache.artifact', artifact)
     r = _get_redis()
     if not r:
+        set_span_attr('declarai.cache.hit', False)
+        set_span_attr('declarai.cache.reason', 'redis-unavailable')
         return None
     try:
         raw = r.get(_key(file_id, artifact))
         if raw is None:
+            set_span_attr('declarai.cache.hit', False)
             return None
+        set_span_attr('declarai.cache.hit', True)
+        set_span_attr('declarai.cache.bytes', len(raw))
         return json.loads(raw)
     except Exception as exc:
+        set_span_attr('declarai.cache.hit', False)
+        set_span_attr('declarai.cache.reason', str(exc)[:200])
         logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
         return None
 
 
+@prometa_tool(name="redis-set-bulk")
 def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_TTL) -> bool:
-    """Store multiple artifacts at once using a Redis pipeline."""
+    """Store multiple artifacts at once using a Redis pipeline.
+
+    Emits a ``redis-set-bulk`` span with attributes:
+      - declarai.cache.file_id      pipeline file id
+      - declarai.cache.keys         artifact keys written (comma separated)
+      - declarai.cache.key_count    number of keys written
+      - declarai.cache.bytes        total serialized payload size
+      - declarai.cache.ttl          ttl seconds
+      - declarai.cache.ok           whether the pipelined write succeeded
+    """
+    _stamp_session(file_id)
+    set_span_attr('declarai.cache.file_id', file_id)
+    set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
+    set_span_attr('declarai.cache.key_count', len(artifacts))
+    set_span_attr('declarai.cache.ttl', ttl)
     r = _get_redis()
     if not r:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', 'redis-unavailable')
         return False
     try:
         pipe = r.pipeline()
+        total_bytes = 0
         for artifact, data in artifacts.items():
-            pipe.setex(_key(file_id, artifact), ttl, json.dumps(data, default=str))
+            payload = json.dumps(data, default=str)
+            total_bytes += len(payload)
+            pipe.setex(_key(file_id, artifact), ttl, payload)
         pipe.execute()
+        set_span_attr('declarai.cache.bytes', total_bytes)
+        set_span_attr('declarai.cache.ok', True)
         return True
     except Exception as exc:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', str(exc)[:200])
         logger.warning("cache_put_bulk failed (file_id=%s): %s", file_id, exc)
         return False
 
 
+@prometa_tool(name="redis-delete")
 def cache_delete(file_id: int, artifact: str) -> bool:
-    """Remove a specific artifact from the cache."""
+    """Remove a specific artifact from the cache.
+
+    Emits a ``redis-delete`` span with attributes:
+      - declarai.cache.file_id   pipeline file id
+      - declarai.cache.artifact  artifact key being evicted
+      - declarai.cache.ok        whether the delete succeeded
+    """
+    _stamp_session(file_id)
+    set_span_attr('declarai.cache.file_id', file_id)
+    set_span_attr('declarai.cache.artifact', artifact)
     r = _get_redis()
     if not r:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', 'redis-unavailable')
         return False
     try:
         r.delete(_key(file_id, artifact))
+        set_span_attr('declarai.cache.ok', True)
         return True
     except Exception as exc:
+        set_span_attr('declarai.cache.ok', False)
+        set_span_attr('declarai.cache.reason', str(exc)[:200])
         logger.warning("cache_delete failed (%s/%s): %s", file_id, artifact, exc)
         return False
 
 
+@prometa_tool(name="redis-list")
 def cache_list_artifacts(file_id: int) -> list[str]:
-    """List all cached artifact types for a given file_id."""
+    """List all cached artifact types for a given file_id.
+
+    Emits a ``redis-list`` span with attributes:
+      - declarai.cache.file_id     pipeline file id
+      - declarai.cache.prefix      key prefix scanned
+      - declarai.cache.key_count   number of matching keys
+      - declarai.cache.keys        matching artifact names (comma separated)
+    """
+    _stamp_session(file_id)
+    set_span_attr('declarai.cache.file_id', file_id)
+    prefix = f"ai:pipeline:{file_id}:"
+    set_span_attr('declarai.cache.prefix', prefix)
     r = _get_redis()
     if not r:
+        set_span_attr('declarai.cache.key_count', 0)
+        set_span_attr('declarai.cache.reason', 'redis-unavailable')
         return []
     try:
-        prefix = f"ai:pipeline:{file_id}:"
         keys = r.keys(f"{prefix}*")
-        return [k.replace(prefix, '') for k in keys]
+        artifacts = [k.replace(prefix, '') for k in keys]
+        set_span_attr('declarai.cache.key_count', len(artifacts))
+        set_span_attr('declarai.cache.keys', ','.join(artifacts))
+        return artifacts
     except Exception as exc:
+        set_span_attr('declarai.cache.key_count', 0)
+        set_span_attr('declarai.cache.reason', str(exc)[:200])
         logger.warning("cache_list_artifacts failed (file_id=%s): %s", file_id, exc)
         return []
 

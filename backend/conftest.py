@@ -4,6 +4,14 @@ Provides shared fixtures used across all test categories.
 """
 import io
 import os
+
+# Disable Prometa OTLP export for the entire test session so test runs don't
+# emit sessions like `declarai-file-99999` into the platform's Session Explorer.
+# Set before any test module imports the AI assistant (decorators init lazily,
+# but the env check runs at first decorated-call, which can be during a test
+# fixture rather than the test body — so PYTEST_CURRENT_TEST alone isn't enough).
+os.environ.setdefault('PROMETA_DISABLE', '1')
+
 import pytest
 import pandas as pd
 import numpy as np
