@@ -2298,9 +2298,16 @@ class _SpanCapture:
 
 
 def _patch_span_attr(monkeypatch, *modules, capture: _SpanCapture):
-    """Replace ``set_span_attr`` in each target module with the capture hook."""
+    """Replace ``set_span_attr`` in each target module with the capture hook.
+
+    Always also patches ``ai_assistant.prometa_config.set_span_attr`` because
+    the shared ``stamp_elapsed`` / ``span_timer`` helpers live there and call
+    their own module-level reference — without patching it, elapsed-time
+    attributes would silently bypass the test capture.
+    """
     import importlib
-    for mod_name in modules:
+    targets = list(modules) + ['ai_assistant.prometa_config']
+    for mod_name in targets:
         mod = importlib.import_module(mod_name)
         monkeypatch.setattr(mod, 'set_span_attr', capture.set_attr)
 
@@ -2637,3 +2644,229 @@ class TestSlimContextEmitsCacheReadSpans:
             r = _get_redis()
             for k in ('pipeline_config', 'selected_features'):
                 r.delete(f'ai:pipeline:53101:{k}')
+
+
+# ---------------------------------------------------------------------------
+# Elapsed-time attribute stamping (v2.22.1+).
+#
+# Redis ops on local docker complete in 100-500µs which the Prometa UI
+# rounds to "0ms" on the waterfall bar.  Every instrumented span must
+# therefore stamp ``<prefix>.elapsed_us`` and ``<prefix>.elapsed_ms`` so
+# the actual duration is always visible in the attribute panel even when
+# the bar is too small to render.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestElapsedTimeAttributes:
+    """Every redis-*, cache-read:*, tool-call, skill-* span must stamp
+    sub-millisecond timing as attributes."""
+
+    def test_redis_get_stamps_elapsed_us_and_ms(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            cache_put(60000, 'elapsed_test', {'x': 1})
+            cap.captured.clear()
+            cache_get(60000, 'elapsed_test')
+            # Microseconds is an integer, milliseconds is a float, both must
+            # be non-negative (a real Redis hit is always > 0 but we don't
+            # want flake on a 0-tick perf_counter result).
+            assert isinstance(cap.captured.get('declarai.cache.elapsed_us'), int)
+            assert cap.captured['declarai.cache.elapsed_us'] >= 0
+            assert isinstance(cap.captured.get('declarai.cache.elapsed_ms'), float)
+            assert cap.captured['declarai.cache.elapsed_ms'] >= 0
+        finally:
+            _get_redis().delete('ai:pipeline:60000:elapsed_test')
+
+    def test_redis_set_stamps_elapsed(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            cache_put(60001, 'elapsed_test', {'x': 1})
+            assert 'declarai.cache.elapsed_us' in cap.captured
+            assert 'declarai.cache.elapsed_ms' in cap.captured
+        finally:
+            _get_redis().delete('ai:pipeline:60001:elapsed_test')
+
+    def test_redis_list_stamps_elapsed(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_list_artifacts, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            cache_put(60002, 'one', [1])
+            cap.captured.clear()
+            cache_list_artifacts(60002)
+            assert 'declarai.cache.elapsed_us' in cap.captured
+            assert 'declarai.cache.elapsed_ms' in cap.captured
+        finally:
+            _get_redis().delete('ai:pipeline:60002:one')
+
+    def test_redis_delete_stamps_elapsed(self, monkeypatch):
+        from ai_assistant.cache import cache_put, cache_delete, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        cache_put(60003, 'to_remove', {'k': 1})
+        cap.captured.clear()
+        cache_delete(60003, 'to_remove')
+        assert 'declarai.cache.elapsed_us' in cap.captured
+        assert 'declarai.cache.elapsed_ms' in cap.captured
+
+    def test_redis_set_bulk_stamps_elapsed(self, monkeypatch):
+        from ai_assistant.cache import cache_put_bulk, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.cache', capture=cap)
+
+        try:
+            cache_put_bulk(60004, {'a': 1, 'b': 2})
+            assert 'declarai.cache.elapsed_us' in cap.captured
+            assert 'declarai.cache.elapsed_ms' in cap.captured
+        finally:
+            r = _get_redis()
+            for k in ('a', 'b'):
+                r.delete(f'ai:pipeline:60004:{k}')
+
+    def test_cache_read_reader_stamps_elapsed(self, monkeypatch):
+        """``cache-read:<artifact>`` spans (raw readers) also stamp elapsed
+        time — this is the layer right above ``redis-get``."""
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import read_pipeline_config
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(60005, 'pipeline_config', {'pipeline_type': 'classification'})
+            cap.captured.clear()
+            read_pipeline_config(60005)
+            assert 'declarai.cache.elapsed_us' in cap.captured
+            assert 'declarai.cache.elapsed_ms' in cap.captured
+            assert cap.captured['declarai.cache.elapsed_us'] >= 0
+        finally:
+            _get_redis().delete('ai:pipeline:60005:pipeline_config')
+
+
+@pytest.mark.unit
+class TestToolCallSpanRename:
+    """The dispatcher span emitted by ``execute_tool_call`` is now named
+    ``tool-call`` (was ``rag-tool-dispatch``) and carries identifying
+    attributes so the waterfall reads cleanly even though sub-ms duration
+    causes the bar to render as 0ms."""
+
+    def test_execute_tool_call_stamps_tool_name_and_outcome(self, monkeypatch):
+        from ai_assistant.cache import cache_put, _get_redis
+        from ai_assistant.tool_executor import execute_tool_call
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        try:
+            cache_put(60100, 'encoding_plan',
+                      [{'feature': 'f1', 'user_lom': 'Nominal', 'nunique': 5}])
+            cap.captured.clear()
+            out = execute_tool_call(60100, 'get_encoding_plan', {'top_n': 5})
+            assert 'Encoding Plan' in out
+            assert cap.captured.get('declarai.tool.name') == 'get_encoding_plan'
+            assert cap.captured.get('declarai.tool.file_id') == 60100
+            assert cap.captured.get('declarai.tool.args_keys') == 'top_n'
+            assert cap.captured.get('declarai.tool.ok') is True
+            assert isinstance(cap.captured.get('declarai.tool.result_chars'), int)
+            assert cap.captured['declarai.tool.result_chars'] > 0
+            assert 'declarai.tool.elapsed_us' in cap.captured
+            assert 'declarai.tool.elapsed_ms' in cap.captured
+        finally:
+            _get_redis().delete('ai:pipeline:60100:encoding_plan')
+
+    def test_execute_tool_call_unknown_tool_stamps_unknown_flag(self, monkeypatch):
+        from ai_assistant.tool_executor import execute_tool_call
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        out = execute_tool_call(60101, 'no_such_tool', {})
+        assert 'Unknown tool' in out
+        assert cap.captured.get('declarai.tool.name') == 'no_such_tool'
+        assert cap.captured.get('declarai.tool.unknown') is True
+        assert cap.captured.get('declarai.tool.ok') is False
+        assert cap.captured.get('declarai.tool.result_chars', 0) > 0
+
+    def test_execute_tool_call_args_keys_empty_when_no_args(self, monkeypatch):
+        from ai_assistant.tool_executor import execute_tool_call
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        execute_tool_call(60102, 'no_such_tool', {})
+        assert cap.captured.get('declarai.tool.args_keys') == ''
+
+    def test_execute_tool_call_handler_exception_stamps_error(self, monkeypatch):
+        """If a handler raises, the tool-call span must record ok=False and
+        a truncated error message so failures are observable."""
+        from ai_assistant import tool_executor
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.tool_executor', capture=cap)
+
+        def _boom(file_id, args):
+            raise ValueError("simulated handler failure")
+        monkeypatch.setitem(tool_executor._HANDLERS, 'get_dq_summary', _boom)
+
+        out = tool_executor.execute_tool_call(60103, 'get_dq_summary', {})
+        assert 'Error executing get_dq_summary' in out
+        assert cap.captured.get('declarai.tool.ok') is False
+        assert 'simulated handler failure' in cap.captured.get('declarai.tool.error', '')
+
+
+@pytest.mark.unit
+class TestPrometaConfigTimerHelpers:
+    """``span_timer`` and ``stamp_elapsed`` are the shared building blocks
+    for the elapsed-time attributes — verify they emit the right keys."""
+
+    def test_stamp_elapsed_emits_us_and_ms(self, monkeypatch):
+        import time
+        from ai_assistant import prometa_config
+        captured: dict = {}
+        monkeypatch.setattr(prometa_config, 'set_span_attr',
+                            lambda k, v: captured.__setitem__(k, v))
+        t0 = time.perf_counter_ns()
+        prometa_config.stamp_elapsed('myns.foo', t0)
+        assert 'myns.foo.elapsed_us' in captured
+        assert 'myns.foo.elapsed_ms' in captured
+        assert isinstance(captured['myns.foo.elapsed_us'], int)
+        assert isinstance(captured['myns.foo.elapsed_ms'], float)
+
+    def test_span_timer_emits_on_exit_even_on_exception(self, monkeypatch):
+        from ai_assistant import prometa_config
+        captured: dict = {}
+        monkeypatch.setattr(prometa_config, 'set_span_attr',
+                            lambda k, v: captured.__setitem__(k, v))
+        with pytest.raises(RuntimeError):
+            with prometa_config.span_timer('myns.bar'):
+                raise RuntimeError("boom")
+        # The finally block of span_timer must have run despite the raise.
+        assert 'myns.bar.elapsed_us' in captured
+        assert 'myns.bar.elapsed_ms' in captured

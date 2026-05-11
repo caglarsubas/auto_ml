@@ -19,6 +19,8 @@ Configuration via environment variables:
 import os
 import functools
 import logging
+import time as _time
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +146,44 @@ def set_span_attr(key: str, value) -> None:
             span.attributes[key] = value
     except Exception:
         pass
+
+
+def stamp_elapsed(prefix: str, t0_ns: int) -> int:
+    """Stamp ``<prefix>.elapsed_us`` and ``<prefix>.elapsed_ms`` on the
+    current span using a previously captured ``time.perf_counter_ns()``
+    reading.
+
+    Redis operations on a local docker network typically complete in
+    100-500µs which the Prometa UI rounds to ``0ms`` in the waterfall bar.
+    Stamping the elapsed time as an attribute guarantees the real
+    duration is always visible in the span detail panel and queryable
+    from Trace Explorer.
+
+    Returns the elapsed nanoseconds for the caller's convenience.
+    """
+    elapsed_ns = _time.perf_counter_ns() - t0_ns
+    set_span_attr(f'{prefix}.elapsed_us', elapsed_ns // 1000)
+    set_span_attr(f'{prefix}.elapsed_ms', round(elapsed_ns / 1_000_000.0, 3))
+    return elapsed_ns
+
+
+@contextmanager
+def span_timer(prefix: str):
+    """Context manager that stamps ``<prefix>.elapsed_{us,ms}`` on exit.
+
+    Use inside a ``@prometa_tool``-decorated function so the elapsed time
+    lands on the SDK's active span::
+
+        @prometa_tool(name="redis-get")
+        def cache_get(file_id, artifact):
+            with span_timer('declarai.cache'):
+                ...  # real work
+    """
+    t0 = _time.perf_counter_ns()
+    try:
+        yield
+    finally:
+        stamp_elapsed(prefix, t0)
 
 
 def set_session_id(session_id: str) -> None:

@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr
+from .prometa_config import tool as prometa_tool, set_span_attr, span_timer
 from .skill_registry import get_skill, list_skills
 
 from .cache import (
@@ -66,85 +66,96 @@ def _stamp_read_attrs(artifact: str, data: Any) -> None:
 # Each raw reader wraps a ``cache_get`` with its own ``cache-read:<artifact>``
 # span.  This gives the trace waterfall a visible, named row per artifact
 # regardless of whether the read was triggered by the LLM (via
-# ``rag-tool-dispatch`` -> handler -> reader) or by the server prefetch path
+# ``tool-call`` -> handler -> reader) or by the server prefetch path
 # (``_build_slim_context`` -> reader).  The underlying ``cache_get`` call
 # produces a nested ``redis-get`` child span.
 
 @prometa_tool(name="cache-read:split_validation")
 def read_split_validation(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_SPLIT_VALIDATION)
-    _stamp_read_attrs(ARTIFACT_SPLIT_VALIDATION, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_SPLIT_VALIDATION)
+        _stamp_read_attrs(ARTIFACT_SPLIT_VALIDATION, data)
+        return data
 
 
 @prometa_tool(name="cache-read:dq_summary")
 def read_dq_summary(file_id: int) -> Optional[Any]:
-    data = cache_get(file_id, ARTIFACT_DQ_SUMMARY)
-    _stamp_read_attrs(ARTIFACT_DQ_SUMMARY, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_DQ_SUMMARY)
+        _stamp_read_attrs(ARTIFACT_DQ_SUMMARY, data)
+        return data
 
 
 @prometa_tool(name="cache-read:feature_stats")
 def read_feature_stats(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_FEATURE_STATS)
-    _stamp_read_attrs(ARTIFACT_FEATURE_STATS, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_FEATURE_STATS)
+        _stamp_read_attrs(ARTIFACT_FEATURE_STATS, data)
+        return data
 
 
 @prometa_tool(name="cache-read:vif_decomposition")
 def read_vif_decomposition(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_VIF_DECOMPOSITION)
-    _stamp_read_attrs(ARTIFACT_VIF_DECOMPOSITION, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_VIF_DECOMPOSITION)
+        _stamp_read_attrs(ARTIFACT_VIF_DECOMPOSITION, data)
+        return data
 
 
 @prometa_tool(name="cache-read:encoding_plan")
 def read_encoding_plan(file_id: int) -> Optional[Any]:
-    data = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
-    _stamp_read_attrs(ARTIFACT_ENCODING_PLAN, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
+        _stamp_read_attrs(ARTIFACT_ENCODING_PLAN, data)
+        return data
 
 
 @prometa_tool(name="cache-read:selected_features")
 def read_selected_features(file_id: int) -> Optional[Any]:
-    data = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
-    _stamp_read_attrs(ARTIFACT_SELECTED_FEATURES, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_SELECTED_FEATURES)
+        _stamp_read_attrs(ARTIFACT_SELECTED_FEATURES, data)
+        return data
 
 
 @prometa_tool(name="cache-read:shap_details")
 def read_shap_details(file_id: int) -> Optional[Any]:
-    data = cache_get(file_id, ARTIFACT_SHAP_DETAILS)
-    _stamp_read_attrs(ARTIFACT_SHAP_DETAILS, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_SHAP_DETAILS)
+        _stamp_read_attrs(ARTIFACT_SHAP_DETAILS, data)
+        return data
 
 
 @prometa_tool(name="cache-read:sfs_results")
 def read_sfs_results(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_SFS_RESULTS)
-    _stamp_read_attrs(ARTIFACT_SFS_RESULTS, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_SFS_RESULTS)
+        _stamp_read_attrs(ARTIFACT_SFS_RESULTS, data)
+        return data
 
 
 @prometa_tool(name="cache-read:cv_results")
 def read_cv_results(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_CV_RESULTS)
-    _stamp_read_attrs(ARTIFACT_CV_RESULTS, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_CV_RESULTS)
+        _stamp_read_attrs(ARTIFACT_CV_RESULTS, data)
+        return data
 
 
 @prometa_tool(name="cache-read:pipeline_notes")
 def read_pipeline_notes(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_PIPELINE_NOTES)
-    _stamp_read_attrs(ARTIFACT_PIPELINE_NOTES, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_PIPELINE_NOTES)
+        _stamp_read_attrs(ARTIFACT_PIPELINE_NOTES, data)
+        return data
 
 
 @prometa_tool(name="cache-read:pipeline_config")
 def read_pipeline_config(file_id: int) -> Optional[dict]:
-    data = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
-    _stamp_read_attrs(ARTIFACT_PIPELINE_CONFIG, data)
-    return data
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_PIPELINE_CONFIG)
+        _stamp_read_attrs(ARTIFACT_PIPELINE_CONFIG, data)
+        return data
 
 
 @prometa_tool(name="cache-read:data_dictionary")
@@ -158,21 +169,22 @@ def read_data_dictionary(file_id: int) -> Optional[list]:
     the slim-context prefetch did.  The span covers both the cache hit and
     the optional DB enrichment for easy latency attribution.
     """
-    raw = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
-    if raw is None:
-        _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, None)
-        return None
-    features = raw if isinstance(raw, list) else raw.get('features', [])
-    try:
-        from ai_assistant.views import _enrich_dd_with_descriptions
-        enriched = _enrich_dd_with_descriptions(file_id, features)
-        set_span_attr('declarai.cache.enriched', True)
-    except Exception as exc:
-        set_span_attr('declarai.cache.enriched', False)
-        set_span_attr('declarai.cache.enrich_error', str(exc)[:200])
-        enriched = features
-    _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, enriched)
-    return enriched
+    with span_timer('declarai.cache'):
+        raw = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
+        if raw is None:
+            _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, None)
+            return None
+        features = raw if isinstance(raw, list) else raw.get('features', [])
+        try:
+            from ai_assistant.views import _enrich_dd_with_descriptions
+            enriched = _enrich_dd_with_descriptions(file_id, features)
+            set_span_attr('declarai.cache.enriched', True)
+        except Exception as exc:
+            set_span_attr('declarai.cache.enriched', False)
+            set_span_attr('declarai.cache.enrich_error', str(exc)[:200])
+            enriched = features
+        _stamp_read_attrs(ARTIFACT_DATA_DICTIONARY, enriched)
+        return enriched
 
 
 # ---------------------------------------------------------------------------
@@ -433,36 +445,39 @@ def _load_skill_traced(skill_name: str) -> str:
       - declarai.skill.body_chars   payload size when found
       - declarai.skill.path         on-disk location when found
       - declarai.skill.file_count   number of supplementary files discovered
+      - declarai.skill.elapsed_us   elapsed time in microseconds
+      - declarai.skill.elapsed_ms   elapsed time in milliseconds
     """
-    set_span_attr('declarai.skill.name', skill_name)
-    skill = get_skill(skill_name)
-    if not skill:
-        set_span_attr('declarai.skill.found', False)
-        available = ', '.join(sorted(list_skills().keys())) or '(none)'
-        return (f"Skill '{skill_name}' is not bundled. "
-                f"Available skills: {available}.")
-    body = skill.body()
-    files = skill.list_files()
-    set_span_attr('declarai.skill.found', True)
-    set_span_attr('declarai.skill.path', skill.path)
-    set_span_attr('declarai.skill.body_chars', len(body))
-    set_span_attr('declarai.skill.file_count', len(files))
-    if not body:
-        return f"Skill '{skill.name}' is registered but its body is empty."
-    file_list = ''
-    if files:
-        file_list = (
-            "\n\nSupplementary files (request via get_skill_file when needed):\n"
-            + '\n'.join(f"  - {p}" for p in files)
+    with span_timer('declarai.skill'):
+        set_span_attr('declarai.skill.name', skill_name)
+        skill = get_skill(skill_name)
+        if not skill:
+            set_span_attr('declarai.skill.found', False)
+            available = ', '.join(sorted(list_skills().keys())) or '(none)'
+            return (f"Skill '{skill_name}' is not bundled. "
+                    f"Available skills: {available}.")
+        body = skill.body()
+        files = skill.list_files()
+        set_span_attr('declarai.skill.found', True)
+        set_span_attr('declarai.skill.path', skill.path)
+        set_span_attr('declarai.skill.body_chars', len(body))
+        set_span_attr('declarai.skill.file_count', len(files))
+        if not body:
+            return f"Skill '{skill.name}' is registered but its body is empty."
+        file_list = ''
+        if files:
+            file_list = (
+                "\n\nSupplementary files (request via get_skill_file when needed):\n"
+                + '\n'.join(f"  - {p}" for p in files)
+            )
+        return (
+            f"Skill: {skill.name}\n"
+            f"Description: {skill.description}\n"
+            f"--- BEGIN SKILL CONTENT ---\n"
+            f"{body}\n"
+            f"--- END SKILL CONTENT ---"
+            f"{file_list}"
         )
-    return (
-        f"Skill: {skill.name}\n"
-        f"Description: {skill.description}\n"
-        f"--- BEGIN SKILL CONTENT ---\n"
-        f"{body}\n"
-        f"--- END SKILL CONTENT ---"
-        f"{file_list}"
-    )
 
 
 def _handle_invoke_skill(file_id: int, args: dict) -> str:
@@ -482,28 +497,31 @@ def _load_skill_file_traced(skill_name: str, rel_path: str) -> str:
       - declarai.skill.file_path      relative path requested
       - declarai.skill.file_found     whether the read succeeded
       - declarai.skill.file_chars     payload size when found
+      - declarai.skill.elapsed_us     elapsed time in microseconds
+      - declarai.skill.elapsed_ms     elapsed time in milliseconds
     """
-    set_span_attr('declarai.skill.name', skill_name)
-    set_span_attr('declarai.skill.file_path', rel_path)
-    skill = get_skill(skill_name)
-    if not skill:
-        set_span_attr('declarai.skill.file_found', False)
-        available = ', '.join(sorted(list_skills().keys())) or '(none)'
-        return f"Skill '{skill_name}' is not bundled. Available skills: {available}."
-    text, err = skill.read_file(rel_path)
-    if err:
-        set_span_attr('declarai.skill.file_found', False)
-        listing = ', '.join(skill.list_files()) or '(none)'
-        return f"Cannot read '{rel_path}' from skill '{skill.name}': {err}. Available files: {listing}."
-    set_span_attr('declarai.skill.file_found', True)
-    set_span_attr('declarai.skill.file_chars', len(text))
-    return (
-        f"Skill: {skill.name}\n"
-        f"File: {rel_path}\n"
-        f"--- BEGIN FILE CONTENT ---\n"
-        f"{text}\n"
-        f"--- END FILE CONTENT ---"
-    )
+    with span_timer('declarai.skill'):
+        set_span_attr('declarai.skill.name', skill_name)
+        set_span_attr('declarai.skill.file_path', rel_path)
+        skill = get_skill(skill_name)
+        if not skill:
+            set_span_attr('declarai.skill.file_found', False)
+            available = ', '.join(sorted(list_skills().keys())) or '(none)'
+            return f"Skill '{skill_name}' is not bundled. Available skills: {available}."
+        text, err = skill.read_file(rel_path)
+        if err:
+            set_span_attr('declarai.skill.file_found', False)
+            listing = ', '.join(skill.list_files()) or '(none)'
+            return f"Cannot read '{rel_path}' from skill '{skill.name}': {err}. Available files: {listing}."
+        set_span_attr('declarai.skill.file_found', True)
+        set_span_attr('declarai.skill.file_chars', len(text))
+        return (
+            f"Skill: {skill.name}\n"
+            f"File: {rel_path}\n"
+            f"--- BEGIN FILE CONTENT ---\n"
+            f"{text}\n"
+            f"--- END FILE CONTENT ---"
+        )
 
 
 def _handle_get_skill_file(file_id: int, args: dict) -> str:
@@ -537,11 +555,26 @@ _HANDLERS = {
 }
 
 
-@prometa_tool(name="rag-tool-dispatch")
+@prometa_tool(name="tool-call")
 def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
     """
-    Execute a single tool call and return the result as a string.
-    Traced as a Prometa tool span so each Redis lookup is visible.
+    Execute a single LLM-initiated tool call and return the result as a string.
+
+    Emits a ``tool-call`` span (renamed from ``rag-tool-dispatch`` — we never
+    did retrieval-augmented generation; this is straight function-calling
+    against a Redis cache).  Span attributes:
+      - declarai.tool.name           which tool the LLM invoked
+      - declarai.tool.file_id        pipeline file id
+      - declarai.tool.args_keys      comma-separated argument names
+      - declarai.tool.ok             whether the handler ran to completion
+      - declarai.tool.unknown        True when tool_name has no registered handler
+      - declarai.tool.result_chars   length of the formatted result string
+      - declarai.tool.elapsed_us     elapsed time in microseconds
+      - declarai.tool.elapsed_ms     elapsed time in milliseconds
+      - declarai.tool.error          truncated error message on exception
+
+    The child spans (``cache-read:<artifact>`` and ``redis-get``) make the
+    actual work this dispatcher delegates to fully observable.
 
     Args:
         file_id: The pipeline file ID for cache lookups.
@@ -551,13 +584,28 @@ def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
     Returns:
         A human-readable string with the tool result.
     """
-    handler = _HANDLERS.get(tool_name)
-    if not handler:
-        return f"Unknown tool: {tool_name}"
-    try:
-        result = handler(file_id, arguments)
-        logger.info("Tool %s executed for file_id=%s (result length=%d)", tool_name, file_id, len(result))
-        return result
-    except Exception as exc:
-        logger.error("Tool execution error (%s): %s", tool_name, exc)
-        return f"Error executing {tool_name}: {exc}"
+    with span_timer('declarai.tool'):
+        set_span_attr('declarai.tool.name', tool_name)
+        set_span_attr('declarai.tool.file_id', file_id)
+        set_span_attr('declarai.tool.args_keys',
+                      ','.join(sorted(arguments.keys())) if arguments else '')
+        handler = _HANDLERS.get(tool_name)
+        if not handler:
+            set_span_attr('declarai.tool.unknown', True)
+            set_span_attr('declarai.tool.ok', False)
+            result = f"Unknown tool: {tool_name}"
+            set_span_attr('declarai.tool.result_chars', len(result))
+            return result
+        try:
+            result = handler(file_id, arguments)
+            set_span_attr('declarai.tool.ok', True)
+            set_span_attr('declarai.tool.result_chars', len(result))
+            logger.info("Tool %s executed for file_id=%s (result length=%d)", tool_name, file_id, len(result))
+            return result
+        except Exception as exc:
+            set_span_attr('declarai.tool.ok', False)
+            set_span_attr('declarai.tool.error', str(exc)[:200])
+            logger.error("Tool execution error (%s): %s", tool_name, exc)
+            result = f"Error executing {tool_name}: {exc}"
+            set_span_attr('declarai.tool.result_chars', len(result))
+            return result

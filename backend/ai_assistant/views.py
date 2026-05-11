@@ -350,7 +350,7 @@ def _build_slim_context(file_id: int, section: str) -> str:
     reader (``read_pipeline_config``/``read_data_dictionary``/...) so each
     fetch appears as its own ``cache-read:<artifact>`` span in the trace
     waterfall — symmetric with the spans emitted when the LLM itself
-    invokes a tool via ``rag-tool-dispatch``.
+    invokes a tool via ``tool-call``.
     """
     # Local import to avoid circular dependency at module load time.
     from .tool_executor import (
