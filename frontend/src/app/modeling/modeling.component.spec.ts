@@ -156,4 +156,151 @@ describe('ModelingComponent', () => {
       expect(component.encodingPlan).toEqual([]);
     });
   });
+
+  // ── encodingRankingUpdates$ subscription (v2.24.0+) ──────────────────
+  // The AI assistant's procedural follow-through path: after setting
+  // LoM=ordinal (handled by metadataUpdates$), it emits a
+  // `set_ordinal_ranking` action with the ranked category values.
+  // The chat panel forwards those rankings here and we patch
+  // encodingPlan[i].ranking on the matching feature — equivalent to
+  // the user clicking "Set Ranking" and arranging the values manually.
+  describe('encodingRankingUpdates$ -> encodingPlan.ranking sync', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+    });
+
+    function seedEncodingPlan(plan: any[]): void {
+      component.encodingPlan = plan;
+    }
+
+    it('should patch entry.ranking on the matching feature', () => {
+      seedEncodingPlan([
+        { feature: 'Var_36', user_lom: 'ordinal', nunique: 7,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'],
+          ranking: null },
+      ]);
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+      ]);
+      expect(component.encodingPlan[0].ranking).toEqual(
+        ['0', '1', '2', '3', '8', 'L', 'Others']);
+    });
+
+    it('should clone the ranking defensively (subsequent ▲▼ must not mutate AI source)', () => {
+      seedEncodingPlan([
+        { feature: 'Var_X', user_lom: 'ordinal', nunique: 3,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['Low', 'Mid', 'High'], ranking: null },
+      ]);
+      const aiSource = ['Low', 'Mid', 'High'];
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_X', ranking: aiSource },
+      ]);
+      // entry.ranking must be a different array reference so any
+      // subsequent moveRankingUp/Down doesn't mutate the AI's source.
+      expect(component.encodingPlan[0].ranking).not.toBe(aiSource);
+      expect(component.encodingPlan[0].ranking).toEqual(aiSource);
+    });
+
+    it('should coerce numeric ranking values to strings (encoding lookup key type)', () => {
+      seedEncodingPlan([
+        { feature: 'Var_Num', user_lom: 'ordinal', nunique: 4,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['0', '1', '2', '3'], ranking: null },
+      ]);
+      // The LLM may emit ints — the modeling component must coerce
+      // to strings so the backend _ordinal_encode lookup hits.
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_Num', ranking: [0, 1, 2, 3] as any },
+      ]);
+      expect(component.encodingPlan[0].ranking).toEqual(['0', '1', '2', '3']);
+      expect(component.encodingPlan[0].ranking.every((v: any) => typeof v === 'string')).toBeTrue();
+    });
+
+    it('should ignore updates whose column is not in the encoding plan', () => {
+      seedEncodingPlan([
+        { feature: 'Var_36', user_lom: 'ordinal', nunique: 3,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['A', 'B', 'C'], ranking: null },
+      ]);
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'NotInPlan', ranking: ['x', 'y'] },
+      ]);
+      // Untouched.
+      expect(component.encodingPlan[0].ranking).toBeNull();
+    });
+
+    it('should patch multiple features in a single emission', () => {
+      seedEncodingPlan([
+        { feature: 'Var_2', user_lom: 'ordinal', nunique: 3,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['A', 'P', 'R'], ranking: null },
+        { feature: 'Var_36', user_lom: 'ordinal', nunique: 7,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'], ranking: null },
+      ]);
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_2', ranking: ['A', 'P', 'R'] },
+        { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+      ]);
+      expect(component.encodingPlan[0].ranking).toEqual(['A', 'P', 'R']);
+      expect(component.encodingPlan[1].ranking).toEqual(
+        ['0', '1', '2', '3', '8', 'L', 'Others']);
+    });
+
+    it('should silently skip entries with empty ranking arrays', () => {
+      seedEncodingPlan([
+        { feature: 'Var_X', user_lom: 'ordinal', nunique: 3,
+          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+          unique_values: ['Low', 'Mid', 'High'], ranking: ['Low', 'Mid', 'High'] },
+      ]);
+      const before = [...component.encodingPlan[0].ranking];
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_X', ranking: [] },
+      ]);
+      // Existing ranking preserved — empty payload is a no-op for that entry.
+      expect(component.encodingPlan[0].ranking).toEqual(before);
+    });
+
+    it('should do nothing when encodingPlan is empty (late mount safety)', () => {
+      component.encodingPlan = [];
+      expect(() => sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
+      ])).not.toThrow();
+      expect(component.encodingPlan).toEqual([]);
+    });
+
+    // End-to-end procedural-chain check: simulate the AI's two-action
+    // sequence (LoM=ordinal first, then set_ordinal_ranking) and
+    // verify the final entry state matches what a user clicking
+    // through the UI manually would produce.
+    it('should fully transform a nominal entry through the procedural chain', () => {
+      seedEncodingPlan([
+        { feature: 'Var_36', user_lom: 'nominal', nunique: 7,
+          fallback_strategy: 'label_encoding',
+          fallback_reason: 'Nominal feature → Label Encoding',
+          needs_ranking: false, ranking: null,
+          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+      ]);
+      // Step 1: AI sets LoM = ordinal via update_metadata
+      sharedService.emitMetadataUpdates([
+        { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+      ]);
+      // Side effects from updateEncodingLom (nunique=7 → 5–10 bucket)
+      expect(component.encodingPlan[0].user_lom).toBe('ordinal');
+      expect(component.encodingPlan[0].fallback_strategy).toBe('ordinal_encoding');
+      expect(component.encodingPlan[0].needs_ranking).toBeTrue();
+      // Step 2: AI sets the ranking via set_ordinal_ranking
+      sharedService.emitEncodingRankingUpdates([
+        { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+      ]);
+      // Final state matches the UI's manual "Set Ranking" + reorder path.
+      expect(component.encodingPlan[0].ranking).toEqual(
+        ['0', '1', '2', '3', '8', 'L', 'Others']);
+    });
+  });
 });

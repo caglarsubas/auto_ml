@@ -377,6 +377,51 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       }
     });
 
+    // v2.24.0+: procedural-chain follow-through.  After the AI flips a
+    // feature's LoM to ordinal (handled by metadataUpdates$ above), it
+    // emits a `set_ordinal_ranking` action with the ranked category
+    // values.  The chat panel forwards those rankings on
+    // encodingRankingUpdates$ and we patch the matching encoding plan
+    // entry's `entry.ranking` array — equivalent to the user clicking
+    // "Set Ranking" and arranging the values manually.  The template
+    // already renders the rank-order list with ▲▼ controls when both
+    // `entry.needs_ranking === true` AND `entry.ranking?.length > 0`,
+    // so a plain in-place assignment is all that's required.
+    this.sharedService.encodingRankingUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      if (!this.encodingPlan || this.encodingPlan.length === 0) return;
+      const idxByName = new Map<string, number>();
+      this.encodingPlan.forEach((e: any, i: number) => {
+        if (typeof e?.feature === 'string') idxByName.set(e.feature, i);
+      });
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const ranking = upd?.ranking;
+        if (!col || !Array.isArray(ranking) || ranking.length === 0) continue;
+        const i = idxByName.get(col);
+        if (i === undefined) continue;
+        const entry = this.encodingPlan[i];
+        // Clone defensively so subsequent push/splice on entry.ranking
+        // (via moveRankingUp/Down) don't mutate the AI's source array.
+        // Coerce each value to string to match the unique_values shape
+        // and the backend's _ordinal_encode mapping key type.
+        entry.ranking = ranking.map((v) => String(v));
+        // The AI is asserting an ordinal ranking, which only makes
+        // sense when the entry is ordinal AND in the 5–10 unique
+        // bucket where needs_ranking is true.  If the entry was not
+        // already marked needs_ranking (e.g. nunique > 10 routed to
+        // target_encoding), respect the backend route: the ranking
+        // is recorded but won't be used at encoding-apply time.
+        touched = true;
+      }
+      if (touched) {
+        // Trigger checkpoint so the new ranking survives pipeline
+        // navigation — same path the manual ▲▼ buttons take.
+        this.onConfigChanged();
+      }
+    });
+
     // Restore from checkpoint if available (pipeline resume)
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {

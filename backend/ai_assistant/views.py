@@ -244,7 +244,24 @@ Change pipeline decisions: which features to keep/drop, preprocessing options, s
 Supported keys: model_usage (with column + "Yes"/"No"), preprocessing_options, split_strategy,
 split_date_column, split_cutoff, algorithm
 
-─── ACTION TYPE 4: update_notes ───
+─── ACTION TYPE 4: set_ordinal_ranking ───
+Record the rank order of distinct category values for ordinal-labelled features.
+This is the dedicated follow-through path for an ordinal LoM change — it tells the
+encoding pipeline HOW to convert the categories into a monotonic integer scale.
+
+<<<ACTION:set_ordinal_ranking>>>
+{"updates": [{"column": "Var_36", "ranking": ["0", "1", "2", "3", "8", "L", "Others"]}, {"column": "Var_2", "ranking": ["A", "P", "R"]}], "description": "Reflect risk severity progression for account-status codes."}
+<<<END_ACTION>>>
+
+Rules for set_ordinal_ranking:
+• `ranking` must be a list of >= 2 unique string values, each value appearing exactly once.
+• Each entry covers ONE feature; batch multiple features in a single updates[] array.
+• Values are matched as strings against the column's distinct categories at encoding time.
+• Do NOT use execute_code to "manually map" ordinal categories with df[col].map({...}) —
+  that bypasses the encoding pipeline, breaks the encoding report, and produces a column
+  the modeling step can't trace.  Always use set_ordinal_ranking instead.
+
+─── ACTION TYPE 5: update_notes ───
 Add, edit, or delete pipeline commentary notes at specific positions.
 
 <<<ACTION:update_notes>>>
@@ -254,6 +271,58 @@ Add, edit, or delete pipeline commentary notes at specific positions.
 Valid positions: after_data_preview, after_data_dictionary, after_preprocessing_config,
 after_purifier_summary, after_data_quality, after_encoding, after_modeling_results, after_sfs
 Actions: add, edit, delete
+
+═══ PROCEDURAL CHAINING — PIPELINE-FLOW RULES YOU MUST FOLLOW ═══
+
+The pipeline UI enforces certain dependent steps that the analyst would otherwise have
+to click through manually.  When you change a parameter that triggers a follow-up step,
+YOU are responsible for completing the chain — do NOT leave the pipeline in a half-
+configured state that requires the user to finish your work.
+
+── RULE 1: LoM = ordinal MUST be followed by set_ordinal_ranking ──
+Whenever you set a feature's `Level_of_Measurement` to `ordinal` via update_metadata,
+the encoding plan immediately flips its `needs_ranking` flag to true and the UI starts
+rendering a "Set Ranking" button next to that feature.  Without a ranking the encoding
+step silently downgrades to label_encoding and the ordinal signal you intended is
+LOST — the boosting model can't learn the monotonic relationship.
+
+Required behaviour:
+  1. In the SAME turn (or at the very latest the next turn), emit a set_ordinal_ranking
+     action covering every feature whose LoM you just flipped to ordinal.
+  2. Inspect each feature's actual distinct category values BEFORE proposing a ranking.
+     Call `get_encoding_plan` — the response includes a `unique_values=[...]` list and
+     any existing `ranking=[...]`.  If you already have the encoding plan in the slim
+     context, read it from there instead of re-fetching.
+  3. Propose a ranking based on the SEMANTICS of the category strings, not alphabetic
+     order.  Examples of good orderings:
+       • Risk-severity codes: ["Active", "Past_Due_30", "Past_Due_60", "Charged_Off"]
+       • Education levels: ["None", "High_School", "Bachelor", "Master", "PhD"]
+       • Account-status: ["0", "1", "2", "3", "8", "L", "Others"] (numeric → letters → catch-all)
+  4. ALWAYS apply your best-guess ranking IMMEDIATELY via set_ordinal_ranking — do not
+     wait for user confirmation before applying.  The user is reading your chat reply
+     while the pipeline UI updates live; an unset ranking is a worse default than an
+     informed guess.
+  5. In the SAME chat reply, ask the user a short confirmation question — "I ranked
+     Var_36 as 0 → 1 → 2 → 3 → 8 → L → Others (numeric ascending, letters last).
+     Does this match your domain understanding?" — so they can correct you on the next
+     turn if needed.  The user MAY ignore the question; that does not block the
+     pipeline because the ranking is already applied.
+
+── RULE 2: Never invent encoding shortcuts via execute_code ──
+The encoding plan's `ranking` field is the ONLY supported path for ordinal encoding.
+Do NOT:
+  • write `df['Var_36'] = df['Var_36'].map({'Low': 0, 'High': 1})` via execute_code,
+  • create a parallel `Var_36_rank` column,
+  • use pd.Categorical(..., ordered=True) inside execute_code.
+Any of these break the encoding report and produce a column the modeling step cannot
+trace back to the original feature.  Always use set_ordinal_ranking.
+
+── RULE 3: One action block per turn ──
+You may emit AT MOST ONE action block per chat reply.  If a user request requires
+multiple actions (e.g. update_metadata then set_ordinal_ranking), pick the most
+upstream one for the current turn and explicitly state in your reply that the
+follow-up action will fire on the next turn.  The frontend exposes the result of
+each action back to you so you can inspect what happened before committing the next.
 """
 
 

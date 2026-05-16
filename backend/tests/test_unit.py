@@ -1318,6 +1318,196 @@ class TestDispatchAction:
         from ai_assistant.action_executor import _remove_backup
         _remove_backup(str(tmp_path / 'nonexistent.bak'))  # should not raise
 
+    # ── v2.24.0+: set_ordinal_ranking action ────────────────────────────
+    # The dedicated path for the AI to follow through on an ordinal LoM
+    # change.  These tests pin the validation surface and ensure the
+    # action is registered in the dispatcher.
+
+    def test_set_ordinal_ranking_routes_correctly(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_36', 'ranking': ['0', '1', '2', '3', '8', 'L', 'Others']},
+            ],
+        })
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'set_ordinal_ranking'
+        assert len(result['applied']) == 1
+        applied = result['applied'][0]
+        assert applied['column'] == 'Var_36'
+        # Values must be coerced to strings to match the encoding plan
+        # `unique_values` shape and the backend's _ordinal_encode key
+        # type — guards against an LLM emitting numeric ranks.
+        assert applied['ranking'] == ['0', '1', '2', '3', '8', 'L', 'Others']
+        assert all(isinstance(v, str) for v in applied['ranking'])
+
+    def test_set_ordinal_ranking_batches_multiple_features(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_2', 'ranking': ['A', 'P', 'R']},
+                {'column': 'Var_36', 'ranking': ['Low', 'Mid', 'High']},
+            ],
+        })
+        assert result['status'] == 'success'
+        assert len(result['applied']) == 2
+        cols = {a['column'] for a in result['applied']}
+        assert cols == {'Var_2', 'Var_36'}
+
+    def test_set_ordinal_ranking_coerces_numeric_ranking_values_to_str(self):
+        # The LLM may emit numeric values in the ranking — coercion to
+        # string is required so the encoding-time `series.map(...)`
+        # lookup hits (the column is astype(str)'d in _ordinal_encode).
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [{'column': 'Var_X', 'ranking': [0, 1, 2, 3]}],
+        })
+        assert result['status'] == 'success'
+        assert result['applied'][0]['ranking'] == ['0', '1', '2', '3']
+
+    def test_set_ordinal_ranking_empty_updates_error(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {'updates': []})
+        assert result['status'] == 'error'
+        assert 'No ranking updates' in result['error']
+
+    def test_set_ordinal_ranking_non_list_updates_error(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {'updates': 'not-a-list'})
+        assert result['status'] == 'error'
+
+    def test_set_ordinal_ranking_rejects_duplicate_values(self):
+        # The ordinal scale is a strict order — every category must
+        # appear exactly once.  Duplicates would alias two ranks to
+        # the same integer at encoding time.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [{'column': 'Var_36', 'ranking': ['Low', 'Mid', 'Low', 'High']}],
+        })
+        assert result['status'] == 'error'  # no entry was applied
+        assert len(result['errors']) == 1
+        err = result['errors'][0]
+        assert err['column'] == 'Var_36'
+        assert 'duplicate' in err['error']
+
+    def test_set_ordinal_ranking_rejects_single_value_ranking(self):
+        # An ordinal "scale" of length 1 has no order to encode.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [{'column': 'Var_X', 'ranking': ['only-one']}],
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+        assert 'at least 2' in result['errors'][0]['error']
+
+    def test_set_ordinal_ranking_rejects_non_list_ranking(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [{'column': 'Var_X', 'ranking': 'not-a-list'}],
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+
+    def test_set_ordinal_ranking_rejects_missing_column(self):
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [{'ranking': ['A', 'B', 'C']}],  # no `column`
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+
+    def test_set_ordinal_ranking_partial_success(self):
+        # Mix of one valid + one invalid entry — the action should
+        # report success because at least one ranking was applied,
+        # and the invalid one is surfaced in `errors`.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_OK', 'ranking': ['A', 'B', 'C']},
+                {'column': 'Var_Bad', 'ranking': ['X', 'X']},  # duplicates
+            ],
+        })
+        assert result['status'] == 'success'
+        assert len(result['applied']) == 1
+        assert result['applied'][0]['column'] == 'Var_OK'
+        assert len(result['errors']) == 1
+        assert result['errors'][0]['column'] == 'Var_Bad'
+
+
+# ---------------------------------------------------------------------------
+# AI tool_executor: get_encoding_plan reader exposes unique_values + ranking
+# ---------------------------------------------------------------------------
+# v2.24.0+: the AI needs to see actual category strings (unique_values)
+# and any existing ranking on every encoding-plan tool call so it can
+# (a) propose a semantically meaningful ranking instead of guessing
+# alphabetically, and (b) skip the set_ordinal_ranking chain when a
+# ranking is already in place (idempotency).
+@pytest.mark.unit
+class TestEncodingPlanReader:
+    """Exercises ai_assistant.tool_executor._handle_get_encoding_plan."""
+
+    def _render(self, cached_plan):
+        from ai_assistant import tool_executor
+        # Monkey-patch the read fn — avoids needing a live Redis.
+        orig = tool_executor.read_encoding_plan
+        tool_executor.read_encoding_plan = lambda fid: cached_plan
+        try:
+            return tool_executor._handle_get_encoding_plan(1, {})
+        finally:
+            tool_executor.read_encoding_plan = orig
+
+    def test_renders_unique_values(self):
+        plan = [{
+            'feature': 'Var_36', 'user_lom': 'ordinal', 'nunique': 7,
+            'fallback_strategy': 'ordinal_encoding', 'needs_ranking': True,
+            'unique_values': ['0', '1', '2', '3', '8', 'L', 'Others'],
+            'ranking': None,
+        }]
+        out = self._render(plan)
+        assert 'Var_36' in out
+        # All unique values are visible in the rendered output.
+        for v in ['0', '1', '2', '3', '8', 'L', 'Others']:
+            assert v in out
+
+    def test_flags_unset_ranking_when_needs_ranking_true(self):
+        plan = [{
+            'feature': 'Var_36', 'user_lom': 'ordinal', 'nunique': 7,
+            'fallback_strategy': 'ordinal_encoding', 'needs_ranking': True,
+            'unique_values': ['Low', 'Mid', 'High'],
+            'ranking': None,
+        }]
+        out = self._render(plan)
+        # The marker prompts the LLM to chain set_ordinal_ranking next.
+        assert 'NOT SET' in out
+        assert 'set_ordinal_ranking' in out
+
+    def test_renders_existing_ranking(self):
+        plan = [{
+            'feature': 'Var_36', 'user_lom': 'ordinal', 'nunique': 3,
+            'fallback_strategy': 'ordinal_encoding', 'needs_ranking': True,
+            'unique_values': ['Low', 'Mid', 'High'],
+            'ranking': ['Low', 'Mid', 'High'],
+        }]
+        out = self._render(plan)
+        # Arrow-separated rendering of the existing ranking.
+        assert 'Low → Mid → High' in out
+        # No "call set_ordinal_ranking" prompt because ranking is set.
+        assert 'NOT SET' not in out
+
+    def test_does_not_prompt_set_ranking_when_not_ordinal(self):
+        plan = [{
+            'feature': 'Var_3', 'user_lom': 'nominal', 'nunique': 2,
+            'fallback_strategy': 'label_encoding', 'needs_ranking': False,
+            'unique_values': ['N', 'Y'],
+            'ranking': None,
+        }]
+        out = self._render(plan)
+        assert 'NOT SET' not in out
+        assert 'set_ordinal_ranking' not in out
+
+    def test_truncates_unique_values_past_12(self):
+        plan = [{
+            'feature': 'Var_HighCard', 'user_lom': 'nominal', 'nunique': 20,
+            'fallback_strategy': 'label_encoding', 'needs_ranking': False,
+            'unique_values': [f'cat{i}' for i in range(20)],
+            'ranking': None,
+        }]
+        out = self._render(plan)
+        assert 'cat0' in out
+        assert 'cat11' in out  # 12th value (index 11) is shown
+        assert 'cat12' not in out  # 13th value truncated
+        assert '+8 more' in out  # 20 - 12 = 8 truncated
+
 
 # ---------------------------------------------------------------------------
 # Feature description generator tests

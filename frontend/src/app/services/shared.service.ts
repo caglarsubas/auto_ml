@@ -165,6 +165,33 @@ export class SharedService {
     return this.dataDictionaryCacheSubject.getValue() || [];
   }
 
+  // Broadcast ordinal-ranking updates applied by AI assistant actions
+  // (v2.24.0+).
+  //
+  // When the AI runs `set_ordinal_ranking` to commit the rank order of
+  // an ordinal feature's distinct category values, the response's
+  // `applied` array — shape Array<{column, ranking: string[]}> — is
+  // fanned out via this subject.  The modeling component subscribes
+  // and patches `encodingPlan[i].ranking` for matching features so the
+  // UI's drag-to-reorder rows render immediately, exactly as if the
+  // user had clicked "Set Ranking" and arranged the values manually.
+  //
+  // Subject (not BehaviorSubject) — late subscribers must NOT replay a
+  // stale ranking that's already been applied to the encoding plan.
+  // Companion to metadataUpdates$ which handles LoM/description
+  // changes from the same `update_metadata` action family.
+  private encodingRankingUpdatesSubject =
+    new Subject<Array<{ column: string; ranking: string[] }>>();
+  encodingRankingUpdates$: Observable<Array<{ column: string; ranking: string[] }>> =
+    this.encodingRankingUpdatesSubject.asObservable();
+
+  emitEncodingRankingUpdates(
+    updates: Array<{ column: string; ranking: string[] }>,
+  ): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.encodingRankingUpdatesSubject.next(updates);
+  }
+
   // Autosave flag shared between parent (model-development) and child (modeling) components
   private autosaveEnabledSubject = new BehaviorSubject<boolean>(true);
   autosaveEnabled$: Observable<boolean> = this.autosaveEnabledSubject.asObservable();

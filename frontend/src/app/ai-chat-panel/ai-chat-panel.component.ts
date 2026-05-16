@@ -277,6 +277,36 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       this.sharedService.triggerCheckpoint('ai_action_update_metadata');
 
+    } else if (actionType === 'set_ordinal_ranking') {
+      const applied = resp.applied || [];
+      const errors = resp.errors || [];
+      let msg = `✅ **Ordinal ranking set.** ${applied.length} feature(s) ranked.`;
+      if (desc) msg += ` ${desc}`;
+      if (applied.length) {
+        msg += '\n\n' + applied.map((a: any) => {
+          const rank = Array.isArray(a.ranking) ? a.ranking.join(' → ') : '';
+          return `- **${a.column}**: \`${rank}\``;
+        }).join('\n');
+      }
+      if (errors.length) {
+        msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || ''}: ${e.error}`).join(', ');
+      }
+      this.actionSuccess = `${applied.length} ordinal ranking(s) applied.`;
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // v2.24.0+: this is the procedural-chain follow-through for an
+      // earlier `update_metadata` LoM = ordinal change.  Broadcast the
+      // applied rankings so the modeling component patches each
+      // matching encoding plan entry's `entry.ranking` array in place
+      // — equivalent to the user clicking "Set Ranking" and arranging
+      // the values manually.  We do NOT re-push anything to AI Redis
+      // here: the backend action_executor already wrote the ranking
+      // through to the cached encoding_plan artifact so the
+      // assistant's NEXT get_encoding_plan call sees its own work.
+      if (applied.length) {
+        this.sharedService.emitEncodingRankingUpdates(applied);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_set_ordinal_ranking');
+
     } else if (actionType === 'update_config') {
       const applied = resp.applied || [];
       const errors = resp.errors || [];

@@ -574,6 +574,136 @@ def update_config(file_id: int, payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ACTION: set_ordinal_ranking — record the rank order for ordinal features
+# ---------------------------------------------------------------------------
+#
+# Procedural context: when the AI flips a feature's Level_of_Measurement to
+# 'ordinal' via `update_metadata`, the encoding plan's `needs_ranking` flag
+# turns true for that feature and the modeling UI starts rendering a
+# "Set Ranking" button.  Without a ranking the encoding step silently
+# downgrades to label_encoding (see encoding/encoding_utils._apply_fallback)
+# and the ordinal signal is lost — the model can no longer learn the
+# monotonic relationship the analyst intended.
+#
+# This action is the explicit path for the AI to FOLLOW THROUGH on its own
+# `LoM = ordinal` change: it provides the ranked list of distinct category
+# values for one or more features in a single call.  The frontend mirrors
+# the ranking onto the matching encoding plan entry (entry.ranking) and
+# the cached `encoding_plan` artifact is updated so any subsequent
+# `get_encoding_plan` tool call by the AI sees its own work.
+
+@tool(name="set-ordinal-ranking")
+def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
+    """
+    Record the ordinal ranking (rank order of distinct category values) for
+    one or more ordinal-labelled features.
+
+    payload: {
+        "updates": [
+            {
+                "column": "Var_36",
+                "ranking": ["0", "1", "2", "3", "8", "L", "Others"]
+            },
+            {
+                "column": "Var_2",
+                "ranking": ["A", "P", "R"]
+            }
+        ],
+        "description": "Reflect risk severity progression for status codes."
+    }
+
+    Validation rules
+    ----------------
+    * `updates` must be a non-empty list.
+    * each entry must have a non-empty `column` (str) and a non-empty
+      `ranking` (list of >= 2 unique values).
+    * duplicate values inside a ranking are rejected — the rank order
+      defines a strict ordinal scale, so each value must appear once.
+    * values are coerced to strings to match the encoding plan's
+      `unique_values` shape (encoding_utils._compute_stats stores them
+      as `[str(v) for v in unique_values[:50]]`).
+    * column does NOT need to exist in the current dataframe — the AI may
+      legitimately set rankings for features that will be created later
+      (e.g. immediately after `execute_code` adds a column).  Validation
+      against actual unique values happens at encoding-apply time.
+
+    On success the cached encoding_plan artifact is patched in place so
+    the AI's next `get_encoding_plan` call sees the ranking it just set.
+    """
+    updates = payload.get('updates', [])
+    description = payload.get('description', '')
+    if not isinstance(updates, list) or not updates:
+        return {'status': 'error', 'error': 'No ranking updates provided'}
+
+    applied: list = []
+    errors: list = []
+
+    for upd in updates:
+        if not isinstance(upd, dict):
+            errors.append({'column': '', 'error': 'update entry must be an object'})
+            continue
+        col = upd.get('column', '')
+        ranking = upd.get('ranking', None)
+        if not col or not isinstance(col, str):
+            errors.append({'column': col, 'error': 'column is required and must be a string'})
+            continue
+        if not isinstance(ranking, list) or len(ranking) < 2:
+            errors.append({
+                'column': col,
+                'error': 'ranking must be a list of at least 2 distinct values',
+            })
+            continue
+        ranking_str = [str(v) for v in ranking]
+        if len(set(ranking_str)) != len(ranking_str):
+            errors.append({
+                'column': col,
+                'error': 'ranking contains duplicate values — each category must appear exactly once',
+            })
+            continue
+        applied.append({'column': col, 'ranking': ranking_str})
+
+    # Patch the cached encoding_plan artifact so the AI's NEXT tool call
+    # sees the ranking it just set.  Best-effort: if Redis is unavailable
+    # the frontend still applies the change in-memory via the action
+    # response, and the cache simply lags one chat turn until something
+    # else refreshes it.
+    if applied:
+        try:
+            from .cache import cache_get, cache_put, ARTIFACT_ENCODING_PLAN
+            cached_plan = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
+            if cached_plan:
+                plan_list = cached_plan if isinstance(cached_plan, list) else cached_plan.get('plan', [])
+                if isinstance(plan_list, list) and plan_list:
+                    rank_by_col = {u['column']: u['ranking'] for u in applied}
+                    mutated = False
+                    for entry in plan_list:
+                        if not isinstance(entry, dict):
+                            continue
+                        feat = entry.get('feature')
+                        if isinstance(feat, str) and feat in rank_by_col:
+                            entry['ranking'] = list(rank_by_col[feat])
+                            mutated = True
+                    if mutated:
+                        if isinstance(cached_plan, list):
+                            cache_put(file_id, ARTIFACT_ENCODING_PLAN, plan_list)
+                        else:
+                            cached_plan['plan'] = plan_list
+                            cache_put(file_id, ARTIFACT_ENCODING_PLAN, cached_plan)
+        except Exception:
+            # Cache write-through is best-effort; never fail the action
+            # because Redis hiccupped.  The frontend has the patch.
+            pass
+
+    return {
+        'status': 'success' if applied else 'error',
+        'action_type': 'set_ordinal_ranking',
+        'description': description,
+        'applied': applied,
+        'errors': errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # ACTION: update_notes — add/edit/delete pipeline commentary notes
 # ---------------------------------------------------------------------------
 
@@ -621,6 +751,7 @@ HANDLERS = {
     'execute_code': execute_code,
     'update_metadata': update_metadata,
     'update_config': update_config,
+    'set_ordinal_ranking': set_ordinal_ranking,
     'update_notes': update_notes,
 }
 

@@ -420,4 +420,75 @@ describe('SharedService', () => {
       expect(service.getDataDictionaryCache()).toEqual(cache);
     });
   });
+
+  // ── encodingRankingUpdates ────────────────────────────────────────────
+  // v2.24.0+ feature.  The AI's procedural follow-through path after
+  // setting a feature's LoM to ordinal: emit a `set_ordinal_ranking`
+  // action; the chat panel forwards the applied rankings here, the
+  // modeling component patches encodingPlan[i].ranking in place.
+  describe('encodingRankingUpdates', () => {
+    it('should not emit anything before any call', (done) => {
+      let emitted = false;
+      const sub = service.encodingRankingUpdates$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit the applied array verbatim', (done) => {
+      const updates = [
+        { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+        { column: 'Var_2', ranking: ['A', 'P', 'R'] },
+      ];
+      service.encodingRankingUpdates$.subscribe(received => {
+        expect(received).toEqual(updates);
+        done();
+      });
+      service.emitEncodingRankingUpdates(updates);
+    });
+
+    it('should ignore an empty array (no emission)', (done) => {
+      let emitted = false;
+      const sub = service.encodingRankingUpdates$.subscribe(() => { emitted = true; });
+      service.emitEncodingRankingUpdates([]);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should ignore null / undefined / non-array gracefully', (done) => {
+      let emitted = false;
+      const sub = service.encodingRankingUpdates$.subscribe(() => { emitted = true; });
+      service.emitEncodingRankingUpdates(null as any);
+      service.emitEncodingRankingUpdates(undefined as any);
+      service.emitEncodingRankingUpdates({} as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past emissions to late subscribers (Subject semantics)', (done) => {
+      // Critical: the ranking is applied to entry.ranking imperatively
+      // when the event fires.  A late subscriber replaying a stale
+      // emission would re-clobber a user's manual ▲▼ adjustments made
+      // after the AI's initial proposal.
+      const first = [{ column: 'Var_A', ranking: ['x', 'y', 'z'] }];
+      const second = [{ column: 'Var_B', ranking: ['p', 'q'] }];
+      service.emitEncodingRankingUpdates(first);
+      const seen: any[] = [];
+      service.encodingRankingUpdates$.subscribe(r => seen.push(r));
+      service.emitEncodingRankingUpdates(second);
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0]).toEqual(second);
+        done();
+      }, 0);
+    });
+  });
 });

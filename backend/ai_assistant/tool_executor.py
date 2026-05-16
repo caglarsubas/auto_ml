@@ -283,10 +283,30 @@ def _handle_get_encoding_plan(file_id: int, args: dict) -> str:
     features = data if isinstance(data, list) else data.get('plan', [])
     lines = [f"Encoding Plan ({len(features)} categorical features):"]
     for f in features:
+        # v2.24.0+: expose unique_values AND any existing ranking so the AI
+        # can (a) propose a sensible ordinal ranking based on the actual
+        # category strings instead of guessing, and (b) skip the
+        # `set_ordinal_ranking` chain when a ranking is already recorded
+        # (idempotency).  Cap rendered unique values at 12 to keep the
+        # tool response readable — the encoding plan stores up to 50.
+        uniq_raw = f.get('unique_values', []) or []
+        uniq_show = uniq_raw[:12]
+        uniq_str = ', '.join(str(v) for v in uniq_show)
+        if len(uniq_raw) > 12:
+            uniq_str += f' … (+{len(uniq_raw) - 12} more)'
+        rank_raw = f.get('ranking')
+        # Treat null / empty list / non-list as "no ranking set".
+        if isinstance(rank_raw, list) and rank_raw:
+            rank_str = ' → '.join(str(v) for v in rank_raw)
+            rank_note = f', ranking=[{rank_str}]'
+        else:
+            needs = f.get('needs_ranking', False)
+            rank_note = ', ranking=<NOT SET — call set_ordinal_ranking>' if needs else ''
         lines.append(
             f"  {f.get('feature','?')}: lom={f.get('user_lom','?')}, "
             f"nunique={f.get('nunique','?')}, "
-            f"strategy={f.get('fallback_strategy', f.get('primary_strategy', '?'))}"
+            f"strategy={f.get('fallback_strategy', f.get('primary_strategy', '?'))}, "
+            f"unique_values=[{uniq_str}]{rank_note}"
         )
     return '\n'.join(lines)
 

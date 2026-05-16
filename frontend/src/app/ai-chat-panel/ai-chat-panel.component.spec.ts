@@ -177,4 +177,79 @@ describe('AiChatPanelComponent', () => {
       expect(cache[1].Level_of_Measurement).toBe('nominal');
     });
   });
+
+  // ── set_ordinal_ranking response handling (v2.24.0+) ──────────────────
+  // The procedural follow-through path after `update_metadata` sets a
+  // feature's LoM to ordinal.  The action handler must:
+  //   (a) broadcast the applied rankings on encodingRankingUpdates$ so
+  //       the modeling component patches encodingPlan[i].ranking,
+  //   (b) NOT re-push to AI Redis (the backend action_executor already
+  //       wrote through to the cached encoding_plan artifact),
+  //   (c) NOT call triggerDataRefresh (would wipe state).
+  describe('_handleActionResult set_ordinal_ranking flow', () => {
+    it('should broadcast applied rankings on encodingRankingUpdates$', (done) => {
+      const applied = [
+        { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+        { column: 'Var_2', ranking: ['A', 'P', 'R'] },
+      ];
+      sharedService.encodingRankingUpdates$.subscribe(received => {
+        expect(received).toEqual(applied);
+        done();
+      });
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied,
+        errors: [],
+      });
+    });
+
+    it('should NOT re-push to AI Redis (backend already wrote through)', () => {
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+        errors: [],
+      });
+      expect(pushSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call triggerDataRefresh', () => {
+      const refreshSpy = spyOn(sharedService, 'triggerDataRefresh');
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+        errors: [],
+      });
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    it('should trigger a checkpoint with ai_action_set_ordinal_ranking substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+        errors: [],
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_set_ordinal_ranking');
+    });
+
+    it('should not broadcast when applied is empty', () => {
+      const emitSpy = spyOn(sharedService, 'emitEncodingRankingUpdates');
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [],
+        errors: [{ column: 'Var_X', error: 'duplicates' }],
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should add a chat message summarising the ranking with arrow notation', () => {
+      // Defensive check that the user-visible message renders the
+      // ranking with ' → ' separators — easier for the user to read
+      // than a comma list and matches how the backend renders it back
+      // to the AI on get_encoding_plan.
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+        errors: [],
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Var_36');
+      expect(lastMsg.content).toContain('Low → Mid → High');
+    });
+  });
 });
