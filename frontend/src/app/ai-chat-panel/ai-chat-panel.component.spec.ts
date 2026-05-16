@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { FormsModule } from '@angular/forms';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { of } from 'rxjs';
 import { AiChatPanelComponent } from './ai-chat-panel.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
@@ -11,6 +12,8 @@ describe('AiChatPanelComponent', () => {
   let component: AiChatPanelComponent;
   let fixture: ComponentFixture<AiChatPanelComponent>;
   let aiService: AiAssistantService;
+  let sharedService: SharedService;
+  let dataService: DataService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -23,6 +26,8 @@ describe('AiChatPanelComponent', () => {
     fixture = TestBed.createComponent(AiChatPanelComponent);
     component = fixture.componentInstance;
     aiService = TestBed.inject(AiAssistantService);
+    sharedService = TestBed.inject(SharedService);
+    dataService = TestBed.inject(DataService);
   });
 
   it('should create', () => {
@@ -52,5 +57,124 @@ describe('AiChatPanelComponent', () => {
     expect(aiService.isPanelOpen()).toBeFalse();
     aiService.openPanel();
     expect(aiService.isPanelOpen()).toBeTrue();
+  });
+
+  // ── update_metadata response handling (v2.23.0+) ──────────────────────
+  // The AI assistant's update_metadata action returns an `applied` array
+  // describing the LoM/description changes it made.  The chat panel must
+  // (a) NOT trigger a backend dictionary refetch — that endpoint
+  //     recomputes from the raw file and would silently overwrite the
+  //     change the AI just made,
+  // (b) broadcast the array on metadataUpdates$ so every interested
+  //     component (declaration table, encoding plan dropdown) patches
+  //     in place,
+  // (c) patch the SharedService dataDictionaryCache snapshot so any
+  //     downstream consumer reading via getDataDictionaryCache() sees
+  //     the new state immediately,
+  // (d) re-push the patched dictionary to the AI Redis cache so the
+  //     assistant's NEXT tool call sees the same state on screen.
+  describe('_handleActionResult update_metadata flow', () => {
+    beforeEach(() => {
+      // Seed the shared dictionary cache with the same shape the
+      // declaration step pushes after fetching the dictionary.
+      sharedService.setDataDictionaryCache([
+        { Feature_Name: 'Var_2', Level_of_Measurement: 'nominal', Feature_Description: 'A' },
+        { Feature_Name: 'Var_36', Level_of_Measurement: 'nominal', Feature_Description: 'B' },
+      ]);
+      sharedService.setCurrentFileId(481);
+    });
+
+    it('should NOT call triggerDataRefresh() (would wipe the AI change)', () => {
+      const refreshSpy = spyOn(sharedService, 'triggerDataRefresh');
+      // Reach into the private handler with bracket notation.
+      (component as any)._handleActionResult('update_metadata', {
+        applied: [{ column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' }],
+        errors: [],
+      });
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    it('should emit applied updates on metadataUpdates$', (done) => {
+      const applied = [
+        { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
+        { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+      ];
+      sharedService.metadataUpdates$.subscribe(received => {
+        expect(received).toEqual(applied);
+        done();
+      });
+      // Stub the AI cache push so the http call doesn't escape the test.
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('update_metadata', { applied, errors: [] });
+    });
+
+    it('should patch dataDictionaryCache snapshot in place', () => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('update_metadata', {
+        applied: [{ column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' }],
+        errors: [],
+      });
+      const cache = sharedService.getDataDictionaryCache();
+      const var2 = cache.find((d: any) => d.Feature_Name === 'Var_2');
+      expect(var2.Level_of_Measurement).toBe('ordinal');
+      // Untouched feature should keep its original value.
+      const var36 = cache.find((d: any) => d.Feature_Name === 'Var_36');
+      expect(var36.Level_of_Measurement).toBe('nominal');
+    });
+
+    it('should re-push the patched dictionary to the AI Redis cache', () => {
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('update_metadata', {
+        applied: [{ column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' }],
+        errors: [],
+      });
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+      const [pushedFileId, pushedArtifacts] = pushSpy.calls.mostRecent().args;
+      expect(pushedFileId).toBe(481);
+      expect(pushedArtifacts['data_dictionary']).toBeDefined();
+      const var2 = pushedArtifacts['data_dictionary'].find((d: any) => d.Feature_Name === 'Var_2');
+      expect(var2.Level_of_Measurement).toBe('ordinal');
+    });
+
+    it('should still broadcast updates when the dictionary cache is empty (late-mount safety)', (done) => {
+      // No cache yet — chat panel can run before the declaration step
+      // has populated the cache, in which case in-place patching is a
+      // no-op but the broadcast must still fan out.
+      sharedService.setDataDictionaryCache([]);
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      const applied = [{ column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' }];
+      sharedService.metadataUpdates$.subscribe(received => {
+        expect(received).toEqual(applied);
+        // No cache present means no Redis re-push (we don't want to
+        // invent an empty dictionary for the assistant to see).
+        expect(pushSpy).not.toHaveBeenCalled();
+        done();
+      });
+      (component as any)._handleActionResult('update_metadata', { applied, errors: [] });
+    });
+
+    it('should not broadcast or push when applied is empty (e.g. all errors)', () => {
+      const emitSpy = spyOn(sharedService, 'emitMetadataUpdates');
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('update_metadata', {
+        applied: [],
+        errors: [{ column: 'Var_2', error: 'unknown column' }],
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+      expect(pushSpy).not.toHaveBeenCalled();
+    });
+
+    it('should ignore updates whose column is not in the cache', () => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('update_metadata', {
+        applied: [{ column: 'Nonexistent_Column', field: 'Level_of_Measurement', value: 'ordinal' }],
+        errors: [],
+      });
+      const cache = sharedService.getDataDictionaryCache();
+      // Original entries preserved unchanged.
+      expect(cache.length).toBe(2);
+      expect(cache[0].Level_of_Measurement).toBe('nominal');
+      expect(cache[1].Level_of_Measurement).toBe('nominal');
+    });
   });
 });

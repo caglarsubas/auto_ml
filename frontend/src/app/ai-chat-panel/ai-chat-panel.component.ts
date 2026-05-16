@@ -260,8 +260,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       this.actionSuccess = `${applied.length} metadata field(s) updated.`;
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
-      // Refresh declaration data (dictionary)
-      this.sharedService.triggerDataRefresh();
+      // v2.23.0+: keep the chat assertion ("changed Var_2 to ordinal")
+      // and the pipeline UI dropdowns ("Var_2 still shows Nominal") in
+      // sync.  We deliberately do NOT call triggerDataRefresh() here:
+      // the data_dictionary GET endpoint recomputes the dictionary from
+      // the raw file every call and only persists descriptions, so a
+      // refetch would wipe the LoM change the AI just made.  Instead
+      // we patch the in-memory dictionary cache + broadcast the change
+      // so every subscriber (declaration table, encoding plan dropdown,
+      // feature card) updates in place, and re-push the patched
+      // dictionary to the AI Redis cache so subsequent tool calls see
+      // the same state the user sees.
+      if (applied.length) {
+        this._applyMetadataPatchesToDictionaryCache(applied);
+        this.sharedService.emitMetadataUpdates(applied);
+      }
       this.sharedService.triggerCheckpoint('ai_action_update_metadata');
 
     } else if (actionType === 'update_config') {
@@ -320,6 +333,56 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       // Other config keys (preprocessing_options, split_strategy, etc.) are handled
       // by triggering a checkpoint which the parent components pick up
+    }
+  }
+
+  /**
+   * v2.23.0+: Patch the SharedService data dictionary cache in place when
+   * the AI assistant runs `update_metadata`, then push the patched cache
+   * back to the AI Redis cache so subsequent tool calls see the same
+   * state the user sees in the pipeline UI.
+   *
+   * Returns nothing — side effects only.  Errors on the AI cache push
+   * are logged but never raised: the in-memory patch is the source of
+   * truth for the UI, and the Redis re-push is a best-effort
+   * synchronization for the AI's next turn.
+   */
+  private _applyMetadataPatchesToDictionaryCache(applied: any[]): void {
+    if (!Array.isArray(applied) || applied.length === 0) return;
+    const cache = this.sharedService.getDataDictionaryCache();
+    if (!Array.isArray(cache) || cache.length === 0) {
+      // No cache to patch yet (declaration step hasn't loaded the
+      // dictionary) — the metadataUpdates$ broadcast will still reach
+      // any component that lazily fetches the dictionary later.
+      return;
+    }
+    // Build a name -> entry index for O(1) lookups.
+    const idxByName = new Map<string, number>();
+    cache.forEach((d: any, i: number) => {
+      const n = d?.Feature_Name;
+      if (typeof n === 'string') idxByName.set(n, i);
+    });
+    let mutated = false;
+    const patched = cache.map((d: any) => ({ ...d }));
+    for (const upd of applied) {
+      const col = upd?.column;
+      const field = upd?.field;
+      const value = upd?.value;
+      if (!col || !field) continue;
+      const i = idxByName.get(col);
+      if (i === undefined) continue;
+      patched[i][field] = value;
+      mutated = true;
+    }
+    if (!mutated) return;
+    this.sharedService.setDataDictionaryCache(patched);
+    // Re-push to AI Redis cache (best effort) so the assistant's next
+    // tool call sees the same dictionary the user sees on screen.
+    const fileId = this.sharedService.getCurrentFileId();
+    if (fileId !== null && fileId !== undefined) {
+      this.dataService.pushAiCache(fileId as number, { data_dictionary: patched }).subscribe({
+        error: (err: any) => console.warn('[AI Cache] post-update_metadata dictionary push failed:', err),
+      });
     }
   }
 

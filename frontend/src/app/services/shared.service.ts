@@ -130,6 +130,41 @@ export class SharedService {
     this.dataRefreshSubject.next();
   }
 
+  // Broadcast metadata updates applied by AI assistant actions (v2.23.0+).
+  //
+  // When the AI runs `update_metadata` to change Level_of_Measurement,
+  // Feature_Description, or any other dictionary field, the response's
+  // `applied` array is fanned out via this subject so every component
+  // showing dictionary-derived state — declaration table, encoding plan
+  // dropdown in the modeling tab, feature card panel — can patch its
+  // local state in place and stay synchronized with the chat assertion.
+  //
+  // Each update has shape: { column: string, field: string, value: any }
+  // where `field` matches the data dictionary key
+  // (Feature_Description / Level_of_Measurement / Model_Usage_YN / ...).
+  //
+  // We deliberately do NOT trigger a backend refetch here: the
+  // `GET /declaration/<id>/data_dictionary/` endpoint recomputes the
+  // dictionary from the raw file every call and only persists
+  // descriptions, so a refetch would silently overwrite the AI's LoM
+  // change. In-place patching is the only way to keep the UI in sync
+  // until the dictionary persistence layer is broadened.
+  private metadataUpdatesSubject = new Subject<Array<{ column: string; field: string; value: any }>>();
+  metadataUpdates$: Observable<Array<{ column: string; field: string; value: any }>> =
+    this.metadataUpdatesSubject.asObservable();
+
+  emitMetadataUpdates(updates: Array<{ column: string; field: string; value: any }>): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.metadataUpdatesSubject.next(updates);
+  }
+
+  // Read-only snapshot accessor for the data dictionary cache; used by
+  // ai-chat-panel to patch the cache in-memory after an AI action and
+  // re-push it to the AI Redis cache without an extra GET round-trip.
+  getDataDictionaryCache(): any[] {
+    return this.dataDictionaryCacheSubject.getValue() || [];
+  }
+
   // Autosave flag shared between parent (model-development) and child (modeling) components
   private autosaveEnabledSubject = new BehaviorSubject<boolean>(true);
   autosaveEnabled$: Observable<boolean> = this.autosaveEnabledSubject.asObservable();

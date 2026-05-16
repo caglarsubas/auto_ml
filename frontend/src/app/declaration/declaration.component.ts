@@ -109,6 +109,41 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       })
     );
 
+    // v2.23.0+: keep the declaration table in sync with AI assistant
+    // metadata updates without triggering a backend refetch.  The
+    // GET /declaration/<id>/data_dictionary/ endpoint recomputes the
+    // dictionary from the raw file every call and only persists
+    // descriptions, so a refetch would silently overwrite any LoM
+    // change the AI just made.  Patching in-place mirrors the chat
+    // assertion ("Var_2 set to ordinal") into the visible table.
+    this.subscription.add(
+      this.sharedService.metadataUpdates$.subscribe((updates) => {
+        if (!Array.isArray(updates) || updates.length === 0) return;
+        if (!Array.isArray(this.dataDictionary) || this.dataDictionary.length === 0) return;
+        const idxByName = new Map<string, number>();
+        this.dataDictionary.forEach((d: any, i: number) => {
+          if (typeof d?.Feature_Name === 'string') idxByName.set(d.Feature_Name, i);
+        });
+        let mutated = false;
+        for (const upd of updates) {
+          const col = upd?.column;
+          const field = upd?.field;
+          const value = upd?.value;
+          if (!col || !field) continue;
+          const i = idxByName.get(col);
+          if (i === undefined) continue;
+          this.dataDictionary[i] = { ...this.dataDictionary[i], [field]: value };
+          mutated = true;
+        }
+        if (mutated) {
+          // Replace the array reference so Angular change detection
+          // notices and the table re-renders.
+          this.dataDictionary = [...this.dataDictionary];
+          this.pushDeclarationAiContext();
+        }
+      })
+    );
+
     // Listen for data refresh events (e.g., after AI creates features)
     this.subscription.add(
       this.sharedService.dataRefresh$.subscribe(() => {

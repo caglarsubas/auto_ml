@@ -327,4 +327,97 @@ describe('SharedService', () => {
       expect(service.getActiveProcess()).toBeNull();
     });
   });
+
+  // ── metadataUpdates ────────────────────────────────────────────────────
+  // v2.23.0+ feature.  Exercised end-to-end by the AI chat panel after
+  // an `update_metadata` action returns: the chat panel calls
+  // `emitMetadataUpdates(applied)` and every interested component
+  // (declaration table, encoding plan dropdown, feature card) patches
+  // its local state instead of triggering a backend refetch.
+  describe('metadataUpdates', () => {
+    it('should not emit anything before any call', (done) => {
+      // Subject (not BehaviorSubject) — should produce zero emissions.
+      let emitted = false;
+      const sub = service.metadataUpdates$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit the applied array verbatim', (done) => {
+      const updates = [
+        { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
+        { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+      ];
+      service.metadataUpdates$.subscribe(received => {
+        expect(received).toEqual(updates);
+        done();
+      });
+      service.emitMetadataUpdates(updates);
+    });
+
+    it('should ignore an empty array (no emission)', (done) => {
+      let emitted = false;
+      const sub = service.metadataUpdates$.subscribe(() => { emitted = true; });
+      service.emitMetadataUpdates([]);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should ignore a non-array argument (no emission)', (done) => {
+      let emitted = false;
+      const sub = service.metadataUpdates$.subscribe(() => { emitted = true; });
+      // Defensive: the chat panel is supposed to pass arrays only, but
+      // the helper guards against accidental misuse.
+      service.emitMetadataUpdates(null as any);
+      service.emitMetadataUpdates(undefined as any);
+      service.emitMetadataUpdates({} as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should fan out a second emission to late subscribers (Subject semantics)', (done) => {
+      // We deliberately use Subject (not BehaviorSubject) so that
+      // late-mounting components don't replay stale updates that have
+      // already been applied to the dictionary cache.
+      const first = [{ column: 'Var_1', field: 'Feature_Description', value: 'first' }];
+      const second = [{ column: 'Var_2', field: 'Feature_Description', value: 'second' }];
+      service.emitMetadataUpdates(first);
+      const seen: any[] = [];
+      service.metadataUpdates$.subscribe(received => seen.push(received));
+      service.emitMetadataUpdates(second);
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0]).toEqual(second);
+        done();
+      }, 0);
+    });
+  });
+
+  // ── getDataDictionaryCache snapshot accessor ──────────────────────────
+  // Used by the AI chat panel to patch the dictionary cache in place
+  // after an `update_metadata` action.  Must return [] (not undefined)
+  // when nothing has been pushed yet so callers can safely .map() it.
+  describe('getDataDictionaryCache', () => {
+    it('should return [] before anything is set', () => {
+      expect(service.getDataDictionaryCache()).toEqual([]);
+    });
+
+    it('should return the most recent cache snapshot', () => {
+      const cache = [
+        { Feature_Name: 'Age', Level_of_Measurement: 'continuous' },
+        { Feature_Name: 'Var_2', Level_of_Measurement: 'nominal' },
+      ];
+      service.setDataDictionaryCache(cache);
+      expect(service.getDataDictionaryCache()).toEqual(cache);
+    });
+  });
 });

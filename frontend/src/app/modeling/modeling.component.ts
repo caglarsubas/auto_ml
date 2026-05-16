@@ -325,6 +325,58 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.dataDictionaryCache = cache || [];
     });
 
+    // v2.23.0+: keep the encoding plan dropdown in sync with AI assistant
+    // metadata updates.  When the AI assistant flips Var_2 to ordinal via
+    // `update_metadata`, the chat panel broadcasts the {column, field,
+    // value} array on metadataUpdates$.  For each Level_of_Measurement
+    // change targeting a feature already in the encoding plan we route
+    // through `updateEncodingLom` so the dropdown's bound value AND its
+    // dependent fields (fallback_strategy, needs_ranking, ranking) all
+    // update — matching exactly what would happen if the user changed
+    // the dropdown manually.  Other fields (Feature_Description, etc.)
+    // are mirrored as a passive metadata patch on the entry so any
+    // dependent renderers can pick them up.
+    this.sharedService.metadataUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      if (!this.encodingPlan || this.encodingPlan.length === 0) return;
+      const idxByName = new Map<string, number>();
+      this.encodingPlan.forEach((e: any, i: number) => {
+        if (typeof e?.feature === 'string') idxByName.set(e.feature, i);
+      });
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const field = upd?.field;
+        const value = upd?.value;
+        if (!col || !field) continue;
+        const i = idxByName.get(col);
+        if (i === undefined) continue;
+        const entry = this.encodingPlan[i];
+        if (field === 'Level_of_Measurement') {
+          // The encoding plan dropdown only renders nominal/ordinal;
+          // other LoM values (cardinal, continuous, datetime, id) imply
+          // the feature is no longer categorical and the encoding plan
+          // entry is stale.  We still mirror the value so debugging is
+          // possible, but only re-run side effects for the supported
+          // dropdown values.
+          const v = String(value || '').toLowerCase();
+          entry.user_lom = v;
+          if (v === 'nominal' || v === 'ordinal') {
+            this.updateEncodingLom(entry, v);
+          }
+          touched = true;
+        } else if (field === 'Feature_Description') {
+          entry.description = value;
+          touched = true;
+        }
+      }
+      if (touched) {
+        // Mirror the same trigger the manual dropdown change uses so
+        // the parent (model-development) checkpoints the new state.
+        this.onConfigChanged();
+      }
+    });
+
     // Restore from checkpoint if available (pipeline resume)
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {
