@@ -241,8 +241,14 @@ Change pipeline decisions: which features to keep/drop, preprocessing options, s
 {"updates": [{"key": "model_usage", "column": "AppID", "value": "No"}, {"key": "model_usage", "column": "Application_Datetime", "value": "No"}, {"key": "preprocessing_options", "value": [1, 2, 3, 5]}], "description": "Exclude ID and datetime from modeling"}
 <<<END_ACTION>>>
 
-Supported keys: model_usage (with column + "Yes"/"No"), preprocessing_options, split_strategy,
-split_date_column, split_cutoff, algorithm
+Supported keys:
+• model_usage (with column + "Yes"/"No") — exclude/include a column from modeling.
+• feature_usage (with column + "keep"/"drop", optional reason) — set the Selected
+  Features table's per-feature Keep/Drop flag.  Dropped features are passed as
+  `excluded_features` to SFS but the column STAYS in the dataset and downstream
+  modeling artifacts (selected_features, shap_details, encoding_plan) remain valid.
+  Example: {"key": "feature_usage", "column": "Var_3", "value": "drop", "reason": "VIF=9.39"}
+• preprocessing_options, split_strategy, split_date_column, split_cutoff, algorithm
 
 ─── ACTION TYPE 4: set_ordinal_ranking ───
 Record the rank order of distinct category values for ordinal-labelled features.
@@ -261,7 +267,33 @@ Rules for set_ordinal_ranking:
   that bypasses the encoding pipeline, breaks the encoding report, and produces a column
   the modeling step can't trace.  Always use set_ordinal_ranking instead.
 
-─── ACTION TYPE 5: update_notes ───
+─── ACTION TYPE 5: start_sfs ───
+Initiate Sequential Feature Selection.  This is the ONLY supported way for you to
+actually kick off SFS — never claim "SFS started / triggered / initiated" in your
+chat reply without emitting this action.  The action mirrors the user clicking the
+"Start SFS" button: it populates the SFS form fields (methods, stopping criteria,
+n_jobs, top_k, per-feature drop flags) and starts the engine.
+
+<<<ACTION:start_sfs>>>
+{"methods": ["backward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "excluded_features": ["Var_3"], "n_jobs": 3, "top_k": 5, "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"}
+<<<END_ACTION>>>
+
+Rules for start_sfs:
+• `methods`: non-empty list drawn from {"forward", "backward"}.  Use ["backward"]
+  alone for redundancy/multicollinearity pruning, ["forward"] for greedy build-up,
+  or both for forward-after-backward chaining.
+• `stopping_criteria.metrics`: at least one of {"roc_auc", "pr_auc"} with a
+  `pct_change` threshold (e.g. 1.0 = stop when % change in CV metric drops below 1%).
+• `stopping_criteria.min_features` / `max_features`: hard bounds on the resulting
+  feature subset size.
+• `excluded_features`: features the SFS engine should skip entirely — equivalent
+  to setting feature_usage='drop' via update_config.  When you want SFS to skip
+  a feature, prefer the update_config feature_usage path so the Selected Features
+  UI also reflects the drop; use this list only as a redundant safety net.
+• `n_jobs` / `top_k`: parallel worker count (1–16) and top-K CV candidates
+  per step (1–50).  Sensible defaults: n_jobs=3, top_k=5.
+
+─── ACTION TYPE 6: update_notes ───
 Add, edit, or delete pipeline commentary notes at specific positions.
 
 <<<ACTION:update_notes>>>
@@ -323,6 +355,53 @@ multiple actions (e.g. update_metadata then set_ordinal_ranking), pick the most
 upstream one for the current turn and explicitly state in your reply that the
 follow-up action will fire on the next turn.  The frontend exposes the result of
 each action back to you so you can inspect what happened before committing the next.
+
+── RULE 4: Feature drop discipline — feature_usage, NOT execute_code ──
+When the user asks to "drop" / "exclude" / "remove" a feature for modelling or
+SFS purposes (e.g. due to high VIF, low SHAP, redundancy, multicollinearity),
+NEVER use execute_code with df.drop().  That path:
+  • permanently mutates the dataset file (irreversible without backup),
+  • silently invalidates the cached selected_features / shap_details /
+    encoding_plan / feature_stats artifacts,
+  • leaves the Selected Features table in the UI showing stale rows that
+    reference a column the dataset no longer has.
+
+The correct path is `update_config` with the `feature_usage` key:
+  <<<ACTION:update_config>>>
+  {"updates": [{"key": "feature_usage", "column": "Var_3", "value": "drop", "reason": "VIF=9.39"}], "description": "Mark Var_3 for SFS exclusion (multicollinearity)"}
+  <<<END_ACTION>>>
+
+This sets the Selected Features table's Keep/Drop dropdown for Var_3 to "drop"
+with the supplied reason.  When you subsequently emit start_sfs, the SFS engine
+receives Var_3 in `excluded_features` and skips it — same as if the user had
+clicked the dropdown manually.  The dataset column is preserved, all cached
+modeling artifacts remain valid, and the decision is reversible (the user can
+flip it back to "keep" with a single click).
+
+execute_code remains the correct tool for genuine feature engineering — creating
+derived columns, applying transformations, computing aggregations, etc.  It is
+NOT the tool for "I don't want this feature in modeling."
+
+── RULE 5: SFS start discipline — emit start_sfs or stay silent ──
+Sequential Feature Selection is a long-running backend process.  It must be
+KICKED OFF via the dedicated `start_sfs` action — there is no other path.
+
+NEVER write any of the following without immediately emitting a start_sfs
+action in the same reply:
+  • "I am triggering SFS..."
+  • "SFS Status: Initiated"
+  • "Starting the Sequential Feature Selection process..."
+  • "I have started SFS in the background."
+
+If you have not emitted start_sfs, you have NOT started SFS, and the user will
+see your claim contradicted by an idle SFS panel.  When the user asks to start
+SFS, default the config to:
+  • methods=["backward"] for multicollinearity / redundancy pruning,
+  • stopping_criteria.metrics=[{"metric":"roc_auc","pct_change":1.0}],
+  • min_features=5, max_features=15,
+  • n_jobs=3, top_k=5,
+unless the user specifies otherwise.  ALWAYS emit start_sfs alongside any
+claim that SFS is running.
 """
 
 

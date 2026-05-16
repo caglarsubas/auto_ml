@@ -491,4 +491,140 @@ describe('SharedService', () => {
       }, 0);
     });
   });
+
+  // ── featureUsageUpdates (v2.25.0+) ───────────────────────────────────
+  // AI's `update_config feature_usage` action broadcasts here; the
+  // modeling component subscribes to patch the Selected Features
+  // table's Keep/Drop dropdown.  The correct path for "exclude Var_3
+  // from SFS due to VIF" — NOT execute_code drop.
+  describe('featureUsageUpdates', () => {
+    it('should not emit anything before any call', (done) => {
+      let emitted = false;
+      const sub = service.featureUsageUpdates$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit the updates array verbatim', (done) => {
+      const updates: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }> = [
+        { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+        { column: 'Var_25', value: 'drop', reason: 'Low SHAP' },
+      ];
+      service.featureUsageUpdates$.subscribe(received => {
+        expect(received).toEqual(updates);
+        done();
+      });
+      service.emitFeatureUsageUpdates(updates);
+    });
+
+    it('should ignore an empty array (no emission)', (done) => {
+      let emitted = false;
+      const sub = service.featureUsageUpdates$.subscribe(() => { emitted = true; });
+      service.emitFeatureUsageUpdates([]);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should ignore null / undefined / non-array gracefully', (done) => {
+      let emitted = false;
+      const sub = service.featureUsageUpdates$.subscribe(() => { emitted = true; });
+      service.emitFeatureUsageUpdates(null as any);
+      service.emitFeatureUsageUpdates(undefined as any);
+      service.emitFeatureUsageUpdates('drop' as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past emissions (Subject semantics)', (done) => {
+      service.emitFeatureUsageUpdates([{ column: 'Var_A', value: 'drop' }]);
+      const seen: any[] = [];
+      service.featureUsageUpdates$.subscribe(r => seen.push(r));
+      service.emitFeatureUsageUpdates([{ column: 'Var_B', value: 'keep' }]);
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0]).toEqual([{ column: 'Var_B', value: 'keep' }]);
+        done();
+      }, 0);
+    });
+  });
+
+  // ── sfsStartRequests (v2.25.0+) ──────────────────────────────────────
+  // AI's `start_sfs` action broadcasts the validated SFS config here;
+  // the modeling component populates form fields and calls startSfs().
+  describe('sfsStartRequests', () => {
+    const mkReq = (overrides: any = {}) => ({
+      methods: ['backward'],
+      stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+      excluded_features: [],
+      n_jobs: 3,
+      top_k: 5,
+      ...overrides,
+    });
+
+    it('should not emit anything before any call', (done) => {
+      let emitted = false;
+      const sub = service.sfsStartRequests$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit the request object verbatim', (done) => {
+      const req = mkReq({ excluded_features: ['Var_3'] });
+      service.sfsStartRequests$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitSfsStartRequest(req);
+    });
+
+    it('should reject a request with empty methods (no emission)', (done) => {
+      let emitted = false;
+      const sub = service.sfsStartRequests$.subscribe(() => { emitted = true; });
+      service.emitSfsStartRequest(mkReq({ methods: [] }));
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject a non-object request gracefully', (done) => {
+      let emitted = false;
+      const sub = service.sfsStartRequests$.subscribe(() => { emitted = true; });
+      service.emitSfsStartRequest(null as any);
+      service.emitSfsStartRequest(undefined as any);
+      service.emitSfsStartRequest('start' as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past requests to late subscribers', (done) => {
+      // Critical: if a late subscriber replayed, SFS could auto-start
+      // twice on component remount.
+      service.emitSfsStartRequest(mkReq());
+      const seen: any[] = [];
+      service.sfsStartRequests$.subscribe(r => seen.push(r));
+      service.emitSfsStartRequest(mkReq({ methods: ['forward'] }));
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0].methods).toEqual(['forward']);
+        done();
+      }, 0);
+    });
+  });
 });

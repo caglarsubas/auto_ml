@@ -422,6 +422,80 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       }
     });
 
+    // v2.25.0+: subscribe to AI assistant Selected-Features Keep/Drop
+    // changes (update_config feature_usage).  The handler patches
+    // `featureUsage[col]` and `featureDropReason[col]` in place so the
+    // dropdown in the Selected Features table re-renders to "Drop"
+    // with the supplied reason — identical to a user changing the
+    // dropdown manually.  The next SFS start picks up the exclusion
+    // through the existing `excludedFeatures` collection logic.
+    this.sharedService.featureUsageUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const val = upd?.value;
+        if (!col || (val !== 'keep' && val !== 'drop')) continue;
+        this.featureUsage[col] = val;
+        if (val === 'drop') {
+          // Record the reason if provided; AI typically passes a
+          // short rationale like "VIF=9.39" or "Low SHAP".
+          if (upd.reason) {
+            this.featureDropReason[col] = String(upd.reason);
+          }
+        } else {
+          // Flipping back to keep clears any stale reason — same as
+          // the template's onChange handler for the manual dropdown.
+          this.featureDropReason[col] = '';
+        }
+        touched = true;
+      }
+      if (touched) {
+        // Persist via the same path the manual dropdown change uses.
+        this.onConfigChanged();
+      }
+    });
+
+    // v2.25.0+: subscribe to AI assistant SFS-start requests.  When
+    // the AI emits a start_sfs action, the chat panel broadcasts the
+    // validated config object here.  We mirror it onto the SFS form
+    // fields, then call the existing startSfs() method — the exact
+    // code path a user's manual "Start SFS" button click takes,
+    // including activeProcess registration and status polling.
+    this.sharedService.sfsStartRequests$.subscribe((req) => {
+      if (!req || typeof req !== 'object') return;
+      if (!Array.isArray(req.methods) || req.methods.length === 0) return;
+      // Populate the form fields (template bindings re-render).
+      this.sfsMethodForward = req.methods.includes('forward');
+      this.sfsMethodBackward = req.methods.includes('backward');
+      const sc: any = req.stopping_criteria || {};
+      if (Array.isArray(sc.metrics) && sc.metrics.length > 0) {
+        this.sfsMetrics = sc.metrics
+          .filter((m: any) => m && (m.metric === 'roc_auc' || m.metric === 'pr_auc'))
+          .map((m: any) => ({ metric: m.metric, pct_change: Number(m.pct_change) || 0 }));
+      }
+      if (typeof sc.min_features === 'number') this.sfsMinFeatures = sc.min_features;
+      if (typeof sc.max_features === 'number') this.sfsMaxFeatures = sc.max_features;
+      if (typeof req.n_jobs === 'number') this.sfsNJobs = req.n_jobs;
+      if (typeof req.top_k === 'number') this.sfsTopK = req.top_k;
+      // Also mark requested excluded features as 'drop' so the
+      // Selected Features table reflects the AI's intent (the user
+      // may want to see WHY they're excluded).  This is a redundant
+      // safety net — the AI should have already emitted a
+      // feature_usage update_config for these.
+      if (Array.isArray(req.excluded_features)) {
+        for (const c of req.excluded_features) {
+          if (typeof c === 'string' && c.trim()) {
+            this.featureUsage[c] = 'drop';
+          }
+        }
+      }
+      // Defer the actual SFS kickoff to the next tick so any pending
+      // form-binding change detection settles before startSfs() reads
+      // the field values.
+      setTimeout(() => this.startSfs(), 0);
+    });
+
     // Restore from checkpoint if available (pipeline resume)
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {

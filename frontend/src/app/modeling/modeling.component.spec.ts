@@ -303,4 +303,212 @@ describe('ModelingComponent', () => {
         ['0', '1', '2', '3', '8', 'L', 'Others']);
     });
   });
+
+  // ── featureUsageUpdates$ subscription (v2.25.0+) ──────────────────────
+  // AI's `update_config feature_usage` action broadcasts here; the
+  // modeling component patches the Selected Features table's
+  // Keep/Drop dropdown in place — identical to a user changing the
+  // dropdown manually.  The next SFS start picks up the exclusion
+  // through the existing excludedFeatures collection.
+  describe('featureUsageUpdates$ -> featureUsage map sync', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+      component.featureUsage = {};
+      component.featureDropReason = {};
+    });
+
+    it('should set featureUsage[col]=drop and record the reason', () => {
+      sharedService.emitFeatureUsageUpdates([
+        { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+      ]);
+      expect(component.featureUsage['Var_3']).toBe('drop');
+      expect(component.featureDropReason['Var_3']).toBe('VIF=9.39');
+    });
+
+    it('should clear the reason when flipping back to keep', () => {
+      component.featureUsage['Var_3'] = 'drop';
+      component.featureDropReason['Var_3'] = 'VIF=9.39';
+      sharedService.emitFeatureUsageUpdates([
+        { column: 'Var_3', value: 'keep' },
+      ]);
+      expect(component.featureUsage['Var_3']).toBe('keep');
+      // Matches the template's onChange handler: $event === 'keep'
+      // && (featureDropReason[f.feature] = '').
+      expect(component.featureDropReason['Var_3']).toBe('');
+    });
+
+    it('should batch-patch multiple features in a single emission', () => {
+      sharedService.emitFeatureUsageUpdates([
+        { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+        { column: 'Var_25', value: 'drop', reason: 'Low SHAP' },
+        { column: 'Var_24', value: 'drop' },  // no reason
+      ]);
+      expect(component.featureUsage['Var_3']).toBe('drop');
+      expect(component.featureUsage['Var_25']).toBe('drop');
+      expect(component.featureUsage['Var_24']).toBe('drop');
+      expect(component.featureDropReason['Var_3']).toBe('VIF=9.39');
+      expect(component.featureDropReason['Var_25']).toBe('Low SHAP');
+      // No reason supplied → unset (stays undefined / empty).
+      expect(component.featureDropReason['Var_24']).toBeFalsy();
+    });
+
+    it('should ignore entries with invalid value', () => {
+      sharedService.emitFeatureUsageUpdates([
+        { column: 'Var_3', value: 'remove' as any },
+        { value: 'drop', reason: 'no col' } as any,
+      ]);
+      expect(component.featureUsage['Var_3']).toBeUndefined();
+    });
+  });
+
+  // ── sfsStartRequests$ subscription (v2.25.0+) ─────────────────────────
+  // The dedicated path for the AI to actually kick off SFS.  Verifies
+  // the modeling component populates form fields and calls startSfs()
+  // — the same code path a manual "Start SFS" button click takes.
+  describe('sfsStartRequests$ -> form-fields + startSfs() sync', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+    });
+
+    it('should populate SFS form fields from the request and call startSfs()', (done) => {
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.5 }],
+          min_features: 7,
+          max_features: 20,
+        },
+        excluded_features: ['Var_3'],
+        n_jobs: 4,
+        top_k: 8,
+      });
+      // startSfs() is fired via setTimeout(0); poll once.
+      setTimeout(() => {
+        expect(component.sfsMethodBackward).toBeTrue();
+        expect(component.sfsMethodForward).toBeFalse();
+        expect(component.sfsMetrics).toEqual([{ metric: 'roc_auc', pct_change: 1.5 }]);
+        expect(component.sfsMinFeatures).toBe(7);
+        expect(component.sfsMaxFeatures).toBe(20);
+        expect(component.sfsNJobs).toBe(4);
+        expect(component.sfsTopK).toBe(8);
+        // Excluded features also marked as drop in featureUsage map.
+        expect(component.featureUsage['Var_3']).toBe('drop');
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        done();
+      }, 5);
+    });
+
+    it('should support both forward and backward methods together', (done) => {
+      spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      sharedService.emitSfsStartRequest({
+        methods: ['forward', 'backward'],
+        stopping_criteria: {
+          metrics: [
+            { metric: 'roc_auc', pct_change: 1.0 },
+            { metric: 'pr_auc', pct_change: 2.0 },
+          ],
+          min_features: 5,
+          max_features: 15,
+        },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+      });
+      setTimeout(() => {
+        expect(component.sfsMethodForward).toBeTrue();
+        expect(component.sfsMethodBackward).toBeTrue();
+        expect(component.sfsMetrics.length).toBe(2);
+        done();
+      }, 5);
+    });
+
+    it('should reject empty methods (no startSfs call)', (done) => {
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      // The SharedService guard already blocks empty methods, but the
+      // component's own guard is a defensive double-check.
+      sharedService.emitSfsStartRequest({
+        methods: [],
+        stopping_criteria: {} as any,
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+      });
+      setTimeout(() => {
+        expect(startSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('should filter unknown metric names from the form fields', (done) => {
+      spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: {
+          metrics: [
+            { metric: 'roc_auc', pct_change: 1.0 },
+            { metric: 'f1_score', pct_change: 2.0 } as any,  // unknown
+          ],
+          min_features: 5,
+          max_features: 15,
+        },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+      });
+      setTimeout(() => {
+        // Only roc_auc survives the filter.
+        expect(component.sfsMetrics).toEqual([{ metric: 'roc_auc', pct_change: 1.0 }]);
+        done();
+      }, 5);
+    });
+
+    // End-to-end procedural-chain check: AI's two-action sequence
+    // for "drop Var_3 due to VIF and start SFS":
+    //   1. update_config feature_usage=drop  → featureUsageUpdates$
+    //   2. start_sfs                         → sfsStartRequests$
+    // verifies final state mirrors manual UI click-through.
+    it('should fully transform via the v2.25.0+ procedural chain', (done) => {
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      component.featureUsage = {};
+      component.featureDropReason = {};
+
+      // Step 1: AI flips Var_3 to drop with VIF reason.
+      sharedService.emitFeatureUsageUpdates([
+        { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+      ]);
+      expect(component.featureUsage['Var_3']).toBe('drop');
+      expect(component.featureDropReason['Var_3']).toBe('VIF=9.39');
+
+      // Step 2: AI starts SFS with Var_3 in excluded_features.
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+          min_features: 5,
+          max_features: 15,
+        },
+        excluded_features: ['Var_3'],
+        n_jobs: 3,
+        top_k: 5,
+      });
+      setTimeout(() => {
+        // Form fields populated.
+        expect(component.sfsMethodBackward).toBeTrue();
+        // featureUsage still has Var_3=drop (preserved across steps).
+        expect(component.featureUsage['Var_3']).toBe('drop');
+        // Reason preserved — the second action doesn't clobber the first.
+        expect(component.featureDropReason['Var_3']).toBe('VIF=9.39');
+        // startSfs() called exactly once.
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        done();
+      }, 5);
+    });
+  });
 });

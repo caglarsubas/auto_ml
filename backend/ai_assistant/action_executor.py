@@ -557,6 +557,35 @@ def update_config(file_id: int, payload: dict) -> dict:
                 applied.append({'key': key, 'column': col, 'value': val})
             else:
                 errors.append({'key': key, 'column': col, 'error': 'Invalid column or value'})
+        elif key == 'feature_usage':
+            # v2.25.0+: mirrors the existing manual UI dropdown in the
+            # Selected Features table.  Setting feature_usage='drop' on
+            # a feature is the canonical way for the AI to exclude it
+            # from SFS without physically removing the column from the
+            # dataset (which would invalidate cached modeling artifacts
+            # like selected_features, shap_details, encoding_plan).
+            # The frontend's existing SFS start flow already passes
+            # `featureUsage['col']==='drop'` features as `excluded_features`
+            # to the SFS engine.
+            col = upd.get('column', '')
+            val = upd.get('value', '')
+            reason = upd.get('reason', '')
+            if not col or not isinstance(col, str):
+                errors.append({'key': key, 'column': col, 'error': 'column is required for feature_usage'})
+                continue
+            if val not in ('keep', 'drop'):
+                errors.append({'key': key, 'column': col, 'error': "feature_usage value must be 'keep' or 'drop'"})
+                continue
+            # Don't validate column against valid_cols here — feature_usage
+            # targets the selected_features list, which may include
+            # encoded columns (e.g. one-hot expansions) that don't
+            # exist as raw dataframe columns.  Validation happens at
+            # SFS-start time when excluded_features is intersected
+            # with the actual feature matrix.
+            entry = {'key': key, 'column': col, 'value': val}
+            if reason:
+                entry['reason'] = str(reason)
+            applied.append(entry)
         elif key in ('preprocessing_options', 'split_strategy', 'split_date_column',
                      'split_cutoff', 'encoding_strategy', 'algorithm'):
             applied.append({'key': key, 'value': upd.get('value')})
@@ -570,6 +599,153 @@ def update_config(file_id: int, payload: dict) -> dict:
         'description': description,
         'applied': applied,
         'errors': errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: start_sfs — initiate Sequential Feature Selection
+# ---------------------------------------------------------------------------
+#
+# Procedural context: SFS (sequential feature selection) is the
+# pipeline step that explores feature-subset performance by either
+# adding (forward) or removing (backward) features one at a time and
+# tracking CV ROC-AUC/PR-AUC at each step.  The pipeline UI exposes a
+# "Start SFS" button alongside form fields for methods, stopping
+# criteria, n_jobs, top_k, and a per-feature "Keep / Drop" dropdown.
+#
+# Before v2.25.0 the AI assistant had no way to actually KICK OFF SFS
+# — it could only TALK about doing it.  When the user asked "drop
+# Var_3 due to VIF and start SFS" the assistant correctly proposed
+# the drop via execute_code but then asserted "SFS Status: Initiated"
+# as plain text, with nothing actually starting.  This action closes
+# that gap.
+#
+# Validation rules
+# ----------------
+# * `methods` must be a non-empty list whose elements are drawn from
+#   {'forward', 'backward'}.  Duplicates are deduplicated.
+# * `stopping_criteria.metrics` must be a non-empty list of
+#   {metric, pct_change} entries; metric ∈ {'roc_auc', 'pr_auc'}.
+# * `stopping_criteria.min_features` / `max_features` must be
+#   positive ints when present.
+# * `excluded_features` (optional) — list of column names the AI
+#   wants the SFS engine to skip.  Matches the existing
+#   `featureUsage[col] === 'drop'` UI mechanism.
+# * `n_jobs` / `top_k` — positive ints, clamped to sane bounds.
+#
+# Returns the validated config in `applied` for the frontend chat
+# panel to forward via `sfsStartRequests$` to the modeling component,
+# which mirrors the user clicking "Start SFS" with these settings.
+
+@tool(name="start-sfs")
+def start_sfs(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast an SFS-start request.
+
+    payload: {
+        "methods": ["backward"],        # or ["forward"] or ["forward", "backward"]
+        "stopping_criteria": {
+            "metrics": [{"metric": "roc_auc", "pct_change": 1.0}],
+            "min_features": 5,
+            "max_features": 15
+        },
+        "excluded_features": ["Var_3"], # optional — features to skip
+        "n_jobs": 3,
+        "top_k": 5,
+        "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"
+    }
+    """
+    description = payload.get('description', '')
+
+    # ── methods ────────────────────────────────────────────────────
+    methods_raw = payload.get('methods', [])
+    if not isinstance(methods_raw, list) or not methods_raw:
+        return {'status': 'error', 'error': 'methods must be a non-empty list (forward|backward)'}
+    methods: list = []
+    bad_methods: list = []
+    seen = set()
+    for m in methods_raw:
+        if not isinstance(m, str):
+            bad_methods.append(repr(m))
+            continue
+        ml = m.strip().lower()
+        if ml not in ('forward', 'backward'):
+            bad_methods.append(m)
+            continue
+        if ml in seen:
+            continue
+        seen.add(ml)
+        methods.append(ml)
+    if not methods:
+        return {
+            'status': 'error',
+            'error': f'methods must contain at least one of forward/backward (got: {bad_methods})',
+        }
+
+    # ── stopping_criteria ──────────────────────────────────────────
+    sc_in = payload.get('stopping_criteria') or {}
+    if not isinstance(sc_in, dict):
+        return {'status': 'error', 'error': 'stopping_criteria must be an object'}
+    metrics_in = sc_in.get('metrics', [])
+    if not isinstance(metrics_in, list) or not metrics_in:
+        return {
+            'status': 'error',
+            'error': 'stopping_criteria.metrics must be a non-empty list of {metric, pct_change}',
+        }
+    metrics: list = []
+    for mc in metrics_in:
+        if not isinstance(mc, dict):
+            continue
+        metric_name = mc.get('metric', '')
+        if metric_name not in ('roc_auc', 'pr_auc'):
+            continue
+        try:
+            pct = float(mc.get('pct_change', 0.0))
+        except (TypeError, ValueError):
+            pct = 0.0
+        metrics.append({'metric': metric_name, 'pct_change': pct})
+    if not metrics:
+        return {
+            'status': 'error',
+            'error': "stopping_criteria.metrics entries must have metric ∈ {'roc_auc','pr_auc'}",
+        }
+
+    def _pos_int(v, default):
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            return default
+        return iv if iv > 0 else default
+
+    stopping_criteria = {
+        'metrics': metrics,
+        'min_features': _pos_int(sc_in.get('min_features', 5), 5),
+        'max_features': _pos_int(sc_in.get('max_features', 15), 15),
+    }
+
+    # ── excluded_features ──────────────────────────────────────────
+    excluded_raw = payload.get('excluded_features', []) or []
+    if not isinstance(excluded_raw, list):
+        excluded = []
+    else:
+        excluded = [str(c) for c in excluded_raw if isinstance(c, str) and c.strip()]
+
+    # ── n_jobs / top_k (clamped) ────────────────────────────────────
+    n_jobs = max(1, min(_pos_int(payload.get('n_jobs', 3), 3), 16))
+    top_k = max(1, min(_pos_int(payload.get('top_k', 5), 5), 50))
+
+    return {
+        'status': 'success',
+        'action_type': 'start_sfs',
+        'description': description,
+        'applied': {
+            'methods': methods,
+            'stopping_criteria': stopping_criteria,
+            'excluded_features': excluded,
+            'n_jobs': n_jobs,
+            'top_k': top_k,
+        },
+        'errors': [],
     }
 
 
@@ -752,6 +928,7 @@ HANDLERS = {
     'update_metadata': update_metadata,
     'update_config': update_config,
     'set_ordinal_ranking': set_ordinal_ranking,
+    'start_sfs': start_sfs,
     'update_notes': update_notes,
 }
 

@@ -1423,6 +1423,244 @@ class TestDispatchAction:
         assert len(result['errors']) == 1
         assert result['errors'][0]['column'] == 'Var_Bad'
 
+    # ── v2.25.0+: update_config feature_usage subkey ────────────────────
+    # The AI's correct path to "exclude Var_3 from SFS due to VIF" —
+    # NOT execute_code drop.  These tests pin the validation surface
+    # for the new sub-key.
+
+    def test_update_config_feature_usage_drop_with_reason(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'feature_usage', 'column': 'Var_3', 'value': 'drop', 'reason': 'VIF=9.39'},
+            ],
+        })
+        assert result['status'] == 'success'
+        assert len(result['applied']) == 1
+        entry = result['applied'][0]
+        assert entry['key'] == 'feature_usage'
+        assert entry['column'] == 'Var_3'
+        assert entry['value'] == 'drop'
+        assert entry['reason'] == 'VIF=9.39'
+
+    def test_update_config_feature_usage_keep_no_reason(self):
+        # The optional reason is dropped on "keep" — flipping back to
+        # keep clears the rationale, matching the manual UI dropdown.
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'feature_usage', 'column': 'Var_3', 'value': 'keep'},
+            ],
+        })
+        assert result['status'] == 'success'
+        entry = result['applied'][0]
+        assert entry['value'] == 'keep'
+        assert 'reason' not in entry
+
+    def test_update_config_feature_usage_invalid_value_error(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'feature_usage', 'column': 'Var_3', 'value': 'remove'},
+            ],
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+        assert 'keep' in result['errors'][0]['error']
+
+    def test_update_config_feature_usage_missing_column_error(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'feature_usage', 'value': 'drop', 'reason': 'low SHAP'},
+            ],
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+
+    def test_update_config_feature_usage_does_not_validate_against_df_columns(self):
+        # feature_usage targets the Selected Features list which may
+        # include encoded columns (one-hot expansions) absent from the
+        # raw dataframe — validation happens later at SFS-start time.
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'feature_usage', 'column': 'Var_HotEncoded_X', 'value': 'drop'},
+            ],
+        })
+        # Not rejected even though the column doesn't exist in df.
+        assert result['status'] == 'success'
+        assert result['applied'][0]['column'] == 'Var_HotEncoded_X'
+
+    def test_update_config_mixed_feature_and_model_usage(self):
+        # A single update_config call may carry both feature_usage and
+        # model_usage entries — they coexist without interference.
+        # model_usage requires df validation; we patch _load_dataframe
+        # to provide a stable column set.
+        from ai_assistant import action_executor as ae
+
+        class _FakeDf:
+            columns = type('cols', (), {'tolist': staticmethod(lambda: ['Var_3', 'AppID', 'Target'])})()
+
+        orig = ae._load_dataframe
+        ae._load_dataframe = lambda fid: (_FakeDf(), None, '')
+        try:
+            result = self._dispatch(1, 'update_config', {
+                'updates': [
+                    {'key': 'feature_usage', 'column': 'Var_3', 'value': 'drop', 'reason': 'VIF=9.39'},
+                    {'key': 'model_usage', 'column': 'AppID', 'value': 'No'},
+                ],
+            })
+        finally:
+            ae._load_dataframe = orig
+        assert result['status'] == 'success'
+        assert len(result['applied']) == 2
+        keys = [a['key'] for a in result['applied']]
+        assert 'feature_usage' in keys
+        assert 'model_usage' in keys
+
+    # ── v2.25.0+: start_sfs action ──────────────────────────────────────
+    # The dedicated path for the AI to actually KICK OFF SFS.  Before
+    # v2.25.0 the AI could only TALK about doing it.  These tests pin
+    # the validation surface end-to-end.
+
+    def test_start_sfs_routes_correctly_minimal_payload(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {
+                'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}],
+            },
+        })
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'start_sfs'
+        applied = result['applied']
+        assert applied['methods'] == ['backward']
+        assert applied['stopping_criteria']['metrics'] == [
+            {'metric': 'roc_auc', 'pct_change': 1.0},
+        ]
+        # Defaults filled in.
+        assert applied['stopping_criteria']['min_features'] == 5
+        assert applied['stopping_criteria']['max_features'] == 15
+        assert applied['n_jobs'] == 3
+        assert applied['top_k'] == 5
+        assert applied['excluded_features'] == []
+
+    def test_start_sfs_full_payload_round_trips(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['forward', 'backward'],
+            'stopping_criteria': {
+                'metrics': [
+                    {'metric': 'roc_auc', 'pct_change': 0.5},
+                    {'metric': 'pr_auc', 'pct_change': 1.0},
+                ],
+                'min_features': 3,
+                'max_features': 20,
+            },
+            'excluded_features': ['Var_3', 'Var_99'],
+            'n_jobs': 4,
+            'top_k': 7,
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['methods'] == ['forward', 'backward']
+        assert len(applied['stopping_criteria']['metrics']) == 2
+        assert applied['stopping_criteria']['min_features'] == 3
+        assert applied['stopping_criteria']['max_features'] == 20
+        assert applied['excluded_features'] == ['Var_3', 'Var_99']
+        assert applied['n_jobs'] == 4
+        assert applied['top_k'] == 7
+
+    def test_start_sfs_deduplicates_methods(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['forward', 'forward', 'backward', 'backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['methods'] == ['forward', 'backward']
+
+    def test_start_sfs_rejects_empty_methods(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': [],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'error'
+        assert 'methods' in result['error']
+
+    def test_start_sfs_rejects_unknown_method(self):
+        # 'middlewards' is gibberish — all methods are filtered out so
+        # we end up with an empty list.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['middlewards', 'sideways'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'error'
+
+    def test_start_sfs_rejects_empty_metrics(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': []},
+        })
+        assert result['status'] == 'error'
+        assert 'metrics' in result['error']
+
+    def test_start_sfs_filters_unknown_metric_names(self):
+        # 'f1_score' isn't supported — all entries get filtered, the
+        # action errors out because no valid metric remains.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'f1_score', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'error'
+        assert 'roc_auc' in result['error']
+
+    def test_start_sfs_clamps_n_jobs_and_top_k(self):
+        # Both fields have hard upper bounds to protect the engine.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'n_jobs': 9999,
+            'top_k': 9999,
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['n_jobs'] == 16
+        assert result['applied']['top_k'] == 50
+
+    def test_start_sfs_coerces_negative_n_jobs_to_default(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'n_jobs': -5,
+            'top_k': -1,
+        })
+        assert result['status'] == 'success'
+        # Defaults are 3 / 5 after _pos_int kicks in.
+        assert result['applied']['n_jobs'] == 3
+        assert result['applied']['top_k'] == 5
+
+    def test_start_sfs_handles_non_list_excluded_features(self):
+        # Robust against the LLM passing a string by mistake.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'excluded_features': 'Var_3',  # not a list
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['excluded_features'] == []
+
+    def test_start_sfs_coerces_pct_change_to_float(self):
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [
+                {'metric': 'roc_auc', 'pct_change': '1.5'},  # str
+                {'metric': 'pr_auc', 'pct_change': None},   # None → 0.0
+            ]},
+        })
+        assert result['status'] == 'success'
+        m = result['applied']['stopping_criteria']['metrics']
+        assert m[0] == {'metric': 'roc_auc', 'pct_change': 1.5}
+        assert m[1] == {'metric': 'pr_auc', 'pct_change': 0.0}
+
+    def test_start_sfs_registered_in_handlers(self):
+        # Defense-in-depth: protect against an accidental delete of
+        # the HANDLERS dict entry on a future refactor.
+        from ai_assistant.action_executor import HANDLERS, start_sfs
+        assert HANDLERS.get('start_sfs') is start_sfs
+
 
 # ---------------------------------------------------------------------------
 # AI tool_executor: get_encoding_plan reader exposes unique_values + ranking

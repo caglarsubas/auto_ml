@@ -192,6 +192,78 @@ export class SharedService {
     this.encodingRankingUpdatesSubject.next(updates);
   }
 
+  // Broadcast Selected-Features Keep/Drop changes coming from the AI
+  // assistant's `update_config: feature_usage` action (v2.25.0+).
+  //
+  // The AI's correct path to "exclude Var_3 from SFS due to VIF" is
+  // NOT to physically drop the column with execute_code — that
+  // invalidates the modeling artifacts.  Instead it emits
+  // update_config with key=feature_usage, mirroring the existing
+  // manual UI dropdown on each row of the Selected Features table.
+  // This subject fans those updates out to the modeling component,
+  // which sets `featureUsage[col] = value` and `featureDropReason[col]`
+  // in place — the dropdown re-renders to "Drop" with the supplied
+  // reason, and the next SFS start picks up the exclusion via the
+  // existing `excludedFeatures` collection in startSfs().
+  //
+  // Subject (not BehaviorSubject) — late subscribers must not replay
+  // stale drop flags that have already been applied.
+  private featureUsageUpdatesSubject =
+    new Subject<Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>>();
+  featureUsageUpdates$:
+    Observable<Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>> =
+    this.featureUsageUpdatesSubject.asObservable();
+
+  emitFeatureUsageUpdates(
+    updates: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>,
+  ): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.featureUsageUpdatesSubject.next(updates);
+  }
+
+  // Broadcast SFS-start requests coming from the AI assistant's
+  // `start_sfs` action (v2.25.0+).
+  //
+  // The chat panel emits this with the validated SFS config object
+  // returned by the backend action handler.  The modeling component
+  // subscribes, populates its SFS form fields (sfsMethodForward /
+  // sfsMethodBackward / sfsMetrics / sfsMinFeatures / sfsMaxFeatures /
+  // sfsNJobs / sfsTopK), and calls its existing `startSfs()` method
+  // — exactly the same code path the user's manual "Start SFS"
+  // button click takes.  This means the AI gets the same form
+  // validation, the same SharedService.activeProcess registration,
+  // and the same status-polling lifecycle as a human click.
+  //
+  // Subject (not BehaviorSubject) — late subscribers must not auto-
+  // re-start SFS on a stale request.  The single shape is the same
+  // object the backend action handler returns in `applied`.
+  private sfsStartRequestsSubject = new Subject<{
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }>();
+  sfsStartRequests$: Observable<{
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }> = this.sfsStartRequestsSubject.asObservable();
+
+  emitSfsStartRequest(request: {
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    if (!Array.isArray(request.methods) || request.methods.length === 0) return;
+    this.sfsStartRequestsSubject.next(request);
+  }
+
   // Autosave flag shared between parent (model-development) and child (modeling) components
   private autosaveEnabledSubject = new BehaviorSubject<boolean>(true);
   autosaveEnabled$: Observable<boolean> = this.autosaveEnabledSubject.asObservable();

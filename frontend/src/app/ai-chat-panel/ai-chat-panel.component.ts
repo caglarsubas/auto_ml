@@ -327,6 +327,36 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       this._applyConfigChanges(applied);
       this.sharedService.triggerCheckpoint('ai_action_update_config');
 
+    } else if (actionType === 'start_sfs') {
+      // v2.25.0+: dedicated path for the AI to actually kick off SFS.
+      // The backend action handler returns the validated config object;
+      // we broadcast it on sfsStartRequests$ so the modeling component
+      // populates its SFS form fields and calls startSfs() — the exact
+      // code path a manual "Start SFS" button click would take.
+      const applied = resp.applied || null;
+      let msg = `✅ **SFS started.**`;
+      if (desc) msg += ` ${desc}`;
+      if (applied && typeof applied === 'object') {
+        const methods = Array.isArray(applied.methods) ? applied.methods.join(', ') : '?';
+        const sc = applied.stopping_criteria || {};
+        const metrics = Array.isArray(sc.metrics)
+          ? sc.metrics.map((m: any) => `${m.metric}≤${m.pct_change}%`).join(', ')
+          : '?';
+        const excl = Array.isArray(applied.excluded_features) ? applied.excluded_features : [];
+        msg += '\n\n' + [
+          `- **Methods**: \`${methods}\``,
+          `- **Stopping criteria**: ${metrics}, min=${sc.min_features ?? '?'}, max=${sc.max_features ?? '?'}`,
+          `- **Excluded features**: ${excl.length ? excl.map((c: string) => `\`${c}\``).join(', ') : '_none_'}`,
+          `- **Parallelism**: n_jobs=${applied.n_jobs ?? '?'}, top_k=${applied.top_k ?? '?'}`,
+        ].join('\n');
+      }
+      this.actionSuccess = 'SFS started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      if (applied && typeof applied === 'object') {
+        this.sharedService.emitSfsStartRequest(applied);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_start_sfs');
+
     } else if (actionType === 'update_notes') {
       const noteAction = resp.note_action || 'add';
       const position = resp.position || '';
@@ -355,14 +385,33 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   /** Apply config changes returned by update_config to frontend SharedService state */
   private _applyConfigChanges(applied: any[]): void {
+    // v2.25.0+: feature_usage entries are collected and broadcast in a
+    // single emission on featureUsageUpdates$ so the modeling component
+    // can patch its featureUsage map and the Selected Features
+    // dropdown re-renders.  model_usage continues to use the existing
+    // BehaviorSubject pattern because it has a different downstream
+    // consumer (Data Quality / preprocessing).
+    const featureUsageBatch: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }> = [];
     for (const upd of applied) {
       if (upd.key === 'model_usage' && upd.column) {
         const current = this.sharedService.getModelUsageSettings() || {};
         current[upd.column] = upd.value;
         this.sharedService.setModelUsageSettings(current);
+      } else if (upd.key === 'feature_usage' && upd.column) {
+        if (upd.value === 'keep' || upd.value === 'drop') {
+          const entry: { column: string; value: 'keep' | 'drop'; reason?: string } = {
+            column: String(upd.column),
+            value: upd.value,
+          };
+          if (upd.reason) entry.reason = String(upd.reason);
+          featureUsageBatch.push(entry);
+        }
       }
       // Other config keys (preprocessing_options, split_strategy, etc.) are handled
       // by triggering a checkpoint which the parent components pick up
+    }
+    if (featureUsageBatch.length) {
+      this.sharedService.emitFeatureUsageUpdates(featureUsageBatch);
     }
   }
 

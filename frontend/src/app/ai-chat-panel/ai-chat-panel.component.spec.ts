@@ -252,4 +252,141 @@ describe('AiChatPanelComponent', () => {
       expect(lastMsg.content).toContain('Low → Mid → High');
     });
   });
+
+  // ── update_config feature_usage (v2.25.0+) ────────────────────────────
+  // The AI's correct path to "exclude Var_3 from SFS due to VIF" — the
+  // chat panel must route feature_usage entries through featureUsageUpdates$
+  // (NOT setModelUsageSettings — that's for the data-quality model_usage flag).
+  describe('_applyConfigChanges feature_usage flow', () => {
+    it('should broadcast feature_usage entries on featureUsageUpdates$', (done) => {
+      const applied = [
+        { key: 'feature_usage', column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+      ];
+      sharedService.featureUsageUpdates$.subscribe(received => {
+        expect(received).toEqual([
+          { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+        ]);
+        done();
+      });
+      (component as any)._handleActionResult('update_config', { applied, errors: [] });
+    });
+
+    it('should batch multiple feature_usage entries into a single broadcast', (done) => {
+      const applied = [
+        { key: 'feature_usage', column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
+        { key: 'feature_usage', column: 'Var_25', value: 'drop', reason: 'Low SHAP' },
+        { key: 'feature_usage', column: 'Var_24', value: 'keep' },
+      ];
+      sharedService.featureUsageUpdates$.subscribe(received => {
+        expect(received.length).toBe(3);
+        expect(received[0]).toEqual({ column: 'Var_3', value: 'drop', reason: 'VIF=9.39' });
+        expect(received[1]).toEqual({ column: 'Var_25', value: 'drop', reason: 'Low SHAP' });
+        // No reason field on "keep" entries — matches the manual UI's
+        // clear-on-flip-back behaviour.
+        expect(received[2]).toEqual({ column: 'Var_24', value: 'keep' });
+        done();
+      });
+      (component as any)._handleActionResult('update_config', { applied, errors: [] });
+    });
+
+    it('should ignore feature_usage entries with invalid value (no broadcast)', () => {
+      const emitSpy = spyOn(sharedService, 'emitFeatureUsageUpdates');
+      (component as any)._handleActionResult('update_config', {
+        applied: [
+          { key: 'feature_usage', column: 'Var_3', value: 'remove' },  // not keep/drop
+          { key: 'feature_usage', value: 'drop' },                      // no column
+        ],
+        errors: [],
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should keep model_usage flow working alongside feature_usage', () => {
+      // Mixed batch — model_usage goes through setModelUsageSettings,
+      // feature_usage through emitFeatureUsageUpdates.  Neither breaks
+      // the other.
+      const modelSpy = spyOn(sharedService, 'setModelUsageSettings').and.callThrough();
+      const featSpy = spyOn(sharedService, 'emitFeatureUsageUpdates');
+      (component as any)._handleActionResult('update_config', {
+        applied: [
+          { key: 'feature_usage', column: 'Var_3', value: 'drop' },
+          { key: 'model_usage', column: 'AppID', value: 'No' },
+        ],
+        errors: [],
+      });
+      expect(modelSpy).toHaveBeenCalled();
+      expect(featSpy).toHaveBeenCalledTimes(1);
+      expect(featSpy.calls.mostRecent().args[0]).toEqual([
+        { column: 'Var_3', value: 'drop' },
+      ]);
+    });
+  });
+
+  // ── start_sfs response handling (v2.25.0+) ────────────────────────────
+  // The dedicated path for the AI to actually kick off SFS.  The chat
+  // panel forwards the validated config object on sfsStartRequests$
+  // so the modeling component populates form fields and calls startSfs().
+  describe('_handleActionResult start_sfs flow', () => {
+    const validApplied = {
+      methods: ['backward'],
+      stopping_criteria: {
+        metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+        min_features: 5,
+        max_features: 15,
+      },
+      excluded_features: ['Var_3'],
+      n_jobs: 3,
+      top_k: 5,
+    };
+
+    it('should broadcast the validated config on sfsStartRequests$', (done) => {
+      sharedService.sfsStartRequests$.subscribe(received => {
+        expect(received).toEqual(validApplied);
+        done();
+      });
+      (component as any)._handleActionResult('start_sfs', {
+        applied: validApplied,
+        description: 'Start backward SFS, excluding Var_3 (VIF=9.39)',
+      });
+    });
+
+    it('should NOT broadcast when applied is missing', () => {
+      const emitSpy = spyOn(sharedService, 'emitSfsStartRequest');
+      (component as any)._handleActionResult('start_sfs', { description: 'malformed' });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should add a chat message summarising the SFS config', () => {
+      (component as any)._handleActionResult('start_sfs', {
+        applied: validApplied,
+        description: 'Start backward SFS, excluding Var_3 (VIF=9.39)',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      // Methods rendered.
+      expect(lastMsg.content).toContain('backward');
+      // Stopping criteria rendered with metric/threshold.
+      expect(lastMsg.content).toContain('roc_auc');
+      expect(lastMsg.content).toContain('1');
+      // Excluded features rendered with backtick code formatting.
+      expect(lastMsg.content).toContain('Var_3');
+      // Parallelism rendered.
+      expect(lastMsg.content).toContain('n_jobs=3');
+      expect(lastMsg.content).toContain('top_k=5');
+    });
+
+    it('should trigger ai_action_start_sfs checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('start_sfs', { applied: validApplied });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_start_sfs');
+    });
+
+    it('should render "none" when excluded_features is empty', () => {
+      (component as any)._handleActionResult('start_sfs', {
+        applied: { ...validApplied, excluded_features: [] },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      // Italic-_none_ marker so the user knows nothing was excluded.
+      expect(lastMsg.content).toContain('_none_');
+    });
+  });
 });
