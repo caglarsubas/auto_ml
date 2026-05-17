@@ -249,6 +249,56 @@ Model deployment interface (under development):
 
 ---
 
+## AI Assistant observability (Prometa integration)
+
+The backend's AI Assistant emits structured agent telemetry through
+[`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
+(≥ 0.5.0) to the **Prometa Agentic Lifecycle Intelligence Platform**
+for tracing, evaluation, and lifecycle governance.
+
+**Integration point**:
+[`backend/ai_assistant/prometa_config.py`](backend/ai_assistant/prometa_config.py)
+configures the SDK client at boot and exposes `@prometa_config.workflow / .agent / .tool`
+decorators consumed throughout the assistant's action layer.
+OpenAI client calls are auto-instrumented via
+`prometa.integrations.openai.install()` — every
+`client.chat.completions.create(...)` invocation emits a child span
+carrying token usage, cost, prompt/completion text, and model name.
+
+**Configuration** is via environment variables:
+
+| Var | Default | Purpose |
+|---|---|---|
+| `PROMETA_ENDPOINT` | (off) | OTLP ingest URL, e.g. `https://prometa.example.com/api/v2/otlp/v1/traces` |
+| `PROMETA_API_KEY` | (off) | Prometa tenant API key |
+| `PROMETA_SOLUTION_ID` | `declarai` | Logical solution identifier in the platform's registry |
+| `PROMETA_AGENT_NAME` | `ai-assistant` | Logical agent name (auto-registered) |
+| `PROMETA_STAGE` | `development` | `development` / `staging` / `production` |
+
+Leaving `PROMETA_ENDPOINT` unset disables telemetry entirely
+(no-op decorators, no network calls). The SDK and platform are
+loosely coupled — DeclarAI's pipeline runs identically with or
+without Prometa wired up.
+
+**Available SDK helpers** (v0.5.0+):
+
+- Lifecycle decorators (`@prometa.workflow / .agent / .tool / .task`)
+  for span boundaries and parent/child relationships.
+- Session grouping via `set_session_id(conversation_id)` so chat-style
+  AI Assistant traces aggregate into a single Session Explorer row.
+- Correlation-chain setters (`set_customer_id`, `set_user_id`,
+  `set_request_model`, `set_tool_name`) that light up the platform's
+  canonical correlation chain — opt-in extras that bridge AI Assistant
+  telemetry to the org's CRM / data warehouse identifiers.
+- AML v0.4 instrumentation primitives (`guardrail`, `pii_filter`,
+  `memory_read`, `record_retry_attempt`, …) for the platform's
+  41-feature agent-maturity scoring.
+
+See the [SDK README](https://github.com/prometa-ai/orchestra-python-sdk)
+for the complete API surface and the platform's
+[`correlation-id-design.md`](https://github.com/caglarsubas/agent-hook-v2/blob/main/resources/correlation/correlation-id-design.md)
+for the chain semantics.
+
 ## Quick Start
 
 ### Prerequisites
@@ -355,6 +405,9 @@ auto-ml/
 | openpyxl / xlrd | — | Excel file reading (.xlsx / .xls) |
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
+| openai | ≥ 1.0 | LLM client for AI Assistant action layer |
+| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.5.0 | Agent telemetry — emits OTLP traces to the Prometa platform via `@prometa.workflow / .agent / .tool` decorators |
+| redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend
 
