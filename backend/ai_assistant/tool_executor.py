@@ -412,6 +412,16 @@ def _handle_get_pipeline_notes(file_id: int, args: dict) -> str:
 
 
 def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
+    # NOTE: the dict keys below MUST match what the frontend writes in
+    # ``model-development.component.ts::getPipelineConfig`` (the cache
+    # producer).  v2.26.0 and earlier silently mismatched four keys
+    # (``row_count_before``/``row_count_after``/``purifier_steps`` vs
+    # the frontend's ``rows_before``/``rows_after``/``selected_purifier_steps``),
+    # which made this tool report ``Rows: ? → ?`` and drop the purifier
+    # step list entirely — the LLM, finding no real config, fell back
+    # to general-toolkit hallucinations.  Keep this in sync; the
+    # regression test ``test_get_pipeline_config_keys_match_frontend``
+    # in ``tests/test_unit.py`` guards against drift.
     data = read_pipeline_config(file_id)
     if not data:
         return _not_available("pipeline configuration")
@@ -420,12 +430,14 @@ def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
         f"  Pipeline type: {data.get('pipeline_type', '?')}",
         f"  Target definition: {data.get('target_definition', '?')}",
         f"  Split strategy: {data.get('split_strategy', '?')}",
-        f"  Rows: {data.get('row_count_before', '?')} → {data.get('row_count_after', '?')}",
+        f"  Rows: {data.get('rows_before', '?')} → {data.get('rows_after', '?')}",
         f"  Rows removed: {data.get('rows_removed', '?')}",
     ]
-    purifier = data.get('purifier_steps', [])
+    purifier = data.get('selected_purifier_steps', [])
     if purifier:
-        lines.append(f"  Purifier steps: {', '.join(str(s) for s in purifier)}")
+        lines.append(f"  Selected purifier steps ({len(purifier)}):")
+        for s in purifier:
+            lines.append(f"    • {s}")
     return '\n'.join(lines)
 
 

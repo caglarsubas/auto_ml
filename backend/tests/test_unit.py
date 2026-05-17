@@ -1981,6 +1981,184 @@ class TestEncodingPlanReader:
 
 
 # ---------------------------------------------------------------------------
+# v2.26.1 — get_pipeline_config tool key contract
+# ---------------------------------------------------------------------------
+# Regression guard for the v2.26.1 bugfix.  The frontend's
+# ``model-development.component.ts::getPipelineConfig()`` writes the
+# pipeline_config Redis artifact with these top-level keys:
+#   - rows_before / rows_after / rows_removed
+#   - selected_purifier_steps  (list of step *names*, not IDs)
+#   - pipeline_type / target_definition / split_strategy / split_details
+#
+# Up to and including v2.26.0 the tool handler `_handle_get_pipeline_config`
+# read the *wrong* names (`row_count_before`, `row_count_after`,
+# `purifier_steps`).  The cache always exists once the user opens the
+# Data Purifier Declaration screen (it's debounce-pushed by
+# `onPipelineConfigChanged`), but the tool returned ``Rows: ? → ?`` and
+# silently dropped the purifier list — leaving the LLM with no real
+# config and forcing it to hallucinate generic preprocessing steps that
+# don't exist in our codebase (the user reported "High Cardinality Drop"
+# / "Quasi-Constant Drop" in an AI answer; neither is implemented in
+# `preprocessing/views.py::_apply_options`).
+#
+# These tests pin the contract so future renames on either side fail
+# fast.  Don't loosen them without first updating the frontend writer.
+@pytest.mark.unit
+class TestPipelineConfigToolContract:
+    """Exercises ai_assistant.tool_executor._handle_get_pipeline_config."""
+
+    def _render(self, cached_config):
+        from ai_assistant import tool_executor
+        orig = tool_executor.read_pipeline_config
+        tool_executor.read_pipeline_config = lambda fid: cached_config
+        try:
+            return tool_executor._handle_get_pipeline_config(1, {})
+        finally:
+            tool_executor.read_pipeline_config = orig
+
+    # ── Contract tests: tool reads the keys the frontend writes ──
+
+    def test_reads_rows_before_after_keys(self):
+        """Tool must read `rows_before`/`rows_after` (frontend writer's keys),
+        not the legacy `row_count_before`/`row_count_after`."""
+        cfg = {
+            'pipeline_type': 'binary_classification',
+            'rows_before': 12345,
+            'rows_after': 11000,
+            'rows_removed': 1345,
+        }
+        out = self._render(cfg)
+        assert 'Rows: 12345 → 11000' in out, (
+            "Tool failed to render row counts. Likely cause: legacy keys "
+            "`row_count_before`/`row_count_after` revived in the handler."
+        )
+        assert 'Rows removed: 1345' in out
+
+    def test_renders_selected_purifier_steps_list(self):
+        """Tool must read `selected_purifier_steps` (frontend writer's key),
+        not the legacy `purifier_steps`.  The list contains step *names*
+        (strings) as written by ``selectedOptions.map(o => o.name)``."""
+        cfg = {
+            'pipeline_type': 'binary_classification',
+            'selected_purifier_steps': [
+                'Column-wise duplicate drop',
+                'Row-wise duplicate drop',
+                'Zero-variance drop',
+                'Perfect-correlation drop',
+                'Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]',
+            ],
+        }
+        out = self._render(cfg)
+        assert 'Selected purifier steps (5):' in out
+        for name in cfg['selected_purifier_steps']:
+            assert name in out, (
+                f"Step name '{name}' missing from rendered output. Likely "
+                f"cause: legacy `purifier_steps` key revived in the handler."
+            )
+
+    def test_legacy_keys_rejected(self):
+        """If the cache still carries ONLY the legacy keys (e.g. a stale
+        artifact from before the migration), the tool must NOT silently
+        succeed — it should report '?' so the LLM can detect the gap and
+        either re-prompt the user or fall back to other tools.  This is
+        the symmetric guard against the original bug."""
+        legacy = {
+            'pipeline_type': 'binary_classification',
+            'row_count_before': 12345,           # legacy key
+            'row_count_after': 11000,            # legacy key
+            'purifier_steps': ['Foo', 'Bar'],    # legacy key
+        }
+        out = self._render(legacy)
+        # Row counts unrenderable — tool falls back to '?'.
+        assert 'Rows: ? → ?' in out
+        # Purifier section absent because new key missing.
+        assert 'Selected purifier steps' not in out
+        assert 'Foo' not in out
+        assert 'Bar' not in out
+
+    # ── End-to-end contract: realistic frontend payload renders cleanly ──
+
+    def test_renders_full_realistic_frontend_payload(self):
+        """Mirrors what `model-development.component.ts::getPipelineConfig()`
+        actually writes after the user ticks purifier checkboxes but
+        BEFORE clicking Run Preprocessing — the exact state where the
+        original bug surfaced."""
+        cfg = {
+            'pipeline_type': 'binary_classification',
+            'target_definition': (
+                'good/bag flag of credit applications within the 12 months '
+                'period of its usage'
+            ),
+            'split_strategy': 'random',
+            'split_details': {'oos_percent': 25},
+            'rows_before': 0,    # 0 because preprocessing not yet run
+            'rows_after': 0,
+            'rows_removed': 0,
+            'selected_purifier_steps': [
+                'Column-wise duplicate drop',
+                'Row-wise duplicate drop',
+                'Zero-variance drop',
+                'Perfect-correlation drop',
+                'Corr-drop threshold = 0.85',
+                'Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]',
+            ],
+        }
+        out = self._render(cfg)
+        # Header and metadata.
+        assert 'Pipeline type: binary_classification' in out
+        assert 'Target definition: good/bag flag' in out
+        assert 'Split strategy: random' in out
+        # Rows render as 0 → 0 (NOT '?' → '?'), proving the keys lined up.
+        assert 'Rows: 0 → 0' in out
+        # All six step names rendered, one per line, with bullets.
+        assert 'Selected purifier steps (6):' in out
+        assert '    • Column-wise duplicate drop' in out
+        assert '    • Outlier-cleaning [lower-upper] quantiles = [0.01-0.99]' in out
+
+    def test_no_question_marks_when_all_keys_present(self):
+        """A fully-populated config must produce zero '?' fallbacks.
+        Catches future contract drift in any of the rendered fields."""
+        cfg = {
+            'pipeline_type': 'binary_classification',
+            'target_definition': 'some target',
+            'split_strategy': 'oot',
+            'rows_before': 100,
+            'rows_after': 90,
+            'rows_removed': 10,
+            'selected_purifier_steps': ['Step A'],
+        }
+        out = self._render(cfg)
+        assert '?' not in out, (
+            f"Unexpected '?' in tool output — a key contract drifted "
+            f"between frontend writer and tool reader. Output:\n{out}"
+        )
+
+    def test_empty_config_returns_not_available(self):
+        """When the cache has nothing (file_id never opened in the UI),
+        the tool returns the standard not-available sentinel — NOT a
+        partial 'Pipeline Configuration:' header with all '?' values."""
+        out = self._render(None)
+        assert 'not yet available' in out.lower() or 'no ' in out.lower()
+
+    # ── Static guard: source code does not contain the legacy keys ──
+
+    def test_handler_source_does_not_use_legacy_keys(self):
+        """Belt-and-braces guard: even if a future refactor renamed the
+        keys back, this test scans the handler's source for the exact
+        legacy strings.  Cheap to run, very fast to flag drift."""
+        import inspect
+        from ai_assistant import tool_executor
+        src = inspect.getsource(tool_executor._handle_get_pipeline_config)
+        # `data.get('row_count_before'` and similar must never reappear.
+        assert "'row_count_before'" not in src
+        assert "'row_count_after'" not in src
+        # Purifier list lives under `selected_purifier_steps`. Plain
+        # `'purifier_steps'` is the legacy key and must not be used as
+        # a `.get()` argument anywhere in this handler.
+        assert "data.get('purifier_steps'" not in src
+
+
+# ---------------------------------------------------------------------------
 # Feature description generator tests
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
