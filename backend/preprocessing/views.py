@@ -11,6 +11,18 @@ from rest_framework.response import Response
 from rest_framework import status
 from declaration.models import Declaration
 from .data_quality import Data_Quality
+from .purifier_catalog import (
+    PURIFIER_OPTIONS,
+    DEFAULT_SELECTED_IDS,
+    KIND_CORR_DROP,
+    KIND_SPARSITY_DROP,
+    KIND_MISSING_DROP,
+    KIND_COMBINED_DROP,
+    KIND_OUTLIER_NUM,
+    KIND_OUTLIER_CAT,
+    pick_most_aggressive,
+    selected_entries_of_kind,
+)
 import pandas as pd
 import numpy as np
 
@@ -48,6 +60,65 @@ class PreprocessingApplyView(APIView):
                 json.dump({'file_id': file_id, 'options': options}, f)
 
             return Response({'status': 'ok', 'file_id': file_id, 'options': options}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PreprocessingOptionsView(APIView):
+    """GET /api/preprocessing/options/
+
+    Returns the canonical catalog of the 34 data-purifier options
+    (IDs, UI labels, kinds, groups, threshold/quantile metadata) plus
+    the default-selected IDs.
+
+    Single source of truth shared by:
+      • Backend _apply_options dispatcher (preprocessing/views.py)
+      • Frontend purifier checkbox list (currently duplicated in TS;
+        will eventually fetch from here)
+      • v2.27.1 AI catalog tool — answers user questions like
+        "which option is the 0.05-0.95 outlier interval?" by
+        consulting this exact list (option 29).
+
+    Response shape:
+      {
+        "options": [
+          {
+            "id": 1,
+            "name": "Column-wise duplicate drop",
+            "kind": "col_dedup",
+            "group": null,
+            "threshold": null,
+            "quantile_range": null
+          },
+          ...
+        ],
+        "default_selected_ids": [1, 2, 3, 4, 7, 11, 17, 23, 28, 32]
+      }
+    """
+
+    def get(self, request, *args, **kwargs):
+        try:
+            # Serialize the catalog.  `quantile_range` is stored as a
+            # tuple in Python for immutability; DRF's JSONRenderer would
+            # serialize that as a list anyway, but we make the
+            # conversion explicit so the contract test sees the same
+            # shape as a fetched response.
+            options_payload = []
+            for entry in PURIFIER_OPTIONS:
+                qr = entry['quantile_range']
+                options_payload.append({
+                    'id': entry['id'],
+                    'name': entry['name'],
+                    'kind': entry['kind'],
+                    'group': entry['group'],
+                    'threshold': entry['threshold'],
+                    'quantile_range': list(qr) if qr is not None else None,
+                })
+            return Response({
+                'options': options_payload,
+                'default_selected_ids': list(DEFAULT_SELECTED_IDS),
+            }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1184,17 +1255,26 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Perfect-correlation drop', 'option_ids': [4], 'columns': to_drop, 'rows_removed': _rows_removed})
 
-        # 5-8: Corr-drop thresholds
-        corr_thresholds = {5: 0.95, 6: 0.90, 7: 0.85, 8: 0.80}
-        selected_corr = [t for k, t in corr_thresholds.items() if k in options]
-        if selected_corr:
-            thr = min(selected_corr)  # be conservative: drop more if multiple selected
-            selected_corr_ids = [k for k in corr_thresholds.keys() if k in options]
+        # Threshold-based drop kinds (catalog-driven).
+        #
+        # The catalog (preprocessing/purifier_catalog.py) maps each ID
+        # in the frontend `purifierOptions` array to its kind and
+        # threshold.  For each "drop when metric >= threshold" kind we
+        # pick the most aggressive (lowest threshold) entry the user
+        # selected — the UI normally enforces single-select within a
+        # group, but if multiple were forwarded (e.g. via the AI's
+        # start_data_purifier action) we want predictable, conservative
+        # behavior.
+
+        # Corr-drop (catalog IDs 5-9, KIND_CORR_DROP)
+        corr_entry = pick_most_aggressive(options, KIND_CORR_DROP)
+        if corr_entry is not None:
+            thr = corr_entry['threshold']
+            selected_corr_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_CORR_DROP)]
             _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
                 corr = num.corr().abs()
-                cols = set(num.columns)
                 removed = set()
                 for i in corr.columns:
                     if i in removed:
@@ -1215,12 +1295,15 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Correlation drop (threshold)', 'option_ids': selected_corr_ids, 'threshold': thr, 'columns': cols_removed_list, 'rows_removed': _rows_removed})
 
-        # 9-13: Missing-drop thresholds
-        miss_thresholds = {9: 0.20, 10: 0.30, 11: 0.40, 12: 0.50, 13: 0.60}
-        selected_miss = [t for k, t in miss_thresholds.items() if k in options]
-        if selected_miss:
-            thr = min(selected_miss)
-            selected_miss_ids = [k for k in miss_thresholds.keys() if k in options]
+        # Missing-drop (catalog IDs 16-21, KIND_MISSING_DROP).
+        # Pre-v2.27.0 this branch was wired to IDs 9-13 with thresholds
+        # 0.20-0.60 — DIFFERENT IDs and INVERTED semantics relative to
+        # the UI labels.  See v2.27.0 commit body for the realignment
+        # matrix.
+        miss_entry = pick_most_aggressive(options, KIND_MISSING_DROP)
+        if miss_entry is not None:
+            thr = miss_entry['threshold']
+            selected_miss_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_MISSING_DROP)]
             _rows_before = len(work)
             miss_ratio = work.isna().mean()
             to_drop = miss_ratio[miss_ratio >= thr].index.tolist()
@@ -1232,12 +1315,15 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Missing-drop (threshold)', 'option_ids': selected_miss_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
-        # 14-18: Sparsity (zeros) drop thresholds
-        sparse_thresholds = {14: 0.20, 15: 0.30, 16: 0.40, 17: 0.50, 18: 0.60}
-        selected_sparse = [t for k, t in sparse_thresholds.items() if k in options]
-        if selected_sparse:
-            thr = min(selected_sparse)
-            selected_sparse_ids = [k for k in sparse_thresholds.keys() if k in options]
+        # Sparsity (zeros) drop (catalog IDs 10-15, KIND_SPARSITY_DROP).
+        # Pre-v2.27.0 this branch was wired to IDs 14-18 with thresholds
+        # 0.20-0.60 — DIFFERENT IDs and INVERTED semantics relative to
+        # the UI labels.  See v2.27.0 commit body for the realignment
+        # matrix.
+        sparse_entry = pick_most_aggressive(options, KIND_SPARSITY_DROP)
+        if sparse_entry is not None:
+            thr = sparse_entry['threshold']
+            selected_sparse_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_SPARSITY_DROP)]
             _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
@@ -1253,12 +1339,15 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Sparsity zeros drop (threshold)', 'option_ids': selected_sparse_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
-        # 19-23: Combined sparsity + missing thresholds
-        combo_thresholds = {19: 0.95, 20: 0.90, 21: 0.85, 22: 0.80, 23: 0.75}
-        selected_combo = [t for k, t in combo_thresholds.items() if k in options]
-        if selected_combo:
-            thr = min(selected_combo)
-            selected_combo_ids = [k for k in combo_thresholds.keys() if k in options]
+        # Combined sparsity + missing drop (catalog IDs 22-27, KIND_COMBINED_DROP).
+        # Pre-v2.27.0 this branch was wired to IDs 19-23 with thresholds
+        # 0.95-0.75 (different ID range, thresholds also shifted by one
+        # slot).  IDs 24-27 were never handled at all — selecting them
+        # was a silent no-op.  See v2.27.0 commit body.
+        combo_entry = pick_most_aggressive(options, KIND_COMBINED_DROP)
+        if combo_entry is not None:
+            thr = combo_entry['threshold']
+            selected_combo_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_COMBINED_DROP)]
             _rows_before = len(work)
             num = work.select_dtypes(include=[np.number])
             zero_ratio = (num == 0).mean() if not num.empty else pd.Series(0, index=[])
@@ -1275,12 +1364,13 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Combined sparsity+missing drop (threshold)', 'option_ids': selected_combo_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
 
-        # 28-30: Outlier cleaning via quantile clipping
-        quantiles = {28: (0.01, 0.99), 29: (0.05, 0.95), 30: (0.10, 0.90)}
-        selected_q = [q for k, q in quantiles.items() if k in options]
-        if selected_q:
-            lo, hi = selected_q[0]  # pick the first specified
-            selected_q_ids = [k for k in quantiles.keys() if k in options]
+        # Outlier-num quantile clipping (catalog IDs 28-30, KIND_OUTLIER_NUM).
+        # IDs/ranges always agreed with the frontend; switching to the
+        # catalog here keeps the single source of truth invariant.
+        outlier_num_selected = selected_entries_of_kind(options, KIND_OUTLIER_NUM)
+        if outlier_num_selected:
+            lo, hi = outlier_num_selected[0]['quantile_range']  # first by ID (UI single-selects within group)
+            selected_q_ids = [e['id'] for e in outlier_num_selected]
             num = work.select_dtypes(include=[np.number])
             if not num.empty:
                 # Snapshot BEFORE outlier cleaning
@@ -1317,12 +1407,14 @@ class PreprocessingRunView(APIView):
                     'note': f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] quantile range'
                 })
 
-        # 31-34: Categorical outlier cleaning (merge rare categories)
-        cat_outlier_thresholds = {31: 0.001, 32: 0.005, 33: 0.01, 34: 0.05}
-        selected_cat_outlier = [t for k, t in cat_outlier_thresholds.items() if k in options]
-        if selected_cat_outlier:
-            threshold = selected_cat_outlier[0]  # pick the first specified
-            selected_cat_outlier_ids = [k for k in cat_outlier_thresholds.keys() if k in options]
+        # Categorical outlier cleaning (catalog IDs 31-34, KIND_OUTLIER_CAT).
+        # Merges rare categories whose volume-share < threshold.  IDs and
+        # threshold values always agreed with the frontend; catalog-driven
+        # for single source of truth.
+        outlier_cat_selected = selected_entries_of_kind(options, KIND_OUTLIER_CAT)
+        if outlier_cat_selected:
+            threshold = outlier_cat_selected[0]['threshold']  # first by ID (UI single-selects within group)
+            selected_cat_outlier_ids = [e['id'] for e in outlier_cat_selected]
 
             # Build LoM lookup and Model_Usage lookup from data_dictionary
             lom_lookup: dict[str, str] = {}

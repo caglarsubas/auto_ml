@@ -4014,3 +4014,398 @@ class TestCacheRestEndpointsDoNotEmitSpans:
                 {'Feature_Name': 'A'}]
         finally:
             _get_redis().delete('ai:pipeline:80001:data_dictionary')
+
+
+# ---------------------------------------------------------------------------
+# v2.27.0 — Purifier catalog tests
+# ---------------------------------------------------------------------------
+#
+# These tests cover the canonical 34-option catalog introduced in
+# v2.27.0 to fix a P0 silent-data-corruption bug.  Pre-v2.27.0 the
+# backend `_apply_options` dispatcher and the frontend `purifierOptions`
+# array had divergent ID-to-transform mappings: ticking
+# "Sparsity-drop 0.95" (UI ID 11) silently executed "Missing-drop ≥ 0.40"
+# in the backend, IDs 24-27 were no-op, etc.  See
+# `backend/preprocessing/purifier_catalog.py` module docstring and
+# the v2.27.0 commit body for the full realignment matrix.
+#
+# Every test here would have FAILED against pre-v2.27.0 code, which is
+# what makes them effective regression guards for the contract.
+@pytest.mark.unit
+class TestPurifierCatalog:
+    """Sanity tests for preprocessing/purifier_catalog.py."""
+
+    def test_catalog_has_exactly_34_entries(self):
+        from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+        assert len(PURIFIER_OPTIONS) == 34
+
+    def test_ids_are_contiguous_1_through_34(self):
+        from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+        ids = sorted(e['id'] for e in PURIFIER_OPTIONS)
+        assert ids == list(range(1, 35))
+
+    def test_every_entry_has_required_keys(self):
+        from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+        required = {'id', 'name', 'kind', 'group', 'threshold', 'quantile_range'}
+        for entry in PURIFIER_OPTIONS:
+            missing = required - set(entry.keys())
+            assert not missing, f"entry id={entry.get('id')} missing keys: {missing}"
+
+    def test_threshold_drop_kinds_have_numeric_threshold(self):
+        from preprocessing.purifier_catalog import (
+            PURIFIER_OPTIONS, KIND_CORR_DROP, KIND_SPARSITY_DROP,
+            KIND_MISSING_DROP, KIND_COMBINED_DROP, KIND_OUTLIER_CAT,
+        )
+        threshold_kinds = {KIND_CORR_DROP, KIND_SPARSITY_DROP,
+                           KIND_MISSING_DROP, KIND_COMBINED_DROP,
+                           KIND_OUTLIER_CAT}
+        for entry in PURIFIER_OPTIONS:
+            if entry['kind'] in threshold_kinds:
+                assert isinstance(entry['threshold'], (int, float)), \
+                    f"id={entry['id']} kind={entry['kind']} missing numeric threshold"
+                assert 0 < entry['threshold'] < 1, \
+                    f"id={entry['id']} threshold {entry['threshold']} out of (0, 1) range"
+
+    def test_outlier_num_entries_have_valid_quantile_range(self):
+        from preprocessing.purifier_catalog import PURIFIER_OPTIONS, KIND_OUTLIER_NUM
+        for entry in PURIFIER_OPTIONS:
+            if entry['kind'] == KIND_OUTLIER_NUM:
+                qr = entry['quantile_range']
+                assert isinstance(qr, tuple) and len(qr) == 2, \
+                    f"id={entry['id']} quantile_range must be a 2-tuple"
+                lo, hi = qr
+                assert 0 < lo < hi < 1, \
+                    f"id={entry['id']} quantile_range ({lo}, {hi}) invalid"
+
+    def test_specific_id_labels_match_frontend_v2_27_0_canonical(self):
+        """Pin the IDs that were misaligned pre-v2.27.0.
+
+        Each (id, expected_kind, expected_threshold_or_qrange) tuple
+        encodes what the frontend label promises the option does.
+        Pre-v2.27.0 the backend dispatcher would have executed a
+        different transform for these IDs (or no transform at all for
+        24-27).
+        """
+        from preprocessing.purifier_catalog import (
+            get_option, KIND_CORR_DROP, KIND_SPARSITY_DROP,
+            KIND_MISSING_DROP, KIND_COMBINED_DROP, KIND_OUTLIER_NUM,
+            KIND_OUTLIER_CAT,
+        )
+        # Format: (id, expected_kind, expected_threshold OR expected_quantile_range)
+        cases = [
+            # Corr-drop group — ID 9 was Missing-drop pre-v2.27.0
+            (5,  KIND_CORR_DROP,     0.95),
+            (9,  KIND_CORR_DROP,     0.75),
+            # Sparsity group — pre-v2.27.0 IDs 10-15 were Missing-drop with thresholds 0.30-0.60
+            (10, KIND_SPARSITY_DROP, 0.99),
+            (11, KIND_SPARSITY_DROP, 0.95),
+            (15, KIND_SPARSITY_DROP, 0.75),
+            # Missing group — pre-v2.27.0 IDs 16-21 were Sparsity-drop with thresholds 0.40-0.60 (only 16-18)
+            (16, KIND_MISSING_DROP,  0.99),
+            (17, KIND_MISSING_DROP,  0.95),
+            (21, KIND_MISSING_DROP,  0.75),
+            # Combined group — pre-v2.27.0 IDs 22-23 ran Combined 0.80/0.75, 24-27 were NO-OP
+            (22, KIND_COMBINED_DROP, 0.99),
+            (23, KIND_COMBINED_DROP, 0.95),
+            (24, KIND_COMBINED_DROP, 0.90),
+            (27, KIND_COMBINED_DROP, 0.75),
+            # Outlier-num — always agreed
+            (28, KIND_OUTLIER_NUM,   (0.01, 0.99)),
+            (29, KIND_OUTLIER_NUM,   (0.05, 0.95)),
+            (30, KIND_OUTLIER_NUM,   (0.10, 0.90)),
+            # Cat-outlier — always agreed
+            (31, KIND_OUTLIER_CAT,   0.001),
+            (34, KIND_OUTLIER_CAT,   0.05),
+        ]
+        for opt_id, expected_kind, expected_value in cases:
+            entry = get_option(opt_id)
+            assert entry is not None, f"id={opt_id} missing from catalog"
+            assert entry['kind'] == expected_kind, \
+                f"id={opt_id} kind={entry['kind']} expected {expected_kind}"
+            if expected_kind == KIND_OUTLIER_NUM:
+                assert entry['quantile_range'] == expected_value, \
+                    f"id={opt_id} quantile_range={entry['quantile_range']} expected {expected_value}"
+            else:
+                assert entry['threshold'] == expected_value, \
+                    f"id={opt_id} threshold={entry['threshold']} expected {expected_value}"
+
+    def test_pick_most_aggressive_returns_lowest_threshold(self):
+        from preprocessing.purifier_catalog import pick_most_aggressive, KIND_CORR_DROP
+        # Selecting 5 (0.95) and 9 (0.75) — most aggressive is 9 (0.75
+        # drops MORE pairs)
+        entry = pick_most_aggressive({5, 9}, KIND_CORR_DROP)
+        assert entry is not None
+        assert entry['id'] == 9
+        assert entry['threshold'] == 0.75
+
+    def test_pick_most_aggressive_returns_none_when_no_match(self):
+        from preprocessing.purifier_catalog import pick_most_aggressive, KIND_SPARSITY_DROP
+        # IDs 1-4 are not sparsity-drop kind
+        assert pick_most_aggressive({1, 2, 3, 4}, KIND_SPARSITY_DROP) is None
+
+    def test_pick_most_aggressive_rejects_non_threshold_kind(self):
+        from preprocessing.purifier_catalog import pick_most_aggressive, KIND_OUTLIER_NUM
+        with pytest.raises(ValueError):
+            pick_most_aggressive({28, 29}, KIND_OUTLIER_NUM)
+
+    def test_selected_entries_of_kind_sorts_by_id(self):
+        from preprocessing.purifier_catalog import selected_entries_of_kind, KIND_OUTLIER_NUM
+        entries = selected_entries_of_kind({30, 28, 29}, KIND_OUTLIER_NUM)
+        assert [e['id'] for e in entries] == [28, 29, 30]
+
+    def test_default_selected_ids_all_valid(self):
+        from preprocessing.purifier_catalog import DEFAULT_SELECTED_IDS, get_option
+        for opt_id in DEFAULT_SELECTED_IDS:
+            assert get_option(opt_id) is not None, f"default id {opt_id} not in catalog"
+
+
+@pytest.mark.unit
+class TestPurifierApplyOptions:
+    """Each option ID must execute the transform its UI label describes.
+
+    Pre-v2.27.0 several IDs in 9-27 silently ran the wrong transform.
+    These tests construct a tiny synthetic frame where the expected
+    transform produces a deterministic outcome, then call
+    `PreprocessingRunView._apply_options` and assert.
+    """
+
+    @staticmethod
+    def _apply(df, option_ids):
+        from preprocessing.views import PreprocessingRunView
+        view = PreprocessingRunView()
+        return view._apply_options(df, set(option_ids))
+
+    # ── Identity / standalone options (1-4) ─────────────────────
+    def test_id_1_drops_column_duplicates(self):
+        df = pd.DataFrame({'a': [1, 2, 3], 'a_dup': [1, 2, 3], 'b': [4, 5, 6]})
+        work, dropped, breakdown, _ = self._apply(df, [1])
+        assert 'a_dup' in dropped or 'a' in dropped
+        assert any(b['step'] == 'Column-wise duplicate drop' for b in breakdown)
+
+    def test_id_3_drops_zero_variance_columns(self):
+        df = pd.DataFrame({'const': [7, 7, 7, 7], 'vary': [1, 2, 3, 4]})
+        work, dropped, breakdown, _ = self._apply(df, [3])
+        assert 'const' in dropped
+        assert 'vary' not in dropped
+
+    # ── Correlation drop (5-9) ──────────────────────────────────
+    def test_id_5_drops_pairs_with_correlation_ge_0_95(self):
+        # x and y are perfectly correlated (|corr|=1 >= 0.95)
+        df = pd.DataFrame({
+            'x': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'y': [2.0, 4.0, 6.0, 8.0, 10.0],
+            'z': [5.0, 1.0, 4.0, 2.0, 3.0],
+        })
+        work, dropped, _, _ = self._apply(df, [5])
+        # Exactly one of (x, y) is dropped; z is uncorrelated and stays.
+        assert ('x' in dropped) ^ ('y' in dropped)
+        assert 'z' not in dropped
+
+    def test_id_9_executes_corr_drop_threshold_0_75_not_missing_drop(self):
+        """v2.27.0 regression — pre-v2.27.0 ID 9 was Missing-drop ≥ 0.20.
+
+        If the dispatcher were still wired the old way, this all-numeric
+        zero-missing frame would have no missing data so ID 9 would be
+        a no-op.  After the fix it must drop one of the two highly
+        correlated columns (|corr|=1 >= 0.75).
+        """
+        df = pd.DataFrame({
+            'x': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'y': [2.1, 3.9, 6.05, 7.95, 10.1],  # ~0.999 correlation with x
+            'z': [5.0, 1.0, 4.0, 2.0, 3.0],
+        })
+        work, dropped, breakdown, _ = self._apply(df, [9])
+        assert ('x' in dropped) ^ ('y' in dropped), \
+            f"ID 9 (Corr-drop ≥ 0.75) did not drop a correlated column; dropped={dropped}"
+        corr_step = next((b for b in breakdown if b['step'] == 'Correlation drop (threshold)'), None)
+        assert corr_step is not None
+        assert corr_step['threshold'] == 0.75
+
+    # ── Sparsity drop (10-15) — THE PRE-v2.27.0 SMOKING GUN ─────
+    def test_id_11_drops_columns_with_zero_ratio_at_least_0_95(self):
+        """Pre-v2.27.0 ID 11 executed "Missing-drop ≥ 0.40" instead of
+        "Sparsity-drop ≥ 0.95".  Fixed in v2.27.0.
+
+        Built so:
+          • `mostly_zero` is 96% zeros (no missings) — must drop under
+            v2.27.0 semantics; pre-v2.27.0 would NOT drop (no missings).
+          • `mostly_missing` is 50% missing (no zeros) — pre-v2.27.0
+            would drop under Missing-drop≥0.40; v2.27.0 must NOT drop
+            (no zeros, so sparsity≈0).
+        """
+        n = 100
+        df = pd.DataFrame({
+            'mostly_zero':    [0.0] * 96 + [1.0, 2.0, 3.0, 4.0],
+            'mostly_missing': [None] * 50 + list(range(50)),
+            'normal':         list(range(n)),
+        })
+        work, dropped, breakdown, _ = self._apply(df, [11])
+        assert 'mostly_zero' in dropped, \
+            f"v2.27.0 contract: ID 11 (Sparsity-drop ≥ 0.95) should drop mostly_zero; dropped={dropped}"
+        assert 'mostly_missing' not in dropped, \
+            f"v2.27.0 contract: ID 11 must NOT drop missing-heavy columns; dropped={dropped}"
+        assert 'normal' not in dropped
+        sparse_step = next((b for b in breakdown if b['step'] == 'Sparsity zeros drop (threshold)'), None)
+        assert sparse_step is not None
+        assert sparse_step['threshold'] == 0.95
+
+    # ── Missing drop (16-21) — THE PRE-v2.27.0 SMOKING GUN #2 ────
+    def test_id_17_drops_columns_with_miss_ratio_at_least_0_95(self):
+        """Pre-v2.27.0 ID 17 executed "Sparsity-drop ≥ 0.50" instead
+        of "Missing-drop ≥ 0.95".  Fixed in v2.27.0.
+
+        Built so:
+          • `mostly_missing` is 96% missing — must drop in v2.27.0,
+            no-op pre-v2.27.0 (sparsity ≈ 0 since values absent).
+          • `mostly_zero` is 60% zeros (no missings) — pre-v2.27.0
+            would drop under Sparsity-drop≥0.50; v2.27.0 must NOT
+            drop (miss_ratio = 0).
+        """
+        n = 100
+        df = pd.DataFrame({
+            'mostly_missing': [None] * 96 + [1.0, 2.0, 3.0, 4.0],
+            'mostly_zero':    [0.0] * 60 + list(range(1, 41)),
+            'normal':         list(range(n)),
+        })
+        work, dropped, breakdown, _ = self._apply(df, [17])
+        assert 'mostly_missing' in dropped, \
+            f"v2.27.0 contract: ID 17 (Missing-drop ≥ 0.95) should drop mostly_missing; dropped={dropped}"
+        assert 'mostly_zero' not in dropped, \
+            f"v2.27.0 contract: ID 17 must NOT drop sparse columns; dropped={dropped}"
+        miss_step = next((b for b in breakdown if b['step'] == 'Missing-drop (threshold)'), None)
+        assert miss_step is not None
+        assert miss_step['threshold'] == 0.95
+
+    # ── Combined sparsity+missing (22-27) — pre-v2.27.0 NO-OPS ──
+    def test_id_24_combined_drop_threshold_0_90_was_silent_noop_pre_v2_27_0(self):
+        """Pre-v2.27.0 IDs 24-27 had no dispatcher branch — selecting
+        "[Sparsity+Missing]-drop 0.90" did literally nothing.  After
+        v2.27.0 it must drop any column where max(zero_ratio, miss_ratio)
+        ≥ 0.90.
+        """
+        n = 100
+        df = pd.DataFrame({
+            'half_miss_half_zero': [None] * 45 + [0.0] * 45 + list(range(1, 11)),
+            'mostly_zero':         [0.0] * 92 + list(range(1, 9)),
+            'mostly_missing':      [None] * 91 + list(range(9)),
+            'normal':              list(range(n)),
+        })
+        work, dropped, breakdown, _ = self._apply(df, [24])
+        # mostly_zero (92% zeros >= 0.90) must drop.
+        assert 'mostly_zero' in dropped, \
+            f"v2.27.0 contract: ID 24 must drop mostly_zero; dropped={dropped}"
+        # mostly_missing (91% missing >= 0.90) must drop.
+        assert 'mostly_missing' in dropped, \
+            f"v2.27.0 contract: ID 24 must drop mostly_missing; dropped={dropped}"
+        # half_miss_half_zero has max(0.45, 0.45) = 0.45 < 0.90 — keep.
+        assert 'half_miss_half_zero' not in dropped
+        assert 'normal' not in dropped
+        combo_step = next((b for b in breakdown if b['step'] == 'Combined sparsity+missing drop (threshold)'), None)
+        assert combo_step is not None
+        assert combo_step['threshold'] == 0.90
+
+    # ── Outlier numeric quantile clipping (28-30) — already aligned ─
+    def test_id_29_clips_numeric_columns_to_0_05_0_95_quantiles(self):
+        """The exact request the user typed that exposed Patch B's
+        underlying capability gap: 'change outlier cleaning interval
+        for numerical features to 0.05-0.95'.  After v2.27.0 this is
+        ID 29 in the catalog — frontend label and backend behavior
+        agree, no realignment was needed for outlier IDs, but the
+        catalog still owns the quantile-range constant now.
+        """
+        n = 100
+        df = pd.DataFrame({
+            # An obvious outlier at index 0 (extreme high), index 1 (extreme low)
+            'with_outliers': [1000.0, -1000.0] + [float(i) for i in range(n - 2)],
+        })
+        original_max = df['with_outliers'].max()
+        original_min = df['with_outliers'].min()
+        work, dropped, breakdown, step_stats = self._apply(df, [29])
+        # No columns dropped — clipping is value-modifying, not column-dropping.
+        assert 'with_outliers' not in dropped
+        # Max/min must be tightened to the [5%, 95%] quantiles.
+        assert work['with_outliers'].max() < original_max
+        assert work['with_outliers'].min() > original_min
+        outlier_step = next((b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'), None)
+        assert outlier_step is not None
+        assert outlier_step['quantile_range'] == [0.05, 0.95]
+        # step_stats records before/after snapshots for the AI pipeline.
+        oc_stats = next((s for s in step_stats if s['step'] == 'Outlier cleaning (quantile clipping)'), None)
+        assert oc_stats is not None
+        assert oc_stats['quantile_range'] == [0.05, 0.95]
+
+
+@pytest.mark.unit
+class TestPurifierCatalogFrontendContract:
+    """Parse the frontend's `purifierOptions` TS literal and assert the
+    34 entries match the backend catalog character-for-character.
+
+    Pre-v2.27.0 there was no such test, which is exactly why the IDs
+    drifted apart.  Both frontend copies (modeling.component.ts and
+    model-development.component.ts) are checked because the AI assistant
+    panel reads the modeling copy while the data-purifier UI reads the
+    model-development copy.
+    """
+
+    _FRONTEND_SOURCES = [
+        'frontend/src/app/modeling/modeling.component.ts',
+        'frontend/src/app/model-development/model-development.component.ts',
+    ]
+
+    @staticmethod
+    def _parse_frontend_options(ts_source: str) -> list[dict]:
+        """Extract the (id, name) pairs from the `purifierOptions` array
+        in a TypeScript source string.  Tolerant to whitespace and
+        optional `group: N` fields.
+        """
+        import re
+        # Capture every `{ id: <int>, name: '<...>'`... block within the
+        # purifierOptions array.  The array contents extend until the
+        # closing `];` so we anchor on that.
+        block_re = re.compile(
+            r"purifierOptions\s*:\s*PurifierOption\[\]\s*=\s*\[(.*?)\];",
+            re.DOTALL,
+        )
+        m = block_re.search(ts_source)
+        if not m:
+            return []
+        body = m.group(1)
+        entry_re = re.compile(
+            r"\{\s*id\s*:\s*(\d+)\s*,\s*name\s*:\s*'([^']*)'",
+        )
+        return [{'id': int(idm), 'name': name} for idm, name in entry_re.findall(body)]
+
+    @staticmethod
+    def _read_repo_file(rel_path: str) -> str:
+        import pathlib
+        # backend/tests/test_unit.py → backend/ → repo root
+        repo_root = pathlib.Path(__file__).resolve().parents[2]
+        full = repo_root / rel_path
+        if not full.exists():
+            pytest.skip(f"frontend source not present at {full}; skipping contract test")
+        return full.read_text(encoding='utf-8')
+
+    @pytest.mark.parametrize('frontend_rel_path', _FRONTEND_SOURCES)
+    def test_frontend_purifier_options_match_backend_catalog(self, frontend_rel_path):
+        from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+        ts_src = self._read_repo_file(frontend_rel_path)
+        frontend_opts = self._parse_frontend_options(ts_src)
+        assert len(frontend_opts) == 34, (
+            f"{frontend_rel_path} parsed {len(frontend_opts)} entries; "
+            f"expected 34.  Did the TS array shape change?"
+        )
+
+        # Build a {id: name} map on each side and compare.
+        backend_map = {e['id']: e['name'] for e in PURIFIER_OPTIONS}
+        frontend_map = {e['id']: e['name'] for e in frontend_opts}
+        mismatches = []
+        for opt_id in range(1, 35):
+            be = backend_map.get(opt_id)
+            fe = frontend_map.get(opt_id)
+            if be != fe:
+                mismatches.append(f"  id={opt_id}: backend={be!r}  frontend={fe!r}")
+        assert not mismatches, (
+            "Frontend↔backend purifier-option labels diverged. "
+            "Update both sides to match (frontend is the source of truth for UI).\n"
+            + "\n".join(mismatches)
+        )
