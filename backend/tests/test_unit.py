@@ -1661,6 +1661,239 @@ class TestDispatchAction:
         from ai_assistant.action_executor import HANDLERS, start_sfs
         assert HANDLERS.get('start_sfs') is start_sfs
 
+    # ── v2.26.0+: pipeline-orchestration actions ────────────────────────
+    # These three actions close the "AI cannot click pipeline buttons"
+    # gap exposed in v2.25.0 (the user's screenshot showed the AI
+    # saying "I cannot 'start' the modeling engine directly").
+    # Each action validates a payload shape mirroring the manual UI
+    # form fields and returns an `applied` config the frontend
+    # forwards to the owning component to fire the actual code path.
+
+    # ── start_data_purifier ──────────────────────────────────────────
+    def test_start_data_purifier_routes_correctly_minimal_payload(self):
+        # Empty payload is valid — frontend falls back to form values.
+        result = self._dispatch(1, 'start_data_purifier', {})
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'start_data_purifier'
+        applied = result['applied']
+        assert applied['purifier_options'] == []
+        assert applied['split'] is None  # signals "use form defaults"
+
+    def test_start_data_purifier_full_payload_round_trips(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'purifier_options': [1, 2, 5, 7],
+            'split': {
+                'strategy': 'random',
+                'percent': 25,
+            },
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['purifier_options'] == [1, 2, 5, 7]
+        assert applied['split'] == {'strategy': 'random', 'percent': 25.0}
+
+    def test_start_data_purifier_oot_with_cutoff(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': {
+                'strategy': 'oot',
+                'date_column': 'Application_Datetime',
+                'cutoff': '2024-01-01T00:00:00',
+            },
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['split']['strategy'] == 'oot'
+        assert applied['split']['date_column'] == 'Application_Datetime'
+        assert applied['split']['cutoff'] == '2024-01-01T00:00:00'
+
+    def test_start_data_purifier_oot_with_percent(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': {
+                'strategy': 'oot',
+                'date_column': 'Application_Datetime',
+                'percent': 30,
+            },
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['split']['strategy'] == 'oot'
+        assert applied['split']['date_column'] == 'Application_Datetime'
+        assert 'cutoff' not in applied['split']
+        assert applied['split']['percent'] == 30.0
+
+    def test_start_data_purifier_oot_missing_date_column_error(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': {'strategy': 'oot'},
+        })
+        assert result['status'] == 'error'
+        assert 'date_column' in result['error']
+
+    def test_start_data_purifier_invalid_strategy_error(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': {'strategy': 'random_oot_hybrid'},
+        })
+        assert result['status'] == 'error'
+        assert "'random'" in result['error']
+
+    def test_start_data_purifier_drops_invalid_option_ids(self):
+        # IDs outside 1..34 are dropped silently; non-int values too.
+        result = self._dispatch(1, 'start_data_purifier', {
+            'purifier_options': [1, 2, 99, -5, 'foo', 34, 0],
+        })
+        assert result['status'] == 'success'
+        # Valid: 1, 2, 34.  Invalid IDs and non-ints filtered.
+        assert result['applied']['purifier_options'] == [1, 2, 34]
+
+    def test_start_data_purifier_dedupes_purifier_options(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'purifier_options': [1, 2, 1, 2, 5, 5, 7],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['purifier_options'] == [1, 2, 5, 7]
+
+    def test_start_data_purifier_rejects_non_list_options(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'purifier_options': 'all',  # not a list
+        })
+        assert result['status'] == 'error'
+
+    def test_start_data_purifier_rejects_non_dict_split(self):
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': 'random',  # not a dict
+        })
+        assert result['status'] == 'error'
+
+    def test_start_data_purifier_drops_invalid_percent(self):
+        # 0 and >=100 are silently dropped (out of range), keeps strategy.
+        result = self._dispatch(1, 'start_data_purifier', {
+            'split': {'strategy': 'random', 'percent': 150},
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['split']['strategy'] == 'random'
+        assert 'percent' not in applied['split']
+
+    def test_start_data_purifier_registered_in_handlers(self):
+        from ai_assistant.action_executor import HANDLERS, start_data_purifier
+        assert HANDLERS.get('start_data_purifier') is start_data_purifier
+
+    # ── apply_encoding ──────────────────────────────────────────────
+    def test_apply_encoding_routes_correctly_default_payload(self):
+        # Empty payload → use_native defaults to True.
+        result = self._dispatch(1, 'apply_encoding', {})
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'apply_encoding'
+        assert result['applied']['use_native'] is True
+
+    def test_apply_encoding_explicit_false(self):
+        result = self._dispatch(1, 'apply_encoding', {'use_native': False})
+        assert result['status'] == 'success'
+        assert result['applied']['use_native'] is False
+
+    def test_apply_encoding_coerces_string_truthy_values(self):
+        # The LLM occasionally passes "true"/"false" as strings.
+        for s, expected in [
+            ('true', True),
+            ('TRUE', True),
+            ('1', True),
+            ('yes', True),
+            ('false', False),
+            ('0', False),
+            ('no', False),
+            ('', False),
+        ]:
+            result = self._dispatch(1, 'apply_encoding', {'use_native': s})
+            assert result['status'] == 'success'
+            assert result['applied']['use_native'] is expected, \
+                f"use_native={s!r} should coerce to {expected}"
+
+    def test_apply_encoding_passes_description_through(self):
+        result = self._dispatch(1, 'apply_encoding', {
+            'description': 'Apply encoding plan with native library',
+        })
+        assert result['status'] == 'success'
+        assert result['description'] == 'Apply encoding plan with native library'
+
+    def test_apply_encoding_registered_in_handlers(self):
+        from ai_assistant.action_executor import HANDLERS, apply_encoding
+        assert HANDLERS.get('apply_encoding') is apply_encoding
+
+    # ── start_modeling ──────────────────────────────────────────────
+    def test_start_modeling_routes_correctly_minimal_payload(self):
+        # Empty payload → algorithm null (use form value), use_native true.
+        result = self._dispatch(1, 'start_modeling', {})
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'start_modeling'
+        applied = result['applied']
+        assert applied['algorithm'] is None
+        assert applied['encoding_use_native'] is True
+
+    def test_start_modeling_with_algorithm(self):
+        result = self._dispatch(1, 'start_modeling', {
+            'algorithm': 'lightgbm',
+            'encoding_use_native': True,
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['algorithm'] == 'lightgbm'
+        assert applied['encoding_use_native'] is True
+
+    def test_start_modeling_strips_whitespace_from_algorithm(self):
+        result = self._dispatch(1, 'start_modeling', {
+            'algorithm': '  xgboost  ',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['algorithm'] == 'xgboost'
+
+    def test_start_modeling_rejects_empty_string_algorithm(self):
+        # Empty string is suspicious — likely a buggy LLM emission.
+        result = self._dispatch(1, 'start_modeling', {'algorithm': '   '})
+        assert result['status'] == 'error'
+        assert 'algorithm' in result['error']
+
+    def test_start_modeling_rejects_non_string_algorithm(self):
+        result = self._dispatch(1, 'start_modeling', {'algorithm': 123})
+        assert result['status'] == 'error'
+
+    def test_start_modeling_coerces_use_native_strings(self):
+        result = self._dispatch(1, 'start_modeling', {
+            'encoding_use_native': 'false',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['encoding_use_native'] is False
+
+    def test_start_modeling_omitted_algorithm_returns_null(self):
+        # When the AI doesn't specify an algorithm, the frontend
+        # falls back to the form's selectedAlgorithm value — null
+        # in the payload signals that.
+        result = self._dispatch(1, 'start_modeling', {
+            'encoding_use_native': True,
+            'description': 'Use whatever algorithm is selected',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['algorithm'] is None
+
+    def test_start_modeling_registered_in_handlers(self):
+        from ai_assistant.action_executor import HANDLERS, start_modeling
+        assert HANDLERS.get('start_modeling') is start_modeling
+
+    # ── Procedural-chain end-to-end test ────────────────────────────
+    # Ensures all v2.26.0 actions return shapes compatible with the
+    # frontend chat-panel handlers — specifically that the `applied`
+    # payload always contains the keys those handlers reference.
+    def test_v2_26_pipeline_actions_return_consistent_applied_shape(self):
+        cases = [
+            ('start_data_purifier', {}, ['purifier_options', 'split']),
+            ('apply_encoding', {}, ['use_native']),
+            ('start_modeling', {}, ['algorithm', 'encoding_use_native']),
+        ]
+        for action, payload, expected_keys in cases:
+            result = self._dispatch(1, action, payload)
+            assert result['status'] == 'success', f"{action} failed: {result}"
+            applied = result.get('applied', {})
+            for key in expected_keys:
+                assert key in applied, f"{action}.applied missing {key}"
+
 
 # ---------------------------------------------------------------------------
 # AI tool_executor: get_encoding_plan reader exposes unique_values + ranking

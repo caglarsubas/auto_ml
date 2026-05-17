@@ -750,6 +750,273 @@ def start_sfs(file_id: int, payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ACTION: start_data_purifier — kick off preprocessing/purifier pipeline
+# ---------------------------------------------------------------------------
+#
+# Procedural context: the data purifier is the FIRST run-step in the
+# pipeline.  It applies the user's selected purifier options (e.g.
+# missing-value imputation, low-variance pruning, outlier cleaning)
+# and the chosen train/test split (random or OOT) to produce the
+# `processed_file` that all downstream steps (encoding, modeling,
+# SFS) consume.  The pipeline UI exposes a "Run Preprocessing" button
+# in the model-development component along with checkboxes for
+# purifier options and form fields for split config.
+#
+# Before v2.26.0 the AI assistant could only DISCUSS preprocessing —
+# it had no way to actually fire `runPreprocessing()`.  When the
+# user asked "run preprocessing" the assistant typically said
+# something like "Please click the Run Preprocessing button".
+# This action closes that gap.
+#
+# Validation rules
+# ----------------
+# * `purifier_options` (optional) — list of integer option IDs (1–34)
+#   matching the selectable preprocessing checkboxes.  Invalid IDs
+#   are dropped silently; an empty/missing list means "use whatever
+#   is currently selected in the UI" (the SharedService cache).
+# * `split` (optional) — dict with:
+#     - `strategy`: 'random' or 'oot'
+#     - `date_column`: required when strategy='oot'
+#     - `cutoff`: optional ISO datetime when strategy='oot' + cutoff mode
+#     - `percent`: optional 0<x<100 percentage for OOS / OOT-percent mode
+#   Missing/invalid → defaults to {'strategy':'random','percent':25}.
+#
+# Returns the validated config in `applied` for the frontend chat
+# panel to forward via `dataPurifierStartRequests$` to the
+# model-development component, which mirrors the user clicking
+# "Run Preprocessing" with these settings.
+
+@tool(name="start-data-purifier")
+def start_data_purifier(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a data-purifier (preprocessing) start request.
+
+    payload: {
+        "purifier_options": [1, 2, 5, 7],  # optional — checkbox IDs
+        "split": {
+            "strategy": "random",          # or "oot"
+            "percent": 25                  # OOS percentage
+        },
+        "description": "Run preprocessing with default purifier options"
+    }
+    """
+    description = payload.get('description', '')
+
+    # ── purifier_options ───────────────────────────────────────────
+    raw_opts = payload.get('purifier_options', None)
+    purifier_options: list = []
+    if raw_opts is not None:
+        if not isinstance(raw_opts, list):
+            return {'status': 'error', 'error': 'purifier_options must be a list of integer option IDs'}
+        for v in raw_opts:
+            try:
+                iv = int(v)
+            except (TypeError, ValueError):
+                continue
+            # The pipeline UI exposes options 1..34 (matching
+            # purifierOptions in model-development.component).  Any
+            # ID outside that range is dropped.
+            if 1 <= iv <= 34:
+                purifier_options.append(iv)
+        # Dedup while preserving order — the AI may double-list
+        # options when chaining suggestions.
+        seen = set()
+        deduped = []
+        for iv in purifier_options:
+            if iv in seen:
+                continue
+            seen.add(iv)
+            deduped.append(iv)
+        purifier_options = deduped
+
+    # ── split ──────────────────────────────────────────────────────
+    split_in = payload.get('split', None)
+    if split_in is None:
+        split = None  # frontend will fall back to its current form values
+    elif not isinstance(split_in, dict):
+        return {'status': 'error', 'error': 'split must be an object'}
+    else:
+        strategy = split_in.get('strategy', 'random')
+        if strategy not in ('random', 'oot'):
+            return {
+                'status': 'error',
+                'error': "split.strategy must be 'random' or 'oot'",
+            }
+        split = {'strategy': strategy}
+
+        # percent is optional; if present it must be 0<pct<100.
+        pct = split_in.get('percent', None)
+        if pct is not None:
+            try:
+                pct_f = float(pct)
+            except (TypeError, ValueError):
+                pct_f = None
+            if pct_f is not None and 0 < pct_f < 100:
+                split['percent'] = pct_f
+
+        if strategy == 'oot':
+            date_col = split_in.get('date_column', '')
+            if not isinstance(date_col, str) or not date_col.strip():
+                return {
+                    'status': 'error',
+                    'error': "split.date_column is required when split.strategy='oot'",
+                }
+            split['date_column'] = date_col.strip()
+            cutoff = split_in.get('cutoff', None)
+            if cutoff is not None:
+                if not isinstance(cutoff, str) or not cutoff.strip():
+                    return {
+                        'status': 'error',
+                        'error': 'split.cutoff must be an ISO datetime string',
+                    }
+                split['cutoff'] = cutoff.strip()
+
+    return {
+        'status': 'success',
+        'action_type': 'start_data_purifier',
+        'description': description,
+        'applied': {
+            'purifier_options': purifier_options,
+            'split': split,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: apply_encoding — apply the encoding plan and produce encoded file
+# ---------------------------------------------------------------------------
+#
+# Procedural context: after preprocessing produces the processed
+# file and the user reviews / edits the encoding plan (one row per
+# feature: nominal/ordinal, fallback strategy, ranking if ordinal),
+# the "Apply Encoding" button calls
+# `dataService.applyEncoding(file_id, processed_file, plan,
+# use_native)`.  This produces the encoded file that modeling
+# consumes.
+#
+# Pre-conditions the AI must check before firing:
+# * `processed_file` exists (data purifier has run).
+# * Encoding plan has been analyzed (encodingPlan length > 0).
+# * Every feature with `needs_ranking=true` has a non-empty
+#   `ranking` array — otherwise encoding silently downgrades to
+#   label_encoding and the ordinal signal is lost.  The AI can
+#   verify this via its `get_encoding_plan` tool.
+#
+# Validation rules
+# ----------------
+# * `use_native` (optional) — boolean.  Defaults to true (use the
+#   native encoding library; false = sklearn fallback).
+
+@tool(name="apply-encoding")
+def apply_encoding(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast an apply-encoding request.
+
+    payload: {
+        "use_native": true,                       # optional, default true
+        "description": "Apply encoding plan with native library"
+    }
+    """
+    description = payload.get('description', '')
+    raw_use_native = payload.get('use_native', True)
+    if not isinstance(raw_use_native, bool):
+        # Coerce truthy values to bool — the LLM occasionally
+        # passes "true"/"false" strings.
+        if isinstance(raw_use_native, str):
+            use_native = raw_use_native.strip().lower() in ('true', '1', 'yes')
+        else:
+            use_native = bool(raw_use_native)
+    else:
+        use_native = raw_use_native
+
+    return {
+        'status': 'success',
+        'action_type': 'apply_encoding',
+        'description': description,
+        'applied': {
+            'use_native': use_native,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: start_modeling — kick off the modeling step (train + evaluate)
+# ---------------------------------------------------------------------------
+#
+# Procedural context: after preprocessing + encoding, the modeling
+# step trains the chosen algorithm (LightGBM, XGBoost, CatBoost, etc.)
+# on the encoded file and produces the modeling artifacts (selected
+# features, SHAP details, ROC-AUC/PR-AUC metrics, training data
+# snapshot for SFS).  The pipeline UI exposes a "Start Modeling"
+# button in the modeling component (the bottom-left button in the
+# user's screenshot that they could not get the AI to press).
+#
+# Before v2.26.0 the AI explicitly told users "I cannot 'start'
+# the modeling engine directly (that is a button in your UI)".
+# This action closes that gap — it's the dedicated path for the
+# AI to fire the modeling step, mirroring a manual click exactly.
+#
+# Pre-conditions the AI must check before firing:
+# * `currentFileId` not null (file uploaded).
+# * `processedFilePath` not null (data purifier has run).
+# * `availableAlgorithms` empty OR `selectedAlgorithm` chosen.
+#
+# Validation rules
+# ----------------
+# * `algorithm` (optional) — string name.  If provided, the frontend
+#   sets `selectedAlgorithm` to it before firing; otherwise the
+#   current form value is used.  We don't validate against a hard
+#   list here because the algorithm catalog is dynamic (loaded from
+#   the backend's `/algorithms/` endpoint at component init).
+# * `encoding_use_native` (optional) — boolean.  Mirrors the same
+#   field used by apply_encoding, since modeling can re-apply
+#   encoding internally if needed.
+
+@tool(name="start-modeling")
+def start_modeling(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a modeling-start request.
+
+    payload: {
+        "algorithm": "lightgbm",                  # optional
+        "encoding_use_native": true,              # optional, default true
+        "description": "Start modeling with LightGBM"
+    }
+    """
+    description = payload.get('description', '')
+
+    raw_algo = payload.get('algorithm', None)
+    if raw_algo is not None and (not isinstance(raw_algo, str) or not raw_algo.strip()):
+        return {
+            'status': 'error',
+            'error': 'algorithm must be a non-empty string when provided',
+        }
+    algorithm = raw_algo.strip() if isinstance(raw_algo, str) else None
+
+    raw_use_native = payload.get('encoding_use_native', True)
+    if not isinstance(raw_use_native, bool):
+        if isinstance(raw_use_native, str):
+            use_native = raw_use_native.strip().lower() in ('true', '1', 'yes')
+        else:
+            use_native = bool(raw_use_native)
+    else:
+        use_native = raw_use_native
+
+    return {
+        'status': 'success',
+        'action_type': 'start_modeling',
+        'description': description,
+        'applied': {
+            'algorithm': algorithm,
+            'encoding_use_native': use_native,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # ACTION: set_ordinal_ranking — record the rank order for ordinal features
 # ---------------------------------------------------------------------------
 #
@@ -929,6 +1196,9 @@ HANDLERS = {
     'update_config': update_config,
     'set_ordinal_ranking': set_ordinal_ranking,
     'start_sfs': start_sfs,
+    'start_data_purifier': start_data_purifier,
+    'apply_encoding': apply_encoding,
+    'start_modeling': start_modeling,
     'update_notes': update_notes,
 }
 

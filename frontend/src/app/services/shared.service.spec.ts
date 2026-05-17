@@ -627,4 +627,184 @@ describe('SharedService', () => {
       }, 0);
     });
   });
+
+  // ── dataPurifierStartRequests (v2.26.0+) ──────────────────────────────
+  // AI's `start_data_purifier` action broadcasts validated config here;
+  // model-development component subscribes and calls
+  // proceedFromPreprocessing() — same code path as a manual
+  // "Run Preprocessing" click.
+  describe('dataPurifierStartRequests', () => {
+    it('should not emit anything before any call', (done) => {
+      let emitted = false;
+      const sub = service.dataPurifierStartRequests$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit the request object verbatim', (done) => {
+      const req = {
+        purifier_options: [1, 2, 5, 7],
+        split: { strategy: 'random', percent: 25 },
+      };
+      service.dataPurifierStartRequests$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitDataPurifierStartRequest(req);
+    });
+
+    it('should accept empty purifier_options + null split (form fallback)', (done) => {
+      const req = { purifier_options: [], split: null };
+      service.dataPurifierStartRequests$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitDataPurifierStartRequest(req);
+    });
+
+    it('should reject a request with non-array purifier_options', (done) => {
+      let emitted = false;
+      const sub = service.dataPurifierStartRequests$.subscribe(() => { emitted = true; });
+      service.emitDataPurifierStartRequest({ purifier_options: 'all' as any, split: null });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject null/undefined gracefully', (done) => {
+      let emitted = false;
+      const sub = service.dataPurifierStartRequests$.subscribe(() => { emitted = true; });
+      service.emitDataPurifierStartRequest(null as any);
+      service.emitDataPurifierStartRequest(undefined as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past requests (Subject semantics)', (done) => {
+      service.emitDataPurifierStartRequest({ purifier_options: [], split: null });
+      const seen: any[] = [];
+      service.dataPurifierStartRequests$.subscribe(r => seen.push(r));
+      service.emitDataPurifierStartRequest({ purifier_options: [1], split: null });
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0].purifier_options).toEqual([1]);
+        done();
+      }, 0);
+    });
+  });
+
+  // ── encodingApplyRequests (v2.26.0+) ──────────────────────────────────
+  // AI's `apply_encoding` action broadcasts use_native flag here;
+  // model-development component subscribes and calls applyEncoding().
+  describe('encodingApplyRequests', () => {
+    it('should emit the request object verbatim', (done) => {
+      service.encodingApplyRequests$.subscribe(received => {
+        expect(received).toEqual({ use_native: false });
+        done();
+      });
+      service.emitEncodingApplyRequest({ use_native: false });
+    });
+
+    it('should reject non-boolean use_native', (done) => {
+      let emitted = false;
+      const sub = service.encodingApplyRequests$.subscribe(() => { emitted = true; });
+      service.emitEncodingApplyRequest({ use_native: 'true' as any });
+      service.emitEncodingApplyRequest({ use_native: 1 as any });
+      service.emitEncodingApplyRequest({ use_native: null as any });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject null request gracefully', (done) => {
+      let emitted = false;
+      const sub = service.encodingApplyRequests$.subscribe(() => { emitted = true; });
+      service.emitEncodingApplyRequest(null as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past requests (Subject semantics)', (done) => {
+      service.emitEncodingApplyRequest({ use_native: true });
+      const seen: any[] = [];
+      service.encodingApplyRequests$.subscribe(r => seen.push(r));
+      service.emitEncodingApplyRequest({ use_native: false });
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0].use_native).toBeFalse();
+        done();
+      }, 0);
+    });
+  });
+
+  // ── modelingStartRequests (v2.26.0+) ──────────────────────────────────
+  // The headline of v2.26.0 — closes the user's exact blocker from
+  // v2.25.0.  AI's `start_modeling` action broadcasts here; modeling
+  // component subscribes and calls startModeling().
+  describe('modelingStartRequests', () => {
+    it('should emit the full request shape verbatim', (done) => {
+      const req = { algorithm: 'lightgbm', encoding_use_native: true };
+      service.modelingStartRequests$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitModelingStartRequest(req);
+    });
+
+    it('should accept algorithm=null (use form value)', (done) => {
+      service.modelingStartRequests$.subscribe(received => {
+        expect(received.algorithm).toBeNull();
+        expect(received.encoding_use_native).toBeTrue();
+        done();
+      });
+      service.emitModelingStartRequest({ algorithm: null, encoding_use_native: true });
+    });
+
+    it('should reject empty-string algorithm', (done) => {
+      let emitted = false;
+      const sub = service.modelingStartRequests$.subscribe(() => { emitted = true; });
+      service.emitModelingStartRequest({ algorithm: '   ', encoding_use_native: true });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject non-boolean encoding_use_native', (done) => {
+      let emitted = false;
+      const sub = service.modelingStartRequests$.subscribe(() => { emitted = true; });
+      service.emitModelingStartRequest({ algorithm: 'lightgbm', encoding_use_native: 'true' as any });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past requests (Subject semantics)', (done) => {
+      service.emitModelingStartRequest({ algorithm: 'lightgbm', encoding_use_native: true });
+      const seen: any[] = [];
+      service.modelingStartRequests$.subscribe(r => seen.push(r));
+      service.emitModelingStartRequest({ algorithm: 'xgboost', encoding_use_native: false });
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0].algorithm).toBe('xgboost');
+        done();
+      }, 0);
+    });
+  });
 });

@@ -389,4 +389,191 @@ describe('AiChatPanelComponent', () => {
       expect(lastMsg.content).toContain('_none_');
     });
   });
+
+  // ── start_data_purifier (v2.26.0+) ────────────────────────────────────
+  // AI's `start_data_purifier` action result handler — must broadcast
+  // on dataPurifierStartRequests$, render a chat summary, trigger a
+  // checkpoint substep.
+  describe('_handleActionResult start_data_purifier flow', () => {
+    it('should broadcast the validated config on dataPurifierStartRequests$', (done) => {
+      const applied = {
+        purifier_options: [1, 2, 5, 7],
+        split: { strategy: 'random', percent: 25 },
+      };
+      sharedService.dataPurifierStartRequests$.subscribe(received => {
+        expect(received).toEqual({
+          purifier_options: [1, 2, 5, 7],
+          split: { strategy: 'random', percent: 25 },
+        });
+        done();
+      });
+      (component as any)._handleActionResult('start_data_purifier', { applied });
+    });
+
+    it('should pass empty options + null split through unchanged', (done) => {
+      sharedService.dataPurifierStartRequests$.subscribe(received => {
+        expect(received).toEqual({ purifier_options: [], split: null });
+        done();
+      });
+      (component as any)._handleActionResult('start_data_purifier', {
+        applied: { purifier_options: [], split: null },
+      });
+    });
+
+    it('should render a chat summary with purifier options and split', () => {
+      (component as any)._handleActionResult('start_data_purifier', {
+        applied: {
+          purifier_options: [1, 2, 5],
+          split: { strategy: 'random', percent: 25 },
+        },
+        description: 'Run preprocessing with low-variance pruning',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Data purifier started');
+      expect(lastMsg.content).toContain('Run preprocessing with low-variance pruning');
+      expect(lastMsg.content).toContain('1');
+      expect(lastMsg.content).toContain('random');
+      expect(lastMsg.content).toContain('25');
+    });
+
+    it('should render OOT split details when strategy=oot', () => {
+      (component as any)._handleActionResult('start_data_purifier', {
+        applied: {
+          purifier_options: [],
+          split: { strategy: 'oot', date_column: 'Application_Datetime', percent: 30 },
+        },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('OOT');
+      expect(lastMsg.content).toContain('Application_Datetime');
+      expect(lastMsg.content).toContain('30');
+    });
+
+    it('should render "_form defaults_" when split is null', () => {
+      (component as any)._handleActionResult('start_data_purifier', {
+        applied: { purifier_options: [], split: null },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('_form defaults_');
+    });
+
+    it('should trigger ai_action_start_data_purifier checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('start_data_purifier', {
+        applied: { purifier_options: [], split: null },
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_start_data_purifier');
+    });
+  });
+
+  // ── apply_encoding (v2.26.0+) ─────────────────────────────────────────
+  describe('_handleActionResult apply_encoding flow', () => {
+    it('should broadcast the use_native flag on encodingApplyRequests$', (done) => {
+      sharedService.encodingApplyRequests$.subscribe(received => {
+        expect(received).toEqual({ use_native: true });
+        done();
+      });
+      (component as any)._handleActionResult('apply_encoding', {
+        applied: { use_native: true },
+      });
+    });
+
+    it('should default use_native=true when applied is missing', (done) => {
+      sharedService.encodingApplyRequests$.subscribe(received => {
+        expect(received).toEqual({ use_native: true });
+        done();
+      });
+      (component as any)._handleActionResult('apply_encoding', {});
+    });
+
+    it('should pass explicit false through unchanged', (done) => {
+      sharedService.encodingApplyRequests$.subscribe(received => {
+        expect(received.use_native).toBeFalse();
+        done();
+      });
+      (component as any)._handleActionResult('apply_encoding', {
+        applied: { use_native: false },
+      });
+    });
+
+    it('should add a chat message summarising the call', () => {
+      (component as any)._handleActionResult('apply_encoding', {
+        applied: { use_native: true },
+        description: 'Apply encoding plan with native library',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Apply encoding started');
+      expect(lastMsg.content).toContain('Apply encoding plan with native library');
+      expect(lastMsg.content).toContain('use_native');
+    });
+
+    it('should trigger ai_action_apply_encoding checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('apply_encoding', {
+        applied: { use_native: true },
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_apply_encoding');
+    });
+  });
+
+  // ── start_modeling (v2.26.0+) ─────────────────────────────────────────
+  // The headline action — closes the user's blocker from v2.25.0.
+  describe('_handleActionResult start_modeling flow', () => {
+    it('should broadcast the validated config on modelingStartRequests$', (done) => {
+      const applied = { algorithm: 'lightgbm', encoding_use_native: true };
+      sharedService.modelingStartRequests$.subscribe(received => {
+        expect(received).toEqual({ algorithm: 'lightgbm', encoding_use_native: true });
+        done();
+      });
+      (component as any)._handleActionResult('start_modeling', { applied });
+    });
+
+    it('should normalise null algorithm (form-value fallback)', (done) => {
+      sharedService.modelingStartRequests$.subscribe(received => {
+        expect(received.algorithm).toBeNull();
+        expect(received.encoding_use_native).toBeTrue();
+        done();
+      });
+      (component as any)._handleActionResult('start_modeling', {
+        applied: { algorithm: null, encoding_use_native: true },
+      });
+    });
+
+    it('should default to algorithm=null + use_native=true on missing applied', (done) => {
+      sharedService.modelingStartRequests$.subscribe(received => {
+        expect(received.algorithm).toBeNull();
+        expect(received.encoding_use_native).toBeTrue();
+        done();
+      });
+      (component as any)._handleActionResult('start_modeling', {});
+    });
+
+    it('should add a chat summary mentioning algorithm and use_native', () => {
+      (component as any)._handleActionResult('start_modeling', {
+        applied: { algorithm: 'xgboost', encoding_use_native: false },
+        description: 'Start modeling with XGBoost',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Modeling started');
+      expect(lastMsg.content).toContain('Start modeling with XGBoost');
+      expect(lastMsg.content).toContain('xgboost');
+      expect(lastMsg.content).toContain('use_native');
+    });
+
+    it('should render "_form value_" when algorithm is null', () => {
+      (component as any)._handleActionResult('start_modeling', {
+        applied: { algorithm: null, encoding_use_native: true },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('_form value_');
+    });
+
+    it('should trigger ai_action_start_modeling checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('start_modeling', {
+        applied: { algorithm: 'lightgbm', encoding_use_native: true },
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_start_modeling');
+    });
+  });
 });

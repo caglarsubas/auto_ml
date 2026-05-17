@@ -496,6 +496,32 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       setTimeout(() => this.startSfs(), 0);
     });
 
+    // v2.26.0+: subscribe to AI assistant Modeling-start requests.
+    // This closes the user's blocker from v2.25.0 ("I cannot start
+    // the modeling engine directly") — when the AI emits a
+    // start_modeling action, the chat panel broadcasts the
+    // validated config here.  We mirror it onto the form fields,
+    // then call the existing startModeling() method — the exact
+    // code path a user's manual "Start Modeling" button click takes,
+    // including activeProcess registration, encoding plan pickup,
+    // and status-polling lifecycle.
+    this.sharedService.modelingStartRequests$.subscribe((req) => {
+      if (!req || typeof req !== 'object') return;
+      // Patch the form fields if the AI specified them — otherwise
+      // leave the user's existing form values intact.
+      if (typeof req.algorithm === 'string' && req.algorithm.trim()) {
+        this.selectedAlgorithm = req.algorithm.trim();
+      }
+      if (typeof req.encoding_use_native === 'boolean') {
+        this.encodingUseNative = req.encoding_use_native;
+      }
+      // Defer the actual modeling kickoff to the next tick so any
+      // pending form-binding change detection settles before
+      // startModeling() reads the field values (matches the SFS-
+      // start pattern above).
+      setTimeout(() => this.startModeling(), 0);
+    });
+
     // Restore from checkpoint if available (pipeline resume)
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {

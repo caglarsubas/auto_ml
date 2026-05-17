@@ -511,4 +511,77 @@ describe('ModelingComponent', () => {
       }, 5);
     });
   });
+
+  // ── modelingStartRequests$ subscription (v2.26.0+) ────────────────────
+  // The headline of v2.26.0 — closes the user's exact blocker from
+  // v2.25.0 ("I cannot 'start' the modeling engine directly").
+  // Verifies the modeling component populates form fields and calls
+  // startModeling() — the same code path a manual "Start Modeling"
+  // button click takes.
+  describe('modelingStartRequests$ -> form-fields + startModeling() sync', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+    });
+
+    it('should populate form fields from the request and call startModeling()', (done) => {
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      sharedService.emitModelingStartRequest({
+        algorithm: 'lightgbm',
+        encoding_use_native: false,
+      });
+      // startModeling() is fired via setTimeout(0); poll once.
+      setTimeout(() => {
+        expect(component.selectedAlgorithm).toBe('lightgbm');
+        expect(component.encodingUseNative).toBeFalse();
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        done();
+      }, 5);
+    });
+
+    it('should not patch selectedAlgorithm when algorithm is null', (done) => {
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      // Pre-populate selectedAlgorithm so we can verify it's preserved.
+      component.selectedAlgorithm = 'xgboost';
+      sharedService.emitModelingStartRequest({
+        algorithm: null,
+        encoding_use_native: true,
+      });
+      setTimeout(() => {
+        // The user's pre-existing form value is preserved.
+        expect(component.selectedAlgorithm).toBe('xgboost');
+        expect(component.encodingUseNative).toBeTrue();
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        done();
+      }, 5);
+    });
+
+    it('should strip whitespace from algorithm before patching', (done) => {
+      spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      sharedService.emitModelingStartRequest({
+        algorithm: 'lightgbm',  // already trimmed by the backend handler
+        encoding_use_native: true,
+      });
+      setTimeout(() => {
+        expect(component.selectedAlgorithm).toBe('lightgbm');
+        done();
+      }, 5);
+    });
+
+    it('should not call startModeling on rejected request (empty algorithm string)', (done) => {
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      // SharedService guard already filters this; the component's
+      // own subscription doesn't even fire.
+      sharedService.emitModelingStartRequest({
+        algorithm: '   ',
+        encoding_use_native: true,
+      });
+      setTimeout(() => {
+        expect(startSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+  });
 });

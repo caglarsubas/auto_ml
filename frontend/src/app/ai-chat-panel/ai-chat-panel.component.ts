@@ -357,6 +357,84 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       this.sharedService.triggerCheckpoint('ai_action_start_sfs');
 
+    } else if (actionType === 'start_data_purifier') {
+      // v2.26.0+: dedicated path for the AI to fire the
+      // "Run Preprocessing" button.  Validated config from the
+      // backend handler is forwarded to the model-development
+      // component via dataPurifierStartRequests$, which mirrors
+      // the user clicking "Run Preprocessing" with these settings.
+      const applied = resp.applied || null;
+      let msg = `✅ **Data purifier started.**`;
+      if (desc) msg += ` ${desc}`;
+      if (applied && typeof applied === 'object') {
+        const opts = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
+        const split = applied.split || null;
+        const splitDesc = split
+          ? (split.strategy === 'oot'
+              ? `OOT on \`${split.date_column}\`${split.cutoff ? ` cutoff=${split.cutoff}` : ` (${split.percent ?? '?'}%)`}`
+              : `random ${split.percent ?? '?'}%`)
+          : '_form defaults_';
+        msg += '\n\n' + [
+          `- **Purifier options**: ${opts.length ? opts.map((o: number) => `\`${o}\``).join(', ') : '_form defaults_'}`,
+          `- **Split**: ${splitDesc}`,
+        ].join('\n');
+      }
+      this.actionSuccess = 'Data purifier started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      if (applied && typeof applied === 'object') {
+        this.sharedService.emitDataPurifierStartRequest({
+          purifier_options: Array.isArray(applied.purifier_options) ? applied.purifier_options : [],
+          split: applied.split ?? null,
+        });
+      }
+      this.sharedService.triggerCheckpoint('ai_action_start_data_purifier');
+
+    } else if (actionType === 'apply_encoding') {
+      // v2.26.0+: dedicated path for the AI to fire the
+      // "Apply Encoding" button.  The component's current
+      // encodingPlan array (already populated/edited by earlier
+      // update_metadata + set_ordinal_ranking actions) is what
+      // gets applied — this action just toggles the use_native flag.
+      const applied = resp.applied || null;
+      const useNative = applied && typeof applied.use_native === 'boolean'
+        ? applied.use_native
+        : true;
+      let msg = `✅ **Apply encoding started.**`;
+      if (desc) msg += ` ${desc}`;
+      msg += `\n\n- **use_native**: \`${useNative}\``;
+      this.actionSuccess = 'Apply encoding started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      this.sharedService.emitEncodingApplyRequest({ use_native: useNative });
+      this.sharedService.triggerCheckpoint('ai_action_apply_encoding');
+
+    } else if (actionType === 'start_modeling') {
+      // v2.26.0+: the headline action — closes the user's exact
+      // blocker from v2.25.0 ("I cannot 'start' the modeling engine
+      // directly").  Validated config goes via modelingStartRequests$
+      // to the modeling component, which optionally patches
+      // selectedAlgorithm + encodingUseNative, then calls the
+      // existing startModeling() method.
+      const applied = resp.applied || null;
+      const algorithm = applied && typeof applied.algorithm === 'string' && applied.algorithm.trim()
+        ? applied.algorithm.trim()
+        : null;
+      const useNative = applied && typeof applied.encoding_use_native === 'boolean'
+        ? applied.encoding_use_native
+        : true;
+      let msg = `✅ **Modeling started.**`;
+      if (desc) msg += ` ${desc}`;
+      msg += '\n\n' + [
+        `- **Algorithm**: ${algorithm ? `\`${algorithm}\`` : '_form value_'}`,
+        `- **encoding_use_native**: \`${useNative}\``,
+      ].join('\n');
+      this.actionSuccess = 'Modeling started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      this.sharedService.emitModelingStartRequest({
+        algorithm,
+        encoding_use_native: useNative,
+      });
+      this.sharedService.triggerCheckpoint('ai_action_start_modeling');
+
     } else if (actionType === 'update_notes') {
       const noteAction = resp.note_action || 'add';
       const position = resp.position || '';
