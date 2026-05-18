@@ -1367,13 +1367,51 @@ class PreprocessingRunView(APIView):
         # Outlier-num quantile clipping (catalog IDs 28-30, KIND_OUTLIER_NUM).
         # IDs/ranges always agreed with the frontend; switching to the
         # catalog here keeps the single source of truth invariant.
+        #
+        # v2.28.1 — CRITICAL FIX: honor `preserve` and Model_Usage='No'.
+        # Pre-fix this branch clipped EVERY numeric column unconditionally,
+        # including the binary Target column.  For an imbalanced target
+        # (e.g. Good_Bad_Flag with <5% positives) at clip range [0.05,0.95]
+        # both quantiles equal 0 → clip(0,0) collapses every target value
+        # to 0 → split-validation chart shows 0% target mean across full /
+        # train / test, modeling silently breaks downstream.  The DROP
+        # branches above already honor `preserve`; the categorical-outlier
+        # branch below already honors both `preserve` and Model_Usage='No'.
+        # This patch closes the parity gap so the numeric-outlier branch
+        # has the same protection contract.
         outlier_num_selected = selected_entries_of_kind(options, KIND_OUTLIER_NUM)
         if outlier_num_selected:
             lo, hi = outlier_num_selected[0]['quantile_range']  # first by ID (UI single-selects within group)
             selected_q_ids = [e['id'] for e in outlier_num_selected]
-            num = work.select_dtypes(include=[np.number])
+
+            # Build Model_Usage lookup so we don't clip ID/index/timestamp
+            # columns the user flagged as not-for-modeling.  The
+            # categorical-outlier branch already does this; mirror it here.
+            usage_lookup_num: dict[str, str] = {}
+            if data_dictionary and isinstance(data_dictionary, list):
+                for entry in data_dictionary:
+                    fname = entry.get('Feature_Name')
+                    usage = (entry.get('Model_Usage_YN') or '').strip()
+                    if fname:
+                        usage_lookup_num[fname] = usage
+
+            num_all = work.select_dtypes(include=[np.number])
+            # Restrict the clip-set to columns we are ALLOWED to mutate:
+            #   - drop preserve columns (Target, OOT date column)
+            #   - drop Model_Usage='No' columns (IDs, indexes, raw timestamps)
+            preserve_set = preserve or set()
+            safe_cols = [
+                c for c in num_all.columns
+                if c not in preserve_set
+                and usage_lookup_num.get(c, '').lower() != 'no'
+            ]
+            protected_cols = [c for c in num_all.columns if c not in safe_cols]
+            num = num_all[safe_cols]
+
             if not num.empty:
-                # Snapshot BEFORE outlier cleaning
+                # Snapshot BEFORE outlier cleaning (full work DF — the
+                # snapshot describes the whole dataset state, not just
+                # the clip subset).
                 try:
                     stats_before_oc = PreprocessingRunView._compute_feature_stats(work)
                 except Exception:
@@ -1397,6 +1435,7 @@ class PreprocessingRunView(APIView):
                     'quantile_range': [lo, hi],
                     'stats_before': stats_before_oc,
                     'stats_after': stats_after_oc,
+                    'protected_columns': protected_cols,
                 })
                 breakdown.append({
                     'step': 'Outlier cleaning (quantile clipping)',
@@ -1404,7 +1443,12 @@ class PreprocessingRunView(APIView):
                     'quantile_range': [lo, hi],
                     'columns': [],
                     'rows_removed': 0,
-                    'note': f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] quantile range'
+                    'protected_columns': protected_cols,
+                    'note': (
+                        f'Numeric columns clipped to [{lo*100:.0f}%, {hi*100:.0f}%] '
+                        f'quantile range '
+                        f'(protected: {len(protected_cols)} cols — Target + Model_Usage=No)'
+                    )
                 })
 
         # Categorical outlier cleaning (catalog IDs 31-34, KIND_OUTLIER_CAT).
