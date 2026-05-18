@@ -22,6 +22,7 @@ from declaration.models import Declaration, DataDictionary
 
 from .prometa_config import (
     workflow, tool, set_span_attr, set_session_id, set_customer_id,
+    schema_validate,
 )
 
 
@@ -958,6 +959,19 @@ def update_purifier_selection(file_id: int, payload: dict) -> dict:
       • "ID <N> appears in both add and remove."
       • "Group conflict: IDs <N>, <M> both belong to <group_name>."
 
+    v2.31.0 (Phase 3a): the entire validation flow is wrapped in a
+    Prometa ``schema.validate`` AML span (catalog C4).  Each return
+    point stamps ``sv.result(passed=..., errors=[...])`` so the
+    platform's output-validation detector can score:
+      - which schema_id (action) is failing most
+      - error categories (form_conflict, group_conflict, diff_conflict,
+        invalid_ids, value_error)
+      - whether downstream is blocked (errors short-circuit the
+        broadcast; success cases don't)
+    Existing ``set_span_attr('declarai.purifier.*')`` calls are kept
+    on the surrounding span as backwards-compatible debug attrs;
+    the AML span is purely additive.
+
     Args:
         file_id: pipeline file id (not used today; kept for signature
             parity with the other action handlers and future cache
@@ -1012,171 +1026,202 @@ def update_purifier_selection(file_id: int, payload: dict) -> dict:
     has_wholesale = 'purifier_options' in payload
     has_diff = ('add' in payload) or ('remove' in payload)
 
-    if has_wholesale and has_diff:
-        set_span_attr('declarai.purifier.form_conflict', True)
-        return {
-            'status': 'error',
-            'action_type': 'update_purifier_selection',
-            'error': (
-                "Specify exactly one of `purifier_options` (wholesale form) "
-                "or `add`/`remove` (diff form), not both."
-            ),
-        }
-
-    if not has_wholesale and not has_diff:
-        # Description-only payloads are a no-op rather than an error —
-        # mirrors how the chat panel treats empty action results.
-        set_span_attr('declarai.purifier.form', 'noop')
-        return {
-            'status': 'success',
-            'action_type': 'update_purifier_selection',
-            'description': description,
-            'applied': {
-                'form': 'noop',
-                'purifier_options': None,
-                'add': [],
-                'remove': [],
-            },
-            'errors': [],
-        }
-
-    try:
-        if has_wholesale:
-            wholesale_ids, wholesale_invalid = _coerce_int_list(
-                payload.get('purifier_options'), 'purifier_options',
-            )
-        else:
-            add_ids, add_invalid = _coerce_int_list(payload.get('add'), 'add')
-            remove_ids, remove_invalid = _coerce_int_list(payload.get('remove'), 'remove')
-    except ValueError as exc:
-        return {
-            'status': 'error',
-            'action_type': 'update_purifier_selection',
-            'error': str(exc),
-        }
-
-    # ── Wholesale-form validation
-    if has_wholesale:
-        set_span_attr('declarai.purifier.form', 'wholesale')
-        if wholesale_invalid:
-            set_span_attr(
-                'declarai.purifier.invalid_ids',
-                ','.join(str(i) for i in wholesale_invalid),
-            )
-
-        # Group-conflict detection: within any non-None group, at most
-        # ONE member may be selected.  The UI enforces this visually
-        # via isOptionDisabled(); the backend enforces it here so the
-        # AI gets a structured error it can recover from on the next
-        # turn instead of producing a silently-malformed selection.
-        groups_seen: dict[int, list[int]] = {}
-        for oid in wholesale_ids:
-            entry = catalog_by_id.get(oid)
-            if entry is None:
-                continue
-            g = entry.get('group')
-            if g is None:
-                continue
-            groups_seen.setdefault(g, []).append(oid)
-        conflicts = {g: ids for g, ids in groups_seen.items() if len(ids) > 1}
-        if conflicts:
-            # Build a human-readable error the AI can parse.  We list
-            # the conflicting group(s) and their member IDs.
-            group_label = {
-                1: 'corr_drop_group',
-                2: 'sparsity_drop_group',
-                3: 'missing_drop_group',
-                4: 'combined_drop_group',
-                5: 'outlier_num_group',
-                6: 'outlier_cat_group',
-            }
-            parts = [
-                f"{group_label.get(g, f'group_{g}')}: IDs {ids}"
-                for g, ids in conflicts.items()
-            ]
-            set_span_attr(
-                'declarai.purifier.group_conflict',
-                '; '.join(parts),
+    # v2.31.0 (Phase 3a): wrap the entire validation flow in a
+    # Prometa ``schema.validate`` AML span.  Each return path stamps
+    # ``sv.result(...)`` with the outcome before returning so the
+    # platform's C4 detector can categorize failures.  Existing
+    # set_span_attr('declarai.purifier.*') calls are KEPT on the
+    # surrounding span for back-compat (debugging via Trace Explorer).
+    with schema_validate('declarai:update-purifier-selection@v1') as sv:
+        if has_wholesale and has_diff:
+            set_span_attr('declarai.purifier.form_conflict', True)
+            sv.result(
+                passed=False,
+                errors=['form_conflict: both purifier_options and add/remove specified'],
+                downstream_blocked=True,
             )
             return {
                 'status': 'error',
                 'action_type': 'update_purifier_selection',
                 'error': (
-                    "Group conflict — at most one option per group may be "
-                    "selected. Conflicts: " + '; '.join(parts) +
-                    ". Pick a single ID per group."
+                    "Specify exactly one of `purifier_options` (wholesale form) "
+                    "or `add`/`remove` (diff form), not both."
                 ),
             }
 
+        if not has_wholesale and not has_diff:
+            # Description-only payloads are a no-op rather than an error —
+            # mirrors how the chat panel treats empty action results.
+            set_span_attr('declarai.purifier.form', 'noop')
+            sv.result(passed=True)  # noop is a valid form, not a failure
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'noop',
+                    'purifier_options': None,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
+        try:
+            if has_wholesale:
+                wholesale_ids, wholesale_invalid = _coerce_int_list(
+                    payload.get('purifier_options'), 'purifier_options',
+                )
+            else:
+                add_ids, add_invalid = _coerce_int_list(payload.get('add'), 'add')
+                remove_ids, remove_invalid = _coerce_int_list(payload.get('remove'), 'remove')
+        except ValueError as exc:
+            sv.result(
+                passed=False,
+                errors=[f'value_error: {exc}'],
+                downstream_blocked=True,
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': str(exc),
+            }
+
+        # ── Wholesale-form validation
+        if has_wholesale:
+            set_span_attr('declarai.purifier.form', 'wholesale')
+            if wholesale_invalid:
+                set_span_attr(
+                    'declarai.purifier.invalid_ids',
+                    ','.join(str(i) for i in wholesale_invalid),
+                )
+
+            # Group-conflict detection: within any non-None group, at most
+            # ONE member may be selected.  The UI enforces this visually
+            # via isOptionDisabled(); the backend enforces it here so the
+            # AI gets a structured error it can recover from on the next
+            # turn instead of producing a silently-malformed selection.
+            groups_seen: dict[int, list[int]] = {}
+            for oid in wholesale_ids:
+                entry = catalog_by_id.get(oid)
+                if entry is None:
+                    continue
+                g = entry.get('group')
+                if g is None:
+                    continue
+                groups_seen.setdefault(g, []).append(oid)
+            conflicts = {g: ids for g, ids in groups_seen.items() if len(ids) > 1}
+            if conflicts:
+                # Build a human-readable error the AI can parse.  We list
+                # the conflicting group(s) and their member IDs.
+                group_label = {
+                    1: 'corr_drop_group',
+                    2: 'sparsity_drop_group',
+                    3: 'missing_drop_group',
+                    4: 'combined_drop_group',
+                    5: 'outlier_num_group',
+                    6: 'outlier_cat_group',
+                }
+                parts = [
+                    f"{group_label.get(g, f'group_{g}')}: IDs {ids}"
+                    for g, ids in conflicts.items()
+                ]
+                set_span_attr(
+                    'declarai.purifier.group_conflict',
+                    '; '.join(parts),
+                )
+                sv.result(
+                    passed=False,
+                    errors=[f'group_conflict: {p}' for p in parts],
+                    downstream_blocked=True,
+                )
+                return {
+                    'status': 'error',
+                    'action_type': 'update_purifier_selection',
+                    'error': (
+                        "Group conflict — at most one option per group may be "
+                        "selected. Conflicts: " + '; '.join(parts) +
+                        ". Pick a single ID per group."
+                    ),
+                }
+
+            set_span_attr(
+                'declarai.purifier.final',
+                ','.join(str(i) for i in wholesale_ids) or '(empty)',
+            )
+
+            sv.result(passed=True)
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'wholesale',
+                    'purifier_options': wholesale_ids,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
+        # ── Diff-form validation
+        set_span_attr('declarai.purifier.form', 'diff')
+        invalid_combined = add_invalid + remove_invalid
+        if invalid_combined:
+            set_span_attr(
+                'declarai.purifier.invalid_ids',
+                ','.join(str(i) for i in invalid_combined),
+            )
+
+        add_set = set(add_ids)
+        remove_set = set(remove_ids)
+        conflict_set = add_set & remove_set
+        if conflict_set:
+            set_span_attr(
+                'declarai.purifier.diff_conflict',
+                ','.join(str(i) for i in sorted(conflict_set)),
+            )
+            sv.result(
+                passed=False,
+                errors=[f'diff_conflict: IDs {sorted(conflict_set)} in both add and remove'],
+                downstream_blocked=True,
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': (
+                    f"ID(s) {sorted(conflict_set)} appear in both `add` and "
+                    "`remove`. Each ID can only go one way per action."
+                ),
+            }
+
+        if not add_ids and not remove_ids:
+            # No-op diff — accept and broadcast nothing.  Avoids surfacing
+            # a confusing "I changed nothing" UI flash.
+            set_span_attr('declarai.purifier.form', 'diff_noop')
+            sv.result(passed=True)  # diff_noop is a valid form, not a failure
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'noop',
+                    'purifier_options': None,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
         set_span_attr(
-            'declarai.purifier.final',
-            ','.join(str(i) for i in wholesale_ids) or '(empty)',
+            'declarai.purifier.added',
+            ','.join(str(i) for i in add_ids) or '(empty)',
         )
-
-        return {
-            'status': 'success',
-            'action_type': 'update_purifier_selection',
-            'description': description,
-            'applied': {
-                'form': 'wholesale',
-                'purifier_options': wholesale_ids,
-                'add': [],
-                'remove': [],
-            },
-            'errors': [],
-        }
-
-    # ── Diff-form validation
-    set_span_attr('declarai.purifier.form', 'diff')
-    invalid_combined = add_invalid + remove_invalid
-    if invalid_combined:
         set_span_attr(
-            'declarai.purifier.invalid_ids',
-            ','.join(str(i) for i in invalid_combined),
+            'declarai.purifier.removed',
+            ','.join(str(i) for i in remove_ids) or '(empty)',
         )
-
-    add_set = set(add_ids)
-    remove_set = set(remove_ids)
-    conflict_set = add_set & remove_set
-    if conflict_set:
-        set_span_attr(
-            'declarai.purifier.diff_conflict',
-            ','.join(str(i) for i in sorted(conflict_set)),
-        )
-        return {
-            'status': 'error',
-            'action_type': 'update_purifier_selection',
-            'error': (
-                f"ID(s) {sorted(conflict_set)} appear in both `add` and "
-                "`remove`. Each ID can only go one way per action."
-            ),
-        }
-
-    if not add_ids and not remove_ids:
-        # No-op diff — accept and broadcast nothing.  Avoids surfacing
-        # a confusing "I changed nothing" UI flash.
-        set_span_attr('declarai.purifier.form', 'diff_noop')
-        return {
-            'status': 'success',
-            'action_type': 'update_purifier_selection',
-            'description': description,
-            'applied': {
-                'form': 'noop',
-                'purifier_options': None,
-                'add': [],
-                'remove': [],
-            },
-            'errors': [],
-        }
-
-    set_span_attr(
-        'declarai.purifier.added',
-        ','.join(str(i) for i in add_ids) or '(empty)',
-    )
-    set_span_attr(
-        'declarai.purifier.removed',
-        ','.join(str(i) for i in remove_ids) or '(empty)',
-    )
+        sv.result(passed=True)
 
     return {
         'status': 'success',

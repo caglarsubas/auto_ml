@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
+    model_route,
 )
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
@@ -24,7 +25,7 @@ from .skill_registry import get_skill
 from .cache import cache_list_artifacts
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
-    call_openai, call_engine,
+    call_openai, call_engine, MODEL_REGISTRY,
 )
 
 # ---------------------------------------------------------------------------
@@ -622,20 +623,34 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
     # because the SDK speaks OpenAI protocol regardless of the upstream.
     set_span_attr('declarai.llm.backend', provider)
 
-    if provider == 'openai':
-        api_key = os.environ.get('OPENAI_API_KEY', '')
-        if not api_key:
-            raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
-        return call_openai(api_key, messages, model_cfg, tools=tools)
+    # v2.31.0 (Phase 3a): emit a Prometa AML ``model.route`` span around
+    # the provider dispatch.  DeclarAI today doesn't run a complexity-
+    # based cascade — the user picks the model in the UI — so the
+    # routing_reason is ``user_selected`` and the candidates set is the
+    # curated static MODEL_REGISTRY (the dropdown the user chose from).
+    # When/if a real cascade lands (rate-limit fallback, cost-capped
+    # routing) the same call site takes a richer routing_reason without
+    # any surface change.  See prometa_config::model_route docstring.
+    candidates = [cfg['model_id'] for cfg in MODEL_REGISTRY.values()]
+    with model_route(
+        chosen=model_cfg['model_id'],
+        candidates_considered=candidates,
+        routing_reason='user_selected',
+    ):
+        if provider == 'openai':
+            api_key = os.environ.get('OPENAI_API_KEY', '')
+            if not api_key:
+                raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
+            return call_openai(api_key, messages, model_cfg, tools=tools)
 
-    elif provider == 'engine':
-        # Local llm-inference-engine via OpenAI-compatible /v1/chat/completions.
-        # See model_registry.call_engine() for the rationale on routing through
-        # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
-        return call_engine(messages, model_cfg, tools=tools)
+        elif provider == 'engine':
+            # Local llm-inference-engine via OpenAI-compatible /v1/chat/completions.
+            # See model_registry.call_engine() for the rationale on routing through
+            # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
+            return call_engine(messages, model_cfg, tools=tools)
 
-    else:
-        raise ValueError(f'Unknown provider: {provider}')
+        else:
+            raise ValueError(f'Unknown provider: {provider}')
 
 
 def _enrich_dd_with_descriptions(file_id: int, dd_list: list) -> list:
