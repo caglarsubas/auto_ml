@@ -392,6 +392,44 @@ def schema_validate(schema_id: str):
 
 
 @contextmanager
+def cache_lookup(kind: str, *, key: str):
+    """Wrap a cache fetch in a Prometa ``cache.lookup`` AML span
+    (catalog B1).  Forwards to the v0.4.0+ SDK helper when available;
+    yields a ``_NoOpAMLHandle`` otherwise.
+
+    ``kind`` MUST be one of ``{response, tool_call, embedding}`` — the
+    SDK enforces this with a ValueError that we deliberately let
+    propagate (it's a programmer error, not a runtime failure).
+
+    Usage::
+
+        with cache_lookup('tool_call', key=cache_key) as ch:
+            raw = r.get(cache_key)
+            if raw is None:
+                ch.miss()
+                return None
+            ch.hit()  # optional: ch.hit(ttl_remaining_seconds=r.ttl(key))
+            return json.loads(raw)
+
+    DeclarAI mapping: every ``cache_get(file_id, artifact)`` in
+    ai_assistant/cache.py is a tool-call cache lookup — when the LLM
+    invokes a tool like ``get_dataset_summary`` we first check the
+    Redis artifact cache.  Hits short-circuit the recompute; misses
+    fall through to the slow path that recomputes and writes back.
+    So ``kind='tool_call'`` is the canonical value for our surface.
+
+    Body exceptions propagate normally — only ImportError is caught.
+    """
+    try:
+        from prometa import cache_lookup as _sdk_cache_lookup
+    except ImportError:
+        yield _NoOpAMLHandle()
+        return
+    with _sdk_cache_lookup(kind, key=key) as handle:
+        yield handle
+
+
+@contextmanager
 def model_route(chosen: str, *, candidates_considered, routing_reason: str):
     """Wrap a model-routing decision in a Prometa ``model.route`` AML
     span (catalog F1).  Forwards to the v0.4.0+ SDK helper when
