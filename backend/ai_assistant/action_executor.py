@@ -884,6 +884,313 @@ def start_data_purifier(file_id: int, payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ACTION: update_purifier_selection — edit the Data-Purifier checkbox UI
+# without firing the run (v2.28.0+)
+# ---------------------------------------------------------------------------
+#
+# Procedural context: `start_data_purifier` is fire-and-run.  When the
+# AI's advisory voice says "let me consolidate IDs 11+17 into ID 23 for
+# you, here's why..." the user deserves a chance to see the new checkbox
+# state and review it BEFORE the pipeline actually executes.  This
+# action is the no-run sibling of start_data_purifier — it patches the
+# UI so the user can review (and optionally tweak) the new selection,
+# then they click Run Preprocessing themselves OR ask the AI to fire it
+# in the next turn.
+#
+# Two payload forms (the AI picks whichever is more natural for the
+# user's intent):
+#
+#   1. WHOLESALE — fully specifies the target option set.  Best when
+#      the AI knows exactly which IDs should end up checked.  The
+#      handler validates the entire set for group conflicts (e.g., two
+#      members of the outlier_num_group cannot both be checked because
+#      the UI is single-select per group).
+#
+#        {"purifier_options": [1, 2, 3, 4, 7, 23, 28, 32],
+#         "description": "Consolidate IDs 11+17 into ID 23"}
+#
+#   2. DIFF — incremental add/remove against the user's CURRENT
+#      selection.  Best when the AI is making a surgical tweak ("just
+#      turn off ID 7") and would otherwise have to re-state the user's
+#      whole list.  Group-conflict detection on the diff is deferred
+#      to the frontend subscriber (which sees the resolved final state).
+#
+#        {"add": [23], "remove": [11, 17],
+#         "description": "Replace separate sparsity/missing drops with combined-drop"}
+#
+# Both forms return a single canonical `applied` shape so the frontend
+# can render one chat-summary template:
+#
+#   applied = {
+#     "form": "wholesale" | "diff",
+#     "purifier_options": list[int] | None,   # wholesale only
+#     "add": list[int],                       # diff only
+#     "remove": list[int],                    # diff only
+#   }
+#
+# Span attributes (declarai-action workflow span):
+#   declarai.purifier.form         "wholesale" | "diff"
+#   declarai.purifier.final        comma-joined IDs (wholesale only)
+#   declarai.purifier.added        comma-joined IDs (diff only)
+#   declarai.purifier.removed      comma-joined IDs (diff only)
+#   declarai.purifier.invalid_ids  comma-joined IDs that were rejected
+#   declarai.purifier.group_conflict  optional error tag
+
+
+@tool(name="update-purifier-selection")
+def update_purifier_selection(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a Data-Purifier checkbox-selection update.
+
+    Unlike start_data_purifier, this action DOES NOT run the
+    preprocessing pipeline — it only patches the UI so the user can
+    review the new selection and click Run themselves.
+
+    payload accepts EITHER (XOR):
+      • {"purifier_options": [1, 2, 5, 7, 23, 28, 32], "description": "..."}
+      • {"add": [23], "remove": [11, 17], "description": "..."}
+
+    Errors are returned with status='error' and a structured `error`
+    string the AI can interpret on its next turn:
+      • "Specify exactly one of `purifier_options` or `add`/`remove`."
+      • "ID <N> appears in both add and remove."
+      • "Group conflict: IDs <N>, <M> both belong to <group_name>."
+
+    Args:
+        file_id: pipeline file id (not used today; kept for signature
+            parity with the other action handlers and future cache
+            integration).
+        payload: dict described above.
+
+    Returns:
+        Action result dict with `applied` shape documented in the
+        module-level comment block.
+    """
+    # Imported lazily so importing this module never triggers a Django
+    # apps registry walk through preprocessing's own imports.  Matches
+    # the lazy-import pattern in _handle_get_purifier_options.
+    from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+
+    description = payload.get('description', '') if isinstance(payload, dict) else ''
+
+    # ── Build the catalog lookup table (id → entry) for validation.
+    catalog_by_id = {e['id']: e for e in PURIFIER_OPTIONS}
+    valid_id_range = (1, 34)
+
+    def _coerce_int_list(raw, field_name: str) -> tuple[list[int], list[int]]:
+        """Return (valid_ids, invalid_or_dropped) from a raw payload list.
+
+        Non-int entries are dropped silently (same forgiving contract
+        as start_data_purifier).  IDs outside 1..34 land in the
+        ``invalid`` bucket and are also dropped — but unlike
+        start_data_purifier we surface them via a span attribute so the
+        AI can see (in tracing) which IDs it guessed wrong.
+        """
+        if raw is None:
+            return [], []
+        if not isinstance(raw, list):
+            raise ValueError(f"`{field_name}` must be a list of integer option IDs")
+        valid: list[int] = []
+        invalid: list[int] = []
+        seen = set()
+        for v in raw:
+            try:
+                iv = int(v)
+            except (TypeError, ValueError):
+                continue
+            if not (valid_id_range[0] <= iv <= valid_id_range[1]):
+                invalid.append(iv)
+                continue
+            if iv in seen:
+                continue
+            seen.add(iv)
+            valid.append(iv)
+        return valid, invalid
+
+    has_wholesale = 'purifier_options' in payload
+    has_diff = ('add' in payload) or ('remove' in payload)
+
+    if has_wholesale and has_diff:
+        set_span_attr('declarai.purifier.form_conflict', True)
+        return {
+            'status': 'error',
+            'action_type': 'update_purifier_selection',
+            'error': (
+                "Specify exactly one of `purifier_options` (wholesale form) "
+                "or `add`/`remove` (diff form), not both."
+            ),
+        }
+
+    if not has_wholesale and not has_diff:
+        # Description-only payloads are a no-op rather than an error —
+        # mirrors how the chat panel treats empty action results.
+        set_span_attr('declarai.purifier.form', 'noop')
+        return {
+            'status': 'success',
+            'action_type': 'update_purifier_selection',
+            'description': description,
+            'applied': {
+                'form': 'noop',
+                'purifier_options': None,
+                'add': [],
+                'remove': [],
+            },
+            'errors': [],
+        }
+
+    try:
+        if has_wholesale:
+            wholesale_ids, wholesale_invalid = _coerce_int_list(
+                payload.get('purifier_options'), 'purifier_options',
+            )
+        else:
+            add_ids, add_invalid = _coerce_int_list(payload.get('add'), 'add')
+            remove_ids, remove_invalid = _coerce_int_list(payload.get('remove'), 'remove')
+    except ValueError as exc:
+        return {
+            'status': 'error',
+            'action_type': 'update_purifier_selection',
+            'error': str(exc),
+        }
+
+    # ── Wholesale-form validation
+    if has_wholesale:
+        set_span_attr('declarai.purifier.form', 'wholesale')
+        if wholesale_invalid:
+            set_span_attr(
+                'declarai.purifier.invalid_ids',
+                ','.join(str(i) for i in wholesale_invalid),
+            )
+
+        # Group-conflict detection: within any non-None group, at most
+        # ONE member may be selected.  The UI enforces this visually
+        # via isOptionDisabled(); the backend enforces it here so the
+        # AI gets a structured error it can recover from on the next
+        # turn instead of producing a silently-malformed selection.
+        groups_seen: dict[int, list[int]] = {}
+        for oid in wholesale_ids:
+            entry = catalog_by_id.get(oid)
+            if entry is None:
+                continue
+            g = entry.get('group')
+            if g is None:
+                continue
+            groups_seen.setdefault(g, []).append(oid)
+        conflicts = {g: ids for g, ids in groups_seen.items() if len(ids) > 1}
+        if conflicts:
+            # Build a human-readable error the AI can parse.  We list
+            # the conflicting group(s) and their member IDs.
+            group_label = {
+                1: 'corr_drop_group',
+                2: 'sparsity_drop_group',
+                3: 'missing_drop_group',
+                4: 'combined_drop_group',
+                5: 'outlier_num_group',
+                6: 'outlier_cat_group',
+            }
+            parts = [
+                f"{group_label.get(g, f'group_{g}')}: IDs {ids}"
+                for g, ids in conflicts.items()
+            ]
+            set_span_attr(
+                'declarai.purifier.group_conflict',
+                '; '.join(parts),
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': (
+                    "Group conflict — at most one option per group may be "
+                    "selected. Conflicts: " + '; '.join(parts) +
+                    ". Pick a single ID per group."
+                ),
+            }
+
+        set_span_attr(
+            'declarai.purifier.final',
+            ','.join(str(i) for i in wholesale_ids) or '(empty)',
+        )
+
+        return {
+            'status': 'success',
+            'action_type': 'update_purifier_selection',
+            'description': description,
+            'applied': {
+                'form': 'wholesale',
+                'purifier_options': wholesale_ids,
+                'add': [],
+                'remove': [],
+            },
+            'errors': [],
+        }
+
+    # ── Diff-form validation
+    set_span_attr('declarai.purifier.form', 'diff')
+    invalid_combined = add_invalid + remove_invalid
+    if invalid_combined:
+        set_span_attr(
+            'declarai.purifier.invalid_ids',
+            ','.join(str(i) for i in invalid_combined),
+        )
+
+    add_set = set(add_ids)
+    remove_set = set(remove_ids)
+    conflict_set = add_set & remove_set
+    if conflict_set:
+        set_span_attr(
+            'declarai.purifier.diff_conflict',
+            ','.join(str(i) for i in sorted(conflict_set)),
+        )
+        return {
+            'status': 'error',
+            'action_type': 'update_purifier_selection',
+            'error': (
+                f"ID(s) {sorted(conflict_set)} appear in both `add` and "
+                "`remove`. Each ID can only go one way per action."
+            ),
+        }
+
+    if not add_ids and not remove_ids:
+        # No-op diff — accept and broadcast nothing.  Avoids surfacing
+        # a confusing "I changed nothing" UI flash.
+        set_span_attr('declarai.purifier.form', 'diff_noop')
+        return {
+            'status': 'success',
+            'action_type': 'update_purifier_selection',
+            'description': description,
+            'applied': {
+                'form': 'noop',
+                'purifier_options': None,
+                'add': [],
+                'remove': [],
+            },
+            'errors': [],
+        }
+
+    set_span_attr(
+        'declarai.purifier.added',
+        ','.join(str(i) for i in add_ids) or '(empty)',
+    )
+    set_span_attr(
+        'declarai.purifier.removed',
+        ','.join(str(i) for i in remove_ids) or '(empty)',
+    )
+
+    return {
+        'status': 'success',
+        'action_type': 'update_purifier_selection',
+        'description': description,
+        'applied': {
+            'form': 'diff',
+            'purifier_options': None,
+            'add': add_ids,
+            'remove': remove_ids,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # ACTION: apply_encoding — apply the encoding plan and produce encoded file
 # ---------------------------------------------------------------------------
 #
@@ -1197,6 +1504,7 @@ HANDLERS = {
     'set_ordinal_ranking': set_ordinal_ranking,
     'start_sfs': start_sfs,
     'start_data_purifier': start_data_purifier,
+    'update_purifier_selection': update_purifier_selection,
     'apply_encoding': apply_encoding,
     'start_modeling': start_modeling,
     'update_notes': update_notes,

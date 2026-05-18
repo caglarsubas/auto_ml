@@ -466,6 +466,176 @@ describe('AiChatPanelComponent', () => {
     });
   });
 
+  // ── update_purifier_selection (v2.28.0+) ─────────────────────────────
+  // AI's `update_purifier_selection` action result handler — the
+  // "preview" sibling of start_data_purifier.  Must:
+  //   (a) broadcast on purifierSelectionUpdates$ with the right form
+  //       discriminator + payload shape,
+  //   (b) render a chat summary that distinguishes wholesale/diff/noop,
+  //   (c) trigger an ai_action_update_purifier_selection checkpoint,
+  //   (d) NEVER emit a start_data_purifier broadcast (that distinction
+  //       is the whole point of v2.28.0 — guard against regression).
+  describe('_handleActionResult update_purifier_selection flow', () => {
+    it('should broadcast a wholesale-form update on purifierSelectionUpdates$', (done) => {
+      const applied = {
+        form: 'wholesale',
+        purifier_options: [1, 2, 3, 4, 7, 23, 28, 32],
+        add: [],
+        remove: [],
+      };
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received.form).toBe('wholesale');
+        expect(received.purifier_options).toEqual([1, 2, 3, 4, 7, 23, 28, 32]);
+        expect(received.add).toEqual([]);
+        expect(received.remove).toEqual([]);
+        done();
+      });
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied,
+        description: 'Consolidate 11+17 into 23',
+      });
+    });
+
+    it('should broadcast a diff-form update on purifierSelectionUpdates$', (done) => {
+      const applied = {
+        form: 'diff',
+        purifier_options: null,
+        add: [23],
+        remove: [11, 17],
+      };
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received.form).toBe('diff');
+        expect(received.purifier_options).toBeNull();
+        expect(received.add).toEqual([23]);
+        expect(received.remove).toEqual([11, 17]);
+        done();
+      });
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied,
+        description: 'Replace 11+17 with 23',
+      });
+    });
+
+    it('should NOT broadcast on dataPurifierStartRequests$ (critical regression guard)', () => {
+      // The whole point of update_purifier_selection vs
+      // start_data_purifier is the no-run UX.  A regression here
+      // re-introduces the v2.27.x problem of one-shot apply-and-run
+      // with no user review step in between.
+      const runSpy = spyOn(sharedService, 'emitDataPurifierStartRequest');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 2, 23],
+          add: [],
+          remove: [],
+        },
+      });
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT broadcast for a noop applied form (description-only payload)', () => {
+      // Backend returns form='noop' for description-only payloads.
+      // We render a chat message but skip the broadcast so the form
+      // doesn't flash.
+      const emitSpy = spyOn(sharedService, 'emitPurifierSelectionUpdate');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'noop',
+          purifier_options: null,
+          add: [],
+          remove: [],
+        },
+        description: 'Thinking about it…',
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should render a chat summary listing the new wholesale selection', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 2, 23],
+          add: [],
+          remove: [],
+        },
+        description: 'Consolidate to combined-drop',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Purifier selection updated');
+      expect(lastMsg.content).toContain('Consolidate to combined-drop');
+      // Each kept ID surfaces with backtick formatting.
+      expect(lastMsg.content).toContain('`1`');
+      expect(lastMsg.content).toContain('`2`');
+      expect(lastMsg.content).toContain('`23`');
+    });
+
+    it('should render a chat summary listing added + removed IDs for diff form', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'diff',
+          purifier_options: null,
+          add: [23],
+          remove: [11, 17],
+        },
+        description: 'Combined-drop swap',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Purifier selection updated');
+      expect(lastMsg.content).toContain('Added');
+      expect(lastMsg.content).toContain('Removed');
+      expect(lastMsg.content).toContain('`23`');
+      expect(lastMsg.content).toContain('`11`');
+      expect(lastMsg.content).toContain('`17`');
+    });
+
+    it('should render the "review then run" call-to-action footer', () => {
+      // The user-visible hint that distinguishes this action from
+      // start_data_purifier: it does NOT auto-run, the user has to
+      // click Run themselves.  Pin the wording so a future copy edit
+      // doesn't silently strip the cue.
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 23],
+          add: [],
+          remove: [],
+        },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Run Preprocessing');
+      // "Review the … checkboxes" prompts the user to scroll to the
+      // form and verify the AI's change before committing.
+      expect(lastMsg.content.toLowerCase()).toContain('review');
+    });
+
+    it('should render an "(cleared)" hint when wholesale selection is empty', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [],
+          add: [],
+          remove: [],
+        },
+        description: 'Clear everything',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content.toLowerCase()).toContain('cleared');
+    });
+
+    it('should trigger ai_action_update_purifier_selection checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'diff',
+          purifier_options: null,
+          add: [7],
+          remove: [],
+        },
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_update_purifier_selection');
+    });
+  });
+
   // ── apply_encoding (v2.26.0+) ─────────────────────────────────────────
   describe('_handleActionResult apply_encoding flow', () => {
     it('should broadcast the use_native flag on encodingApplyRequests$', (done) => {
