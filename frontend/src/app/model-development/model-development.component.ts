@@ -1030,6 +1030,73 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
       })
     );
 
+    // v2.26.0+: subscribe to AI assistant Data-Purifier-start requests.
+    // When the AI emits a start_data_purifier action, the chat panel
+    // broadcasts the validated config here.  We mirror onto the
+    // selectedOptions and split form fields, then call the existing
+    // proceedFromPreprocessing() method — the exact code path a user's
+    // manual "Run Preprocessing" button click takes, including
+    // activeProcess registration and the data-quality-summary auto-nav.
+    this.subscription.add(
+      this.sharedService.dataPurifierStartRequests$.subscribe((req) => {
+        if (!req || typeof req !== 'object') return;
+        // Patch purifier checkbox selection if the AI provided IDs;
+        // otherwise leave whatever is currently selected.  The AI
+        // payload uses integer IDs that match purifierOptions[].id.
+        if (Array.isArray(req.purifier_options) && req.purifier_options.length > 0) {
+          const idSet = new Set<number>(req.purifier_options.map((id: number) => Number(id)));
+          this.selectedOptions = this.purifierOptions.filter(o => idSet.has(o.id));
+        }
+        // Patch split form fields if the AI provided them.
+        if (req.split && typeof req.split === 'object') {
+          if (req.split.strategy === 'random' || req.split.strategy === 'oot') {
+            this.splitStrategy = req.split.strategy;
+          }
+          if (typeof req.split.percent === 'number' && req.split.percent > 0 && req.split.percent < 100) {
+            // Random uses oosPercent; OOT-percent mode uses ootPercent.
+            // We patch both to the same value so the active mode picks it up.
+            this.oosPercent = req.split.percent;
+            this.ootPercent = req.split.percent;
+          }
+          if (req.split.strategy === 'oot') {
+            if (typeof req.split.date_column === 'string' && req.split.date_column.trim()) {
+              this.splitDateColumn = req.split.date_column.trim();
+            }
+            if (typeof req.split.cutoff === 'string' && req.split.cutoff.trim()) {
+              this.splitCutoff = req.split.cutoff.trim();
+              this.ootMode = 'cutoff';
+            } else {
+              this.ootMode = 'percent';
+            }
+          }
+        }
+        // Defer the actual preprocessing kickoff to the next tick so
+        // pending form-binding change detection settles before
+        // proceedFromPreprocessing() reads the field values (matches
+        // the same setTimeout(0) pattern used elsewhere for AI-driven
+        // pipeline-step kickoffs).
+        setTimeout(() => this.proceedFromPreprocessing(), 0);
+      })
+    );
+
+    // v2.26.0+: subscribe to AI assistant Apply-Encoding requests.
+    // When the AI emits an apply_encoding action, the chat panel
+    // broadcasts the validated config here.  We patch encodingUseNative
+    // if specified, then call the existing applyEncoding() method —
+    // the same code path a user's manual "Apply Encoding" button
+    // click takes.  The component's current encodingPlan array
+    // (already populated/edited by earlier update_metadata +
+    // set_ordinal_ranking actions) is what gets applied.
+    this.subscription.add(
+      this.sharedService.encodingApplyRequests$.subscribe((req) => {
+        if (!req || typeof req !== 'object') return;
+        if (typeof req.use_native === 'boolean') {
+          this.encodingUseNative = req.use_native;
+        }
+        setTimeout(() => this.applyEncoding(), 0);
+      })
+    );
+
     // Baseline reset to prevent stale state causing steps to appear out of order
     this.sharedService.setStarted(false);
     this.sharedService.setPreprocessingInitiated(false);

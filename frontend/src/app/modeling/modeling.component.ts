@@ -325,6 +325,203 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       this.dataDictionaryCache = cache || [];
     });
 
+    // v2.23.0+: keep the encoding plan dropdown in sync with AI assistant
+    // metadata updates.  When the AI assistant flips Var_2 to ordinal via
+    // `update_metadata`, the chat panel broadcasts the {column, field,
+    // value} array on metadataUpdates$.  For each Level_of_Measurement
+    // change targeting a feature already in the encoding plan we route
+    // through `updateEncodingLom` so the dropdown's bound value AND its
+    // dependent fields (fallback_strategy, needs_ranking, ranking) all
+    // update — matching exactly what would happen if the user changed
+    // the dropdown manually.  Other fields (Feature_Description, etc.)
+    // are mirrored as a passive metadata patch on the entry so any
+    // dependent renderers can pick them up.
+    this.sharedService.metadataUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      if (!this.encodingPlan || this.encodingPlan.length === 0) return;
+      const idxByName = new Map<string, number>();
+      this.encodingPlan.forEach((e: any, i: number) => {
+        if (typeof e?.feature === 'string') idxByName.set(e.feature, i);
+      });
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const field = upd?.field;
+        const value = upd?.value;
+        if (!col || !field) continue;
+        const i = idxByName.get(col);
+        if (i === undefined) continue;
+        const entry = this.encodingPlan[i];
+        if (field === 'Level_of_Measurement') {
+          // The encoding plan dropdown only renders nominal/ordinal;
+          // other LoM values (cardinal, continuous, datetime, id) imply
+          // the feature is no longer categorical and the encoding plan
+          // entry is stale.  We still mirror the value so debugging is
+          // possible, but only re-run side effects for the supported
+          // dropdown values.
+          const v = String(value || '').toLowerCase();
+          entry.user_lom = v;
+          if (v === 'nominal' || v === 'ordinal') {
+            this.updateEncodingLom(entry, v);
+          }
+          touched = true;
+        } else if (field === 'Feature_Description') {
+          entry.description = value;
+          touched = true;
+        }
+      }
+      if (touched) {
+        // Mirror the same trigger the manual dropdown change uses so
+        // the parent (model-development) checkpoints the new state.
+        this.onConfigChanged();
+      }
+    });
+
+    // v2.24.0+: procedural-chain follow-through.  After the AI flips a
+    // feature's LoM to ordinal (handled by metadataUpdates$ above), it
+    // emits a `set_ordinal_ranking` action with the ranked category
+    // values.  The chat panel forwards those rankings on
+    // encodingRankingUpdates$ and we patch the matching encoding plan
+    // entry's `entry.ranking` array — equivalent to the user clicking
+    // "Set Ranking" and arranging the values manually.  The template
+    // already renders the rank-order list with ▲▼ controls when both
+    // `entry.needs_ranking === true` AND `entry.ranking?.length > 0`,
+    // so a plain in-place assignment is all that's required.
+    this.sharedService.encodingRankingUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      if (!this.encodingPlan || this.encodingPlan.length === 0) return;
+      const idxByName = new Map<string, number>();
+      this.encodingPlan.forEach((e: any, i: number) => {
+        if (typeof e?.feature === 'string') idxByName.set(e.feature, i);
+      });
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const ranking = upd?.ranking;
+        if (!col || !Array.isArray(ranking) || ranking.length === 0) continue;
+        const i = idxByName.get(col);
+        if (i === undefined) continue;
+        const entry = this.encodingPlan[i];
+        // Clone defensively so subsequent push/splice on entry.ranking
+        // (via moveRankingUp/Down) don't mutate the AI's source array.
+        // Coerce each value to string to match the unique_values shape
+        // and the backend's _ordinal_encode mapping key type.
+        entry.ranking = ranking.map((v) => String(v));
+        // The AI is asserting an ordinal ranking, which only makes
+        // sense when the entry is ordinal AND in the 5–10 unique
+        // bucket where needs_ranking is true.  If the entry was not
+        // already marked needs_ranking (e.g. nunique > 10 routed to
+        // target_encoding), respect the backend route: the ranking
+        // is recorded but won't be used at encoding-apply time.
+        touched = true;
+      }
+      if (touched) {
+        // Trigger checkpoint so the new ranking survives pipeline
+        // navigation — same path the manual ▲▼ buttons take.
+        this.onConfigChanged();
+      }
+    });
+
+    // v2.25.0+: subscribe to AI assistant Selected-Features Keep/Drop
+    // changes (update_config feature_usage).  The handler patches
+    // `featureUsage[col]` and `featureDropReason[col]` in place so the
+    // dropdown in the Selected Features table re-renders to "Drop"
+    // with the supplied reason — identical to a user changing the
+    // dropdown manually.  The next SFS start picks up the exclusion
+    // through the existing `excludedFeatures` collection logic.
+    this.sharedService.featureUsageUpdates$.subscribe((updates) => {
+      if (!Array.isArray(updates) || updates.length === 0) return;
+      let touched = false;
+      for (const upd of updates) {
+        const col = upd?.column;
+        const val = upd?.value;
+        if (!col || (val !== 'keep' && val !== 'drop')) continue;
+        this.featureUsage[col] = val;
+        if (val === 'drop') {
+          // Record the reason if provided; AI typically passes a
+          // short rationale like "VIF=9.39" or "Low SHAP".
+          if (upd.reason) {
+            this.featureDropReason[col] = String(upd.reason);
+          }
+        } else {
+          // Flipping back to keep clears any stale reason — same as
+          // the template's onChange handler for the manual dropdown.
+          this.featureDropReason[col] = '';
+        }
+        touched = true;
+      }
+      if (touched) {
+        // Persist via the same path the manual dropdown change uses.
+        this.onConfigChanged();
+      }
+    });
+
+    // v2.25.0+: subscribe to AI assistant SFS-start requests.  When
+    // the AI emits a start_sfs action, the chat panel broadcasts the
+    // validated config object here.  We mirror it onto the SFS form
+    // fields, then call the existing startSfs() method — the exact
+    // code path a user's manual "Start SFS" button click takes,
+    // including activeProcess registration and status polling.
+    this.sharedService.sfsStartRequests$.subscribe((req) => {
+      if (!req || typeof req !== 'object') return;
+      if (!Array.isArray(req.methods) || req.methods.length === 0) return;
+      // Populate the form fields (template bindings re-render).
+      this.sfsMethodForward = req.methods.includes('forward');
+      this.sfsMethodBackward = req.methods.includes('backward');
+      const sc: any = req.stopping_criteria || {};
+      if (Array.isArray(sc.metrics) && sc.metrics.length > 0) {
+        this.sfsMetrics = sc.metrics
+          .filter((m: any) => m && (m.metric === 'roc_auc' || m.metric === 'pr_auc'))
+          .map((m: any) => ({ metric: m.metric, pct_change: Number(m.pct_change) || 0 }));
+      }
+      if (typeof sc.min_features === 'number') this.sfsMinFeatures = sc.min_features;
+      if (typeof sc.max_features === 'number') this.sfsMaxFeatures = sc.max_features;
+      if (typeof req.n_jobs === 'number') this.sfsNJobs = req.n_jobs;
+      if (typeof req.top_k === 'number') this.sfsTopK = req.top_k;
+      // Also mark requested excluded features as 'drop' so the
+      // Selected Features table reflects the AI's intent (the user
+      // may want to see WHY they're excluded).  This is a redundant
+      // safety net — the AI should have already emitted a
+      // feature_usage update_config for these.
+      if (Array.isArray(req.excluded_features)) {
+        for (const c of req.excluded_features) {
+          if (typeof c === 'string' && c.trim()) {
+            this.featureUsage[c] = 'drop';
+          }
+        }
+      }
+      // Defer the actual SFS kickoff to the next tick so any pending
+      // form-binding change detection settles before startSfs() reads
+      // the field values.
+      setTimeout(() => this.startSfs(), 0);
+    });
+
+    // v2.26.0+: subscribe to AI assistant Modeling-start requests.
+    // This closes the user's blocker from v2.25.0 ("I cannot start
+    // the modeling engine directly") — when the AI emits a
+    // start_modeling action, the chat panel broadcasts the
+    // validated config here.  We mirror it onto the form fields,
+    // then call the existing startModeling() method — the exact
+    // code path a user's manual "Start Modeling" button click takes,
+    // including activeProcess registration, encoding plan pickup,
+    // and status-polling lifecycle.
+    this.sharedService.modelingStartRequests$.subscribe((req) => {
+      if (!req || typeof req !== 'object') return;
+      // Patch the form fields if the AI specified them — otherwise
+      // leave the user's existing form values intact.
+      if (typeof req.algorithm === 'string' && req.algorithm.trim()) {
+        this.selectedAlgorithm = req.algorithm.trim();
+      }
+      if (typeof req.encoding_use_native === 'boolean') {
+        this.encodingUseNative = req.encoding_use_native;
+      }
+      // Defer the actual modeling kickoff to the next tick so any
+      // pending form-binding change detection settles before
+      // startModeling() reads the field values (matches the SFS-
+      // start pattern above).
+      setTimeout(() => this.startModeling(), 0);
+    });
+
     // Restore from checkpoint if available (pipeline resume)
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {

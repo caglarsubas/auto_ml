@@ -130,6 +130,241 @@ export class SharedService {
     this.dataRefreshSubject.next();
   }
 
+  // Broadcast metadata updates applied by AI assistant actions (v2.23.0+).
+  //
+  // When the AI runs `update_metadata` to change Level_of_Measurement,
+  // Feature_Description, or any other dictionary field, the response's
+  // `applied` array is fanned out via this subject so every component
+  // showing dictionary-derived state — declaration table, encoding plan
+  // dropdown in the modeling tab, feature card panel — can patch its
+  // local state in place and stay synchronized with the chat assertion.
+  //
+  // Each update has shape: { column: string, field: string, value: any }
+  // where `field` matches the data dictionary key
+  // (Feature_Description / Level_of_Measurement / Model_Usage_YN / ...).
+  //
+  // We deliberately do NOT trigger a backend refetch here: the
+  // `GET /declaration/<id>/data_dictionary/` endpoint recomputes the
+  // dictionary from the raw file every call and only persists
+  // descriptions, so a refetch would silently overwrite the AI's LoM
+  // change. In-place patching is the only way to keep the UI in sync
+  // until the dictionary persistence layer is broadened.
+  private metadataUpdatesSubject = new Subject<Array<{ column: string; field: string; value: any }>>();
+  metadataUpdates$: Observable<Array<{ column: string; field: string; value: any }>> =
+    this.metadataUpdatesSubject.asObservable();
+
+  emitMetadataUpdates(updates: Array<{ column: string; field: string; value: any }>): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.metadataUpdatesSubject.next(updates);
+  }
+
+  // Read-only snapshot accessor for the data dictionary cache; used by
+  // ai-chat-panel to patch the cache in-memory after an AI action and
+  // re-push it to the AI Redis cache without an extra GET round-trip.
+  getDataDictionaryCache(): any[] {
+    return this.dataDictionaryCacheSubject.getValue() || [];
+  }
+
+  // Broadcast ordinal-ranking updates applied by AI assistant actions
+  // (v2.24.0+).
+  //
+  // When the AI runs `set_ordinal_ranking` to commit the rank order of
+  // an ordinal feature's distinct category values, the response's
+  // `applied` array — shape Array<{column, ranking: string[]}> — is
+  // fanned out via this subject.  The modeling component subscribes
+  // and patches `encodingPlan[i].ranking` for matching features so the
+  // UI's drag-to-reorder rows render immediately, exactly as if the
+  // user had clicked "Set Ranking" and arranged the values manually.
+  //
+  // Subject (not BehaviorSubject) — late subscribers must NOT replay a
+  // stale ranking that's already been applied to the encoding plan.
+  // Companion to metadataUpdates$ which handles LoM/description
+  // changes from the same `update_metadata` action family.
+  private encodingRankingUpdatesSubject =
+    new Subject<Array<{ column: string; ranking: string[] }>>();
+  encodingRankingUpdates$: Observable<Array<{ column: string; ranking: string[] }>> =
+    this.encodingRankingUpdatesSubject.asObservable();
+
+  emitEncodingRankingUpdates(
+    updates: Array<{ column: string; ranking: string[] }>,
+  ): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.encodingRankingUpdatesSubject.next(updates);
+  }
+
+  // Broadcast Selected-Features Keep/Drop changes coming from the AI
+  // assistant's `update_config: feature_usage` action (v2.25.0+).
+  //
+  // The AI's correct path to "exclude Var_3 from SFS due to VIF" is
+  // NOT to physically drop the column with execute_code — that
+  // invalidates the modeling artifacts.  Instead it emits
+  // update_config with key=feature_usage, mirroring the existing
+  // manual UI dropdown on each row of the Selected Features table.
+  // This subject fans those updates out to the modeling component,
+  // which sets `featureUsage[col] = value` and `featureDropReason[col]`
+  // in place — the dropdown re-renders to "Drop" with the supplied
+  // reason, and the next SFS start picks up the exclusion via the
+  // existing `excludedFeatures` collection in startSfs().
+  //
+  // Subject (not BehaviorSubject) — late subscribers must not replay
+  // stale drop flags that have already been applied.
+  private featureUsageUpdatesSubject =
+    new Subject<Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>>();
+  featureUsageUpdates$:
+    Observable<Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>> =
+    this.featureUsageUpdatesSubject.asObservable();
+
+  emitFeatureUsageUpdates(
+    updates: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }>,
+  ): void {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    this.featureUsageUpdatesSubject.next(updates);
+  }
+
+  // Broadcast SFS-start requests coming from the AI assistant's
+  // `start_sfs` action (v2.25.0+).
+  //
+  // The chat panel emits this with the validated SFS config object
+  // returned by the backend action handler.  The modeling component
+  // subscribes, populates its SFS form fields (sfsMethodForward /
+  // sfsMethodBackward / sfsMetrics / sfsMinFeatures / sfsMaxFeatures /
+  // sfsNJobs / sfsTopK), and calls its existing `startSfs()` method
+  // — exactly the same code path the user's manual "Start SFS"
+  // button click takes.  This means the AI gets the same form
+  // validation, the same SharedService.activeProcess registration,
+  // and the same status-polling lifecycle as a human click.
+  //
+  // Subject (not BehaviorSubject) — late subscribers must not auto-
+  // re-start SFS on a stale request.  The single shape is the same
+  // object the backend action handler returns in `applied`.
+  private sfsStartRequestsSubject = new Subject<{
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }>();
+  sfsStartRequests$: Observable<{
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }> = this.sfsStartRequestsSubject.asObservable();
+
+  emitSfsStartRequest(request: {
+    methods: string[];
+    stopping_criteria: any;
+    excluded_features: string[];
+    n_jobs: number;
+    top_k: number;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    if (!Array.isArray(request.methods) || request.methods.length === 0) return;
+    this.sfsStartRequestsSubject.next(request);
+  }
+
+  // ── Pipeline-orchestration channels (v2.26.0+) ─────────────────────
+  //
+  // These three Subjects close the "AI cannot click pipeline buttons"
+  // gap that was the user's blocker in v2.25.0.  Each one is paired
+  // with a dedicated AI action in action_executor.py, and each is
+  // consumed by exactly the component that owns the corresponding
+  // manual button:
+  //
+  //   - dataPurifierStartRequests$  ↔  model-development.proceedFromPreprocessing()
+  //   - encodingApplyRequests$      ↔  model-development.applyEncoding()
+  //   - modelingStartRequests$      ↔  modeling.startModeling()
+  //
+  // All three use Subject (not BehaviorSubject) — late subscribers
+  // must NEVER replay a stale request, otherwise an unmounted-then-
+  // remounted component could auto-fire a long-running pipeline
+  // step the user already saw complete.
+
+  // ── start_data_purifier ────────────────────────────────────────
+  // Mirrors a manual "Run Preprocessing" click: applies selected
+  // purifier checkbox options + chosen train/test split, kicks off
+  // dataService.runPreprocessing().  The model-development component
+  // subscribes, patches its `selectedOptions` and split form fields,
+  // then calls proceedFromPreprocessing() — the same code path a
+  // manual click takes.
+  //
+  // `purifier_options` may be empty/[] meaning "use whatever is
+  // currently selected"; `split` may be null meaning "use the form's
+  // current values".  This matches the AI action's optional payload.
+  private dataPurifierStartRequestsSubject = new Subject<{
+    purifier_options: number[];
+    split: any | null;
+  }>();
+  dataPurifierStartRequests$: Observable<{
+    purifier_options: number[];
+    split: any | null;
+  }> = this.dataPurifierStartRequestsSubject.asObservable();
+
+  emitDataPurifierStartRequest(request: {
+    purifier_options: number[];
+    split: any | null;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    // Defensive: purifier_options must be an array even if empty.
+    if (!Array.isArray(request.purifier_options)) return;
+    this.dataPurifierStartRequestsSubject.next(request);
+  }
+
+  // ── apply_encoding ─────────────────────────────────────────────
+  // Mirrors a manual "Apply Encoding" click: applies the encoding
+  // plan to produce the encoded file.  The model-development
+  // component subscribes, optionally patches `encodingUseNative`,
+  // calls applyEncoding().
+  //
+  // The encoding plan itself isn't transmitted in the request —
+  // the AI is expected to have populated/edited it via earlier
+  // update_metadata + set_ordinal_ranking actions, and the
+  // current `encodingPlan` array on the component is what gets
+  // applied.  This keeps the action's payload minimal.
+  private encodingApplyRequestsSubject = new Subject<{
+    use_native: boolean;
+  }>();
+  encodingApplyRequests$: Observable<{ use_native: boolean }> =
+    this.encodingApplyRequestsSubject.asObservable();
+
+  emitEncodingApplyRequest(request: { use_native: boolean }): void {
+    if (!request || typeof request !== 'object') return;
+    if (typeof request.use_native !== 'boolean') return;
+    this.encodingApplyRequestsSubject.next(request);
+  }
+
+  // ── start_modeling ─────────────────────────────────────────────
+  // The headline of v2.26.0 — closes the exact gap the user hit in
+  // v2.25.0 ("I cannot 'start' the modeling engine directly").
+  // Mirrors a manual "Start Modeling" click: trains the chosen
+  // algorithm on the encoded file, produces selected_features,
+  // SHAP details, ROC-AUC/PR-AUC metrics, training data snapshot
+  // for SFS.  The modeling component subscribes, optionally patches
+  // `selectedAlgorithm` and `encodingUseNative`, calls startModeling().
+  private modelingStartRequestsSubject = new Subject<{
+    algorithm: string | null;
+    encoding_use_native: boolean;
+  }>();
+  modelingStartRequests$: Observable<{
+    algorithm: string | null;
+    encoding_use_native: boolean;
+  }> = this.modelingStartRequestsSubject.asObservable();
+
+  emitModelingStartRequest(request: {
+    algorithm: string | null;
+    encoding_use_native: boolean;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    if (typeof request.encoding_use_native !== 'boolean') return;
+    // algorithm may be null (use form value), but if provided it
+    // must be a non-empty string.
+    if (request.algorithm !== null && (typeof request.algorithm !== 'string' || !request.algorithm.trim())) {
+      return;
+    }
+    this.modelingStartRequestsSubject.next(request);
+  }
+
   // Autosave flag shared between parent (model-development) and child (modeling) components
   private autosaveEnabledSubject = new BehaviorSubject<boolean>(true);
   autosaveEnabled$: Observable<boolean> = this.autosaveEnabledSubject.asObservable();

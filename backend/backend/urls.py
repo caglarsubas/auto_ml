@@ -3,7 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
-from preprocessing.views import PreprocessingApplyView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
+from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
 from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/feature-card/<int:pk>/get_stacked_feature_data/', FeatureCardViewSet.as_view({'get': 'get_stacked_feature_data'}), name='get-stacked-feature-data'),
     path('api/preprocessing/apply/', PreprocessingApplyView.as_view(), name='preprocessing-apply'),
+    path('api/preprocessing/options/', PreprocessingOptionsView.as_view(), name='preprocessing-options'),
     path('api/preprocessing/run/', PreprocessingRunView.as_view(), name='preprocessing-run'),
     path('api/preprocessing/datq_detail/', PreprocessingDatqDetailView.as_view(), name='preprocessing-datq-detail'),
     path('api/preprocessing/datq_timeseries/', PreprocessingDatqTimeseriesView.as_view(), name='preprocessing-datq-timeseries'),

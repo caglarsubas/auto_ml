@@ -244,6 +244,151 @@ class TestPreprocessingApplyAPI:
 
 
 # ---------------------------------------------------------------------------
+# v2.27.0 — Preprocessing Options Catalog API
+# ---------------------------------------------------------------------------
+@pytest.mark.functional
+@pytest.mark.django_db
+class TestPreprocessingOptionsAPI:
+    """GET /api/preprocessing/options/ exposes the canonical 34-option
+    purifier catalog so the frontend (and the v2.27.1 AI catalog tool)
+    can pull labels/thresholds from a single source of truth instead of
+    duplicating them in TypeScript.
+
+    These tests guard the response shape and confirm key IDs that the
+    pre-v2.27.0 contract bug had misaligned.
+    """
+
+    def test_options_endpoint_returns_200_and_expected_shape(self, api_client):
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        body = response.data
+        assert 'options' in body
+        assert 'default_selected_ids' in body
+        assert isinstance(body['options'], list)
+        assert isinstance(body['default_selected_ids'], list)
+
+    def test_options_endpoint_returns_exactly_34_entries(self, api_client):
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        assert len(response.data['options']) == 34
+
+    def test_options_endpoint_entries_have_required_keys(self, api_client):
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        required = {'id', 'name', 'kind', 'group', 'threshold', 'quantile_range'}
+        for entry in response.data['options']:
+            missing = required - set(entry.keys())
+            assert not missing, f"entry id={entry.get('id')} missing keys: {missing}"
+
+    def test_options_endpoint_pins_outlier_quantile_29_to_0_05_0_95(self, api_client):
+        """The exact request that triggered the v2.27.0 dig: 'change
+        outlier cleaning interval for numerical features to 0.05-0.95'
+        must resolve to option ID 29 in the catalog.  v2.27.1's AI
+        catalog tool will read this same shape.
+        """
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        by_id = {e['id']: e for e in response.data['options']}
+        assert by_id[29]['kind'] == 'outlier_quantile_clip'
+        # JSON renders tuples as lists.
+        assert by_id[29]['quantile_range'] == [0.05, 0.95]
+
+    def test_options_endpoint_pins_post_v2_27_0_realigned_ids(self, api_client):
+        """ID labels for the pre-v2.27.0 misaligned slots must match the
+        frontend's UI text.  Pinning these in a functional test means
+        any future drift on either side trips immediately rather than
+        silently routing the user's checkbox to the wrong transform.
+        """
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        by_id = {e['id']: e for e in response.data['options']}
+        expected_labels = {
+            9:  'Corr-drop threshold = 0.75',
+            11: 'Sparsity-drop threshold = 0.95',
+            17: 'Missing-drop threshold = 0.95',
+            23: '[Sparsity+Missing]-drop threshold = 0.95',
+            24: '[Sparsity+Missing]-drop threshold = 0.90',
+            27: '[Sparsity+Missing]-drop threshold = 0.75',
+            29: 'Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]',
+        }
+        for opt_id, label in expected_labels.items():
+            assert by_id[opt_id]['name'] == label, \
+                f"id={opt_id} label drifted from v2.27.0 contract"
+
+    def test_options_endpoint_default_selected_ids_subset_of_catalog(self, api_client):
+        response = api_client.get('/api/preprocessing/options/')
+        assert response.status_code == 200
+        catalog_ids = {e['id'] for e in response.data['options']}
+        for opt_id in response.data['default_selected_ids']:
+            assert opt_id in catalog_ids, f"default id {opt_id} not in catalog"
+
+
+# ---------------------------------------------------------------------------
+# AI Assistant — get_purifier_options tool (v2.27.1)
+# ---------------------------------------------------------------------------
+# Functional coverage for the new LLM-facing catalog tool.  These tests
+# don't go through the chat HTTP endpoint (that would need a live LLM);
+# they exercise the dispatcher path the chat workflow uses internally —
+# `execute_tool_call(file_id, tool_name, arguments)` — which is the same
+# call site as the OpenAI tool_calls loop in views._chat_workflow.
+@pytest.mark.functional
+class TestAIPurifierOptionsToolDispatch:
+    """Verify the LLM-facing dispatch path for get_purifier_options.
+
+    Pre-v2.27.1 the LLM had no way to retrieve the canonical purifier
+    catalog at runtime — the system prompt held a misleading generic list
+    and the AI would hallucinate IDs.  v2.27.1 wires the catalog through
+    `execute_tool_call` so the LLM can look up real IDs/labels/thresholds
+    on demand before emitting start_data_purifier.
+    """
+
+    def test_dispatch_unknown_tool_does_not_match_new_name(self):
+        """Sanity: an unrelated name still resolves to the unknown sentinel."""
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options_NOT_A_TOOL', {})
+        assert "Unknown tool" in out
+
+    def test_dispatch_returns_full_catalog_when_no_args(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options', {})
+        assert "Data Purifier Options Catalog" in out
+        # 34 entries means 34 ID-prefixed lines.
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 34
+        # And the canonical example we expect the LLM to use must appear.
+        assert '"Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]"' in out
+
+    def test_dispatch_honors_kind_filter_argument(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(
+            0, 'get_purifier_options', {'kind': 'outlier_quantile_clip'},
+        )
+        # Three numeric-outlier options (IDs 28, 29, 30).
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 3
+        for ln in id_lines:
+            assert 'outlier_quantile_clip' in ln
+        # Non-matching family must NOT appear when filtered.
+        assert 'corr_drop_group' not in out
+
+    def test_dispatch_handles_invalid_kind_with_helpful_error(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(
+            0, 'get_purifier_options', {'kind': 'no_such_kind'},
+        )
+        assert "No purifier options match" in out
+        assert "Valid kinds" in out
+
+    def test_dispatch_does_not_require_a_real_file_id(self):
+        """The catalog is static — file_id is unused by this tool but the
+        dispatcher signature still accepts it. Negative/zero ids must work."""
+        from ai_assistant.tool_executor import execute_tool_call
+        for fake in (0, -1, 999999):
+            out = execute_tool_call(fake, 'get_purifier_options', {})
+            assert "Data Purifier Options Catalog" in out
+
+
+# ---------------------------------------------------------------------------
 # Preprocessing Run API
 # ---------------------------------------------------------------------------
 @pytest.mark.functional

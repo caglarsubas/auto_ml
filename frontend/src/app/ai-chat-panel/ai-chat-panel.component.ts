@@ -25,6 +25,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   selectedModel: string = 'gpt-5.5';
   showModelSelector: boolean = false;
 
+  // ── v2.27.2 — defensive empty-response copy ─────────────────────────
+  // The backend now always returns a meaningful `message` even when the
+  // LLM produces no content (see `_chat_workflow` synthesis pass +
+  // _EMPTY_RESPONSE_FALLBACK / _TOOL_BUDGET_EXHAUSTED_FALLBACK in
+  // backend/ai_assistant/views.py).  Pre-v2.27.2 the frontend showed
+  // the literal "No response received." which left the user with no
+  // actionable next step.  Keeping this constant as defense-in-depth:
+  // if a future regression or network anomaly does return an empty
+  // `message`, the user still sees actionable copy.  Public so the
+  // Karma spec can pin the exact wording without reaching into a
+  // component-private field.
+  static readonly EMPTY_RESPONSE_FALLBACK =
+    'The assistant did not return an answer this time. ' +
+    'Please try rephrasing your question or check the backend logs.';
+
   constructor(
     public aiService: AiAssistantService,
     private dataService: DataService,
@@ -135,7 +150,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         }));
         const fallbackMsg = actions.length > 0
           ? 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
-          : 'No response received.';
+          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
         this.aiService.updateLastMessage(resp.message || fallbackMsg, actions);
         this.isLoading = false;
       },
@@ -260,9 +275,52 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       this.actionSuccess = `${applied.length} metadata field(s) updated.`;
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
-      // Refresh declaration data (dictionary)
-      this.sharedService.triggerDataRefresh();
+      // v2.23.0+: keep the chat assertion ("changed Var_2 to ordinal")
+      // and the pipeline UI dropdowns ("Var_2 still shows Nominal") in
+      // sync.  We deliberately do NOT call triggerDataRefresh() here:
+      // the data_dictionary GET endpoint recomputes the dictionary from
+      // the raw file every call and only persists descriptions, so a
+      // refetch would wipe the LoM change the AI just made.  Instead
+      // we patch the in-memory dictionary cache + broadcast the change
+      // so every subscriber (declaration table, encoding plan dropdown,
+      // feature card) updates in place, and re-push the patched
+      // dictionary to the AI Redis cache so subsequent tool calls see
+      // the same state the user sees.
+      if (applied.length) {
+        this._applyMetadataPatchesToDictionaryCache(applied);
+        this.sharedService.emitMetadataUpdates(applied);
+      }
       this.sharedService.triggerCheckpoint('ai_action_update_metadata');
+
+    } else if (actionType === 'set_ordinal_ranking') {
+      const applied = resp.applied || [];
+      const errors = resp.errors || [];
+      let msg = `✅ **Ordinal ranking set.** ${applied.length} feature(s) ranked.`;
+      if (desc) msg += ` ${desc}`;
+      if (applied.length) {
+        msg += '\n\n' + applied.map((a: any) => {
+          const rank = Array.isArray(a.ranking) ? a.ranking.join(' → ') : '';
+          return `- **${a.column}**: \`${rank}\``;
+        }).join('\n');
+      }
+      if (errors.length) {
+        msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || ''}: ${e.error}`).join(', ');
+      }
+      this.actionSuccess = `${applied.length} ordinal ranking(s) applied.`;
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      // v2.24.0+: this is the procedural-chain follow-through for an
+      // earlier `update_metadata` LoM = ordinal change.  Broadcast the
+      // applied rankings so the modeling component patches each
+      // matching encoding plan entry's `entry.ranking` array in place
+      // — equivalent to the user clicking "Set Ranking" and arranging
+      // the values manually.  We do NOT re-push anything to AI Redis
+      // here: the backend action_executor already wrote the ranking
+      // through to the cached encoding_plan artifact so the
+      // assistant's NEXT get_encoding_plan call sees its own work.
+      if (applied.length) {
+        this.sharedService.emitEncodingRankingUpdates(applied);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_set_ordinal_ranking');
 
     } else if (actionType === 'update_config') {
       const applied = resp.applied || [];
@@ -283,6 +341,114 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // Apply config changes to frontend state
       this._applyConfigChanges(applied);
       this.sharedService.triggerCheckpoint('ai_action_update_config');
+
+    } else if (actionType === 'start_sfs') {
+      // v2.25.0+: dedicated path for the AI to actually kick off SFS.
+      // The backend action handler returns the validated config object;
+      // we broadcast it on sfsStartRequests$ so the modeling component
+      // populates its SFS form fields and calls startSfs() — the exact
+      // code path a manual "Start SFS" button click would take.
+      const applied = resp.applied || null;
+      let msg = `✅ **SFS started.**`;
+      if (desc) msg += ` ${desc}`;
+      if (applied && typeof applied === 'object') {
+        const methods = Array.isArray(applied.methods) ? applied.methods.join(', ') : '?';
+        const sc = applied.stopping_criteria || {};
+        const metrics = Array.isArray(sc.metrics)
+          ? sc.metrics.map((m: any) => `${m.metric}≤${m.pct_change}%`).join(', ')
+          : '?';
+        const excl = Array.isArray(applied.excluded_features) ? applied.excluded_features : [];
+        msg += '\n\n' + [
+          `- **Methods**: \`${methods}\``,
+          `- **Stopping criteria**: ${metrics}, min=${sc.min_features ?? '?'}, max=${sc.max_features ?? '?'}`,
+          `- **Excluded features**: ${excl.length ? excl.map((c: string) => `\`${c}\``).join(', ') : '_none_'}`,
+          `- **Parallelism**: n_jobs=${applied.n_jobs ?? '?'}, top_k=${applied.top_k ?? '?'}`,
+        ].join('\n');
+      }
+      this.actionSuccess = 'SFS started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      if (applied && typeof applied === 'object') {
+        this.sharedService.emitSfsStartRequest(applied);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_start_sfs');
+
+    } else if (actionType === 'start_data_purifier') {
+      // v2.26.0+: dedicated path for the AI to fire the
+      // "Run Preprocessing" button.  Validated config from the
+      // backend handler is forwarded to the model-development
+      // component via dataPurifierStartRequests$, which mirrors
+      // the user clicking "Run Preprocessing" with these settings.
+      const applied = resp.applied || null;
+      let msg = `✅ **Data purifier started.**`;
+      if (desc) msg += ` ${desc}`;
+      if (applied && typeof applied === 'object') {
+        const opts = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
+        const split = applied.split || null;
+        const splitDesc = split
+          ? (split.strategy === 'oot'
+              ? `OOT on \`${split.date_column}\`${split.cutoff ? ` cutoff=${split.cutoff}` : ` (${split.percent ?? '?'}%)`}`
+              : `random ${split.percent ?? '?'}%`)
+          : '_form defaults_';
+        msg += '\n\n' + [
+          `- **Purifier options**: ${opts.length ? opts.map((o: number) => `\`${o}\``).join(', ') : '_form defaults_'}`,
+          `- **Split**: ${splitDesc}`,
+        ].join('\n');
+      }
+      this.actionSuccess = 'Data purifier started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      if (applied && typeof applied === 'object') {
+        this.sharedService.emitDataPurifierStartRequest({
+          purifier_options: Array.isArray(applied.purifier_options) ? applied.purifier_options : [],
+          split: applied.split ?? null,
+        });
+      }
+      this.sharedService.triggerCheckpoint('ai_action_start_data_purifier');
+
+    } else if (actionType === 'apply_encoding') {
+      // v2.26.0+: dedicated path for the AI to fire the
+      // "Apply Encoding" button.  The component's current
+      // encodingPlan array (already populated/edited by earlier
+      // update_metadata + set_ordinal_ranking actions) is what
+      // gets applied — this action just toggles the use_native flag.
+      const applied = resp.applied || null;
+      const useNative = applied && typeof applied.use_native === 'boolean'
+        ? applied.use_native
+        : true;
+      let msg = `✅ **Apply encoding started.**`;
+      if (desc) msg += ` ${desc}`;
+      msg += `\n\n- **use_native**: \`${useNative}\``;
+      this.actionSuccess = 'Apply encoding started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      this.sharedService.emitEncodingApplyRequest({ use_native: useNative });
+      this.sharedService.triggerCheckpoint('ai_action_apply_encoding');
+
+    } else if (actionType === 'start_modeling') {
+      // v2.26.0+: the headline action — closes the user's exact
+      // blocker from v2.25.0 ("I cannot 'start' the modeling engine
+      // directly").  Validated config goes via modelingStartRequests$
+      // to the modeling component, which optionally patches
+      // selectedAlgorithm + encodingUseNative, then calls the
+      // existing startModeling() method.
+      const applied = resp.applied || null;
+      const algorithm = applied && typeof applied.algorithm === 'string' && applied.algorithm.trim()
+        ? applied.algorithm.trim()
+        : null;
+      const useNative = applied && typeof applied.encoding_use_native === 'boolean'
+        ? applied.encoding_use_native
+        : true;
+      let msg = `✅ **Modeling started.**`;
+      if (desc) msg += ` ${desc}`;
+      msg += '\n\n' + [
+        `- **Algorithm**: ${algorithm ? `\`${algorithm}\`` : '_form value_'}`,
+        `- **encoding_use_native**: \`${useNative}\``,
+      ].join('\n');
+      this.actionSuccess = 'Modeling started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      this.sharedService.emitModelingStartRequest({
+        algorithm,
+        encoding_use_native: useNative,
+      });
+      this.sharedService.triggerCheckpoint('ai_action_start_modeling');
 
     } else if (actionType === 'update_notes') {
       const noteAction = resp.note_action || 'add';
@@ -312,14 +478,83 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   /** Apply config changes returned by update_config to frontend SharedService state */
   private _applyConfigChanges(applied: any[]): void {
+    // v2.25.0+: feature_usage entries are collected and broadcast in a
+    // single emission on featureUsageUpdates$ so the modeling component
+    // can patch its featureUsage map and the Selected Features
+    // dropdown re-renders.  model_usage continues to use the existing
+    // BehaviorSubject pattern because it has a different downstream
+    // consumer (Data Quality / preprocessing).
+    const featureUsageBatch: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }> = [];
     for (const upd of applied) {
       if (upd.key === 'model_usage' && upd.column) {
         const current = this.sharedService.getModelUsageSettings() || {};
         current[upd.column] = upd.value;
         this.sharedService.setModelUsageSettings(current);
+      } else if (upd.key === 'feature_usage' && upd.column) {
+        if (upd.value === 'keep' || upd.value === 'drop') {
+          const entry: { column: string; value: 'keep' | 'drop'; reason?: string } = {
+            column: String(upd.column),
+            value: upd.value,
+          };
+          if (upd.reason) entry.reason = String(upd.reason);
+          featureUsageBatch.push(entry);
+        }
       }
       // Other config keys (preprocessing_options, split_strategy, etc.) are handled
       // by triggering a checkpoint which the parent components pick up
+    }
+    if (featureUsageBatch.length) {
+      this.sharedService.emitFeatureUsageUpdates(featureUsageBatch);
+    }
+  }
+
+  /**
+   * v2.23.0+: Patch the SharedService data dictionary cache in place when
+   * the AI assistant runs `update_metadata`, then push the patched cache
+   * back to the AI Redis cache so subsequent tool calls see the same
+   * state the user sees in the pipeline UI.
+   *
+   * Returns nothing — side effects only.  Errors on the AI cache push
+   * are logged but never raised: the in-memory patch is the source of
+   * truth for the UI, and the Redis re-push is a best-effort
+   * synchronization for the AI's next turn.
+   */
+  private _applyMetadataPatchesToDictionaryCache(applied: any[]): void {
+    if (!Array.isArray(applied) || applied.length === 0) return;
+    const cache = this.sharedService.getDataDictionaryCache();
+    if (!Array.isArray(cache) || cache.length === 0) {
+      // No cache to patch yet (declaration step hasn't loaded the
+      // dictionary) — the metadataUpdates$ broadcast will still reach
+      // any component that lazily fetches the dictionary later.
+      return;
+    }
+    // Build a name -> entry index for O(1) lookups.
+    const idxByName = new Map<string, number>();
+    cache.forEach((d: any, i: number) => {
+      const n = d?.Feature_Name;
+      if (typeof n === 'string') idxByName.set(n, i);
+    });
+    let mutated = false;
+    const patched = cache.map((d: any) => ({ ...d }));
+    for (const upd of applied) {
+      const col = upd?.column;
+      const field = upd?.field;
+      const value = upd?.value;
+      if (!col || !field) continue;
+      const i = idxByName.get(col);
+      if (i === undefined) continue;
+      patched[i][field] = value;
+      mutated = true;
+    }
+    if (!mutated) return;
+    this.sharedService.setDataDictionaryCache(patched);
+    // Re-push to AI Redis cache (best effort) so the assistant's next
+    // tool call sees the same dictionary the user sees on screen.
+    const fileId = this.sharedService.getCurrentFileId();
+    if (fileId !== null && fileId !== undefined) {
+      this.dataService.pushAiCache(fileId as number, { data_dictionary: patched }).subscribe({
+        error: (err: any) => console.warn('[AI Cache] post-update_metadata dictionary push failed:', err),
+      });
     }
   }
 
@@ -414,7 +649,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         }));
         const correctionFallback = actions.length > 0
           ? 'I\'ve prepared a corrected operation. Review the details below and click **Apply** to execute.'
-          : 'No response received.';
+          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
         this.aiService.updateLastMessage(resp.message || correctionFallback, actions);
         this.isLoading = false;
         // Clear the error since the AI has provided a correction

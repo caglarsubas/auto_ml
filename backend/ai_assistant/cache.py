@@ -17,24 +17,37 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr, set_session_id
+from .prometa_config import child_only_tool, set_span_attr, span_timer
 
-
-def _stamp_session(file_id: int) -> None:
-    """Tag the current cache span with the file's session id.
-
-    Cache helpers are called from two contexts: inside the chat workflow
-    (child span — session already set, this is an idempotent re-set) and
-    from the standalone /api/ai/cache_push/ endpoint (root span — without
-    this call the span lands in Trace Explorer with no session and
-    pollutes the view next to real user traces).
-    """
-    if file_id is None:
-        return
-    try:
-        set_session_id(f'declarai-file-{int(file_id)}')
-    except (TypeError, ValueError):
-        pass
+# ---------------------------------------------------------------------------
+# Tracing policy for cache ops (v2.22.3+)
+# ---------------------------------------------------------------------------
+# Cache helpers use ``@child_only_tool`` instead of ``@prometa_tool``: they
+# emit a Prometa span only when called from inside an active parent span
+# (the chat workflow in ``ai_assistant.views`` or the action handler in
+# ``ai_assistant.action_executor``).  When called standalone — from the
+# ``/api/ai/cache_push/`` REST endpoint, the ``declaration/views.py``
+# data-dictionary push hook, or an ad-hoc shell script — they run plain,
+# producing NO trace at all.
+#
+# Two complementary cleanups arrived together:
+#
+#   * v2.22.2 removed ``_stamp_session`` from every cache op so they
+#     stopped tagging server-side writes with ``declarai-file-<id>``
+#     (which had been polluting Session Explorer).
+#   * v2.22.3 stops cache ops from creating standalone root traces in
+#     Trace Explorer when there's no user-facing parent workflow.
+#
+# Together: cache I/O is fully visible WITHIN a chat or action trace
+# (child ``redis-*`` spans inside ``declarai-chat`` / ``declarai-action``)
+# but completely invisible OUTSIDE one (no clutter from background
+# writes the user never initiated).
+#
+# Session ids continue to live on the user-facing root span only and
+# propagate to children via OTLP trace context.
+#
+# For ad-hoc scripts that should not touch Prometa at all, set
+# ``PROMETA_DISABLE=1`` before running.
 
 logger = logging.getLogger(__name__)
 
@@ -74,171 +87,196 @@ def _key(file_id: int, artifact: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-@prometa_tool(name="redis-set")
+@child_only_tool(name="redis-set")
 def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) -> bool:
     """Store a pipeline artifact in the cache. Returns True on success.
 
-    Emits a ``redis-set`` span with attributes:
-      - declarai.cache.file_id   pipeline file id
-      - declarai.cache.artifact  artifact key (e.g. 'data_dictionary')
-      - declarai.cache.bytes     serialized payload size
-      - declarai.cache.ttl       ttl seconds
-      - declarai.cache.ok        whether the write succeeded
+    Emits a ``redis-set`` child span when called inside an active parent
+    workflow (chat / action).  When called standalone (cache_push REST
+    endpoint, declaration data-dict push, ad-hoc scripts) it runs plain
+    — no trace, no Trace Explorer clutter.  See the policy note at the
+    top of this module.  Span attributes when emitted:
+      - declarai.cache.file_id     pipeline file id
+      - declarai.cache.artifact    artifact key (e.g. 'data_dictionary')
+      - declarai.cache.bytes       serialized payload size
+      - declarai.cache.ttl         ttl seconds
+      - declarai.cache.ok          whether the write succeeded
+      - declarai.cache.elapsed_us  elapsed time in microseconds
+      - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
-    _stamp_session(file_id)
-    set_span_attr('declarai.cache.file_id', file_id)
-    set_span_attr('declarai.cache.artifact', artifact)
-    set_span_attr('declarai.cache.ttl', ttl)
-    r = _get_redis()
-    if not r:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', 'redis-unavailable')
-        return False
-    try:
-        payload = json.dumps(data, default=str)
-        set_span_attr('declarai.cache.bytes', len(payload))
-        r.setex(_key(file_id, artifact), ttl, payload)
-        set_span_attr('declarai.cache.ok', True)
-        return True
-    except Exception as exc:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', str(exc)[:200])
-        logger.warning("cache_put failed (%s/%s): %s", file_id, artifact, exc)
-        return False
+    with span_timer('declarai.cache'):
+        set_span_attr('declarai.cache.file_id', file_id)
+        set_span_attr('declarai.cache.artifact', artifact)
+        set_span_attr('declarai.cache.ttl', ttl)
+        r = _get_redis()
+        if not r:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', 'redis-unavailable')
+            return False
+        try:
+            payload = json.dumps(data, default=str)
+            set_span_attr('declarai.cache.bytes', len(payload))
+            r.setex(_key(file_id, artifact), ttl, payload)
+            set_span_attr('declarai.cache.ok', True)
+            return True
+        except Exception as exc:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', str(exc)[:200])
+            logger.warning("cache_put failed (%s/%s): %s", file_id, artifact, exc)
+            return False
 
 
-@prometa_tool(name="redis-get")
+@child_only_tool(name="redis-get")
 def cache_get(file_id: int, artifact: str) -> Optional[Any]:
     """Retrieve a pipeline artifact from the cache. Returns None if missing.
 
-    Emits a ``redis-get`` span with attributes:
-      - declarai.cache.file_id   pipeline file id
-      - declarai.cache.artifact  artifact key (e.g. 'pipeline_config')
-      - declarai.cache.hit       True when a value was returned
-      - declarai.cache.bytes     raw payload size on hit
-      - declarai.cache.reason    error / miss reason (when applicable)
+    Emits a ``redis-get`` child span only when called inside an active
+    parent workflow.  See the policy note at the top of this module.
+    Span attributes when emitted:
+      - declarai.cache.file_id     pipeline file id
+      - declarai.cache.artifact    artifact key (e.g. 'pipeline_config')
+      - declarai.cache.hit         True when a value was returned
+      - declarai.cache.bytes       raw payload size on hit
+      - declarai.cache.reason      error / miss reason (when applicable)
+      - declarai.cache.elapsed_us  elapsed time in microseconds
+      - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
-    _stamp_session(file_id)
-    set_span_attr('declarai.cache.file_id', file_id)
-    set_span_attr('declarai.cache.artifact', artifact)
-    r = _get_redis()
-    if not r:
-        set_span_attr('declarai.cache.hit', False)
-        set_span_attr('declarai.cache.reason', 'redis-unavailable')
-        return None
-    try:
-        raw = r.get(_key(file_id, artifact))
-        if raw is None:
+    with span_timer('declarai.cache'):
+        set_span_attr('declarai.cache.file_id', file_id)
+        set_span_attr('declarai.cache.artifact', artifact)
+        r = _get_redis()
+        if not r:
             set_span_attr('declarai.cache.hit', False)
+            set_span_attr('declarai.cache.reason', 'redis-unavailable')
             return None
-        set_span_attr('declarai.cache.hit', True)
-        set_span_attr('declarai.cache.bytes', len(raw))
-        return json.loads(raw)
-    except Exception as exc:
-        set_span_attr('declarai.cache.hit', False)
-        set_span_attr('declarai.cache.reason', str(exc)[:200])
-        logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
-        return None
+        try:
+            raw = r.get(_key(file_id, artifact))
+            if raw is None:
+                set_span_attr('declarai.cache.hit', False)
+                return None
+            set_span_attr('declarai.cache.hit', True)
+            set_span_attr('declarai.cache.bytes', len(raw))
+            return json.loads(raw)
+        except Exception as exc:
+            set_span_attr('declarai.cache.hit', False)
+            set_span_attr('declarai.cache.reason', str(exc)[:200])
+            logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
+            return None
 
 
-@prometa_tool(name="redis-set-bulk")
+@child_only_tool(name="redis-set-bulk")
 def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_TTL) -> bool:
     """Store multiple artifacts at once using a Redis pipeline.
 
-    Emits a ``redis-set-bulk`` span with attributes:
+    Emits a ``redis-set-bulk`` child span only when called inside an
+    active parent workflow.  The ``/api/ai/cache_push/`` REST endpoint
+    invokes this from a non-chat context and therefore produces no
+    trace — which is the entire point of v2.22.3.  Span attributes
+    when emitted:
       - declarai.cache.file_id      pipeline file id
       - declarai.cache.keys         artifact keys written (comma separated)
       - declarai.cache.key_count    number of keys written
       - declarai.cache.bytes        total serialized payload size
       - declarai.cache.ttl          ttl seconds
       - declarai.cache.ok           whether the pipelined write succeeded
+      - declarai.cache.elapsed_us   elapsed time in microseconds
+      - declarai.cache.elapsed_ms   elapsed time in milliseconds
     """
-    _stamp_session(file_id)
-    set_span_attr('declarai.cache.file_id', file_id)
-    set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
-    set_span_attr('declarai.cache.key_count', len(artifacts))
-    set_span_attr('declarai.cache.ttl', ttl)
-    r = _get_redis()
-    if not r:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', 'redis-unavailable')
-        return False
-    try:
-        pipe = r.pipeline()
-        total_bytes = 0
-        for artifact, data in artifacts.items():
-            payload = json.dumps(data, default=str)
-            total_bytes += len(payload)
-            pipe.setex(_key(file_id, artifact), ttl, payload)
-        pipe.execute()
-        set_span_attr('declarai.cache.bytes', total_bytes)
-        set_span_attr('declarai.cache.ok', True)
-        return True
-    except Exception as exc:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', str(exc)[:200])
-        logger.warning("cache_put_bulk failed (file_id=%s): %s", file_id, exc)
-        return False
+    with span_timer('declarai.cache'):
+        set_span_attr('declarai.cache.file_id', file_id)
+        set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
+        set_span_attr('declarai.cache.key_count', len(artifacts))
+        set_span_attr('declarai.cache.ttl', ttl)
+        r = _get_redis()
+        if not r:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', 'redis-unavailable')
+            return False
+        try:
+            pipe = r.pipeline()
+            total_bytes = 0
+            for artifact, data in artifacts.items():
+                payload = json.dumps(data, default=str)
+                total_bytes += len(payload)
+                pipe.setex(_key(file_id, artifact), ttl, payload)
+            pipe.execute()
+            set_span_attr('declarai.cache.bytes', total_bytes)
+            set_span_attr('declarai.cache.ok', True)
+            return True
+        except Exception as exc:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', str(exc)[:200])
+            logger.warning("cache_put_bulk failed (file_id=%s): %s", file_id, exc)
+            return False
 
 
-@prometa_tool(name="redis-delete")
+@child_only_tool(name="redis-delete")
 def cache_delete(file_id: int, artifact: str) -> bool:
     """Remove a specific artifact from the cache.
 
-    Emits a ``redis-delete`` span with attributes:
-      - declarai.cache.file_id   pipeline file id
-      - declarai.cache.artifact  artifact key being evicted
-      - declarai.cache.ok        whether the delete succeeded
+    Emits a ``redis-delete`` child span only when called inside an
+    active parent workflow.  See the policy note at the top of this
+    module.  Span attributes when emitted:
+      - declarai.cache.file_id     pipeline file id
+      - declarai.cache.artifact    artifact key being evicted
+      - declarai.cache.ok          whether the delete succeeded
+      - declarai.cache.elapsed_us  elapsed time in microseconds
+      - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
-    _stamp_session(file_id)
-    set_span_attr('declarai.cache.file_id', file_id)
-    set_span_attr('declarai.cache.artifact', artifact)
-    r = _get_redis()
-    if not r:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', 'redis-unavailable')
-        return False
-    try:
-        r.delete(_key(file_id, artifact))
-        set_span_attr('declarai.cache.ok', True)
-        return True
-    except Exception as exc:
-        set_span_attr('declarai.cache.ok', False)
-        set_span_attr('declarai.cache.reason', str(exc)[:200])
-        logger.warning("cache_delete failed (%s/%s): %s", file_id, artifact, exc)
-        return False
+    with span_timer('declarai.cache'):
+        set_span_attr('declarai.cache.file_id', file_id)
+        set_span_attr('declarai.cache.artifact', artifact)
+        r = _get_redis()
+        if not r:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', 'redis-unavailable')
+            return False
+        try:
+            r.delete(_key(file_id, artifact))
+            set_span_attr('declarai.cache.ok', True)
+            return True
+        except Exception as exc:
+            set_span_attr('declarai.cache.ok', False)
+            set_span_attr('declarai.cache.reason', str(exc)[:200])
+            logger.warning("cache_delete failed (%s/%s): %s", file_id, artifact, exc)
+            return False
 
 
-@prometa_tool(name="redis-list")
+@child_only_tool(name="redis-list")
 def cache_list_artifacts(file_id: int) -> list[str]:
     """List all cached artifact types for a given file_id.
 
-    Emits a ``redis-list`` span with attributes:
+    Emits a ``redis-list`` child span only when called inside an
+    active parent workflow.  The ``/api/ai/cache_status/`` REST
+    endpoint invokes this standalone and therefore produces no trace.
+    Span attributes when emitted:
       - declarai.cache.file_id     pipeline file id
       - declarai.cache.prefix      key prefix scanned
       - declarai.cache.key_count   number of matching keys
       - declarai.cache.keys        matching artifact names (comma separated)
+      - declarai.cache.elapsed_us  elapsed time in microseconds
+      - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
-    _stamp_session(file_id)
-    set_span_attr('declarai.cache.file_id', file_id)
-    prefix = f"ai:pipeline:{file_id}:"
-    set_span_attr('declarai.cache.prefix', prefix)
-    r = _get_redis()
-    if not r:
-        set_span_attr('declarai.cache.key_count', 0)
-        set_span_attr('declarai.cache.reason', 'redis-unavailable')
-        return []
-    try:
-        keys = r.keys(f"{prefix}*")
-        artifacts = [k.replace(prefix, '') for k in keys]
-        set_span_attr('declarai.cache.key_count', len(artifacts))
-        set_span_attr('declarai.cache.keys', ','.join(artifacts))
-        return artifacts
-    except Exception as exc:
-        set_span_attr('declarai.cache.key_count', 0)
-        set_span_attr('declarai.cache.reason', str(exc)[:200])
-        logger.warning("cache_list_artifacts failed (file_id=%s): %s", file_id, exc)
-        return []
+    with span_timer('declarai.cache'):
+        set_span_attr('declarai.cache.file_id', file_id)
+        prefix = f"ai:pipeline:{file_id}:"
+        set_span_attr('declarai.cache.prefix', prefix)
+        r = _get_redis()
+        if not r:
+            set_span_attr('declarai.cache.key_count', 0)
+            set_span_attr('declarai.cache.reason', 'redis-unavailable')
+            return []
+        try:
+            keys = r.keys(f"{prefix}*")
+            artifacts = [k.replace(prefix, '') for k in keys]
+            set_span_attr('declarai.cache.key_count', len(artifacts))
+            set_span_attr('declarai.cache.keys', ','.join(artifacts))
+            return artifacts
+        except Exception as exc:
+            set_span_attr('declarai.cache.key_count', 0)
+            set_span_attr('declarai.cache.reason', str(exc)[:200])
+            logger.warning("cache_list_artifacts failed (file_id=%s): %s", file_id, exc)
+            return []
 
 
 # ---------------------------------------------------------------------------

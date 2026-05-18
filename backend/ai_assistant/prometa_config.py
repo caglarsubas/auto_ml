@@ -19,6 +19,8 @@ Configuration via environment variables:
 import os
 import functools
 import logging
+import time as _time
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,63 @@ agent = _make_lazy_decorator('agent')
 tool = _make_lazy_decorator('tool')
 
 
+def has_active_span() -> bool:
+    """Return True if there is currently an active Prometa span in context.
+
+    Used by ``child_only_tool`` to decide whether to emit a span at all.
+    When called outside any workflow/tool/agent (e.g. from a REST endpoint
+    that doesn't wrap itself in ``@workflow``), this returns False and
+    callers should run their work without creating a new root trace.
+
+    Failure modes return False (treat as no parent):
+      * Prometa SDK not installed (test env, dev box without endpoint)
+      * Prometa not yet initialized (no chat turn has run since boot)
+      * ``current_span()`` raised (defensive)
+    """
+    try:
+        from prometa._context import current_span
+        return current_span() is not None
+    except Exception:
+        return False
+
+
+def child_only_tool(name: str = None, **kwargs):
+    """Decorator: wrap a function as a Prometa tool only when a parent
+    span is already active. Without a parent the function runs plain,
+    so it does NOT appear as a standalone root trace in Trace Explorer.
+
+    Use for infrastructure helpers (Redis ops, etc.) that are useful to
+    trace as children of a user-facing workflow (``declarai-chat``,
+    ``declarai-action``) but produce noise traces when invoked from
+    standalone REST endpoints (``/api/ai/cache_push/``), background
+    DB-update hooks (``declaration/views.py``), or ad-hoc shell scripts.
+
+    Composition: the function body is still free to call
+    ``set_span_attr()``; those calls become no-ops when no span is
+    active in production but are still captured by test fixtures that
+    monkeypatch ``set_span_attr`` directly — so existing tests continue
+    to work without modification.
+
+    Marks the wrapper with ``_child_only=True`` so structural tests
+    can verify the decorator is in place without invoking the SDK.
+    """
+    def decorator(fn):
+        # Build the lazily-traced variant once; we'll choose between
+        # it and the plain function at every call based on context.
+        traced = tool(name=name, **kwargs)(fn)
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kw):
+            if has_active_span():
+                return traced(*args, **kw)
+            return fn(*args, **kw)
+
+        wrapper._child_only = True
+        wrapper._tool_name = name
+        return wrapper
+    return decorator
+
+
 def set_span_attr(key: str, value) -> None:
     """Set an attribute on the current Prometa span (no-op if SDK unavailable)."""
     try:
@@ -144,6 +203,44 @@ def set_span_attr(key: str, value) -> None:
             span.attributes[key] = value
     except Exception:
         pass
+
+
+def stamp_elapsed(prefix: str, t0_ns: int) -> int:
+    """Stamp ``<prefix>.elapsed_us`` and ``<prefix>.elapsed_ms`` on the
+    current span using a previously captured ``time.perf_counter_ns()``
+    reading.
+
+    Redis operations on a local docker network typically complete in
+    100-500µs which the Prometa UI rounds to ``0ms`` in the waterfall bar.
+    Stamping the elapsed time as an attribute guarantees the real
+    duration is always visible in the span detail panel and queryable
+    from Trace Explorer.
+
+    Returns the elapsed nanoseconds for the caller's convenience.
+    """
+    elapsed_ns = _time.perf_counter_ns() - t0_ns
+    set_span_attr(f'{prefix}.elapsed_us', elapsed_ns // 1000)
+    set_span_attr(f'{prefix}.elapsed_ms', round(elapsed_ns / 1_000_000.0, 3))
+    return elapsed_ns
+
+
+@contextmanager
+def span_timer(prefix: str):
+    """Context manager that stamps ``<prefix>.elapsed_{us,ms}`` on exit.
+
+    Use inside a ``@prometa_tool``-decorated function so the elapsed time
+    lands on the SDK's active span::
+
+        @prometa_tool(name="redis-get")
+        def cache_get(file_id, artifact):
+            with span_timer('declarai.cache'):
+                ...  # real work
+    """
+    t0 = _time.perf_counter_ns()
+    try:
+        yield
+    finally:
+        stamp_elapsed(prefix, t0)
 
 
 def set_session_id(session_id: str) -> None:

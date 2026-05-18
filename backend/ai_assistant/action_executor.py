@@ -557,6 +557,35 @@ def update_config(file_id: int, payload: dict) -> dict:
                 applied.append({'key': key, 'column': col, 'value': val})
             else:
                 errors.append({'key': key, 'column': col, 'error': 'Invalid column or value'})
+        elif key == 'feature_usage':
+            # v2.25.0+: mirrors the existing manual UI dropdown in the
+            # Selected Features table.  Setting feature_usage='drop' on
+            # a feature is the canonical way for the AI to exclude it
+            # from SFS without physically removing the column from the
+            # dataset (which would invalidate cached modeling artifacts
+            # like selected_features, shap_details, encoding_plan).
+            # The frontend's existing SFS start flow already passes
+            # `featureUsage['col']==='drop'` features as `excluded_features`
+            # to the SFS engine.
+            col = upd.get('column', '')
+            val = upd.get('value', '')
+            reason = upd.get('reason', '')
+            if not col or not isinstance(col, str):
+                errors.append({'key': key, 'column': col, 'error': 'column is required for feature_usage'})
+                continue
+            if val not in ('keep', 'drop'):
+                errors.append({'key': key, 'column': col, 'error': "feature_usage value must be 'keep' or 'drop'"})
+                continue
+            # Don't validate column against valid_cols here — feature_usage
+            # targets the selected_features list, which may include
+            # encoded columns (e.g. one-hot expansions) that don't
+            # exist as raw dataframe columns.  Validation happens at
+            # SFS-start time when excluded_features is intersected
+            # with the actual feature matrix.
+            entry = {'key': key, 'column': col, 'value': val}
+            if reason:
+                entry['reason'] = str(reason)
+            applied.append(entry)
         elif key in ('preprocessing_options', 'split_strategy', 'split_date_column',
                      'split_cutoff', 'encoding_strategy', 'algorithm'):
             applied.append({'key': key, 'value': upd.get('value')})
@@ -567,6 +596,550 @@ def update_config(file_id: int, payload: dict) -> dict:
     return {
         'status': 'success' if applied else 'error',
         'action_type': 'update_config',
+        'description': description,
+        'applied': applied,
+        'errors': errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: start_sfs — initiate Sequential Feature Selection
+# ---------------------------------------------------------------------------
+#
+# Procedural context: SFS (sequential feature selection) is the
+# pipeline step that explores feature-subset performance by either
+# adding (forward) or removing (backward) features one at a time and
+# tracking CV ROC-AUC/PR-AUC at each step.  The pipeline UI exposes a
+# "Start SFS" button alongside form fields for methods, stopping
+# criteria, n_jobs, top_k, and a per-feature "Keep / Drop" dropdown.
+#
+# Before v2.25.0 the AI assistant had no way to actually KICK OFF SFS
+# — it could only TALK about doing it.  When the user asked "drop
+# Var_3 due to VIF and start SFS" the assistant correctly proposed
+# the drop via execute_code but then asserted "SFS Status: Initiated"
+# as plain text, with nothing actually starting.  This action closes
+# that gap.
+#
+# Validation rules
+# ----------------
+# * `methods` must be a non-empty list whose elements are drawn from
+#   {'forward', 'backward'}.  Duplicates are deduplicated.
+# * `stopping_criteria.metrics` must be a non-empty list of
+#   {metric, pct_change} entries; metric ∈ {'roc_auc', 'pr_auc'}.
+# * `stopping_criteria.min_features` / `max_features` must be
+#   positive ints when present.
+# * `excluded_features` (optional) — list of column names the AI
+#   wants the SFS engine to skip.  Matches the existing
+#   `featureUsage[col] === 'drop'` UI mechanism.
+# * `n_jobs` / `top_k` — positive ints, clamped to sane bounds.
+#
+# Returns the validated config in `applied` for the frontend chat
+# panel to forward via `sfsStartRequests$` to the modeling component,
+# which mirrors the user clicking "Start SFS" with these settings.
+
+@tool(name="start-sfs")
+def start_sfs(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast an SFS-start request.
+
+    payload: {
+        "methods": ["backward"],        # or ["forward"] or ["forward", "backward"]
+        "stopping_criteria": {
+            "metrics": [{"metric": "roc_auc", "pct_change": 1.0}],
+            "min_features": 5,
+            "max_features": 15
+        },
+        "excluded_features": ["Var_3"], # optional — features to skip
+        "n_jobs": 3,
+        "top_k": 5,
+        "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"
+    }
+    """
+    description = payload.get('description', '')
+
+    # ── methods ────────────────────────────────────────────────────
+    methods_raw = payload.get('methods', [])
+    if not isinstance(methods_raw, list) or not methods_raw:
+        return {'status': 'error', 'error': 'methods must be a non-empty list (forward|backward)'}
+    methods: list = []
+    bad_methods: list = []
+    seen = set()
+    for m in methods_raw:
+        if not isinstance(m, str):
+            bad_methods.append(repr(m))
+            continue
+        ml = m.strip().lower()
+        if ml not in ('forward', 'backward'):
+            bad_methods.append(m)
+            continue
+        if ml in seen:
+            continue
+        seen.add(ml)
+        methods.append(ml)
+    if not methods:
+        return {
+            'status': 'error',
+            'error': f'methods must contain at least one of forward/backward (got: {bad_methods})',
+        }
+
+    # ── stopping_criteria ──────────────────────────────────────────
+    sc_in = payload.get('stopping_criteria') or {}
+    if not isinstance(sc_in, dict):
+        return {'status': 'error', 'error': 'stopping_criteria must be an object'}
+    metrics_in = sc_in.get('metrics', [])
+    if not isinstance(metrics_in, list) or not metrics_in:
+        return {
+            'status': 'error',
+            'error': 'stopping_criteria.metrics must be a non-empty list of {metric, pct_change}',
+        }
+    metrics: list = []
+    for mc in metrics_in:
+        if not isinstance(mc, dict):
+            continue
+        metric_name = mc.get('metric', '')
+        if metric_name not in ('roc_auc', 'pr_auc'):
+            continue
+        try:
+            pct = float(mc.get('pct_change', 0.0))
+        except (TypeError, ValueError):
+            pct = 0.0
+        metrics.append({'metric': metric_name, 'pct_change': pct})
+    if not metrics:
+        return {
+            'status': 'error',
+            'error': "stopping_criteria.metrics entries must have metric ∈ {'roc_auc','pr_auc'}",
+        }
+
+    def _pos_int(v, default):
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            return default
+        return iv if iv > 0 else default
+
+    stopping_criteria = {
+        'metrics': metrics,
+        'min_features': _pos_int(sc_in.get('min_features', 5), 5),
+        'max_features': _pos_int(sc_in.get('max_features', 15), 15),
+    }
+
+    # ── excluded_features ──────────────────────────────────────────
+    excluded_raw = payload.get('excluded_features', []) or []
+    if not isinstance(excluded_raw, list):
+        excluded = []
+    else:
+        excluded = [str(c) for c in excluded_raw if isinstance(c, str) and c.strip()]
+
+    # ── n_jobs / top_k (clamped) ────────────────────────────────────
+    n_jobs = max(1, min(_pos_int(payload.get('n_jobs', 3), 3), 16))
+    top_k = max(1, min(_pos_int(payload.get('top_k', 5), 5), 50))
+
+    return {
+        'status': 'success',
+        'action_type': 'start_sfs',
+        'description': description,
+        'applied': {
+            'methods': methods,
+            'stopping_criteria': stopping_criteria,
+            'excluded_features': excluded,
+            'n_jobs': n_jobs,
+            'top_k': top_k,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: start_data_purifier — kick off preprocessing/purifier pipeline
+# ---------------------------------------------------------------------------
+#
+# Procedural context: the data purifier is the FIRST run-step in the
+# pipeline.  It applies the user's selected purifier options (e.g.
+# missing-value imputation, low-variance pruning, outlier cleaning)
+# and the chosen train/test split (random or OOT) to produce the
+# `processed_file` that all downstream steps (encoding, modeling,
+# SFS) consume.  The pipeline UI exposes a "Run Preprocessing" button
+# in the model-development component along with checkboxes for
+# purifier options and form fields for split config.
+#
+# Before v2.26.0 the AI assistant could only DISCUSS preprocessing —
+# it had no way to actually fire `runPreprocessing()`.  When the
+# user asked "run preprocessing" the assistant typically said
+# something like "Please click the Run Preprocessing button".
+# This action closes that gap.
+#
+# Validation rules
+# ----------------
+# * `purifier_options` (optional) — list of integer option IDs (1–34)
+#   matching the selectable preprocessing checkboxes.  Invalid IDs
+#   are dropped silently; an empty/missing list means "use whatever
+#   is currently selected in the UI" (the SharedService cache).
+# * `split` (optional) — dict with:
+#     - `strategy`: 'random' or 'oot'
+#     - `date_column`: required when strategy='oot'
+#     - `cutoff`: optional ISO datetime when strategy='oot' + cutoff mode
+#     - `percent`: optional 0<x<100 percentage for OOS / OOT-percent mode
+#   Missing/invalid → defaults to {'strategy':'random','percent':25}.
+#
+# Returns the validated config in `applied` for the frontend chat
+# panel to forward via `dataPurifierStartRequests$` to the
+# model-development component, which mirrors the user clicking
+# "Run Preprocessing" with these settings.
+
+@tool(name="start-data-purifier")
+def start_data_purifier(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a data-purifier (preprocessing) start request.
+
+    payload: {
+        "purifier_options": [1, 2, 5, 7],  # optional — checkbox IDs
+        "split": {
+            "strategy": "random",          # or "oot"
+            "percent": 25                  # OOS percentage
+        },
+        "description": "Run preprocessing with default purifier options"
+    }
+    """
+    description = payload.get('description', '')
+
+    # ── purifier_options ───────────────────────────────────────────
+    raw_opts = payload.get('purifier_options', None)
+    purifier_options: list = []
+    if raw_opts is not None:
+        if not isinstance(raw_opts, list):
+            return {'status': 'error', 'error': 'purifier_options must be a list of integer option IDs'}
+        for v in raw_opts:
+            try:
+                iv = int(v)
+            except (TypeError, ValueError):
+                continue
+            # The pipeline UI exposes options 1..34 (matching
+            # purifierOptions in model-development.component).  Any
+            # ID outside that range is dropped.
+            if 1 <= iv <= 34:
+                purifier_options.append(iv)
+        # Dedup while preserving order — the AI may double-list
+        # options when chaining suggestions.
+        seen = set()
+        deduped = []
+        for iv in purifier_options:
+            if iv in seen:
+                continue
+            seen.add(iv)
+            deduped.append(iv)
+        purifier_options = deduped
+
+    # ── split ──────────────────────────────────────────────────────
+    split_in = payload.get('split', None)
+    if split_in is None:
+        split = None  # frontend will fall back to its current form values
+    elif not isinstance(split_in, dict):
+        return {'status': 'error', 'error': 'split must be an object'}
+    else:
+        strategy = split_in.get('strategy', 'random')
+        if strategy not in ('random', 'oot'):
+            return {
+                'status': 'error',
+                'error': "split.strategy must be 'random' or 'oot'",
+            }
+        split = {'strategy': strategy}
+
+        # percent is optional; if present it must be 0<pct<100.
+        pct = split_in.get('percent', None)
+        if pct is not None:
+            try:
+                pct_f = float(pct)
+            except (TypeError, ValueError):
+                pct_f = None
+            if pct_f is not None and 0 < pct_f < 100:
+                split['percent'] = pct_f
+
+        if strategy == 'oot':
+            date_col = split_in.get('date_column', '')
+            if not isinstance(date_col, str) or not date_col.strip():
+                return {
+                    'status': 'error',
+                    'error': "split.date_column is required when split.strategy='oot'",
+                }
+            split['date_column'] = date_col.strip()
+            cutoff = split_in.get('cutoff', None)
+            if cutoff is not None:
+                if not isinstance(cutoff, str) or not cutoff.strip():
+                    return {
+                        'status': 'error',
+                        'error': 'split.cutoff must be an ISO datetime string',
+                    }
+                split['cutoff'] = cutoff.strip()
+
+    return {
+        'status': 'success',
+        'action_type': 'start_data_purifier',
+        'description': description,
+        'applied': {
+            'purifier_options': purifier_options,
+            'split': split,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: apply_encoding — apply the encoding plan and produce encoded file
+# ---------------------------------------------------------------------------
+#
+# Procedural context: after preprocessing produces the processed
+# file and the user reviews / edits the encoding plan (one row per
+# feature: nominal/ordinal, fallback strategy, ranking if ordinal),
+# the "Apply Encoding" button calls
+# `dataService.applyEncoding(file_id, processed_file, plan,
+# use_native)`.  This produces the encoded file that modeling
+# consumes.
+#
+# Pre-conditions the AI must check before firing:
+# * `processed_file` exists (data purifier has run).
+# * Encoding plan has been analyzed (encodingPlan length > 0).
+# * Every feature with `needs_ranking=true` has a non-empty
+#   `ranking` array — otherwise encoding silently downgrades to
+#   label_encoding and the ordinal signal is lost.  The AI can
+#   verify this via its `get_encoding_plan` tool.
+#
+# Validation rules
+# ----------------
+# * `use_native` (optional) — boolean.  Defaults to true (use the
+#   native encoding library; false = sklearn fallback).
+
+@tool(name="apply-encoding")
+def apply_encoding(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast an apply-encoding request.
+
+    payload: {
+        "use_native": true,                       # optional, default true
+        "description": "Apply encoding plan with native library"
+    }
+    """
+    description = payload.get('description', '')
+    raw_use_native = payload.get('use_native', True)
+    if not isinstance(raw_use_native, bool):
+        # Coerce truthy values to bool — the LLM occasionally
+        # passes "true"/"false" strings.
+        if isinstance(raw_use_native, str):
+            use_native = raw_use_native.strip().lower() in ('true', '1', 'yes')
+        else:
+            use_native = bool(raw_use_native)
+    else:
+        use_native = raw_use_native
+
+    return {
+        'status': 'success',
+        'action_type': 'apply_encoding',
+        'description': description,
+        'applied': {
+            'use_native': use_native,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: start_modeling — kick off the modeling step (train + evaluate)
+# ---------------------------------------------------------------------------
+#
+# Procedural context: after preprocessing + encoding, the modeling
+# step trains the chosen algorithm (LightGBM, XGBoost, CatBoost, etc.)
+# on the encoded file and produces the modeling artifacts (selected
+# features, SHAP details, ROC-AUC/PR-AUC metrics, training data
+# snapshot for SFS).  The pipeline UI exposes a "Start Modeling"
+# button in the modeling component (the bottom-left button in the
+# user's screenshot that they could not get the AI to press).
+#
+# Before v2.26.0 the AI explicitly told users "I cannot 'start'
+# the modeling engine directly (that is a button in your UI)".
+# This action closes that gap — it's the dedicated path for the
+# AI to fire the modeling step, mirroring a manual click exactly.
+#
+# Pre-conditions the AI must check before firing:
+# * `currentFileId` not null (file uploaded).
+# * `processedFilePath` not null (data purifier has run).
+# * `availableAlgorithms` empty OR `selectedAlgorithm` chosen.
+#
+# Validation rules
+# ----------------
+# * `algorithm` (optional) — string name.  If provided, the frontend
+#   sets `selectedAlgorithm` to it before firing; otherwise the
+#   current form value is used.  We don't validate against a hard
+#   list here because the algorithm catalog is dynamic (loaded from
+#   the backend's `/algorithms/` endpoint at component init).
+# * `encoding_use_native` (optional) — boolean.  Mirrors the same
+#   field used by apply_encoding, since modeling can re-apply
+#   encoding internally if needed.
+
+@tool(name="start-modeling")
+def start_modeling(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a modeling-start request.
+
+    payload: {
+        "algorithm": "lightgbm",                  # optional
+        "encoding_use_native": true,              # optional, default true
+        "description": "Start modeling with LightGBM"
+    }
+    """
+    description = payload.get('description', '')
+
+    raw_algo = payload.get('algorithm', None)
+    if raw_algo is not None and (not isinstance(raw_algo, str) or not raw_algo.strip()):
+        return {
+            'status': 'error',
+            'error': 'algorithm must be a non-empty string when provided',
+        }
+    algorithm = raw_algo.strip() if isinstance(raw_algo, str) else None
+
+    raw_use_native = payload.get('encoding_use_native', True)
+    if not isinstance(raw_use_native, bool):
+        if isinstance(raw_use_native, str):
+            use_native = raw_use_native.strip().lower() in ('true', '1', 'yes')
+        else:
+            use_native = bool(raw_use_native)
+    else:
+        use_native = raw_use_native
+
+    return {
+        'status': 'success',
+        'action_type': 'start_modeling',
+        'description': description,
+        'applied': {
+            'algorithm': algorithm,
+            'encoding_use_native': use_native,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: set_ordinal_ranking — record the rank order for ordinal features
+# ---------------------------------------------------------------------------
+#
+# Procedural context: when the AI flips a feature's Level_of_Measurement to
+# 'ordinal' via `update_metadata`, the encoding plan's `needs_ranking` flag
+# turns true for that feature and the modeling UI starts rendering a
+# "Set Ranking" button.  Without a ranking the encoding step silently
+# downgrades to label_encoding (see encoding/encoding_utils._apply_fallback)
+# and the ordinal signal is lost — the model can no longer learn the
+# monotonic relationship the analyst intended.
+#
+# This action is the explicit path for the AI to FOLLOW THROUGH on its own
+# `LoM = ordinal` change: it provides the ranked list of distinct category
+# values for one or more features in a single call.  The frontend mirrors
+# the ranking onto the matching encoding plan entry (entry.ranking) and
+# the cached `encoding_plan` artifact is updated so any subsequent
+# `get_encoding_plan` tool call by the AI sees its own work.
+
+@tool(name="set-ordinal-ranking")
+def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
+    """
+    Record the ordinal ranking (rank order of distinct category values) for
+    one or more ordinal-labelled features.
+
+    payload: {
+        "updates": [
+            {
+                "column": "Var_36",
+                "ranking": ["0", "1", "2", "3", "8", "L", "Others"]
+            },
+            {
+                "column": "Var_2",
+                "ranking": ["A", "P", "R"]
+            }
+        ],
+        "description": "Reflect risk severity progression for status codes."
+    }
+
+    Validation rules
+    ----------------
+    * `updates` must be a non-empty list.
+    * each entry must have a non-empty `column` (str) and a non-empty
+      `ranking` (list of >= 2 unique values).
+    * duplicate values inside a ranking are rejected — the rank order
+      defines a strict ordinal scale, so each value must appear once.
+    * values are coerced to strings to match the encoding plan's
+      `unique_values` shape (encoding_utils._compute_stats stores them
+      as `[str(v) for v in unique_values[:50]]`).
+    * column does NOT need to exist in the current dataframe — the AI may
+      legitimately set rankings for features that will be created later
+      (e.g. immediately after `execute_code` adds a column).  Validation
+      against actual unique values happens at encoding-apply time.
+
+    On success the cached encoding_plan artifact is patched in place so
+    the AI's next `get_encoding_plan` call sees the ranking it just set.
+    """
+    updates = payload.get('updates', [])
+    description = payload.get('description', '')
+    if not isinstance(updates, list) or not updates:
+        return {'status': 'error', 'error': 'No ranking updates provided'}
+
+    applied: list = []
+    errors: list = []
+
+    for upd in updates:
+        if not isinstance(upd, dict):
+            errors.append({'column': '', 'error': 'update entry must be an object'})
+            continue
+        col = upd.get('column', '')
+        ranking = upd.get('ranking', None)
+        if not col or not isinstance(col, str):
+            errors.append({'column': col, 'error': 'column is required and must be a string'})
+            continue
+        if not isinstance(ranking, list) or len(ranking) < 2:
+            errors.append({
+                'column': col,
+                'error': 'ranking must be a list of at least 2 distinct values',
+            })
+            continue
+        ranking_str = [str(v) for v in ranking]
+        if len(set(ranking_str)) != len(ranking_str):
+            errors.append({
+                'column': col,
+                'error': 'ranking contains duplicate values — each category must appear exactly once',
+            })
+            continue
+        applied.append({'column': col, 'ranking': ranking_str})
+
+    # Patch the cached encoding_plan artifact so the AI's NEXT tool call
+    # sees the ranking it just set.  Best-effort: if Redis is unavailable
+    # the frontend still applies the change in-memory via the action
+    # response, and the cache simply lags one chat turn until something
+    # else refreshes it.
+    if applied:
+        try:
+            from .cache import cache_get, cache_put, ARTIFACT_ENCODING_PLAN
+            cached_plan = cache_get(file_id, ARTIFACT_ENCODING_PLAN)
+            if cached_plan:
+                plan_list = cached_plan if isinstance(cached_plan, list) else cached_plan.get('plan', [])
+                if isinstance(plan_list, list) and plan_list:
+                    rank_by_col = {u['column']: u['ranking'] for u in applied}
+                    mutated = False
+                    for entry in plan_list:
+                        if not isinstance(entry, dict):
+                            continue
+                        feat = entry.get('feature')
+                        if isinstance(feat, str) and feat in rank_by_col:
+                            entry['ranking'] = list(rank_by_col[feat])
+                            mutated = True
+                    if mutated:
+                        if isinstance(cached_plan, list):
+                            cache_put(file_id, ARTIFACT_ENCODING_PLAN, plan_list)
+                        else:
+                            cached_plan['plan'] = plan_list
+                            cache_put(file_id, ARTIFACT_ENCODING_PLAN, cached_plan)
+        except Exception:
+            # Cache write-through is best-effort; never fail the action
+            # because Redis hiccupped.  The frontend has the patch.
+            pass
+
+    return {
+        'status': 'success' if applied else 'error',
+        'action_type': 'set_ordinal_ranking',
         'description': description,
         'applied': applied,
         'errors': errors,
@@ -621,6 +1194,11 @@ HANDLERS = {
     'execute_code': execute_code,
     'update_metadata': update_metadata,
     'update_config': update_config,
+    'set_ordinal_ranking': set_ordinal_ranking,
+    'start_sfs': start_sfs,
+    'start_data_purifier': start_data_purifier,
+    'apply_encoding': apply_encoding,
+    'start_modeling': start_modeling,
     'update_notes': update_notes,
 }
 
