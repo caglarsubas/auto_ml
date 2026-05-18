@@ -1777,6 +1777,186 @@ class TestDispatchAction:
         from ai_assistant.action_executor import HANDLERS, start_data_purifier
         assert HANDLERS.get('start_data_purifier') is start_data_purifier
 
+    # ── update_purifier_selection (v2.28.0+) ────────────────────────
+    # The "preview" sibling of start_data_purifier — edits the
+    # Data-Purifier checkbox UI WITHOUT firing the run.  Two payload
+    # forms (wholesale + diff), strict XOR between them, group-conflict
+    # validation on wholesale, add/remove disjointness on diff, no-op
+    # fallthroughs for empty payloads.  These tests script every
+    # branch in the handler so a future refactor cannot silently regress
+    # the "review-then-run" UX.
+
+    def test_update_purifier_selection_wholesale_form_round_trips(self):
+        # The screenshot scenario: AI consolidates IDs 11+17 into ID 23.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 3, 4, 7, 23, 28, 32],
+            'description': 'Consolidate IDs 11+17 into ID 23',
+        })
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'update_purifier_selection'
+        applied = result['applied']
+        assert applied['form'] == 'wholesale'
+        assert applied['purifier_options'] == [1, 2, 3, 4, 7, 23, 28, 32]
+        assert applied['add'] == []
+        assert applied['remove'] == []
+        assert result['description'] == 'Consolidate IDs 11+17 into ID 23'
+
+    def test_update_purifier_selection_wholesale_empty_clears_selection(self):
+        # Empty wholesale list is a legitimate "clear everything" use case.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [],
+            'description': 'Clear all purifier options',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'wholesale'
+        assert result['applied']['purifier_options'] == []
+
+    def test_update_purifier_selection_wholesale_drops_invalid_ids(self):
+        # IDs outside 1..34 are dropped silently, dedup preserved.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 1, 99, -3, 'foo', 23, 0, 34],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['purifier_options'] == [1, 23, 34]
+
+    def test_update_purifier_selection_wholesale_group_conflict_errors(self):
+        # IDs 11 and 12 are both in sparsity_drop_group — UI normally
+        # enforces single-select.  Backend must reject so the AI can
+        # fix on the next turn instead of producing a silently malformed
+        # selection.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 11, 12, 23],
+        })
+        assert result['status'] == 'error'
+        assert 'Group conflict' in result['error']
+        # Error message must name the conflicting IDs so the AI can
+        # pick which to keep.
+        assert '11' in result['error']
+        assert '12' in result['error']
+        assert 'sparsity_drop_group' in result['error']
+
+    def test_update_purifier_selection_wholesale_no_conflict_across_groups(self):
+        # IDs 11 (sparsity_drop_group), 17 (missing_drop_group), 23
+        # (combined_drop_group) are in DIFFERENT groups — no conflict
+        # even though the user wouldn't normally select all three.
+        # (This particular combo is what the screenshot AI was warning
+        # against — but it's not a backend-rejectable error, it's a
+        # design recommendation.)
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [11, 17, 23],
+        })
+        assert result['status'] == 'success'
+        assert sorted(result['applied']['purifier_options']) == [11, 17, 23]
+
+    def test_update_purifier_selection_wholesale_no_conflict_for_standalone(self):
+        # IDs 1-4 have group=None (standalone) — multiple selection is
+        # never a conflict for them.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 3, 4],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['purifier_options'] == [1, 2, 3, 4]
+
+    def test_update_purifier_selection_diff_form_round_trips(self):
+        # The diff-form equivalent of the screenshot scenario.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [23],
+            'remove': [11, 17],
+            'description': 'Replace 11+17 with combined-drop ID 23',
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['form'] == 'diff'
+        assert applied['purifier_options'] is None  # diff form omits this
+        assert applied['add'] == [23]
+        assert applied['remove'] == [11, 17]
+
+    def test_update_purifier_selection_diff_add_only(self):
+        # "Just turn ON ID 7" — no removals.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [7],
+            'description': 'Add 0.85 corr-drop',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'diff'
+        assert result['applied']['add'] == [7]
+        assert result['applied']['remove'] == []
+
+    def test_update_purifier_selection_diff_remove_only(self):
+        # "Just turn OFF ID 7" — no additions.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'remove': [7],
+            'description': 'Drop correlation pruning',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'diff'
+        assert result['applied']['add'] == []
+        assert result['applied']['remove'] == [7]
+
+    def test_update_purifier_selection_diff_conflict_rejected(self):
+        # Same ID in add and remove is incoherent — must error so the
+        # AI fixes its diff on the next turn.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [7, 23],
+            'remove': [11, 23, 17],
+        })
+        assert result['status'] == 'error'
+        assert '23' in result['error']
+        # Error wording is stable so the AI can pattern-match on it.
+        assert 'both' in result['error'].lower()
+
+    def test_update_purifier_selection_rejects_both_forms_simultaneously(self):
+        # Mixing wholesale and diff in one payload is incoherent.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 23],
+            'add': [7],
+        })
+        assert result['status'] == 'error'
+        assert 'exactly one' in result['error'].lower()
+
+    def test_update_purifier_selection_description_only_is_noop(self):
+        # Neither form provided — accept as a no-op (not an error).
+        # The frontend handler will render the chat message but skip
+        # the broadcast so the form doesn't flash.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'description': 'Thinking about it…',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'noop'
+        assert result['applied']['purifier_options'] is None
+
+    def test_update_purifier_selection_self_cancelling_diff_is_noop(self):
+        # Empty add + empty remove is a self-cancelling diff — accept
+        # but mark as noop.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [],
+            'remove': [],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'noop'
+
+    def test_update_purifier_selection_rejects_non_list_wholesale(self):
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': 'all',
+        })
+        assert result['status'] == 'error'
+        assert 'list' in result['error'].lower()
+
+    def test_update_purifier_selection_rejects_non_list_diff(self):
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': 23,  # not a list
+        })
+        assert result['status'] == 'error'
+        assert 'list' in result['error'].lower()
+
+    def test_update_purifier_selection_registered_in_handlers(self):
+        # Defense-in-depth: protect the HANDLERS dict entry from
+        # accidental delete on a future refactor.  Without this, a
+        # bad refactor would route update_purifier_selection requests
+        # to "Unknown action type" and silently break the preview UX.
+        from ai_assistant.action_executor import HANDLERS, update_purifier_selection
+        assert HANDLERS.get('update_purifier_selection') is update_purifier_selection
+
     # ── apply_encoding ──────────────────────────────────────────────
     def test_apply_encoding_routes_correctly_default_payload(self):
         # Empty payload → use_native defaults to True.

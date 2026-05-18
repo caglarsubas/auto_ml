@@ -337,6 +337,53 @@ Rules for start_data_purifier:
 • Don't auto-fire after every config tweak — only when the user explicitly
   asks "run preprocessing" / "start the purifier" / "preprocess the data".
 
+─── ACTION TYPE 6b: update_purifier_selection ───
+EDIT the Data-Purifier checkbox UI WITHOUT running the pipeline.  Use this
+when the user is THINKING about, REVIEWING, or REORGANIZING the purifier
+setup — when they want to see the new checkbox state before deciding to
+run.  Compared to start_data_purifier, this action is the "preview" sibling:
+patch the form, let the user click Run Preprocessing themselves.
+
+Two payload forms — pick whichever is more natural for the user's intent:
+
+WHOLESALE form (you know the exact final option set):
+<<<ACTION:update_purifier_selection>>>
+{"purifier_options": [1, 2, 3, 4, 7, 23, 28, 32], "description": "Consolidate IDs 11+17 into ID 23 (mathematically equivalent, prevents threshold drift)"}
+<<<END_ACTION>>>
+
+DIFF form (incremental tweak — add and/or remove specific IDs):
+<<<ACTION:update_purifier_selection>>>
+{"add": [23], "remove": [11, 17], "description": "Replace separate sparsity (ID 11) + missing (ID 17) drops with combined-drop (ID 23) at the same 0.95 threshold"}
+<<<END_ACTION>>>
+
+Rules for update_purifier_selection:
+• Choose EXACTLY ONE form: `purifier_options` (wholesale) XOR `add`/`remove` (diff).
+  Mixing the two returns an error.
+• Group conflicts are validated on the wholesale form: only ONE member per
+  group (corr_drop / sparsity_drop / missing_drop / combined_drop /
+  outlier_num / outlier_cat) may be selected.  If you violate this you get
+  a structured error listing the conflicting group + IDs — fix it and
+  retry on the next turn.
+• `add`/`remove` may not name the same ID twice — that returns an error.
+• Empty wholesale list `[]` clears all selections (legitimate use case
+  when the user says "clear the purifier selection").
+• MAPPING USER INTENT: same rule as start_data_purifier — call
+  ``get_purifier_options`` FIRST when the user describes purifier behavior
+  in natural language, then emit with the catalog-authoritative IDs.
+
+WHEN TO USE update_purifier_selection vs start_data_purifier — DECISION RULE:
+  • User says "run preprocessing", "start the purifier", "preprocess the
+    data", "go ahead and run" → fire start_data_purifier (one-shot apply +
+    run).
+  • User says "change the options to…", "consolidate these steps",
+    "swap 11+17 for 23", "let's review the purifier setup", "tweak the
+    selection", "what if we add…", or you (the AI) are PROACTIVELY
+    proposing a checkbox change → fire update_purifier_selection.  The user
+    can then click Run themselves OR ask you to run it in the next turn.
+  • When in doubt, prefer update_purifier_selection — it is safer (no
+    surprise pipeline runs) and the user can always say "now run it"
+    in the next turn.
+
 ─── ACTION TYPE 7: apply_encoding ───
 Apply the encoding plan and produce the encoded file that modeling consumes.
 This is the dedicated path to fire the "Apply Encoding" button.  Encoding

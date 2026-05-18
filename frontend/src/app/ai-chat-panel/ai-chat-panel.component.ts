@@ -404,6 +404,58 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       }
       this.sharedService.triggerCheckpoint('ai_action_start_data_purifier');
 
+    } else if (actionType === 'update_purifier_selection') {
+      // v2.28.0+: the "preview" sibling of start_data_purifier.
+      // Edits the Data-Purifier checkbox UI WITHOUT firing the run.
+      // The user reviews the new selection in the form and clicks
+      // Run Preprocessing themselves (or asks the AI to run it in
+      // the next turn).
+      //
+      // Two payload forms supported (matches the backend handler):
+      //   • WHOLESALE: { form: 'wholesale', purifier_options: [..] }
+      //   • DIFF:      { form: 'diff', add: [..], remove: [..] }
+      //
+      // No-op form: { form: 'noop' } — the backend returns this
+      // when the AI emitted a description-only payload or a diff
+      // that cancels itself out.  We render a chat message but skip
+      // the broadcast so the form doesn't flash.
+      const applied = resp.applied || {};
+      const form = applied.form || 'noop';
+      const opts: number[] = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
+      const adds: number[] = Array.isArray(applied.add) ? applied.add : [];
+      const rems: number[] = Array.isArray(applied.remove) ? applied.remove : [];
+
+      let msg = `✏️ **Purifier selection updated.**`;
+      if (desc) msg += ` ${desc}`;
+      if (form === 'wholesale') {
+        msg += '\n\n- **New selection**: ' + (opts.length
+          ? opts.map((o: number) => `\`${o}\``).join(', ')
+          : '_(cleared)_');
+      } else if (form === 'diff') {
+        if (adds.length) msg += '\n- **Added**: ' + adds.map((o: number) => `\`${o}\``).join(', ');
+        if (rems.length) msg += '\n- **Removed**: ' + rems.map((o: number) => `\`${o}\``).join(', ');
+      } else {
+        msg += '\n\n_(no change applied — empty payload or self-cancelling diff)_';
+      }
+      msg += '\n\n👉 _Review the Data-Purifier checkboxes, then click_ **Run Preprocessing** _when ready (or ask me to run it)._';
+
+      this.actionSuccess = 'Purifier selection updated.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+
+      // Broadcast to the model-development subscriber.  The noop
+      // form is intentionally NOT broadcast — there is nothing for
+      // the form to patch.
+      if (form === 'wholesale' || form === 'diff') {
+        this.sharedService.emitPurifierSelectionUpdate({
+          form,
+          purifier_options: form === 'wholesale' ? opts : null,
+          add: adds,
+          remove: rems,
+          description: desc || undefined,
+        });
+      }
+      this.sharedService.triggerCheckpoint('ai_action_update_purifier_selection');
+
     } else if (actionType === 'apply_encoding') {
       // v2.26.0+: dedicated path for the AI to fire the
       // "Apply Encoding" button.  The component's current

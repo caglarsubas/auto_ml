@@ -701,6 +701,206 @@ describe('SharedService', () => {
     });
   });
 
+  // ── purifierSelectionUpdates (v2.28.0+) ───────────────────────────────
+  // AI's `update_purifier_selection` action — the "preview" sibling of
+  // start_data_purifier.  Broadcasts a UI-only checkbox change here;
+  // model-development subscribes and patches `selectedOptions` WITHOUT
+  // calling proceedFromPreprocessing().  Two payload forms (wholesale +
+  // diff) with strict per-form validation so a subscriber never sees an
+  // inconsistent shape.
+  describe('purifierSelectionUpdates', () => {
+    it('should not emit anything before any call', (done) => {
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should emit a valid wholesale-form request verbatim', (done) => {
+      const req = {
+        form: 'wholesale' as const,
+        purifier_options: [1, 2, 3, 4, 7, 23, 28, 32],
+        add: [],
+        remove: [],
+        description: 'Consolidate 11+17 into 23',
+      };
+      service.purifierSelectionUpdates$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitPurifierSelectionUpdate(req);
+    });
+
+    it('should accept wholesale-form with empty array (clear all)', (done) => {
+      const req = {
+        form: 'wholesale' as const,
+        purifier_options: [],
+        add: [],
+        remove: [],
+      };
+      service.purifierSelectionUpdates$.subscribe(received => {
+        expect(received.form).toBe('wholesale');
+        expect(received.purifier_options).toEqual([]);
+        done();
+      });
+      service.emitPurifierSelectionUpdate(req);
+    });
+
+    it('should emit a valid diff-form request verbatim', (done) => {
+      const req = {
+        form: 'diff' as const,
+        purifier_options: null,
+        add: [23],
+        remove: [11, 17],
+        description: 'Replace 11+17 with 23',
+      };
+      service.purifierSelectionUpdates$.subscribe(received => {
+        expect(received).toEqual(req);
+        done();
+      });
+      service.emitPurifierSelectionUpdate(req);
+    });
+
+    it('should reject wholesale request with non-array purifier_options', (done) => {
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: 'all' as any,
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject wholesale request with null purifier_options', (done) => {
+      // Wholesale REQUIRES an array (can be []) — null is reserved for
+      // the diff-form discriminator.  Mixing breaks the contract.
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: null as any,
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject diff request with non-null purifier_options', (done) => {
+      // Diff REQUIRES purifier_options=null — the discriminator
+      // contract is strict so a subscriber can never accidentally
+      // wholesale-replace on a diff broadcast.
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: [1, 2] as any,
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject unknown form values', (done) => {
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate({
+        form: 'noop' as any,
+        purifier_options: null,
+        add: [],
+        remove: [],
+      });
+      service.emitPurifierSelectionUpdate({
+        form: '' as any,
+        purifier_options: [],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject request with non-array add or remove', (done) => {
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: 23 as any,
+        remove: [],
+      });
+      service.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: [],
+        remove: '11,17' as any,
+      });
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should reject null / undefined requests gracefully', (done) => {
+      let emitted = false;
+      const sub = service.purifierSelectionUpdates$.subscribe(() => { emitted = true; });
+      service.emitPurifierSelectionUpdate(null as any);
+      service.emitPurifierSelectionUpdate(undefined as any);
+      setTimeout(() => {
+        expect(emitted).toBeFalse();
+        sub.unsubscribe();
+        done();
+      }, 0);
+    });
+
+    it('should not replay past requests (Subject semantics)', (done) => {
+      // Late-mounted subscriber must NEVER see a stale checkbox change
+      // — otherwise an unmounted-then-remounted model-development
+      // component would re-apply an AI patch the user already saw on
+      // screen, and the AI's NEXT real broadcast would race against it.
+      service.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1, 2],
+        add: [],
+        remove: [],
+      });
+      const seen: any[] = [];
+      service.purifierSelectionUpdates$.subscribe(r => seen.push(r));
+      service.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: [7],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(seen.length).toBe(1);
+        expect(seen[0].form).toBe('diff');
+        expect(seen[0].add).toEqual([7]);
+        done();
+      }, 0);
+    });
+  });
+
   // ── encodingApplyRequests (v2.26.0+) ──────────────────────────────────
   // AI's `apply_encoding` action broadcasts use_native flag here;
   // model-development component subscribes and calls applyEncoding().

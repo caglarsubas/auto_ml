@@ -7,6 +7,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
 import { ModelDevelopmentComponent } from './model-development.component';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
@@ -211,6 +212,194 @@ describe('ModelDevelopmentComponent', () => {
       sharedService.emitEncodingApplyRequest({ use_native: 'true' as any });
       setTimeout(() => {
         expect(spy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+  });
+
+  // ── purifierSelectionUpdates$ subscription (v2.28.0+) ───────────────
+  // AI's `update_purifier_selection` action broadcasts here; this
+  // component patches selectedOptions WITHOUT calling
+  // proceedFromPreprocessing() — that's the whole UX distinction from
+  // dataPurifierStartRequests$ above.  The patch is also pushed to AI
+  // Redis so the next AI turn sees the new checkbox state on-screen.
+  describe('purifierSelectionUpdates$ -> selectedOptions patch (no run)', () => {
+    let sharedService: SharedService;
+    let dataService: DataService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      dataService = TestBed.inject(DataService);
+      fixture.detectChanges();
+    });
+
+    it('should REPLACE selectedOptions on wholesale-form broadcast', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      // Seed with the v2.27.x default set so we can verify it gets
+      // wholesale-replaced.
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => [1, 2, 3, 4, 7, 11, 17, 23, 28, 32].includes(o.id));
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1, 2, 3, 4, 7, 23, 28, 32],  // 11+17 removed
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        const ids = component.selectedOptions.map((o: any) => o.id).sort((a: number, b: number) => a - b);
+        expect(ids).toEqual([1, 2, 3, 4, 7, 23, 28, 32]);
+        // 11 and 17 must be gone from the form.
+        expect(ids).not.toContain(11);
+        expect(ids).not.toContain(17);
+        done();
+      }, 5);
+    });
+
+    it('should CLEAR selectedOptions when wholesale purifier_options is []', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => [1, 2, 7].includes(o.id));
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(component.selectedOptions).toEqual([]);
+        done();
+      }, 5);
+    });
+
+    it('should ADD + REMOVE on diff-form broadcast', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      // Mirror the screenshot's "current selection".
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => [1, 2, 3, 4, 7, 11, 17, 23, 28, 32].includes(o.id));
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: [29],   // add the 0.05-0.95 outlier option…
+        remove: [11, 17, 28],  // …and remove sparsity+missing+0.01-0.99 outlier
+      });
+      setTimeout(() => {
+        const ids = component.selectedOptions.map((o: any) => o.id).sort((a: number, b: number) => a - b);
+        expect(ids).toEqual([1, 2, 3, 4, 7, 23, 29, 32]);
+        done();
+      }, 5);
+    });
+
+    it('should handle diff-form with empty add (remove-only)', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => [1, 2, 7].includes(o.id));
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: [],
+        remove: [7],
+      });
+      setTimeout(() => {
+        const ids = component.selectedOptions.map((o: any) => o.id).sort();
+        expect(ids).toEqual([1, 2]);
+        done();
+      }, 5);
+    });
+
+    it('should handle diff-form with empty remove (add-only)', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => o.id === 1);
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'diff',
+        purifier_options: null,
+        add: [23, 29],
+        remove: [],
+      });
+      setTimeout(() => {
+        const ids = component.selectedOptions.map((o: any) => o.id).sort((a: number, b: number) => a - b);
+        expect(ids).toEqual([1, 23, 29]);
+        done();
+      }, 5);
+    });
+
+    it('should NOT call proceedFromPreprocessing() (critical UX regression guard)', (done) => {
+      // This is THE distinction from dataPurifierStartRequests$.  If
+      // this subscriber ever fires proceedFromPreprocessing() the
+      // "preview-then-run" UX collapses back into one-shot
+      // apply-and-run, which is exactly what start_data_purifier is
+      // for.  Two distinct actions must remain distinct.
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      const runSpy = spyOn(component, 'proceedFromPreprocessing').and.callFake(() => { /* no-op */ });
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1, 23],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(runSpy).not.toHaveBeenCalled();
+        done();
+      }, 10);
+    });
+
+    it('should push the updated pipeline_config to AI Redis after patching', (done) => {
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      // currentFileId must be set or the push is skipped (non-fatal).
+      component.currentFileId = 481;
+      component.selectedOptions = component.purifierOptions
+        .filter((o: any) => o.id === 1);
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1, 23],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(pushSpy).toHaveBeenCalledTimes(1);
+        const [fileId, artifacts] = pushSpy.calls.mostRecent().args;
+        expect(fileId).toBe(481);
+        expect(artifacts['pipeline_config']).toBeDefined();
+        // The pipeline_config snapshot is taken AFTER the
+        // selectedOptions mutation, so the AI's next turn sees the
+        // post-patch state.  `selected_purifier_steps` is a list of
+        // option NAMES; pick the one corresponding to ID 23 to verify
+        // it ended up in the snapshot.
+        const stepNames: string[] = artifacts['pipeline_config']['selected_purifier_steps'] || [];
+        const has23 = stepNames.some(n => n.includes('[Sparsity+Missing]-drop threshold = 0.95'));
+        expect(has23).toBeTrue();
+        done();
+      }, 10);
+    });
+
+    it('should NOT push to AI Redis when currentFileId is null', (done) => {
+      const pushSpy = spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      component.currentFileId = null;
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(pushSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('should write the new option IDs through to SharedService.setSelectedPurifierOptions', (done) => {
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      const setSpy = spyOn(sharedService, 'setSelectedPurifierOptions').and.callThrough();
+      sharedService.emitPurifierSelectionUpdate({
+        form: 'wholesale',
+        purifier_options: [1, 2, 23],
+        add: [],
+        remove: [],
+      });
+      setTimeout(() => {
+        expect(setSpy).toHaveBeenCalledTimes(1);
+        const ids = setSpy.calls.mostRecent().args[0];
+        expect(ids.sort((a: number, b: number) => a - b)).toEqual([1, 2, 23]);
         done();
       }, 5);
     });
