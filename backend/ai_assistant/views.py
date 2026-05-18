@@ -78,12 +78,24 @@ results, ALWAYS check the actual configuration parameters provided in the contex
 
 ── 2. DATA PURIFIER (Preprocessing) ──
 • Runs a configurable sequence of preprocessing steps on the raw data.
-• Available purifier steps (user selects which to apply and in what order):
-  - Missing Value Imputation: median for numeric, mode for categorical
-  - Outlier Removal (Numeric): IQR-based or percentile-based with configurable thresholds
-  - Constant Column Drop: removes features with zero variance
-  - Quasi-Constant Drop: removes features where a single value dominates above a threshold
-  - High Cardinality Drop: removes categorical features with too many unique values
+• The catalog has EXACTLY 34 numbered options (IDs 1..34) drawn from these
+  ten transform families:
+    - col_dedup, row_dedup, zero_var_drop, perfect_corr_drop  (standalone toggles)
+    - corr_drop                  (5 thresholds: 0.95, 0.90, 0.85, 0.80, 0.75)
+    - sparsity_drop              (6 thresholds: 0.99, 0.95, 0.90, 0.85, 0.80, 0.75)
+    - missing_drop               (6 thresholds: 0.99, 0.95, 0.90, 0.85, 0.80, 0.75)
+    - combined_drop              (6 thresholds: 0.99, 0.95, 0.90, 0.85, 0.80, 0.75)
+      [combined = max(zero_ratio, miss_ratio); drops cols at-or-above threshold]
+    - outlier_quantile_clip      (3 quantile pairs: [0.01-0.99], [0.05-0.95], [0.10-0.90])
+    - cat_outlier_merge          (4 thresholds: 0.001, 0.005, 0.01, 0.05)
+  Within each parametric group ONLY ONE option may be selected at a time
+  (UI radio-style mutual exclusion).  Standalone options never disable
+  each other.
+• Do NOT invent step names from generic ML toolkits — only the kinds listed
+  above exist in this catalog.  Use the ``get_purifier_options`` tool to
+  fetch the canonical IDs, labels, and thresholds whenever the user asks
+  what's available, what a step does, or asks you to set/change a specific
+  purifier behavior.
 • After purification, data is split into train/test (random or out-of-time split).
 • The purifier summary shows rows before/after, columns dropped, and reasons.
 
@@ -307,6 +319,14 @@ Rules for start_data_purifier:
 • `purifier_options`: optional list of integer IDs (1–34) matching the
   preprocessing checkboxes.  Omit or pass [] to use whatever is currently
   selected in the UI (the SharedService cache).  Invalid IDs are dropped.
+• MAPPING USER INTENT → IDs: when the user describes a purifier behavior
+  in natural language (e.g. "set outlier interval to 0.05/0.95", "drop
+  columns with >=95% missing", "add the 0.85 correlation cutoff"), CALL
+  ``get_purifier_options`` FIRST to look up the matching integer ID, then
+  emit start_data_purifier with that exact ID.  Never guess IDs from
+  memory — the catalog is authoritative.  Use the optional ``kind`` filter
+  to narrow the catalog (e.g. kind='outlier_quantile_clip' for the three
+  numeric outlier options).
 • `split.strategy`: 'random' or 'oot'.  When 'oot', `split.date_column` is
   REQUIRED and `split.cutoff` (ISO datetime) is optional (cutoff mode vs
   percent mode).  Omit `split` entirely to fall back to the form's current values.

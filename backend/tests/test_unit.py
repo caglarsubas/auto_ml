@@ -4409,3 +4409,317 @@ class TestPurifierCatalogFrontendContract:
             "Update both sides to match (frontend is the source of truth for UI).\n"
             + "\n".join(mismatches)
         )
+
+
+# ---------------------------------------------------------------------------
+# v2.27.1 — AI catalog tool: get_purifier_options
+# ---------------------------------------------------------------------------
+# Patch B (v2.27.1) exposes the canonical purifier catalog to the LLM via a
+# dedicated tool so the assistant can map natural-language requests like
+# "set the outlier interval to 0.05/0.95" to the right integer option ID
+# (29) when emitting a start_data_purifier action.  Pre-v2.27.1 the AI had
+# to guess from a misleading generic step list in the system prompt and
+# routinely invented step names like "Quasi-Constant Drop" / "High
+# Cardinality Drop" that don't exist in the catalog.
+#
+# These tests guard:
+#   • The handler returns the full canonical catalog with stable formatting.
+#   • The tool is registered in PIPELINE_TOOLS (so the LLM can see it) and
+#     in _HANDLERS (so execute_tool_call can dispatch to it).
+#   • The system prompt no longer hands the LLM the misleading list and
+#     instead points it at the new tool.
+@pytest.mark.unit
+class TestGetPurifierOptionsToolHandler:
+    """Exercises ai_assistant.tool_executor._handle_get_purifier_options."""
+
+    def _run(self, args=None):
+        from ai_assistant.tool_executor import _handle_get_purifier_options
+        # file_id is irrelevant for this static-catalog tool; pass a dummy.
+        return _handle_get_purifier_options(0, args or {})
+
+    def test_returns_string(self):
+        out = self._run()
+        assert isinstance(out, str)
+        assert out.strip()
+
+    def test_unfiltered_lists_all_34_options(self):
+        out = self._run()
+        # Each option line starts with `ID `; count the entries between
+        # the two `---` separator lines.
+        lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(lines) == 34, (
+            f"Expected 34 ID-prefixed lines, got {len(lines)}.\nOutput:\n{out}"
+        )
+
+    def test_header_advertises_total_count(self):
+        out = self._run()
+        assert "34 of 34 total entries" in out, (
+            f"Header should report 34/34 entries; got:\n{out}"
+        )
+
+    def test_default_selected_ids_listed_in_header(self):
+        out = self._run()
+        # Handler renders defaults via `sorted(DEFAULT_SELECTED_IDS)`,
+        # so we can pin the exact literal.
+        from preprocessing.purifier_catalog import DEFAULT_SELECTED_IDS
+        expected_literal = str(sorted(DEFAULT_SELECTED_IDS))
+        assert "Default selected IDs" in out
+        assert expected_literal in out, (
+            f"Header should print sorted defaults verbatim ({expected_literal}); got:\n{out}"
+        )
+
+    def test_default_options_are_flagged_inline(self):
+        """Default-selected options carry a (DEFAULT) marker on their line."""
+        out = self._run()
+        from preprocessing.purifier_catalog import DEFAULT_SELECTED_IDS
+        for default_id in DEFAULT_SELECTED_IDS:
+            # Find the line for this ID and confirm it contains DEFAULT.
+            line = next(
+                (ln for ln in out.splitlines()
+                 if ln.startswith('ID ') and ln.split()[1] == str(default_id)),
+                None,
+            )
+            assert line is not None, f"No line for ID {default_id} in output:\n{out}"
+            assert 'DEFAULT' in line, (
+                f"ID {default_id} is in DEFAULT_SELECTED_IDS but its line "
+                f"does not carry the DEFAULT marker:\n  {line}"
+            )
+
+    def test_non_default_option_does_not_carry_marker(self):
+        """Negative case: ID 29 is NOT a default and must not show DEFAULT."""
+        out = self._run()
+        line = next(
+            (ln for ln in out.splitlines()
+             if ln.startswith('ID ') and ln.split()[1] == '29'),
+            None,
+        )
+        assert line is not None
+        assert 'DEFAULT' not in line, (
+            f"ID 29 is not in DEFAULT_SELECTED_IDS but line carries DEFAULT:\n  {line}"
+        )
+
+    def test_id_29_appears_with_quantile_range_and_correct_label(self):
+        """The canonical example we want the AI to emit: ID 29 = outlier
+        cleaning at quantiles [0.05-0.95].  Pre-v2.27.0 the system prompt
+        hid this; v2.27.1 makes it explicit via this tool."""
+        out = self._run()
+        line = next(
+            (ln for ln in out.splitlines()
+             if ln.startswith('ID ') and ln.split()[1] == '29'),
+            None,
+        )
+        assert line is not None, f"ID 29 missing from output:\n{out}"
+        assert 'outlier_quantile_clip' in line
+        assert 'outlier_num_group' in line
+        assert 'quantile_range=(0.05, 0.95)' in line
+        assert '"Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]"' in line
+
+    def test_id_5_appears_with_threshold_0_95(self):
+        """Smoke-check a threshold-drop entry: ID 5 = corr-drop @ 0.95."""
+        out = self._run()
+        line = next(
+            (ln for ln in out.splitlines()
+             if ln.startswith('ID ') and ln.split()[1] == '5'),
+            None,
+        )
+        assert line is not None, f"ID 5 missing from output:\n{out}"
+        assert 'corr_drop' in line and 'corr_drop_group' in line
+        assert 'threshold=0.95' in line
+
+    def test_kind_filter_outlier_quantile_clip_returns_only_three(self):
+        out = self._run({'kind': 'outlier_quantile_clip'})
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 3, (
+            f"outlier_quantile_clip kind has 3 catalog entries; got "
+            f"{len(id_lines)}.\nOutput:\n{out}"
+        )
+        # All three must reference the kind.
+        for ln in id_lines:
+            assert 'outlier_quantile_clip' in ln
+
+    def test_kind_filter_corr_drop_returns_only_five(self):
+        out = self._run({'kind': 'corr_drop'})
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 5
+        for ln in id_lines:
+            assert 'corr_drop' in ln
+
+    def test_kind_filter_unknown_returns_helpful_error(self):
+        out = self._run({'kind': 'no_such_kind'})
+        assert "No purifier options match" in out
+        assert "Valid kinds" in out
+        # Surface a few real kinds so the LLM can self-correct.
+        assert 'corr_drop' in out
+        assert 'outlier_quantile_clip' in out
+
+    def test_kind_filter_skips_default_id_header(self):
+        """When filtered, the 'Default selected IDs' line should be omitted
+        to keep the response focused on the requested family."""
+        out = self._run({'kind': 'outlier_quantile_clip'})
+        assert "Default selected IDs" not in out
+
+    def test_handler_does_not_touch_redis_cache(self, monkeypatch):
+        """The catalog is static; the handler must not call cache_get."""
+        calls = []
+        from ai_assistant import cache as cache_mod
+        monkeypatch.setattr(
+            cache_mod, 'cache_get',
+            lambda *a, **kw: calls.append((a, kw)) or None,
+        )
+        out = self._run()
+        assert calls == [], (
+            f"_handle_get_purifier_options must not call cache_get; "
+            f"observed calls: {calls}"
+        )
+        # And it still produces a real catalog response.
+        assert "Data Purifier Options Catalog" in out
+
+    def test_handler_ignores_file_id(self):
+        """Catalog content is identical regardless of file_id supplied."""
+        from ai_assistant.tool_executor import _handle_get_purifier_options
+        out_a = _handle_get_purifier_options(0, {})
+        out_b = _handle_get_purifier_options(99999, {})
+        assert out_a == out_b
+
+
+@pytest.mark.unit
+class TestGetPurifierOptionsToolRegistration:
+    """The new tool must be wired into both the LLM-facing schema
+    (PIPELINE_TOOLS) and the dispatcher (_HANDLERS).  Either gap leaves
+    the AI unable to use the tool even if the handler works."""
+
+    def test_tool_is_in_pipeline_tools_schema(self):
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        names = [t['function']['name'] for t in PIPELINE_TOOLS]
+        assert 'get_purifier_options' in names, (
+            f"get_purifier_options not found in PIPELINE_TOOLS. "
+            f"Registered tool names: {names}"
+        )
+
+    def test_tool_schema_has_kind_filter_with_full_enum(self):
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        spec = next(
+            t for t in PIPELINE_TOOLS
+            if t['function']['name'] == 'get_purifier_options'
+        )
+        kind_param = spec['function']['parameters']['properties'].get('kind')
+        assert kind_param is not None, "kind parameter missing"
+        # Enum must cover every kind constant defined in the catalog
+        # so the LLM cannot drift into invalid filter values.
+        from preprocessing import purifier_catalog as pc
+        catalog_kinds = sorted({e['kind'] for e in pc.PURIFIER_OPTIONS})
+        assert sorted(kind_param['enum']) == catalog_kinds, (
+            f"kind enum drifted from catalog kinds.\n"
+            f"  schema enum:    {sorted(kind_param['enum'])}\n"
+            f"  catalog kinds:  {catalog_kinds}"
+        )
+
+    def test_tool_schema_marks_kind_optional(self):
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        spec = next(
+            t for t in PIPELINE_TOOLS
+            if t['function']['name'] == 'get_purifier_options'
+        )
+        # Required list should NOT include 'kind' — full catalog with no
+        # filter is a valid call.
+        assert 'kind' not in spec['function']['parameters'].get('required', [])
+
+    def test_tool_description_mentions_start_data_purifier_link(self):
+        """The description should tell the LLM this is the pre-flight tool
+        for start_data_purifier so retrieval-augmented planning works."""
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        spec = next(
+            t for t in PIPELINE_TOOLS
+            if t['function']['name'] == 'get_purifier_options'
+        )
+        desc = spec['function']['description']
+        assert 'start_data_purifier' in desc, (
+            f"Description should reference start_data_purifier; got:\n{desc}"
+        )
+
+    def test_tool_is_in_dispatcher(self):
+        from ai_assistant.tool_executor import _HANDLERS, _handle_get_purifier_options
+        assert _HANDLERS.get('get_purifier_options') is _handle_get_purifier_options
+
+    def test_execute_tool_call_dispatches_to_handler(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options', {})
+        # Should produce the catalog header, not the unknown-tool sentinel.
+        assert "Data Purifier Options Catalog" in out
+        assert "Unknown tool" not in out
+
+    def test_execute_tool_call_passes_kind_arg_through(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options', {'kind': 'corr_drop'})
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 5  # 5 corr_drop thresholds
+
+
+@pytest.mark.unit
+class TestSystemPromptPurifierGuidance:
+    """The pre-v2.27.1 system prompt listed five generic step names
+    ("Missing Value Imputation", "Outlier Removal (Numeric)", "Constant
+    Column Drop", "Quasi-Constant Drop", "High Cardinality Drop") that
+    don't exist in the canonical catalog.  Those phrases led the LLM to
+    fabricate IDs and step names.  The v2.27.1 prompt must:
+      • not advertise any of those phantom phrases;
+      • mention every real transform kind so the LLM has a vocabulary;
+      • tell the LLM to call get_purifier_options before mapping intent
+        to integer IDs in start_data_purifier.
+    """
+
+    def _prompt(self):
+        from ai_assistant.views import SYSTEM_PROMPT
+        return SYSTEM_PROMPT
+
+    def test_no_phantom_step_names(self):
+        prompt = self._prompt()
+        forbidden = [
+            'Quasi-Constant Drop',
+            'High Cardinality Drop',
+            'Missing Value Imputation',
+            'Constant Column Drop',
+        ]
+        # "Outlier Removal (Numeric)" is a borderline phrase; the catalog
+        # uses "Outlier-cleaning". Pin the explicit pre-v2.27.1 wording.
+        forbidden.append('Outlier Removal (Numeric)')
+        present = [phrase for phrase in forbidden if phrase in prompt]
+        assert not present, (
+            "System prompt still advertises phantom purifier step names "
+            "that don't exist in the catalog: "
+            + ', '.join(repr(p) for p in present)
+        )
+
+    def test_prompt_lists_every_real_transform_kind(self):
+        prompt = self._prompt()
+        from preprocessing import purifier_catalog as pc
+        catalog_kinds = sorted({e['kind'] for e in pc.PURIFIER_OPTIONS})
+        missing = [k for k in catalog_kinds if k not in prompt]
+        assert not missing, (
+            f"System prompt is missing these real transform kinds: {missing}.\n"
+            f"All catalog kinds must appear so the LLM can ground its replies."
+        )
+
+    def test_prompt_directs_llm_to_get_purifier_options_tool(self):
+        prompt = self._prompt()
+        assert 'get_purifier_options' in prompt, (
+            "System prompt must mention get_purifier_options so the LLM "
+            "knows the tool exists."
+        )
+
+    def test_prompt_links_tool_to_start_data_purifier_action(self):
+        prompt = self._prompt()
+        # The action-block section must instruct calling the catalog tool
+        # before emitting purifier_options.
+        action_section = prompt.split('ACTION TYPE 6: start_data_purifier')[-1]
+        action_section = action_section.split('ACTION TYPE 7')[0]
+        assert 'get_purifier_options' in action_section, (
+            "start_data_purifier action rules must instruct calling "
+            "get_purifier_options first to map user intent to IDs."
+        )
+
+    def test_prompt_announces_exactly_34_options(self):
+        prompt = self._prompt()
+        # Exact count anchors the LLM and lets us catch silent drift if
+        # the catalog grows but the prompt isn't updated.
+        assert '34' in prompt, "Prompt should anchor the option count at 34."

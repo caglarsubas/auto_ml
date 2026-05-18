@@ -512,6 +512,109 @@ def _load_skill_traced(skill_name: str) -> str:
         )
 
 
+def _handle_get_purifier_options(file_id: int, args: dict) -> str:
+    """Return the canonical 34-option purifier catalog as a structured listing.
+
+    The catalog (preprocessing/purifier_catalog.py) is the single source of
+    truth shared by the Run-Preprocessing UI checkboxes, the backend
+    dispatcher in _apply_options, and the GET /api/preprocessing/options/
+    endpoint.  This tool exposes it to the LLM so that when the user asks
+    for a specific purifier behavior in natural language (e.g. "set the
+    outlier interval to 0.05/0.95"), the assistant can look up the integer
+    option ID it should pass in start_data_purifier.purifier_options.
+
+    Unlike the other ``get_*`` tools, this one does NOT read from Redis or
+    depend on file_id — the catalog is a static, code-shipped resource.
+
+    Optional ``args``:
+      * ``kind`` — filter to a single transform kind, e.g.
+        ``"outlier_quantile_clip"``, ``"sparsity_drop"``,
+        ``"missing_drop"``, ``"combined_drop"``, ``"corr_drop"``,
+        ``"cat_outlier_merge"``, ``"col_dedup"``, ``"row_dedup"``,
+        ``"zero_var_drop"``, ``"perfect_corr_drop"``.
+
+    Result format (one line per option) matches what the LLM can copy
+    directly into a start_data_purifier action:
+
+        ID 29 [outlier_quantile_clip / outlier_num] "Outlier-cleaning
+        [lower-upper] quantiles = [0.05-0.95]" range=(0.05, 0.95)
+    """
+    # Imported lazily so importing this module never triggers a Django
+    # apps registry walk through preprocessing's own imports.
+    from preprocessing.purifier_catalog import (
+        PURIFIER_OPTIONS,
+        DEFAULT_SELECTED_IDS,
+    )
+
+    kind_filter = (args.get('kind') or '').strip() or None
+    set_span_attr('declarai.tool.purifier_options.kind_filter', kind_filter or '(all)')
+
+    if kind_filter:
+        entries = [e for e in PURIFIER_OPTIONS if e['kind'] == kind_filter]
+        if not entries:
+            available_kinds = sorted({e['kind'] for e in PURIFIER_OPTIONS})
+            return (
+                f"No purifier options match kind={kind_filter!r}. "
+                f"Valid kinds: {', '.join(available_kinds)}."
+            )
+    else:
+        entries = list(PURIFIER_OPTIONS)
+
+    set_span_attr('declarai.tool.purifier_options.count', len(entries))
+
+    defaults = set(DEFAULT_SELECTED_IDS)
+    lines = [
+        f"Data Purifier Options Catalog ({len(entries)} of {len(PURIFIER_OPTIONS)} total entries):",
+    ]
+    if not kind_filter:
+        lines.append(
+            f"Default selected IDs (pre-checked when the user lands on Data "
+            f"Purifier Declaration): {sorted(DEFAULT_SELECTED_IDS)}"
+        )
+    lines.append(
+        "Group rules: within a group only ONE option may be selected at a time "
+        "(UI radio-style). Standalone options (group=None) never disable each other."
+    )
+    lines.append("---")
+
+    # Group identifier → human label so the LLM doesn't have to guess.
+    group_label = {
+        None: 'standalone',
+        1: 'corr_drop_group',
+        2: 'sparsity_drop_group',
+        3: 'missing_drop_group',
+        4: 'combined_drop_group',
+        5: 'outlier_num_group',
+        6: 'outlier_cat_group',
+    }
+
+    for e in entries:
+        oid = e['id']
+        kind = e['kind']
+        group = group_label.get(e.get('group'), str(e.get('group')))
+        name = e['name']
+        threshold = e.get('threshold')
+        qrange = e.get('quantile_range')
+        is_default = ' (DEFAULT)' if oid in defaults else ''
+
+        bits = [f'ID {oid:>2}', f'[{kind} / {group}]', f'"{name}"']
+        if threshold is not None:
+            bits.append(f'threshold={threshold}')
+        if qrange is not None:
+            bits.append(f'quantile_range={qrange}')
+        if is_default:
+            bits.append(is_default.strip())
+        lines.append(' '.join(bits))
+
+    lines.append("---")
+    lines.append(
+        "To execute these, emit a start_data_purifier ACTION BLOCK with "
+        "purifier_options=[<id>, <id>, ...]. IDs outside 1..34 are dropped "
+        "silently by the action handler."
+    )
+    return '\n'.join(lines)
+
+
 def _handle_invoke_skill(file_id: int, args: dict) -> str:
     skill_name = (args.get('skill_name') or args.get('name') or '').strip()
     if not skill_name:
@@ -582,6 +685,7 @@ _HANDLERS = {
     'get_pipeline_notes': _handle_get_pipeline_notes,
     'get_pipeline_config': _handle_get_pipeline_config,
     'get_data_dictionary': _handle_get_data_dictionary,
+    'get_purifier_options': _handle_get_purifier_options,
     'invoke_skill': _handle_invoke_skill,
     'get_skill_file': _handle_get_skill_file,
 }

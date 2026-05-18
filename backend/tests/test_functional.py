@@ -324,6 +324,71 @@ class TestPreprocessingOptionsAPI:
 
 
 # ---------------------------------------------------------------------------
+# AI Assistant — get_purifier_options tool (v2.27.1)
+# ---------------------------------------------------------------------------
+# Functional coverage for the new LLM-facing catalog tool.  These tests
+# don't go through the chat HTTP endpoint (that would need a live LLM);
+# they exercise the dispatcher path the chat workflow uses internally —
+# `execute_tool_call(file_id, tool_name, arguments)` — which is the same
+# call site as the OpenAI tool_calls loop in views._chat_workflow.
+@pytest.mark.functional
+class TestAIPurifierOptionsToolDispatch:
+    """Verify the LLM-facing dispatch path for get_purifier_options.
+
+    Pre-v2.27.1 the LLM had no way to retrieve the canonical purifier
+    catalog at runtime — the system prompt held a misleading generic list
+    and the AI would hallucinate IDs.  v2.27.1 wires the catalog through
+    `execute_tool_call` so the LLM can look up real IDs/labels/thresholds
+    on demand before emitting start_data_purifier.
+    """
+
+    def test_dispatch_unknown_tool_does_not_match_new_name(self):
+        """Sanity: an unrelated name still resolves to the unknown sentinel."""
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options_NOT_A_TOOL', {})
+        assert "Unknown tool" in out
+
+    def test_dispatch_returns_full_catalog_when_no_args(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(0, 'get_purifier_options', {})
+        assert "Data Purifier Options Catalog" in out
+        # 34 entries means 34 ID-prefixed lines.
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 34
+        # And the canonical example we expect the LLM to use must appear.
+        assert '"Outlier-cleaning [lower-upper] quantiles = [0.05-0.95]"' in out
+
+    def test_dispatch_honors_kind_filter_argument(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(
+            0, 'get_purifier_options', {'kind': 'outlier_quantile_clip'},
+        )
+        # Three numeric-outlier options (IDs 28, 29, 30).
+        id_lines = [ln for ln in out.splitlines() if ln.startswith('ID ')]
+        assert len(id_lines) == 3
+        for ln in id_lines:
+            assert 'outlier_quantile_clip' in ln
+        # Non-matching family must NOT appear when filtered.
+        assert 'corr_drop_group' not in out
+
+    def test_dispatch_handles_invalid_kind_with_helpful_error(self):
+        from ai_assistant.tool_executor import execute_tool_call
+        out = execute_tool_call(
+            0, 'get_purifier_options', {'kind': 'no_such_kind'},
+        )
+        assert "No purifier options match" in out
+        assert "Valid kinds" in out
+
+    def test_dispatch_does_not_require_a_real_file_id(self):
+        """The catalog is static — file_id is unused by this tool but the
+        dispatcher signature still accepts it. Negative/zero ids must work."""
+        from ai_assistant.tool_executor import execute_tool_call
+        for fake in (0, -1, 999999):
+            out = execute_tool_call(fake, 'get_purifier_options', {})
+            assert "Data Purifier Options Catalog" in out
+
+
+# ---------------------------------------------------------------------------
 # Preprocessing Run API
 # ---------------------------------------------------------------------------
 @pytest.mark.functional

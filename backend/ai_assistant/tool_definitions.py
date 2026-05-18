@@ -327,6 +327,52 @@ PIPELINE_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_purifier_options",
+            "description": (
+                "Get the canonical catalog of the 34 data-purifier options that the "
+                "Run-Preprocessing UI exposes (column-/row-dedup, zero-variance drop, "
+                "perfect-correlation drop, parametric correlation/sparsity/missing/combined "
+                "drops with their thresholds, numeric outlier-quantile clipping at "
+                "[0.01-0.99], [0.05-0.95], [0.10-0.90], and four categorical-outlier merge "
+                "thresholds).  Each entry returns its integer ID (1..34), its UI label, "
+                "its transform kind, its mutual-exclusion group, and any threshold or "
+                "quantile range.  Default-selected IDs are also flagged.  CALL THIS "
+                "BEFORE emitting a start_data_purifier ACTION whenever the user asks for "
+                "a specific behavior in natural language (e.g. 'change outlier interval to "
+                "0.05/0.95', 'drop columns with >95% missing', 'turn off correlation "
+                "pruning').  Use the returned IDs verbatim in purifier_options.  Optional "
+                "`kind` filter narrows the catalog to one transform family."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "col_dedup",
+                            "row_dedup",
+                            "zero_var_drop",
+                            "perfect_corr_drop",
+                            "corr_drop",
+                            "sparsity_drop",
+                            "missing_drop",
+                            "combined_drop",
+                            "outlier_quantile_clip",
+                            "cat_outlier_merge",
+                        ],
+                        "description": (
+                            "Optional: filter to a single transform kind. "
+                            "Omit to retrieve all 34 entries."
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_data_dictionary",
             "description": (
                 "Get the data dictionary: all features with their name, description, "
