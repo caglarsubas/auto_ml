@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
-    model_route,
+    model_route, plan_generate,
 )
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
@@ -1007,6 +1007,41 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     # Parse action blocks from the AI response
     actions, clean_message = _extract_actions(assistant_message)
+
+    # v2.33.0 (Phase 3c): emit a Prometa AML ``plan.generate`` span (C2)
+    # whenever the LLM's response yields ≥1 action block.  Pure
+    # conversational replies don't produce plans, so the span is
+    # conditional — emitting it for zero-action turns would inflate the
+    # C2 detector's denominator with non-plans.
+    #
+    # plan_id encodes file_id + turn-time so the span is uniquely
+    # addressable per chat turn (the SDK uses it as the canonical
+    # ``plan.id`` span attribute).  Steps mirror the extracted action
+    # blocks 1:1; depends_on=[] on every step because DeclarAI actions
+    # are independent suggestions (the user applies any subset in the
+    # chat-panel UI — no enforced ordering).  complexity_estimate is
+    # the raw action count as a first-cut proxy for plan size.
+    #
+    # When PROMETA_ENDPOINT is unset or the SDK is unavailable, the
+    # wrapper yields a _NoOpAMLHandle and the entire block is a
+    # transparent no-op (no behavior change vs v2.32.0).
+    if actions and file_id is not None:
+        import time as _time
+        plan_id = f'declarai-file-{file_id}-{int(_time.time() * 1000)}'
+        plan_steps = [
+            {
+                'order': i + 1,
+                'action': a.get('action_type', 'unknown'),
+                'tool': a.get('action_type', 'unknown'),
+                'depends_on': [],
+            }
+            for i, a in enumerate(actions)
+        ]
+        with plan_generate(plan_id) as _plan:
+            _plan.emitted(
+                steps=plan_steps,
+                complexity_estimate=len(actions),
+            )
 
     # If the model's entire reply was the action block, synthesize a brief message
     if not clean_message.strip() and actions:

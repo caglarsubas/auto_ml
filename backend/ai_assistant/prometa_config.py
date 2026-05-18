@@ -392,6 +392,46 @@ def schema_validate(schema_id: str):
 
 
 @contextmanager
+def plan_generate(plan_id: str):
+    """Wrap a plan-generation event in a Prometa ``plan.generate`` AML
+    span (catalog C2).  Forwards to the v0.4.0+ SDK helper when
+    available; yields a ``_NoOpAMLHandle`` otherwise.
+
+    Usage::
+
+        with plan_generate('declarai-file-42-1234567890') as p:
+            p.emitted(
+                steps=[
+                    {'order': 1, 'action': 'update_purifier_selection',
+                     'tool': 'update_purifier_selection', 'depends_on': []},
+                ],
+                complexity_estimate=1,
+            )
+
+    DeclarAI mapping: the LLM in ``_chat_workflow`` may emit one or
+    more ``<<<ACTION:action_type>>>...payload...<<<END_ACTION>>>``
+    blocks in its response.  ``_extract_actions`` parses them into a
+    list of ``{action_type, payload}`` dicts — that IS the generated
+    plan.  We emit ``plan.generate`` only when the parse yields ≥1
+    action (pure conversational replies don't produce plans).
+
+    Each action becomes one plan step.  DeclarAI actions are
+    independent suggestions (the user applies any subset via the
+    chat-panel UI) so ``depends_on=[]`` on every step; we don't
+    encode false ordering constraints.
+
+    Body exceptions propagate normally — only ImportError is caught.
+    """
+    try:
+        from prometa import plan_generate as _sdk_plan_generate
+    except ImportError:
+        yield _NoOpAMLHandle()
+        return
+    with _sdk_plan_generate(plan_id) as handle:
+        yield handle
+
+
+@contextmanager
 def cache_lookup(kind: str, *, key: str):
     """Wrap a cache fetch in a Prometa ``cache.lookup`` AML span
     (catalog B1).  Forwards to the v0.4.0+ SDK helper when available;

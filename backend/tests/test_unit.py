@@ -4580,6 +4580,118 @@ class TestPrometaAMLHelpers:
             "cache_get must call ch.miss() on miss / redis-down / exception paths"
         )
 
+    # ── plan_generate (v2.33.0 / Phase 3c) ─────────────────────────────
+
+    def test_plan_generate_yields_real_handle_when_sdk_available(self):
+        """Happy path: plan_generate is reachable on 0.6.0+; handle
+        must accept .emitted(steps, complexity_estimate, replanned_from)."""
+        from ai_assistant.prometa_config import plan_generate
+        with plan_generate('declarai-file-42-1700000000') as p:
+            assert p is not None
+            # Minimum-required form.
+            p.emitted(steps=[{'order': 1, 'action': 'foo',
+                              'tool': 'foo', 'depends_on': []}])
+            # Full form with all kwargs.
+            p.emitted(
+                steps=[
+                    {'order': 1, 'action': 'a', 'tool': 'a', 'depends_on': []},
+                    {'order': 2, 'action': 'b', 'tool': 'b', 'depends_on': []},
+                ],
+                replanned_from='declarai-file-42-1699999999',
+                complexity_estimate=2,
+            )
+
+    def test_plan_generate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without plan_generate symbol → wrapper yields _NoOpAMLHandle.
+        Same fallback contract as the other AML helpers."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'plan_generate', raising=False)
+
+        with pc.plan_generate('declarai-file-42-1700000000') as p:
+            assert isinstance(p, pc._NoOpAMLHandle)
+            p.emitted(steps=[], complexity_estimate=0)  # absorbed
+            p.future_method_that_doesnt_exist_yet()      # absorbed
+
+    def test_plan_generate_propagates_body_exceptions(self):
+        """Body exceptions propagate (same contract as the other AML
+        helpers).  Only ImportError is caught."""
+        from ai_assistant.prometa_config import plan_generate
+
+        class _PlannerError(Exception):
+            pass
+
+        with pytest.raises(_PlannerError):
+            with plan_generate('declarai-file-42-1700000000') as p:
+                p.emitted(steps=[], complexity_estimate=0)
+                raise _PlannerError('plan emission failed downstream')
+
+    def test_chat_workflow_source_emits_plan_generate_when_actions_present(self):
+        """Structural guard: _chat_workflow body in views.py must call
+        plan_generate AFTER _extract_actions returns, and only when
+        ``actions`` is non-empty (the conditional `if actions and ...:`
+        guard).
+
+        Pre-v2.33.0 we had no plan.generate span at all.  Reverting to
+        the bare-extraction shape would silently kill the C2 detector
+        signal for the entire DeclarAI surface."""
+        import inspect
+        from ai_assistant import views
+        source = inspect.getsource(views._chat_workflow)
+        # Must call plan_generate.
+        assert 'with plan_generate(' in source, (
+            "_chat_workflow must wrap action emission in `with plan_generate(...)`"
+        )
+        # Must be conditional on actions being non-empty.
+        assert 'if actions and file_id is not None' in source, (
+            "_chat_workflow must only emit plan_generate when actions are "
+            "non-empty AND file_id is known (avoids polluting C2 detector "
+            "denominator with zero-action conversational replies)."
+        )
+        # Must call p.emitted() with steps.
+        assert '.emitted(' in source and 'steps=' in source, (
+            "_chat_workflow must call .emitted(steps=..., complexity_estimate=...) "
+            "on the plan_generate handle"
+        )
+        # Steps must use 'order' / 'action' / 'tool' / 'depends_on' shape.
+        for key in ("'order'", "'action'", "'tool'", "'depends_on'"):
+            assert key in source, (
+                f"plan_generate steps must include {key} (SDK-canonical key) — "
+                f"the C2 detector parses these specific fields."
+            )
+
+    def test_views_module_imports_plan_generate(self):
+        """Belt-and-suspenders: views.py must expose plan_generate in
+        its module namespace so the _chat_workflow body can call it.
+
+        Pairs with the structural guard above to catch an accidental
+        revert of the import line even when the workflow body isn't
+        executed end-to-end (requires OpenAI)."""
+        from ai_assistant import views
+        assert hasattr(views, 'plan_generate'), (
+            "views.py must import plan_generate from prometa_config"
+        )
+
+    def test_chat_workflow_plan_id_format_uses_file_id_and_timestamp(self):
+        """The plan_id must encode both the file_id (for joining with
+        customer_id / session_id correlation chain) AND a per-turn
+        time component (so multiple plans within the same Declaration
+        get distinct ids).
+
+        Pre-v2.33.0 there was no plan_id; this test pins the format
+        used for the canonical plan.id span attribute."""
+        import inspect
+        from ai_assistant import views
+        source = inspect.getsource(views._chat_workflow)
+        # Format pinned: f'declarai-file-{file_id}-{int(_time.time() * 1000)}'
+        assert "f'declarai-file-{file_id}" in source, (
+            "plan_id must include the file_id so platform-side correlation "
+            "joins plan.generate spans to customer_id (Phase 2)."
+        )
+        assert '_time.time()' in source or 'time.time()' in source, (
+            "plan_id must include a time component for per-turn uniqueness"
+        )
+
     def test_update_purifier_selection_form_conflict_returns_error_via_schema_validate(self, monkeypatch):
         """Functional guard: when the AI passes BOTH purifier_options
         AND add/remove (the form_conflict path), the function must:
