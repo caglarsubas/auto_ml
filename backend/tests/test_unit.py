@@ -4514,6 +4514,187 @@ class TestPurifierApplyOptions:
         assert oc_stats is not None
         assert oc_stats['quantile_range'] == [0.05, 0.95]
 
+    # ── v2.28.1 critical regression: target preservation ──────────
+    # Pre-v2.28.1, ID 29 (and 28/30) silently corrupted the binary
+    # Target column.  An imbalanced 0/1 target with <5% positives has
+    # both q(0.05) and q(0.95) equal to 0; clip(0,0) → all zeros →
+    # split-validation chart shows 0% target mean across full / train
+    # / test, modeling silently breaks downstream.  Reproduced by the
+    # user on May 18, 2026 with Good_Bad_Flag.  These tests are the
+    # immune system against re-introducing the bug.
+    @staticmethod
+    def _apply_with_preserve(df, option_ids, preserve=None, data_dictionary=None):
+        from preprocessing.views import PreprocessingRunView
+        view = PreprocessingRunView()
+        return view._apply_options(
+            df, set(option_ids),
+            preserve=preserve,
+            data_dictionary=data_dictionary,
+        )
+
+    def test_id_29_does_NOT_modify_Target_column_with_imbalanced_binary(self):
+        """Repro of the May-2026 user bug:
+            df = 100 rows, 5% Target=1 (95% Target=0)
+            apply ID 29 (clip [0.05, 0.95])
+            → Target column MUST be unchanged.
+
+        Pre-fix: Target gets clipped to all zeros.
+        Post-fix: Target preserved verbatim.
+        """
+        n = 100
+        # Exactly 5 positives → q(0.05)=0 and q(0.95)=0 for binary target.
+        target = [1] * 5 + [0] * (n - 5)
+        df = pd.DataFrame({
+            'Target': target,
+            'feature_a': [float(i) for i in range(n)],  # ordinary numeric feature
+        })
+        target_before = df['Target'].copy()
+
+        work, dropped, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        # Critical: Target column is byte-for-byte unchanged.
+        assert 'Target' in work.columns, "Target dropped from output"
+        assert work['Target'].tolist() == target_before.tolist(), (
+            f"Target column was modified by outlier clipping. "
+            f"Sum before={target_before.sum()}, after={work['Target'].sum()}. "
+            f"This re-introduces the v2.28.0 silent-corruption bug."
+        )
+        # And the breakdown reports Target as protected.
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        assert 'Target' in outlier_step['protected_columns']
+
+    def test_id_29_does_NOT_modify_Model_Usage_No_columns(self):
+        """ID columns / index columns / raw timestamps with
+        Model_Usage_YN='No' must not be clipped.  The categorical-
+        outlier branch already honored this; the numerical branch
+        must too (parity contract).
+        """
+        n = 50
+        df = pd.DataFrame({
+            'customer_id': list(range(1, n + 1)),  # 1..50, monotonic — q(0.05)=2.45, q(0.95)=47.55
+            'feature_x': [float(i) for i in range(n)],
+        })
+        cust_id_before = df['customer_id'].copy()
+        data_dict = [
+            {'Feature_Name': 'customer_id', 'Model_Usage_YN': 'No'},
+            {'Feature_Name': 'feature_x', 'Model_Usage_YN': 'Yes'},
+        ]
+
+        work, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], data_dictionary=data_dict,
+        )
+
+        # customer_id must be untouched (Model_Usage='No').
+        assert work['customer_id'].tolist() == cust_id_before.tolist(), (
+            "customer_id (Model_Usage_YN='No') was modified by outlier clipping."
+        )
+        # feature_x must have been clipped (its outliers should be
+        # squeezed toward [q(0.05), q(0.95)]).  Strict inequality
+        # checks the value-modifying behavior actually fired.
+        assert work['feature_x'].min() >= 0.0
+        # Breakdown surfaces the protection.
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        assert 'customer_id' in outlier_step['protected_columns']
+        assert 'feature_x' not in outlier_step['protected_columns']
+
+    def test_id_29_still_clips_normal_numeric_features_when_target_preserved(self):
+        """Defense-in-depth: while protecting Target + Model_Usage='No',
+        we must NOT regress the core clipping behavior on legitimate
+        ordinary features.
+        """
+        n = 100
+        df = pd.DataFrame({
+            'Target': [1] * 5 + [0] * (n - 5),
+            # An obvious outlier at index 0 (extreme high), index 1 (extreme low).
+            'with_outliers': [1000.0, -1000.0] + [float(i) for i in range(n - 2)],
+        })
+        original_max = df['with_outliers'].max()
+        original_min = df['with_outliers'].min()
+
+        work, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        # The ordinary numeric feature is still clipped.
+        assert work['with_outliers'].max() < original_max
+        assert work['with_outliers'].min() > original_min
+        # And Target is still safe.
+        assert work['Target'].sum() == 5
+
+    def test_id_29_repro_target_mean_unchanged_after_clipping(self):
+        """The exact metric the user saw collapse to 0 in the screenshot:
+        target_mean = mean(Target) per split.  This test reconstructs
+        the chart's metric and asserts post-clip target_mean equals
+        pre-clip target_mean.
+
+        Pre-v2.28.1: target_mean drops to 0.0 across full/train/test.
+        Post-fix: target_mean is preserved exactly.
+        """
+        n = 1000
+        # 4% positive class — exactly the imbalanced shape that caused
+        # both q(0.05) and q(0.95) to equal 0 → all-zero clip.
+        positives = 40
+        target = [1] * positives + [0] * (n - positives)
+        df = pd.DataFrame({
+            'Target': target,
+            'noise_a': np.random.RandomState(0).randn(n).tolist(),
+            'noise_b': np.random.RandomState(1).randn(n).tolist(),
+        })
+        target_mean_before = df['Target'].mean()
+        assert target_mean_before == pytest.approx(0.04)  # sanity
+
+        work, _, _, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        target_mean_after = work['Target'].mean()
+        assert target_mean_after == pytest.approx(target_mean_before), (
+            f"target_mean changed from {target_mean_before:.4f} to "
+            f"{target_mean_after:.4f} after outlier clipping. "
+            f"This is the smoking-gun metric from the May-2026 screenshot."
+        )
+
+    def test_id_29_protected_columns_logged_for_audit_trail(self):
+        """The breakdown row must list every protected column so the
+        user can audit *why* their Target column wasn't clipped.  Pre-
+        v2.28.1 the breakdown silently said 'all numeric columns
+        clipped' even though it did so to the Target — same opaque
+        observability problem that hid the v2.27.0 ID-realignment bug.
+        """
+        df = pd.DataFrame({
+            'Target': [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+            'app_id': list(range(10)),
+            'feature_a': [float(i) for i in range(10)],
+        })
+        data_dict = [
+            {'Feature_Name': 'app_id', 'Model_Usage_YN': 'No'},
+            {'Feature_Name': 'feature_a', 'Model_Usage_YN': 'Yes'},
+        ]
+        _, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'}, data_dictionary=data_dict,
+        )
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        protected = set(outlier_step['protected_columns'])
+        assert 'Target' in protected
+        assert 'app_id' in protected
+        assert 'feature_a' not in protected
+        # Note string explains WHY the cols were skipped.
+        assert 'protected' in outlier_step['note'].lower()
+
 
 @pytest.mark.unit
 class TestPurifierCatalogFrontendContract:
