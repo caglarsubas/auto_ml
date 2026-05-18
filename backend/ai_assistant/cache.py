@@ -17,7 +17,7 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import child_only_tool, set_span_attr, span_timer
+from .prometa_config import child_only_tool, set_span_attr, span_timer, cache_lookup
 
 # ---------------------------------------------------------------------------
 # Tracing policy for cache ops (v2.22.3+)
@@ -140,28 +140,52 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
       - declarai.cache.reason      error / miss reason (when applicable)
       - declarai.cache.elapsed_us  elapsed time in microseconds
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
+
+    v2.32.0 (Phase 3b): also emits a Prometa ``cache.lookup`` AML span
+    (catalog B1) as a PARENT of the ``redis-get`` tool span.  The AML
+    span carries the canonical ``cache.kind='tool_call'`` / ``cache.key``
+    attributes and stamps hit/miss via the SDK handle (``ch.hit()`` /
+    ``ch.miss()``).  Hit/miss attribution is propagated to BOTH spans:
+    the legacy ``declarai.cache.hit`` boolean (for Trace Explorer back-
+    compat) AND the canonical ``cache.hit`` attribute (for AML B1).
     """
-    with span_timer('declarai.cache'):
-        set_span_attr('declarai.cache.file_id', file_id)
-        set_span_attr('declarai.cache.artifact', artifact)
-        r = _get_redis()
-        if not r:
-            set_span_attr('declarai.cache.hit', False)
-            set_span_attr('declarai.cache.reason', 'redis-unavailable')
-            return None
-        try:
-            raw = r.get(_key(file_id, artifact))
-            if raw is None:
+    cache_key = _key(file_id, artifact)
+    # v2.32.0: outer cache.lookup AML span wraps the redis-get tool span.
+    # When the SDK is unconfigured (no PROMETA_ENDPOINT) or unavailable,
+    # ``ch`` is a _NoOpAMLHandle and the with-block is a transparent no-op
+    # — the existing legacy span shape continues unchanged.
+    with cache_lookup('tool_call', key=cache_key) as ch:
+        with span_timer('declarai.cache'):
+            set_span_attr('declarai.cache.file_id', file_id)
+            set_span_attr('declarai.cache.artifact', artifact)
+            r = _get_redis()
+            if not r:
                 set_span_attr('declarai.cache.hit', False)
+                set_span_attr('declarai.cache.reason', 'redis-unavailable')
+                # Redis unavailable IS a logical cache miss for AML scoring.
+                ch.miss()
                 return None
-            set_span_attr('declarai.cache.hit', True)
-            set_span_attr('declarai.cache.bytes', len(raw))
-            return json.loads(raw)
-        except Exception as exc:
-            set_span_attr('declarai.cache.hit', False)
-            set_span_attr('declarai.cache.reason', str(exc)[:200])
-            logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
-            return None
+            try:
+                raw = r.get(cache_key)
+                if raw is None:
+                    set_span_attr('declarai.cache.hit', False)
+                    ch.miss()
+                    return None
+                set_span_attr('declarai.cache.hit', True)
+                set_span_attr('declarai.cache.bytes', len(raw))
+                # ttl_remaining_seconds is optional; we skip it to avoid
+                # an extra Redis op per get.  The TTL is a write-time
+                # constant (DEFAULT_TTL=24h) so the platform can infer
+                # remaining TTL from span start_time if needed.
+                ch.hit()
+                return json.loads(raw)
+            except Exception as exc:
+                set_span_attr('declarai.cache.hit', False)
+                set_span_attr('declarai.cache.reason', str(exc)[:200])
+                # Parse / decode errors are logical misses too.
+                ch.miss()
+                logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
+                return None
 
 
 @child_only_tool(name="redis-set-bulk")

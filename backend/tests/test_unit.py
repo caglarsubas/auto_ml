@@ -4398,6 +4398,188 @@ class TestPrometaAMLHelpers:
             "(form_conflict, value_error, group_conflict, diff_conflict)"
         )
 
+    # ── cache_lookup (v2.32.0 / Phase 3b) ──────────────────────────────
+
+    def test_cache_lookup_yields_real_handle_when_sdk_available(self):
+        """Happy path: cache_lookup is reachable on 0.6.0+; handle
+        must accept .hit(), .miss(), .write_action_blocked()."""
+        from ai_assistant.prometa_config import cache_lookup
+        with cache_lookup('tool_call', key='ai:pipeline:42:dataset_summary') as ch:
+            assert ch is not None
+            # All three SDK handle methods must be callable.
+            ch.hit()
+            ch.miss()
+            ch.write_action_blocked()
+            # And the optional kwarg form of .hit() too.
+            ch.hit(ttl_remaining_seconds=86400)
+
+    def test_cache_lookup_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without cache_lookup symbol → wrapper yields _NoOpAMLHandle.
+        Same fallback contract as schema_validate and model_route."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'cache_lookup', raising=False)
+
+        with pc.cache_lookup('tool_call', key='ai:pipeline:42:foo') as ch:
+            assert isinstance(ch, pc._NoOpAMLHandle)
+            ch.hit()          # absorbed
+            ch.miss()         # absorbed
+            ch.future_method_that_doesnt_exist_yet()  # absorbed
+
+    def test_cache_lookup_propagates_invalid_kind_error(self):
+        """The SDK enforces ``kind`` ∈ {response, tool_call, embedding}
+        with a ValueError.  Our wrapper must NOT catch it — that's a
+        programmer error that needs to surface, not a runtime failure
+        we should silently no-op past."""
+        from ai_assistant.prometa_config import cache_lookup
+        with pytest.raises(ValueError, match='kind must be one of'):
+            with cache_lookup('invalid_kind_xyz', key='ai:pipeline:1:x'):
+                pass  # pragma: no cover — must raise on enter
+
+    def test_cache_lookup_propagates_body_exceptions(self):
+        """Body exceptions propagate (same contract as the other AML
+        helpers).  Only ImportError is caught."""
+        from ai_assistant.prometa_config import cache_lookup
+
+        class _RedisDown(Exception):
+            pass
+
+        with pytest.raises(_RedisDown):
+            with cache_lookup('tool_call', key='ai:pipeline:1:x') as ch:
+                ch.miss()
+                raise _RedisDown('redis connection dropped mid-fetch')
+
+    def test_cache_get_wraps_redis_fetch_in_cache_lookup_with_hit(self, monkeypatch):
+        """Functional end-to-end: cache_get must wrap the redis fetch
+        in a cache_lookup AML span and call ch.hit() on the hit path.
+
+        Patches cache_lookup as a recording context manager; populates
+        Redis with a known value; invokes cache_get; asserts:
+          1. enter('tool_call', key='ai:pipeline:<id>:<artifact>')
+          2. hit() recorded — NOT miss()
+          3. cache_get returned the value
+          4. exit fired
+        Pins the most common cache path (hit) to the B1 detector."""
+        from ai_assistant import cache as cache_mod
+
+        lookup_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def hit(self, **kwargs):
+                lookup_calls.append(('hit', kwargs))
+            def miss(self):
+                lookup_calls.append(('miss', {}))
+            def write_action_blocked(self):
+                lookup_calls.append(('blocked', {}))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_cache_lookup(kind, *, key):
+            lookup_calls.append(('enter', kind, key))
+            try:
+                yield _RecordingHandle()
+            finally:
+                lookup_calls.append(('exit', kind, key))
+
+        monkeypatch.setattr(cache_mod, 'cache_lookup', _recording_cache_lookup)
+
+        # Seed the cache.
+        r = cache_mod._get_redis()
+        assert r is not None, 'Redis must be available for this test'
+        try:
+            r.set(cache_mod._key(80001, 'aml_test_artifact'), '{"x": 7}', ex=60)
+
+            result = cache_mod.cache_get(80001, 'aml_test_artifact')
+
+            assert result == {'x': 7}
+            # Lifecycle: enter → hit → exit (NOT miss).
+            assert lookup_calls[0] == ('enter', 'tool_call', 'ai:pipeline:80001:aml_test_artifact')
+            assert lookup_calls[-1] == ('exit', 'tool_call', 'ai:pipeline:80001:aml_test_artifact')
+            # Hit recorded exactly once; no miss recorded.
+            hit_calls = [c for c in lookup_calls if c[0] == 'hit']
+            miss_calls = [c for c in lookup_calls if c[0] == 'miss']
+            assert len(hit_calls) == 1, (
+                f"cache_get on a hit path must call ch.hit() exactly once; "
+                f"got hit_calls={hit_calls}, full lifecycle={lookup_calls}"
+            )
+            assert miss_calls == [], (
+                f"cache_get on a hit path must NOT call ch.miss(); "
+                f"got miss_calls={miss_calls}"
+            )
+        finally:
+            r.delete(cache_mod._key(80001, 'aml_test_artifact'))
+
+    def test_cache_get_wraps_redis_fetch_in_cache_lookup_with_miss(self, monkeypatch):
+        """Mirror of the hit test: missing key → ch.miss() recorded.
+
+        The B1 detector needs both hit AND miss signals to compute
+        cache hit-rate; this guard pins the miss path."""
+        from ai_assistant import cache as cache_mod
+
+        lookup_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def hit(self, **kwargs):
+                lookup_calls.append(('hit', kwargs))
+            def miss(self):
+                lookup_calls.append(('miss', {}))
+            def write_action_blocked(self):
+                lookup_calls.append(('blocked', {}))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_cache_lookup(kind, *, key):
+            lookup_calls.append(('enter', kind, key))
+            try:
+                yield _RecordingHandle()
+            finally:
+                lookup_calls.append(('exit', kind, key))
+
+        monkeypatch.setattr(cache_mod, 'cache_lookup', _recording_cache_lookup)
+
+        # Ensure key is absent.
+        r = cache_mod._get_redis()
+        assert r is not None
+        r.delete(cache_mod._key(80002, 'absent_artifact'))
+
+        result = cache_mod.cache_get(80002, 'absent_artifact')
+        assert result is None
+
+        # Miss recorded exactly once.
+        miss_calls = [c for c in lookup_calls if c[0] == 'miss']
+        hit_calls = [c for c in lookup_calls if c[0] == 'hit']
+        assert len(miss_calls) == 1, (
+            f"cache_get on a miss path must call ch.miss() exactly once; "
+            f"got miss_calls={miss_calls}, full lifecycle={lookup_calls}"
+        )
+        assert hit_calls == [], (
+            f"cache_get on a miss path must NOT call ch.hit(); "
+            f"got hit_calls={hit_calls}"
+        )
+
+    def test_cache_get_source_uses_cache_lookup_wrapper(self):
+        """Structural guard: cache.py::cache_get must wrap the redis
+        fetch in `with cache_lookup('tool_call', key=...)`.
+
+        Catches a future contributor removing the AML span while
+        keeping the rest of the function intact (no functional
+        regression but B1 signal would silently vanish)."""
+        import inspect
+        from ai_assistant import cache as cache_mod
+        source = inspect.getsource(cache_mod.cache_get)
+        assert "with cache_lookup('tool_call'" in source, (
+            "cache_get must wrap redis fetch in cache_lookup('tool_call', ...)"
+        )
+        # Both hit AND miss paths must be instrumented.
+        assert 'ch.hit(' in source, (
+            "cache_get must call ch.hit() on the value-returned path"
+        )
+        assert 'ch.miss()' in source, (
+            "cache_get must call ch.miss() on miss / redis-down / exception paths"
+        )
+
     def test_update_purifier_selection_form_conflict_returns_error_via_schema_validate(self, monkeypatch):
         """Functional guard: when the AI passes BOTH purifier_options
         AND add/remove (the form_conflict path), the function must:
