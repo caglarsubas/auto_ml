@@ -257,3 +257,59 @@ def set_session_id(session_id: str) -> None:
         set_span_attr('gen_ai.conversation.id', session_id)
     except Exception:
         pass
+
+
+def set_customer_id(customer_id: str) -> None:
+    """Stamp ``prometa.customer_id`` on the current span for cross-feature
+    correlation (Session Explorer, AML scoring, cost panels, registry).
+
+    Uses the v0.5.0+ ``set_customer_id()`` SDK helper when available; falls
+    back to writing the attribute directly so the platform's correlation-id
+    resolver can still join by customer even when the helper is missing
+    (older SDK or import failure).
+
+    The Prometa contract: the constructor's ``customer_id="..."`` kwarg
+    sets an org-wide default; per-span ``set_customer_id(...)`` overrides
+    it for the current span AND every nested span via parent-attribute
+    inheritance.
+
+    DeclarAI mapping: we use ``str(file_id)`` so each Declaration is its
+    own correlation key — every chat turn, action dispatch, cache read,
+    and LLM call within a single uploaded dataset's pipeline groups
+    under one ``customer_id``.  This is the right choice for our
+    single-tenant POC; if/when authenticated end-users land we'd switch
+    to the user's external id and demote ``file_id`` to a sub-attribute.
+
+    Synchronous, no-op outside an active span context.
+    """
+    try:
+        from prometa import set_customer_id as _sdk_set_customer_id
+        _sdk_set_customer_id(customer_id)
+    except ImportError:
+        set_span_attr('prometa.customer_id', customer_id)
+    except Exception:
+        pass
+
+
+def set_request_model(model: str) -> None:
+    """Stamp ``gen_ai.request.model`` on the current span.
+
+    Uses the v0.5.0+ ``set_request_model()`` SDK helper when available;
+    falls back to writing the attribute directly.  Both produce the same
+    OTel-canonical attribute path that the platform's cost panel, model-
+    routing detector (AML F1), and trace UI consume.
+
+    Replaces the manual ``set_span_attr('gen_ai.request.model', ...)``
+    pattern; lifts model annotation onto the canonical helper so future
+    SDK behavior (e.g. parent-attribute inheritance, normalization) is
+    automatically picked up without site-by-site refactors.
+
+    Synchronous, no-op outside an active span context.
+    """
+    try:
+        from prometa import set_request_model as _sdk_set_request_model
+        _sdk_set_request_model(model)
+    except ImportError:
+        set_span_attr('gen_ai.request.model', model)
+    except Exception:
+        pass

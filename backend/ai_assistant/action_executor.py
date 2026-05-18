@@ -20,7 +20,9 @@ import pandas as pd
 from django.conf import settings
 from declaration.models import Declaration, DataDictionary
 
-from .prometa_config import workflow, tool, set_span_attr, set_session_id
+from .prometa_config import (
+    workflow, tool, set_span_attr, set_session_id, set_customer_id,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1553,6 +1555,11 @@ def dispatch_action(file_id: int, action_type: str, payload: dict) -> dict:
     set_span_attr('gen_ai.prompt', f"[Action: {action_type}] {description}")
     set_span_attr('declarai.file_id', file_id)
     set_session_id(f'declarai-file-{file_id}')
+    # v2.30.0 (Phase 2): per-span customer_id override.  Mirrors the
+    # _chat_workflow entry point so action dispatches and chat turns
+    # share the same correlation key per Declaration.  See
+    # ai_assistant/prometa_config.py::set_customer_id for the rationale.
+    set_customer_id(str(file_id))
 
     handler = HANDLERS.get(action_type)
     if not handler:
