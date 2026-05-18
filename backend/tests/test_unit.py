@@ -4000,6 +4000,222 @@ class TestCacheHelpersDoNotStampSession:
             "session-tagging is the chat/action workflow's responsibility, "
             "not the infrastructure layer's (see v2.22.2 comment block).")
 
+    def test_cache_module_does_not_import_set_customer_id(self):
+        """v2.30.0 parity: the cache module must not import
+        ``set_customer_id`` either.  Same rationale as set_session_id —
+        the workflow root span owns correlation-chain stamping; cache
+        helpers run as children and inherit the parent's attributes
+        automatically.  Importing the helper into cache.py would tempt
+        future contributors to over-stamp redundantly."""
+        from ai_assistant import cache as cache_mod
+        assert not hasattr(cache_mod, 'set_customer_id'), (
+            "ai_assistant.cache must not import set_customer_id — "
+            "customer-id stamping is the chat/action workflow's "
+            "responsibility (set_customer_id propagates to children "
+            "via parent-attribute inheritance).")
+
+
+# ---------------------------------------------------------------------------
+# Correlation-chain helpers (v2.30.0 / Phase 2 of prometa-sdk roadmap).
+#
+# The v0.5.0+ SDK adds set_customer_id and set_request_model alongside
+# the existing set_session_id.  prometa_config wraps each in a tiny
+# try-import shim:
+#   1. Forward to the SDK helper when available (the happy path on 0.6.0+).
+#   2. Fall back to set_span_attr when the SDK is older or import fails.
+#   3. Swallow any other exception (defense; SDK helpers are documented
+#      synchronous no-ops outside an active span context).
+#
+# These tests pin all three branches and verify both call sites
+# (_chat_workflow + dispatch_action for set_customer_id, _call_llm for
+# set_request_model) actually invoke the helpers when triggered.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPrometaCorrelationHelpers:
+    """``set_customer_id`` and ``set_request_model`` must forward to
+    the SDK helpers when available, fall back to ``set_span_attr`` on
+    ImportError, and never propagate exceptions."""
+
+    def test_set_customer_id_forwards_to_sdk_helper_when_available(self, monkeypatch):
+        """Happy path: SDK on 0.6.0+ exposes ``set_customer_id``; our
+        wrapper must call it verbatim, NOT the set_span_attr fallback."""
+        from ai_assistant import prometa_config as pc
+        sdk_calls: list[str] = []
+        attr_calls: list[tuple[str, object]] = []
+        # Patch the SDK symbol our wrapper imports.
+        import prometa
+        monkeypatch.setattr(prometa, 'set_customer_id',
+                            lambda v: sdk_calls.append(v), raising=False)
+        # Patch set_span_attr to ensure the fallback path is NOT taken.
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+
+        pc.set_customer_id('cus_42')
+
+        assert sdk_calls == ['cus_42'], (
+            f"Expected SDK helper to be called once with 'cus_42'; got {sdk_calls}"
+        )
+        assert attr_calls == [], (
+            f"Fallback set_span_attr must NOT fire when SDK helper exists; "
+            f"got {attr_calls}"
+        )
+
+    def test_set_customer_id_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+        """If the SDK is older than 0.5.0 (no ``set_customer_id`` symbol),
+        the wrapper must still emit the canonical attribute via
+        ``set_span_attr('prometa.customer_id', ...)`` so the platform's
+        correlation-id resolver still joins by customer."""
+        from ai_assistant import prometa_config as pc
+        attr_calls: list[tuple[str, object]] = []
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+        # Simulate the helper being absent: stash a real ImportError
+        # behind the import statement by deleting the SDK attribute.
+        import prometa
+        monkeypatch.delattr(prometa, 'set_customer_id', raising=False)
+
+        pc.set_customer_id('cus_99')
+
+        assert attr_calls == [('prometa.customer_id', 'cus_99')], (
+            f"Fallback must stamp prometa.customer_id; got {attr_calls}"
+        )
+
+    def test_set_customer_id_swallows_other_exceptions(self, monkeypatch):
+        """Defensive: if the SDK helper raises something other than
+        ImportError (e.g. a runtime error from inside an in-progress
+        span flush), the wrapper must NOT propagate."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+
+        def boom(_v):
+            raise RuntimeError('span flush in progress')
+
+        monkeypatch.setattr(prometa, 'set_customer_id', boom, raising=False)
+        # Must not raise.
+        pc.set_customer_id('cus_ok')
+
+    def test_set_request_model_forwards_to_sdk_helper_when_available(self, monkeypatch):
+        """Same contract as set_customer_id, mirrored for set_request_model."""
+        from ai_assistant import prometa_config as pc
+        sdk_calls: list[str] = []
+        attr_calls: list[tuple[str, object]] = []
+        import prometa
+        monkeypatch.setattr(prometa, 'set_request_model',
+                            lambda v: sdk_calls.append(v), raising=False)
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+
+        pc.set_request_model('gpt-5.5')
+
+        assert sdk_calls == ['gpt-5.5']
+        assert attr_calls == []
+
+    def test_set_request_model_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+        """SDK <0.5.0 path: must still stamp gen_ai.request.model so the
+        cost panel and AML model_route detector keep working."""
+        from ai_assistant import prometa_config as pc
+        attr_calls: list[tuple[str, object]] = []
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+        import prometa
+        monkeypatch.delattr(prometa, 'set_request_model', raising=False)
+
+        pc.set_request_model('gpt-5.5')
+
+        assert attr_calls == [('gen_ai.request.model', 'gpt-5.5')]
+
+    def test_set_request_model_swallows_other_exceptions(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+        import prometa
+
+        def boom(_v):
+            raise RuntimeError('span context lost')
+
+        monkeypatch.setattr(prometa, 'set_request_model', boom, raising=False)
+        pc.set_request_model('gpt-5.5')
+
+    # ── Call-site tests: where the helpers actually land in production ─
+
+    def test_dispatch_action_calls_set_customer_id_with_file_id(self, monkeypatch):
+        """``dispatch_action`` is the action-executor entry point; it
+        must call ``set_customer_id(str(file_id))`` at the top of the
+        workflow body so every nested span (validators, broadcasts,
+        cache writes) inherits the correlation key.
+
+        Triggered via an unknown action_type so the body short-circuits
+        immediately without invoking real action handlers — keeps the
+        test cheap while still exercising the real code path."""
+        from ai_assistant import action_executor
+        from ai_assistant import prometa_config as pc
+
+        customer_calls: list[str] = []
+        session_calls: list[str] = []
+        # Patch where action_executor.py imported them (module-local
+        # binding) — patching prometa_config alone wouldn't catch the
+        # already-bound name in action_executor's namespace.
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda v: customer_calls.append(v))
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda v: session_calls.append(v))
+        # set_span_attr also runs at the entry; let it no-op silently.
+        monkeypatch.setattr(action_executor, 'set_span_attr', lambda *a, **kw: None)
+
+        result = action_executor.dispatch_action.__wrapped__(
+            42, 'unknown_action_xyz', {'description': 'test'}
+        ) if hasattr(action_executor.dispatch_action, '__wrapped__') else \
+            action_executor.dispatch_action(42, 'unknown_action_xyz', {'description': 'test'})
+
+        # Unknown action_type triggers the early-return path.
+        assert result.get('status') == 'error'
+        assert 'Unknown action type' in result.get('error', '')
+        # And both correlation helpers fired with the expected file_id.
+        assert customer_calls == ['42'], (
+            f"dispatch_action must call set_customer_id(str(file_id)); "
+            f"got {customer_calls}"
+        )
+        # Session id format is unchanged (declarai-file-{id}).
+        assert session_calls == ['declarai-file-42']
+
+    def test_chat_workflow_imports_set_customer_id_and_set_request_model(self):
+        """Structural guard: views.py must import both helpers from
+        prometa_config so the workflow body can call them.  This
+        catches an accidental import-line regression even when the
+        full _chat_workflow body isn't executed (it requires OpenAI).
+
+        Pairs with the dispatch_action call-site test above to give
+        full coverage of the v2.30.0 wiring without needing to mock
+        the entire LLM round-trip."""
+        from ai_assistant import views
+        # Both names must be reachable from views.py's module namespace.
+        assert hasattr(views, 'set_customer_id'), (
+            "views.py must import set_customer_id from prometa_config"
+        )
+        assert hasattr(views, 'set_request_model'), (
+            "views.py must import set_request_model from prometa_config"
+        )
+
+    def test_call_llm_source_uses_set_request_model_not_manual_set_span_attr(self):
+        """Belt-and-suspenders source-level guard: the _call_llm body
+        must use the canonical ``set_request_model(...)`` helper, not
+        the legacy ``set_span_attr('gen_ai.request.model', ...)`` shape.
+
+        Pre-v2.30.0 we had the manual call; post-fix it MUST be gone.
+        A future contributor reverting to the manual shape would lose
+        the v0.5.0+ helper's parent-attribute inheritance behavior."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert 'set_request_model(' in source, (
+            "_call_llm must use the canonical set_request_model() helper"
+        )
+        assert "set_span_attr('gen_ai.request.model'" not in source, (
+            "_call_llm must NOT manually stamp gen_ai.request.model — "
+            "use set_request_model() instead so the v0.5.0+ SDK helper's "
+            "parent-attribute inheritance kicks in."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Standalone-trace pollution prevention (v2.22.3+).

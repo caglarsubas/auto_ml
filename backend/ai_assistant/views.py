@@ -14,7 +14,10 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_span_attr, set_session_id
+from .prometa_config import (
+    workflow, agent, tool, flush as prometa_flush,
+    set_span_attr, set_session_id, set_customer_id, set_request_model,
+)
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
@@ -607,7 +610,12 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
     """
     model_cfg = get_model_config(model_key)
     provider = model_cfg['provider']
-    set_span_attr('gen_ai.request.model', model_cfg['model_id'])
+    # v2.30.0 (Phase 2): canonical helper instead of manual set_span_attr.
+    # The SDK helper auto-bubbles to parent spans and gets normalization
+    # for free as the platform evolves.  Wire shape is unchanged —
+    # gen_ai.request.model still reaches the cost panel, AML F1 (model_route)
+    # detector, and trace UI exactly as before.
+    set_request_model(model_cfg['model_id'])
     # Tag the routing target on the parent agent span so the platform UI
     # can distinguish engine-routed calls from direct cloud calls.
     # The child openai-instrumented span still carries gen_ai.system="openai"
@@ -822,6 +830,14 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     if file_id is not None:
         set_span_attr('declarai.file_id', file_id)
         set_session_id(f'declarai-file-{file_id}')
+        # v2.30.0 (Phase 2): per-span customer_id override.  Joins every
+        # span emitted from this chat turn — and its child agent / tool /
+        # cache spans via parent-attribute inheritance — under one
+        # correlation key for AML scoring, Session Explorer aggregates,
+        # and the platform's correlation-id resolver.  See
+        # ai_assistant/prometa_config.py::set_customer_id docstring for
+        # the file_id ↔ customer_id mapping rationale.
+        set_customer_id(str(file_id))
 
     # Build messages array for OpenAI
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
