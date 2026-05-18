@@ -25,6 +25,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   selectedModel: string = 'gpt-5.5';
   showModelSelector: boolean = false;
 
+  // ── v2.27.2 — defensive empty-response copy ─────────────────────────
+  // The backend now always returns a meaningful `message` even when the
+  // LLM produces no content (see `_chat_workflow` synthesis pass +
+  // _EMPTY_RESPONSE_FALLBACK / _TOOL_BUDGET_EXHAUSTED_FALLBACK in
+  // backend/ai_assistant/views.py).  Pre-v2.27.2 the frontend showed
+  // the literal "No response received." which left the user with no
+  // actionable next step.  Keeping this constant as defense-in-depth:
+  // if a future regression or network anomaly does return an empty
+  // `message`, the user still sees actionable copy.  Public so the
+  // Karma spec can pin the exact wording without reaching into a
+  // component-private field.
+  static readonly EMPTY_RESPONSE_FALLBACK =
+    'The assistant did not return an answer this time. ' +
+    'Please try rephrasing your question or check the backend logs.';
+
   constructor(
     public aiService: AiAssistantService,
     private dataService: DataService,
@@ -135,7 +150,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         }));
         const fallbackMsg = actions.length > 0
           ? 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
-          : 'No response received.';
+          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
         this.aiService.updateLastMessage(resp.message || fallbackMsg, actions);
         this.isLoading = false;
       },
@@ -634,7 +649,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         }));
         const correctionFallback = actions.length > 0
           ? 'I\'ve prepared a corrected operation. Review the details below and click **Apply** to execute.'
-          : 'No response received.';
+          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
         this.aiService.updateLastMessage(resp.message || correctionFallback, actions);
         this.isLoading = false;
         // Clear the error since the AI has provided a correction

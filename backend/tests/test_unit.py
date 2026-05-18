@@ -4723,3 +4723,329 @@ class TestSystemPromptPurifierGuidance:
         # Exact count anchors the LLM and lets us catch silent drift if
         # the catalog grows but the prompt isn't updated.
         assert '34' in prompt, "Prompt should anchor the option count at 34."
+
+
+# ---------------------------------------------------------------------------
+# v2.27.2 — Empty-response synthesis pass + actionable fallback (Patch A)
+# ---------------------------------------------------------------------------
+# Pre-v2.27.2 the chat workflow could exit its tool-call loop with an
+# assistant message that had `tool_calls` populated but `content=null`.
+# This happened when the model kept calling tools through the very last
+# round (the no-tools forced round): we executed those tool calls inside
+# the loop body, then broke naturally without ever asking the model for a
+# final text answer.  The user saw the bare string "No response received."
+# in the chat UI, and tracing showed real tool work that produced no
+# visible output.
+#
+# v2.27.2 fixes this with two layers of defence:
+#   1. A synthesis pass — when the loop exits with empty content but tool
+#      work happened, run ONE more no-tools call so the model verbalizes
+#      what it found.  All tool results are already in `messages` so this
+#      is cheap.
+#   2. An actionable fallback — if the synthesis pass also fails (network
+#      error, model truly returns blank), surface a meaningful message
+#      that tells the user what to do next.  Two flavours: one for the
+#      "tool work happened, ran out of room" case and one for the "model
+#      returned nothing at all" case.
+#
+# The tests below script the exact LLM response sequences that triggered
+# the bug pre-v2.27.2 and assert that v2.27.2 always returns a meaningful
+# `message` to the API caller.
+def _mock_llm_response(content=None, tool_calls=None, tokens=10):
+    """Build an OpenAI-style /v1/chat/completions response payload.
+
+    `content=None` + non-empty `tool_calls` is the exact shape that
+    triggered the original "No response received." bug.
+    """
+    msg = {'role': 'assistant', 'content': content}
+    if tool_calls is not None:
+        msg['tool_calls'] = tool_calls
+    finish = 'tool_calls' if tool_calls else 'stop'
+    return {
+        'choices': [{'finish_reason': finish, 'message': msg}],
+        'usage': {
+            'prompt_tokens': tokens,
+            'completion_tokens': tokens,
+            'total_tokens': tokens * 2,
+        },
+    }
+
+
+def _purifier_tool_call(call_id):
+    """A canned tool_call invocation against get_purifier_options — the
+    handler is static and side-effect-free, so it works inside any test
+    without Redis or DB fixtures."""
+    return [{
+        'id': call_id,
+        'type': 'function',
+        'function': {'name': 'get_purifier_options', 'arguments': '{}'},
+    }]
+
+
+@pytest.mark.unit
+class TestChatWorkflowSynthesisPass:
+    """Assert the synthesis pass triggers in exactly the right conditions
+    and produces a non-empty `message` on the final API response.
+    """
+
+    def _patch_chat_env(self, monkeypatch, llm_responses):
+        """Prepare _chat_workflow to run with a scripted LLM and tool-mode
+        enabled.  `llm_responses` is a list of dicts; the i-th call to
+        _call_llm returns `llm_responses[i]` (or the last entry if exhausted).
+        """
+        from ai_assistant import views
+        calls = []
+
+        def fake_call_llm(messages, model_key, tools=None):
+            idx = min(len(calls), len(llm_responses) - 1)
+            calls.append({
+                'tools_provided': tools is not None,
+                'last_role': messages[-1].get('role') if messages else None,
+                'msg_count': len(messages),
+            })
+            return llm_responses[idx]
+
+        # Tool mode requires cached artifacts + supports_tools.
+        monkeypatch.setattr(views, '_call_llm', fake_call_llm)
+        monkeypatch.setattr(views, 'cache_list_artifacts',
+                            lambda fid: ['split_validation'])
+        monkeypatch.setattr(views, '_build_slim_context',
+                            lambda fid, sec: 'slim context')
+        monkeypatch.setattr(
+            views, 'get_model_config',
+            lambda key: {
+                'provider': 'openai',
+                'model_id': 'gpt-test',
+                'supports_tools': True,
+            },
+        )
+        return calls
+
+    def test_synthesis_pass_runs_when_loop_exhausts_budget_with_empty_content(self, monkeypatch):
+        """The exact bug from v2.26.1: every round returns tool_calls + null
+        content, the loop runs out, msg_obj has empty content.  Synthesis
+        pass must run AFTER the loop and produce a real reply."""
+        from ai_assistant import views
+
+        # 6 in-loop rounds (0..5) all return tool_calls + null content;
+        # the 7th call is the synthesis pass and returns real content.
+        responses = [
+            _mock_llm_response(tool_calls=_purifier_tool_call(f'tc_{i}'))
+            for i in range(6)
+        ] + [
+            _mock_llm_response(content='Here are the 34 purifier options.')
+        ]
+        calls = self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='list all purifier options',
+            context={},
+            section='general',
+            history=[],
+            file_id=1,
+            model='gpt-5.5',
+        )
+
+        # Exactly 7 LLM calls: 6 in-loop + 1 synthesis pass.
+        assert len(calls) == 7, (
+            f"Expected 7 _call_llm invocations (6 loop rounds + 1 synthesis); "
+            f"got {len(calls)}."
+        )
+        # The last call must have tools disabled — synthesis pass forces
+        # text output.
+        assert calls[-1]['tools_provided'] is False, (
+            "Synthesis pass must invoke _call_llm with tools=None to force "
+            "a text response."
+        )
+        # The synthesis system prompt must be the most recent system msg
+        # before the synthesis call.
+        assert calls[-1]['last_role'] == 'system'
+        # Final response.message comes from the synthesis pass content.
+        assert result['message'] == 'Here are the 34 purifier options.'
+
+    def test_synthesis_pass_does_not_run_on_happy_path(self, monkeypatch):
+        """When the model returns content on round 0, no synthesis pass is
+        needed.  Critical regression guard — the synthesis pass adds an
+        LLM round-trip per turn and must NOT fire unless the loop exited
+        with empty content."""
+        from ai_assistant import views
+
+        responses = [_mock_llm_response(content='Direct reply, no tools.')]
+        calls = self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='hi', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        assert len(calls) == 1, (
+            f"Happy path must use exactly one LLM call; got {len(calls)}."
+        )
+        assert result['message'] == 'Direct reply, no tools.'
+
+    def test_synthesis_pass_does_not_run_when_no_tool_work_happened(self, monkeypatch):
+        """Edge case: the model returns finish_reason='stop' with empty
+        content and NO tools were called this turn.  Don't run a synthesis
+        pass — there's nothing to synthesize from.  Fall through to the
+        generic _EMPTY_RESPONSE_FALLBACK instead."""
+        from ai_assistant import views
+
+        responses = [_mock_llm_response(content='')]
+        calls = self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='???', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        # Exactly one call — no synthesis pass.
+        assert len(calls) == 1, (
+            f"With no tool work + empty content, no synthesis pass should "
+            f"run; got {len(calls)} LLM calls."
+        )
+        # Generic empty fallback.
+        assert result['message'] == views._EMPTY_RESPONSE_FALLBACK
+
+    def test_synthesis_pass_failure_falls_back_to_budget_exhausted_copy(self, monkeypatch):
+        """If the synthesis call ALSO returns empty, the user must see the
+        tool-budget-exhausted fallback (different from the no-content
+        fallback because real work was done)."""
+        from ai_assistant import views
+
+        responses = [
+            _mock_llm_response(tool_calls=_purifier_tool_call(f'tc_{i}'))
+            for i in range(6)
+        ] + [
+            _mock_llm_response(content='')  # synthesis returns blank
+        ]
+        calls = self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='hi', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        assert len(calls) == 7
+        assert result['message'] == views._TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+    def test_usage_merges_synthesis_pass_tokens(self, monkeypatch):
+        """The synthesis pass costs tokens — they must be merged into
+        total_usage so the cost dashboard reflects the true spend."""
+        from ai_assistant import views
+
+        # 6 in-loop rounds @ 10 tokens each + 1 synthesis @ 25 tokens.
+        responses = [
+            _mock_llm_response(
+                tool_calls=_purifier_tool_call(f'tc_{i}'), tokens=10,
+            )
+            for i in range(6)
+        ] + [
+            _mock_llm_response(content='Synthesized answer.', tokens=25)
+        ]
+        self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='hi', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        usage = result['usage']
+        # Each mock response declares prompt_tokens=tokens, completion_tokens=tokens.
+        # 6 loop calls @ tokens=10 → 60 + 60 = 120 prompt + 120 completion = 240 total.
+        # 1 synthesis call @ tokens=25 → 25 prompt + 25 completion = 50 total.
+        # Grand totals: 145 prompt, 145 completion, 290 total.
+        assert usage.get('prompt_tokens') == 6 * 10 + 25
+        assert usage.get('completion_tokens') == 6 * 10 + 25
+        assert usage.get('total_tokens') == 6 * 20 + 50
+
+    def test_synthesis_pass_uses_tools_none(self, monkeypatch):
+        """The whole point of the synthesis pass is to disable tools so the
+        model produces text.  Pin this contract so a future refactor
+        cannot accidentally re-enable tools and re-introduce the empty-
+        response loop."""
+        from ai_assistant import views
+
+        responses = [
+            _mock_llm_response(tool_calls=_purifier_tool_call(f'tc_{i}'))
+            for i in range(6)
+        ] + [
+            _mock_llm_response(content='Synth answer.')
+        ]
+        calls = self._patch_chat_env(monkeypatch, responses)
+
+        views._chat_workflow(
+            user_message='hi', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        # The 7th (synthesis) call must have tools=None.
+        assert calls[6]['tools_provided'] is False
+
+    def test_action_only_response_does_not_trigger_fallback(self, monkeypatch):
+        """Regression guard: when the model emits ONLY an ACTION BLOCK
+        (no surrounding prose), the existing 'I've prepared the following
+        operation' message takes precedence over the empty-response
+        fallback.  This test pins that path."""
+        from ai_assistant import views
+
+        action_only = (
+            "<<<ACTION:update_notes>>>\n"
+            '{"action": "add", "position": "after_data_preview", '
+            '"content": "test note", "description": "Add a test note"}\n'
+            "<<<END_ACTION>>>"
+        )
+        responses = [_mock_llm_response(content=action_only)]
+        self._patch_chat_env(monkeypatch, responses)
+
+        result = views._chat_workflow(
+            user_message='add a note', context={}, section='general',
+            history=[], file_id=1, model='gpt-5.5',
+        )
+
+        # Action surfaced.
+        assert result.get('actions'), "ACTION BLOCK should be parsed out."
+        # Message is the canned 'I've prepared…' string, NOT the empty
+        # fallback.
+        assert 'prepared' in result['message'].lower()
+        assert result['message'] != views._EMPTY_RESPONSE_FALLBACK
+        assert result['message'] != views._TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+
+@pytest.mark.unit
+class TestEmptyResponseFallbackConstants:
+    """Pin the actionable copy strings.  These are user-facing text — we
+    want a deliberate test failure if they get truncated, mangled, or
+    accidentally reverted to the bare 'No response received.' literal."""
+
+    def test_empty_response_fallback_is_actionable(self):
+        from ai_assistant.views import _EMPTY_RESPONSE_FALLBACK
+        assert isinstance(_EMPTY_RESPONSE_FALLBACK, str)
+        assert _EMPTY_RESPONSE_FALLBACK.strip()
+        # Must give the user a concrete next action ("rephrasing",
+        # "for example", etc.) — not just say "no response".
+        assert 'rephras' in _EMPTY_RESPONSE_FALLBACK.lower(), (
+            "Fallback should suggest rephrasing the question."
+        )
+        # Should not be the bare pre-v2.27.2 string.
+        assert _EMPTY_RESPONSE_FALLBACK.strip() != 'No response received.'
+
+    def test_tool_budget_exhausted_fallback_is_actionable(self):
+        from ai_assistant.views import _TOOL_BUDGET_EXHAUSTED_FALLBACK
+        assert isinstance(_TOOL_BUDGET_EXHAUSTED_FALLBACK, str)
+        assert _TOOL_BUDGET_EXHAUSTED_FALLBACK.strip()
+        # Must acknowledge tool work happened (different vibe from the
+        # generic empty-response copy).
+        low = _TOOL_BUDGET_EXHAUSTED_FALLBACK.lower()
+        assert 'tool' in low or 'context' in low or 'gathered' in low
+        # Should suggest a more focused follow-up.
+        assert 'focused' in low or 'follow-up' in low or 'specific' in low
+
+    def test_two_fallbacks_are_distinct(self):
+        from ai_assistant.views import (
+            _EMPTY_RESPONSE_FALLBACK, _TOOL_BUDGET_EXHAUSTED_FALLBACK,
+        )
+        assert _EMPTY_RESPONSE_FALLBACK != _TOOL_BUDGET_EXHAUSTED_FALLBACK, (
+            "The two fallbacks must be distinct so tracing / UX can "
+            "distinguish 'model gave up immediately' from 'model burned "
+            "the tool budget'."
+        )

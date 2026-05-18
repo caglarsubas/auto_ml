@@ -576,4 +576,88 @@ describe('AiChatPanelComponent', () => {
       expect(cpSpy).toHaveBeenCalledWith('ai_action_start_modeling');
     });
   });
+
+  // ── v2.27.2 — empty-response defensive fallback ───────────────────────
+  // The backend now always returns a meaningful `message` even when the
+  // LLM produces no content (synthesis pass + actionable fallback in
+  // backend/ai_assistant/views.py).  Pre-v2.27.2 the chat panel showed
+  // the literal "No response received." which gave the user no next
+  // step.  This block pins the new defensive fallback wording so any
+  // future revert to the old string trips immediately.
+  describe('v2.27.2 empty-response fallback copy', () => {
+    it('should expose a public EMPTY_RESPONSE_FALLBACK constant', () => {
+      expect(typeof AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK).toBe('string');
+      expect(AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK.trim().length).toBeGreaterThan(0);
+    });
+
+    it('should NOT use the bare pre-v2.27.2 "No response received." literal', () => {
+      // The pre-v2.27.2 string left users with no actionable next step.
+      // Pin it gone.
+      expect(AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK).not.toBe('No response received.');
+      expect(AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK.toLowerCase())
+        .not.toContain('no response received');
+    });
+
+    it('should mention an actionable next step (rephrasing or backend logs)', () => {
+      const copy = AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK.toLowerCase();
+      const hasActionableHint =
+        copy.includes('rephras') || copy.includes('backend') || copy.includes('try ');
+      expect(hasActionableHint).toBeTrue();
+    });
+
+    it('should render EMPTY_RESPONSE_FALLBACK when backend returns empty message AND no actions', () => {
+      // Stub network calls + service plumbing.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({ message: '', actions: [] }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+      sharedService.setCurrentFileId(1);
+
+      // Seed an in-flight assistant message so updateLastMessage has
+      // something to update — mirrors the real send-flow which adds an
+      // empty assistant placeholder before awaiting the response.
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.content).toBe(AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK);
+    });
+
+    it('should render the action-prepared message (NOT the empty fallback) when actions are present', () => {
+      // When the backend returns no message but DOES return actions,
+      // the user should see the "I've prepared the following operation"
+      // string, not the empty-response fallback.  This is the same
+      // branch the existing fallbackMsg ternary covers.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: '',
+        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+      sharedService.setCurrentFileId(1);
+      aiService.addMessage({ role: 'user', content: 'add note', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('add note');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.content.toLowerCase()).toContain('prepared');
+      expect(last.content).not.toBe(AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK);
+    });
+
+    it('should pass through the backend message verbatim when present', () => {
+      // The fallback only kicks in when `resp.message` is falsy — pin
+      // that the happy path is unaffected.
+      const realMessage = 'Here is a real assistant reply with content.';
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({ message: realMessage, actions: [] }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+      sharedService.setCurrentFileId(1);
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.content).toBe(realMessage);
+    });
+  });
 });

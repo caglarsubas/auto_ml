@@ -704,6 +704,28 @@ def _build_slim_context(file_id: int, section: str) -> str:
 # Maximum number of tool-call rounds before forcing a final response
 _MAX_TOOL_ROUNDS = 5
 
+# Actionable fallback shown when the model genuinely returns no content AND
+# no actions across the entire workflow.  Pre-v2.27.2 this surfaced as the
+# bare "No response received." string in the chat UI; v2.27.2 makes the
+# backend the single source of truth for empty-response copy so the
+# frontend, the action-correction retry path, and any future API consumer
+# see the same actionable message.
+_EMPTY_RESPONSE_FALLBACK = (
+    "I couldn't compose an answer for that prompt. Please try rephrasing "
+    "your question — for example, ask about a specific feature, metric, "
+    "pipeline step, or purifier option."
+)
+
+# Fallback shown when the tool-loop budget is exhausted AND the synthesis
+# pass also fails to produce text.  Different copy from the generic empty
+# fallback because the user CAN see (in tracing) that real work happened.
+_TOOL_BUDGET_EXHAUSTED_FALLBACK = (
+    "I gathered the requested context across multiple tool calls but ran "
+    "out of room to write a full reply. Please ask a more focused "
+    "follow-up question (e.g., zoom in on one feature, one metric, or "
+    "one pipeline step) and I'll answer it directly."
+)
+
 # ---------------------------------------------------------------------------
 # Skill auto-routing — map user intent to a bundled skill
 # ---------------------------------------------------------------------------
@@ -854,6 +876,53 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Extract final response
     assistant_message = msg_obj.get('content', '') or ''
 
+    # ── v2.27.2 synthesis pass ──────────────────────────────────────────
+    # Pre-v2.27.2 the loop could exit with an assistant message that has
+    # `tool_calls` populated but `content=null`.  This happened when the
+    # model kept calling tools through round 5 (the no-tools forced
+    # round): we executed those tool calls inside the loop body, then
+    # broke naturally without ever asking the model to verbalize a
+    # final answer.  The user saw the literal string "No response
+    # received." and the tracing showed real tool work that produced
+    # no visible output.  Root cause: there was no synthesis pass after
+    # the budget cap.
+    #
+    # Fix: when the loop exits with empty content but tool work was
+    # done, run ONE more no-tools call to force the model to summarize
+    # what it found.  All tool results are already in `messages`, so
+    # this is a cheap one-shot synthesis.  It produces a non-empty
+    # answer in the vast majority of cases; if it still fails (network
+    # error, model returns blank), `_TOOL_BUDGET_EXHAUSTED_FALLBACK`
+    # ensures the user sees an actionable message instead of a blank
+    # bubble.
+    synthesis_required = (
+        not assistant_message.strip()
+        and any(m.get('role') == 'tool' for m in messages)
+    )
+    set_span_attr('declarai.chat.synthesis_pass', synthesis_required)
+    if synthesis_required:
+        try:
+            messages.append({
+                'role': 'system',
+                'content': (
+                    'You executed tool calls but did not produce a final '
+                    'answer.  Using ONLY the tool results above plus the '
+                    'pipeline context, write a concise reply to the user '
+                    'now.  Do not call any more tools.'
+                ),
+            })
+            synth = _call_llm(messages, model_key, tools=None)
+            _merge_usage(total_usage, synth.get('usage', {}))
+            synth_msg = synth.get('choices', [{}])[0].get('message', {}) or {}
+            assistant_message = synth_msg.get('content', '') or ''
+            set_span_attr(
+                'declarai.chat.synthesis_chars',
+                len(assistant_message),
+            )
+        except Exception as exc:  # pragma: no cover - network path
+            set_span_attr('declarai.chat.synthesis_error', str(exc)[:200])
+            assistant_message = ''
+
     # Cost, tokens, and conversation turns are handled by auto-instrumentation (v0.3.3+).
     # The Conversation panel reads gen_ai.prompt.user (pre-extracted by the SDK) and
     # gen_ai.completion from each LLM span.  No manual stamping needed.
@@ -869,6 +938,21 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             clean_message = 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
         else:
             clean_message = 'I\'ve prepared an action for you. Review it below and click **Apply** to execute.'
+
+    # ── Final empty-response guard (v2.27.2) ────────────────────────────
+    # If we still have no message AND no actions, surface an actionable
+    # fallback instead of an empty bubble.  Pick the copy based on
+    # whether real tool work happened in this turn so the message is
+    # contextually honest.
+    if not clean_message.strip() and not actions:
+        had_tool_work = any(m.get('role') == 'tool' for m in messages)
+        clean_message = (
+            _TOOL_BUDGET_EXHAUSTED_FALLBACK if had_tool_work
+            else _EMPTY_RESPONSE_FALLBACK
+        )
+        set_span_attr('declarai.chat.empty_fallback', True)
+        set_span_attr('declarai.chat.empty_fallback_kind',
+                      'budget_exhausted' if had_tool_work else 'no_content')
 
     response_data = {
         'message': clean_message,
