@@ -4218,6 +4218,245 @@ class TestPrometaCorrelationHelpers:
 
 
 # ---------------------------------------------------------------------------
+# AML v0.4 instrumentation helpers (v2.31.0 / Phase 3a of prometa-sdk roadmap).
+#
+# `schema_validate` and `model_route` are context managers that wrap
+# their respective AML events.  Unlike the simple set_* helpers from
+# Phase 2, these:
+#   1. yield a handle the call site stamps with .result(...) / .cost(...)
+#   2. propagate body exceptions normally (only ImportError is caught)
+#   3. fall back to a `_NoOpAMLHandle` that absorbs every method call
+#      so call sites don't need to guard
+#
+# These tests pin the wrapper contract + verify call-site adoption in
+# `_call_llm` (model_route) and `update_purifier_selection` (schema_validate).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPrometaAMLHelpers:
+    """``schema_validate`` and ``model_route`` are AML span context
+    managers wrapping the v0.4.0+ SDK helpers.  Tests pin the three
+    failure modes (SDK present, SDK absent, body exception) and the
+    no-op handle's absorbing-method contract."""
+
+    def test_noop_aml_handle_absorbs_arbitrary_method_calls(self):
+        """The fallback handle must accept ANY method call with ANY
+        args/kwargs and silently no-op.  This is what lets the call
+        site write `sv.result(passed=True, errors=[...])` without
+        guarding for SDK availability."""
+        from ai_assistant.prometa_config import _NoOpAMLHandle
+        h = _NoOpAMLHandle()
+        # Every call must return None and not raise.
+        assert h.result(passed=True) is None
+        assert h.result(passed=False, errors=['x'], downstream_blocked=True) is None
+        assert h.cost(cost_estimate_usd=0.01, budget_cap_usd=0.10) is None
+        # Even completely fictitious method names must work — _NoOpAMLHandle
+        # is a forward-compatible absorber for future SDK handle methods.
+        assert h.method_that_does_not_exist_anywhere() is None
+        assert h.with_positional_and_kwargs('foo', 'bar', x=1, y=2) is None
+
+    def test_schema_validate_yields_real_handle_when_sdk_available(self, monkeypatch):
+        """Happy path: the SDK's schema_validate is reachable on
+        prometa-sdk 0.6.0+; our wrapper must delegate verbatim."""
+        from ai_assistant import prometa_config as pc
+        # Don't fully replace the SDK helper — just verify our wrapper
+        # actually enters the SDK's context manager.  The handle yielded
+        # by the SDK has a `.result()` method we can call.
+        with pc.schema_validate('declarai:test-spec@v1') as sv:
+            # The handle must expose .result()  — either the real SDK
+            # handle (when client is configured) or _NoOpAMLHandle.
+            assert hasattr(sv, 'result'), (
+                "schema_validate handle must expose .result(...)"
+            )
+            # Calling .result() must not raise on either path.
+            sv.result(passed=True)
+
+    def test_schema_validate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without schema_validate symbol → wrapper yields
+        _NoOpAMLHandle.  Validates the ImportError branch."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        # Simulate the helper being absent.
+        monkeypatch.delattr(prometa, 'schema_validate', raising=False)
+
+        with pc.schema_validate('declarai:fallback-test@v1') as sv:
+            # Must be the no-op handle.
+            assert isinstance(sv, pc._NoOpAMLHandle), (
+                f"Expected _NoOpAMLHandle on ImportError; got {type(sv)}"
+            )
+            # And it must absorb method calls without raising.
+            sv.result(passed=False, errors=['simulated'])
+
+    def test_schema_validate_propagates_body_exceptions(self):
+        """Body exceptions must NOT be swallowed.  The validator's
+        ValidationError still has to bubble up so the API caller
+        sees the failure — the AML span just records the event."""
+        from ai_assistant.prometa_config import schema_validate
+
+        class _CustomError(Exception):
+            pass
+
+        with pytest.raises(_CustomError):
+            with schema_validate('declarai:propagate-test@v1') as sv:
+                sv.result(passed=False, errors=['boom'])
+                raise _CustomError('body raised — must propagate')
+
+    def test_model_route_yields_real_handle_when_sdk_available(self):
+        """Happy path: model_route is reachable on 0.6.0+; the yielded
+        handle must accept .cost() (and any other future method)."""
+        from ai_assistant.prometa_config import model_route
+        with model_route(
+            chosen='gpt-5.5',
+            candidates_considered=['gpt-5.5', 'gpt-5.4-mini'],
+            routing_reason='user_selected',
+        ) as mr:
+            assert mr is not None
+            # Must accept .cost() and not raise on either path.
+            mr.cost(cost_estimate_usd=0.001)
+
+    def test_model_route_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without model_route symbol → wrapper yields
+        _NoOpAMLHandle.  Same fallback contract as schema_validate."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'model_route', raising=False)
+
+        with pc.model_route(
+            chosen='gpt-5.5',
+            candidates_considered=['gpt-5.5'],
+            routing_reason='user_selected',
+        ) as mr:
+            assert isinstance(mr, pc._NoOpAMLHandle)
+            mr.cost(cost_estimate_usd=0.001)  # absorbed
+            mr.future_method_that_doesnt_exist_yet(123)  # absorbed
+
+    def test_model_route_propagates_body_exceptions(self):
+        """Same exception-propagation contract as schema_validate."""
+        from ai_assistant.prometa_config import model_route
+
+        class _RouterError(Exception):
+            pass
+
+        with pytest.raises(_RouterError):
+            with model_route(
+                chosen='gpt-5.5',
+                candidates_considered=['gpt-5.5'],
+                routing_reason='user_selected',
+            ):
+                raise _RouterError('upstream LLM call failed')
+
+    # ── Call-site tests ────────────────────────────────────────────────
+
+    def test_call_llm_source_wraps_dispatch_in_model_route(self):
+        """Structural guard: `_call_llm` must wrap its provider dispatch
+        in a `with model_route(...)` block, not just emit attributes.
+
+        Pre-v2.31.0 there was no AML span at all.  Reverting to the
+        bare-attrs shape would silently kill the F1 (model_route)
+        detector signal for the entire DeclarAI surface."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert 'with model_route(' in source, (
+            "_call_llm must wrap dispatch in `with model_route(...)`"
+        )
+        assert "routing_reason='user_selected'" in source, (
+            "_call_llm must record routing_reason=user_selected today; "
+            "switch to a richer reason when a real cascade lands."
+        )
+        assert 'candidates_considered=' in source, (
+            "_call_llm must pass candidates_considered to model_route"
+        )
+
+    def test_update_purifier_selection_source_wraps_validation_in_schema_validate(self):
+        """Structural guard: `update_purifier_selection` must wrap its
+        full validation flow in a `with schema_validate(...)` block.
+
+        Catches the regression where someone removes the AML span but
+        leaves the existing set_span_attr('declarai.purifier.*') calls
+        in place — the surrounding tests would still pass but the C4
+        detector signal would be gone."""
+        import inspect
+        from ai_assistant.action_executor import update_purifier_selection
+        source = inspect.getsource(update_purifier_selection)
+        assert "with schema_validate('declarai:update-purifier-selection@v1')" in source, (
+            "update_purifier_selection must wrap validation in "
+            "schema_validate('declarai:update-purifier-selection@v1')"
+        )
+        # Must call sv.result() multiple times — once per return branch.
+        # We don't pin the exact count to avoid brittleness, but require
+        # both passing AND failing outcomes are recorded (8 returns ≥
+        # 5 distinct sv.result calls in current shape).
+        assert source.count('sv.result(passed=True') >= 3, (
+            "update_purifier_selection must record sv.result(passed=True) "
+            "on each success branch (noop, wholesale, diff_noop, diff)"
+        )
+        assert source.count('sv.result(\n                passed=False') >= 2, (
+            "update_purifier_selection must record sv.result(passed=False, "
+            "errors=[...], downstream_blocked=True) on each error branch "
+            "(form_conflict, value_error, group_conflict, diff_conflict)"
+        )
+
+    def test_update_purifier_selection_form_conflict_returns_error_via_schema_validate(self, monkeypatch):
+        """Functional guard: when the AI passes BOTH purifier_options
+        AND add/remove (the form_conflict path), the function must:
+          1. Return status='error' with the form_conflict message
+          2. Have entered the schema_validate context manager
+          3. Have stamped sv.result(passed=False, ..., downstream_blocked=True)
+
+        This pins the most common AI mistake — sending mutually-exclusive
+        forms in the same payload — to the AML-instrumented error path."""
+        from ai_assistant import action_executor
+
+        sv_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def result(self, **kwargs):
+                sv_calls.append(('result', kwargs))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_schema_validate(schema_id):
+            sv_calls.append(('enter', schema_id))
+            try:
+                yield _RecordingHandle()
+            finally:
+                sv_calls.append(('exit', schema_id))
+
+        monkeypatch.setattr(action_executor, 'schema_validate', _recording_schema_validate)
+        monkeypatch.setattr(action_executor, 'set_span_attr', lambda *a, **kw: None)
+
+        # Unwrap the @tool decorator to call the underlying body directly,
+        # the same trick the dispatch_action call-site test uses.
+        fn = action_executor.update_purifier_selection
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        result = fn(42, {
+            'purifier_options': [1, 2, 3],
+            'add': [10],  # mutually-exclusive with purifier_options
+            'description': 'AI confused itself',
+        })
+
+        # Result shape pinned.
+        assert result['status'] == 'error'
+        assert 'Specify exactly one' in result['error']
+
+        # AML span lifecycle: enter → result(passed=False) → exit.
+        assert sv_calls[0] == ('enter', 'declarai:update-purifier-selection@v1')
+        assert sv_calls[-1] == ('exit', 'declarai:update-purifier-selection@v1')
+        # Find the result call in between.
+        result_calls = [c for c in sv_calls if c[0] == 'result']
+        assert len(result_calls) == 1
+        kwargs = result_calls[0][1]
+        assert kwargs['passed'] is False
+        assert kwargs['downstream_blocked'] is True
+        assert any('form_conflict' in e for e in kwargs['errors'])
+
+
+# ---------------------------------------------------------------------------
 # Standalone-trace pollution prevention (v2.22.3+).
 #
 # Cache helpers must use ``@child_only_tool`` so calls from non-workflow

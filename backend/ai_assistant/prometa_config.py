@@ -313,3 +313,122 @@ def set_request_model(model: str) -> None:
         set_span_attr('gen_ai.request.model', model)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# AML v0.4 instrumentation helpers (v2.31.0 / Phase 3a of prometa-sdk roadmap).
+#
+# The v0.4.0 SDK ships 16 typed-span helpers feeding the platform's
+# 41-feature AML scoring catalog.  We adopt them piecewise — this file
+# wraps the two highest-leverage ones for DeclarAI:
+#
+#   model_route       (AML F1: Observability — model-routing detector)
+#   schema_validate   (AML C4: Reasoning — output-validation detector)
+#
+# Each wrapper is a context manager that yields a handle on which the
+# call site stamps result attributes (e.g. ``mr.cost(...)``,
+# ``sv.result(passed=...)``).  When the SDK is unavailable we yield a
+# ``_NoOpAMLHandle`` whose every attribute access is a method that
+# silently swallows arguments — the call site never has to guard.
+# ---------------------------------------------------------------------------
+
+
+class _NoOpAMLHandle:
+    """Fallback handle yielded by AML helper wrappers when the SDK is
+    not importable (older SDK pin, sandboxed test env without prometa
+    installed at all, etc.).
+
+    Absorbs every attribute access into a do-nothing callable, so the
+    call site can write ``handle.result(passed=True, errors=[])`` /
+    ``handle.cost(cost_estimate_usd=0.01)`` etc. unconditionally.
+
+    This mirrors the ``_NoOp`` handle the SDK itself yields when the
+    Prometa client is unconfigured (no PROMETA_ENDPOINT), so the
+    contract is uniform across all three failure modes:
+      1. SDK not installed              → our _NoOpAMLHandle
+      2. SDK installed, client None     → SDK's own no-op handle
+      3. SDK installed, client active   → real span handle
+    """
+
+    @staticmethod
+    def _noop(*_args, **_kwargs):
+        return None
+
+    def __getattr__(self, _name):
+        return self._noop
+
+
+@contextmanager
+def schema_validate(schema_id: str):
+    """Wrap an output-validation event in a Prometa ``schema.validate``
+    AML span (catalog C4).  Forwards to the v0.4.0+ SDK helper when
+    available; yields a ``_NoOpAMLHandle`` otherwise.
+
+    Usage::
+
+        with schema_validate("declarai:update-purifier-selection@v1") as sv:
+            try:
+                _validate(payload)
+                sv.result(passed=True)
+            except ValidationError as e:
+                sv.result(passed=False, errors=[str(e)],
+                          downstream_blocked=True)
+                raise
+
+    The schema_id is a free-form string; we use the convention
+    ``declarai:<action-name>@v<n>`` so platform-side queries can filter
+    by validator independently of the surrounding workflow span.
+
+    Body exceptions propagate normally — only ImportError is caught
+    (SDK absent), so validation logic still gets to fail loudly.
+    """
+    try:
+        from prometa import schema_validate as _sdk_schema_validate
+    except ImportError:
+        yield _NoOpAMLHandle()
+        return
+    with _sdk_schema_validate(schema_id) as handle:
+        yield handle
+
+
+@contextmanager
+def model_route(chosen: str, *, candidates_considered, routing_reason: str):
+    """Wrap a model-routing decision in a Prometa ``model.route`` AML
+    span (catalog F1).  Forwards to the v0.4.0+ SDK helper when
+    available; yields a ``_NoOpAMLHandle`` otherwise.
+
+    Usage::
+
+        with model_route(
+            chosen=model_cfg['model_id'],
+            candidates_considered=available_model_ids,
+            routing_reason="user_selected",
+        ) as mr:
+            response = _call_llm(...)
+            # Optional: mr.cost(cost_estimate_usd=...) when known.
+
+    DeclarAI today does not run a complexity-based cascade — the user
+    explicitly selects a model in the UI.  We still record the routing
+    span so:
+      1. The model_route detector has a baseline signal per call.
+      2. When/if a real cascade lands (rate-limit fallback, cost-
+         capped routing, complexity-tier routing) the same call site
+         takes the richer ``routing_reason`` without surface changes.
+
+    ``candidates_considered`` is a sequence; the SDK joins it as a
+    comma-separated string in the ``model.candidates_considered``
+    span attribute.
+
+    Body exceptions propagate normally — only ImportError is caught.
+    """
+    try:
+        from prometa import model_route as _sdk_model_route
+    except ImportError:
+        yield _NoOpAMLHandle()
+        return
+    with _sdk_model_route(
+        chosen,
+        candidates_considered=candidates_considered,
+        routing_reason=routing_reason,
+    ) as handle:
+        yield handle
