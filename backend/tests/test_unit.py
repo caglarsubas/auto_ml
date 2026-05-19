@@ -4054,6 +4054,323 @@ class TestToolCallSpanRename:
 
 
 @pytest.mark.unit
+class TestSFSStatusReader:
+    """v2.35.0 — ``read_sfs_status`` and ``_format_sfs_status_line`` close
+    the "assistant unaware SFS is running" bug from the 2026-05-19
+    ToDoS screenshot.  These specs lock down precedence, shape,
+    interrupted-fallback semantics, banner emission rules, slim-context
+    wiring, the in-flight guard on ``start_sfs``, and source-level
+    regression guards on the integration points.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_sfs_progress(self):
+        """SFS_PROGRESS is a process-local dict — reset before AND
+        after each test so stale state cannot pollute siblings."""
+        from modeling import views as mv
+        mv.SFS_PROGRESS.clear()
+        yield
+        mv.SFS_PROGRESS.clear()
+
+    # ── read_sfs_status: precedence + shape ──────────────────────────
+
+    def test_read_sfs_status_returns_not_started_when_absent(self):
+        """When SFS_PROGRESS has no entry AND no disk file exists,
+        the canonical 'not_started' shape is returned (never None)."""
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(99999)
+        assert result['status'] == 'not_started'
+        assert result['progress'] == 0.0
+        assert result['completed_step_count'] == 0
+        assert result['source'] == 'absent'
+        assert isinstance(result, dict)
+
+    def test_read_sfs_status_running_state_from_memory(self):
+        """In-memory SFS_PROGRESS shows running → reader returns the
+        live state with source='memory'.  This is the screenshot
+        scenario."""
+        from ai_assistant.tool_executor import read_sfs_status
+        from modeling import views as mv
+        mv.SFS_PROGRESS[42] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        result = read_sfs_status(42)
+        assert result['status'] == 'running'
+        assert result['progress'] == 0.12
+        assert result['completed_step_count'] == 7
+        assert result['message'] == 'Backward elimination: Step 8/68'
+        assert result['source'] == 'memory'
+
+    def test_read_sfs_status_disk_fallback_treats_running_as_interrupted(
+        self, tmp_path, monkeypatch,
+    ):
+        """No in-memory entry but disk says 'running' → SFS thread
+        was killed (server restart) → surface as 'interrupted'."""
+        import json as _json
+        from django.conf import settings
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '888_sfs_results.json').write_text(_json.dumps({
+            'status': 'running',
+            'forward': [{'step': 1}, {'step': 2}],
+            'backward': [],
+        }))
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(888)
+        assert result['status'] == 'interrupted'
+        assert result['source'] == 'disk'
+        assert result['completed_step_count'] == 2
+
+    def test_read_sfs_status_disk_fallback_completed(self, tmp_path, monkeypatch):
+        """No in-memory + disk says 'completed' → completed (server-
+        restart-after-completion case)."""
+        import json as _json
+        from django.conf import settings
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '777_sfs_results.json').write_text(_json.dumps({
+            'status': 'completed',
+            'forward': [{'step': 1}],
+            'backward': [{'step': 1}, {'step': 2}],
+        }))
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(777)
+        assert result['status'] == 'completed'
+        assert result['progress'] == 1.0
+        assert result['source'] == 'disk'
+        assert result['completed_step_count'] == 3
+
+    def test_read_sfs_status_memory_wins_over_disk(self, tmp_path, monkeypatch):
+        """Precedence: in-memory always wins over disk because it's
+        freshest.  Disk-completed + memory-running → must report
+        running (user is mid-rerun)."""
+        import json as _json
+        from django.conf import settings
+        from modeling import views as mv
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '555_sfs_results.json').write_text(
+            _json.dumps({'status': 'completed', 'forward': [], 'backward': []})
+        )
+        mv.SFS_PROGRESS[555] = {
+            'status': 'running',
+            'progress': 0.05,
+            'message': 'Forward selection: Step 2',
+            'completed_steps': [{'step': 1}],
+            'duration_seconds': None,
+            'error': None,
+        }
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(555)
+        assert result['status'] == 'running'
+        assert result['source'] == 'memory'
+
+    # ── _format_sfs_status_line: banner emission rules ───────────────
+
+    def test_format_sfs_status_line_returns_none_for_benign_states(self):
+        """No banner for not_started / completed — common case must
+        not waste tokens."""
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        assert _format_sfs_status_line({'status': 'not_started'}) is None
+        assert _format_sfs_status_line({'status': 'completed'}) is None
+
+    def test_format_sfs_status_line_emphatic_for_running(self):
+        """Running banner must explicitly forbid duplicate-start AND
+        quote progress numerically.  Primary defence against the
+        screenshot bug."""
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'running',
+            'progress': 0.12,
+            'completed_step_count': 7,
+            'message': 'Backward elimination: Step 8/68',
+        })
+        assert line is not None
+        assert 'RUNNING' in line
+        assert 'DO NOT' in line
+        assert '12%' in line
+        assert '7 steps' in line
+        assert 'Backward elimination: Step 8/68' in line
+
+    def test_format_sfs_status_line_warns_for_stopped(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'stopped', 'progress': 0.5, 'completed_step_count': 30,
+        })
+        assert line is not None
+        assert 'stopped' in line.lower()
+        assert '30 steps' in line
+
+    def test_format_sfs_status_line_warns_for_interrupted(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'interrupted', 'progress': 0.0, 'completed_step_count': 5,
+        })
+        assert line is not None
+        assert 'INTERRUPTED' in line
+        assert 'Continue' in line
+
+    def test_format_sfs_status_line_surfaces_error_message(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'error', 'error': 'feature matrix is singular',
+        })
+        assert line is not None
+        assert 'FAILED' in line
+        assert 'feature matrix is singular' in line
+
+    # ── _build_slim_context wiring ───────────────────────────────────
+
+    def test_build_slim_context_includes_sfs_running_banner(self):
+        """When SFS is running, _build_slim_context prepends the
+        banner at the very top of the context.  This is the
+        integration point that closes the screenshot bug."""
+        from modeling import views as mv
+        from ai_assistant import views as av
+        mv.SFS_PROGRESS[100] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        slim = av._build_slim_context(100, 'sfs')
+        assert 'SFS IS CURRENTLY RUNNING' in slim
+        assert 'DO NOT propose to start SFS' in slim
+        assert '12%' in slim and '7 steps' in slim
+
+    def test_build_slim_context_omits_sfs_banner_when_not_started(self):
+        """No banner for the common pre-SFS case — context stays clean."""
+        from ai_assistant import views as av
+        slim = av._build_slim_context(99998, 'general')
+        assert 'SFS IS CURRENTLY RUNNING' not in slim
+        assert 'INTERRUPTED' not in slim
+        assert 'FAILED' not in slim
+
+    # ── _handle_get_sfs_results: status header in tool output ────────
+
+    def test_handle_get_sfs_results_surfaces_status_when_cache_empty(self, monkeypatch):
+        """The screenshot bug: cache empty during early SFS run, the
+        LLM asked get_sfs_results and got 'not available' → concluded
+        SFS hadn't started.  After v2.35.0, the handler returns the
+        running banner even when Redis cache is empty."""
+        from modeling import views as mv
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_sfs_results', lambda fid: None)
+        mv.SFS_PROGRESS[200] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        out = te._handle_get_sfs_results(200, {})
+        assert 'SFS IS CURRENTLY RUNNING' in out
+        assert 'is not available' not in out
+
+    def test_handle_get_sfs_results_status_first_when_cache_present(self, monkeypatch):
+        """Status header must precede the SFS Configuration block so
+        the LLM cannot miss it even with truncated context windows."""
+        from modeling import views as mv
+        from ai_assistant import tool_executor as te
+        mv.SFS_PROGRESS[300] = {
+            'status': 'running', 'progress': 0.5, 'message': 'mid-run',
+            'completed_steps': [{'step': 1}], 'duration_seconds': None, 'error': None,
+        }
+        monkeypatch.setattr(te, 'read_sfs_results', lambda fid: {
+            'config': {
+                'top_k': 5,
+                'stopping_criteria': {
+                    'metrics': [], 'min_features': 5, 'max_features': 15,
+                },
+            },
+            'forward': [{'step': 1, 'feature_name': 'X1', 'cv_roc_auc': 0.75,
+                         'selected_features': ['X1']}],
+        })
+        out = te._handle_get_sfs_results(300, {})
+        running_idx = out.find('SFS IS CURRENTLY RUNNING')
+        config_idx = out.find('SFS Configuration')
+        assert running_idx >= 0
+        assert config_idx > running_idx
+
+    # ── start_sfs in-flight guard ────────────────────────────────────
+
+    def test_start_sfs_refuses_when_already_running(self):
+        """Last-line-of-defence: even if LLM bypasses banner + header,
+        action executor REFUSES duplicate run.  Prevents clobbering
+        SFS_PROGRESS[file_id] and corrupting in-flight results."""
+        from modeling import views as mv
+        from ai_assistant.action_executor import start_sfs
+        mv.SFS_PROGRESS[400] = {
+            'status': 'running', 'progress': 0.3, 'message': 'mid-run',
+            'completed_steps': [{'step': i} for i in range(20)],
+            'duration_seconds': None, 'error': None,
+        }
+        result = start_sfs(400, {
+            'methods': ['backward'],
+            'stopping_criteria': {
+                'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}],
+                'min_features': 5, 'max_features': 15,
+            },
+            'description': 'restart SFS',
+        })
+        assert result['status'] == 'error'
+        assert 'sfs_already_running' in result.get('errors', [])
+        assert 'already running' in result['error']
+        assert '30%' in result['error'] or '20 steps' in result['error']
+
+    def test_start_sfs_proceeds_when_completed(self):
+        """status='completed' is a valid pre-condition for a new run
+        (user wants to rerun with different params) — guard must NOT
+        fire."""
+        from modeling import views as mv
+        from ai_assistant.action_executor import start_sfs
+        mv.SFS_PROGRESS[500] = {
+            'status': 'completed', 'progress': 1.0, 'message': 'done',
+            'completed_steps': [], 'duration_seconds': 60.0, 'error': None,
+        }
+        result = start_sfs(500, {
+            'methods': ['forward'],
+            'stopping_criteria': {
+                'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}],
+                'min_features': 3, 'max_features': 10,
+            },
+            'description': 'rerun forward SFS',
+        })
+        assert result['status'] == 'success'
+
+    # ── Structural guards (regression at source level) ───────────────
+
+    def test_slim_context_imports_sfs_status_reader(self):
+        """Future refactor dropping the slim-context wiring would
+        silently re-open the bug — guard at the source level."""
+        import inspect
+        from ai_assistant import views as av
+        source = inspect.getsource(av._build_slim_context)
+        assert 'read_sfs_status' in source
+        assert '_format_sfs_status_line' in source
+
+    def test_start_sfs_source_guards_against_duplicate_run(self):
+        """Structural guard: start_sfs source must reference
+        read_sfs_status and check 'running' status."""
+        import inspect
+        from ai_assistant import action_executor as ae
+        source = inspect.getsource(ae.start_sfs)
+        assert 'read_sfs_status' in source
+        assert "'running'" in source or '"running"' in source
+
+
+@pytest.mark.unit
 class TestPrometaConfigTimerHelpers:
     """``span_timer`` and ``stamp_elapsed`` are the shared building blocks
     for the elapsed-time attributes — verify they emit the right keys."""

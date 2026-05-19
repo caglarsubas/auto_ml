@@ -660,6 +660,37 @@ def start_sfs(file_id: int, payload: dict) -> dict:
     """
     description = payload.get('description', '')
 
+    # ── v2.35.0: in-flight guard — refuse to spawn a duplicate run ──
+    # Without this, the LLM sometimes proposed start_sfs again when it
+    # found stale or empty cached results mid-run (see the 2026-05-19
+    # ToDoS screenshot).  The slim-context preamble in views.py and the
+    # status header in _handle_get_sfs_results both warn the LLM,
+    # but the guard here is the last line of defence — even a confused
+    # model that bypasses the warnings cannot accidentally start a
+    # second SFS run that would clobber SFS_PROGRESS[file_id] and
+    # truncate the in-flight intermediate-results file.
+    try:
+        from .tool_executor import read_sfs_status
+        live = read_sfs_status(file_id)
+        live_status = live.get('status') if isinstance(live, dict) else None
+    except Exception:
+        live_status = None
+    if live_status == 'running':
+        progress = live.get('progress', 0.0) if isinstance(live, dict) else 0.0
+        completed = live.get('completed_step_count', 0) if isinstance(live, dict) else 0
+        return {
+            'status': 'error',
+            'action_type': 'start_sfs',
+            'description': description,
+            'error': (
+                f'SFS is already running for file_id={file_id} '
+                f'(progress={progress:.0%}, {completed} steps completed). '
+                f'Refusing to spawn a duplicate run — wait for the current '
+                f'SFS to complete or have the user click Stop SFS first.'
+            ),
+            'errors': ['sfs_already_running'],
+        }
+
     # ── methods ────────────────────────────────────────────────────
     methods_raw = payload.get('methods', [])
     if not isinstance(methods_raw, list) or not methods_raw:

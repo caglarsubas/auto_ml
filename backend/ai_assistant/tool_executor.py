@@ -134,6 +134,214 @@ def read_sfs_results(file_id: int) -> Optional[dict]:
         return data
 
 
+# ---------------------------------------------------------------------------
+# v2.35.0 — live SFS run-state reader (closes the "assistant unaware SFS is
+# running" bug shown in the screenshot for 2026-05-19's ToDoS entry).
+# ---------------------------------------------------------------------------
+#
+# Why this reader is NOT a Redis ``cache-read:*``:
+# ──────────────────────────────────────────────
+# Pipeline artifacts (DQ summary, encoding plan, SFS *results*, ...) are
+# pushed to Redis by the frontend AFTER each step completes — that's why
+# their readers are ``cache-read:*``.  But SFS *progress* lives in two
+# stores that the frontend never sees:
+#
+#   1. ``modeling.views.SFS_PROGRESS`` (process-local Python dict) —
+#      the background SFS thread updates ``progress`` / ``message`` /
+#      ``completed_steps`` here on every step.  Lost on server restart.
+#
+#   2. ``MEDIA_ROOT/sfs_results/{file_id}_sfs_results.json`` — the
+#      same background thread dumps a status field plus partial results
+#      here after each completed step (see ``_save_intermediate``).
+#      Survives server restart but lags one step behind in-memory.
+#
+# When a chat turn arrives mid-SFS, the assistant's slim-context
+# builder used to read ``cache_get('sfs_results')`` and find either
+# nothing (SFS just started) or stale data (previous run) — then the
+# LLM cheerfully reported "SFS is not running / no results are available
+# yet" while the UI showed step 8/68 of backward elimination.
+#
+# This reader unifies the two state stores under a single canonical
+# shape so ``_build_slim_context`` can inject a ground-truth status
+# preamble on every turn, and ``start_sfs`` can refuse to spawn a
+# duplicate run.
+#
+# Status semantics (mirror ``modeling.views.SFSStatusView``):
+#   * ``running``        in-memory says running and thread is alive
+#   * ``completed``      in-memory says completed, OR no in-memory and disk says completed
+#   * ``stopped``        user pressed Stop SFS (partial results saved)
+#   * ``interrupted``    no in-memory but disk shows running — server restart killed the thread
+#   * ``error``          background thread raised an exception
+#   * ``not_started``    no in-memory state and no disk file
+#
+# We DO NOT expose this reader via the OpenAI tool schema (see
+# ``tool_definitions.py``).  The slim-context preamble surfaces status
+# proactively on every turn — making the LLM call a tool just to learn
+# "is SFS running" would waste a tool round and the corresponding
+# tokens.  ``_handle_get_sfs_results`` does call this reader when the
+# LLM asks for results (see below) so a status header lands at the
+# top of the rendered output.
+
+_SFS_TERMINAL_STATUSES = frozenset({'completed', 'stopped', 'error'})
+
+
+@prometa_tool(name="state-read:sfs_status")
+def read_sfs_status(file_id: int) -> dict:
+    """Return the current SFS run-state for ``file_id``.
+
+    Always returns a dict (never ``None``) so callers can render
+    unconditionally without null-guarding.  Shape:
+
+        {
+            'status': 'running' | 'completed' | 'stopped' |
+                      'interrupted' | 'error' | 'not_started',
+            'progress': float,            # 0.0..1.0
+            'message': str,               # human-readable last step message
+            'completed_step_count': int,  # number of steps already finished
+            'duration_seconds': float | None,
+            'error': str | None,
+            'source': 'memory' | 'disk' | 'absent',
+        }
+
+    Precedence: in-memory ``SFS_PROGRESS`` wins (freshest), with on-disk
+    JSON as the server-restart fallback.  Mirrors
+    ``modeling.views.SFSStatusView`` so the assistant and the UI agree
+    on what state SFS is in.
+    """
+    # Local import: ``modeling.views`` imports ``ai_assistant.cache``
+    # transitively for tracing decorators; importing it at module load
+    # would create a circular dependency.  Inside a function call all
+    # apps are fully loaded.
+    from django.conf import settings  # noqa: WPS433
+    import os as _os                  # noqa: WPS433
+
+    default_payload = {
+        'status': 'not_started',
+        'progress': 0.0,
+        'message': 'SFS has not been started yet',
+        'completed_step_count': 0,
+        'duration_seconds': None,
+        'error': None,
+        'source': 'absent',
+    }
+
+    # ── 1) In-memory progress dict (freshest, lost on server restart) ──
+    try:
+        from modeling.views import SFS_PROGRESS  # noqa: WPS433
+    except Exception as exc:  # pragma: no cover — safety net
+        logger.warning("read_sfs_status: cannot import SFS_PROGRESS: %s", exc)
+        SFS_PROGRESS = {}
+
+    mem = SFS_PROGRESS.get(file_id) if isinstance(SFS_PROGRESS, dict) else None
+    if isinstance(mem, dict) and mem.get('status'):
+        completed = mem.get('completed_steps') or []
+        out = {
+            **default_payload,
+            'status': mem.get('status', 'running'),
+            'progress': float(mem.get('progress') or 0.0),
+            'message': mem.get('message') or '',
+            'completed_step_count': len(completed) if isinstance(completed, list) else 0,
+            'duration_seconds': mem.get('duration_seconds'),
+            'error': mem.get('error'),
+            'source': 'memory',
+        }
+        set_span_attr('declarai.sfs_status.source', 'memory')
+        set_span_attr('declarai.sfs_status.status', out['status'])
+        set_span_attr('declarai.sfs_status.progress', out['progress'])
+        return out
+
+    # ── 2) On-disk JSON fallback (server-restart case) ──
+    try:
+        sfs_path = _os.path.join(
+            settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json',
+        )
+        if _os.path.exists(sfs_path):
+            with open(sfs_path, 'r', encoding='utf-8') as f:
+                disk = json.load(f) or {}
+            disk_status = disk.get('status', 'completed')
+            # If the disk file says "running" but in-memory has nothing,
+            # the SFS thread was killed (server restart) — surface it
+            # as ``interrupted`` to match SFSStatusView and so the LLM
+            # can suggest the user click Continue.
+            if disk_status == 'running':
+                disk_status = 'interrupted'
+            completed = []
+            for direction in ('forward', 'backward', 'forward_from_backward'):
+                completed.extend(disk.get(direction, []) or [])
+            out = {
+                **default_payload,
+                'status': disk_status,
+                'progress': 1.0 if disk_status == 'completed' else 0.0,
+                'message': (
+                    'SFS completed' if disk_status == 'completed'
+                    else 'SFS was interrupted by a server restart — partial results saved'
+                    if disk_status == 'interrupted'
+                    else f'SFS {disk_status}'
+                ),
+                'completed_step_count': len(completed),
+                'error': disk.get('error'),
+                'source': 'disk',
+            }
+            set_span_attr('declarai.sfs_status.source', 'disk')
+            set_span_attr('declarai.sfs_status.status', out['status'])
+            return out
+    except Exception as exc:
+        logger.warning("read_sfs_status: disk fallback failed for file_id=%s: %s",
+                       file_id, exc)
+
+    # ── 3) Nothing on either side ──
+    set_span_attr('declarai.sfs_status.source', 'absent')
+    set_span_attr('declarai.sfs_status.status', 'not_started')
+    return default_payload
+
+
+def _format_sfs_status_line(status_payload: dict) -> Optional[str]:
+    """Render a one-line status preamble for the slim-context builder.
+
+    Returns ``None`` when status is benign (``not_started`` /
+    ``completed``) — those don't need a banner because the rest of the
+    context already conveys them.  Returns an emphatic line when SFS is
+    actively running, stopped, interrupted, or errored — that's when
+    the LLM must know to NOT propose starting SFS.
+    """
+    status = status_payload.get('status', 'not_started')
+    if status in {'not_started', 'completed'}:
+        return None
+
+    progress = status_payload.get('progress') or 0.0
+    pct = int(round(float(progress) * 100))
+    completed = status_payload.get('completed_step_count', 0)
+    message = (status_payload.get('message') or '').strip()
+
+    if status == 'running':
+        # Strong, capitalised wording — the LLM has historically been
+        # eager to "help" by proposing to start SFS again when it sees
+        # a partial-results state.  Make the banner unambiguous.
+        line = (
+            f'⚠ SFS IS CURRENTLY RUNNING — DO NOT propose to start SFS again. '
+            f'Progress: {pct}% ({completed} steps completed). '
+            f'Latest: {message}.'
+        )
+    elif status == 'stopped':
+        line = (
+            f'⚠ SFS was stopped by the user. Partial results available '
+            f'({completed} steps completed). DO NOT auto-restart — wait for '
+            f'the user to click Continue or explicitly request a new run.'
+        )
+    elif status == 'interrupted':
+        line = (
+            f'⚠ SFS was INTERRUPTED (likely a server restart). Partial results '
+            f'on disk ({completed} steps). Suggest the user click Continue to '
+            f'resume from the saved state.'
+        )
+    elif status == 'error':
+        err = status_payload.get('error') or 'unknown error'
+        line = f'⚠ SFS FAILED with error: {err}. The user may need to retry.'
+    else:
+        line = f'SFS status: {status}'
+    return line
+
+
 @prometa_tool(name="cache-read:cv_results")
 def read_cv_results(file_id: int) -> Optional[dict]:
     with span_timer('declarai.cache'):
@@ -349,11 +557,43 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
 
 
 def _handle_get_sfs_results(file_id: int, args: dict) -> str:
+    # v2.35.0: surface live run-state at the very top of the rendered
+    # output BEFORE returning early on missing cache data.  Pre-v2.35.0
+    # this handler returned "Information about SFS results is not
+    # available yet" when the Redis cache was empty, even when the
+    # background SFS thread was actively running step 8/68 — see the
+    # ToDoS screenshot for the in-flight bug this closes.
+    status_payload = read_sfs_status(file_id)
+    status_header_lines: list = []
+    status_line = _format_sfs_status_line(status_payload)
+    if status_line:
+        status_header_lines.append(status_line)
+    if status_payload.get('status') == 'running':
+        # Echo the live progress numerically too — the LLM benefits
+        # from seeing both the prose banner AND the structured fields
+        # so it can quote them faithfully when explaining state to
+        # the user.
+        status_header_lines.append(
+            f"  status_payload: status={status_payload.get('status')}, "
+            f"progress={status_payload.get('progress'):.2f}, "
+            f"completed_step_count={status_payload.get('completed_step_count')}"
+        )
+
     data = read_sfs_results(file_id)
     if not data:
+        # Even with no cached results, the status header is the most
+        # useful signal we can return.  Pair it with a clear message so
+        # the LLM knows the cache miss is expected (SFS still running)
+        # rather than an unconfigured pipeline.
+        if status_header_lines:
+            status_header_lines.append(
+                'No SFS step results have been pushed to the cache yet — '
+                'the background thread saves them as each step completes.'
+            )
+            return '\n'.join(status_header_lines)
         return _not_available("SFS results")
     direction_filter = args.get('direction')
-    lines = []
+    lines = list(status_header_lines)  # status header first, if any
     # Config
     cfg = data.get('config', {})
     if cfg:

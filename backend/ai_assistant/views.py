@@ -711,9 +711,24 @@ def _build_slim_context(file_id: int, section: str) -> str:
         read_pipeline_config,
         read_data_dictionary,
         read_selected_features,
+        read_sfs_status,
+        _format_sfs_status_line,
     )
 
     parts = []
+
+    # ── v2.35.0: SFS run-state preamble (BEFORE pipeline config) ──
+    # Surface SFS-running / stopped / interrupted / errored status at
+    # the very top of the slim context so the LLM cannot miss it.
+    # See the rationale block in tool_executor.read_sfs_status — this
+    # closes the "assistant unaware SFS is running" bug from the
+    # 2026-05-19 ToDoS screenshot.  Benign statuses (not_started /
+    # completed) emit no banner so we don't waste tokens on the
+    # common case.
+    sfs_status_payload = read_sfs_status(file_id)
+    sfs_status_line = _format_sfs_status_line(sfs_status_payload)
+    if sfs_status_line:
+        parts.append(sfs_status_line)
 
     # Pipeline config (always include)
     config = read_pipeline_config(file_id)
