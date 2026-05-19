@@ -1078,10 +1078,32 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       };
     }
     // SHAP features (top 20)
+    //
+    // v2.36.0 — closes ToDoS item #1: "the cached SHAP details
+    // currently show the feature order but not numeric signed SHAP
+    // values".  Pre-v2.36.0 this map read `f.shap_impact` /
+    // `f.signed_shap_impact` — fields that DO NOT EXIST on the
+    // selected_features object the backend returns (verified against
+    // media/modeling/<id>_status.json).  The actual schema is
+    // `{feature, impact, signed_impact, signed_mean, gain, vif,
+    // shap_percentile, gain_percentile, combined_score}`.  Reading
+    // the wrong fields meant `JSON.stringify` dropped the undefined
+    // values, leaving the cached `shap_details` artifact as bare
+    // `{feature: 'Var_5'}` items — so the assistant's
+    // `_handle_get_shap_details` rendered "|impact|=—, signed=—"
+    // for every feature and the LLM could not reason about impact
+    // direction.  This is the same field-mismatch class as the
+    // v2.26.0 pipeline_config bug; the regression test
+    // `test_pushModelingToAiCache_shap_details_has_numeric_impact`
+    // in modeling.component.spec.ts guards against drift.
     const feats = this.modelingStatus?.model?.selected_features;
     if (feats && feats.length > 0) {
       modelCtx.shap_features = feats.slice(0, 20).map((f: any) => ({
-        feature: f.feature, impact: f.shap_impact, signed_impact: f.signed_shap_impact,
+        feature: f.feature,
+        impact: f.impact,                  // |SHAP| magnitude (positive)
+        signed_impact: f.signed_impact,    // impact * direction → sign encodes UP/DOWN
+        signed_mean: f.signed_mean,        // raw mean of signed SHAP values (small)
+        vif: f.vif,                        // pairs SHAP with collinearity context
       }));
       modelCtx.selected_features = feats.map((f: any) => ({
         feature: f.feature, combined_score: f.combined_score,

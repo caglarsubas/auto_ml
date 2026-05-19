@@ -584,4 +584,125 @@ describe('ModelingComponent', () => {
       }, 5);
     });
   });
+
+  // ── pushModelingAiContext / pushModelingToAiCache (v2.36.0+) ─────────
+  //
+  // Closes ToDoS item #1: "the cached SHAP details currently show the
+  // feature order but not numeric signed SHAP values".  Pre-v2.36.0 the
+  // SHAP map read non-existent field names (`f.shap_impact` instead of
+  // `f.impact`), so the cached `shap_details` artifact was just bare
+  // `{feature: 'Var_5'}` items — the assistant had no way to reason
+  // about impact direction.
+  //
+  // These specs lock in the field-name correctness AT THE FRONTEND so
+  // the bug class cannot silently re-emerge if anyone refactors
+  // `pushModelingAiContext` again.  The backend handler tests
+  // (test_unit.py::TestShapDetailsHandler) verify that GIVEN a properly
+  // populated cache, the handler renders `direction=UP/DOWN` correctly
+  // — but the FE specs are what guarantee the cache is properly
+  // populated in the first place.
+  describe('pushModelingAiContext: shap_features field mapping (v2.36.0)', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+    });
+
+    function seedModelingStatusWithSelectedFeatures(features: any[]): void {
+      // Mirror the actual backend response shape produced by
+      // ``modeling/views.py::ModelingStartView`` and dumped to
+      // ``media/modeling/<id>_status.json`` — `feature`, `impact`,
+      // `signed_impact`, `signed_mean`, `vif`, etc.  Tests must use
+      // this shape (not the legacy `shap_impact` / `signed_shap_impact`
+      // variant) — using the wrong key names here would mask the bug
+      // that v2.36.0 actually fixed.
+      (component as any).modelingStatus = {
+        model: { selected_features: features, score: 0.85 },
+      };
+      // Required so the encoding-plan + cv branches don't short-circuit.
+      component.encodingPlan = [];
+    }
+
+    it('should write shap_features with NUMERIC `impact` (not undefined) — the v2.36.0 regression', () => {
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
+          signed_mean: -0.095, vif: 1.8, combined_score: 0.91,
+          shap_percentile: 0.95, gain_percentile: 0.88, usage: 'keep' },
+        { feature: 'Var_7', impact: 0.349, signed_impact: -0.349,
+          signed_mean: -0.085, vif: 2.1, combined_score: 0.89,
+          shap_percentile: 0.93, gain_percentile: 0.81, usage: 'keep' },
+      ]);
+      // Capture what would be pushed to the AI cumulative context —
+      // that's where shap_features lands BEFORE pushModelingToAiCache
+      // forwards it to the Redis cache as `shap_details`.
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      // Stub the network-bound cache push so this stays a unit test.
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      expect(setSpy).toHaveBeenCalled();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      expect(pushedCtx.shap_features).toBeDefined();
+      expect(pushedCtx.shap_features.length).toBe(2);
+      const v5 = pushedCtx.shap_features[0];
+      // PRIMARY ASSERTION — impact must be a finite number, not undefined.
+      // Pre-v2.36.0 this was undefined because the map read f.shap_impact
+      // instead of f.impact.
+      expect(typeof v5.impact).toBe('number');
+      expect(Number.isFinite(v5.impact)).toBeTrue();
+      expect(v5.impact).toBeCloseTo(0.342, 4);
+      // SIGN must encode direction.  Var_7 has signed_impact < 0
+      // (DOWN); Var_5 has signed_impact > 0 (UP).  This is what
+      // enables the assistant to reason about impact direction.
+      expect(typeof v5.signed_impact).toBe('number');
+      expect(v5.signed_impact).toBeGreaterThan(0);
+      const v7 = pushedCtx.shap_features[1];
+      expect(typeof v7.signed_impact).toBe('number');
+      expect(v7.signed_impact).toBeLessThan(0);
+    });
+
+    it('should include the v2.36.0-added context fields (signed_mean, vif) in shap_features items', () => {
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
+          signed_mean: -0.095, vif: 1.8 },
+      ]);
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      const v5 = pushedCtx.shap_features[0];
+      // signed_mean and vif are pulled into shap_features payload so
+      // the assistant handler can render "raw_mean_signed=-0.0950"
+      // and "VIF=1.80" tail context.  Without these, the v2.36.0
+      // backend handler's tail-formatting branch would always be
+      // skipped and the LLM would never see the collinearity hint
+      // alongside SHAP magnitude.
+      expect(v5.signed_mean).toBeCloseTo(-0.095, 4);
+      expect(v5.vif).toBe(1.8);
+    });
+
+    it('should NOT read legacy field names (f.shap_impact / f.signed_shap_impact) — guards against pre-v2.36.0 regression', () => {
+      // Construct selected_features with ONLY the legacy field names
+      // populated and the v2.36.0 names as undefined.  Pre-v2.36.0 this
+      // would have produced shap_features[0].impact = 0.5 (because the
+      // map read f.shap_impact).  Post-v2.36.0 it must produce
+      // shap_features[0].impact = undefined — i.e. the legacy fields
+      // are ignored entirely.  Without this guard a future refactor
+      // that "helpfully" added a fallback `f.impact ?? f.shap_impact`
+      // would silently mask the actual fix and the bug could re-emerge
+      // if the backend ever stopped writing `f.impact`.
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'LegacyVar', shap_impact: 0.5, signed_shap_impact: 0.5 },
+      ]);
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      const item = pushedCtx.shap_features[0];
+      // The legacy shap_impact is 0.5, but item.impact must be
+      // undefined — confirming we read the canonical field name.
+      expect(item.impact).toBeUndefined();
+      expect(item.signed_impact).toBeUndefined();
+    });
+  });
 });

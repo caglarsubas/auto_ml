@@ -4054,6 +4054,121 @@ class TestToolCallSpanRename:
 
 
 @pytest.mark.unit
+class TestShapDetailsHandler:
+    """v2.36.0 — ``_handle_get_shap_details`` upgrades closed ToDoS
+    item #1: assistant could not reason about impact direction
+    because the cached ``shap_details`` artifact only contained feature
+    names (frontend cache-push read non-existent field names; see the
+    rationale block in ``_handle_get_shap_details``).  These specs
+    lock down:
+
+      * direction-label semantics (sign of signed_impact → UP/DOWN/NEUTRAL)
+      * VIF + signed_mean tail context formatting
+      * graceful handling when fields are missing (legacy cache data)
+      * structural guard: handler source must reference ``signed_impact``
+        and emit a ``direction=`` token so a refactor cannot silently
+        regress to the pre-v2.36.0 raw-numbers-only output.
+    """
+
+    def test_handle_get_shap_details_renders_direction_up_for_positive_signed(
+        self, monkeypatch,
+    ):
+        """signed_impact > 0 → direction=UP.  This is what enables the
+        LLM to say 'increasing Var_5 pushes prediction UP'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'Var_5', 'impact': 0.342, 'signed_impact': 0.342,
+             'signed_mean': -0.095, 'vif': 1.8},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'Var_5' in out
+        assert 'direction=UP' in out
+        assert '|impact|=0.3420' in out
+        assert 'VIF=1.80' in out
+
+    def test_handle_get_shap_details_renders_direction_down_for_negative_signed(
+        self, monkeypatch,
+    ):
+        """signed_impact < 0 → direction=DOWN.  Critical for the
+        screenshot scenario where the user asks 'why is Var_7 important?'
+        and the LLM should answer 'Var_7 pushes prediction DOWN — i.e.
+        increasing Var_7 reduces predicted default risk'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'Var_7', 'impact': 0.349, 'signed_impact': -0.349,
+             'signed_mean': -0.085, 'vif': 2.1},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'Var_7' in out
+        assert 'direction=DOWN' in out
+        assert 'signed=-0.3490' in out
+
+    def test_handle_get_shap_details_renders_neutral_for_missing_signed(
+        self, monkeypatch,
+    ):
+        """If the cached item lacks ``signed_impact`` (e.g. legacy
+        cache from before the v2.36.0 FE fix landed), emit
+        direction=NEUTRAL with — for the signed value rather than
+        crashing on float-format of None."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'LegacyVar', 'impact': 0.1},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'direction=NEUTRAL' in out
+        assert 'signed=—' in out, (
+            "missing signed_impact must render as em-dash placeholder, "
+            "not crash on float-format(None)"
+        )
+
+    def test_handle_get_shap_details_omits_vif_when_absent(self, monkeypatch):
+        """VIF tail is optional context — omit cleanly when the field
+        isn't in the cache (legacy data) instead of rendering 'VIF=None'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'NoVifVar', 'impact': 0.2, 'signed_impact': 0.2},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'VIF=' not in out, (
+            "when VIF field is missing the tail context must be omitted "
+            "entirely rather than rendering 'VIF=None'"
+        )
+        assert 'direction=UP' in out
+
+    def test_handle_get_shap_details_top_n_filter(self, monkeypatch):
+        """The existing top_n arg must still work after the v2.36.0
+        upgrade — this is a regression guard."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': f'V{i}', 'impact': 1.0 / (i + 1), 'signed_impact': 1.0 / (i + 1)}
+            for i in range(10)
+        ])
+        out = te._handle_get_shap_details(1, {'top_n': 3})
+        assert '3 features' in out
+        assert 'V0' in out and 'V1' in out and 'V2' in out
+        assert 'V3' not in out
+
+    def test_handle_get_shap_details_source_emits_direction_token(self):
+        """Structural guard: the handler source must emit a
+        ``direction=`` token derived from ``signed_impact``.  Without
+        this guard a future refactor that drops the prose direction
+        would silently regress the v2.36.0 capability — the cached
+        data would still be correct but the LLM would lose the
+        signal it was promised."""
+        import inspect
+        from ai_assistant import tool_executor as te
+        source = inspect.getsource(te._handle_get_shap_details)
+        assert 'signed_impact' in source
+        assert "'UP'" in source or '"UP"' in source
+        assert "'DOWN'" in source or '"DOWN"' in source
+        assert 'direction=' in source, (
+            "handler source must emit a 'direction=' token in its "
+            "output template — that's the LLM-facing prose label "
+            "that enables impact-direction reasoning"
+        )
+
+
+@pytest.mark.unit
 class TestSFSStatusReader:
     """v2.35.0 — ``read_sfs_status`` and ``_format_sfs_status_line`` close
     the "assistant unaware SFS is running" bug from the 2026-05-19

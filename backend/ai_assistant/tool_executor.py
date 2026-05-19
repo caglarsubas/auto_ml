@@ -540,6 +540,17 @@ def _handle_get_selected_features(file_id: int, args: dict) -> str:
 
 
 def _handle_get_shap_details(file_id: int, args: dict) -> str:
+    # v2.36.0 — closes ToDoS item #1.  Pre-v2.36.0 the frontend's
+    # cache-push (model-development.component.ts) read non-existent
+    # field names ``f.shap_impact`` / ``f.signed_shap_impact`` instead
+    # of the actual ``f.impact`` / ``f.signed_impact`` keys, so the
+    # cached ``shap_details`` artifact contained only feature names —
+    # this handler dutifully rendered "|impact|=—, signed=—" for every
+    # feature and the LLM could not reason about impact direction.
+    # v2.36.0 fixes the FE bug AND upgrades this renderer to surface
+    # impact direction in PROSE form (UP / DOWN / NEUTRAL) so the LLM
+    # can quote it directly to the user without computing sign() from
+    # the numeric ``signed_impact``.
     data = read_shap_details(file_id)
     if not data:
         return _not_available("SHAP details")
@@ -547,11 +558,45 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
     top_n = args.get('top_n')
     if top_n and isinstance(top_n, int):
         features = features[:top_n]
-    lines = [f"SHAP Feature Impact ({len(features)} shown):"]
+    lines = [f"SHAP Feature Impact ({len(features)} features, sorted by |impact|):"]
     for f in features:
+        feat_name = f.get('feature', '?')
+        impact = f.get('impact')
+        signed = f.get('signed_impact')
+        # Direction is derived from sign(signed_impact).  Backend writes
+        # signed_impact = mean_abs * direction where direction ∈ {-1, +1, 0}
+        # (see modeling/views.py:488), so:
+        #   signed > 0   → feature pushes the prediction UP
+        #   signed < 0   → feature pushes the prediction DOWN
+        #   signed == 0  → no monotonic pattern detected (unusual)
+        if isinstance(signed, (int, float)) and signed > 0:
+            direction = 'UP'
+        elif isinstance(signed, (int, float)) and signed < 0:
+            direction = 'DOWN'
+        else:
+            direction = 'NEUTRAL'
+        # Tail context: VIF if available (pairs SHAP magnitude with
+        # collinearity warning so the LLM can flag "high impact AND
+        # high VIF" features for SFS-cluster-resolution suggestions).
+        tail_parts = []
+        vif = f.get('vif')
+        if isinstance(vif, (int, float)):
+            tail_parts.append(f"VIF={vif:.2f}")
+        sm = f.get('signed_mean')
+        if isinstance(sm, (int, float)):
+            tail_parts.append(f"raw_mean_signed={sm:+.4f}")
+        tail = (' — ' + ', '.join(tail_parts)) if tail_parts else ''
+        # Prose direction first, raw numerics second — the LLM tends
+        # to copy the first salient phrase per line, so leading with
+        # "direction=DOWN" makes responses about impact direction
+        # more accurate.
+        if isinstance(signed, (int, float)):
+            signed_str = f"{signed:+.4f}"
+        else:
+            signed_str = '—'
         lines.append(
-            f"  {f.get('feature','?')}: |impact|={_fmt(f.get('impact'))}, "
-            f"signed={_fmt(f.get('signed_impact'))}"
+            f"  {feat_name}: direction={direction}, "
+            f"|impact|={_fmt(impact)}, signed={signed_str}{tail}"
         )
     return '\n'.join(lines)
 
