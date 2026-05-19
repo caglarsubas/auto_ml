@@ -1,12 +1,83 @@
 # Design feedback: auto-register Agents on first sighting (mirror Tool registration)
 
+**Status:** **RESOLVED 2026-05-19** in `prometa-sdk` 0.7.1 — Prometa team adopted
+the proposed Option A (platform-side auto-registration). See the resolution
+log at the top of this doc for the SDK-side changes that landed, and the
+original feedback below preserved verbatim for posterity.
+
 **Audience:** Prometa platform / SDK team
 **From:** DeclarAI (POC customer, `solution_id=sol_declarai`)
-**Date:** 2026-05-19
-**SDK version observed:** `prometa-sdk` 0.7.0
-**Severity:** Onboarding friction + silent correctness footgun
+**Date filed:** 2026-05-19 (against `prometa-sdk` 0.7.0)
+**Date resolved:** 2026-05-19 (in `prometa-sdk` 0.7.1, ~2h after filing)
+**Severity at filing:** Onboarding friction + silent correctness footgun
 
 ---
+
+## Resolution log — `prometa-sdk` 0.7.1
+
+The Prometa team shipped 0.7.1 to PyPI roughly two hours after this
+feedback landed.  The release adopts **Option A** from the proposal
+below (SDK omits `agent_id` when not pinned; platform auto-registers
+the Agent row on first sighting from the `(solution_id, agent_name)`
+tuple).
+
+### SDK-side changes that landed (full diff `0.7.0..0.7.1`)
+
+| File | Change |
+|---|---|
+| `prometa/client.py` | `_resolve_agent_id` return type narrowed to `Optional[str]`; random per-process fallback **removed**; `UserWarning` **removed**; new `_clean_agent_id()` strips whitespace and treats empty string as `None`; new `_agent_identity_attrs(agent_name, agent_id)` helper conditionally includes `gen_ai.agent.id` only when pinned |
+| `prometa/integrations/_llm_common.py` | Native LLM span path uses `_agent_identity_attrs` — `gen_ai.agent.id` omitted when not pinned |
+| `prometa/integrations/openllmetry.py` | OpenLLMetry integration path uses `_agent_identity_attrs` in both span builder and OTLP resource attributes — same omission |
+| `prometa/__init__.py` | Version bump `0.7.0 → 0.7.1` |
+| `README.md`, `CHANGELOG.md` | Agent auto-registration semantics documented |
+
+The behaviour change matches the spec in *Proposal → SDK side* below.
+The wire-level effect: when a customer does not pin `agent_id`, the
+attribute is absent from the OTLP payload entirely (in all four
+code paths that emit spans), letting the platform attach the
+canonical UUID at ingest based on the customer-owned tuple.
+
+### DeclarAI-side response
+
+We chose to **pin a customer-owned slug** even though auto-registration
+would now work without one:
+
+- `PROMETA_AGENT_ID` env-var honoured first (operator override path)
+- Falls back to `{agent_name}-{stage}` slug (e.g. `declarai-assistant-staging`,
+  `declarai-assistant-production`) — deterministic, self-describing in
+  logs, debuggable
+
+Rationale: the slug shows up in our own log lines at `Prometa tracing
+initialized — agent_id=… (default-slug)`, which is more useful than an
+opaque platform UUID we never see locally.  Either path works against
+0.7.1; we picked the slug variant.
+
+Shipped in DeclarAI `v2.34.1` (commit-of-record references this doc).
+
+### Answer to the open question
+
+Original open question (filed): *"Will the platform continue accepting
+non-UUID strings for `agent_id`?"*
+
+**Answer (inferred from 0.7.1 implementation):** Yes.  The SDK's
+`_resolve_agent_id` returns `Optional[str]` with no format validation;
+platform-side ingest accepts whatever the SDK forwards.  Customer-owned
+slugs are the supported pattern going forward, alongside the new
+no-pin-at-all path.
+
+### Acknowledgement
+
+Filed at 2026-05-19 ~13:48 UTC+08; SDK 0.7.1 published at 2026-05-19
+~14:18 UTC.  That's a ~30-minute turnaround on a non-trivial design
+change touching 4 wire-emitting code paths plus tests, docs, and a
+changelog entry.  Genuine respect for the Prometa team's velocity on
+customer feedback — that's the kind of vendor responsiveness that
+actually justifies the platform-team-fixes-it-properly path over
+client-side workarounds.
+
+---
+
+## Original feedback (preserved verbatim, filed against 0.7.0)
 
 ## TL;DR
 
@@ -192,11 +263,15 @@ adjacent platform requires.
 
 - **v2.34.0 (just shipped)** — wires `PROMETA_AGENT_ID` env-var support so
   we can set a stable id and silence the warning.
-- **Considering** — switching `PROMETA_AGENT_ID` to a customer-owned slug
-  (e.g. `declarai-assistant-prod`) instead of a copy-pasted UUID, on the
-  basis that the SDK doesn't validate format and the slug is the natural
-  customer-owned identifier shape. Would appreciate confirmation that the
-  platform won't reject non-UUID strings.
+- **2026-05-19 mitigation** — set `PROMETA_AGENT_ID` to a customer-owned
+  slug (`declarai-assistant-staging` / `declarai-assistant-production`)
+  instead of a copy-pasted UUID. The app now defaults to
+  `{agent_name}-{stage}` when the env var is absent, so every cold start
+  emits the same id while the platform-side auto-registration design is
+  pending.
+- **Open question** — please confirm the platform will continue accepting
+  non-UUID strings for `agent_id`, or document the validation contract if
+  UUIDs are required server-side.
 
 Happy to discuss further or move this onto a public issue tracker.
 

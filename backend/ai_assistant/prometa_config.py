@@ -11,20 +11,19 @@ Configuration via environment variables:
     PROMETA_API_KEY_{STAGE}      — API key for this stage
     PROMETA_SOLUTION_ID          — Solution identifier (default: sol_declarai)
     PROMETA_AGENT_NAME           — Agent display name (default: declarai-assistant)
-    PROMETA_AGENT_ID             — Stable Agent UUID matching the platform-side
-                                   registry entry.  REQUIRED for platform-side
-                                   joins (PG ``Agent.id`` ↔ ClickHouse
-                                   ``prometa.agent.id``) — without it the SDK
-                                   v0.7.0+ falls back to a random per-process
-                                   id and emits a ``UserWarning`` at init,
-                                   silently breaking lineage / AML scoring /
-                                   incident-to-trace queries on the platform.
+    PROMETA_AGENT_ID             — Stable customer-owned Agent id/slug.
+                                   Defaults to ``{agent_name}-{stage}``, e.g.
+                                   ``declarai-assistant-staging``. We pass it
+                                   explicitly so the SDK never falls back to a
+                                   random per-process id while Prometa's Agent
+                                   auto-registration design is still pending.
 
     Fallback: PROMETA_ENDPOINT / PROMETA_API_KEY (without suffix) are checked
     if the stage-specific vars are not set.
 """
 
 import os
+import re
 import functools
 import logging
 import time as _time
@@ -32,8 +31,31 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_PROMETA_SOLUTION_ID = 'sol_declarai'
+DEFAULT_PROMETA_AGENT_NAME = 'declarai-assistant'
+
 _prometa = None
 _initialized = False
+
+
+def _slugify_agent_part(value: str, fallback: str) -> str:
+    slug = re.sub(r'[^a-z0-9]+', '-', value.lower()).strip('-')
+    return slug or fallback
+
+
+def _resolve_agent_id(agent_name: str, stage: str) -> tuple[str, str]:
+    """Return a stable Prometa agent id and its source.
+
+    Prometa SDK 0.7.0 accepts any non-empty string as ``agent_id``. Until
+    Prometa mirrors Tool auto-registration for Agents, DeclarAI owns a
+    human-readable slug instead of copy-pasting a platform UUID.
+    """
+    from_env = (os.environ.get('PROMETA_AGENT_ID') or '').strip()
+    if from_env:
+        return from_env, 'env'
+    agent_slug = _slugify_agent_part(agent_name, DEFAULT_PROMETA_AGENT_NAME)
+    stage_slug = _slugify_agent_part(stage, 'staging')
+    return f'{agent_slug}-{stage_slug}', 'default-slug'
 
 
 def get_prometa():
@@ -66,32 +88,31 @@ def get_prometa():
 
     try:
         from prometa import Prometa
-        # v2.34.0 / SDK 0.7.0+: pass agent_id when ``PROMETA_AGENT_ID`` is
-        # set so the trace's ``prometa.agent.id`` matches the platform's
-        # registry ``Agent.id`` (a stable UUID).  The SDK's resolver
-        # precedence is: explicit kwarg > PROMETA_AGENT_ID env > random
-        # fallback (with UserWarning).  We forward the env-var path
-        # explicitly so a future SDK upgrade that changes the env name
-        # would surface here in tests instead of silently regressing the
-        # PG↔CH join coverage.  When the env var is unset we
-        # deliberately pass nothing (not None / not empty string) to
-        # let the SDK's _resolve_agent_id() emit its own warning at
-        # init — it's better surfaced than swallowed.
+        solution_id = os.environ.get('PROMETA_SOLUTION_ID', DEFAULT_PROMETA_SOLUTION_ID)
+        agent_name = os.environ.get('PROMETA_AGENT_NAME', DEFAULT_PROMETA_AGENT_NAME)
+        agent_id, agent_id_source = _resolve_agent_id(agent_name, stage)
+
+        # Prometa platform feedback tracked in
+        # docs/prometa-feedback/agent-id-auto-registration.md asks upstream
+        # to auto-register Agents like Tools. Until that lands, pass a stable
+        # customer-owned slug so the SDK never emits a fresh random id per
+        # process. This preserves platform joins without requiring operators
+        # to copy a UUID from the Prometa UI.
         prometa_kwargs: dict = {
             'endpoint': endpoint,
             'api_key': api_key,
-            'solution_id': os.environ.get('PROMETA_SOLUTION_ID', 'sol_declarai'),
-            'agent_name': os.environ.get('PROMETA_AGENT_NAME', 'declarai-assistant'),
+            'solution_id': solution_id,
+            'agent_name': agent_name,
+            'agent_id': agent_id,
             'stage': stage,
             # Default flush_interval_seconds=2.0 is fine — platform v0.3.2+
             # deduplicates by (trace_id, span_id) via ReplacingMergeTree.
         }
-        agent_id = os.environ.get('PROMETA_AGENT_ID')
-        if agent_id:
-            prometa_kwargs['agent_id'] = agent_id
         _prometa = Prometa(**prometa_kwargs)
-        logger.info("Prometa tracing initialized — stage=%s, endpoint=%s, agent_id=%s",
-                    stage, endpoint, '<env>' if agent_id else '<random fallback>')
+        logger.info(
+            "Prometa tracing initialized — stage=%s, endpoint=%s, agent_id=%s (%s)",
+            stage, endpoint, agent_id, agent_id_source,
+        )
 
         # Enable LLM client auto-instrumentation.
         # Patches openai.Client to emit gen_ai.* span attributes automatically.

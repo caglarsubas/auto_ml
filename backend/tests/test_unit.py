@@ -2554,14 +2554,15 @@ class TestPrometaConfig:
 
         assert my_workflow.__name__ == 'my_workflow'
 
-    # ── PROMETA_AGENT_ID env-var wiring (v2.34.0 / SDK 0.7.0+) ─────────
+    # ── Stable Prometa agent id wiring (v2.34.0 / SDK 0.7.0+) ─────────
 
     def test_get_prometa_passes_agent_id_when_env_var_set(self, monkeypatch):
         """When PROMETA_AGENT_ID is set, get_prometa() must forward it
         as agent_id= to Prometa(...).  This is the platform-correctness
         path: matching the trace's prometa.agent.id to the registry's
-        Agent.id (a stable UUID) is what makes PG↔CH joins work for
-        lineage / AML scoring / incident-to-trace.
+        Agent.id (or customer-owned slug accepted by ingest) is what
+        makes PG↔CH joins work for lineage / AML scoring /
+        incident-to-trace.
 
         Without this forwarding the SDK 0.7.0+ falls back to a random
         per-process id and emits a UserWarning."""
@@ -2572,8 +2573,8 @@ class TestPrometaConfig:
         monkeypatch.setenv('PROMETA_STAGE', 'staging')
         monkeypatch.setenv('PROMETA_ENDPOINT_STAGING', 'http://test.invalid/otlp')
         monkeypatch.setenv('PROMETA_API_KEY_STAGING', 'pk_test')
-        # The behaviour-under-test: stable agent UUID via env var.
-        monkeypatch.setenv('PROMETA_AGENT_ID', 'declarai-stable-uuid-aaaa-1111')
+        # The behaviour-under-test: stable customer-owned slug via env var.
+        monkeypatch.setenv('PROMETA_AGENT_ID', 'declarai-assistant-staging')
 
         # Capture the kwargs Prometa(...) is constructed with, without
         # actually emitting telemetry.
@@ -2601,14 +2602,15 @@ class TestPrometaConfig:
             "PROMETA_AGENT_ID was set; get_prometa() must forward it as "
             "agent_id= so the SDK does not fall back to a random per-process id"
         )
-        assert captured_kwargs['agent_id'] == 'declarai-stable-uuid-aaaa-1111'
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging'
 
-    def test_get_prometa_omits_agent_id_when_env_var_unset(self, monkeypatch):
-        """When PROMETA_AGENT_ID is NOT set, get_prometa() must NOT pass
-        agent_id= to Prometa(...).  We deliberately let the SDK's own
-        _resolve_agent_id() emit its UserWarning at init — surfacing
-        the configuration gap is better than silently swallowing it
-        with a random id we generate ourselves."""
+    def test_get_prometa_uses_stable_slug_when_env_var_unset(self, monkeypatch):
+        """When PROMETA_AGENT_ID is NOT set, use a deterministic slug.
+
+        The attached Prometa feedback documents why we no longer ask
+        operators to copy a platform UUID into .env: until Prometa
+        auto-registers Agents like Tools, DeclarAI owns a stable slug so
+        every cold start reports the same agent_id."""
         monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
         monkeypatch.delenv('PROMETA_DISABLE', raising=False)
         monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
@@ -2634,19 +2636,16 @@ class TestPrometaConfig:
 
         client = pc.get_prometa()
         assert client is not None
-        assert 'agent_id' not in captured_kwargs, (
-            "PROMETA_AGENT_ID was unset; get_prometa() must NOT pass agent_id="
-            " — the SDK's own resolver should fire its UserWarning to surface "
-            "the gap.  Sending an empty/None agent_id would suppress the warning"
-            " and silently restore the broken state."
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+            "PROMETA_AGENT_ID was unset; get_prometa() must still pass a "
+            "stable customer-owned slug so the SDK does not generate a "
+            "random per-process id"
         )
 
-    def test_get_prometa_omits_agent_id_when_env_var_empty_string(self, monkeypatch):
+    def test_get_prometa_uses_stable_slug_when_env_var_empty_string(self, monkeypatch):
         """Edge case: PROMETA_AGENT_ID set to empty string (often happens
         when an operator unsets a deployment var by leaving it blank in
-        the env file).  Treat as unset — don't forward an empty string
-        to the SDK (would override its random fallback with '' which is
-        falsy but truthy enough to confuse downstream readers)."""
+        the env file). Treat as unset and use the deterministic slug."""
         monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
         monkeypatch.delenv('PROMETA_DISABLE', raising=False)
         monkeypatch.setenv('PROMETA_STAGE', 'staging')
@@ -2671,10 +2670,9 @@ class TestPrometaConfig:
         pc._prometa = None
 
         pc.get_prometa()
-        assert 'agent_id' not in captured_kwargs, (
-            "Empty-string PROMETA_AGENT_ID must be treated as unset; "
-            "do not forward '' to Prometa(agent_id='') — the SDK would "
-            "treat it as truthy-explicit and bypass its own warning"
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+            "Empty-string PROMETA_AGENT_ID must be treated as unset and "
+            "replaced by the stable DeclarAI slug"
         )
 
     def test_prometa_config_module_documents_agent_id_env_var(self):
@@ -2690,24 +2688,46 @@ class TestPrometaConfig:
         )
 
     def test_get_prometa_source_reads_agent_id_env_var(self):
-        """Structural guard: get_prometa() source must read
-        PROMETA_AGENT_ID and conditionally forward it to Prometa(...).
+        """Structural guard: the prometa_config module must read
+        PROMETA_AGENT_ID (in _resolve_agent_id) AND get_prometa() must
+        always forward the resolved stable agent_id to Prometa(...).
 
         Reverting to the pre-v2.34.0 shape (always-random agent_id)
         would silently break PG↔CH joins again — this test catches
         that regression at the source level even when the runtime
-        code path is short-circuited under pytest."""
+        code path is short-circuited under pytest.
+
+        Split assertion across the two helpers because v2.34.0+
+        factored the env-var read into ``_resolve_agent_id`` so
+        get_prometa() stays a thin orchestrator.  Both pieces must
+        be present for the contract to hold."""
         import inspect
         import ai_assistant.prometa_config as pc
-        source = inspect.getsource(pc.get_prometa)
-        assert "PROMETA_AGENT_ID" in source, (
-            "get_prometa() must read os.environ['PROMETA_AGENT_ID']"
+        resolver_source = inspect.getsource(pc._resolve_agent_id)
+        assert "PROMETA_AGENT_ID" in resolver_source, (
+            "_resolve_agent_id() must read os.environ['PROMETA_AGENT_ID']"
         )
-        # Conditional-forward shape — not unconditional / not as
-        # default fallback (would suppress SDK's own warning).
-        assert 'if agent_id:' in source, (
-            "get_prometa() must conditionally forward agent_id only when "
-            "the env var is truthy (treat empty/None as unset)"
+        getter_source = inspect.getsource(pc.get_prometa)
+        assert "'agent_id': agent_id" in getter_source, (
+            "get_prometa() must always forward the resolved stable agent_id"
+        )
+
+    def test_resolve_agent_id_defaults_to_stage_slug(self, monkeypatch):
+        """Default agent_id is stable, readable, and environment-specific."""
+        import ai_assistant.prometa_config as pc
+        monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
+        assert pc._resolve_agent_id('declarai-assistant', 'production') == (
+            'declarai-assistant-production',
+            'default-slug',
+        )
+
+    def test_resolve_agent_id_slugifies_display_name(self, monkeypatch):
+        """A changed display label should still produce a slug-shaped id."""
+        import ai_assistant.prometa_config as pc
+        monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
+        assert pc._resolve_agent_id('DeclarAI Assistant', 'Staging EU') == (
+            'declarai-assistant-staging-eu',
+            'default-slug',
         )
 
     def test_set_span_attr_noop_without_active_span(self):
