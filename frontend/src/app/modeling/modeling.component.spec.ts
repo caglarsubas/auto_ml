@@ -705,4 +705,159 @@ describe('ModelingComponent', () => {
       expect(item.signed_impact).toBeUndefined();
     });
   });
+
+  // ── SFS step tables: Description column (v2.36.1) ──────────────────
+  //
+  // Closes ToDoS item #5: "view details button under sfs progress with
+  // the table containing per-step sfs results, including feature name,
+  // description, CV ROC-AUC, percentage change, and direction."
+  //
+  // The modal, the post-completion Forward Selection Results table, and
+  // the Backward Elimination table all carry a `Description` column
+  // sourced from `getFeatureDescription(step.feature_name)` (which
+  // resolves against `dataDictionaryCache`).  These specs are the lock:
+  // if someone reorders columns, drops the cell, or breaks the lookup,
+  // we want the test gate to fail BEFORE the change reaches a user.
+  //
+  // We deliberately verify the rendered DOM (not just component state)
+  // because the bug class here is "the column silently disappeared from
+  // the template" — which a pure state-level assertion would miss.
+  describe('SFS step tables: Description column rendering (v2.36.1)', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+      // Seed dataDictionaryCache with two entries the SFS step seeds
+      // below will reference.  `Var_unknown` is deliberately absent so
+      // the em-dash fallback path is exercised.
+      component.dataDictionaryCache = [
+        { Feature_Name: 'Var_5', Feature_Description: 'Customer credit score band' },
+        { Feature_Name: 'Var_7', Feature_Description: 'Months since last default' },
+      ];
+      // The post-completion Forward/Backward results tables live inside
+      // TWO nested gates in modeling.component.html:
+      //   line 167: <div *ngIf="modelingStatus">          (outer)
+      //   line 174: <div *ngIf="modelingStatus?.model">   (inner)
+      // Both must be truthy or the SFS Results section at line 604 is
+      // pruned from the DOM and our `.sfs-feature-description` querySelector
+      // returns an empty NodeList.  An empty `model: {}` object suffices
+      // because line 174 only does a truthiness check.
+      (component as any).modelingStatus = { status: 'completed', model: {} };
+    });
+
+    function descriptionCellTexts(): string[] {
+      const cells: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
+      return Array.from(cells).map(c => (c.textContent || '').trim());
+    }
+
+    it('should render the Description header + cell in the View Details modal', () => {
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+        { step: 2, direction: 'forward', action: 'added',
+          feature_name: 'Var_7', cv_roc_auc: 0.83, cv_pr_auc: 0.65,
+          pct_changes: { roc_auc: 2.47, pr_auc: 4.84 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const headers: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+      // Sanity: a Description header exists alongside the original
+      // CV ROC-AUC / Direction columns — this is the "column wasn't
+      // accidentally dropped" check.
+      expect(headerTexts).toContain('Description');
+      expect(headerTexts).toContain('CV ROC-AUC');
+      expect(headerTexts).toContain('Direction');
+
+      const texts = descriptionCellTexts();
+      // Both modal rows must surface the dictionary text.
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should render the Description column in the Forward Selection Results table', () => {
+      component.sfsForwardResults = [
+        { step: 1, feature_name: 'Var_5',
+          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
+          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
+        { step: 2, feature_name: 'Var_7',
+          train_roc_auc: 0.87, cv_roc_auc: 0.83, test_roc_auc: 0.82,
+          train_pr_auc: 0.69, cv_pr_auc: 0.65, test_pr_auc: 0.63 },
+      ];
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should render the Description column in the Backward Elimination table', () => {
+      component.sfsBackwardResults = [
+        { step: 1, feature_name: 'Var_5', selected_features: ['Var_5','Var_7','Var_9'],
+          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
+          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
+        { step: 2, feature_name: 'Var_7', selected_features: ['Var_5','Var_9'],
+          train_roc_auc: 0.83, cv_roc_auc: 0.79, test_roc_auc: 0.78,
+          train_pr_auc: 0.64, cv_pr_auc: 0.60, test_pr_auc: 0.58 },
+      ];
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should fall back to em-dash when the feature has no dictionary entry', () => {
+      // Var_unknown is intentionally absent from dataDictionaryCache
+      // (see beforeEach).  The cell text must be exactly the em-dash
+      // placeholder so users see "missing" rather than blank.
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_unknown', cv_roc_auc: 0.71, cv_pr_auc: 0.55,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      // Em-dash (U+2014) — must match exactly what the template emits.
+      expect(texts).toContain('\u2014');
+    });
+
+    it('should set the [title] attribute to the full description for hover preview (modal)', () => {
+      // Description cells truncate with ellipsis at max-width.  The
+      // [title] binding must carry the full text so users can hover to
+      // see the rest — otherwise long descriptions are silently lost.
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const cells: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
+      // Find the cell whose body text matches the seeded description.
+      const cell = Array.from(cells)
+        .find(c => (c.textContent || '').trim() === 'Customer credit score band');
+      expect(cell).toBeTruthy();
+      expect(cell!.getAttribute('title')).toBe('Customer credit score band');
+    });
+
+    it('getFeatureDescription should resolve from dataDictionaryCache and return empty string on miss', () => {
+      // The renderer leans on this helper for all three tables, so a
+      // direct unit assertion guards the lookup contract independently
+      // of any template wiring.
+      expect(component.getFeatureDescription('Var_5')).toBe('Customer credit score band');
+      expect(component.getFeatureDescription('Var_7')).toBe('Months since last default');
+      // Miss must return '' (NOT undefined) so the template's
+      // `|| '\u2014'` fallback fires cleanly.
+      expect(component.getFeatureDescription('Var_unknown')).toBe('');
+      // Empty/null inputs must not crash and must return ''.
+      expect(component.getFeatureDescription('')).toBe('');
+    });
+  });
 });
