@@ -237,12 +237,17 @@ export class SharedService {
   // Subject (not BehaviorSubject) — late subscribers must not auto-
   // re-start SFS on a stale request.  The single shape is the same
   // object the backend action handler returns in `applied`.
+  // v2.37.0+: backward_cut_step (optional) signals forward-from-
+  // backward — the modeling component routes to
+  // startForwardFromBackwardFeatures() instead of startSfs() when
+  // it's present.
   private sfsStartRequestsSubject = new Subject<{
     methods: string[];
     stopping_criteria: any;
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }>();
   sfsStartRequests$: Observable<{
     methods: string[];
@@ -250,6 +255,7 @@ export class SharedService {
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }> = this.sfsStartRequestsSubject.asObservable();
 
   emitSfsStartRequest(request: {
@@ -258,6 +264,7 @@ export class SharedService {
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }): void {
     if (!request || typeof request !== 'object') return;
     if (!Array.isArray(request.methods) || request.methods.length === 0) return;

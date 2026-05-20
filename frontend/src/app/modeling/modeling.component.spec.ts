@@ -860,4 +860,293 @@ describe('ModelingComponent', () => {
       expect(component.getFeatureDescription('')).toBe('');
     });
   });
+
+  // ── Backward cut-step lifecycle (v2.37.0) ─────────────────────────────
+  // Locks in two related fixes:
+  //
+  //   (Bug A — regression) Before v2.37.0, fetchSfsResults() unconditionally
+  //   called initBackwardCutStep() on every refetch, which RESET the user's
+  //   manual cut selection (sfsBackwardCutStep, sfsBackwardCutFeatures) back
+  //   to the last backward step.  Symptom: user clicks the radio at step 37,
+  //   runs forward-from-backward, the SFS completes, fetchSfsResults() fires
+  //   → green box label snaps back to "Step 67 (6 features)" even though the
+  //   forward run actually used 36 features from step 37.  The user-visible
+  //   bug: clicking the radio looked like it did nothing.
+  //
+  //   (Bug B — new feature) The AI's start_sfs tool now accepts a
+  //   backward_cut_step parameter.  When present, the modeling component
+  //   routes to startForwardFromBackwardFeatures() instead of startSfs() —
+  //   the exact same code path the manual "Run Forward Selection on These N
+  //   Features" button takes.  Without this, the AI's only way to mimic the
+  //   cut was to enumerate every dropped feature in excluded_features, which
+  //   never updated the visible cut step display.
+  describe('backward cut-step lifecycle (v2.37.0)', () => {
+    let sharedService: SharedService;
+    let dataService: DataService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      dataService = TestBed.inject(DataService);
+      fixture.detectChanges();
+    });
+
+    // Seeds a backward-results array shaped like the backend's
+    // sanitize_sfs() output (modeling/views.py:1513): each step has
+    // `step`, `feature_name`, `selected_features`, and a CV metric.
+    function seedBackwardResults(): any[] {
+      return [
+        { step: 1, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_A', cv_roc_auc: 0.70,
+          selected_features: ['Var_B', 'Var_C', 'Var_D'] },
+        { step: 2, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_B', cv_roc_auc: 0.72,
+          selected_features: ['Var_C', 'Var_D'] },
+        { step: 3, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_C', cv_roc_auc: 0.68,
+          selected_features: ['Var_D'] },
+      ];
+    }
+
+    // ── setBackwardCutStep: manual click contract ──────────────────────
+    it('setBackwardCutStep should set sfsBackwardCutStep and copy selected_features', () => {
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+      // Simulate the user clicking the radio at step 2.
+      component.setBackwardCutStep(steps[1]);
+      expect(component.sfsBackwardCutStep).toBe(2);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+      // Verify it's a defensive copy (mutating the source row must not
+      // leak into the component's state).
+      (steps[1].selected_features as string[]).push('Var_LEAK');
+      expect(component.sfsBackwardCutFeatures).not.toContain('Var_LEAK');
+    });
+
+    it('setBackwardCutStep should clear features when the step has no selected_features', () => {
+      // Robustness: even though the backend writes selected_features on
+      // every step, a corrupted/legacy result row must not crash the UI.
+      component.setBackwardCutStep({ step: 7, feature_name: 'Var_X' } as any);
+      expect(component.sfsBackwardCutStep).toBe(7);
+      expect(component.sfsBackwardCutFeatures).toEqual([]);
+    });
+
+    // ── initBackwardCutStep: default-to-last semantics ─────────────────
+    it('initBackwardCutStep should default to the last backward step when called fresh', () => {
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+      // Use `as any` to avoid TS control-flow narrowing — after a literal
+      // null assignment the compiler will narrow subsequent reads to
+      // `null` and reject the numeric `toBe(3)` matcher.
+      (component as any).sfsBackwardCutStep = null;
+      component.sfsBackwardCutFeatures = [];
+      component.initBackwardCutStep();
+      expect(component.sfsBackwardCutStep).toBe(3);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_D']);
+    });
+
+    it('initBackwardCutStep should null-out cut state when there are no backward results', () => {
+      component.sfsBackwardResults = [];
+      component.sfsBackwardCutStep = 99;
+      component.sfsBackwardCutFeatures = ['stale'];
+      component.initBackwardCutStep();
+      expect(component.sfsBackwardCutStep).toBeNull();
+      expect(component.sfsBackwardCutFeatures).toEqual([]);
+    });
+
+    // ── fetchSfsResults: Bug A regression lock ─────────────────────────
+    //
+    // Before v2.37.0 this call would have stomped sfsBackwardCutStep
+    // back to step 3 (the last step in the response).  The fix preserves
+    // step 2 because it's still a valid step in the refreshed results.
+    it('fetchSfsResults should PRESERVE a user-selected cut step that is still valid', (done) => {
+      const steps = seedBackwardResults();
+      // Stub the HTTP call so the test stays synchronous and stable.
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: steps, backward_remaining_features: ['Var_D'],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.sfsBackwardResults = steps;
+      // User clicked step 2 before the refetch.
+      component.setBackwardCutStep(steps[1]);
+      expect(component.sfsBackwardCutStep).toBe(2);
+
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Cut step PRESERVED — the unconditional initBackwardCutStep()
+        // call is gone.  Features are resynced from the refreshed row.
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+        done();
+      }, 5);
+    });
+
+    it('fetchSfsResults should RESYNC sfsBackwardCutFeatures from the refreshed row data', (done) => {
+      // After a stop+resume the backend may rewrite a step's selected_features
+      // list.  The cut step is still valid, but the features list must
+      // reflect the latest payload so the green box and the
+      // startForwardFromBackwardFeatures() call use the correct set.
+      const stale: any[] = [
+        { step: 1, selected_features: ['Var_OLD_1', 'Var_OLD_2'] },
+      ];
+      const refreshed: any[] = [
+        { step: 1, selected_features: ['Var_NEW_1', 'Var_NEW_2', 'Var_NEW_3'] },
+      ];
+      component.sfsBackwardResults = stale;
+      component.setBackwardCutStep(stale[0]);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_OLD_1', 'Var_OLD_2']);
+
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: refreshed, backward_remaining_features: [],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Cut step preserved, features resynced from refreshed data.
+        expect(component.sfsBackwardCutStep).toBe(1);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_NEW_1', 'Var_NEW_2', 'Var_NEW_3']);
+        done();
+      }, 5);
+    });
+
+    it('fetchSfsResults should FALL BACK to last-step default when the cut step is no longer present', (done) => {
+      // After an SFS restart, the backward results may be entirely new
+      // and the user's previous cut step number may no longer exist.
+      const fresh: any[] = [
+        { step: 1, selected_features: ['F1', 'F2'] },
+        { step: 2, selected_features: ['F2'] },
+      ];
+      component.sfsBackwardResults = [{ step: 99, selected_features: ['old'] }];
+      // Use `as any` to avoid TS literal narrowing (= 99 narrows the read
+      // type to `99 | null`, which then rejects the `toBe(2)` matcher).
+      (component as any).sfsBackwardCutStep = 99;
+      component.sfsBackwardCutFeatures = ['old'];
+
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: fresh, backward_remaining_features: [],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Step 99 is no longer valid → fall back to last (step 2).
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['F2']);
+        done();
+      }, 5);
+    });
+
+    // ── sfsStartRequests$ branching on backward_cut_step (Bug B) ───────
+    it('sfsStartRequests$ with backward_cut_step + forward method should route to startForwardFromBackwardFeatures()', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+
+      sharedService.emitSfsStartRequest({
+        methods: ['forward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 2,  // ← v2.37.0+ new field
+      });
+
+      setTimeout(() => {
+        // Cut step + features synced from the matching backward row.
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+        // Routed to the forward-from-backward path; plain startSfs NOT called.
+        expect(ffbSpy).toHaveBeenCalledTimes(1);
+        expect(startSfsSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is missing (no regression)', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      component.sfsBackwardResults = seedBackwardResults();
+
+      // Existing v2.25.0 payload shape — no backward_cut_step.
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+      });
+
+      setTimeout(() => {
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is set but methods lack forward', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      // Console.warn is logged in the fallback branch; spy on it so we
+      // can assert the developer-facing warning fired without polluting
+      // the test runner's output.
+      const warnSpy = spyOn(console, 'warn');
+      component.sfsBackwardResults = seedBackwardResults();
+
+      // Mixed signal: cut step set but only backward method.  Backend
+      // would have already rejected this, but the frontend also
+      // defensively falls through to plain startSfs() with a warn.
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 2,
+      });
+
+      setTimeout(() => {
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step does not match any row', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      spyOn(console, 'warn');
+      component.sfsBackwardResults = seedBackwardResults();  // steps 1..3
+
+      sharedService.emitSfsStartRequest({
+        methods: ['forward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 999,  // ← not in seedBackwardResults()
+      });
+
+      setTimeout(() => {
+        // Frontend cannot resolve step 999 → fall back to plain startSfs.
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+  });
 });

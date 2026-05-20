@@ -388,6 +388,27 @@ describe('AiChatPanelComponent', () => {
       // Italic-_none_ marker so the user knows nothing was excluded.
       expect(lastMsg.content).toContain('_none_');
     });
+
+    // ── v2.37.0+: backward_cut_step pass-through ──────────────────────
+    // Backend tool now returns `backward_cut_step` in `applied`.  The
+    // chat panel must forward it verbatim so the modeling component can
+    // branch to startForwardFromBackwardFeatures() instead of startSfs().
+    it('should forward backward_cut_step in the broadcast (v2.37.0+)', (done) => {
+      const appliedWithCut = {
+        ...validApplied,
+        methods: ['forward'],
+        backward_cut_step: 37,
+      };
+      sharedService.sfsStartRequests$.subscribe(received => {
+        expect(received).toEqual(appliedWithCut);
+        expect(received.backward_cut_step).toBe(37);
+        done();
+      });
+      (component as any)._handleActionResult('start_sfs', {
+        applied: appliedWithCut,
+        description: 'Forward SFS from backward step 37 survivor set',
+      });
+    });
   });
 
   // ── start_data_purifier (v2.26.0+) ────────────────────────────────────

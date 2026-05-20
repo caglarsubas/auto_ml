@@ -490,6 +490,35 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           }
         }
       }
+      // v2.37.0+: when the AI provides backward_cut_step, route to the
+      // forward-from-backward code path instead of plain startSfs().
+      // This mirrors the user clicking the radio at the matching row in
+      // the Backward Elimination table and then clicking "Run Forward
+      // Selection on These N Features".  Falls through to startSfs() if
+      // any precondition fails — keeping the existing v2.25.0 behaviour
+      // for backward-compatible payloads.
+      const _cut = (req as any).backward_cut_step;
+      if (typeof _cut === 'number' && _cut > 0) {
+        const _cutRow = this.sfsBackwardResults.find((s: any) => s.step === _cut);
+        const _hasForward = req.methods.includes('forward');
+        if (_cutRow
+            && Array.isArray(_cutRow.selected_features)
+            && _cutRow.selected_features.length > 0
+            && _hasForward) {
+          // Update the green box display + cut features list, then
+          // route to the same code path the manual button takes.
+          this.setBackwardCutStep(_cutRow);
+          setTimeout(() => this.startForwardFromBackwardFeatures(), 0);
+          return;
+        }
+        // Precondition failed — log for the developer, fall through to
+        // plain startSfs() so the action isn't silently dropped.
+        console.warn(
+          `[SFS] backward_cut_step=${_cut} from AI request could not be honored ` +
+          `(cutRow found=${!!_cutRow}, hasForward=${_hasForward}); ` +
+          `falling back to plain startSfs()`
+        );
+      }
       // Defer the actual SFS kickoff to the next tick so any pending
       // form-binding change detection settles before startSfs() reads
       // the field values.
@@ -2406,8 +2435,38 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         };
         console.log('[SFS] Backward remaining features:', this.sfsBackwardRemainingFeatures);
         console.log('[SFS] Forward-from-backward results:', this.sfsForwardFromBackwardResults.length);
-        // Initialize cut point to last backward step (default = all eliminations applied)
-        this.initBackwardCutStep();
+        // v2.37.0: preserve the user/AI-selected cut step across refetches.
+        //
+        // Before v2.37.0 this branch unconditionally called
+        // initBackwardCutStep(), which RESET sfsBackwardCutStep to the
+        // LAST backward step on every refetch.  Symptom (reported by
+        // user on 2026-05-19): after clicking the radio at step 37 and
+        // running forward-from-backward via the AI assistant, the green
+        // box label snapped back to "Step 67 (6 features)" the instant
+        // SFS completed — even though the forward run actually used the
+        // 36 features from step 37.  The forward results were correct,
+        // only the cut-step display was wrong, which made the user
+        // believe their click never registered.
+        //
+        // The fix: preserve a cut step that's still valid in the refreshed
+        // backward results, and resync its features list from the latest
+        // step payload (the backend may have updated metrics after a
+        // stop+resume).  Fall back to the default-to-last behaviour only
+        // when there's no prior cut step or it's no longer present in the
+        // results (e.g. after a full SFS restart).
+        const _existingCut = this.sfsBackwardCutStep;
+        const _cutRow = _existingCut == null
+          ? null
+          : this.sfsBackwardResults.find((s: any) => s.step === _existingCut) || null;
+        if (_cutRow) {
+          // Preserve the user's selection; resync features from latest data.
+          if (Array.isArray(_cutRow.selected_features)) {
+            this.sfsBackwardCutFeatures = [..._cutRow.selected_features];
+          }
+        } else {
+          // No prior cut, or it's been invalidated (e.g. SFS restart) — init.
+          this.initBackwardCutStep();
+        }
         // Determine SFS checkpoint substep based on what results we have
         if (this.sfsForwardFromBackwardResults.length > 0) {
           this.pushModelingCheckpoint('sfs_forward_from_backward_completed');

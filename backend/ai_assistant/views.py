@@ -294,6 +294,14 @@ n_jobs, top_k, per-feature drop flags) and starts the engine.
 {"methods": ["backward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "excluded_features": ["Var_3"], "n_jobs": 3, "top_k": 5, "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"}
 <<<END_ACTION>>>
 
+Forward-from-backward example (v2.37.0+: pick a backward cut point and run forward
+SFS from the features remaining at that step — mirrors the user clicking the radio
+at row N of the Backward Elimination table, then clicking "Run Forward Selection
+on These M Features"):
+<<<ACTION:start_sfs>>>
+{"methods": ["forward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "n_jobs": 3, "top_k": 5, "backward_cut_step": 37, "description": "Forward SFS from backward step 37 survivor set (best observed CV ROC-AUC=0.7688, 36 features remaining)"}
+<<<END_ACTION>>>
+
 Rules for start_sfs:
 • `methods`: non-empty list drawn from {"forward", "backward"}.  Use ["backward"]
   alone for redundancy/multicollinearity pruning, ["forward"] for greedy build-up,
@@ -306,8 +314,24 @@ Rules for start_sfs:
   to setting feature_usage='drop' via update_config.  When you want SFS to skip
   a feature, prefer the update_config feature_usage path so the Selected Features
   UI also reflects the drop; use this list only as a redundant safety net.
+  IMPORTANT (v2.37.0+): do NOT enumerate backward-dropped features here to fake a
+  cut step — use `backward_cut_step` below instead.  The two are semantically
+  different and the cut-step path also updates the visible green-box label
+  ("Remaining Features at Step N (M features)") so the user sees what you did.
 • `n_jobs` / `top_k`: parallel worker count (1–16) and top-K CV candidates
   per step (1–50).  Sensible defaults: n_jobs=3, top_k=5.
+• `backward_cut_step` (optional, v2.37.0+): positive int identifying a row in
+  the on-disk backward SFS results.  When set, forward SFS uses the features
+  remaining at that step as the initial pool — the same code path the manual
+  "Run Forward Selection on These N Features" button takes.  Requires `methods`
+  to include "forward" (the cut step has no effect on a backward-only run, so
+  the tool will REJECT a backward-only payload with this field set).  Requires a
+  completed backward SFS run on disk; the tool reads
+  ``media/sfs_results/{file_id}_sfs_results.json`` and rejects if the step
+  number is out of range.  When the user asks to "pick the best observed cut
+  and run forward from there", call ``get_sfs_results`` first to find the
+  backward step with the maximum CV ROC-AUC, then emit start_sfs with
+  ``backward_cut_step`` set to that step number.
 
 ─── ACTION TYPE 6: start_data_purifier ───
 Kick off the preprocessing/data-purifier step (the FIRST run-step in the pipeline).

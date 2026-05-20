@@ -768,6 +768,124 @@ def start_sfs(file_id: int, payload: dict) -> dict:
     n_jobs = max(1, min(_pos_int(payload.get('n_jobs', 3), 3), 16))
     top_k = max(1, min(_pos_int(payload.get('top_k', 5), 5), 50))
 
+    # ── v2.37.0: backward_cut_step (forward-from-backward) ─────────
+    # When set, the AI is requesting forward-from-backward SFS using
+    # the features remaining at the given backward step.  This mirrors
+    # the user clicking the radio at that row in the Backward
+    # Elimination table, then clicking "Run Forward Selection on
+    # These N Features".
+    #
+    # Before v2.37.0 the AI's only way to mimic this was to enumerate
+    # every backward-dropped feature in ``excluded_features`` — fragile
+    # (off-by-one in step counting, missed features), conflated with
+    # user-drop intent, and never updated the visible cut step
+    # display (the green box at the bottom of the backward table).
+    #
+    # Constraints:
+    #   - Must be a positive integer.
+    #   - ``methods`` must include 'forward' — the cut step has no
+    #     effect on a backward-only run, so accepting it would be
+    #     silent corruption.
+    #   - The step must exist in the on-disk sfs_results JSON.  If
+    #     no backward SFS has been run yet (file missing or
+    #     ``backward`` array empty), reject — the cut step is
+    #     meaningless without backward results to cut.
+    backward_cut_step_raw = payload.get('backward_cut_step', None)
+    backward_cut_step = None
+    if backward_cut_step_raw is not None:
+        try:
+            bcs = int(backward_cut_step_raw)
+        except (TypeError, ValueError):
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step must be a positive integer '
+                    f'(got: {backward_cut_step_raw!r})'
+                ),
+                'errors': ['invalid_backward_cut_step'],
+            }
+        if bcs <= 0:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': f'backward_cut_step must be a positive integer (got: {bcs})',
+                'errors': ['invalid_backward_cut_step'],
+            }
+        if 'forward' not in methods:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f"backward_cut_step requires methods to include 'forward' "
+                    f"(forward-from-backward SFS); got methods={methods}"
+                ),
+                'errors': ['backward_cut_step_requires_forward_method'],
+            }
+        # Validate the step exists in the on-disk sfs_results JSON.
+        from django.conf import settings as _settings  # local import — avoid Django at module load when settings absent
+        import os as _os
+        import json as _json
+        sfs_path = _os.path.join(
+            _settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json'
+        )
+        if not _os.path.exists(sfs_path):
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} requires a completed backward SFS run, '
+                    f'but no sfs_results file exists for file_id={file_id}'
+                ),
+                'errors': ['no_sfs_results_for_cut_step'],
+            }
+        try:
+            with open(sfs_path, 'r', encoding='utf-8') as _f:
+                sfs_data = _json.load(_f)
+        except Exception as _read_err:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': f'Failed to read sfs_results JSON for file_id={file_id}: {_read_err}',
+                'errors': ['sfs_results_read_error'],
+            }
+        backward_steps = sfs_data.get('backward', []) or []
+        valid_steps = {
+            int(s.get('step'))
+            for s in backward_steps
+            if isinstance(s, dict) and isinstance(s.get('step'), (int, float))
+        }
+        if not valid_steps:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} requires backward SFS results, '
+                    f'but the sfs_results JSON for file_id={file_id} has no backward array'
+                ),
+                'errors': ['no_backward_results_for_cut_step'],
+            }
+        if bcs not in valid_steps:
+            sorted_steps = sorted(valid_steps)
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} is not a valid backward step '
+                    f'(valid steps: {sorted_steps[0]}..{sorted_steps[-1]}, '
+                    f'{len(sorted_steps)} total)'
+                ),
+                'errors': ['invalid_backward_cut_step_value'],
+            }
+        backward_cut_step = bcs
+
     return {
         'status': 'success',
         'action_type': 'start_sfs',
@@ -778,6 +896,7 @@ def start_sfs(file_id: int, payload: dict) -> dict:
             'excluded_features': excluded,
             'n_jobs': n_jobs,
             'top_k': top_k,
+            'backward_cut_step': backward_cut_step,
         },
         'errors': [],
     }

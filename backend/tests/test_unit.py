@@ -1661,6 +1661,174 @@ class TestDispatchAction:
         from ai_assistant.action_executor import HANDLERS, start_sfs
         assert HANDLERS.get('start_sfs') is start_sfs
 
+    # ── v2.37.0+: backward_cut_step (forward-from-backward) ─────────────
+    # Closes the gap where the AI's only way to mimic the manual
+    # "Run Forward Selection on These N Features" button was to
+    # enumerate every backward-dropped feature in excluded_features —
+    # fragile, conflated with user-drop intent, and silently failing to
+    # update the visible green-box cut-step display.
+
+    def test_start_sfs_default_applied_backward_cut_step_is_none(self):
+        # Backward-compat with v2.25.0..v2.36.1 callers — when the AI
+        # doesn't send backward_cut_step, applied must still expose the
+        # field as None so subscribers can read it uniformly.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'success'
+        assert 'backward_cut_step' in result['applied']
+        assert result['applied']['backward_cut_step'] is None
+
+    def test_start_sfs_rejects_non_int_backward_cut_step(self):
+        # "thirty-seven" isn't coercible to int — must fail loudly.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 'thirty-seven',
+        })
+        assert result['status'] == 'error'
+        assert 'backward_cut_step' in result['error']
+        assert 'invalid_backward_cut_step' in result.get('errors', [])
+
+    def test_start_sfs_rejects_non_positive_backward_cut_step(self):
+        # 0 and negatives are nonsense step numbers — backend steps are 1-indexed.
+        for bad_val in (0, -1, -42):
+            result = self._dispatch(1, 'start_sfs', {
+                'methods': ['forward'],
+                'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+                'backward_cut_step': bad_val,
+            })
+            assert result['status'] == 'error', f'expected error for backward_cut_step={bad_val}'
+            assert 'positive integer' in result['error']
+
+    def test_start_sfs_rejects_backward_cut_step_without_forward_method(self):
+        # backward_cut_step only makes sense for forward-from-backward.
+        # If methods=['backward'], honoring the cut step is silent
+        # corruption — the cut features would never reach the engine.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 37,
+        })
+        assert result['status'] == 'error'
+        assert 'forward' in result['error']
+        assert 'backward_cut_step_requires_forward_method' in result.get('errors', [])
+
+    def test_start_sfs_rejects_backward_cut_step_when_sfs_results_missing(self, tmp_path, settings):
+        # Without a completed backward SFS run there's nothing to cut
+        # from.  Tool must reject (not silently fall back to full feature
+        # pool — that would surprise the user).
+        settings.MEDIA_ROOT = str(tmp_path)
+        # tmp_path has no sfs_results directory at all.
+        result = self._dispatch(99999, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 1,
+        })
+        assert result['status'] == 'error'
+        assert 'no sfs_results' in result['error']
+
+    def test_start_sfs_rejects_backward_cut_step_out_of_range(self, tmp_path, settings):
+        # cut_step=999 is greater than the number of backward steps on disk.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '777_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [
+                    {'step': 1, 'selected_features': ['A', 'B', 'C']},
+                    {'step': 2, 'selected_features': ['B', 'C']},
+                    {'step': 3, 'selected_features': ['C']},
+                ],
+            }, f)
+        result = self._dispatch(777, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 999,
+        })
+        assert result['status'] == 'error'
+        assert 'not a valid backward step' in result['error']
+        assert 'invalid_backward_cut_step_value' in result.get('errors', [])
+
+    def test_start_sfs_rejects_backward_cut_step_when_backward_array_empty(self, tmp_path, settings):
+        # File exists but has no backward results.  This shouldn't
+        # happen in normal operation but the guard prevents a confusing
+        # downstream error in SFSStartView.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '888_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({'forward': [{'step': 1, 'selected_features': ['A']}], 'backward': []}, f)
+        result = self._dispatch(888, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 1,
+        })
+        assert result['status'] == 'error'
+        assert 'no backward array' in result['error']
+        assert 'no_backward_results_for_cut_step' in result.get('errors', [])
+
+    def test_start_sfs_accepts_valid_backward_cut_step(self, tmp_path, settings):
+        # Happy path: cut step exists in the on-disk backward results
+        # and methods includes 'forward' — cut step is mirrored into
+        # applied so the frontend can branch on it.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '555_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [
+                    {'step': 1, 'selected_features': ['A', 'B', 'C', 'D']},
+                    {'step': 2, 'selected_features': ['B', 'C', 'D']},
+                    {'step': 3, 'selected_features': ['C', 'D']},
+                ],
+            }, f)
+        result = self._dispatch(555, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}], 'min_features': 2, 'max_features': 4},
+            'backward_cut_step': 2,
+            'n_jobs': 3,
+            'top_k': 5,
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['backward_cut_step'] == 2
+
+    def test_start_sfs_coerces_numeric_string_backward_cut_step(self, tmp_path, settings):
+        # Robustness: the LLM sometimes wraps numbers in quotes.  As long
+        # as int() can coerce it (and all other constraints are met),
+        # accept it rather than reject — symmetric with how other
+        # numeric fields are coerced.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '556_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [{'step': 1, 'selected_features': ['A', 'B']}],
+            }, f)
+        result = self._dispatch(556, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': '1',  # ← string, not int
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['backward_cut_step'] == 1
+
     # ── v2.26.0+: pipeline-orchestration actions ────────────────────────
     # These three actions close the "AI cannot click pipeline buttons"
     # gap exposed in v2.25.0 (the user's screenshot showed the AI

@@ -626,6 +626,31 @@ describe('SharedService', () => {
         done();
       }, 0);
     });
+
+    // ── v2.37.0+: backward_cut_step forwarding ──────────────────────────
+    // The new optional field signals forward-from-backward routing in the
+    // modeling component.  The Subject must forward it verbatim so the
+    // subscriber can branch on it; a future refactor that strips unknown
+    // fields would silently drop the cut-step intent and revert SFS to
+    // a full-feature run.
+    it('should forward the optional backward_cut_step field verbatim', (done) => {
+      const req = mkReq({ methods: ['forward'], backward_cut_step: 37 });
+      service.sfsStartRequests$.subscribe(received => {
+        expect(received).toEqual(req);
+        expect(received.backward_cut_step).toBe(37);
+        done();
+      });
+      service.emitSfsStartRequest(req);
+    });
+
+    it('should accept null backward_cut_step (explicit "no cut") and forward it', (done) => {
+      const req = mkReq({ backward_cut_step: null });
+      service.sfsStartRequests$.subscribe(received => {
+        expect(received.backward_cut_step).toBeNull();
+        done();
+      });
+      service.emitSfsStartRequest(req);
+    });
   });
 
   // ── dataPurifierStartRequests (v2.26.0+) ──────────────────────────────
