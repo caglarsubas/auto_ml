@@ -357,6 +357,33 @@ describe('DataService', () => {
       req.flush({ status: 'success' });
     });
 
+    // ── v2.38.0: cross-trace link forwarding (parent_span_id) ────────────
+    it('executeAiAction should include parent_span_id when provided (v2.38.0)', () => {
+      service.executeAiAction(7, 'update_config', { foo: 'bar' }, 'chat-span-deadbeef')
+        .subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      expect(req.request.body.parent_span_id).toBe('chat-span-deadbeef');
+      req.flush({ status: 'success' });
+    });
+
+    it('executeAiAction should OMIT parent_span_id when not provided (legacy)', () => {
+      service.executeAiAction(7, 'update_notes', { x: 1 }).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      // Legacy v2.25.0..v2.37.0 callers must produce a body byte-identical
+      // to the pre-v2.38.0 shape — parent_span_id field MUST NOT be set.
+      expect('parent_span_id' in req.request.body).toBeFalse();
+      req.flush({ status: 'success' });
+    });
+
+    it('executeAiAction should OMIT parent_span_id when explicitly empty', () => {
+      // Defensive: the chat-panel passes message?.chatSpanId which can be
+      // undefined or empty; both paths must skip the link field.
+      service.executeAiAction(7, 'update_notes', {}, '').subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      expect('parent_span_id' in req.request.body).toBeFalse();
+      req.flush({ status: 'success' });
+    });
+
     it('sendAiChat should POST message with context', () => {
       service.sendAiChat('Hello', { summary: [] }, 'data_quality', []).subscribe(res => {
         expect(res.message).toBeTruthy();

@@ -584,4 +584,569 @@ describe('ModelingComponent', () => {
       }, 5);
     });
   });
+
+  // ── pushModelingAiContext / pushModelingToAiCache (v2.36.0+) ─────────
+  //
+  // Closes ToDoS item #1: "the cached SHAP details currently show the
+  // feature order but not numeric signed SHAP values".  Pre-v2.36.0 the
+  // SHAP map read non-existent field names (`f.shap_impact` instead of
+  // `f.impact`), so the cached `shap_details` artifact was just bare
+  // `{feature: 'Var_5'}` items — the assistant had no way to reason
+  // about impact direction.
+  //
+  // These specs lock in the field-name correctness AT THE FRONTEND so
+  // the bug class cannot silently re-emerge if anyone refactors
+  // `pushModelingAiContext` again.  The backend handler tests
+  // (test_unit.py::TestShapDetailsHandler) verify that GIVEN a properly
+  // populated cache, the handler renders `direction=UP/DOWN` correctly
+  // — but the FE specs are what guarantee the cache is properly
+  // populated in the first place.
+  describe('pushModelingAiContext: shap_features field mapping (v2.36.0)', () => {
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      fixture.detectChanges();
+    });
+
+    function seedModelingStatusWithSelectedFeatures(features: any[]): void {
+      // Mirror the actual backend response shape produced by
+      // ``modeling/views.py::ModelingStartView`` and dumped to
+      // ``media/modeling/<id>_status.json`` — `feature`, `impact`,
+      // `signed_impact`, `signed_mean`, `vif`, etc.  Tests must use
+      // this shape (not the legacy `shap_impact` / `signed_shap_impact`
+      // variant) — using the wrong key names here would mask the bug
+      // that v2.36.0 actually fixed.
+      (component as any).modelingStatus = {
+        model: { selected_features: features, score: 0.85 },
+      };
+      // Required so the encoding-plan + cv branches don't short-circuit.
+      component.encodingPlan = [];
+    }
+
+    it('should write shap_features with NUMERIC `impact` (not undefined) — the v2.36.0 regression', () => {
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
+          signed_mean: -0.095, vif: 1.8, combined_score: 0.91,
+          shap_percentile: 0.95, gain_percentile: 0.88, usage: 'keep' },
+        { feature: 'Var_7', impact: 0.349, signed_impact: -0.349,
+          signed_mean: -0.085, vif: 2.1, combined_score: 0.89,
+          shap_percentile: 0.93, gain_percentile: 0.81, usage: 'keep' },
+      ]);
+      // Capture what would be pushed to the AI cumulative context —
+      // that's where shap_features lands BEFORE pushModelingToAiCache
+      // forwards it to the Redis cache as `shap_details`.
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      // Stub the network-bound cache push so this stays a unit test.
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      expect(setSpy).toHaveBeenCalled();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      expect(pushedCtx.shap_features).toBeDefined();
+      expect(pushedCtx.shap_features.length).toBe(2);
+      const v5 = pushedCtx.shap_features[0];
+      // PRIMARY ASSERTION — impact must be a finite number, not undefined.
+      // Pre-v2.36.0 this was undefined because the map read f.shap_impact
+      // instead of f.impact.
+      expect(typeof v5.impact).toBe('number');
+      expect(Number.isFinite(v5.impact)).toBeTrue();
+      expect(v5.impact).toBeCloseTo(0.342, 4);
+      // SIGN must encode direction.  Var_7 has signed_impact < 0
+      // (DOWN); Var_5 has signed_impact > 0 (UP).  This is what
+      // enables the assistant to reason about impact direction.
+      expect(typeof v5.signed_impact).toBe('number');
+      expect(v5.signed_impact).toBeGreaterThan(0);
+      const v7 = pushedCtx.shap_features[1];
+      expect(typeof v7.signed_impact).toBe('number');
+      expect(v7.signed_impact).toBeLessThan(0);
+    });
+
+    it('should include the v2.36.0-added context fields (signed_mean, vif) in shap_features items', () => {
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
+          signed_mean: -0.095, vif: 1.8 },
+      ]);
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      const v5 = pushedCtx.shap_features[0];
+      // signed_mean and vif are pulled into shap_features payload so
+      // the assistant handler can render "raw_mean_signed=-0.0950"
+      // and "VIF=1.80" tail context.  Without these, the v2.36.0
+      // backend handler's tail-formatting branch would always be
+      // skipped and the LLM would never see the collinearity hint
+      // alongside SHAP magnitude.
+      expect(v5.signed_mean).toBeCloseTo(-0.095, 4);
+      expect(v5.vif).toBe(1.8);
+    });
+
+    it('should NOT read legacy field names (f.shap_impact / f.signed_shap_impact) — guards against pre-v2.36.0 regression', () => {
+      // Construct selected_features with ONLY the legacy field names
+      // populated and the v2.36.0 names as undefined.  Pre-v2.36.0 this
+      // would have produced shap_features[0].impact = 0.5 (because the
+      // map read f.shap_impact).  Post-v2.36.0 it must produce
+      // shap_features[0].impact = undefined — i.e. the legacy fields
+      // are ignored entirely.  Without this guard a future refactor
+      // that "helpfully" added a fallback `f.impact ?? f.shap_impact`
+      // would silently mask the actual fix and the bug could re-emerge
+      // if the backend ever stopped writing `f.impact`.
+      seedModelingStatusWithSelectedFeatures([
+        { feature: 'LegacyVar', shap_impact: 0.5, signed_shap_impact: 0.5 },
+      ]);
+      const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
+      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      (component as any).pushModelingAiContext();
+      const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
+      const item = pushedCtx.shap_features[0];
+      // The legacy shap_impact is 0.5, but item.impact must be
+      // undefined — confirming we read the canonical field name.
+      expect(item.impact).toBeUndefined();
+      expect(item.signed_impact).toBeUndefined();
+    });
+  });
+
+  // ── SFS step tables: Description column (v2.36.1) ──────────────────
+  //
+  // Closes ToDoS item #5: "view details button under sfs progress with
+  // the table containing per-step sfs results, including feature name,
+  // description, CV ROC-AUC, percentage change, and direction."
+  //
+  // The modal, the post-completion Forward Selection Results table, and
+  // the Backward Elimination table all carry a `Description` column
+  // sourced from `getFeatureDescription(step.feature_name)` (which
+  // resolves against `dataDictionaryCache`).  These specs are the lock:
+  // if someone reorders columns, drops the cell, or breaks the lookup,
+  // we want the test gate to fail BEFORE the change reaches a user.
+  //
+  // We deliberately verify the rendered DOM (not just component state)
+  // because the bug class here is "the column silently disappeared from
+  // the template" — which a pure state-level assertion would miss.
+  describe('SFS step tables: Description column rendering (v2.36.1)', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+      // Seed dataDictionaryCache with two entries the SFS step seeds
+      // below will reference.  `Var_unknown` is deliberately absent so
+      // the em-dash fallback path is exercised.
+      component.dataDictionaryCache = [
+        { Feature_Name: 'Var_5', Feature_Description: 'Customer credit score band' },
+        { Feature_Name: 'Var_7', Feature_Description: 'Months since last default' },
+      ];
+      // The post-completion Forward/Backward results tables live inside
+      // TWO nested gates in modeling.component.html:
+      //   line 167: <div *ngIf="modelingStatus">          (outer)
+      //   line 174: <div *ngIf="modelingStatus?.model">   (inner)
+      // Both must be truthy or the SFS Results section at line 604 is
+      // pruned from the DOM and our `.sfs-feature-description` querySelector
+      // returns an empty NodeList.  An empty `model: {}` object suffices
+      // because line 174 only does a truthiness check.
+      (component as any).modelingStatus = { status: 'completed', model: {} };
+    });
+
+    function descriptionCellTexts(): string[] {
+      const cells: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
+      return Array.from(cells).map(c => (c.textContent || '').trim());
+    }
+
+    it('should render the Description header + cell in the View Details modal', () => {
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+        { step: 2, direction: 'forward', action: 'added',
+          feature_name: 'Var_7', cv_roc_auc: 0.83, cv_pr_auc: 0.65,
+          pct_changes: { roc_auc: 2.47, pr_auc: 4.84 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const headers: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+      // Sanity: a Description header exists alongside the original
+      // CV ROC-AUC / Direction columns — this is the "column wasn't
+      // accidentally dropped" check.
+      expect(headerTexts).toContain('Description');
+      expect(headerTexts).toContain('CV ROC-AUC');
+      expect(headerTexts).toContain('Direction');
+
+      const texts = descriptionCellTexts();
+      // Both modal rows must surface the dictionary text.
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should render the Description column in the Forward Selection Results table', () => {
+      component.sfsForwardResults = [
+        { step: 1, feature_name: 'Var_5',
+          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
+          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
+        { step: 2, feature_name: 'Var_7',
+          train_roc_auc: 0.87, cv_roc_auc: 0.83, test_roc_auc: 0.82,
+          train_pr_auc: 0.69, cv_pr_auc: 0.65, test_pr_auc: 0.63 },
+      ];
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should render the Description column in the Backward Elimination table', () => {
+      component.sfsBackwardResults = [
+        { step: 1, feature_name: 'Var_5', selected_features: ['Var_5','Var_7','Var_9'],
+          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
+          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
+        { step: 2, feature_name: 'Var_7', selected_features: ['Var_5','Var_9'],
+          train_roc_auc: 0.83, cv_roc_auc: 0.79, test_roc_auc: 0.78,
+          train_pr_auc: 0.64, cv_pr_auc: 0.60, test_pr_auc: 0.58 },
+      ];
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      expect(texts).toContain('Customer credit score band');
+      expect(texts).toContain('Months since last default');
+    });
+
+    it('should fall back to em-dash when the feature has no dictionary entry', () => {
+      // Var_unknown is intentionally absent from dataDictionaryCache
+      // (see beforeEach).  The cell text must be exactly the em-dash
+      // placeholder so users see "missing" rather than blank.
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_unknown', cv_roc_auc: 0.71, cv_pr_auc: 0.55,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const texts = descriptionCellTexts();
+      // Em-dash (U+2014) — must match exactly what the template emits.
+      expect(texts).toContain('\u2014');
+    });
+
+    it('should set the [title] attribute to the full description for hover preview (modal)', () => {
+      // Description cells truncate with ellipsis at max-width.  The
+      // [title] binding must carry the full text so users can hover to
+      // see the rest — otherwise long descriptions are silently lost.
+      component.sfsCompletedSteps = [
+        { step: 1, direction: 'forward', action: 'added',
+          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+      ];
+      component.showSfsProgressModal = true;
+      fixture.detectChanges();
+
+      const cells: NodeListOf<HTMLElement> =
+        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
+      // Find the cell whose body text matches the seeded description.
+      const cell = Array.from(cells)
+        .find(c => (c.textContent || '').trim() === 'Customer credit score band');
+      expect(cell).toBeTruthy();
+      expect(cell!.getAttribute('title')).toBe('Customer credit score band');
+    });
+
+    it('getFeatureDescription should resolve from dataDictionaryCache and return empty string on miss', () => {
+      // The renderer leans on this helper for all three tables, so a
+      // direct unit assertion guards the lookup contract independently
+      // of any template wiring.
+      expect(component.getFeatureDescription('Var_5')).toBe('Customer credit score band');
+      expect(component.getFeatureDescription('Var_7')).toBe('Months since last default');
+      // Miss must return '' (NOT undefined) so the template's
+      // `|| '\u2014'` fallback fires cleanly.
+      expect(component.getFeatureDescription('Var_unknown')).toBe('');
+      // Empty/null inputs must not crash and must return ''.
+      expect(component.getFeatureDescription('')).toBe('');
+    });
+  });
+
+  // ── Backward cut-step lifecycle (v2.37.0) ─────────────────────────────
+  // Locks in two related fixes:
+  //
+  //   (Bug A — regression) Before v2.37.0, fetchSfsResults() unconditionally
+  //   called initBackwardCutStep() on every refetch, which RESET the user's
+  //   manual cut selection (sfsBackwardCutStep, sfsBackwardCutFeatures) back
+  //   to the last backward step.  Symptom: user clicks the radio at step 37,
+  //   runs forward-from-backward, the SFS completes, fetchSfsResults() fires
+  //   → green box label snaps back to "Step 67 (6 features)" even though the
+  //   forward run actually used 36 features from step 37.  The user-visible
+  //   bug: clicking the radio looked like it did nothing.
+  //
+  //   (Bug B — new feature) The AI's start_sfs tool now accepts a
+  //   backward_cut_step parameter.  When present, the modeling component
+  //   routes to startForwardFromBackwardFeatures() instead of startSfs() —
+  //   the exact same code path the manual "Run Forward Selection on These N
+  //   Features" button takes.  Without this, the AI's only way to mimic the
+  //   cut was to enumerate every dropped feature in excluded_features, which
+  //   never updated the visible cut step display.
+  describe('backward cut-step lifecycle (v2.37.0)', () => {
+    let sharedService: SharedService;
+    let dataService: DataService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      dataService = TestBed.inject(DataService);
+      fixture.detectChanges();
+    });
+
+    // Seeds a backward-results array shaped like the backend's
+    // sanitize_sfs() output (modeling/views.py:1513): each step has
+    // `step`, `feature_name`, `selected_features`, and a CV metric.
+    function seedBackwardResults(): any[] {
+      return [
+        { step: 1, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_A', cv_roc_auc: 0.70,
+          selected_features: ['Var_B', 'Var_C', 'Var_D'] },
+        { step: 2, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_B', cv_roc_auc: 0.72,
+          selected_features: ['Var_C', 'Var_D'] },
+        { step: 3, direction: 'backward', action: 'dropped',
+          feature_name: 'Var_C', cv_roc_auc: 0.68,
+          selected_features: ['Var_D'] },
+      ];
+    }
+
+    // ── setBackwardCutStep: manual click contract ──────────────────────
+    it('setBackwardCutStep should set sfsBackwardCutStep and copy selected_features', () => {
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+      // Simulate the user clicking the radio at step 2.
+      component.setBackwardCutStep(steps[1]);
+      expect(component.sfsBackwardCutStep).toBe(2);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+      // Verify it's a defensive copy (mutating the source row must not
+      // leak into the component's state).
+      (steps[1].selected_features as string[]).push('Var_LEAK');
+      expect(component.sfsBackwardCutFeatures).not.toContain('Var_LEAK');
+    });
+
+    it('setBackwardCutStep should clear features when the step has no selected_features', () => {
+      // Robustness: even though the backend writes selected_features on
+      // every step, a corrupted/legacy result row must not crash the UI.
+      component.setBackwardCutStep({ step: 7, feature_name: 'Var_X' } as any);
+      expect(component.sfsBackwardCutStep).toBe(7);
+      expect(component.sfsBackwardCutFeatures).toEqual([]);
+    });
+
+    // ── initBackwardCutStep: default-to-last semantics ─────────────────
+    it('initBackwardCutStep should default to the last backward step when called fresh', () => {
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+      // Use `as any` to avoid TS control-flow narrowing — after a literal
+      // null assignment the compiler will narrow subsequent reads to
+      // `null` and reject the numeric `toBe(3)` matcher.
+      (component as any).sfsBackwardCutStep = null;
+      component.sfsBackwardCutFeatures = [];
+      component.initBackwardCutStep();
+      expect(component.sfsBackwardCutStep).toBe(3);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_D']);
+    });
+
+    it('initBackwardCutStep should null-out cut state when there are no backward results', () => {
+      component.sfsBackwardResults = [];
+      component.sfsBackwardCutStep = 99;
+      component.sfsBackwardCutFeatures = ['stale'];
+      component.initBackwardCutStep();
+      expect(component.sfsBackwardCutStep).toBeNull();
+      expect(component.sfsBackwardCutFeatures).toEqual([]);
+    });
+
+    // ── fetchSfsResults: Bug A regression lock ─────────────────────────
+    //
+    // Before v2.37.0 this call would have stomped sfsBackwardCutStep
+    // back to step 3 (the last step in the response).  The fix preserves
+    // step 2 because it's still a valid step in the refreshed results.
+    it('fetchSfsResults should PRESERVE a user-selected cut step that is still valid', (done) => {
+      const steps = seedBackwardResults();
+      // Stub the HTTP call so the test stays synchronous and stable.
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: steps, backward_remaining_features: ['Var_D'],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.sfsBackwardResults = steps;
+      // User clicked step 2 before the refetch.
+      component.setBackwardCutStep(steps[1]);
+      expect(component.sfsBackwardCutStep).toBe(2);
+
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Cut step PRESERVED — the unconditional initBackwardCutStep()
+        // call is gone.  Features are resynced from the refreshed row.
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+        done();
+      }, 5);
+    });
+
+    it('fetchSfsResults should RESYNC sfsBackwardCutFeatures from the refreshed row data', (done) => {
+      // After a stop+resume the backend may rewrite a step's selected_features
+      // list.  The cut step is still valid, but the features list must
+      // reflect the latest payload so the green box and the
+      // startForwardFromBackwardFeatures() call use the correct set.
+      const stale: any[] = [
+        { step: 1, selected_features: ['Var_OLD_1', 'Var_OLD_2'] },
+      ];
+      const refreshed: any[] = [
+        { step: 1, selected_features: ['Var_NEW_1', 'Var_NEW_2', 'Var_NEW_3'] },
+      ];
+      component.sfsBackwardResults = stale;
+      component.setBackwardCutStep(stale[0]);
+      expect(component.sfsBackwardCutFeatures).toEqual(['Var_OLD_1', 'Var_OLD_2']);
+
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: refreshed, backward_remaining_features: [],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Cut step preserved, features resynced from refreshed data.
+        expect(component.sfsBackwardCutStep).toBe(1);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_NEW_1', 'Var_NEW_2', 'Var_NEW_3']);
+        done();
+      }, 5);
+    });
+
+    it('fetchSfsResults should FALL BACK to last-step default when the cut step is no longer present', (done) => {
+      // After an SFS restart, the backward results may be entirely new
+      // and the user's previous cut step number may no longer exist.
+      const fresh: any[] = [
+        { step: 1, selected_features: ['F1', 'F2'] },
+        { step: 2, selected_features: ['F2'] },
+      ];
+      component.sfsBackwardResults = [{ step: 99, selected_features: ['old'] }];
+      // Use `as any` to avoid TS literal narrowing (= 99 narrows the read
+      // type to `99 | null`, which then rejects the `toBe(2)` matcher).
+      (component as any).sfsBackwardCutStep = 99;
+      component.sfsBackwardCutFeatures = ['old'];
+
+      spyOn(dataService, 'getSfsResults').and.returnValue({
+        subscribe: (cb: any) => cb.next({
+          forward: [], backward: fresh, backward_remaining_features: [],
+          forward_from_backward: [],
+        })
+      } as any);
+      component.currentFileId = 42;
+      component.fetchSfsResults();
+
+      setTimeout(() => {
+        // Step 99 is no longer valid → fall back to last (step 2).
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['F2']);
+        done();
+      }, 5);
+    });
+
+    // ── sfsStartRequests$ branching on backward_cut_step (Bug B) ───────
+    it('sfsStartRequests$ with backward_cut_step + forward method should route to startForwardFromBackwardFeatures()', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      const steps = seedBackwardResults();
+      component.sfsBackwardResults = steps;
+
+      sharedService.emitSfsStartRequest({
+        methods: ['forward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 2,  // ← v2.37.0+ new field
+      });
+
+      setTimeout(() => {
+        // Cut step + features synced from the matching backward row.
+        expect(component.sfsBackwardCutStep).toBe(2);
+        expect(component.sfsBackwardCutFeatures).toEqual(['Var_C', 'Var_D']);
+        // Routed to the forward-from-backward path; plain startSfs NOT called.
+        expect(ffbSpy).toHaveBeenCalledTimes(1);
+        expect(startSfsSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is missing (no regression)', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      component.sfsBackwardResults = seedBackwardResults();
+
+      // Existing v2.25.0 payload shape — no backward_cut_step.
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+      });
+
+      setTimeout(() => {
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is set but methods lack forward', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      // Console.warn is logged in the fallback branch; spy on it so we
+      // can assert the developer-facing warning fired without polluting
+      // the test runner's output.
+      const warnSpy = spyOn(console, 'warn');
+      component.sfsBackwardResults = seedBackwardResults();
+
+      // Mixed signal: cut step set but only backward method.  Backend
+      // would have already rejected this, but the frontend also
+      // defensively falls through to plain startSfs() with a warn.
+      sharedService.emitSfsStartRequest({
+        methods: ['backward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 2,
+      });
+
+      setTimeout(() => {
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+
+    it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step does not match any row', (done) => {
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
+        .and.callFake(() => { /* no-op */ });
+      spyOn(console, 'warn');
+      component.sfsBackwardResults = seedBackwardResults();  // steps 1..3
+
+      sharedService.emitSfsStartRequest({
+        methods: ['forward'],
+        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        excluded_features: [],
+        n_jobs: 3,
+        top_k: 5,
+        backward_cut_step: 999,  // ← not in seedBackwardResults()
+      });
+
+      setTimeout(() => {
+        // Frontend cannot resolve step 999 → fall back to plain startSfs.
+        expect(startSfsSpy).toHaveBeenCalledTimes(1);
+        expect(ffbSpy).not.toHaveBeenCalled();
+        done();
+      }, 5);
+    });
+  });
 });

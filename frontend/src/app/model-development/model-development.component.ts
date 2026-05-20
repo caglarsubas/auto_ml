@@ -1079,6 +1079,83 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
       })
     );
 
+    // v2.28.0+: subscribe to AI assistant Purifier-selection updates.
+    // Distinct from dataPurifierStartRequests$ above — this stream
+    // patches the checkbox selection WITHOUT firing the run.  The
+    // user reviews the new selection in the form, then clicks Run
+    // Preprocessing themselves (or asks the AI to run it in the next
+    // turn).
+    //
+    // CRITICAL: this handler MUST NOT call proceedFromPreprocessing().
+    // The whole point of update_purifier_selection vs
+    // start_data_purifier is the user-review intermediate step.  A
+    // regression here re-introduces the v2.27.x UX gap (no preview
+    // before commit).  Karma spec guards this.
+    //
+    // Supported forms (matches the backend handler + emit signature):
+    //   • WHOLESALE: replace selectedOptions with the new ID set.
+    //   • DIFF:      mutate selectedOptions by adding/removing IDs
+    //                relative to the current state.
+    // After the patch we re-push to the AI Redis cache so the AI's
+    // NEXT turn sees the updated state without having to re-call
+    // get_pipeline_config.
+    this.subscription.add(
+      this.sharedService.purifierSelectionUpdates$.subscribe((req) => {
+        if (!req || typeof req !== 'object') return;
+
+        if (req.form === 'wholesale') {
+          // Wholesale-replace: empty array means "clear everything".
+          // Non-empty: filter the catalog down to the requested IDs.
+          if (!Array.isArray(req.purifier_options)) return;
+          const idSet = new Set<number>(
+            req.purifier_options.map((id: number) => Number(id)),
+          );
+          this.selectedOptions = this.purifierOptions.filter(o => idSet.has(o.id));
+        } else if (req.form === 'diff') {
+          // Diff: apply add then remove against the current selection.
+          // Sequence (add → remove) matters when an ID appears in both,
+          // but the backend already rejects that case so by the time
+          // we get here add and remove are disjoint.
+          const current = new Set<number>(this.selectedOptions.map(o => o.id));
+          (req.add || []).forEach((id: number) => current.add(Number(id)));
+          (req.remove || []).forEach((id: number) => current.delete(Number(id)));
+          this.selectedOptions = this.purifierOptions.filter(o => current.has(o.id));
+        } else {
+          // 'noop' (or anything else) — nothing to patch.
+          return;
+        }
+
+        // Mirror the new selection into the SharedService cache so
+        // any other component reading current state (e.g. autosave
+        // serializer, save-progress dialog) sees the AI's change.
+        const newIds = this.selectedOptions.map(o => o.id);
+        this.sharedService.setSelectedPurifierOptions(newIds);
+
+        // Re-push to AI Redis so the AI's next turn sees the updated
+        // checkbox state on-screen.  Matches the same convention used
+        // by update_metadata + set_ordinal_ranking handlers — the AI
+        // should always be able to read the current UI state via tool
+        // calls without us having to re-fetch the dictionary.
+        //
+        // `getPipelineConfig()` already serializes `selectedOptions`
+        // via its `selected_purifier_steps` field, which is exactly
+        // what the backend `_handle_get_pipeline_config` reads — so
+        // by re-calling it AFTER mutating `selectedOptions` we get a
+        // fresh snapshot for free.
+        if (this.currentFileId != null) {
+          const artifacts: any = {
+            pipeline_config: this.getPipelineConfig(),
+          };
+          this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
+            next: () => { /* silent success */ },
+            error: (err: any) => console.warn('AI cache re-push failed (non-fatal):', err),
+          });
+        }
+        // NO proceedFromPreprocessing() call — that is the whole
+        // distinction between this stream and dataPurifierStartRequests$.
+      })
+    );
+
     // v2.26.0+: subscribe to AI assistant Apply-Encoding requests.
     // When the AI emits an apply_encoding action, the chat panel
     // broadcasts the validated config here.  We patch encodingUseNative

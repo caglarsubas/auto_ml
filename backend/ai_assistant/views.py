@@ -14,14 +14,18 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .prometa_config import workflow, agent, tool, flush as prometa_flush, set_span_attr, set_session_id
+from .prometa_config import (
+    workflow, agent, tool, flush as prometa_flush,
+    set_span_attr, set_session_id, set_customer_id, set_request_model,
+    model_route, plan_generate, current_span_id, set_input_ref,
+)
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
 from .cache import cache_list_artifacts
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
-    call_openai, call_engine,
+    call_openai, call_engine, MODEL_REGISTRY,
 )
 
 # ---------------------------------------------------------------------------
@@ -290,6 +294,14 @@ n_jobs, top_k, per-feature drop flags) and starts the engine.
 {"methods": ["backward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "excluded_features": ["Var_3"], "n_jobs": 3, "top_k": 5, "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"}
 <<<END_ACTION>>>
 
+Forward-from-backward example (v2.37.0+: pick a backward cut point and run forward
+SFS from the features remaining at that step — mirrors the user clicking the radio
+at row N of the Backward Elimination table, then clicking "Run Forward Selection
+on These M Features"):
+<<<ACTION:start_sfs>>>
+{"methods": ["forward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "n_jobs": 3, "top_k": 5, "backward_cut_step": 37, "description": "Forward SFS from backward step 37 survivor set (best observed CV ROC-AUC=0.7688, 36 features remaining)"}
+<<<END_ACTION>>>
+
 Rules for start_sfs:
 • `methods`: non-empty list drawn from {"forward", "backward"}.  Use ["backward"]
   alone for redundancy/multicollinearity pruning, ["forward"] for greedy build-up,
@@ -302,8 +314,24 @@ Rules for start_sfs:
   to setting feature_usage='drop' via update_config.  When you want SFS to skip
   a feature, prefer the update_config feature_usage path so the Selected Features
   UI also reflects the drop; use this list only as a redundant safety net.
+  IMPORTANT (v2.37.0+): do NOT enumerate backward-dropped features here to fake a
+  cut step — use `backward_cut_step` below instead.  The two are semantically
+  different and the cut-step path also updates the visible green-box label
+  ("Remaining Features at Step N (M features)") so the user sees what you did.
 • `n_jobs` / `top_k`: parallel worker count (1–16) and top-K CV candidates
   per step (1–50).  Sensible defaults: n_jobs=3, top_k=5.
+• `backward_cut_step` (optional, v2.37.0+): positive int identifying a row in
+  the on-disk backward SFS results.  When set, forward SFS uses the features
+  remaining at that step as the initial pool — the same code path the manual
+  "Run Forward Selection on These N Features" button takes.  Requires `methods`
+  to include "forward" (the cut step has no effect on a backward-only run, so
+  the tool will REJECT a backward-only payload with this field set).  Requires a
+  completed backward SFS run on disk; the tool reads
+  ``media/sfs_results/{file_id}_sfs_results.json`` and rejects if the step
+  number is out of range.  When the user asks to "pick the best observed cut
+  and run forward from there", call ``get_sfs_results`` first to find the
+  backward step with the maximum CV ROC-AUC, then emit start_sfs with
+  ``backward_cut_step`` set to that step number.
 
 ─── ACTION TYPE 6: start_data_purifier ───
 Kick off the preprocessing/data-purifier step (the FIRST run-step in the pipeline).
@@ -336,6 +364,53 @@ Rules for start_data_purifier:
     excluded via model_usage='No')
 • Don't auto-fire after every config tweak — only when the user explicitly
   asks "run preprocessing" / "start the purifier" / "preprocess the data".
+
+─── ACTION TYPE 6b: update_purifier_selection ───
+EDIT the Data-Purifier checkbox UI WITHOUT running the pipeline.  Use this
+when the user is THINKING about, REVIEWING, or REORGANIZING the purifier
+setup — when they want to see the new checkbox state before deciding to
+run.  Compared to start_data_purifier, this action is the "preview" sibling:
+patch the form, let the user click Run Preprocessing themselves.
+
+Two payload forms — pick whichever is more natural for the user's intent:
+
+WHOLESALE form (you know the exact final option set):
+<<<ACTION:update_purifier_selection>>>
+{"purifier_options": [1, 2, 3, 4, 7, 23, 28, 32], "description": "Consolidate IDs 11+17 into ID 23 (mathematically equivalent, prevents threshold drift)"}
+<<<END_ACTION>>>
+
+DIFF form (incremental tweak — add and/or remove specific IDs):
+<<<ACTION:update_purifier_selection>>>
+{"add": [23], "remove": [11, 17], "description": "Replace separate sparsity (ID 11) + missing (ID 17) drops with combined-drop (ID 23) at the same 0.95 threshold"}
+<<<END_ACTION>>>
+
+Rules for update_purifier_selection:
+• Choose EXACTLY ONE form: `purifier_options` (wholesale) XOR `add`/`remove` (diff).
+  Mixing the two returns an error.
+• Group conflicts are validated on the wholesale form: only ONE member per
+  group (corr_drop / sparsity_drop / missing_drop / combined_drop /
+  outlier_num / outlier_cat) may be selected.  If you violate this you get
+  a structured error listing the conflicting group + IDs — fix it and
+  retry on the next turn.
+• `add`/`remove` may not name the same ID twice — that returns an error.
+• Empty wholesale list `[]` clears all selections (legitimate use case
+  when the user says "clear the purifier selection").
+• MAPPING USER INTENT: same rule as start_data_purifier — call
+  ``get_purifier_options`` FIRST when the user describes purifier behavior
+  in natural language, then emit with the catalog-authoritative IDs.
+
+WHEN TO USE update_purifier_selection vs start_data_purifier — DECISION RULE:
+  • User says "run preprocessing", "start the purifier", "preprocess the
+    data", "go ahead and run" → fire start_data_purifier (one-shot apply +
+    run).
+  • User says "change the options to…", "consolidate these steps",
+    "swap 11+17 for 23", "let's review the purifier setup", "tweak the
+    selection", "what if we add…", or you (the AI) are PROACTIVELY
+    proposing a checkbox change → fire update_purifier_selection.  The user
+    can then click Run themselves OR ask you to run it in the next turn.
+  • When in doubt, prefer update_purifier_selection — it is safer (no
+    surprise pipeline runs) and the user can always say "now run it"
+    in the next turn.
 
 ─── ACTION TYPE 7: apply_encoding ───
 Apply the encoding plan and produce the encoded file that modeling consumes.
@@ -560,27 +635,46 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
     """
     model_cfg = get_model_config(model_key)
     provider = model_cfg['provider']
-    set_span_attr('gen_ai.request.model', model_cfg['model_id'])
+    # v2.30.0 (Phase 2): canonical helper instead of manual set_span_attr.
+    # The SDK helper auto-bubbles to parent spans and gets normalization
+    # for free as the platform evolves.  Wire shape is unchanged —
+    # gen_ai.request.model still reaches the cost panel, AML F1 (model_route)
+    # detector, and trace UI exactly as before.
+    set_request_model(model_cfg['model_id'])
     # Tag the routing target on the parent agent span so the platform UI
     # can distinguish engine-routed calls from direct cloud calls.
     # The child openai-instrumented span still carries gen_ai.system="openai"
     # because the SDK speaks OpenAI protocol regardless of the upstream.
     set_span_attr('declarai.llm.backend', provider)
 
-    if provider == 'openai':
-        api_key = os.environ.get('OPENAI_API_KEY', '')
-        if not api_key:
-            raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
-        return call_openai(api_key, messages, model_cfg, tools=tools)
+    # v2.31.0 (Phase 3a): emit a Prometa AML ``model.route`` span around
+    # the provider dispatch.  DeclarAI today doesn't run a complexity-
+    # based cascade — the user picks the model in the UI — so the
+    # routing_reason is ``user_selected`` and the candidates set is the
+    # curated static MODEL_REGISTRY (the dropdown the user chose from).
+    # When/if a real cascade lands (rate-limit fallback, cost-capped
+    # routing) the same call site takes a richer routing_reason without
+    # any surface change.  See prometa_config::model_route docstring.
+    candidates = [cfg['model_id'] for cfg in MODEL_REGISTRY.values()]
+    with model_route(
+        chosen=model_cfg['model_id'],
+        candidates_considered=candidates,
+        routing_reason='user_selected',
+    ):
+        if provider == 'openai':
+            api_key = os.environ.get('OPENAI_API_KEY', '')
+            if not api_key:
+                raise EnvironmentError('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.')
+            return call_openai(api_key, messages, model_cfg, tools=tools)
 
-    elif provider == 'engine':
-        # Local llm-inference-engine via OpenAI-compatible /v1/chat/completions.
-        # See model_registry.call_engine() for the rationale on routing through
-        # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
-        return call_engine(messages, model_cfg, tools=tools)
+        elif provider == 'engine':
+            # Local llm-inference-engine via OpenAI-compatible /v1/chat/completions.
+            # See model_registry.call_engine() for the rationale on routing through
+            # the OpenAI SDK (it's how prometa-sdk auto-instrumentation finds it).
+            return call_engine(messages, model_cfg, tools=tools)
 
-    else:
-        raise ValueError(f'Unknown provider: {provider}')
+        else:
+            raise ValueError(f'Unknown provider: {provider}')
 
 
 def _enrich_dd_with_descriptions(file_id: int, dd_list: list) -> list:
@@ -641,9 +735,24 @@ def _build_slim_context(file_id: int, section: str) -> str:
         read_pipeline_config,
         read_data_dictionary,
         read_selected_features,
+        read_sfs_status,
+        _format_sfs_status_line,
     )
 
     parts = []
+
+    # ── v2.35.0: SFS run-state preamble (BEFORE pipeline config) ──
+    # Surface SFS-running / stopped / interrupted / errored status at
+    # the very top of the slim context so the LLM cannot miss it.
+    # See the rationale block in tool_executor.read_sfs_status — this
+    # closes the "assistant unaware SFS is running" bug from the
+    # 2026-05-19 ToDoS screenshot.  Benign statuses (not_started /
+    # completed) emit no banner so we don't waste tokens on the
+    # common case.
+    sfs_status_payload = read_sfs_status(file_id)
+    sfs_status_line = _format_sfs_status_line(sfs_status_payload)
+    if sfs_status_line:
+        parts.append(sfs_status_line)
 
     # Pipeline config (always include)
     config = read_pipeline_config(file_id)
@@ -775,6 +884,14 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     if file_id is not None:
         set_span_attr('declarai.file_id', file_id)
         set_session_id(f'declarai-file-{file_id}')
+        # v2.30.0 (Phase 2): per-span customer_id override.  Joins every
+        # span emitted from this chat turn — and its child agent / tool /
+        # cache spans via parent-attribute inheritance — under one
+        # correlation key for AML scoring, Session Explorer aggregates,
+        # and the platform's correlation-id resolver.  See
+        # ai_assistant/prometa_config.py::set_customer_id docstring for
+        # the file_id ↔ customer_id mapping rationale.
+        set_customer_id(str(file_id))
 
     # Build messages array for OpenAI
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
@@ -930,6 +1047,41 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Parse action blocks from the AI response
     actions, clean_message = _extract_actions(assistant_message)
 
+    # v2.33.0 (Phase 3c): emit a Prometa AML ``plan.generate`` span (C2)
+    # whenever the LLM's response yields ≥1 action block.  Pure
+    # conversational replies don't produce plans, so the span is
+    # conditional — emitting it for zero-action turns would inflate the
+    # C2 detector's denominator with non-plans.
+    #
+    # plan_id encodes file_id + turn-time so the span is uniquely
+    # addressable per chat turn (the SDK uses it as the canonical
+    # ``plan.id`` span attribute).  Steps mirror the extracted action
+    # blocks 1:1; depends_on=[] on every step because DeclarAI actions
+    # are independent suggestions (the user applies any subset in the
+    # chat-panel UI — no enforced ordering).  complexity_estimate is
+    # the raw action count as a first-cut proxy for plan size.
+    #
+    # When PROMETA_ENDPOINT is unset or the SDK is unavailable, the
+    # wrapper yields a _NoOpAMLHandle and the entire block is a
+    # transparent no-op (no behavior change vs v2.32.0).
+    if actions and file_id is not None:
+        import time as _time
+        plan_id = f'declarai-file-{file_id}-{int(_time.time() * 1000)}'
+        plan_steps = [
+            {
+                'order': i + 1,
+                'action': a.get('action_type', 'unknown'),
+                'tool': a.get('action_type', 'unknown'),
+                'depends_on': [],
+            }
+            for i, a in enumerate(actions)
+        ]
+        with plan_generate(plan_id) as _plan:
+            _plan.emitted(
+                steps=plan_steps,
+                complexity_estimate=len(actions),
+            )
+
     # If the model's entire reply was the action block, synthesize a brief message
     if not clean_message.strip() and actions:
         descs = [a['payload'].get('description', '') for a in actions if a.get('payload')]
@@ -960,6 +1112,19 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     }
     if actions:
         response_data['actions'] = actions
+        # v2.38.0: snapshot the chat span id so the frontend can pass it
+        # back when applying any of these actions.  ``current_span_id()``
+        # returns None when:
+        #   * SDK is unavailable (test mode, dev box without endpoint)
+        #   * we're outside any @workflow / @tool / @agent context
+        # In all cases the frontend treats a missing id as "no cross-
+        # trace link" and skips the link header on the apply call, so
+        # the legacy v2.25.0..v2.37.0 behaviour is preserved.  The
+        # link is purely-additive observability sugar — it never
+        # changes action dispatch semantics.
+        chat_span_id = current_span_id()
+        if chat_span_id:
+            response_data['chat_span_id'] = str(chat_span_id)
 
     return response_data
 
@@ -1082,6 +1247,17 @@ class AIActionExecuteView(APIView):
             file_id = request.data.get('file_id')
             action_type = request.data.get('action_type', '')
             payload = request.data.get('payload', {})
+            # v2.38.0: optional cross-trace link back to the chat span
+            # that proposed this action.  Frontend echoes the
+            # ``chat_span_id`` it received from /chat/.  Defensive limit:
+            # span ids in Prometa are short hex strings — a payload
+            # longer than 256 chars is almost certainly malformed and
+            # treated as missing rather than stamped (so a buggy client
+            # can't poison span attributes).
+            parent_span_id_raw = request.data.get('parent_span_id')
+            parent_span_id = None
+            if isinstance(parent_span_id_raw, str) and 0 < len(parent_span_id_raw) <= 256:
+                parent_span_id = parent_span_id_raw
 
             if not file_id:
                 return Response({'status': 'error', 'error': 'file_id is required'},
@@ -1090,7 +1266,8 @@ class AIActionExecuteView(APIView):
                 return Response({'status': 'error', 'error': 'action_type is required'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            result = dispatch_action(int(file_id), action_type, payload)
+            result = dispatch_action(int(file_id), action_type, payload,
+                                     parent_span_id=parent_span_id)
 
             http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
             return Response(result, status=http_status)

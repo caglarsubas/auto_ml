@@ -20,7 +20,10 @@ import pandas as pd
 from django.conf import settings
 from declaration.models import Declaration, DataDictionary
 
-from .prometa_config import workflow, tool, set_span_attr, set_session_id
+from .prometa_config import (
+    workflow, tool, set_span_attr, set_session_id, set_customer_id,
+    schema_validate, set_input_ref,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -657,6 +660,37 @@ def start_sfs(file_id: int, payload: dict) -> dict:
     """
     description = payload.get('description', '')
 
+    # ── v2.35.0: in-flight guard — refuse to spawn a duplicate run ──
+    # Without this, the LLM sometimes proposed start_sfs again when it
+    # found stale or empty cached results mid-run (see the 2026-05-19
+    # ToDoS screenshot).  The slim-context preamble in views.py and the
+    # status header in _handle_get_sfs_results both warn the LLM,
+    # but the guard here is the last line of defence — even a confused
+    # model that bypasses the warnings cannot accidentally start a
+    # second SFS run that would clobber SFS_PROGRESS[file_id] and
+    # truncate the in-flight intermediate-results file.
+    try:
+        from .tool_executor import read_sfs_status
+        live = read_sfs_status(file_id)
+        live_status = live.get('status') if isinstance(live, dict) else None
+    except Exception:
+        live_status = None
+    if live_status == 'running':
+        progress = live.get('progress', 0.0) if isinstance(live, dict) else 0.0
+        completed = live.get('completed_step_count', 0) if isinstance(live, dict) else 0
+        return {
+            'status': 'error',
+            'action_type': 'start_sfs',
+            'description': description,
+            'error': (
+                f'SFS is already running for file_id={file_id} '
+                f'(progress={progress:.0%}, {completed} steps completed). '
+                f'Refusing to spawn a duplicate run — wait for the current '
+                f'SFS to complete or have the user click Stop SFS first.'
+            ),
+            'errors': ['sfs_already_running'],
+        }
+
     # ── methods ────────────────────────────────────────────────────
     methods_raw = payload.get('methods', [])
     if not isinstance(methods_raw, list) or not methods_raw:
@@ -734,6 +768,124 @@ def start_sfs(file_id: int, payload: dict) -> dict:
     n_jobs = max(1, min(_pos_int(payload.get('n_jobs', 3), 3), 16))
     top_k = max(1, min(_pos_int(payload.get('top_k', 5), 5), 50))
 
+    # ── v2.37.0: backward_cut_step (forward-from-backward) ─────────
+    # When set, the AI is requesting forward-from-backward SFS using
+    # the features remaining at the given backward step.  This mirrors
+    # the user clicking the radio at that row in the Backward
+    # Elimination table, then clicking "Run Forward Selection on
+    # These N Features".
+    #
+    # Before v2.37.0 the AI's only way to mimic this was to enumerate
+    # every backward-dropped feature in ``excluded_features`` — fragile
+    # (off-by-one in step counting, missed features), conflated with
+    # user-drop intent, and never updated the visible cut step
+    # display (the green box at the bottom of the backward table).
+    #
+    # Constraints:
+    #   - Must be a positive integer.
+    #   - ``methods`` must include 'forward' — the cut step has no
+    #     effect on a backward-only run, so accepting it would be
+    #     silent corruption.
+    #   - The step must exist in the on-disk sfs_results JSON.  If
+    #     no backward SFS has been run yet (file missing or
+    #     ``backward`` array empty), reject — the cut step is
+    #     meaningless without backward results to cut.
+    backward_cut_step_raw = payload.get('backward_cut_step', None)
+    backward_cut_step = None
+    if backward_cut_step_raw is not None:
+        try:
+            bcs = int(backward_cut_step_raw)
+        except (TypeError, ValueError):
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step must be a positive integer '
+                    f'(got: {backward_cut_step_raw!r})'
+                ),
+                'errors': ['invalid_backward_cut_step'],
+            }
+        if bcs <= 0:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': f'backward_cut_step must be a positive integer (got: {bcs})',
+                'errors': ['invalid_backward_cut_step'],
+            }
+        if 'forward' not in methods:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f"backward_cut_step requires methods to include 'forward' "
+                    f"(forward-from-backward SFS); got methods={methods}"
+                ),
+                'errors': ['backward_cut_step_requires_forward_method'],
+            }
+        # Validate the step exists in the on-disk sfs_results JSON.
+        from django.conf import settings as _settings  # local import — avoid Django at module load when settings absent
+        import os as _os
+        import json as _json
+        sfs_path = _os.path.join(
+            _settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json'
+        )
+        if not _os.path.exists(sfs_path):
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} requires a completed backward SFS run, '
+                    f'but no sfs_results file exists for file_id={file_id}'
+                ),
+                'errors': ['no_sfs_results_for_cut_step'],
+            }
+        try:
+            with open(sfs_path, 'r', encoding='utf-8') as _f:
+                sfs_data = _json.load(_f)
+        except Exception as _read_err:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': f'Failed to read sfs_results JSON for file_id={file_id}: {_read_err}',
+                'errors': ['sfs_results_read_error'],
+            }
+        backward_steps = sfs_data.get('backward', []) or []
+        valid_steps = {
+            int(s.get('step'))
+            for s in backward_steps
+            if isinstance(s, dict) and isinstance(s.get('step'), (int, float))
+        }
+        if not valid_steps:
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} requires backward SFS results, '
+                    f'but the sfs_results JSON for file_id={file_id} has no backward array'
+                ),
+                'errors': ['no_backward_results_for_cut_step'],
+            }
+        if bcs not in valid_steps:
+            sorted_steps = sorted(valid_steps)
+            return {
+                'status': 'error',
+                'action_type': 'start_sfs',
+                'description': description,
+                'error': (
+                    f'backward_cut_step={bcs} is not a valid backward step '
+                    f'(valid steps: {sorted_steps[0]}..{sorted_steps[-1]}, '
+                    f'{len(sorted_steps)} total)'
+                ),
+                'errors': ['invalid_backward_cut_step_value'],
+            }
+        backward_cut_step = bcs
+
     return {
         'status': 'success',
         'action_type': 'start_sfs',
@@ -744,6 +896,7 @@ def start_sfs(file_id: int, payload: dict) -> dict:
             'excluded_features': excluded,
             'n_jobs': n_jobs,
             'top_k': top_k,
+            'backward_cut_step': backward_cut_step,
         },
         'errors': [],
     }
@@ -878,6 +1031,357 @@ def start_data_purifier(file_id: int, payload: dict) -> dict:
         'applied': {
             'purifier_options': purifier_options,
             'split': split,
+        },
+        'errors': [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ACTION: update_purifier_selection — edit the Data-Purifier checkbox UI
+# without firing the run (v2.28.0+)
+# ---------------------------------------------------------------------------
+#
+# Procedural context: `start_data_purifier` is fire-and-run.  When the
+# AI's advisory voice says "let me consolidate IDs 11+17 into ID 23 for
+# you, here's why..." the user deserves a chance to see the new checkbox
+# state and review it BEFORE the pipeline actually executes.  This
+# action is the no-run sibling of start_data_purifier — it patches the
+# UI so the user can review (and optionally tweak) the new selection,
+# then they click Run Preprocessing themselves OR ask the AI to fire it
+# in the next turn.
+#
+# Two payload forms (the AI picks whichever is more natural for the
+# user's intent):
+#
+#   1. WHOLESALE — fully specifies the target option set.  Best when
+#      the AI knows exactly which IDs should end up checked.  The
+#      handler validates the entire set for group conflicts (e.g., two
+#      members of the outlier_num_group cannot both be checked because
+#      the UI is single-select per group).
+#
+#        {"purifier_options": [1, 2, 3, 4, 7, 23, 28, 32],
+#         "description": "Consolidate IDs 11+17 into ID 23"}
+#
+#   2. DIFF — incremental add/remove against the user's CURRENT
+#      selection.  Best when the AI is making a surgical tweak ("just
+#      turn off ID 7") and would otherwise have to re-state the user's
+#      whole list.  Group-conflict detection on the diff is deferred
+#      to the frontend subscriber (which sees the resolved final state).
+#
+#        {"add": [23], "remove": [11, 17],
+#         "description": "Replace separate sparsity/missing drops with combined-drop"}
+#
+# Both forms return a single canonical `applied` shape so the frontend
+# can render one chat-summary template:
+#
+#   applied = {
+#     "form": "wholesale" | "diff",
+#     "purifier_options": list[int] | None,   # wholesale only
+#     "add": list[int],                       # diff only
+#     "remove": list[int],                    # diff only
+#   }
+#
+# Span attributes (declarai-action workflow span):
+#   declarai.purifier.form         "wholesale" | "diff"
+#   declarai.purifier.final        comma-joined IDs (wholesale only)
+#   declarai.purifier.added        comma-joined IDs (diff only)
+#   declarai.purifier.removed      comma-joined IDs (diff only)
+#   declarai.purifier.invalid_ids  comma-joined IDs that were rejected
+#   declarai.purifier.group_conflict  optional error tag
+
+
+@tool(name="update-purifier-selection")
+def update_purifier_selection(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a Data-Purifier checkbox-selection update.
+
+    Unlike start_data_purifier, this action DOES NOT run the
+    preprocessing pipeline — it only patches the UI so the user can
+    review the new selection and click Run themselves.
+
+    payload accepts EITHER (XOR):
+      • {"purifier_options": [1, 2, 5, 7, 23, 28, 32], "description": "..."}
+      • {"add": [23], "remove": [11, 17], "description": "..."}
+
+    Errors are returned with status='error' and a structured `error`
+    string the AI can interpret on its next turn:
+      • "Specify exactly one of `purifier_options` or `add`/`remove`."
+      • "ID <N> appears in both add and remove."
+      • "Group conflict: IDs <N>, <M> both belong to <group_name>."
+
+    v2.31.0 (Phase 3a): the entire validation flow is wrapped in a
+    Prometa ``schema.validate`` AML span (catalog C4).  Each return
+    point stamps ``sv.result(passed=..., errors=[...])`` so the
+    platform's output-validation detector can score:
+      - which schema_id (action) is failing most
+      - error categories (form_conflict, group_conflict, diff_conflict,
+        invalid_ids, value_error)
+      - whether downstream is blocked (errors short-circuit the
+        broadcast; success cases don't)
+    Existing ``set_span_attr('declarai.purifier.*')`` calls are kept
+    on the surrounding span as backwards-compatible debug attrs;
+    the AML span is purely additive.
+
+    Args:
+        file_id: pipeline file id (not used today; kept for signature
+            parity with the other action handlers and future cache
+            integration).
+        payload: dict described above.
+
+    Returns:
+        Action result dict with `applied` shape documented in the
+        module-level comment block.
+    """
+    # Imported lazily so importing this module never triggers a Django
+    # apps registry walk through preprocessing's own imports.  Matches
+    # the lazy-import pattern in _handle_get_purifier_options.
+    from preprocessing.purifier_catalog import PURIFIER_OPTIONS
+
+    description = payload.get('description', '') if isinstance(payload, dict) else ''
+
+    # ── Build the catalog lookup table (id → entry) for validation.
+    catalog_by_id = {e['id']: e for e in PURIFIER_OPTIONS}
+    valid_id_range = (1, 34)
+
+    def _coerce_int_list(raw, field_name: str) -> tuple[list[int], list[int]]:
+        """Return (valid_ids, invalid_or_dropped) from a raw payload list.
+
+        Non-int entries are dropped silently (same forgiving contract
+        as start_data_purifier).  IDs outside 1..34 land in the
+        ``invalid`` bucket and are also dropped — but unlike
+        start_data_purifier we surface them via a span attribute so the
+        AI can see (in tracing) which IDs it guessed wrong.
+        """
+        if raw is None:
+            return [], []
+        if not isinstance(raw, list):
+            raise ValueError(f"`{field_name}` must be a list of integer option IDs")
+        valid: list[int] = []
+        invalid: list[int] = []
+        seen = set()
+        for v in raw:
+            try:
+                iv = int(v)
+            except (TypeError, ValueError):
+                continue
+            if not (valid_id_range[0] <= iv <= valid_id_range[1]):
+                invalid.append(iv)
+                continue
+            if iv in seen:
+                continue
+            seen.add(iv)
+            valid.append(iv)
+        return valid, invalid
+
+    has_wholesale = 'purifier_options' in payload
+    has_diff = ('add' in payload) or ('remove' in payload)
+
+    # v2.31.0 (Phase 3a): wrap the entire validation flow in a
+    # Prometa ``schema.validate`` AML span.  Each return path stamps
+    # ``sv.result(...)`` with the outcome before returning so the
+    # platform's C4 detector can categorize failures.  Existing
+    # set_span_attr('declarai.purifier.*') calls are KEPT on the
+    # surrounding span for back-compat (debugging via Trace Explorer).
+    with schema_validate('declarai:update-purifier-selection@v1') as sv:
+        if has_wholesale and has_diff:
+            set_span_attr('declarai.purifier.form_conflict', True)
+            sv.result(
+                passed=False,
+                errors=['form_conflict: both purifier_options and add/remove specified'],
+                downstream_blocked=True,
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': (
+                    "Specify exactly one of `purifier_options` (wholesale form) "
+                    "or `add`/`remove` (diff form), not both."
+                ),
+            }
+
+        if not has_wholesale and not has_diff:
+            # Description-only payloads are a no-op rather than an error —
+            # mirrors how the chat panel treats empty action results.
+            set_span_attr('declarai.purifier.form', 'noop')
+            sv.result(passed=True)  # noop is a valid form, not a failure
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'noop',
+                    'purifier_options': None,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
+        try:
+            if has_wholesale:
+                wholesale_ids, wholesale_invalid = _coerce_int_list(
+                    payload.get('purifier_options'), 'purifier_options',
+                )
+            else:
+                add_ids, add_invalid = _coerce_int_list(payload.get('add'), 'add')
+                remove_ids, remove_invalid = _coerce_int_list(payload.get('remove'), 'remove')
+        except ValueError as exc:
+            sv.result(
+                passed=False,
+                errors=[f'value_error: {exc}'],
+                downstream_blocked=True,
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': str(exc),
+            }
+
+        # ── Wholesale-form validation
+        if has_wholesale:
+            set_span_attr('declarai.purifier.form', 'wholesale')
+            if wholesale_invalid:
+                set_span_attr(
+                    'declarai.purifier.invalid_ids',
+                    ','.join(str(i) for i in wholesale_invalid),
+                )
+
+            # Group-conflict detection: within any non-None group, at most
+            # ONE member may be selected.  The UI enforces this visually
+            # via isOptionDisabled(); the backend enforces it here so the
+            # AI gets a structured error it can recover from on the next
+            # turn instead of producing a silently-malformed selection.
+            groups_seen: dict[int, list[int]] = {}
+            for oid in wholesale_ids:
+                entry = catalog_by_id.get(oid)
+                if entry is None:
+                    continue
+                g = entry.get('group')
+                if g is None:
+                    continue
+                groups_seen.setdefault(g, []).append(oid)
+            conflicts = {g: ids for g, ids in groups_seen.items() if len(ids) > 1}
+            if conflicts:
+                # Build a human-readable error the AI can parse.  We list
+                # the conflicting group(s) and their member IDs.
+                group_label = {
+                    1: 'corr_drop_group',
+                    2: 'sparsity_drop_group',
+                    3: 'missing_drop_group',
+                    4: 'combined_drop_group',
+                    5: 'outlier_num_group',
+                    6: 'outlier_cat_group',
+                }
+                parts = [
+                    f"{group_label.get(g, f'group_{g}')}: IDs {ids}"
+                    for g, ids in conflicts.items()
+                ]
+                set_span_attr(
+                    'declarai.purifier.group_conflict',
+                    '; '.join(parts),
+                )
+                sv.result(
+                    passed=False,
+                    errors=[f'group_conflict: {p}' for p in parts],
+                    downstream_blocked=True,
+                )
+                return {
+                    'status': 'error',
+                    'action_type': 'update_purifier_selection',
+                    'error': (
+                        "Group conflict — at most one option per group may be "
+                        "selected. Conflicts: " + '; '.join(parts) +
+                        ". Pick a single ID per group."
+                    ),
+                }
+
+            set_span_attr(
+                'declarai.purifier.final',
+                ','.join(str(i) for i in wholesale_ids) or '(empty)',
+            )
+
+            sv.result(passed=True)
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'wholesale',
+                    'purifier_options': wholesale_ids,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
+        # ── Diff-form validation
+        set_span_attr('declarai.purifier.form', 'diff')
+        invalid_combined = add_invalid + remove_invalid
+        if invalid_combined:
+            set_span_attr(
+                'declarai.purifier.invalid_ids',
+                ','.join(str(i) for i in invalid_combined),
+            )
+
+        add_set = set(add_ids)
+        remove_set = set(remove_ids)
+        conflict_set = add_set & remove_set
+        if conflict_set:
+            set_span_attr(
+                'declarai.purifier.diff_conflict',
+                ','.join(str(i) for i in sorted(conflict_set)),
+            )
+            sv.result(
+                passed=False,
+                errors=[f'diff_conflict: IDs {sorted(conflict_set)} in both add and remove'],
+                downstream_blocked=True,
+            )
+            return {
+                'status': 'error',
+                'action_type': 'update_purifier_selection',
+                'error': (
+                    f"ID(s) {sorted(conflict_set)} appear in both `add` and "
+                    "`remove`. Each ID can only go one way per action."
+                ),
+            }
+
+        if not add_ids and not remove_ids:
+            # No-op diff — accept and broadcast nothing.  Avoids surfacing
+            # a confusing "I changed nothing" UI flash.
+            set_span_attr('declarai.purifier.form', 'diff_noop')
+            sv.result(passed=True)  # diff_noop is a valid form, not a failure
+            return {
+                'status': 'success',
+                'action_type': 'update_purifier_selection',
+                'description': description,
+                'applied': {
+                    'form': 'noop',
+                    'purifier_options': None,
+                    'add': [],
+                    'remove': [],
+                },
+                'errors': [],
+            }
+
+        set_span_attr(
+            'declarai.purifier.added',
+            ','.join(str(i) for i in add_ids) or '(empty)',
+        )
+        set_span_attr(
+            'declarai.purifier.removed',
+            ','.join(str(i) for i in remove_ids) or '(empty)',
+        )
+        sv.result(passed=True)
+
+    return {
+        'status': 'success',
+        'action_type': 'update_purifier_selection',
+        'description': description,
+        'applied': {
+            'form': 'diff',
+            'purifier_options': None,
+            'add': add_ids,
+            'remove': remove_ids,
         },
         'errors': [],
     }
@@ -1197,6 +1701,7 @@ HANDLERS = {
     'set_ordinal_ranking': set_ordinal_ranking,
     'start_sfs': start_sfs,
     'start_data_purifier': start_data_purifier,
+    'update_purifier_selection': update_purifier_selection,
     'apply_encoding': apply_encoding,
     'start_modeling': start_modeling,
     'update_notes': update_notes,
@@ -1238,13 +1743,49 @@ def _build_completion_message(result: dict, action_type: str) -> str:
 
 
 @workflow(name="declarai-action")
-def dispatch_action(file_id: int, action_type: str, payload: dict) -> dict:
-    """Route an action to the correct handler."""
+def dispatch_action(file_id: int, action_type: str, payload: dict,
+                    *, parent_span_id: str = None) -> dict:
+    """Route an action to the correct handler.
+
+    Args:
+        file_id: pipeline declaration id.
+        action_type: HANDLERS key (``update_config``, ``start_sfs`` etc.).
+        payload: handler-specific dict.
+        parent_span_id: optional Prometa span id of the upstream chat
+            turn that PROPOSED this action.  When provided, stamped
+            via ``set_input_ref()`` so Prometa's Causal-context block
+            renders the action trace with a clickable "Input from
+            <chat span>" row, collapsing the two-trace propose-then-
+            execute split into one navigable flow.  When None (legacy
+            v2.25.0..v2.37.0 callers, internal tests, missing chat-side
+            instrumentation), the link is simply omitted — action
+            dispatch semantics are unchanged.  Keyword-only so positional
+            call sites that pre-date v2.38.0 are stable.
+    """
     # Set prompt attribute so Prometa Conversation panel shows the action request
     description = payload.get('description', '') if isinstance(payload, dict) else ''
     set_span_attr('gen_ai.prompt', f"[Action: {action_type}] {description}")
     set_span_attr('declarai.file_id', file_id)
     set_session_id(f'declarai-file-{file_id}')
+    # v2.30.0 (Phase 2): per-span customer_id override.  Mirrors the
+    # _chat_workflow entry point so action dispatches and chat turns
+    # share the same correlation key per Declaration.  See
+    # ai_assistant/prometa_config.py::set_customer_id for the rationale.
+    set_customer_id(str(file_id))
+    # v2.38.0: cross-trace data-flow ref back to the chat span that
+    # proposed this action (when the frontend passed it through from
+    # /chat/'s response).  Stamping happens TWICE on purpose:
+    #   (1) set_input_ref → canonical Prometa ``prometa.input_ref``
+    #       attribute consumed by the platform's Causal-context UI.
+    #       No-op when the SDK is absent or no active span — won't
+    #       throw, won't fail dispatch.
+    #   (2) set_span_attr → ``declarai.action.parent_span_id`` debug
+    #       attribute, visible even in test mode without the real
+    #       Prometa endpoint so we can verify the link is being
+    #       attempted independent of platform connectivity.
+    if parent_span_id:
+        set_input_ref(parent_span_id)
+        set_span_attr('declarai.action.parent_span_id', parent_span_id)
 
     handler = HANDLERS.get(action_type)
     if not handler:

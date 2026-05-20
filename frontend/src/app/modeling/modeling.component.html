@@ -642,6 +642,7 @@
                 <tr style="background: #f5f5f5; text-align: left;">
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Description</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
@@ -659,6 +660,11 @@
                     <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
                           style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
                           title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
+                  <td class="sfs-feature-description"
+                      style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px; color: #555; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                      [title]="getFeatureDescription(step.feature_name) || ''">
+                    {{ getFeatureDescription(step.feature_name) || '—' }}
                   </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
@@ -692,6 +698,7 @@
                       title="Select cutting point — features remaining at this step will be used for forward selection">Cut</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature Dropped</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd;">Description</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Remaining</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
@@ -719,6 +726,11 @@
                     <span (click)="openFeatureCardFromSfs(step.feature_name, step); $event.stopPropagation()"
                           style="color: #1976d2; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;"
                           title="Open Feature Card for {{ step.feature_name }}">{{ step.feature_name }}</span>
+                  </td>
+                  <td class="sfs-feature-description"
+                      style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px; color: #555; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                      [title]="getFeatureDescription(step.feature_name) || ''">
+                    {{ getFeatureDescription(step.feature_name) || '—' }}
                   </td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; color: #555; font-size: 11px;">
                     {{ step.selected_features?.length || '—' }}
@@ -1166,6 +1178,7 @@
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Direction</th>
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Action</th>
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Feature</th>
+              <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Description</th>
               <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV ROC-AUC</th>
               <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV PR-AUC</th>
               <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">ROC-AUC Change %</th>
@@ -1190,6 +1203,11 @@
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #1976d2; font-weight: 500;">
                 {{ step.feature_name }}
+              </td>
+              <td class="sfs-feature-description"
+                  style="padding: 10px; border: 1px solid #ddd; font-size: 12px; color: #555; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                  [title]="getFeatureDescription(step.feature_name) || ''">
+                {{ getFeatureDescription(step.feature_name) || '—' }}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #1976d2;">
                 {{ step.cv_roc_auc.toFixed(4) }}

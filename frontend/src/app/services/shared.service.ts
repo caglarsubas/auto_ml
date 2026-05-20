@@ -237,12 +237,17 @@ export class SharedService {
   // Subject (not BehaviorSubject) — late subscribers must not auto-
   // re-start SFS on a stale request.  The single shape is the same
   // object the backend action handler returns in `applied`.
+  // v2.37.0+: backward_cut_step (optional) signals forward-from-
+  // backward — the modeling component routes to
+  // startForwardFromBackwardFeatures() instead of startSfs() when
+  // it's present.
   private sfsStartRequestsSubject = new Subject<{
     methods: string[];
     stopping_criteria: any;
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }>();
   sfsStartRequests$: Observable<{
     methods: string[];
@@ -250,6 +255,7 @@ export class SharedService {
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }> = this.sfsStartRequestsSubject.asObservable();
 
   emitSfsStartRequest(request: {
@@ -258,6 +264,7 @@ export class SharedService {
     excluded_features: string[];
     n_jobs: number;
     top_k: number;
+    backward_cut_step?: number | null;
   }): void {
     if (!request || typeof request !== 'object') return;
     if (!Array.isArray(request.methods) || request.methods.length === 0) return;
@@ -309,6 +316,61 @@ export class SharedService {
     // Defensive: purifier_options must be an array even if empty.
     if (!Array.isArray(request.purifier_options)) return;
     this.dataPurifierStartRequestsSubject.next(request);
+  }
+
+  // ── update_purifier_selection (v2.28.0+) ──────────────────────
+  // The "preview" sibling of start_data_purifier — edits the
+  // checkbox UI WITHOUT firing the run.  The AI uses this when it
+  // wants to propose a checkbox change for the user to review (e.g.
+  // "let me consolidate IDs 11+17 into ID 23 for you") instead of
+  // applying-and-running in one step.
+  //
+  // Two payload forms supported (matches the backend action handler):
+  //   • WHOLESALE: { form: 'wholesale', purifier_options: [..] }
+  //   • DIFF:      { form: 'diff', add: [..], remove: [..] }
+  //
+  // The model-development subscriber MUST NOT call
+  // proceedFromPreprocessing() in response — that is the exact
+  // distinction from dataPurifierStartRequests$.  Regression-guarded
+  // by a Karma spec; the difference must stay sharp.
+  //
+  // Subject (not BehaviorSubject) so a late-mounted component never
+  // replays a stale checkbox change.
+  private purifierSelectionUpdatesSubject = new Subject<{
+    form: 'wholesale' | 'diff';
+    purifier_options: number[] | null;
+    add: number[];
+    remove: number[];
+    description?: string;
+  }>();
+  purifierSelectionUpdates$: Observable<{
+    form: 'wholesale' | 'diff';
+    purifier_options: number[] | null;
+    add: number[];
+    remove: number[];
+    description?: string;
+  }> = this.purifierSelectionUpdatesSubject.asObservable();
+
+  emitPurifierSelectionUpdate(request: {
+    form: 'wholesale' | 'diff';
+    purifier_options: number[] | null;
+    add: number[];
+    remove: number[];
+    description?: string;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    // Form discriminator must be one of the two valid values.
+    if (request.form !== 'wholesale' && request.form !== 'diff') return;
+    // Both diff arrays MUST be arrays even when empty so subscribers
+    // can iterate without null checks.
+    if (!Array.isArray(request.add) || !Array.isArray(request.remove)) return;
+    // Wholesale form REQUIRES an array (can be []).  Diff form
+    // requires purifier_options to be null (the discriminator
+    // contract is strict so a subscriber can never accidentally
+    // wholesale-replace on a diff broadcast).
+    if (request.form === 'wholesale' && !Array.isArray(request.purifier_options)) return;
+    if (request.form === 'diff' && request.purifier_options !== null) return;
+    this.purifierSelectionUpdatesSubject.next(request);
   }
 
   // ── apply_encoding ─────────────────────────────────────────────

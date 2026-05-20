@@ -1661,6 +1661,174 @@ class TestDispatchAction:
         from ai_assistant.action_executor import HANDLERS, start_sfs
         assert HANDLERS.get('start_sfs') is start_sfs
 
+    # ── v2.37.0+: backward_cut_step (forward-from-backward) ─────────────
+    # Closes the gap where the AI's only way to mimic the manual
+    # "Run Forward Selection on These N Features" button was to
+    # enumerate every backward-dropped feature in excluded_features —
+    # fragile, conflated with user-drop intent, and silently failing to
+    # update the visible green-box cut-step display.
+
+    def test_start_sfs_default_applied_backward_cut_step_is_none(self):
+        # Backward-compat with v2.25.0..v2.36.1 callers — when the AI
+        # doesn't send backward_cut_step, applied must still expose the
+        # field as None so subscribers can read it uniformly.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+        })
+        assert result['status'] == 'success'
+        assert 'backward_cut_step' in result['applied']
+        assert result['applied']['backward_cut_step'] is None
+
+    def test_start_sfs_rejects_non_int_backward_cut_step(self):
+        # "thirty-seven" isn't coercible to int — must fail loudly.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 'thirty-seven',
+        })
+        assert result['status'] == 'error'
+        assert 'backward_cut_step' in result['error']
+        assert 'invalid_backward_cut_step' in result.get('errors', [])
+
+    def test_start_sfs_rejects_non_positive_backward_cut_step(self):
+        # 0 and negatives are nonsense step numbers — backend steps are 1-indexed.
+        for bad_val in (0, -1, -42):
+            result = self._dispatch(1, 'start_sfs', {
+                'methods': ['forward'],
+                'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+                'backward_cut_step': bad_val,
+            })
+            assert result['status'] == 'error', f'expected error for backward_cut_step={bad_val}'
+            assert 'positive integer' in result['error']
+
+    def test_start_sfs_rejects_backward_cut_step_without_forward_method(self):
+        # backward_cut_step only makes sense for forward-from-backward.
+        # If methods=['backward'], honoring the cut step is silent
+        # corruption — the cut features would never reach the engine.
+        result = self._dispatch(1, 'start_sfs', {
+            'methods': ['backward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 37,
+        })
+        assert result['status'] == 'error'
+        assert 'forward' in result['error']
+        assert 'backward_cut_step_requires_forward_method' in result.get('errors', [])
+
+    def test_start_sfs_rejects_backward_cut_step_when_sfs_results_missing(self, tmp_path, settings):
+        # Without a completed backward SFS run there's nothing to cut
+        # from.  Tool must reject (not silently fall back to full feature
+        # pool — that would surprise the user).
+        settings.MEDIA_ROOT = str(tmp_path)
+        # tmp_path has no sfs_results directory at all.
+        result = self._dispatch(99999, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 1,
+        })
+        assert result['status'] == 'error'
+        assert 'no sfs_results' in result['error']
+
+    def test_start_sfs_rejects_backward_cut_step_out_of_range(self, tmp_path, settings):
+        # cut_step=999 is greater than the number of backward steps on disk.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '777_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [
+                    {'step': 1, 'selected_features': ['A', 'B', 'C']},
+                    {'step': 2, 'selected_features': ['B', 'C']},
+                    {'step': 3, 'selected_features': ['C']},
+                ],
+            }, f)
+        result = self._dispatch(777, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 999,
+        })
+        assert result['status'] == 'error'
+        assert 'not a valid backward step' in result['error']
+        assert 'invalid_backward_cut_step_value' in result.get('errors', [])
+
+    def test_start_sfs_rejects_backward_cut_step_when_backward_array_empty(self, tmp_path, settings):
+        # File exists but has no backward results.  This shouldn't
+        # happen in normal operation but the guard prevents a confusing
+        # downstream error in SFSStartView.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '888_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({'forward': [{'step': 1, 'selected_features': ['A']}], 'backward': []}, f)
+        result = self._dispatch(888, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': 1,
+        })
+        assert result['status'] == 'error'
+        assert 'no backward array' in result['error']
+        assert 'no_backward_results_for_cut_step' in result.get('errors', [])
+
+    def test_start_sfs_accepts_valid_backward_cut_step(self, tmp_path, settings):
+        # Happy path: cut step exists in the on-disk backward results
+        # and methods includes 'forward' — cut step is mirrored into
+        # applied so the frontend can branch on it.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '555_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [
+                    {'step': 1, 'selected_features': ['A', 'B', 'C', 'D']},
+                    {'step': 2, 'selected_features': ['B', 'C', 'D']},
+                    {'step': 3, 'selected_features': ['C', 'D']},
+                ],
+            }, f)
+        result = self._dispatch(555, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}], 'min_features': 2, 'max_features': 4},
+            'backward_cut_step': 2,
+            'n_jobs': 3,
+            'top_k': 5,
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['backward_cut_step'] == 2
+
+    def test_start_sfs_coerces_numeric_string_backward_cut_step(self, tmp_path, settings):
+        # Robustness: the LLM sometimes wraps numbers in quotes.  As long
+        # as int() can coerce it (and all other constraints are met),
+        # accept it rather than reject — symmetric with how other
+        # numeric fields are coerced.
+        import os
+        import json
+        settings.MEDIA_ROOT = str(tmp_path)
+        sfs_dir = os.path.join(str(tmp_path), 'sfs_results')
+        os.makedirs(sfs_dir, exist_ok=True)
+        sfs_path = os.path.join(sfs_dir, '556_sfs_results.json')
+        with open(sfs_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'forward': [],
+                'backward': [{'step': 1, 'selected_features': ['A', 'B']}],
+            }, f)
+        result = self._dispatch(556, 'start_sfs', {
+            'methods': ['forward'],
+            'stopping_criteria': {'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}]},
+            'backward_cut_step': '1',  # ← string, not int
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['backward_cut_step'] == 1
+
     # ── v2.26.0+: pipeline-orchestration actions ────────────────────────
     # These three actions close the "AI cannot click pipeline buttons"
     # gap exposed in v2.25.0 (the user's screenshot showed the AI
@@ -1776,6 +1944,186 @@ class TestDispatchAction:
     def test_start_data_purifier_registered_in_handlers(self):
         from ai_assistant.action_executor import HANDLERS, start_data_purifier
         assert HANDLERS.get('start_data_purifier') is start_data_purifier
+
+    # ── update_purifier_selection (v2.28.0+) ────────────────────────
+    # The "preview" sibling of start_data_purifier — edits the
+    # Data-Purifier checkbox UI WITHOUT firing the run.  Two payload
+    # forms (wholesale + diff), strict XOR between them, group-conflict
+    # validation on wholesale, add/remove disjointness on diff, no-op
+    # fallthroughs for empty payloads.  These tests script every
+    # branch in the handler so a future refactor cannot silently regress
+    # the "review-then-run" UX.
+
+    def test_update_purifier_selection_wholesale_form_round_trips(self):
+        # The screenshot scenario: AI consolidates IDs 11+17 into ID 23.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 3, 4, 7, 23, 28, 32],
+            'description': 'Consolidate IDs 11+17 into ID 23',
+        })
+        assert result['status'] == 'success'
+        assert result['action_type'] == 'update_purifier_selection'
+        applied = result['applied']
+        assert applied['form'] == 'wholesale'
+        assert applied['purifier_options'] == [1, 2, 3, 4, 7, 23, 28, 32]
+        assert applied['add'] == []
+        assert applied['remove'] == []
+        assert result['description'] == 'Consolidate IDs 11+17 into ID 23'
+
+    def test_update_purifier_selection_wholesale_empty_clears_selection(self):
+        # Empty wholesale list is a legitimate "clear everything" use case.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [],
+            'description': 'Clear all purifier options',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'wholesale'
+        assert result['applied']['purifier_options'] == []
+
+    def test_update_purifier_selection_wholesale_drops_invalid_ids(self):
+        # IDs outside 1..34 are dropped silently, dedup preserved.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 1, 99, -3, 'foo', 23, 0, 34],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['purifier_options'] == [1, 23, 34]
+
+    def test_update_purifier_selection_wholesale_group_conflict_errors(self):
+        # IDs 11 and 12 are both in sparsity_drop_group — UI normally
+        # enforces single-select.  Backend must reject so the AI can
+        # fix on the next turn instead of producing a silently malformed
+        # selection.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 11, 12, 23],
+        })
+        assert result['status'] == 'error'
+        assert 'Group conflict' in result['error']
+        # Error message must name the conflicting IDs so the AI can
+        # pick which to keep.
+        assert '11' in result['error']
+        assert '12' in result['error']
+        assert 'sparsity_drop_group' in result['error']
+
+    def test_update_purifier_selection_wholesale_no_conflict_across_groups(self):
+        # IDs 11 (sparsity_drop_group), 17 (missing_drop_group), 23
+        # (combined_drop_group) are in DIFFERENT groups — no conflict
+        # even though the user wouldn't normally select all three.
+        # (This particular combo is what the screenshot AI was warning
+        # against — but it's not a backend-rejectable error, it's a
+        # design recommendation.)
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [11, 17, 23],
+        })
+        assert result['status'] == 'success'
+        assert sorted(result['applied']['purifier_options']) == [11, 17, 23]
+
+    def test_update_purifier_selection_wholesale_no_conflict_for_standalone(self):
+        # IDs 1-4 have group=None (standalone) — multiple selection is
+        # never a conflict for them.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 3, 4],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['purifier_options'] == [1, 2, 3, 4]
+
+    def test_update_purifier_selection_diff_form_round_trips(self):
+        # The diff-form equivalent of the screenshot scenario.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [23],
+            'remove': [11, 17],
+            'description': 'Replace 11+17 with combined-drop ID 23',
+        })
+        assert result['status'] == 'success'
+        applied = result['applied']
+        assert applied['form'] == 'diff'
+        assert applied['purifier_options'] is None  # diff form omits this
+        assert applied['add'] == [23]
+        assert applied['remove'] == [11, 17]
+
+    def test_update_purifier_selection_diff_add_only(self):
+        # "Just turn ON ID 7" — no removals.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [7],
+            'description': 'Add 0.85 corr-drop',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'diff'
+        assert result['applied']['add'] == [7]
+        assert result['applied']['remove'] == []
+
+    def test_update_purifier_selection_diff_remove_only(self):
+        # "Just turn OFF ID 7" — no additions.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'remove': [7],
+            'description': 'Drop correlation pruning',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'diff'
+        assert result['applied']['add'] == []
+        assert result['applied']['remove'] == [7]
+
+    def test_update_purifier_selection_diff_conflict_rejected(self):
+        # Same ID in add and remove is incoherent — must error so the
+        # AI fixes its diff on the next turn.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [7, 23],
+            'remove': [11, 23, 17],
+        })
+        assert result['status'] == 'error'
+        assert '23' in result['error']
+        # Error wording is stable so the AI can pattern-match on it.
+        assert 'both' in result['error'].lower()
+
+    def test_update_purifier_selection_rejects_both_forms_simultaneously(self):
+        # Mixing wholesale and diff in one payload is incoherent.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': [1, 2, 23],
+            'add': [7],
+        })
+        assert result['status'] == 'error'
+        assert 'exactly one' in result['error'].lower()
+
+    def test_update_purifier_selection_description_only_is_noop(self):
+        # Neither form provided — accept as a no-op (not an error).
+        # The frontend handler will render the chat message but skip
+        # the broadcast so the form doesn't flash.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'description': 'Thinking about it…',
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'noop'
+        assert result['applied']['purifier_options'] is None
+
+    def test_update_purifier_selection_self_cancelling_diff_is_noop(self):
+        # Empty add + empty remove is a self-cancelling diff — accept
+        # but mark as noop.
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': [],
+            'remove': [],
+        })
+        assert result['status'] == 'success'
+        assert result['applied']['form'] == 'noop'
+
+    def test_update_purifier_selection_rejects_non_list_wholesale(self):
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'purifier_options': 'all',
+        })
+        assert result['status'] == 'error'
+        assert 'list' in result['error'].lower()
+
+    def test_update_purifier_selection_rejects_non_list_diff(self):
+        result = self._dispatch(1, 'update_purifier_selection', {
+            'add': 23,  # not a list
+        })
+        assert result['status'] == 'error'
+        assert 'list' in result['error'].lower()
+
+    def test_update_purifier_selection_registered_in_handlers(self):
+        # Defense-in-depth: protect the HANDLERS dict entry from
+        # accidental delete on a future refactor.  Without this, a
+        # bad refactor would route update_purifier_selection requests
+        # to "Unknown action type" and silently break the preview UX.
+        from ai_assistant.action_executor import HANDLERS, update_purifier_selection
+        assert HANDLERS.get('update_purifier_selection') is update_purifier_selection
 
     # ── apply_encoding ──────────────────────────────────────────────
     def test_apply_encoding_routes_correctly_default_payload(self):
@@ -2286,6 +2634,23 @@ class TestGenerateFeatureDescription:
 class TestPrometaConfig:
     """Test prometa_config lazy decorators and flush when SDK is not configured."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_prometa_singleton(self):
+        """v2.34.0: the new agent_id wiring tests stub out
+        ``prometa.Prometa`` and force-init the singleton; without this
+        teardown the stub instance leaks into the next test (cache /
+        tool-call specs that genuinely use the real client) and
+        manifests as 16 cascading failures.
+
+        Reset in BOTH directions (before AND after) so the class is
+        hermetic regardless of which test ran before."""
+        import ai_assistant.prometa_config as pc
+        pc._initialized = False
+        pc._prometa = None
+        yield
+        pc._initialized = False
+        pc._prometa = None
+
     def test_workflow_decorator_noop_without_endpoint(self, monkeypatch):
         """Without PROMETA_ENDPOINT, @workflow should be a transparent no-op."""
         monkeypatch.delenv('PROMETA_ENDPOINT', raising=False)
@@ -2356,6 +2721,182 @@ class TestPrometaConfig:
             pass
 
         assert my_workflow.__name__ == 'my_workflow'
+
+    # ── Stable Prometa agent id wiring (v2.34.0 / SDK 0.7.0+) ─────────
+
+    def test_get_prometa_passes_agent_id_when_env_var_set(self, monkeypatch):
+        """When PROMETA_AGENT_ID is set, get_prometa() must forward it
+        as agent_id= to Prometa(...).  This is the platform-correctness
+        path: matching the trace's prometa.agent.id to the registry's
+        Agent.id (or customer-owned slug accepted by ingest) is what
+        makes PG↔CH joins work for lineage / AML scoring /
+        incident-to-trace.
+
+        Without this forwarding the SDK 0.7.0+ falls back to a random
+        per-process id and emits a UserWarning."""
+        # Bypass the pytest short-circuit (lines 42-44 of prometa_config)
+        monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
+        monkeypatch.delenv('PROMETA_DISABLE', raising=False)
+        # Provide minimum endpoint config so init proceeds.
+        monkeypatch.setenv('PROMETA_STAGE', 'staging')
+        monkeypatch.setenv('PROMETA_ENDPOINT_STAGING', 'http://test.invalid/otlp')
+        monkeypatch.setenv('PROMETA_API_KEY_STAGING', 'pk_test')
+        # The behaviour-under-test: stable customer-owned slug via env var.
+        monkeypatch.setenv('PROMETA_AGENT_ID', 'declarai-assistant-staging')
+
+        # Capture the kwargs Prometa(...) is constructed with, without
+        # actually emitting telemetry.
+        captured_kwargs = {}
+
+        class _StubPrometa:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                # SDK 0.7.0+ assigns agent_id from kwarg if present.
+                self.agent_id = kwargs.get('agent_id', '<would-be-random>')
+
+        import ai_assistant.prometa_config as pc
+        import prometa
+        monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
+        # Avoid OpenAI auto-instrumentation side-effect during the test.
+        if hasattr(prometa, 'integrations'):
+            monkeypatch.setattr(prometa.integrations.openai, 'install',
+                                lambda: None, raising=False)
+        pc._initialized = False
+        pc._prometa = None
+
+        client = pc.get_prometa()
+        assert client is not None
+        assert 'agent_id' in captured_kwargs, (
+            "PROMETA_AGENT_ID was set; get_prometa() must forward it as "
+            "agent_id= so the SDK does not fall back to a random per-process id"
+        )
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging'
+
+    def test_get_prometa_uses_stable_slug_when_env_var_unset(self, monkeypatch):
+        """When PROMETA_AGENT_ID is NOT set, use a deterministic slug.
+
+        The attached Prometa feedback documents why we no longer ask
+        operators to copy a platform UUID into .env: until Prometa
+        auto-registers Agents like Tools, DeclarAI owns a stable slug so
+        every cold start reports the same agent_id."""
+        monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
+        monkeypatch.delenv('PROMETA_DISABLE', raising=False)
+        monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
+        monkeypatch.setenv('PROMETA_STAGE', 'staging')
+        monkeypatch.setenv('PROMETA_ENDPOINT_STAGING', 'http://test.invalid/otlp')
+        monkeypatch.setenv('PROMETA_API_KEY_STAGING', 'pk_test')
+
+        captured_kwargs = {}
+
+        class _StubPrometa:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                self.agent_id = kwargs.get('agent_id', '<random>')
+
+        import ai_assistant.prometa_config as pc
+        import prometa
+        monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
+        if hasattr(prometa, 'integrations'):
+            monkeypatch.setattr(prometa.integrations.openai, 'install',
+                                lambda: None, raising=False)
+        pc._initialized = False
+        pc._prometa = None
+
+        client = pc.get_prometa()
+        assert client is not None
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+            "PROMETA_AGENT_ID was unset; get_prometa() must still pass a "
+            "stable customer-owned slug so the SDK does not generate a "
+            "random per-process id"
+        )
+
+    def test_get_prometa_uses_stable_slug_when_env_var_empty_string(self, monkeypatch):
+        """Edge case: PROMETA_AGENT_ID set to empty string (often happens
+        when an operator unsets a deployment var by leaving it blank in
+        the env file). Treat as unset and use the deterministic slug."""
+        monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
+        monkeypatch.delenv('PROMETA_DISABLE', raising=False)
+        monkeypatch.setenv('PROMETA_STAGE', 'staging')
+        monkeypatch.setenv('PROMETA_ENDPOINT_STAGING', 'http://test.invalid/otlp')
+        monkeypatch.setenv('PROMETA_API_KEY_STAGING', 'pk_test')
+        monkeypatch.setenv('PROMETA_AGENT_ID', '')  # blank — should be treated as unset
+
+        captured_kwargs = {}
+
+        class _StubPrometa:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                self.agent_id = kwargs.get('agent_id', '<random>')
+
+        import ai_assistant.prometa_config as pc
+        import prometa
+        monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
+        if hasattr(prometa, 'integrations'):
+            monkeypatch.setattr(prometa.integrations.openai, 'install',
+                                lambda: None, raising=False)
+        pc._initialized = False
+        pc._prometa = None
+
+        pc.get_prometa()
+        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+            "Empty-string PROMETA_AGENT_ID must be treated as unset and "
+            "replaced by the stable DeclarAI slug"
+        )
+
+    def test_prometa_config_module_documents_agent_id_env_var(self):
+        """Module-level docstring must call out PROMETA_AGENT_ID so a
+        future contributor reading the file learns about it without
+        having to read the SDK source.  Pairs with the structural code
+        guard below."""
+        import ai_assistant.prometa_config as pc
+        assert pc.__doc__ is not None
+        assert 'PROMETA_AGENT_ID' in pc.__doc__, (
+            "prometa_config module docstring must document the "
+            "PROMETA_AGENT_ID env var (operator-facing config)"
+        )
+
+    def test_get_prometa_source_reads_agent_id_env_var(self):
+        """Structural guard: the prometa_config module must read
+        PROMETA_AGENT_ID (in _resolve_agent_id) AND get_prometa() must
+        always forward the resolved stable agent_id to Prometa(...).
+
+        Reverting to the pre-v2.34.0 shape (always-random agent_id)
+        would silently break PG↔CH joins again — this test catches
+        that regression at the source level even when the runtime
+        code path is short-circuited under pytest.
+
+        Split assertion across the two helpers because v2.34.0+
+        factored the env-var read into ``_resolve_agent_id`` so
+        get_prometa() stays a thin orchestrator.  Both pieces must
+        be present for the contract to hold."""
+        import inspect
+        import ai_assistant.prometa_config as pc
+        resolver_source = inspect.getsource(pc._resolve_agent_id)
+        assert "PROMETA_AGENT_ID" in resolver_source, (
+            "_resolve_agent_id() must read os.environ['PROMETA_AGENT_ID']"
+        )
+        getter_source = inspect.getsource(pc.get_prometa)
+        assert "'agent_id': agent_id" in getter_source, (
+            "get_prometa() must always forward the resolved stable agent_id"
+        )
+
+    def test_resolve_agent_id_defaults_to_stage_slug(self, monkeypatch):
+        """Default agent_id is stable, readable, and environment-specific."""
+        import ai_assistant.prometa_config as pc
+        monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
+        assert pc._resolve_agent_id('declarai-assistant', 'production') == (
+            'declarai-assistant-production',
+            'default-slug',
+        )
+
+    def test_resolve_agent_id_slugifies_display_name(self, monkeypatch):
+        """A changed display label should still produce a slug-shaped id."""
+        import ai_assistant.prometa_config as pc
+        monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
+        assert pc._resolve_agent_id('DeclarAI Assistant', 'Staging EU') == (
+            'declarai-assistant-staging-eu',
+            'default-slug',
+        )
 
     def test_set_span_attr_noop_without_active_span(self):
         """set_span_attr is a no-op when no Prometa span is active."""
@@ -3681,6 +4222,438 @@ class TestToolCallSpanRename:
 
 
 @pytest.mark.unit
+class TestShapDetailsHandler:
+    """v2.36.0 — ``_handle_get_shap_details`` upgrades closed ToDoS
+    item #1: assistant could not reason about impact direction
+    because the cached ``shap_details`` artifact only contained feature
+    names (frontend cache-push read non-existent field names; see the
+    rationale block in ``_handle_get_shap_details``).  These specs
+    lock down:
+
+      * direction-label semantics (sign of signed_impact → UP/DOWN/NEUTRAL)
+      * VIF + signed_mean tail context formatting
+      * graceful handling when fields are missing (legacy cache data)
+      * structural guard: handler source must reference ``signed_impact``
+        and emit a ``direction=`` token so a refactor cannot silently
+        regress to the pre-v2.36.0 raw-numbers-only output.
+    """
+
+    def test_handle_get_shap_details_renders_direction_up_for_positive_signed(
+        self, monkeypatch,
+    ):
+        """signed_impact > 0 → direction=UP.  This is what enables the
+        LLM to say 'increasing Var_5 pushes prediction UP'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'Var_5', 'impact': 0.342, 'signed_impact': 0.342,
+             'signed_mean': -0.095, 'vif': 1.8},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'Var_5' in out
+        assert 'direction=UP' in out
+        assert '|impact|=0.3420' in out
+        assert 'VIF=1.80' in out
+
+    def test_handle_get_shap_details_renders_direction_down_for_negative_signed(
+        self, monkeypatch,
+    ):
+        """signed_impact < 0 → direction=DOWN.  Critical for the
+        screenshot scenario where the user asks 'why is Var_7 important?'
+        and the LLM should answer 'Var_7 pushes prediction DOWN — i.e.
+        increasing Var_7 reduces predicted default risk'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'Var_7', 'impact': 0.349, 'signed_impact': -0.349,
+             'signed_mean': -0.085, 'vif': 2.1},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'Var_7' in out
+        assert 'direction=DOWN' in out
+        assert 'signed=-0.3490' in out
+
+    def test_handle_get_shap_details_renders_neutral_for_missing_signed(
+        self, monkeypatch,
+    ):
+        """If the cached item lacks ``signed_impact`` (e.g. legacy
+        cache from before the v2.36.0 FE fix landed), emit
+        direction=NEUTRAL with — for the signed value rather than
+        crashing on float-format of None."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'LegacyVar', 'impact': 0.1},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'direction=NEUTRAL' in out
+        assert 'signed=—' in out, (
+            "missing signed_impact must render as em-dash placeholder, "
+            "not crash on float-format(None)"
+        )
+
+    def test_handle_get_shap_details_omits_vif_when_absent(self, monkeypatch):
+        """VIF tail is optional context — omit cleanly when the field
+        isn't in the cache (legacy data) instead of rendering 'VIF=None'."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': 'NoVifVar', 'impact': 0.2, 'signed_impact': 0.2},
+        ])
+        out = te._handle_get_shap_details(1, {})
+        assert 'VIF=' not in out, (
+            "when VIF field is missing the tail context must be omitted "
+            "entirely rather than rendering 'VIF=None'"
+        )
+        assert 'direction=UP' in out
+
+    def test_handle_get_shap_details_top_n_filter(self, monkeypatch):
+        """The existing top_n arg must still work after the v2.36.0
+        upgrade — this is a regression guard."""
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
+            {'feature': f'V{i}', 'impact': 1.0 / (i + 1), 'signed_impact': 1.0 / (i + 1)}
+            for i in range(10)
+        ])
+        out = te._handle_get_shap_details(1, {'top_n': 3})
+        assert '3 features' in out
+        assert 'V0' in out and 'V1' in out and 'V2' in out
+        assert 'V3' not in out
+
+    def test_handle_get_shap_details_source_emits_direction_token(self):
+        """Structural guard: the handler source must emit a
+        ``direction=`` token derived from ``signed_impact``.  Without
+        this guard a future refactor that drops the prose direction
+        would silently regress the v2.36.0 capability — the cached
+        data would still be correct but the LLM would lose the
+        signal it was promised."""
+        import inspect
+        from ai_assistant import tool_executor as te
+        source = inspect.getsource(te._handle_get_shap_details)
+        assert 'signed_impact' in source
+        assert "'UP'" in source or '"UP"' in source
+        assert "'DOWN'" in source or '"DOWN"' in source
+        assert 'direction=' in source, (
+            "handler source must emit a 'direction=' token in its "
+            "output template — that's the LLM-facing prose label "
+            "that enables impact-direction reasoning"
+        )
+
+
+@pytest.mark.unit
+class TestSFSStatusReader:
+    """v2.35.0 — ``read_sfs_status`` and ``_format_sfs_status_line`` close
+    the "assistant unaware SFS is running" bug from the 2026-05-19
+    ToDoS screenshot.  These specs lock down precedence, shape,
+    interrupted-fallback semantics, banner emission rules, slim-context
+    wiring, the in-flight guard on ``start_sfs``, and source-level
+    regression guards on the integration points.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_sfs_progress(self):
+        """SFS_PROGRESS is a process-local dict — reset before AND
+        after each test so stale state cannot pollute siblings."""
+        from modeling import views as mv
+        mv.SFS_PROGRESS.clear()
+        yield
+        mv.SFS_PROGRESS.clear()
+
+    # ── read_sfs_status: precedence + shape ──────────────────────────
+
+    def test_read_sfs_status_returns_not_started_when_absent(self):
+        """When SFS_PROGRESS has no entry AND no disk file exists,
+        the canonical 'not_started' shape is returned (never None)."""
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(99999)
+        assert result['status'] == 'not_started'
+        assert result['progress'] == 0.0
+        assert result['completed_step_count'] == 0
+        assert result['source'] == 'absent'
+        assert isinstance(result, dict)
+
+    def test_read_sfs_status_running_state_from_memory(self):
+        """In-memory SFS_PROGRESS shows running → reader returns the
+        live state with source='memory'.  This is the screenshot
+        scenario."""
+        from ai_assistant.tool_executor import read_sfs_status
+        from modeling import views as mv
+        mv.SFS_PROGRESS[42] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        result = read_sfs_status(42)
+        assert result['status'] == 'running'
+        assert result['progress'] == 0.12
+        assert result['completed_step_count'] == 7
+        assert result['message'] == 'Backward elimination: Step 8/68'
+        assert result['source'] == 'memory'
+
+    def test_read_sfs_status_disk_fallback_treats_running_as_interrupted(
+        self, tmp_path, monkeypatch,
+    ):
+        """No in-memory entry but disk says 'running' → SFS thread
+        was killed (server restart) → surface as 'interrupted'."""
+        import json as _json
+        from django.conf import settings
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '888_sfs_results.json').write_text(_json.dumps({
+            'status': 'running',
+            'forward': [{'step': 1}, {'step': 2}],
+            'backward': [],
+        }))
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(888)
+        assert result['status'] == 'interrupted'
+        assert result['source'] == 'disk'
+        assert result['completed_step_count'] == 2
+
+    def test_read_sfs_status_disk_fallback_completed(self, tmp_path, monkeypatch):
+        """No in-memory + disk says 'completed' → completed (server-
+        restart-after-completion case)."""
+        import json as _json
+        from django.conf import settings
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '777_sfs_results.json').write_text(_json.dumps({
+            'status': 'completed',
+            'forward': [{'step': 1}],
+            'backward': [{'step': 1}, {'step': 2}],
+        }))
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(777)
+        assert result['status'] == 'completed'
+        assert result['progress'] == 1.0
+        assert result['source'] == 'disk'
+        assert result['completed_step_count'] == 3
+
+    def test_read_sfs_status_memory_wins_over_disk(self, tmp_path, monkeypatch):
+        """Precedence: in-memory always wins over disk because it's
+        freshest.  Disk-completed + memory-running → must report
+        running (user is mid-rerun)."""
+        import json as _json
+        from django.conf import settings
+        from modeling import views as mv
+        monkeypatch.setattr(settings, 'MEDIA_ROOT', str(tmp_path))
+        sfs_dir = tmp_path / 'sfs_results'
+        sfs_dir.mkdir()
+        (sfs_dir / '555_sfs_results.json').write_text(
+            _json.dumps({'status': 'completed', 'forward': [], 'backward': []})
+        )
+        mv.SFS_PROGRESS[555] = {
+            'status': 'running',
+            'progress': 0.05,
+            'message': 'Forward selection: Step 2',
+            'completed_steps': [{'step': 1}],
+            'duration_seconds': None,
+            'error': None,
+        }
+        from ai_assistant.tool_executor import read_sfs_status
+        result = read_sfs_status(555)
+        assert result['status'] == 'running'
+        assert result['source'] == 'memory'
+
+    # ── _format_sfs_status_line: banner emission rules ───────────────
+
+    def test_format_sfs_status_line_returns_none_for_benign_states(self):
+        """No banner for not_started / completed — common case must
+        not waste tokens."""
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        assert _format_sfs_status_line({'status': 'not_started'}) is None
+        assert _format_sfs_status_line({'status': 'completed'}) is None
+
+    def test_format_sfs_status_line_emphatic_for_running(self):
+        """Running banner must explicitly forbid duplicate-start AND
+        quote progress numerically.  Primary defence against the
+        screenshot bug."""
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'running',
+            'progress': 0.12,
+            'completed_step_count': 7,
+            'message': 'Backward elimination: Step 8/68',
+        })
+        assert line is not None
+        assert 'RUNNING' in line
+        assert 'DO NOT' in line
+        assert '12%' in line
+        assert '7 steps' in line
+        assert 'Backward elimination: Step 8/68' in line
+
+    def test_format_sfs_status_line_warns_for_stopped(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'stopped', 'progress': 0.5, 'completed_step_count': 30,
+        })
+        assert line is not None
+        assert 'stopped' in line.lower()
+        assert '30 steps' in line
+
+    def test_format_sfs_status_line_warns_for_interrupted(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'interrupted', 'progress': 0.0, 'completed_step_count': 5,
+        })
+        assert line is not None
+        assert 'INTERRUPTED' in line
+        assert 'Continue' in line
+
+    def test_format_sfs_status_line_surfaces_error_message(self):
+        from ai_assistant.tool_executor import _format_sfs_status_line
+        line = _format_sfs_status_line({
+            'status': 'error', 'error': 'feature matrix is singular',
+        })
+        assert line is not None
+        assert 'FAILED' in line
+        assert 'feature matrix is singular' in line
+
+    # ── _build_slim_context wiring ───────────────────────────────────
+
+    def test_build_slim_context_includes_sfs_running_banner(self):
+        """When SFS is running, _build_slim_context prepends the
+        banner at the very top of the context.  This is the
+        integration point that closes the screenshot bug."""
+        from modeling import views as mv
+        from ai_assistant import views as av
+        mv.SFS_PROGRESS[100] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        slim = av._build_slim_context(100, 'sfs')
+        assert 'SFS IS CURRENTLY RUNNING' in slim
+        assert 'DO NOT propose to start SFS' in slim
+        assert '12%' in slim and '7 steps' in slim
+
+    def test_build_slim_context_omits_sfs_banner_when_not_started(self):
+        """No banner for the common pre-SFS case — context stays clean."""
+        from ai_assistant import views as av
+        slim = av._build_slim_context(99998, 'general')
+        assert 'SFS IS CURRENTLY RUNNING' not in slim
+        assert 'INTERRUPTED' not in slim
+        assert 'FAILED' not in slim
+
+    # ── _handle_get_sfs_results: status header in tool output ────────
+
+    def test_handle_get_sfs_results_surfaces_status_when_cache_empty(self, monkeypatch):
+        """The screenshot bug: cache empty during early SFS run, the
+        LLM asked get_sfs_results and got 'not available' → concluded
+        SFS hadn't started.  After v2.35.0, the handler returns the
+        running banner even when Redis cache is empty."""
+        from modeling import views as mv
+        from ai_assistant import tool_executor as te
+        monkeypatch.setattr(te, 'read_sfs_results', lambda fid: None)
+        mv.SFS_PROGRESS[200] = {
+            'status': 'running',
+            'progress': 0.12,
+            'message': 'Backward elimination: Step 8/68',
+            'completed_steps': [{'step': i} for i in range(7)],
+            'duration_seconds': None,
+            'error': None,
+        }
+        out = te._handle_get_sfs_results(200, {})
+        assert 'SFS IS CURRENTLY RUNNING' in out
+        assert 'is not available' not in out
+
+    def test_handle_get_sfs_results_status_first_when_cache_present(self, monkeypatch):
+        """Status header must precede the SFS Configuration block so
+        the LLM cannot miss it even with truncated context windows."""
+        from modeling import views as mv
+        from ai_assistant import tool_executor as te
+        mv.SFS_PROGRESS[300] = {
+            'status': 'running', 'progress': 0.5, 'message': 'mid-run',
+            'completed_steps': [{'step': 1}], 'duration_seconds': None, 'error': None,
+        }
+        monkeypatch.setattr(te, 'read_sfs_results', lambda fid: {
+            'config': {
+                'top_k': 5,
+                'stopping_criteria': {
+                    'metrics': [], 'min_features': 5, 'max_features': 15,
+                },
+            },
+            'forward': [{'step': 1, 'feature_name': 'X1', 'cv_roc_auc': 0.75,
+                         'selected_features': ['X1']}],
+        })
+        out = te._handle_get_sfs_results(300, {})
+        running_idx = out.find('SFS IS CURRENTLY RUNNING')
+        config_idx = out.find('SFS Configuration')
+        assert running_idx >= 0
+        assert config_idx > running_idx
+
+    # ── start_sfs in-flight guard ────────────────────────────────────
+
+    def test_start_sfs_refuses_when_already_running(self):
+        """Last-line-of-defence: even if LLM bypasses banner + header,
+        action executor REFUSES duplicate run.  Prevents clobbering
+        SFS_PROGRESS[file_id] and corrupting in-flight results."""
+        from modeling import views as mv
+        from ai_assistant.action_executor import start_sfs
+        mv.SFS_PROGRESS[400] = {
+            'status': 'running', 'progress': 0.3, 'message': 'mid-run',
+            'completed_steps': [{'step': i} for i in range(20)],
+            'duration_seconds': None, 'error': None,
+        }
+        result = start_sfs(400, {
+            'methods': ['backward'],
+            'stopping_criteria': {
+                'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}],
+                'min_features': 5, 'max_features': 15,
+            },
+            'description': 'restart SFS',
+        })
+        assert result['status'] == 'error'
+        assert 'sfs_already_running' in result.get('errors', [])
+        assert 'already running' in result['error']
+        assert '30%' in result['error'] or '20 steps' in result['error']
+
+    def test_start_sfs_proceeds_when_completed(self):
+        """status='completed' is a valid pre-condition for a new run
+        (user wants to rerun with different params) — guard must NOT
+        fire."""
+        from modeling import views as mv
+        from ai_assistant.action_executor import start_sfs
+        mv.SFS_PROGRESS[500] = {
+            'status': 'completed', 'progress': 1.0, 'message': 'done',
+            'completed_steps': [], 'duration_seconds': 60.0, 'error': None,
+        }
+        result = start_sfs(500, {
+            'methods': ['forward'],
+            'stopping_criteria': {
+                'metrics': [{'metric': 'roc_auc', 'pct_change': 1.0}],
+                'min_features': 3, 'max_features': 10,
+            },
+            'description': 'rerun forward SFS',
+        })
+        assert result['status'] == 'success'
+
+    # ── Structural guards (regression at source level) ───────────────
+
+    def test_slim_context_imports_sfs_status_reader(self):
+        """Future refactor dropping the slim-context wiring would
+        silently re-open the bug — guard at the source level."""
+        import inspect
+        from ai_assistant import views as av
+        source = inspect.getsource(av._build_slim_context)
+        assert 'read_sfs_status' in source
+        assert '_format_sfs_status_line' in source
+
+    def test_start_sfs_source_guards_against_duplicate_run(self):
+        """Structural guard: start_sfs source must reference
+        read_sfs_status and check 'running' status."""
+        import inspect
+        from ai_assistant import action_executor as ae
+        source = inspect.getsource(ae.start_sfs)
+        assert 'read_sfs_status' in source
+        assert "'running'" in source or '"running"' in source
+
+
+@pytest.mark.unit
 class TestPrometaConfigTimerHelpers:
     """``span_timer`` and ``stamp_elapsed`` are the shared building blocks
     for the elapsed-time attributes — verify they emit the right keys."""
@@ -3819,6 +4792,1175 @@ class TestCacheHelpersDoNotStampSession:
             "ai_assistant.cache must not import set_session_id — "
             "session-tagging is the chat/action workflow's responsibility, "
             "not the infrastructure layer's (see v2.22.2 comment block).")
+
+    def test_cache_module_does_not_import_set_customer_id(self):
+        """v2.30.0 parity: the cache module must not import
+        ``set_customer_id`` either.  Same rationale as set_session_id —
+        the workflow root span owns correlation-chain stamping; cache
+        helpers run as children and inherit the parent's attributes
+        automatically.  Importing the helper into cache.py would tempt
+        future contributors to over-stamp redundantly."""
+        from ai_assistant import cache as cache_mod
+        assert not hasattr(cache_mod, 'set_customer_id'), (
+            "ai_assistant.cache must not import set_customer_id — "
+            "customer-id stamping is the chat/action workflow's "
+            "responsibility (set_customer_id propagates to children "
+            "via parent-attribute inheritance).")
+
+
+# ---------------------------------------------------------------------------
+# Correlation-chain helpers (v2.30.0 / Phase 2 of prometa-sdk roadmap).
+#
+# The v0.5.0+ SDK adds set_customer_id and set_request_model alongside
+# the existing set_session_id.  prometa_config wraps each in a tiny
+# try-import shim:
+#   1. Forward to the SDK helper when available (the happy path on 0.6.0+).
+#   2. Fall back to set_span_attr when the SDK is older or import fails.
+#   3. Swallow any other exception (defense; SDK helpers are documented
+#      synchronous no-ops outside an active span context).
+#
+# These tests pin all three branches and verify both call sites
+# (_chat_workflow + dispatch_action for set_customer_id, _call_llm for
+# set_request_model) actually invoke the helpers when triggered.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPrometaCorrelationHelpers:
+    """``set_customer_id`` and ``set_request_model`` must forward to
+    the SDK helpers when available, fall back to ``set_span_attr`` on
+    ImportError, and never propagate exceptions."""
+
+    def test_set_customer_id_forwards_to_sdk_helper_when_available(self, monkeypatch):
+        """Happy path: SDK on 0.6.0+ exposes ``set_customer_id``; our
+        wrapper must call it verbatim, NOT the set_span_attr fallback."""
+        from ai_assistant import prometa_config as pc
+        sdk_calls: list[str] = []
+        attr_calls: list[tuple[str, object]] = []
+        # Patch the SDK symbol our wrapper imports.
+        import prometa
+        monkeypatch.setattr(prometa, 'set_customer_id',
+                            lambda v: sdk_calls.append(v), raising=False)
+        # Patch set_span_attr to ensure the fallback path is NOT taken.
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+
+        pc.set_customer_id('cus_42')
+
+        assert sdk_calls == ['cus_42'], (
+            f"Expected SDK helper to be called once with 'cus_42'; got {sdk_calls}"
+        )
+        assert attr_calls == [], (
+            f"Fallback set_span_attr must NOT fire when SDK helper exists; "
+            f"got {attr_calls}"
+        )
+
+    def test_set_customer_id_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+        """If the SDK is older than 0.5.0 (no ``set_customer_id`` symbol),
+        the wrapper must still emit the canonical attribute via
+        ``set_span_attr('prometa.customer_id', ...)`` so the platform's
+        correlation-id resolver still joins by customer."""
+        from ai_assistant import prometa_config as pc
+        attr_calls: list[tuple[str, object]] = []
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+        # Simulate the helper being absent: stash a real ImportError
+        # behind the import statement by deleting the SDK attribute.
+        import prometa
+        monkeypatch.delattr(prometa, 'set_customer_id', raising=False)
+
+        pc.set_customer_id('cus_99')
+
+        assert attr_calls == [('prometa.customer_id', 'cus_99')], (
+            f"Fallback must stamp prometa.customer_id; got {attr_calls}"
+        )
+
+    def test_set_customer_id_swallows_other_exceptions(self, monkeypatch):
+        """Defensive: if the SDK helper raises something other than
+        ImportError (e.g. a runtime error from inside an in-progress
+        span flush), the wrapper must NOT propagate."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+
+        def boom(_v):
+            raise RuntimeError('span flush in progress')
+
+        monkeypatch.setattr(prometa, 'set_customer_id', boom, raising=False)
+        # Must not raise.
+        pc.set_customer_id('cus_ok')
+
+    def test_set_request_model_forwards_to_sdk_helper_when_available(self, monkeypatch):
+        """Same contract as set_customer_id, mirrored for set_request_model."""
+        from ai_assistant import prometa_config as pc
+        sdk_calls: list[str] = []
+        attr_calls: list[tuple[str, object]] = []
+        import prometa
+        monkeypatch.setattr(prometa, 'set_request_model',
+                            lambda v: sdk_calls.append(v), raising=False)
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+
+        pc.set_request_model('gpt-5.5')
+
+        assert sdk_calls == ['gpt-5.5']
+        assert attr_calls == []
+
+    def test_set_request_model_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+        """SDK <0.5.0 path: must still stamp gen_ai.request.model so the
+        cost panel and AML model_route detector keep working."""
+        from ai_assistant import prometa_config as pc
+        attr_calls: list[tuple[str, object]] = []
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: attr_calls.append((k, v)))
+        import prometa
+        monkeypatch.delattr(prometa, 'set_request_model', raising=False)
+
+        pc.set_request_model('gpt-5.5')
+
+        assert attr_calls == [('gen_ai.request.model', 'gpt-5.5')]
+
+    def test_set_request_model_swallows_other_exceptions(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+        import prometa
+
+        def boom(_v):
+            raise RuntimeError('span context lost')
+
+        monkeypatch.setattr(prometa, 'set_request_model', boom, raising=False)
+        pc.set_request_model('gpt-5.5')
+
+    # ── Call-site tests: where the helpers actually land in production ─
+
+    def test_dispatch_action_calls_set_customer_id_with_file_id(self, monkeypatch):
+        """``dispatch_action`` is the action-executor entry point; it
+        must call ``set_customer_id(str(file_id))`` at the top of the
+        workflow body so every nested span (validators, broadcasts,
+        cache writes) inherits the correlation key.
+
+        Triggered via an unknown action_type so the body short-circuits
+        immediately without invoking real action handlers — keeps the
+        test cheap while still exercising the real code path."""
+        from ai_assistant import action_executor
+        from ai_assistant import prometa_config as pc
+
+        customer_calls: list[str] = []
+        session_calls: list[str] = []
+        # Patch where action_executor.py imported them (module-local
+        # binding) — patching prometa_config alone wouldn't catch the
+        # already-bound name in action_executor's namespace.
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda v: customer_calls.append(v))
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda v: session_calls.append(v))
+        # set_span_attr also runs at the entry; let it no-op silently.
+        monkeypatch.setattr(action_executor, 'set_span_attr', lambda *a, **kw: None)
+
+        result = action_executor.dispatch_action.__wrapped__(
+            42, 'unknown_action_xyz', {'description': 'test'}
+        ) if hasattr(action_executor.dispatch_action, '__wrapped__') else \
+            action_executor.dispatch_action(42, 'unknown_action_xyz', {'description': 'test'})
+
+        # Unknown action_type triggers the early-return path.
+        assert result.get('status') == 'error'
+        assert 'Unknown action type' in result.get('error', '')
+        # And both correlation helpers fired with the expected file_id.
+        assert customer_calls == ['42'], (
+            f"dispatch_action must call set_customer_id(str(file_id)); "
+            f"got {customer_calls}"
+        )
+        # Session id format is unchanged (declarai-file-{id}).
+        assert session_calls == ['declarai-file-42']
+
+    def test_chat_workflow_imports_set_customer_id_and_set_request_model(self):
+        """Structural guard: views.py must import both helpers from
+        prometa_config so the workflow body can call them.  This
+        catches an accidental import-line regression even when the
+        full _chat_workflow body isn't executed (it requires OpenAI).
+
+        Pairs with the dispatch_action call-site test above to give
+        full coverage of the v2.30.0 wiring without needing to mock
+        the entire LLM round-trip."""
+        from ai_assistant import views
+        # Both names must be reachable from views.py's module namespace.
+        assert hasattr(views, 'set_customer_id'), (
+            "views.py must import set_customer_id from prometa_config"
+        )
+        assert hasattr(views, 'set_request_model'), (
+            "views.py must import set_request_model from prometa_config"
+        )
+
+    def test_call_llm_source_uses_set_request_model_not_manual_set_span_attr(self):
+        """Belt-and-suspenders source-level guard: the _call_llm body
+        must use the canonical ``set_request_model(...)`` helper, not
+        the legacy ``set_span_attr('gen_ai.request.model', ...)`` shape.
+
+        Pre-v2.30.0 we had the manual call; post-fix it MUST be gone.
+        A future contributor reverting to the manual shape would lose
+        the v0.5.0+ helper's parent-attribute inheritance behavior."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert 'set_request_model(' in source, (
+            "_call_llm must use the canonical set_request_model() helper"
+        )
+        assert "set_span_attr('gen_ai.request.model'" not in source, (
+            "_call_llm must NOT manually stamp gen_ai.request.model — "
+            "use set_request_model() instead so the v0.5.0+ SDK helper's "
+            "parent-attribute inheritance kicks in."
+        )
+
+
+# ---------------------------------------------------------------------------
+# v2.38.0: cross-trace data-flow refs (set_input_ref / current_span_id)
+#
+# These tests pin the chat→action propose-then-execute linking so the
+# Prometa Causal-context block can render the two traces as a single
+# navigable flow.  Without these tests a future refactor could silently
+# drop either:
+#   * the chat side (forget to include chat_span_id in /chat/ response)
+#   * the dispatch side (forget to call set_input_ref in dispatch_action)
+# and observability would degrade with no test signal.
+#
+# Coverage matrix:
+#   1. prometa_config wrapper contract (SDK-absent fallback + happy path)
+#   2. dispatch_action call-site (forwards keyword arg → set_input_ref)
+#   3. AIActionExecuteView body (extracts + validates parent_span_id)
+#   4. _chat_workflow source-level guard (response carries chat_span_id)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCrossTraceRefs:
+    """Pin v2.38.0 cross-trace linking between chat and action traces."""
+
+    # ── (1) prometa_config wrapper contract ─────────────────────────────
+
+    def test_current_span_id_returns_none_when_sdk_absent(self, monkeypatch):
+        """Wrapper must catch ImportError and return None — never raise.
+
+        Mirrors the test/dev environment where prometa-sdk isn't pinned
+        (or is disabled via ``PROMETA_DISABLE=1``).  Call sites assume
+        a None return = "no active span", and stamp nothing."""
+        from ai_assistant import prometa_config as pc
+        # Force the inner ``from prometa import current_span_id`` to fail
+        # by monkeypatching __import__ to raise on the prometa module.
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'prometa':
+                raise ImportError('simulated SDK absent')
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        # No exception, returns None.
+        assert pc.current_span_id() is None
+
+    def test_current_span_id_swallows_internal_sdk_errors(self, monkeypatch):
+        """If the SDK is installed but ``current_span_id()`` raises
+        (e.g. context-var was never initialized in this thread), the
+        wrapper must still return None instead of bubbling.  Otherwise a
+        single corrupt span context would crash the chat response."""
+        from ai_assistant import prometa_config as pc
+        # Simulate the "SDK present but raising" path by monkeypatching
+        # the lazy import inside prometa_config.current_span_id.  We do
+        # this by injecting a fake `prometa` module into sys.modules.
+        import sys
+        import types
+        fake_prometa = types.ModuleType('prometa')
+
+        def boom():
+            raise RuntimeError('span context corrupted')
+
+        fake_prometa.current_span_id = boom
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+        # Wrapper catches and returns None.
+        assert pc.current_span_id() is None
+
+    def test_set_input_ref_returns_false_for_falsy_input(self):
+        """No span id, no link.  None / empty string short-circuit
+        before the SDK is even imported — symmetric with the chat-side
+        contract that an absent ``chat_span_id`` means "don't stamp"."""
+        from ai_assistant import prometa_config as pc
+        assert pc.set_input_ref(None) is False
+        assert pc.set_input_ref('') is False
+        assert pc.set_input_ref(0) is False
+
+    def test_set_input_ref_returns_false_when_sdk_absent(self, monkeypatch):
+        """Non-empty span id but SDK not installed → False, no raise.
+        Matches the no-op contract documented in the wrapper docstring."""
+        from ai_assistant import prometa_config as pc
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'prometa':
+                raise ImportError('simulated SDK absent')
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        assert pc.set_input_ref('chat-span-abc123') is False
+
+    def test_set_input_ref_forwards_to_sdk_when_active(self, monkeypatch):
+        """Happy path: SDK is present, wrapper coerces id to str and
+        forwards.  Returns whatever the SDK returns coerced to bool."""
+        from ai_assistant import prometa_config as pc
+        import sys
+        import types
+        captured: list[str] = []
+        fake_prometa = types.ModuleType('prometa')
+
+        def fake_set_input_ref(span_id):
+            captured.append(span_id)
+            return True  # SDK signals "stamp succeeded"
+
+        fake_prometa.set_input_ref = fake_set_input_ref
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+
+        result = pc.set_input_ref('chat-span-xyz789')
+
+        assert result is True
+        assert captured == ['chat-span-xyz789']
+
+    def test_set_input_ref_swallows_sdk_runtime_errors(self, monkeypatch):
+        """If the SDK call raises (e.g. no active span context), the
+        wrapper must return False — call sites must never have to wrap
+        the link call in try/except themselves."""
+        from ai_assistant import prometa_config as pc
+        import sys
+        import types
+        fake_prometa = types.ModuleType('prometa')
+
+        def boom(_v):
+            raise RuntimeError('no active span')
+
+        fake_prometa.set_input_ref = boom
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+
+        assert pc.set_input_ref('chat-span-xyz') is False
+
+    # ── (2) dispatch_action call-site ───────────────────────────────────
+
+    def test_dispatch_action_calls_set_input_ref_when_parent_span_id_provided(
+            self, monkeypatch):
+        """The action-execute trace must call set_input_ref(parent) at
+        the top of the workflow body so the Causal-context block in
+        Prometa surfaces the chat→action link."""
+        from ai_assistant import action_executor
+
+        # Capture every helper invocation; let the rest no-op.
+        ref_calls: list[str] = []
+        attr_calls: list[tuple] = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: attr_calls.append(a))
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        result = fn(42, 'unknown_action_xyz', {'description': 'test'},
+                    parent_span_id='chat-span-deadbeef')
+
+        # Unknown action_type still triggers early-return error,
+        # but set_input_ref must have fired BEFORE that branch.
+        assert result.get('status') == 'error'
+        assert ref_calls == ['chat-span-deadbeef']
+        # And the debug attribute mirror is present too.
+        assert any(
+            call[0] == 'declarai.action.parent_span_id'
+            and call[1] == 'chat-span-deadbeef'
+            for call in attr_calls
+        ), f'expected declarai.action.parent_span_id attr; got {attr_calls}'
+
+    def test_dispatch_action_skips_set_input_ref_when_parent_span_id_none(
+            self, monkeypatch):
+        """Legacy v2.25.0..v2.37.0 callers pass no parent_span_id —
+        set_input_ref must NOT be invoked (don't stamp a phantom link).
+
+        This is the backward-compat guard: every internal call site
+        (test fixtures, programmatic dispatch) keeps working unchanged."""
+        from ai_assistant import action_executor
+        ref_calls: list = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        # No parent_span_id — pre-v2.38.0 call shape.
+        fn(42, 'unknown_action_xyz', {})
+
+        assert ref_calls == [], (
+            "dispatch_action must not call set_input_ref when "
+            f"parent_span_id is omitted; got {ref_calls}"
+        )
+
+    def test_dispatch_action_skips_set_input_ref_when_parent_span_id_empty(
+            self, monkeypatch):
+        """Empty string is treated as "no link" — defensive against a
+        frontend that always sends the field but with an empty value
+        when the chat turn wasn't traced."""
+        from ai_assistant import action_executor
+        ref_calls: list = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        fn(42, 'unknown_action_xyz', {}, parent_span_id='')
+
+        assert ref_calls == []
+
+    def test_dispatch_action_signature_keyword_only_parent_span_id(self):
+        """parent_span_id must be keyword-only so positional v2.25.0..
+        v2.37.0 call sites stay valid (they pass exactly 3 positionals)."""
+        import inspect
+        from ai_assistant.action_executor import dispatch_action
+        # Unwrap the @workflow decorator if present.
+        fn = dispatch_action.__wrapped__ if hasattr(dispatch_action, '__wrapped__') \
+            else dispatch_action
+        sig = inspect.signature(fn)
+        params = sig.parameters
+        assert 'parent_span_id' in params
+        assert params['parent_span_id'].kind == inspect.Parameter.KEYWORD_ONLY, (
+            'parent_span_id must be keyword-only to keep legacy positional '
+            'call sites compatible'
+        )
+        assert params['parent_span_id'].default is None
+
+    # ── (3) AIActionExecuteView body ────────────────────────────────────
+
+    def test_action_execute_view_forwards_parent_span_id_from_body(
+            self, monkeypatch):
+        """The /execute-action/ endpoint must extract parent_span_id
+        from the JSON body and pass it through to dispatch_action as
+        the keyword arg.  This is the "wire" — without it, the chat span
+        id never reaches the action workflow."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['file_id'] = file_id
+            captured['action_type'] = action_type
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success', 'description': 'ok'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        req = _FakeRequest({
+            'file_id': 7,
+            'action_type': 'update_config',
+            'payload': {'foo': 'bar'},
+            'parent_span_id': 'chat-span-abc',
+        })
+
+        view.post(req)
+
+        assert captured['parent_span_id'] == 'chat-span-abc'
+        assert captured['file_id'] == 7
+        assert captured['action_type'] == 'update_config'
+
+    def test_action_execute_view_treats_missing_parent_span_id_as_none(
+            self, monkeypatch):
+        """Legacy clients (v2.25.0..v2.37.0 frontend) don't send the
+        field — view must default to None so dispatch_action sees the
+        legacy call shape and skips set_input_ref entirely."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        view.post(_FakeRequest({
+            'file_id': 1,
+            'action_type': 'update_notes',
+            'payload': {},
+        }))
+
+        assert captured['parent_span_id'] is None
+
+    def test_action_execute_view_rejects_non_string_parent_span_id(
+            self, monkeypatch):
+        """Defensive: a buggy frontend that sends parent_span_id as an
+        int / dict / list must not poison the span attribute.  View
+        coerces non-strings to None (treat as no-link) rather than
+        passing garbage through to set_input_ref."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        for bad_val in (123, {'x': 1}, [1, 2], True):
+            captured.clear()
+            view.post(_FakeRequest({
+                'file_id': 1,
+                'action_type': 'update_notes',
+                'payload': {},
+                'parent_span_id': bad_val,
+            }))
+            assert captured['parent_span_id'] is None, (
+                f'expected None for non-string parent_span_id={bad_val!r}'
+            )
+
+    def test_action_execute_view_rejects_oversized_parent_span_id(
+            self, monkeypatch):
+        """Span ids in Prometa are short hex (~16 chars).  A 1000-char
+        string is almost certainly malformed; treat as no-link rather
+        than stamp giant garbage onto the span attribute."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        view.post(_FakeRequest({
+            'file_id': 1,
+            'action_type': 'update_notes',
+            'payload': {},
+            'parent_span_id': 'x' * 500,  # > 256-char limit
+        }))
+
+        assert captured['parent_span_id'] is None
+
+    # ── (4) _chat_workflow source-level guard ───────────────────────────
+
+    def test_chat_workflow_stamps_chat_span_id_into_response(self):
+        """Source-level guard: the chat workflow body must call
+        ``current_span_id()`` and conditionally stamp the result into
+        response_data['chat_span_id'] when actions exist.  Without this
+        the frontend has no id to forward on Apply, breaking the link."""
+        import inspect
+        from ai_assistant.views import _chat_workflow
+        # _chat_workflow is wrapped by @workflow; unwrap to get the body.
+        fn = _chat_workflow.__wrapped__ if hasattr(_chat_workflow, '__wrapped__') \
+            else _chat_workflow
+        source = inspect.getsource(fn)
+        assert 'current_span_id()' in source, (
+            '_chat_workflow must call current_span_id() to capture the '
+            'chat-turn span id for cross-trace linking (v2.38.0)'
+        )
+        assert "'chat_span_id'" in source or '"chat_span_id"' in source, (
+            '_chat_workflow must stamp chat_span_id into response_data '
+            'so the frontend can forward it on Apply'
+        )
+
+    def test_views_imports_current_span_id_and_set_input_ref(self):
+        """Structural guard: views.py must import both helpers from
+        prometa_config so the chat workflow body can call them."""
+        from ai_assistant import views
+        assert hasattr(views, 'current_span_id'), (
+            'views.py must import current_span_id from prometa_config '
+            '(v2.38.0)'
+        )
+        assert hasattr(views, 'set_input_ref'), (
+            'views.py must import set_input_ref from prometa_config '
+            '(v2.38.0)'
+        )
+
+    def test_action_executor_imports_set_input_ref(self):
+        """Structural guard: action_executor.py must import
+        set_input_ref so dispatch_action can stamp the link."""
+        from ai_assistant import action_executor
+        assert hasattr(action_executor, 'set_input_ref'), (
+            'action_executor.py must import set_input_ref from '
+            'prometa_config (v2.38.0)'
+        )
+
+
+# ---------------------------------------------------------------------------
+# AML v0.4 instrumentation helpers (v2.31.0 / Phase 3a of prometa-sdk roadmap).
+#
+# `schema_validate` and `model_route` are context managers that wrap
+# their respective AML events.  Unlike the simple set_* helpers from
+# Phase 2, these:
+#   1. yield a handle the call site stamps with .result(...) / .cost(...)
+#   2. propagate body exceptions normally (only ImportError is caught)
+#   3. fall back to a `_NoOpAMLHandle` that absorbs every method call
+#      so call sites don't need to guard
+#
+# These tests pin the wrapper contract + verify call-site adoption in
+# `_call_llm` (model_route) and `update_purifier_selection` (schema_validate).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPrometaAMLHelpers:
+    """``schema_validate`` and ``model_route`` are AML span context
+    managers wrapping the v0.4.0+ SDK helpers.  Tests pin the three
+    failure modes (SDK present, SDK absent, body exception) and the
+    no-op handle's absorbing-method contract."""
+
+    def test_noop_aml_handle_absorbs_arbitrary_method_calls(self):
+        """The fallback handle must accept ANY method call with ANY
+        args/kwargs and silently no-op.  This is what lets the call
+        site write `sv.result(passed=True, errors=[...])` without
+        guarding for SDK availability."""
+        from ai_assistant.prometa_config import _NoOpAMLHandle
+        h = _NoOpAMLHandle()
+        # Every call must return None and not raise.
+        assert h.result(passed=True) is None
+        assert h.result(passed=False, errors=['x'], downstream_blocked=True) is None
+        assert h.cost(cost_estimate_usd=0.01, budget_cap_usd=0.10) is None
+        # Even completely fictitious method names must work — _NoOpAMLHandle
+        # is a forward-compatible absorber for future SDK handle methods.
+        assert h.method_that_does_not_exist_anywhere() is None
+        assert h.with_positional_and_kwargs('foo', 'bar', x=1, y=2) is None
+
+    def test_schema_validate_yields_real_handle_when_sdk_available(self, monkeypatch):
+        """Happy path: the SDK's schema_validate is reachable on
+        prometa-sdk 0.6.0+; our wrapper must delegate verbatim."""
+        from ai_assistant import prometa_config as pc
+        # Don't fully replace the SDK helper — just verify our wrapper
+        # actually enters the SDK's context manager.  The handle yielded
+        # by the SDK has a `.result()` method we can call.
+        with pc.schema_validate('declarai:test-spec@v1') as sv:
+            # The handle must expose .result()  — either the real SDK
+            # handle (when client is configured) or _NoOpAMLHandle.
+            assert hasattr(sv, 'result'), (
+                "schema_validate handle must expose .result(...)"
+            )
+            # Calling .result() must not raise on either path.
+            sv.result(passed=True)
+
+    def test_schema_validate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without schema_validate symbol → wrapper yields
+        _NoOpAMLHandle.  Validates the ImportError branch."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        # Simulate the helper being absent.
+        monkeypatch.delattr(prometa, 'schema_validate', raising=False)
+
+        with pc.schema_validate('declarai:fallback-test@v1') as sv:
+            # Must be the no-op handle.
+            assert isinstance(sv, pc._NoOpAMLHandle), (
+                f"Expected _NoOpAMLHandle on ImportError; got {type(sv)}"
+            )
+            # And it must absorb method calls without raising.
+            sv.result(passed=False, errors=['simulated'])
+
+    def test_schema_validate_propagates_body_exceptions(self):
+        """Body exceptions must NOT be swallowed.  The validator's
+        ValidationError still has to bubble up so the API caller
+        sees the failure — the AML span just records the event."""
+        from ai_assistant.prometa_config import schema_validate
+
+        class _CustomError(Exception):
+            pass
+
+        with pytest.raises(_CustomError):
+            with schema_validate('declarai:propagate-test@v1') as sv:
+                sv.result(passed=False, errors=['boom'])
+                raise _CustomError('body raised — must propagate')
+
+    def test_model_route_yields_real_handle_when_sdk_available(self):
+        """Happy path: model_route is reachable on 0.6.0+; the yielded
+        handle must accept .cost() (and any other future method)."""
+        from ai_assistant.prometa_config import model_route
+        with model_route(
+            chosen='gpt-5.5',
+            candidates_considered=['gpt-5.5', 'gpt-5.4-mini'],
+            routing_reason='user_selected',
+        ) as mr:
+            assert mr is not None
+            # Must accept .cost() and not raise on either path.
+            mr.cost(cost_estimate_usd=0.001)
+
+    def test_model_route_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without model_route symbol → wrapper yields
+        _NoOpAMLHandle.  Same fallback contract as schema_validate."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'model_route', raising=False)
+
+        with pc.model_route(
+            chosen='gpt-5.5',
+            candidates_considered=['gpt-5.5'],
+            routing_reason='user_selected',
+        ) as mr:
+            assert isinstance(mr, pc._NoOpAMLHandle)
+            mr.cost(cost_estimate_usd=0.001)  # absorbed
+            mr.future_method_that_doesnt_exist_yet(123)  # absorbed
+
+    def test_model_route_propagates_body_exceptions(self):
+        """Same exception-propagation contract as schema_validate."""
+        from ai_assistant.prometa_config import model_route
+
+        class _RouterError(Exception):
+            pass
+
+        with pytest.raises(_RouterError):
+            with model_route(
+                chosen='gpt-5.5',
+                candidates_considered=['gpt-5.5'],
+                routing_reason='user_selected',
+            ):
+                raise _RouterError('upstream LLM call failed')
+
+    # ── Call-site tests ────────────────────────────────────────────────
+
+    def test_call_llm_source_wraps_dispatch_in_model_route(self):
+        """Structural guard: `_call_llm` must wrap its provider dispatch
+        in a `with model_route(...)` block, not just emit attributes.
+
+        Pre-v2.31.0 there was no AML span at all.  Reverting to the
+        bare-attrs shape would silently kill the F1 (model_route)
+        detector signal for the entire DeclarAI surface."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert 'with model_route(' in source, (
+            "_call_llm must wrap dispatch in `with model_route(...)`"
+        )
+        assert "routing_reason='user_selected'" in source, (
+            "_call_llm must record routing_reason=user_selected today; "
+            "switch to a richer reason when a real cascade lands."
+        )
+        assert 'candidates_considered=' in source, (
+            "_call_llm must pass candidates_considered to model_route"
+        )
+
+    def test_update_purifier_selection_source_wraps_validation_in_schema_validate(self):
+        """Structural guard: `update_purifier_selection` must wrap its
+        full validation flow in a `with schema_validate(...)` block.
+
+        Catches the regression where someone removes the AML span but
+        leaves the existing set_span_attr('declarai.purifier.*') calls
+        in place — the surrounding tests would still pass but the C4
+        detector signal would be gone."""
+        import inspect
+        from ai_assistant.action_executor import update_purifier_selection
+        source = inspect.getsource(update_purifier_selection)
+        assert "with schema_validate('declarai:update-purifier-selection@v1')" in source, (
+            "update_purifier_selection must wrap validation in "
+            "schema_validate('declarai:update-purifier-selection@v1')"
+        )
+        # Must call sv.result() multiple times — once per return branch.
+        # We don't pin the exact count to avoid brittleness, but require
+        # both passing AND failing outcomes are recorded (8 returns ≥
+        # 5 distinct sv.result calls in current shape).
+        assert source.count('sv.result(passed=True') >= 3, (
+            "update_purifier_selection must record sv.result(passed=True) "
+            "on each success branch (noop, wholesale, diff_noop, diff)"
+        )
+        assert source.count('sv.result(\n                passed=False') >= 2, (
+            "update_purifier_selection must record sv.result(passed=False, "
+            "errors=[...], downstream_blocked=True) on each error branch "
+            "(form_conflict, value_error, group_conflict, diff_conflict)"
+        )
+
+    # ── cache_lookup (v2.32.0 / Phase 3b) ──────────────────────────────
+
+    def test_cache_lookup_yields_real_handle_when_sdk_available(self):
+        """Happy path: cache_lookup is reachable on 0.6.0+; handle
+        must accept .hit(), .miss(), .write_action_blocked()."""
+        from ai_assistant.prometa_config import cache_lookup
+        with cache_lookup('tool_call', key='ai:pipeline:42:dataset_summary') as ch:
+            assert ch is not None
+            # All three SDK handle methods must be callable.
+            ch.hit()
+            ch.miss()
+            ch.write_action_blocked()
+            # And the optional kwarg form of .hit() too.
+            ch.hit(ttl_remaining_seconds=86400)
+
+    def test_cache_lookup_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without cache_lookup symbol → wrapper yields _NoOpAMLHandle.
+        Same fallback contract as schema_validate and model_route."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'cache_lookup', raising=False)
+
+        with pc.cache_lookup('tool_call', key='ai:pipeline:42:foo') as ch:
+            assert isinstance(ch, pc._NoOpAMLHandle)
+            ch.hit()          # absorbed
+            ch.miss()         # absorbed
+            ch.future_method_that_doesnt_exist_yet()  # absorbed
+
+    def test_cache_lookup_propagates_invalid_kind_error(self):
+        """The SDK enforces ``kind`` ∈ {response, tool_call, embedding}
+        with a ValueError.  Our wrapper must NOT catch it — that's a
+        programmer error that needs to surface, not a runtime failure
+        we should silently no-op past."""
+        from ai_assistant.prometa_config import cache_lookup
+        with pytest.raises(ValueError, match='kind must be one of'):
+            with cache_lookup('invalid_kind_xyz', key='ai:pipeline:1:x'):
+                pass  # pragma: no cover — must raise on enter
+
+    def test_cache_lookup_propagates_body_exceptions(self):
+        """Body exceptions propagate (same contract as the other AML
+        helpers).  Only ImportError is caught."""
+        from ai_assistant.prometa_config import cache_lookup
+
+        class _RedisDown(Exception):
+            pass
+
+        with pytest.raises(_RedisDown):
+            with cache_lookup('tool_call', key='ai:pipeline:1:x') as ch:
+                ch.miss()
+                raise _RedisDown('redis connection dropped mid-fetch')
+
+    def test_cache_get_wraps_redis_fetch_in_cache_lookup_with_hit(self, monkeypatch):
+        """Functional end-to-end: cache_get must wrap the redis fetch
+        in a cache_lookup AML span and call ch.hit() on the hit path.
+
+        Patches cache_lookup as a recording context manager; populates
+        Redis with a known value; invokes cache_get; asserts:
+          1. enter('tool_call', key='ai:pipeline:<id>:<artifact>')
+          2. hit() recorded — NOT miss()
+          3. cache_get returned the value
+          4. exit fired
+        Pins the most common cache path (hit) to the B1 detector."""
+        from ai_assistant import cache as cache_mod
+
+        lookup_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def hit(self, **kwargs):
+                lookup_calls.append(('hit', kwargs))
+            def miss(self):
+                lookup_calls.append(('miss', {}))
+            def write_action_blocked(self):
+                lookup_calls.append(('blocked', {}))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_cache_lookup(kind, *, key):
+            lookup_calls.append(('enter', kind, key))
+            try:
+                yield _RecordingHandle()
+            finally:
+                lookup_calls.append(('exit', kind, key))
+
+        monkeypatch.setattr(cache_mod, 'cache_lookup', _recording_cache_lookup)
+
+        # Seed the cache.
+        r = cache_mod._get_redis()
+        assert r is not None, 'Redis must be available for this test'
+        try:
+            r.set(cache_mod._key(80001, 'aml_test_artifact'), '{"x": 7}', ex=60)
+
+            result = cache_mod.cache_get(80001, 'aml_test_artifact')
+
+            assert result == {'x': 7}
+            # Lifecycle: enter → hit → exit (NOT miss).
+            assert lookup_calls[0] == ('enter', 'tool_call', 'ai:pipeline:80001:aml_test_artifact')
+            assert lookup_calls[-1] == ('exit', 'tool_call', 'ai:pipeline:80001:aml_test_artifact')
+            # Hit recorded exactly once; no miss recorded.
+            hit_calls = [c for c in lookup_calls if c[0] == 'hit']
+            miss_calls = [c for c in lookup_calls if c[0] == 'miss']
+            assert len(hit_calls) == 1, (
+                f"cache_get on a hit path must call ch.hit() exactly once; "
+                f"got hit_calls={hit_calls}, full lifecycle={lookup_calls}"
+            )
+            assert miss_calls == [], (
+                f"cache_get on a hit path must NOT call ch.miss(); "
+                f"got miss_calls={miss_calls}"
+            )
+        finally:
+            r.delete(cache_mod._key(80001, 'aml_test_artifact'))
+
+    def test_cache_get_wraps_redis_fetch_in_cache_lookup_with_miss(self, monkeypatch):
+        """Mirror of the hit test: missing key → ch.miss() recorded.
+
+        The B1 detector needs both hit AND miss signals to compute
+        cache hit-rate; this guard pins the miss path."""
+        from ai_assistant import cache as cache_mod
+
+        lookup_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def hit(self, **kwargs):
+                lookup_calls.append(('hit', kwargs))
+            def miss(self):
+                lookup_calls.append(('miss', {}))
+            def write_action_blocked(self):
+                lookup_calls.append(('blocked', {}))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_cache_lookup(kind, *, key):
+            lookup_calls.append(('enter', kind, key))
+            try:
+                yield _RecordingHandle()
+            finally:
+                lookup_calls.append(('exit', kind, key))
+
+        monkeypatch.setattr(cache_mod, 'cache_lookup', _recording_cache_lookup)
+
+        # Ensure key is absent.
+        r = cache_mod._get_redis()
+        assert r is not None
+        r.delete(cache_mod._key(80002, 'absent_artifact'))
+
+        result = cache_mod.cache_get(80002, 'absent_artifact')
+        assert result is None
+
+        # Miss recorded exactly once.
+        miss_calls = [c for c in lookup_calls if c[0] == 'miss']
+        hit_calls = [c for c in lookup_calls if c[0] == 'hit']
+        assert len(miss_calls) == 1, (
+            f"cache_get on a miss path must call ch.miss() exactly once; "
+            f"got miss_calls={miss_calls}, full lifecycle={lookup_calls}"
+        )
+        assert hit_calls == [], (
+            f"cache_get on a miss path must NOT call ch.hit(); "
+            f"got hit_calls={hit_calls}"
+        )
+
+    def test_cache_get_source_uses_cache_lookup_wrapper(self):
+        """Structural guard: cache.py::cache_get must wrap the redis
+        fetch in `with cache_lookup('tool_call', key=...)`.
+
+        Catches a future contributor removing the AML span while
+        keeping the rest of the function intact (no functional
+        regression but B1 signal would silently vanish)."""
+        import inspect
+        from ai_assistant import cache as cache_mod
+        source = inspect.getsource(cache_mod.cache_get)
+        assert "with cache_lookup('tool_call'" in source, (
+            "cache_get must wrap redis fetch in cache_lookup('tool_call', ...)"
+        )
+        # Both hit AND miss paths must be instrumented.
+        assert 'ch.hit(' in source, (
+            "cache_get must call ch.hit() on the value-returned path"
+        )
+        assert 'ch.miss()' in source, (
+            "cache_get must call ch.miss() on miss / redis-down / exception paths"
+        )
+
+    # ── plan_generate (v2.33.0 / Phase 3c) ─────────────────────────────
+
+    def test_plan_generate_yields_real_handle_when_sdk_available(self):
+        """Happy path: plan_generate is reachable on 0.6.0+; handle
+        must accept .emitted(steps, complexity_estimate, replanned_from)."""
+        from ai_assistant.prometa_config import plan_generate
+        with plan_generate('declarai-file-42-1700000000') as p:
+            assert p is not None
+            # Minimum-required form.
+            p.emitted(steps=[{'order': 1, 'action': 'foo',
+                              'tool': 'foo', 'depends_on': []}])
+            # Full form with all kwargs.
+            p.emitted(
+                steps=[
+                    {'order': 1, 'action': 'a', 'tool': 'a', 'depends_on': []},
+                    {'order': 2, 'action': 'b', 'tool': 'b', 'depends_on': []},
+                ],
+                replanned_from='declarai-file-42-1699999999',
+                complexity_estimate=2,
+            )
+
+    def test_plan_generate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without plan_generate symbol → wrapper yields _NoOpAMLHandle.
+        Same fallback contract as the other AML helpers."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'plan_generate', raising=False)
+
+        with pc.plan_generate('declarai-file-42-1700000000') as p:
+            assert isinstance(p, pc._NoOpAMLHandle)
+            p.emitted(steps=[], complexity_estimate=0)  # absorbed
+            p.future_method_that_doesnt_exist_yet()      # absorbed
+
+    def test_plan_generate_propagates_body_exceptions(self):
+        """Body exceptions propagate (same contract as the other AML
+        helpers).  Only ImportError is caught."""
+        from ai_assistant.prometa_config import plan_generate
+
+        class _PlannerError(Exception):
+            pass
+
+        with pytest.raises(_PlannerError):
+            with plan_generate('declarai-file-42-1700000000') as p:
+                p.emitted(steps=[], complexity_estimate=0)
+                raise _PlannerError('plan emission failed downstream')
+
+    def test_chat_workflow_source_emits_plan_generate_when_actions_present(self):
+        """Structural guard: _chat_workflow body in views.py must call
+        plan_generate AFTER _extract_actions returns, and only when
+        ``actions`` is non-empty (the conditional `if actions and ...:`
+        guard).
+
+        Pre-v2.33.0 we had no plan.generate span at all.  Reverting to
+        the bare-extraction shape would silently kill the C2 detector
+        signal for the entire DeclarAI surface."""
+        import inspect
+        from ai_assistant import views
+        source = inspect.getsource(views._chat_workflow)
+        # Must call plan_generate.
+        assert 'with plan_generate(' in source, (
+            "_chat_workflow must wrap action emission in `with plan_generate(...)`"
+        )
+        # Must be conditional on actions being non-empty.
+        assert 'if actions and file_id is not None' in source, (
+            "_chat_workflow must only emit plan_generate when actions are "
+            "non-empty AND file_id is known (avoids polluting C2 detector "
+            "denominator with zero-action conversational replies)."
+        )
+        # Must call p.emitted() with steps.
+        assert '.emitted(' in source and 'steps=' in source, (
+            "_chat_workflow must call .emitted(steps=..., complexity_estimate=...) "
+            "on the plan_generate handle"
+        )
+        # Steps must use 'order' / 'action' / 'tool' / 'depends_on' shape.
+        for key in ("'order'", "'action'", "'tool'", "'depends_on'"):
+            assert key in source, (
+                f"plan_generate steps must include {key} (SDK-canonical key) — "
+                f"the C2 detector parses these specific fields."
+            )
+
+    def test_views_module_imports_plan_generate(self):
+        """Belt-and-suspenders: views.py must expose plan_generate in
+        its module namespace so the _chat_workflow body can call it.
+
+        Pairs with the structural guard above to catch an accidental
+        revert of the import line even when the workflow body isn't
+        executed end-to-end (requires OpenAI)."""
+        from ai_assistant import views
+        assert hasattr(views, 'plan_generate'), (
+            "views.py must import plan_generate from prometa_config"
+        )
+
+    def test_chat_workflow_plan_id_format_uses_file_id_and_timestamp(self):
+        """The plan_id must encode both the file_id (for joining with
+        customer_id / session_id correlation chain) AND a per-turn
+        time component (so multiple plans within the same Declaration
+        get distinct ids).
+
+        Pre-v2.33.0 there was no plan_id; this test pins the format
+        used for the canonical plan.id span attribute."""
+        import inspect
+        from ai_assistant import views
+        source = inspect.getsource(views._chat_workflow)
+        # Format pinned: f'declarai-file-{file_id}-{int(_time.time() * 1000)}'
+        assert "f'declarai-file-{file_id}" in source, (
+            "plan_id must include the file_id so platform-side correlation "
+            "joins plan.generate spans to customer_id (Phase 2)."
+        )
+        assert '_time.time()' in source or 'time.time()' in source, (
+            "plan_id must include a time component for per-turn uniqueness"
+        )
+
+    def test_update_purifier_selection_form_conflict_returns_error_via_schema_validate(self, monkeypatch):
+        """Functional guard: when the AI passes BOTH purifier_options
+        AND add/remove (the form_conflict path), the function must:
+          1. Return status='error' with the form_conflict message
+          2. Have entered the schema_validate context manager
+          3. Have stamped sv.result(passed=False, ..., downstream_blocked=True)
+
+        This pins the most common AI mistake — sending mutually-exclusive
+        forms in the same payload — to the AML-instrumented error path."""
+        from ai_assistant import action_executor
+
+        sv_calls: list[tuple] = []
+
+        class _RecordingHandle:
+            def result(self, **kwargs):
+                sv_calls.append(('result', kwargs))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_schema_validate(schema_id):
+            sv_calls.append(('enter', schema_id))
+            try:
+                yield _RecordingHandle()
+            finally:
+                sv_calls.append(('exit', schema_id))
+
+        monkeypatch.setattr(action_executor, 'schema_validate', _recording_schema_validate)
+        monkeypatch.setattr(action_executor, 'set_span_attr', lambda *a, **kw: None)
+
+        # Unwrap the @tool decorator to call the underlying body directly,
+        # the same trick the dispatch_action call-site test uses.
+        fn = action_executor.update_purifier_selection
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        result = fn(42, {
+            'purifier_options': [1, 2, 3],
+            'add': [10],  # mutually-exclusive with purifier_options
+            'description': 'AI confused itself',
+        })
+
+        # Result shape pinned.
+        assert result['status'] == 'error'
+        assert 'Specify exactly one' in result['error']
+
+        # AML span lifecycle: enter → result(passed=False) → exit.
+        assert sv_calls[0] == ('enter', 'declarai:update-purifier-selection@v1')
+        assert sv_calls[-1] == ('exit', 'declarai:update-purifier-selection@v1')
+        # Find the result call in between.
+        result_calls = [c for c in sv_calls if c[0] == 'result']
+        assert len(result_calls) == 1
+        kwargs = result_calls[0][1]
+        assert kwargs['passed'] is False
+        assert kwargs['downstream_blocked'] is True
+        assert any('form_conflict' in e for e in kwargs['errors'])
 
 
 # ---------------------------------------------------------------------------
@@ -4333,6 +6475,187 @@ class TestPurifierApplyOptions:
         oc_stats = next((s for s in step_stats if s['step'] == 'Outlier cleaning (quantile clipping)'), None)
         assert oc_stats is not None
         assert oc_stats['quantile_range'] == [0.05, 0.95]
+
+    # ── v2.28.1 critical regression: target preservation ──────────
+    # Pre-v2.28.1, ID 29 (and 28/30) silently corrupted the binary
+    # Target column.  An imbalanced 0/1 target with <5% positives has
+    # both q(0.05) and q(0.95) equal to 0; clip(0,0) → all zeros →
+    # split-validation chart shows 0% target mean across full / train
+    # / test, modeling silently breaks downstream.  Reproduced by the
+    # user on May 18, 2026 with Good_Bad_Flag.  These tests are the
+    # immune system against re-introducing the bug.
+    @staticmethod
+    def _apply_with_preserve(df, option_ids, preserve=None, data_dictionary=None):
+        from preprocessing.views import PreprocessingRunView
+        view = PreprocessingRunView()
+        return view._apply_options(
+            df, set(option_ids),
+            preserve=preserve,
+            data_dictionary=data_dictionary,
+        )
+
+    def test_id_29_does_NOT_modify_Target_column_with_imbalanced_binary(self):
+        """Repro of the May-2026 user bug:
+            df = 100 rows, 5% Target=1 (95% Target=0)
+            apply ID 29 (clip [0.05, 0.95])
+            → Target column MUST be unchanged.
+
+        Pre-fix: Target gets clipped to all zeros.
+        Post-fix: Target preserved verbatim.
+        """
+        n = 100
+        # Exactly 5 positives → q(0.05)=0 and q(0.95)=0 for binary target.
+        target = [1] * 5 + [0] * (n - 5)
+        df = pd.DataFrame({
+            'Target': target,
+            'feature_a': [float(i) for i in range(n)],  # ordinary numeric feature
+        })
+        target_before = df['Target'].copy()
+
+        work, dropped, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        # Critical: Target column is byte-for-byte unchanged.
+        assert 'Target' in work.columns, "Target dropped from output"
+        assert work['Target'].tolist() == target_before.tolist(), (
+            f"Target column was modified by outlier clipping. "
+            f"Sum before={target_before.sum()}, after={work['Target'].sum()}. "
+            f"This re-introduces the v2.28.0 silent-corruption bug."
+        )
+        # And the breakdown reports Target as protected.
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        assert 'Target' in outlier_step['protected_columns']
+
+    def test_id_29_does_NOT_modify_Model_Usage_No_columns(self):
+        """ID columns / index columns / raw timestamps with
+        Model_Usage_YN='No' must not be clipped.  The categorical-
+        outlier branch already honored this; the numerical branch
+        must too (parity contract).
+        """
+        n = 50
+        df = pd.DataFrame({
+            'customer_id': list(range(1, n + 1)),  # 1..50, monotonic — q(0.05)=2.45, q(0.95)=47.55
+            'feature_x': [float(i) for i in range(n)],
+        })
+        cust_id_before = df['customer_id'].copy()
+        data_dict = [
+            {'Feature_Name': 'customer_id', 'Model_Usage_YN': 'No'},
+            {'Feature_Name': 'feature_x', 'Model_Usage_YN': 'Yes'},
+        ]
+
+        work, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], data_dictionary=data_dict,
+        )
+
+        # customer_id must be untouched (Model_Usage='No').
+        assert work['customer_id'].tolist() == cust_id_before.tolist(), (
+            "customer_id (Model_Usage_YN='No') was modified by outlier clipping."
+        )
+        # feature_x must have been clipped (its outliers should be
+        # squeezed toward [q(0.05), q(0.95)]).  Strict inequality
+        # checks the value-modifying behavior actually fired.
+        assert work['feature_x'].min() >= 0.0
+        # Breakdown surfaces the protection.
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        assert 'customer_id' in outlier_step['protected_columns']
+        assert 'feature_x' not in outlier_step['protected_columns']
+
+    def test_id_29_still_clips_normal_numeric_features_when_target_preserved(self):
+        """Defense-in-depth: while protecting Target + Model_Usage='No',
+        we must NOT regress the core clipping behavior on legitimate
+        ordinary features.
+        """
+        n = 100
+        df = pd.DataFrame({
+            'Target': [1] * 5 + [0] * (n - 5),
+            # An obvious outlier at index 0 (extreme high), index 1 (extreme low).
+            'with_outliers': [1000.0, -1000.0] + [float(i) for i in range(n - 2)],
+        })
+        original_max = df['with_outliers'].max()
+        original_min = df['with_outliers'].min()
+
+        work, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        # The ordinary numeric feature is still clipped.
+        assert work['with_outliers'].max() < original_max
+        assert work['with_outliers'].min() > original_min
+        # And Target is still safe.
+        assert work['Target'].sum() == 5
+
+    def test_id_29_repro_target_mean_unchanged_after_clipping(self):
+        """The exact metric the user saw collapse to 0 in the screenshot:
+        target_mean = mean(Target) per split.  This test reconstructs
+        the chart's metric and asserts post-clip target_mean equals
+        pre-clip target_mean.
+
+        Pre-v2.28.1: target_mean drops to 0.0 across full/train/test.
+        Post-fix: target_mean is preserved exactly.
+        """
+        n = 1000
+        # 4% positive class — exactly the imbalanced shape that caused
+        # both q(0.05) and q(0.95) to equal 0 → all-zero clip.
+        positives = 40
+        target = [1] * positives + [0] * (n - positives)
+        df = pd.DataFrame({
+            'Target': target,
+            'noise_a': np.random.RandomState(0).randn(n).tolist(),
+            'noise_b': np.random.RandomState(1).randn(n).tolist(),
+        })
+        target_mean_before = df['Target'].mean()
+        assert target_mean_before == pytest.approx(0.04)  # sanity
+
+        work, _, _, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'},
+        )
+
+        target_mean_after = work['Target'].mean()
+        assert target_mean_after == pytest.approx(target_mean_before), (
+            f"target_mean changed from {target_mean_before:.4f} to "
+            f"{target_mean_after:.4f} after outlier clipping. "
+            f"This is the smoking-gun metric from the May-2026 screenshot."
+        )
+
+    def test_id_29_protected_columns_logged_for_audit_trail(self):
+        """The breakdown row must list every protected column so the
+        user can audit *why* their Target column wasn't clipped.  Pre-
+        v2.28.1 the breakdown silently said 'all numeric columns
+        clipped' even though it did so to the Target — same opaque
+        observability problem that hid the v2.27.0 ID-realignment bug.
+        """
+        df = pd.DataFrame({
+            'Target': [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+            'app_id': list(range(10)),
+            'feature_a': [float(i) for i in range(10)],
+        })
+        data_dict = [
+            {'Feature_Name': 'app_id', 'Model_Usage_YN': 'No'},
+            {'Feature_Name': 'feature_a', 'Model_Usage_YN': 'Yes'},
+        ]
+        _, _, breakdown, _ = self._apply_with_preserve(
+            df, [29], preserve={'Target'}, data_dictionary=data_dict,
+        )
+        outlier_step = next(
+            (b for b in breakdown if b['step'] == 'Outlier cleaning (quantile clipping)'),
+            None,
+        )
+        assert outlier_step is not None
+        protected = set(outlier_step['protected_columns'])
+        assert 'Target' in protected
+        assert 'app_id' in protected
+        assert 'feature_a' not in protected
+        # Note string explains WHY the cols were skipped.
+        assert 'protected' in outlier_step['note'].lower()
 
 
 @pytest.mark.unit

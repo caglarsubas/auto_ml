@@ -388,6 +388,27 @@ describe('AiChatPanelComponent', () => {
       // Italic-_none_ marker so the user knows nothing was excluded.
       expect(lastMsg.content).toContain('_none_');
     });
+
+    // ── v2.37.0+: backward_cut_step pass-through ──────────────────────
+    // Backend tool now returns `backward_cut_step` in `applied`.  The
+    // chat panel must forward it verbatim so the modeling component can
+    // branch to startForwardFromBackwardFeatures() instead of startSfs().
+    it('should forward backward_cut_step in the broadcast (v2.37.0+)', (done) => {
+      const appliedWithCut = {
+        ...validApplied,
+        methods: ['forward'],
+        backward_cut_step: 37,
+      };
+      sharedService.sfsStartRequests$.subscribe(received => {
+        expect(received).toEqual(appliedWithCut);
+        expect(received.backward_cut_step).toBe(37);
+        done();
+      });
+      (component as any)._handleActionResult('start_sfs', {
+        applied: appliedWithCut,
+        description: 'Forward SFS from backward step 37 survivor set',
+      });
+    });
   });
 
   // ── start_data_purifier (v2.26.0+) ────────────────────────────────────
@@ -463,6 +484,176 @@ describe('AiChatPanelComponent', () => {
         applied: { purifier_options: [], split: null },
       });
       expect(cpSpy).toHaveBeenCalledWith('ai_action_start_data_purifier');
+    });
+  });
+
+  // ── update_purifier_selection (v2.28.0+) ─────────────────────────────
+  // AI's `update_purifier_selection` action result handler — the
+  // "preview" sibling of start_data_purifier.  Must:
+  //   (a) broadcast on purifierSelectionUpdates$ with the right form
+  //       discriminator + payload shape,
+  //   (b) render a chat summary that distinguishes wholesale/diff/noop,
+  //   (c) trigger an ai_action_update_purifier_selection checkpoint,
+  //   (d) NEVER emit a start_data_purifier broadcast (that distinction
+  //       is the whole point of v2.28.0 — guard against regression).
+  describe('_handleActionResult update_purifier_selection flow', () => {
+    it('should broadcast a wholesale-form update on purifierSelectionUpdates$', (done) => {
+      const applied = {
+        form: 'wholesale',
+        purifier_options: [1, 2, 3, 4, 7, 23, 28, 32],
+        add: [],
+        remove: [],
+      };
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received.form).toBe('wholesale');
+        expect(received.purifier_options).toEqual([1, 2, 3, 4, 7, 23, 28, 32]);
+        expect(received.add).toEqual([]);
+        expect(received.remove).toEqual([]);
+        done();
+      });
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied,
+        description: 'Consolidate 11+17 into 23',
+      });
+    });
+
+    it('should broadcast a diff-form update on purifierSelectionUpdates$', (done) => {
+      const applied = {
+        form: 'diff',
+        purifier_options: null,
+        add: [23],
+        remove: [11, 17],
+      };
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received.form).toBe('diff');
+        expect(received.purifier_options).toBeNull();
+        expect(received.add).toEqual([23]);
+        expect(received.remove).toEqual([11, 17]);
+        done();
+      });
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied,
+        description: 'Replace 11+17 with 23',
+      });
+    });
+
+    it('should NOT broadcast on dataPurifierStartRequests$ (critical regression guard)', () => {
+      // The whole point of update_purifier_selection vs
+      // start_data_purifier is the no-run UX.  A regression here
+      // re-introduces the v2.27.x problem of one-shot apply-and-run
+      // with no user review step in between.
+      const runSpy = spyOn(sharedService, 'emitDataPurifierStartRequest');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 2, 23],
+          add: [],
+          remove: [],
+        },
+      });
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT broadcast for a noop applied form (description-only payload)', () => {
+      // Backend returns form='noop' for description-only payloads.
+      // We render a chat message but skip the broadcast so the form
+      // doesn't flash.
+      const emitSpy = spyOn(sharedService, 'emitPurifierSelectionUpdate');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'noop',
+          purifier_options: null,
+          add: [],
+          remove: [],
+        },
+        description: 'Thinking about it…',
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should render a chat summary listing the new wholesale selection', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 2, 23],
+          add: [],
+          remove: [],
+        },
+        description: 'Consolidate to combined-drop',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Purifier selection updated');
+      expect(lastMsg.content).toContain('Consolidate to combined-drop');
+      // Each kept ID surfaces with backtick formatting.
+      expect(lastMsg.content).toContain('`1`');
+      expect(lastMsg.content).toContain('`2`');
+      expect(lastMsg.content).toContain('`23`');
+    });
+
+    it('should render a chat summary listing added + removed IDs for diff form', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'diff',
+          purifier_options: null,
+          add: [23],
+          remove: [11, 17],
+        },
+        description: 'Combined-drop swap',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Purifier selection updated');
+      expect(lastMsg.content).toContain('Added');
+      expect(lastMsg.content).toContain('Removed');
+      expect(lastMsg.content).toContain('`23`');
+      expect(lastMsg.content).toContain('`11`');
+      expect(lastMsg.content).toContain('`17`');
+    });
+
+    it('should render the "review then run" call-to-action footer', () => {
+      // The user-visible hint that distinguishes this action from
+      // start_data_purifier: it does NOT auto-run, the user has to
+      // click Run themselves.  Pin the wording so a future copy edit
+      // doesn't silently strip the cue.
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [1, 23],
+          add: [],
+          remove: [],
+        },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Run Preprocessing');
+      // "Review the … checkboxes" prompts the user to scroll to the
+      // form and verify the AI's change before committing.
+      expect(lastMsg.content.toLowerCase()).toContain('review');
+    });
+
+    it('should render an "(cleared)" hint when wholesale selection is empty', () => {
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'wholesale',
+          purifier_options: [],
+          add: [],
+          remove: [],
+        },
+        description: 'Clear everything',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content.toLowerCase()).toContain('cleared');
+    });
+
+    it('should trigger ai_action_update_purifier_selection checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('update_purifier_selection', {
+        applied: {
+          form: 'diff',
+          purifier_options: null,
+          add: [7],
+          remove: [],
+        },
+      });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_update_purifier_selection');
     });
   });
 
@@ -658,6 +849,119 @@ describe('AiChatPanelComponent', () => {
 
       const last = aiService.getMessages().slice(-1)[0];
       expect(last.content).toBe(realMessage);
+    });
+  });
+
+  // ── v2.38.0: cross-trace linking (chat_span_id ↔ parent_span_id) ─────
+  // The chat panel is the bridge between the two backend traces:
+  //   1. /chat/ response → carries chat_span_id (when actions present)
+  //   2. /execute-action/ request → must echo it as parent_span_id
+  // These specs lock both halves of the bridge so a future refactor of
+  // the send/apply flow can't silently drop the link.
+  describe('v2.38.0 cross-trace linking', () => {
+    beforeEach(() => {
+      sharedService.setCurrentFileId(1);
+    });
+
+    it('should persist chat_span_id from /chat/ response onto the message', () => {
+      // Mirror the send-flow: stub sendAiChat to return a chat_span_id,
+      // verify updateLastMessage stamped it on the assistant message.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'I prepared an action.',
+        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+        chat_span_id: 'chat-span-abc123',
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.chatSpanId).toBe('chat-span-abc123');
+    });
+
+    it('should leave chatSpanId undefined when /chat/ response omits the field', () => {
+      // Pre-v2.38.0 backend (or SDK-disabled) — no chat_span_id in response.
+      // Frontend must not fabricate one; subsequent applyAction skips link.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'I prepared an action.',
+        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.chatSpanId).toBeUndefined();
+    });
+
+    it('applyAction should forward chatSpanId as parentSpanId to executeAiAction', () => {
+      // Seed an assistant message that already has a chatSpanId
+      // (mimicking the post-send state from the previous spec).
+      const action: any = {
+        type: 'update_notes',
+        payload: { description: 'note' },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared an action.',
+        timestamp: new Date(),
+        actions: [action],
+        chatSpanId: 'chat-span-abc123',
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
+        of({ status: 'success', description: 'ok' })
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      // 4th arg (parentSpanId) MUST be the message's chatSpanId.
+      expect(execSpy).toHaveBeenCalledWith(
+        1,                            // fileId
+        'update_notes',               // actionType
+        { description: 'note' },      // payload
+        'chat-span-abc123',           // parentSpanId — the link
+      );
+    });
+
+    it('applyAction should pass undefined parentSpanId when message lacks chatSpanId', () => {
+      // Legacy v2.25.0..v2.37.0 message with no chatSpanId — applyAction
+      // must call executeAiAction with parentSpanId omitted/undefined so
+      // dataService skips the parent_span_id POST field (legacy semantics).
+      const action: any = {
+        type: 'update_notes',
+        payload: { description: 'note' },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared an action.',
+        timestamp: new Date(),
+        actions: [action],
+        // No chatSpanId — pre-v2.38.0 message shape.
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
+        of({ status: 'success' })
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      expect(execSpy).toHaveBeenCalledWith(
+        1,
+        'update_notes',
+        { description: 'note' },
+        undefined,                    // ← key assertion: no link forwarded
+      );
     });
   });
 });
