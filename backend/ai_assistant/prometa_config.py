@@ -555,3 +555,120 @@ def model_route(chosen: str, *, candidates_considered, routing_reason: str):
         routing_reason=routing_reason,
     ) as handle:
         yield handle
+
+
+# ---------------------------------------------------------------------------
+# v2.38.0: cross-trace data-flow refs (Prometa SDK ``refs`` module).
+#
+# DeclarAI splits each AI action into two HTTP requests — and therefore
+# two separate Prometa traces:
+#
+#   1. POST /api/ai-assistant/chat/         → ``declarai-chat`` workflow
+#      The LLM emits ``<<<ACTION:...>>>`` text blocks parsed into a list
+#      of action proposals.  No execution happens here; the chat trace
+#      ends with a ``plan.generate`` AML span and returns to the
+#      frontend.
+#
+#   2. POST /api/ai-assistant/execute-action/  → ``declarai-action`` workflow
+#      Fires only when the user clicks the green "Apply" button on the
+#      action card.  Dispatches to the matching handler in HANDLERS,
+#      writes back to Redis, returns the applied result.
+#
+# Without explicit linking these two traces appear as unrelated rows in
+# Prometa's Trace Explorer — making the user think "Acting" is missing
+# from the chat waterfall.  They share ``session_id =
+# declarai-file-{file_id}`` so Session Explorer groups them, but the
+# data-flow relationship "the action trace consumed the chat trace's
+# proposal output" is invisible.
+#
+# The SDK provides the right primitive via ``prometa.refs``:
+# ``set_input_ref(other_span_id)`` stamps the canonical
+# ``prometa.input_ref`` attribute on the active span, which Prometa's
+# trace UI renders as a clickable "Input from" row in the
+# Causal-context block.  See ``orchestra-python-sdk/prometa/refs.py``
+# docstring — it literally describes our use case:
+#
+#     "an LLM emits a tool_call, the agent dispatches a sibling tool
+#      span. Without an explicit ref the platform can only infer the
+#      link from temporal proximity..."
+#
+# Failure modes — both wrappers degrade gracefully (no exceptions):
+#   1. SDK not installed              → ``current_span_id`` returns
+#                                        None; ``set_input_ref`` returns
+#                                        False.
+#   2. SDK installed, no active span  → same (no-op contract).
+#   3. SDK active, span available     → forwards to the real SDK call.
+# ---------------------------------------------------------------------------
+
+
+def current_span_id():
+    """Return the span_id of the currently-active Prometa span, or None.
+
+    Thin wrapper around ``prometa.current_span_id()`` (v0.4.0+) with
+    SDK-absent fallback to None.  Used by ``_chat_workflow`` to snapshot
+    the chat-turn span id and stamp it into the response so the frontend
+    can pass it back when applying actions.
+
+    Returns:
+        str | None: the active span's id (opaque to us — Prometa's
+        internal representation), or None when:
+          * the SDK isn't installed (test env, dev box without endpoint)
+          * no span is active (call happened outside ``@workflow`` /
+            ``@tool`` / ``@agent`` context)
+          * any internal SDK failure
+
+    Synchronous, side-effect-free.
+    """
+    try:
+        from prometa import current_span_id as _sdk_current_span_id
+    except ImportError:
+        return None
+    try:
+        return _sdk_current_span_id()
+    except Exception:
+        return None
+
+
+def set_input_ref(ref_span_id) -> bool:
+    """Declare that the active span consumed ``ref_span_id``'s output.
+
+    Thin wrapper around ``prometa.set_input_ref()`` (v0.4.0+) with
+    SDK-absent / empty-input fallback to False.  Used by
+    ``dispatch_action`` to link the action-execution trace back to the
+    chat trace that proposed it.
+
+    The platform reads ``prometa.input_ref`` from the span at OTLP
+    ingest and surfaces it in the trace UI's Causal-context block as a
+    clickable "Input from" row.  This collapses the two-trace
+    propose-then-execute split into a single navigable flow in the UI
+    without requiring actual span-parent nesting (which would need a
+    custom OTel context propagator).
+
+    Args:
+        ref_span_id: the producer span's id (whatever
+            ``current_span_id()`` returned upstream).  Falsy values
+            (None, empty string) are treated as "no link" and the
+            attribute is left unset rather than cleared — symmetric
+            with the upstream chat trace having no span id at all
+            (e.g. SDK disabled in test mode).
+
+    Returns:
+        bool: True if the attribute was successfully stamped on an
+        active span, False on any of:
+          * SDK not installed
+          * no active span (call outside a Prometa-traced block)
+          * empty/falsy ref_span_id
+          * any internal SDK failure
+
+    Synchronous, no exceptions surface to the caller.
+    """
+    if not ref_span_id:
+        return False
+    try:
+        from prometa import set_input_ref as _sdk_set_input_ref
+    except ImportError:
+        return False
+    try:
+        return bool(_sdk_set_input_ref(str(ref_span_id)))
+    except Exception:
+        return False

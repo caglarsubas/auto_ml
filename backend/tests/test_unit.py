@@ -5011,6 +5011,426 @@ class TestPrometaCorrelationHelpers:
 
 
 # ---------------------------------------------------------------------------
+# v2.38.0: cross-trace data-flow refs (set_input_ref / current_span_id)
+#
+# These tests pin the chat→action propose-then-execute linking so the
+# Prometa Causal-context block can render the two traces as a single
+# navigable flow.  Without these tests a future refactor could silently
+# drop either:
+#   * the chat side (forget to include chat_span_id in /chat/ response)
+#   * the dispatch side (forget to call set_input_ref in dispatch_action)
+# and observability would degrade with no test signal.
+#
+# Coverage matrix:
+#   1. prometa_config wrapper contract (SDK-absent fallback + happy path)
+#   2. dispatch_action call-site (forwards keyword arg → set_input_ref)
+#   3. AIActionExecuteView body (extracts + validates parent_span_id)
+#   4. _chat_workflow source-level guard (response carries chat_span_id)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCrossTraceRefs:
+    """Pin v2.38.0 cross-trace linking between chat and action traces."""
+
+    # ── (1) prometa_config wrapper contract ─────────────────────────────
+
+    def test_current_span_id_returns_none_when_sdk_absent(self, monkeypatch):
+        """Wrapper must catch ImportError and return None — never raise.
+
+        Mirrors the test/dev environment where prometa-sdk isn't pinned
+        (or is disabled via ``PROMETA_DISABLE=1``).  Call sites assume
+        a None return = "no active span", and stamp nothing."""
+        from ai_assistant import prometa_config as pc
+        # Force the inner ``from prometa import current_span_id`` to fail
+        # by monkeypatching __import__ to raise on the prometa module.
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'prometa':
+                raise ImportError('simulated SDK absent')
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        # No exception, returns None.
+        assert pc.current_span_id() is None
+
+    def test_current_span_id_swallows_internal_sdk_errors(self, monkeypatch):
+        """If the SDK is installed but ``current_span_id()`` raises
+        (e.g. context-var was never initialized in this thread), the
+        wrapper must still return None instead of bubbling.  Otherwise a
+        single corrupt span context would crash the chat response."""
+        from ai_assistant import prometa_config as pc
+        # Simulate the "SDK present but raising" path by monkeypatching
+        # the lazy import inside prometa_config.current_span_id.  We do
+        # this by injecting a fake `prometa` module into sys.modules.
+        import sys
+        import types
+        fake_prometa = types.ModuleType('prometa')
+
+        def boom():
+            raise RuntimeError('span context corrupted')
+
+        fake_prometa.current_span_id = boom
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+        # Wrapper catches and returns None.
+        assert pc.current_span_id() is None
+
+    def test_set_input_ref_returns_false_for_falsy_input(self):
+        """No span id, no link.  None / empty string short-circuit
+        before the SDK is even imported — symmetric with the chat-side
+        contract that an absent ``chat_span_id`` means "don't stamp"."""
+        from ai_assistant import prometa_config as pc
+        assert pc.set_input_ref(None) is False
+        assert pc.set_input_ref('') is False
+        assert pc.set_input_ref(0) is False
+
+    def test_set_input_ref_returns_false_when_sdk_absent(self, monkeypatch):
+        """Non-empty span id but SDK not installed → False, no raise.
+        Matches the no-op contract documented in the wrapper docstring."""
+        from ai_assistant import prometa_config as pc
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'prometa':
+                raise ImportError('simulated SDK absent')
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+        assert pc.set_input_ref('chat-span-abc123') is False
+
+    def test_set_input_ref_forwards_to_sdk_when_active(self, monkeypatch):
+        """Happy path: SDK is present, wrapper coerces id to str and
+        forwards.  Returns whatever the SDK returns coerced to bool."""
+        from ai_assistant import prometa_config as pc
+        import sys
+        import types
+        captured: list[str] = []
+        fake_prometa = types.ModuleType('prometa')
+
+        def fake_set_input_ref(span_id):
+            captured.append(span_id)
+            return True  # SDK signals "stamp succeeded"
+
+        fake_prometa.set_input_ref = fake_set_input_ref
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+
+        result = pc.set_input_ref('chat-span-xyz789')
+
+        assert result is True
+        assert captured == ['chat-span-xyz789']
+
+    def test_set_input_ref_swallows_sdk_runtime_errors(self, monkeypatch):
+        """If the SDK call raises (e.g. no active span context), the
+        wrapper must return False — call sites must never have to wrap
+        the link call in try/except themselves."""
+        from ai_assistant import prometa_config as pc
+        import sys
+        import types
+        fake_prometa = types.ModuleType('prometa')
+
+        def boom(_v):
+            raise RuntimeError('no active span')
+
+        fake_prometa.set_input_ref = boom
+        monkeypatch.setitem(sys.modules, 'prometa', fake_prometa)
+
+        assert pc.set_input_ref('chat-span-xyz') is False
+
+    # ── (2) dispatch_action call-site ───────────────────────────────────
+
+    def test_dispatch_action_calls_set_input_ref_when_parent_span_id_provided(
+            self, monkeypatch):
+        """The action-execute trace must call set_input_ref(parent) at
+        the top of the workflow body so the Causal-context block in
+        Prometa surfaces the chat→action link."""
+        from ai_assistant import action_executor
+
+        # Capture every helper invocation; let the rest no-op.
+        ref_calls: list[str] = []
+        attr_calls: list[tuple] = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: attr_calls.append(a))
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        result = fn(42, 'unknown_action_xyz', {'description': 'test'},
+                    parent_span_id='chat-span-deadbeef')
+
+        # Unknown action_type still triggers early-return error,
+        # but set_input_ref must have fired BEFORE that branch.
+        assert result.get('status') == 'error'
+        assert ref_calls == ['chat-span-deadbeef']
+        # And the debug attribute mirror is present too.
+        assert any(
+            call[0] == 'declarai.action.parent_span_id'
+            and call[1] == 'chat-span-deadbeef'
+            for call in attr_calls
+        ), f'expected declarai.action.parent_span_id attr; got {attr_calls}'
+
+    def test_dispatch_action_skips_set_input_ref_when_parent_span_id_none(
+            self, monkeypatch):
+        """Legacy v2.25.0..v2.37.0 callers pass no parent_span_id —
+        set_input_ref must NOT be invoked (don't stamp a phantom link).
+
+        This is the backward-compat guard: every internal call site
+        (test fixtures, programmatic dispatch) keeps working unchanged."""
+        from ai_assistant import action_executor
+        ref_calls: list = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        # No parent_span_id — pre-v2.38.0 call shape.
+        fn(42, 'unknown_action_xyz', {})
+
+        assert ref_calls == [], (
+            "dispatch_action must not call set_input_ref when "
+            f"parent_span_id is omitted; got {ref_calls}"
+        )
+
+    def test_dispatch_action_skips_set_input_ref_when_parent_span_id_empty(
+            self, monkeypatch):
+        """Empty string is treated as "no link" — defensive against a
+        frontend that always sends the field but with an empty value
+        when the chat turn wasn't traced."""
+        from ai_assistant import action_executor
+        ref_calls: list = []
+        monkeypatch.setattr(action_executor, 'set_input_ref',
+                            lambda v: ref_calls.append(v) or True)
+        monkeypatch.setattr(action_executor, 'set_span_attr',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_customer_id',
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(action_executor, 'set_session_id',
+                            lambda *a, **kw: None)
+
+        fn = action_executor.dispatch_action
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+
+        fn(42, 'unknown_action_xyz', {}, parent_span_id='')
+
+        assert ref_calls == []
+
+    def test_dispatch_action_signature_keyword_only_parent_span_id(self):
+        """parent_span_id must be keyword-only so positional v2.25.0..
+        v2.37.0 call sites stay valid (they pass exactly 3 positionals)."""
+        import inspect
+        from ai_assistant.action_executor import dispatch_action
+        # Unwrap the @workflow decorator if present.
+        fn = dispatch_action.__wrapped__ if hasattr(dispatch_action, '__wrapped__') \
+            else dispatch_action
+        sig = inspect.signature(fn)
+        params = sig.parameters
+        assert 'parent_span_id' in params
+        assert params['parent_span_id'].kind == inspect.Parameter.KEYWORD_ONLY, (
+            'parent_span_id must be keyword-only to keep legacy positional '
+            'call sites compatible'
+        )
+        assert params['parent_span_id'].default is None
+
+    # ── (3) AIActionExecuteView body ────────────────────────────────────
+
+    def test_action_execute_view_forwards_parent_span_id_from_body(
+            self, monkeypatch):
+        """The /execute-action/ endpoint must extract parent_span_id
+        from the JSON body and pass it through to dispatch_action as
+        the keyword arg.  This is the "wire" — without it, the chat span
+        id never reaches the action workflow."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['file_id'] = file_id
+            captured['action_type'] = action_type
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success', 'description': 'ok'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        req = _FakeRequest({
+            'file_id': 7,
+            'action_type': 'update_config',
+            'payload': {'foo': 'bar'},
+            'parent_span_id': 'chat-span-abc',
+        })
+
+        view.post(req)
+
+        assert captured['parent_span_id'] == 'chat-span-abc'
+        assert captured['file_id'] == 7
+        assert captured['action_type'] == 'update_config'
+
+    def test_action_execute_view_treats_missing_parent_span_id_as_none(
+            self, monkeypatch):
+        """Legacy clients (v2.25.0..v2.37.0 frontend) don't send the
+        field — view must default to None so dispatch_action sees the
+        legacy call shape and skips set_input_ref entirely."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        view.post(_FakeRequest({
+            'file_id': 1,
+            'action_type': 'update_notes',
+            'payload': {},
+        }))
+
+        assert captured['parent_span_id'] is None
+
+    def test_action_execute_view_rejects_non_string_parent_span_id(
+            self, monkeypatch):
+        """Defensive: a buggy frontend that sends parent_span_id as an
+        int / dict / list must not poison the span attribute.  View
+        coerces non-strings to None (treat as no-link) rather than
+        passing garbage through to set_input_ref."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        for bad_val in (123, {'x': 1}, [1, 2], True):
+            captured.clear()
+            view.post(_FakeRequest({
+                'file_id': 1,
+                'action_type': 'update_notes',
+                'payload': {},
+                'parent_span_id': bad_val,
+            }))
+            assert captured['parent_span_id'] is None, (
+                f'expected None for non-string parent_span_id={bad_val!r}'
+            )
+
+    def test_action_execute_view_rejects_oversized_parent_span_id(
+            self, monkeypatch):
+        """Span ids in Prometa are short hex (~16 chars).  A 1000-char
+        string is almost certainly malformed; treat as no-link rather
+        than stamp giant garbage onto the span attribute."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+            captured['parent_span_id'] = parent_span_id
+            return {'status': 'success'}
+
+        monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
+                            fake_dispatch)
+
+        view = views.AIActionExecuteView()
+
+        class _FakeRequest:
+            def __init__(self, data):
+                self.data = data
+
+        view.post(_FakeRequest({
+            'file_id': 1,
+            'action_type': 'update_notes',
+            'payload': {},
+            'parent_span_id': 'x' * 500,  # > 256-char limit
+        }))
+
+        assert captured['parent_span_id'] is None
+
+    # ── (4) _chat_workflow source-level guard ───────────────────────────
+
+    def test_chat_workflow_stamps_chat_span_id_into_response(self):
+        """Source-level guard: the chat workflow body must call
+        ``current_span_id()`` and conditionally stamp the result into
+        response_data['chat_span_id'] when actions exist.  Without this
+        the frontend has no id to forward on Apply, breaking the link."""
+        import inspect
+        from ai_assistant.views import _chat_workflow
+        # _chat_workflow is wrapped by @workflow; unwrap to get the body.
+        fn = _chat_workflow.__wrapped__ if hasattr(_chat_workflow, '__wrapped__') \
+            else _chat_workflow
+        source = inspect.getsource(fn)
+        assert 'current_span_id()' in source, (
+            '_chat_workflow must call current_span_id() to capture the '
+            'chat-turn span id for cross-trace linking (v2.38.0)'
+        )
+        assert "'chat_span_id'" in source or '"chat_span_id"' in source, (
+            '_chat_workflow must stamp chat_span_id into response_data '
+            'so the frontend can forward it on Apply'
+        )
+
+    def test_views_imports_current_span_id_and_set_input_ref(self):
+        """Structural guard: views.py must import both helpers from
+        prometa_config so the chat workflow body can call them."""
+        from ai_assistant import views
+        assert hasattr(views, 'current_span_id'), (
+            'views.py must import current_span_id from prometa_config '
+            '(v2.38.0)'
+        )
+        assert hasattr(views, 'set_input_ref'), (
+            'views.py must import set_input_ref from prometa_config '
+            '(v2.38.0)'
+        )
+
+    def test_action_executor_imports_set_input_ref(self):
+        """Structural guard: action_executor.py must import
+        set_input_ref so dispatch_action can stamp the link."""
+        from ai_assistant import action_executor
+        assert hasattr(action_executor, 'set_input_ref'), (
+            'action_executor.py must import set_input_ref from '
+            'prometa_config (v2.38.0)'
+        )
+
+
+# ---------------------------------------------------------------------------
 # AML v0.4 instrumentation helpers (v2.31.0 / Phase 3a of prometa-sdk roadmap).
 #
 # `schema_validate` and `model_route` are context managers that wrap

@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
-    model_route, plan_generate,
+    model_route, plan_generate, current_span_id, set_input_ref,
 )
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
@@ -1112,6 +1112,19 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     }
     if actions:
         response_data['actions'] = actions
+        # v2.38.0: snapshot the chat span id so the frontend can pass it
+        # back when applying any of these actions.  ``current_span_id()``
+        # returns None when:
+        #   * SDK is unavailable (test mode, dev box without endpoint)
+        #   * we're outside any @workflow / @tool / @agent context
+        # In all cases the frontend treats a missing id as "no cross-
+        # trace link" and skips the link header on the apply call, so
+        # the legacy v2.25.0..v2.37.0 behaviour is preserved.  The
+        # link is purely-additive observability sugar — it never
+        # changes action dispatch semantics.
+        chat_span_id = current_span_id()
+        if chat_span_id:
+            response_data['chat_span_id'] = str(chat_span_id)
 
     return response_data
 
@@ -1234,6 +1247,17 @@ class AIActionExecuteView(APIView):
             file_id = request.data.get('file_id')
             action_type = request.data.get('action_type', '')
             payload = request.data.get('payload', {})
+            # v2.38.0: optional cross-trace link back to the chat span
+            # that proposed this action.  Frontend echoes the
+            # ``chat_span_id`` it received from /chat/.  Defensive limit:
+            # span ids in Prometa are short hex strings — a payload
+            # longer than 256 chars is almost certainly malformed and
+            # treated as missing rather than stamped (so a buggy client
+            # can't poison span attributes).
+            parent_span_id_raw = request.data.get('parent_span_id')
+            parent_span_id = None
+            if isinstance(parent_span_id_raw, str) and 0 < len(parent_span_id_raw) <= 256:
+                parent_span_id = parent_span_id_raw
 
             if not file_id:
                 return Response({'status': 'error', 'error': 'file_id is required'},
@@ -1242,7 +1266,8 @@ class AIActionExecuteView(APIView):
                 return Response({'status': 'error', 'error': 'action_type is required'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            result = dispatch_action(int(file_id), action_type, payload)
+            result = dispatch_action(int(file_id), action_type, payload,
+                                     parent_span_id=parent_span_id)
 
             http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
             return Response(result, status=http_status)

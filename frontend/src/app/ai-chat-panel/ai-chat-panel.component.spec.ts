@@ -851,4 +851,117 @@ describe('AiChatPanelComponent', () => {
       expect(last.content).toBe(realMessage);
     });
   });
+
+  // ── v2.38.0: cross-trace linking (chat_span_id ↔ parent_span_id) ─────
+  // The chat panel is the bridge between the two backend traces:
+  //   1. /chat/ response → carries chat_span_id (when actions present)
+  //   2. /execute-action/ request → must echo it as parent_span_id
+  // These specs lock both halves of the bridge so a future refactor of
+  // the send/apply flow can't silently drop the link.
+  describe('v2.38.0 cross-trace linking', () => {
+    beforeEach(() => {
+      sharedService.setCurrentFileId(1);
+    });
+
+    it('should persist chat_span_id from /chat/ response onto the message', () => {
+      // Mirror the send-flow: stub sendAiChat to return a chat_span_id,
+      // verify updateLastMessage stamped it on the assistant message.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'I prepared an action.',
+        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+        chat_span_id: 'chat-span-abc123',
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.chatSpanId).toBe('chat-span-abc123');
+    });
+
+    it('should leave chatSpanId undefined when /chat/ response omits the field', () => {
+      // Pre-v2.38.0 backend (or SDK-disabled) — no chat_span_id in response.
+      // Frontend must not fabricate one; subsequent applyAction skips link.
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'I prepared an action.',
+        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.chatSpanId).toBeUndefined();
+    });
+
+    it('applyAction should forward chatSpanId as parentSpanId to executeAiAction', () => {
+      // Seed an assistant message that already has a chatSpanId
+      // (mimicking the post-send state from the previous spec).
+      const action: any = {
+        type: 'update_notes',
+        payload: { description: 'note' },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared an action.',
+        timestamp: new Date(),
+        actions: [action],
+        chatSpanId: 'chat-span-abc123',
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
+        of({ status: 'success', description: 'ok' })
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      // 4th arg (parentSpanId) MUST be the message's chatSpanId.
+      expect(execSpy).toHaveBeenCalledWith(
+        1,                            // fileId
+        'update_notes',               // actionType
+        { description: 'note' },      // payload
+        'chat-span-abc123',           // parentSpanId — the link
+      );
+    });
+
+    it('applyAction should pass undefined parentSpanId when message lacks chatSpanId', () => {
+      // Legacy v2.25.0..v2.37.0 message with no chatSpanId — applyAction
+      // must call executeAiAction with parentSpanId omitted/undefined so
+      // dataService skips the parent_span_id POST field (legacy semantics).
+      const action: any = {
+        type: 'update_notes',
+        payload: { description: 'note' },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared an action.',
+        timestamp: new Date(),
+        actions: [action],
+        // No chatSpanId — pre-v2.38.0 message shape.
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
+        of({ status: 'success' })
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      expect(execSpy).toHaveBeenCalledWith(
+        1,
+        'update_notes',
+        { description: 'note' },
+        undefined,                    // ← key assertion: no link forwarded
+      );
+    });
+  });
 });

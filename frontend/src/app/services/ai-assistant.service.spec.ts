@@ -121,6 +121,34 @@ describe('AiAssistantService', () => {
       service.updateLastMessage('test');
       expect(service.getMessages()).toEqual([]);
     });
+
+    // ── v2.38.0: chat-span-id persistence (cross-trace linking) ─────
+    it('should persist chatSpanId when provided as 3rd arg (v2.38.0)', () => {
+      service.addMessage({ role: 'assistant', content: '...', timestamp: new Date(), loading: true });
+      const actions: AiAction[] = [{ type: 'update_notes', payload: { content: 'test' } }];
+      service.updateLastMessage('Done', actions, 'chat-span-deadbeef');
+      const msgs = service.getMessages();
+      expect(msgs[msgs.length - 1].chatSpanId).toBe('chat-span-deadbeef');
+    });
+
+    it('should leave chatSpanId undefined when 3rd arg is omitted (legacy)', () => {
+      service.addMessage({ role: 'assistant', content: '...', timestamp: new Date(), loading: true });
+      service.updateLastMessage('Done');
+      const msgs = service.getMessages();
+      // Pre-v2.38.0 callers used 1- or 2-arg form — chatSpanId must stay
+      // absent so applyAction's `sourceMessage?.chatSpanId` evaluates
+      // to undefined and the link header is skipped.
+      expect(msgs[msgs.length - 1].chatSpanId).toBeUndefined();
+    });
+
+    it('should leave chatSpanId undefined when 3rd arg is empty string', () => {
+      service.addMessage({ role: 'assistant', content: '...', timestamp: new Date(), loading: true });
+      service.updateLastMessage('Done', [], '');
+      const msgs = service.getMessages();
+      // Empty string from a Prometa-disabled chat response (resp.chat_span_id
+      // missing) must be treated identically to omitted — never stamped.
+      expect(msgs[msgs.length - 1].chatSpanId).toBeUndefined();
+    });
   });
 
   // ── markActionApplied ──────────────────────────────────────────────

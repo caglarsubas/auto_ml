@@ -387,12 +387,19 @@ export class DataService {
 
   // ===== AI Action Execution (general-purpose) =====
 
-  executeAiAction(fileId: number, actionType: string, payload: any): Observable<any> {
-    return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, {
+  executeAiAction(fileId: number, actionType: string, payload: any,
+                  parentSpanId?: string): Observable<any> {
+    const body: any = {
       file_id: fileId,
       action_type: actionType,
       payload,
-    }).pipe(
+    };
+    // v2.38.0+: cross-trace link.  Only set when caller has a span id;
+    // backend treats missing/empty as "no link" (legacy semantics).
+    if (parentSpanId) {
+      body.parent_span_id = parentSpanId;
+    }
+    return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, body).pipe(
       catchError((err: any) => {
         console.error('Error executing AI action:', err);
         return throwError(() => err);

@@ -22,7 +22,7 @@ from declaration.models import Declaration, DataDictionary
 
 from .prometa_config import (
     workflow, tool, set_span_attr, set_session_id, set_customer_id,
-    schema_validate,
+    schema_validate, set_input_ref,
 )
 
 
@@ -1743,8 +1743,25 @@ def _build_completion_message(result: dict, action_type: str) -> str:
 
 
 @workflow(name="declarai-action")
-def dispatch_action(file_id: int, action_type: str, payload: dict) -> dict:
-    """Route an action to the correct handler."""
+def dispatch_action(file_id: int, action_type: str, payload: dict,
+                    *, parent_span_id: str = None) -> dict:
+    """Route an action to the correct handler.
+
+    Args:
+        file_id: pipeline declaration id.
+        action_type: HANDLERS key (``update_config``, ``start_sfs`` etc.).
+        payload: handler-specific dict.
+        parent_span_id: optional Prometa span id of the upstream chat
+            turn that PROPOSED this action.  When provided, stamped
+            via ``set_input_ref()`` so Prometa's Causal-context block
+            renders the action trace with a clickable "Input from
+            <chat span>" row, collapsing the two-trace propose-then-
+            execute split into one navigable flow.  When None (legacy
+            v2.25.0..v2.37.0 callers, internal tests, missing chat-side
+            instrumentation), the link is simply omitted — action
+            dispatch semantics are unchanged.  Keyword-only so positional
+            call sites that pre-date v2.38.0 are stable.
+    """
     # Set prompt attribute so Prometa Conversation panel shows the action request
     description = payload.get('description', '') if isinstance(payload, dict) else ''
     set_span_attr('gen_ai.prompt', f"[Action: {action_type}] {description}")
@@ -1755,6 +1772,20 @@ def dispatch_action(file_id: int, action_type: str, payload: dict) -> dict:
     # share the same correlation key per Declaration.  See
     # ai_assistant/prometa_config.py::set_customer_id for the rationale.
     set_customer_id(str(file_id))
+    # v2.38.0: cross-trace data-flow ref back to the chat span that
+    # proposed this action (when the frontend passed it through from
+    # /chat/'s response).  Stamping happens TWICE on purpose:
+    #   (1) set_input_ref → canonical Prometa ``prometa.input_ref``
+    #       attribute consumed by the platform's Causal-context UI.
+    #       No-op when the SDK is absent or no active span — won't
+    #       throw, won't fail dispatch.
+    #   (2) set_span_attr → ``declarai.action.parent_span_id`` debug
+    #       attribute, visible even in test mode without the real
+    #       Prometa endpoint so we can verify the link is being
+    #       attempted independent of platform connectivity.
+    if parent_span_id:
+        set_input_ref(parent_span_id)
+        set_span_attr('declarai.action.parent_span_id', parent_span_id)
 
     handler = HANDLERS.get(action_type)
     if not handler:

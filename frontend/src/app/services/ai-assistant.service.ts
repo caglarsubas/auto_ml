@@ -18,6 +18,18 @@ export interface ChatMessage {
   actions?: AiAction[];
   autoCorrection?: boolean;
   autoCorrectionSummary?: string;
+  /**
+   * v2.38.0+: Prometa span id of the @workflow('declarai-chat') turn
+   * that produced this message.  Populated only when the backend
+   * response includes `chat_span_id` (i.e. when the turn produced ≥1
+   * action AND the Prometa SDK is active).  Forwarded to
+   * `dataService.executeAiAction()` on Apply so the action-dispatch
+   * trace can call `set_input_ref(chatSpanId)` and Prometa renders
+   * the two traces as a single navigable flow in the Causal-context
+   * block.  Optional everywhere — a missing id means "no cross-trace
+   * link" and the apply call simply omits the `parent_span_id` field.
+   */
+  chatSpanId?: string;
 }
 
 @Injectable({
@@ -58,7 +70,7 @@ export class AiAssistantService {
     this.messagesSubject.next(messages);
   }
 
-  updateLastMessage(content: string, actions?: AiAction[]): void {
+  updateLastMessage(content: string, actions?: AiAction[], chatSpanId?: string): void {
     const messages = [...this.messagesSubject.getValue()];
     if (messages.length > 0) {
       messages[messages.length - 1] = {
@@ -66,6 +78,12 @@ export class AiAssistantService {
         content,
         loading: false,
         ...(actions && actions.length > 0 ? { actions } : {}),
+        // v2.38.0+: persist the chat span id so applyAction() can
+        // forward it as parent_span_id on the action-execute call.
+        // Only stamped when defined — legacy callers that pass 2 args
+        // are unaffected and an absent id keeps the message clean
+        // rather than writing `chatSpanId: undefined`.
+        ...(chatSpanId ? { chatSpanId } : {}),
       };
       this.messagesSubject.next(messages);
     }
