@@ -2931,7 +2931,8 @@ class TestPrometaConfig:
         monkeypatch.setenv('PROMETA_ENDPOINT_STAGING', 'http://test.invalid/otlp')
         monkeypatch.setenv('PROMETA_API_KEY_STAGING', 'pk_test')
         # The behaviour-under-test: stable customer-owned slug via env var.
-        monkeypatch.setenv('PROMETA_AGENT_ID', 'declarai-assistant-staging')
+        # v2.40.2: value reflects Stream A naming (agent_name=declarai-agent).
+        monkeypatch.setenv('PROMETA_AGENT_ID', 'declarai-agent-staging')
 
         # Capture the kwargs Prometa(...) is constructed with, without
         # actually emitting telemetry.
@@ -2959,7 +2960,10 @@ class TestPrometaConfig:
             "PROMETA_AGENT_ID was set; get_prometa() must forward it as "
             "agent_id= so the SDK does not fall back to a random per-process id"
         )
-        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging'
+        # v2.40.2: literal updated to match Stream A naming (this test
+        # asserts pass-through behavior, so any deterministic value works
+        # — kept aligned with the new default slug for consistency).
+        assert captured_kwargs['agent_id'] == 'declarai-agent-staging'
 
     def test_get_prometa_uses_stable_slug_when_env_var_unset(self, monkeypatch):
         """When PROMETA_AGENT_ID is NOT set, use a deterministic slug.
@@ -2993,7 +2997,10 @@ class TestPrometaConfig:
 
         client = pc.get_prometa()
         assert client is not None
-        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+        # v2.40.2: default agent_name flipped from 'declarai-assistant' to
+        # 'declarai-agent' (Stream A naming) so the derived slug is now
+        # 'declarai-agent-staging'.
+        assert captured_kwargs['agent_id'] == 'declarai-agent-staging', (
             "PROMETA_AGENT_ID was unset; get_prometa() must still pass a "
             "stable customer-owned slug so the SDK does not generate a "
             "random per-process id"
@@ -3027,7 +3034,9 @@ class TestPrometaConfig:
         pc._prometa = None
 
         pc.get_prometa()
-        assert captured_kwargs['agent_id'] == 'declarai-assistant-staging', (
+        # v2.40.2: default agent slug is now 'declarai-agent-staging'
+        # (Stream A naming — see prometa_config.py module docstring).
+        assert captured_kwargs['agent_id'] == 'declarai-agent-staging', (
             "Empty-string PROMETA_AGENT_ID must be treated as unset and "
             "replaced by the stable DeclarAI slug"
         )
@@ -3070,21 +3079,108 @@ class TestPrometaConfig:
         )
 
     def test_resolve_agent_id_defaults_to_stage_slug(self, monkeypatch):
-        """Default agent_id is stable, readable, and environment-specific."""
+        """Default agent_id is stable, readable, and environment-specific.
+
+        v2.40.2: inputs reflect Stream A naming (agent_name='declarai-agent')."""
         import ai_assistant.prometa_config as pc
         monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
-        assert pc._resolve_agent_id('declarai-assistant', 'production') == (
-            'declarai-assistant-production',
+        assert pc._resolve_agent_id('declarai-agent', 'production') == (
+            'declarai-agent-production',
             'default-slug',
         )
 
     def test_resolve_agent_id_slugifies_display_name(self, monkeypatch):
-        """A changed display label should still produce a slug-shaped id."""
+        """A changed display label should still produce a slug-shaped id.
+
+        v2.40.2: input updated to 'DeclarAI Agent' to match Stream A
+        naming — the slugify logic itself is unchanged."""
         import ai_assistant.prometa_config as pc
         monkeypatch.delenv('PROMETA_AGENT_ID', raising=False)
-        assert pc._resolve_agent_id('DeclarAI Assistant', 'Staging EU') == (
-            'declarai-assistant-staging-eu',
+        assert pc._resolve_agent_id('DeclarAI Agent', 'Staging EU') == (
+            'declarai-agent-staging-eu',
             'default-slug',
+        )
+
+    # ── v2.40.2: Stream A naming pin (platform-team request) ─────────
+
+    def test_default_solution_id_is_stream_a_naming(self):
+        """v2.40.2: pin DEFAULT_PROMETA_SOLUTION_ID = 'declarai-assistant'.
+
+        Platform-team request (2026-05-21 screenshot): the auto-register
+        dedupes on ``(orgId, solutionId, agentName)``.  The previous
+        default 'sol_declarai' created a duplicate Agent row that the
+        platform team soft-deprecated — reverting to this default would
+        re-activate that row on the next trace.  This test catches an
+        accidental revert at the source level."""
+        import ai_assistant.prometa_config as pc
+        assert pc.DEFAULT_PROMETA_SOLUTION_ID == 'declarai-assistant', (
+            "DEFAULT_PROMETA_SOLUTION_ID must be 'declarai-assistant' "
+            "(Stream A naming).  Reverting to 'sol_declarai' would "
+            "re-activate the platform's soft-deprecated duplicate Agent row."
+        )
+
+    def test_default_agent_name_is_stream_a_naming(self):
+        """v2.40.2: pin DEFAULT_PROMETA_AGENT_NAME = 'declarai-agent'.
+
+        Companion guard to the solution-id pin above.  The platform-side
+        dedup key is ``(orgId, solutionId, agentName)`` — both halves
+        must stay correct or the soft-deprecate gets undone."""
+        import ai_assistant.prometa_config as pc
+        assert pc.DEFAULT_PROMETA_AGENT_NAME == 'declarai-agent', (
+            "DEFAULT_PROMETA_AGENT_NAME must be 'declarai-agent' "
+            "(Stream A naming).  Reverting to 'declarai-assistant' "
+            "would re-activate the platform's soft-deprecated row."
+        )
+
+    def test_default_solution_id_is_not_sol_declarai(self):
+        """Hard-fail if the pre-v2.40.2 default ever leaks back.  This is
+        a redundant guard alongside the positive-assertion tests above,
+        but the negative form makes the intent unmistakable in CI
+        failure output."""
+        import ai_assistant.prometa_config as pc
+        assert pc.DEFAULT_PROMETA_SOLUTION_ID != 'sol_declarai', (
+            "DEFAULT_PROMETA_SOLUTION_ID reverted to the pre-v2.40.2 "
+            "value 'sol_declarai'.  See 2026-05-21 prometa-team "
+            "screenshot — this value re-creates the duplicate Agent."
+        )
+
+    def test_dotenv_file_pins_stream_a_naming(self):
+        """v2.40.2: the .env file ships with PROMETA_SOLUTION_ID,
+        PROMETA_AGENT_NAME, and PROMETA_AGENT_ID aligned to Stream A
+        naming.  Operators who copy this file as their starting point
+        must NOT inherit the pre-v2.40.2 dedup-key-breaking values.
+
+        We grep the literal file rather than the loaded env so the test
+        catches drift in the COMMITTED defaults, not just the
+        process-time values (which may have been overridden in CI)."""
+        import os
+        # Locate .env relative to this test file's repo root.
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        env_path = os.path.join(repo_root, '.env')
+        if not os.path.exists(env_path):
+            # In some CI environments .env is intentionally absent
+            # (secrets injected by the runner).  Skip rather than fail.
+            import pytest
+            pytest.skip(f'.env not present at {env_path} — skipping')
+        with open(env_path, 'r') as f:
+            content = f.read()
+        assert 'PROMETA_SOLUTION_ID=declarai-assistant' in content, (
+            ".env must pin PROMETA_SOLUTION_ID=declarai-assistant "
+            "(Stream A naming)."
+        )
+        assert 'PROMETA_AGENT_NAME=declarai-agent' in content, (
+            ".env must pin PROMETA_AGENT_NAME=declarai-agent "
+            "(Stream A naming) — platform-team request 2026-05-21."
+        )
+        assert 'PROMETA_AGENT_ID=declarai-agent-staging' in content, (
+            ".env must pin PROMETA_AGENT_ID=declarai-agent-staging "
+            "so the slug matches {agent_name}-{stage}."
+        )
+        # Negative guard: the pre-v2.40.2 values must NOT be present.
+        assert 'PROMETA_SOLUTION_ID=sol_declarai' not in content, (
+            "Pre-v2.40.2 PROMETA_SOLUTION_ID=sol_declarai leaked back "
+            "into .env — this would re-activate the soft-deprecated row."
         )
 
     def test_set_span_attr_noop_without_active_span(self):
