@@ -7702,6 +7702,88 @@ class TestSystemPromptSelection:
             "started' messages without firing the matching action."
         )
 
+    def test_lite_prompt_has_tool_routing_section(self):
+        """v2.40.1: the lite prompt MUST contain an explicit TOOL ROUTING
+        section that maps user intent → required tool call.  Engine models
+        (gemma, llama, qwen) skip tool calls for analytical questions when
+        the slim context "feels" complete enough — even though the slim
+        context only carries feature names + pipeline status, NOT the
+        actual analysis numbers.  The routing table forces an explicit
+        intent→tool mapping the model can pattern-match against."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        # Header presence (case-insensitive — the actual header is uppercase
+        # but checking lowercase is forgiving against future rewrites).
+        assert 'tool routing' in _LITE_SYSTEM_PROMPT.lower(), (
+            "Lite prompt must contain a TOOL ROUTING section so engine "
+            "models know which tool to call for which kind of question."
+        )
+        # The directive 'WHEN IN DOUBT, CALL THE TOOL' is the key anti-
+        # hallucination instruction — it tilts gemma's default from
+        # 'answer directly' to 'fetch data first'.
+        assert 'when in doubt, call the tool' in _LITE_SYSTEM_PROMPT.lower()
+
+    def test_lite_prompt_routes_sfs_to_get_sfs_results(self):
+        """The motivating failure (2026-05-20 trace): user asks 'analyze
+        the SFS results' → gemma skips the tool and hallucinates.  The
+        routing table MUST explicitly map SFS-related vocabulary to
+        get_sfs_results so gemma cannot ambiguate."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Vocabulary trigger AND target tool must both appear in the
+        # routing block (signaled by the 'tool routing' header above).
+        assert 'sfs' in low
+        assert 'get_sfs_results' in _LITE_SYSTEM_PROMPT
+        # The two should be co-located — search the routing table region.
+        routing_start = low.find('tool routing')
+        routing_end = low.find('actionable operations')
+        assert routing_start >= 0 and routing_end > routing_start, (
+            "Could not locate routing section for co-location check."
+        )
+        routing_block = _LITE_SYSTEM_PROMPT[routing_start:routing_end]
+        assert 'get_sfs_results' in routing_block, (
+            "get_sfs_results must appear inside the TOOL ROUTING block, "
+            "not just somewhere in the prompt."
+        )
+        # SFS-specific keywords must trigger the route.
+        rb_low = routing_block.lower()
+        assert 'forward' in rb_low and 'backward' in rb_low, (
+            "Routing block must mention 'forward' AND 'backward' as "
+            "SFS-vocabulary triggers."
+        )
+
+    def test_lite_prompt_routes_every_registered_tool(self):
+        """Every tool the executor exposes (except invoke_skill /
+        get_skill_file, which are the auto-routed skills path) must
+        appear in the routing table.  If a future tool is added to
+        tool_executor._HANDLERS but not to the routing table, gemma
+        will silently lose the ability to discover it."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        from ai_assistant.tool_executor import _HANDLERS
+        # Skills are auto-routed pre-LLM via _auto_route_skill; the LLM
+        # never has to "decide" to call them based on the routing table.
+        skill_tools = {'invoke_skill', 'get_skill_file'}
+        analytical_tools = set(_HANDLERS.keys()) - skill_tools
+        missing = [t for t in analytical_tools
+                   if t not in _LITE_SYSTEM_PROMPT]
+        assert not missing, (
+            f"Routing table is missing analytical tools: {missing}.  "
+            f"Engine models will not know to call them."
+        )
+
+    def test_lite_prompt_size_still_under_2k_tokens(self):
+        """Even with the routing table, the lite prompt must stay under
+        ~2000 tokens (~8000 chars) so we keep the substantial budget
+        win that v2.40.0 delivered.  Token estimate: chars/4."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        chars = len(_LITE_SYSTEM_PROMPT)
+        approx_tokens = chars // 4
+        assert approx_tokens < 2000, (
+            f"Lite prompt grew to ~{approx_tokens} tokens "
+            f"({chars} chars).  v2.40.x budget is ~2000 tokens — "
+            f"either trim the routing table or split the lite variant "
+            f"into pure-lite vs lite-plus-routing tiers."
+        )
+
     def test_lite_prompt_preserves_set_ordinal_ranking_v2_39_semantics(self):
         """The v2.39.0 backend autonomy fix made set_ordinal_ranking
         auto-flip Level_of_Measurement='ordinal' on its own.  The lite
