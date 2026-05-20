@@ -251,6 +251,124 @@ describe('AiChatPanelComponent', () => {
       expect(lastMsg.content).toContain('Var_36');
       expect(lastMsg.content).toContain('Low → Mid → High');
     });
+
+    // ── v2.39.0+: implied_metadata_updates auto-fan to metadataUpdates$ ──
+    // The v2.39.0 backend stamps an `implied_metadata_updates` array onto
+    // every set_ordinal_ranking response — one LoM=ordinal entry per
+    // applied column, shaped identically to update_metadata's `applied`.
+    // The chat panel MUST fan this list onto metadataUpdates$ AND patch
+    // the dictionary cache so the encoding-plan dropdown's LoM column
+    // flips Nominal → Ordinal in lock-step with the ranking populating.
+    // Pre-v2.39.0 the user saw "Applied" while the table silently kept
+    // showing Nominal — the regression these tests guard against.
+    it('should broadcast implied_metadata_updates on metadataUpdates$ (v2.39.0+)', (done) => {
+      const implied = [
+        { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
+        { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+      ];
+      sharedService.metadataUpdates$.subscribe(received => {
+        expect(received).toEqual(implied);
+        done();
+      });
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [
+          { column: 'Var_2', ranking: ['A', 'P', 'R'] },
+          { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
+        ],
+        errors: [],
+        implied_metadata_updates: implied,
+      });
+    });
+
+    it('should patch the dictionary cache with LoM=ordinal for ranked features (v2.39.0+)', () => {
+      // Seed the cache with the same shape the declaration step pushes
+      // after fetching the dictionary — both features are nominal pre-action.
+      sharedService.setDataDictionaryCache([
+        { Feature_Name: 'Var_2', Level_of_Measurement: 'nominal', Feature_Description: 'A' },
+        { Feature_Name: 'Var_36', Level_of_Measurement: 'nominal', Feature_Description: 'B' },
+        { Feature_Name: 'Var_Other', Level_of_Measurement: 'nominal', Feature_Description: 'C' },
+      ]);
+      spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [
+          { column: 'Var_2', ranking: ['A', 'P', 'R'] },
+          { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
+        ],
+        errors: [],
+        implied_metadata_updates: [
+          { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
+          { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+        ],
+      });
+      const cache = sharedService.getDataDictionaryCache();
+      const byName: Record<string, any> = {};
+      cache.forEach((d: any) => { byName[d.Feature_Name] = d; });
+      // Ranked features flipped to ordinal in place.
+      expect(byName['Var_2'].Level_of_Measurement).toBe('ordinal');
+      expect(byName['Var_36'].Level_of_Measurement).toBe('ordinal');
+      // Untouched feature MUST keep its original LoM — the patch is
+      // surgical, not a wholesale dictionary replace.
+      expect(byName['Var_Other'].Level_of_Measurement).toBe('nominal');
+    });
+
+    it('should NOT broadcast metadataUpdates$ when implied_metadata_updates is empty (v2.39.0+)', () => {
+      // All-invalid set_ordinal_ranking call: applied=[], implied=[].
+      // Frontend's `if (impliedMetadata.length)` guard MUST prevent the
+      // broadcast — flipping LoM for a column whose ranking didn't land
+      // would leave the pipeline in a broken state (LoM=ordinal but no
+      // ranking → encoding silently downgrades to label_encoding).
+      const emitSpy = spyOn(sharedService, 'emitMetadataUpdates');
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [],
+        errors: [{ column: 'Var_X', error: 'duplicates' }],
+        implied_metadata_updates: [],
+      });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should be backward-compatible with pre-v2.39.0 backends (no implied_metadata_updates field)', () => {
+      // A v2.38.0 backend would omit `implied_metadata_updates` entirely.
+      // Frontend MUST default to [] (NOT undefined.length crash) so a
+      // version-mismatched stack still applies the ranking — just
+      // without the LoM auto-flip.  Existing v2.24.0..v2.38.0 manual
+      // chain (update_metadata then set_ordinal_ranking across two
+      // turns) remains the operative path against an old backend.
+      const emitSpy = spyOn(sharedService, 'emitMetadataUpdates');
+      const rankingSpy = spyOn(sharedService, 'emitEncodingRankingUpdates');
+      expect(() => {
+        (component as any)._handleActionResult('set_ordinal_ranking', {
+          applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+          errors: [],
+          // No implied_metadata_updates field — pre-v2.39.0 backend.
+        });
+      }).not.toThrow();
+      // Ranking still broadcasts (existing v2.24.0+ behaviour preserved).
+      expect(rankingSpy).toHaveBeenCalledWith([
+        { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
+      ]);
+      // Metadata broadcast is skipped because no implied updates exist.
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should surface the implied LoM flip in the chat bubble (v2.39.0+)', () => {
+      // The user-visible message must explicitly mention the LoM=ordinal
+      // side-effect so the action's full impact is transparent.  Pre-
+      // v2.39.0 the bubble only described the ranking and the user
+      // could not tell whether LoM had been touched.
+      (component as any)._handleActionResult('set_ordinal_ranking', {
+        applied: [{ column: 'Var_36', ranking: ['Low', 'Mid', 'High'] }],
+        errors: [],
+        implied_metadata_updates: [
+          { column: 'Var_36', field: 'Level_of_Measurement', value: 'ordinal' },
+        ],
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      // Mention of the LoM flip — exact wording verified by the test
+      // so any future copy change shows up as an explicit test diff.
+      expect(lastMsg.content).toContain('Level of Measurement');
+      expect(lastMsg.content).toContain('Ordinal');
+      expect(lastMsg.content).toContain('Var_36');
+    });
   });
 
   // ── update_config feature_usage (v2.25.0+) ────────────────────────────

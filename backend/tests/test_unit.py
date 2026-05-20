@@ -1423,6 +1423,195 @@ class TestDispatchAction:
         assert len(result['errors']) == 1
         assert result['errors'][0]['column'] == 'Var_Bad'
 
+    # ── v2.39.0+: set_ordinal_ranking auto-couples LoM=ordinal ──────────
+    # Pre-v2.39.0 the AI had to emit BOTH update_metadata (LoM=ordinal)
+    # AND set_ordinal_ranking action blocks for the encoding-plan
+    # dropdown to render the ranking.  Smaller models (gemma-4-26b)
+    # reliably emitted only the second, so the ranking landed in the
+    # cache but the UI silently kept rendering Nominal — the user saw
+    # "Applied" while nothing visibly changed.  v2.39.0 closes the gap
+    # by treating LoM='ordinal' as an automatic consequence of any
+    # successfully-applied ranking, eliminating the multi-block chain.
+
+    def test_set_ordinal_ranking_emits_implied_metadata_updates(self):
+        # Single-feature happy path: the response carries a parallel
+        # implied_metadata_updates list with one LoM=ordinal entry per
+        # applied column.  Frontend uses this list to fan onto its
+        # existing metadataUpdates$ broadcast — the encoding-plan
+        # dropdown's LoM column flips visibly in lock-step.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_36', 'ranking': ['Low', 'Mid', 'High']},
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert isinstance(implied, list)
+        assert len(implied) == 1
+        entry = implied[0]
+        # Shape MUST mirror update_metadata's `applied` array exactly so
+        # the frontend's _applyMetadataPatchesToDictionaryCache helper
+        # consumes it without a special case.
+        assert set(entry.keys()) == {'column', 'field', 'value'}
+        assert entry['column'] == 'Var_36'
+        assert entry['field'] == 'Level_of_Measurement'
+        assert entry['value'] == 'ordinal'
+
+    def test_set_ordinal_ranking_implied_metadata_batches_multiple_features(self):
+        # When several rankings land in one call, every applied column
+        # gets its own LoM=ordinal entry — order preserved relative to
+        # `applied` so the frontend's index-by-name lookup hits.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_A', 'ranking': ['1', '2', '3']},
+                {'column': 'Var_B', 'ranking': ['Low', 'High']},
+                {'column': 'Var_C', 'ranking': ['Red', 'Green', 'Blue']},
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert len(implied) == 3
+        cols = [e['column'] for e in implied]
+        assert cols == ['Var_A', 'Var_B', 'Var_C']
+        # Every entry must declare LoM=ordinal — that's the whole point.
+        assert all(e['field'] == 'Level_of_Measurement' for e in implied)
+        assert all(e['value'] == 'ordinal' for e in implied)
+
+    def test_set_ordinal_ranking_implied_metadata_only_for_applied_columns(self):
+        # Partial success: one valid ranking lands, one invalid ranking
+        # is rejected.  The implied LoM flip must fire ONLY for the
+        # column whose ranking actually applied — flipping LoM for the
+        # rejected column would leave the pipeline in a broken state
+        # (LoM=ordinal but no ranking → encoding silently downgrades).
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_OK', 'ranking': ['A', 'B', 'C']},
+                {'column': 'Var_Bad', 'ranking': ['X', 'X']},  # rejected: duplicates
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert len(implied) == 1
+        assert implied[0]['column'] == 'Var_OK'
+        # Var_Bad MUST NOT appear — its ranking did not land.
+        assert 'Var_Bad' not in {e['column'] for e in implied}
+
+    def test_set_ordinal_ranking_empty_updates_returns_implied_metadata_field(self):
+        # When the request fails validation outright (no updates), the
+        # response still has `implied_metadata_updates` as an empty
+        # list — frontend code paths assume the field is always
+        # present and an `(resp.implied_metadata_updates || []).length`
+        # check is a stricter contract than `if 'implied_metadata_updates' in resp`.
+        result = self._dispatch(1, 'set_ordinal_ranking', {'updates': []})
+        assert result['status'] == 'error'
+        assert 'implied_metadata_updates' in result
+        assert result['implied_metadata_updates'] == []
+
+    def test_set_ordinal_ranking_implied_metadata_when_all_invalid(self):
+        # Edge case: every supplied ranking is rejected → applied=[],
+        # implied_metadata_updates=[].  The response status is 'error'
+        # because nothing landed, and the frontend's
+        # `if (impliedMetadata.length)` guard correctly skips the
+        # broadcast — the encoding-plan dropdown is NOT mutated.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_Bad1', 'ranking': ['X', 'X']},  # duplicates
+                {'column': 'Var_Bad2', 'ranking': ['only-one']},  # too short
+            ],
+        })
+        assert result['status'] == 'error'
+        assert result['applied'] == []
+        assert result['implied_metadata_updates'] == []
+
+    def test_set_ordinal_ranking_writes_lom_through_to_data_dictionary_cache(self):
+        # The cache write-through is best-effort: if Redis is up, the
+        # NEXT get_data_dictionary tool call MUST report LoM='ordinal'
+        # for every ranked column so the assistant's view of the
+        # world matches the user's view in the encoding-plan
+        # dropdown.  This test is the regression guard for the
+        # "AI thinks Var_36 is still Nominal next turn" failure mode.
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39001
+        try:
+            cache_put(file_id, 'data_dictionary', [
+                {'Feature_Name': 'Var_36', 'Level_of_Measurement': 'Nominal',
+                 'Data_Type': 'object', 'Unique_Values': 7},
+                {'Feature_Name': 'Var_Other', 'Level_of_Measurement': 'Nominal',
+                 'Data_Type': 'object', 'Unique_Values': 3},
+            ])
+            self._dispatch(file_id, 'set_ordinal_ranking', {
+                'updates': [
+                    {'column': 'Var_36', 'ranking': ['0', '1', '2', '3', '8', 'L', 'Others']},
+                ],
+            })
+            patched = cache_get(file_id, 'data_dictionary')
+            by_name = {e['Feature_Name']: e for e in patched}
+            # Var_36's LoM is now ordinal — the AI's NEXT
+            # get_data_dictionary call sees the post-action state.
+            assert by_name['Var_36']['Level_of_Measurement'] == 'ordinal'
+            # Var_Other is untouched — only ranked columns flip.
+            assert by_name['Var_Other']['Level_of_Measurement'] == 'Nominal'
+        finally:
+            _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+
+    def test_set_ordinal_ranking_dictionary_write_through_silent_on_cache_miss(self):
+        # When the data_dictionary cache is empty (Redis available but
+        # no prior cache_put), the write-through is a silent no-op —
+        # the action still succeeds and returns implied_metadata_updates
+        # so the frontend can patch its in-memory cache.  This test
+        # pins the "fail open, never raise" contract: the cache layer
+        # MUST NOT cause a successful action to error out.
+        from ai_assistant.cache import _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39002
+        # Ensure no stale cache.
+        _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+        result = self._dispatch(file_id, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_X', 'ranking': ['A', 'B', 'C']},
+            ],
+        })
+        # Action succeeded — cache miss was tolerated silently.
+        assert result['status'] == 'success'
+        assert result['applied'][0]['column'] == 'Var_X'
+        # Frontend still gets the implied flip via the response.
+        assert result['implied_metadata_updates'][0]['value'] == 'ordinal'
+
+    def test_set_ordinal_ranking_dictionary_write_through_handles_dict_envelope(self):
+        # Some pipeline-config caches store the dictionary inside a
+        # `{'features': [...]}` envelope rather than as a bare list.
+        # The write-through path MUST handle both shapes — the
+        # frontend cache patcher already does (it reads
+        # entry.Feature_Name), and the backend symmetrically must
+        # not silently skip the envelope shape.
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39003
+        try:
+            cache_put(file_id, 'data_dictionary', {
+                'features': [
+                    {'Feature_Name': 'Var_E', 'Level_of_Measurement': 'Nominal',
+                     'Data_Type': 'object'},
+                ],
+                'metadata': {'source': 'envelope-shape'},
+            })
+            self._dispatch(file_id, 'set_ordinal_ranking', {
+                'updates': [
+                    {'column': 'Var_E', 'ranking': ['1', '2', '3']},
+                ],
+            })
+            patched = cache_get(file_id, 'data_dictionary')
+            # Envelope preserved; nested feature flipped.
+            assert isinstance(patched, dict)
+            assert patched['metadata']['source'] == 'envelope-shape'
+            assert patched['features'][0]['Level_of_Measurement'] == 'ordinal'
+        finally:
+            _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+
     # ── v2.25.0+: update_config feature_usage subkey ────────────────────
     # The AI's correct path to "exclude Var_3 from SFS due to VIF" —
     # NOT execute_code drop.  These tests pin the validation surface

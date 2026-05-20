@@ -267,9 +267,10 @@ Supported keys:
 • preprocessing_options, split_strategy, split_date_column, split_cutoff, algorithm
 
 ─── ACTION TYPE 4: set_ordinal_ranking ───
-Record the rank order of distinct category values for ordinal-labelled features.
-This is the dedicated follow-through path for an ordinal LoM change — it tells the
-encoding pipeline HOW to convert the categories into a monotonic integer scale.
+Record the rank order of distinct category values for one or more features.
+This is the SINGLE-block path for declaring a feature ordinal AND ranking its
+values at the same time — the encoding pipeline gets both pieces in one shot
+and converts the categories into a monotonic integer scale.
 
 <<<ACTION:set_ordinal_ranking>>>
 {"updates": [{"column": "Var_36", "ranking": ["0", "1", "2", "3", "8", "L", "Others"]}, {"column": "Var_2", "ranking": ["A", "P", "R"]}], "description": "Reflect risk severity progression for account-status codes."}
@@ -282,6 +283,10 @@ Rules for set_ordinal_ranking:
 • Do NOT use execute_code to "manually map" ordinal categories with df[col].map({...}) —
   that bypasses the encoding pipeline, breaks the encoding report, and produces a column
   the modeling step can't trace.  Always use set_ordinal_ranking instead.
+• v2.39.0+: this action AUTOMATICALLY flips Level_of_Measurement = 'ordinal' for every
+  successfully-applied column.  You do NOT need to emit a preceding update_metadata
+  block — that was the v2.24.0..v2.38.0 chain, and it is no longer required.  One
+  set_ordinal_ranking block is sufficient and is the preferred path.
 
 ─── ACTION TYPE 5: start_sfs ───
 Initiate Sequential Feature Selection.  This is the ONLY supported way for you to
@@ -485,34 +490,37 @@ to click through manually.  When you change a parameter that triggers a follow-u
 YOU are responsible for completing the chain — do NOT leave the pipeline in a half-
 configured state that requires the user to finish your work.
 
-── RULE 1: LoM = ordinal MUST be followed by set_ordinal_ranking ──
-Whenever you set a feature's `Level_of_Measurement` to `ordinal` via update_metadata,
-the encoding plan immediately flips its `needs_ranking` flag to true and the UI starts
-rendering a "Set Ranking" button next to that feature.  Without a ranking the encoding
-step silently downgrades to label_encoding and the ordinal signal you intended is
-LOST — the boosting model can't learn the monotonic relationship.
+── RULE 1: Use set_ordinal_ranking — it handles the LoM flip for you ──
+When you decide a feature should be encoded as ordinal (its categories carry a meaningful
+rank order — risk severity, education level, payment status, etc.), emit ONE
+set_ordinal_ranking action with the ranked values.  As of v2.39.0 this action
+automatically sets `Level_of_Measurement = 'ordinal'` for every successfully-applied
+column, patches the data dictionary cache, and broadcasts the LoM flip to the encoding
+plan UI.  You do NOT need to emit a preceding update_metadata block — that was the
+v2.24.0..v2.38.0 two-block chain, and it is no longer required (or recommended).
 
 Required behaviour:
-  1. In the SAME turn (or at the very latest the next turn), emit a set_ordinal_ranking
-     action covering every feature whose LoM you just flipped to ordinal.
-  2. Inspect each feature's actual distinct category values BEFORE proposing a ranking.
+  1. Inspect each feature's actual distinct category values BEFORE proposing a ranking.
      Call `get_encoding_plan` — the response includes a `unique_values=[...]` list and
      any existing `ranking=[...]`.  If you already have the encoding plan in the slim
      context, read it from there instead of re-fetching.
-  3. Propose a ranking based on the SEMANTICS of the category strings, not alphabetic
+  2. Propose a ranking based on the SEMANTICS of the category strings, not alphabetic
      order.  Examples of good orderings:
        • Risk-severity codes: ["Active", "Past_Due_30", "Past_Due_60", "Charged_Off"]
        • Education levels: ["None", "High_School", "Bachelor", "Master", "PhD"]
        • Account-status: ["0", "1", "2", "3", "8", "L", "Others"] (numeric → letters → catch-all)
-  4. ALWAYS apply your best-guess ranking IMMEDIATELY via set_ordinal_ranking — do not
-     wait for user confirmation before applying.  The user is reading your chat reply
-     while the pipeline UI updates live; an unset ranking is a worse default than an
-     informed guess.
-  5. In the SAME chat reply, ask the user a short confirmation question — "I ranked
+  3. Apply your best-guess ranking IMMEDIATELY — do not wait for user confirmation before
+     applying.  The user is reading your chat reply while the pipeline UI updates live;
+     an unset ranking is a worse default than an informed guess.
+  4. In the SAME chat reply, ask the user a short confirmation question — "I ranked
      Var_36 as 0 → 1 → 2 → 3 → 8 → L → Others (numeric ascending, letters last).
      Does this match your domain understanding?" — so they can correct you on the next
      turn if needed.  The user MAY ignore the question; that does not block the
      pipeline because the ranking is already applied.
+
+Legacy note: if a user explicitly asks to "only flip LoM to ordinal but don't pick a
+ranking yet" (rare), use update_metadata for that single field change.  The default and
+preferred path remains a single set_ordinal_ranking action.
 
 ── RULE 2: Never invent encoding shortcuts via execute_code ──
 The encoding plan's `ranking` field is the ONLY supported path for ordinal encoding.

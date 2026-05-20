@@ -1524,20 +1524,39 @@ def start_modeling(file_id: int, payload: dict) -> dict:
 # ACTION: set_ordinal_ranking — record the rank order for ordinal features
 # ---------------------------------------------------------------------------
 #
-# Procedural context: when the AI flips a feature's Level_of_Measurement to
-# 'ordinal' via `update_metadata`, the encoding plan's `needs_ranking` flag
-# turns true for that feature and the modeling UI starts rendering a
-# "Set Ranking" button.  Without a ranking the encoding step silently
-# downgrades to label_encoding (see encoding/encoding_utils._apply_fallback)
-# and the ordinal signal is lost — the model can no longer learn the
-# monotonic relationship the analyst intended.
+# Procedural context: setting an ordinal ranking on a feature only carries
+# meaning when that feature's Level_of_Measurement is 'ordinal' — the rank
+# order encodes a monotonic relationship the boosting model is supposed to
+# learn.  Pre-v2.39.0 the AI had to emit TWO action blocks across one or
+# two turns to make this work end-to-end:
 #
-# This action is the explicit path for the AI to FOLLOW THROUGH on its own
-# `LoM = ordinal` change: it provides the ranked list of distinct category
-# values for one or more features in a single call.  The frontend mirrors
-# the ranking onto the matching encoding plan entry (entry.ranking) and
-# the cached `encoding_plan` artifact is updated so any subsequent
-# `get_encoding_plan` tool call by the AI sees its own work.
+#   1. update_metadata setting Level_of_Measurement = 'ordinal'
+#   2. set_ordinal_ranking with the ranked category values
+#
+# Smaller models (notably gemma-4-26b through the local inference fabric)
+# reliably emitted only step 2 — they internalized the system prompt's
+# "RULE 3: One action block per turn" and stopped there.  The cached
+# ranking was correct, but the encoding-plan column kept rendering
+# 'Nominal' because LoM was never flipped, so the ranking was silently
+# invisible in the UI.  The user saw a green "Applied" badge while the
+# Categorical Feature Encoding table stayed unchanged.
+#
+# v2.39.0 closes this gap by treating LoM='ordinal' as an automatic
+# *consequence* of any successfully-applied ranking instead of a
+# separate prerequisite the model has to remember.  The handler:
+#
+#   • patches the cached encoding_plan ranking (existing behaviour),
+#   • patches the cached data_dictionary so the next get_data_dictionary
+#     tool call sees LoM='ordinal' for the same columns,
+#   • returns an `implied_metadata_updates` array shaped identically to
+#     update_metadata's `applied`, so the frontend can fan it out on
+#     the existing metadataUpdates$ stream alongside the existing
+#     encodingRankingUpdates$ broadcast — the encoding-plan dropdown
+#     flips Nominal → Ordinal in lock-step with the ranking
+#     populating, exactly as if both action blocks had run.
+#
+# The action's input schema is unchanged — every existing payload
+# emitted by gpt-5.5 / gpt-5.4-mini / gemma-4-26b continues to work.
 
 @tool(name="set-ordinal-ranking")
 def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
@@ -1576,11 +1595,27 @@ def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
 
     On success the cached encoding_plan artifact is patched in place so
     the AI's next `get_encoding_plan` call sees the ranking it just set.
+    The cached data_dictionary is similarly patched with LoM='ordinal'
+    for every applied column (v2.39.0+) so subsequent get_data_dictionary
+    calls report the post-action LoM, not the pre-action one.
+
+    The response includes `implied_metadata_updates` — a list shaped
+    like update_metadata's `applied` field — that the frontend uses to
+    drive the metadataUpdates$ broadcast.  Pre-v2.39.0 callers that
+    ignore the new field continue to work; the only behavioural change
+    they observe is the encoding-plan dropdown also flipping to
+    'Ordinal' when the ranking lands.
     """
     updates = payload.get('updates', [])
     description = payload.get('description', '')
     if not isinstance(updates, list) or not updates:
-        return {'status': 'error', 'error': 'No ranking updates provided'}
+        return {
+            'status': 'error',
+            'error': 'No ranking updates provided',
+            'applied': [],
+            'errors': [],
+            'implied_metadata_updates': [],
+        }
 
     applied: list = []
     errors: list = []
@@ -1608,6 +1643,18 @@ def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
             })
             continue
         applied.append({'column': col, 'ranking': ranking_str})
+
+    # ── v2.39.0: implied LoM='ordinal' metadata updates ────────────────
+    # Built from the validated `applied` list so a partial-success
+    # request (one valid ranking + one invalid) only flips LoM for the
+    # column whose ranking actually landed.  The shape mirrors
+    # update_metadata's `applied` array exactly so the frontend's
+    # existing _applyMetadataPatchesToDictionaryCache + emitMetadataUpdates
+    # helpers can consume it without a special case.
+    implied_metadata_updates = [
+        {'column': a['column'], 'field': 'Level_of_Measurement', 'value': 'ordinal'}
+        for a in applied
+    ]
 
     # Patch the cached encoding_plan artifact so the AI's NEXT tool call
     # sees the ranking it just set.  Best-effort: if Redis is unavailable
@@ -1641,12 +1688,45 @@ def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
             # because Redis hiccupped.  The frontend has the patch.
             pass
 
+    # ── v2.39.0: patch the cached data_dictionary too ──────────────────
+    # Symmetric to the encoding_plan patch above — the next time the AI
+    # calls get_data_dictionary, the LoM column for each ranked feature
+    # will read 'ordinal' so the assistant's view of the world matches
+    # the user's view in the encoding-plan dropdown.  Same best-effort
+    # contract: silent on cache miss, never raises through to the
+    # action handler.
+    if applied:
+        try:
+            from .cache import cache_get, cache_put, ARTIFACT_DATA_DICTIONARY
+            cached_dd = cache_get(file_id, ARTIFACT_DATA_DICTIONARY)
+            if cached_dd:
+                dd_list = cached_dd if isinstance(cached_dd, list) else cached_dd.get('features', [])
+                if isinstance(dd_list, list) and dd_list:
+                    cols_to_flip = {u['column'] for u in implied_metadata_updates}
+                    mutated = False
+                    for entry in dd_list:
+                        if not isinstance(entry, dict):
+                            continue
+                        feat = entry.get('Feature_Name') or entry.get('feature')
+                        if isinstance(feat, str) and feat in cols_to_flip:
+                            entry['Level_of_Measurement'] = 'ordinal'
+                            mutated = True
+                    if mutated:
+                        if isinstance(cached_dd, list):
+                            cache_put(file_id, ARTIFACT_DATA_DICTIONARY, dd_list)
+                        else:
+                            cached_dd['features'] = dd_list
+                            cache_put(file_id, ARTIFACT_DATA_DICTIONARY, cached_dd)
+        except Exception:
+            pass
+
     return {
         'status': 'success' if applied else 'error',
         'action_type': 'set_ordinal_ranking',
         'description': description,
         'applied': applied,
         'errors': errors,
+        'implied_metadata_updates': implied_metadata_updates,
     }
 
 
