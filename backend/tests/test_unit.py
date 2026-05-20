@@ -1423,6 +1423,195 @@ class TestDispatchAction:
         assert len(result['errors']) == 1
         assert result['errors'][0]['column'] == 'Var_Bad'
 
+    # ── v2.39.0+: set_ordinal_ranking auto-couples LoM=ordinal ──────────
+    # Pre-v2.39.0 the AI had to emit BOTH update_metadata (LoM=ordinal)
+    # AND set_ordinal_ranking action blocks for the encoding-plan
+    # dropdown to render the ranking.  Smaller models (gemma-4-26b)
+    # reliably emitted only the second, so the ranking landed in the
+    # cache but the UI silently kept rendering Nominal — the user saw
+    # "Applied" while nothing visibly changed.  v2.39.0 closes the gap
+    # by treating LoM='ordinal' as an automatic consequence of any
+    # successfully-applied ranking, eliminating the multi-block chain.
+
+    def test_set_ordinal_ranking_emits_implied_metadata_updates(self):
+        # Single-feature happy path: the response carries a parallel
+        # implied_metadata_updates list with one LoM=ordinal entry per
+        # applied column.  Frontend uses this list to fan onto its
+        # existing metadataUpdates$ broadcast — the encoding-plan
+        # dropdown's LoM column flips visibly in lock-step.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_36', 'ranking': ['Low', 'Mid', 'High']},
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert isinstance(implied, list)
+        assert len(implied) == 1
+        entry = implied[0]
+        # Shape MUST mirror update_metadata's `applied` array exactly so
+        # the frontend's _applyMetadataPatchesToDictionaryCache helper
+        # consumes it without a special case.
+        assert set(entry.keys()) == {'column', 'field', 'value'}
+        assert entry['column'] == 'Var_36'
+        assert entry['field'] == 'Level_of_Measurement'
+        assert entry['value'] == 'ordinal'
+
+    def test_set_ordinal_ranking_implied_metadata_batches_multiple_features(self):
+        # When several rankings land in one call, every applied column
+        # gets its own LoM=ordinal entry — order preserved relative to
+        # `applied` so the frontend's index-by-name lookup hits.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_A', 'ranking': ['1', '2', '3']},
+                {'column': 'Var_B', 'ranking': ['Low', 'High']},
+                {'column': 'Var_C', 'ranking': ['Red', 'Green', 'Blue']},
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert len(implied) == 3
+        cols = [e['column'] for e in implied]
+        assert cols == ['Var_A', 'Var_B', 'Var_C']
+        # Every entry must declare LoM=ordinal — that's the whole point.
+        assert all(e['field'] == 'Level_of_Measurement' for e in implied)
+        assert all(e['value'] == 'ordinal' for e in implied)
+
+    def test_set_ordinal_ranking_implied_metadata_only_for_applied_columns(self):
+        # Partial success: one valid ranking lands, one invalid ranking
+        # is rejected.  The implied LoM flip must fire ONLY for the
+        # column whose ranking actually applied — flipping LoM for the
+        # rejected column would leave the pipeline in a broken state
+        # (LoM=ordinal but no ranking → encoding silently downgrades).
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_OK', 'ranking': ['A', 'B', 'C']},
+                {'column': 'Var_Bad', 'ranking': ['X', 'X']},  # rejected: duplicates
+            ],
+        })
+        assert result['status'] == 'success'
+        implied = result['implied_metadata_updates']
+        assert len(implied) == 1
+        assert implied[0]['column'] == 'Var_OK'
+        # Var_Bad MUST NOT appear — its ranking did not land.
+        assert 'Var_Bad' not in {e['column'] for e in implied}
+
+    def test_set_ordinal_ranking_empty_updates_returns_implied_metadata_field(self):
+        # When the request fails validation outright (no updates), the
+        # response still has `implied_metadata_updates` as an empty
+        # list — frontend code paths assume the field is always
+        # present and an `(resp.implied_metadata_updates || []).length`
+        # check is a stricter contract than `if 'implied_metadata_updates' in resp`.
+        result = self._dispatch(1, 'set_ordinal_ranking', {'updates': []})
+        assert result['status'] == 'error'
+        assert 'implied_metadata_updates' in result
+        assert result['implied_metadata_updates'] == []
+
+    def test_set_ordinal_ranking_implied_metadata_when_all_invalid(self):
+        # Edge case: every supplied ranking is rejected → applied=[],
+        # implied_metadata_updates=[].  The response status is 'error'
+        # because nothing landed, and the frontend's
+        # `if (impliedMetadata.length)` guard correctly skips the
+        # broadcast — the encoding-plan dropdown is NOT mutated.
+        result = self._dispatch(1, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_Bad1', 'ranking': ['X', 'X']},  # duplicates
+                {'column': 'Var_Bad2', 'ranking': ['only-one']},  # too short
+            ],
+        })
+        assert result['status'] == 'error'
+        assert result['applied'] == []
+        assert result['implied_metadata_updates'] == []
+
+    def test_set_ordinal_ranking_writes_lom_through_to_data_dictionary_cache(self):
+        # The cache write-through is best-effort: if Redis is up, the
+        # NEXT get_data_dictionary tool call MUST report LoM='ordinal'
+        # for every ranked column so the assistant's view of the
+        # world matches the user's view in the encoding-plan
+        # dropdown.  This test is the regression guard for the
+        # "AI thinks Var_36 is still Nominal next turn" failure mode.
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39001
+        try:
+            cache_put(file_id, 'data_dictionary', [
+                {'Feature_Name': 'Var_36', 'Level_of_Measurement': 'Nominal',
+                 'Data_Type': 'object', 'Unique_Values': 7},
+                {'Feature_Name': 'Var_Other', 'Level_of_Measurement': 'Nominal',
+                 'Data_Type': 'object', 'Unique_Values': 3},
+            ])
+            self._dispatch(file_id, 'set_ordinal_ranking', {
+                'updates': [
+                    {'column': 'Var_36', 'ranking': ['0', '1', '2', '3', '8', 'L', 'Others']},
+                ],
+            })
+            patched = cache_get(file_id, 'data_dictionary')
+            by_name = {e['Feature_Name']: e for e in patched}
+            # Var_36's LoM is now ordinal — the AI's NEXT
+            # get_data_dictionary call sees the post-action state.
+            assert by_name['Var_36']['Level_of_Measurement'] == 'ordinal'
+            # Var_Other is untouched — only ranked columns flip.
+            assert by_name['Var_Other']['Level_of_Measurement'] == 'Nominal'
+        finally:
+            _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+
+    def test_set_ordinal_ranking_dictionary_write_through_silent_on_cache_miss(self):
+        # When the data_dictionary cache is empty (Redis available but
+        # no prior cache_put), the write-through is a silent no-op —
+        # the action still succeeds and returns implied_metadata_updates
+        # so the frontend can patch its in-memory cache.  This test
+        # pins the "fail open, never raise" contract: the cache layer
+        # MUST NOT cause a successful action to error out.
+        from ai_assistant.cache import _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39002
+        # Ensure no stale cache.
+        _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+        result = self._dispatch(file_id, 'set_ordinal_ranking', {
+            'updates': [
+                {'column': 'Var_X', 'ranking': ['A', 'B', 'C']},
+            ],
+        })
+        # Action succeeded — cache miss was tolerated silently.
+        assert result['status'] == 'success'
+        assert result['applied'][0]['column'] == 'Var_X'
+        # Frontend still gets the implied flip via the response.
+        assert result['implied_metadata_updates'][0]['value'] == 'ordinal'
+
+    def test_set_ordinal_ranking_dictionary_write_through_handles_dict_envelope(self):
+        # Some pipeline-config caches store the dictionary inside a
+        # `{'features': [...]}` envelope rather than as a bare list.
+        # The write-through path MUST handle both shapes — the
+        # frontend cache patcher already does (it reads
+        # entry.Feature_Name), and the backend symmetrically must
+        # not silently skip the envelope shape.
+        from ai_assistant.cache import cache_put, cache_get, _get_redis
+        if _get_redis() is None:
+            pytest.skip("Redis not available")
+        file_id = 39003
+        try:
+            cache_put(file_id, 'data_dictionary', {
+                'features': [
+                    {'Feature_Name': 'Var_E', 'Level_of_Measurement': 'Nominal',
+                     'Data_Type': 'object'},
+                ],
+                'metadata': {'source': 'envelope-shape'},
+            })
+            self._dispatch(file_id, 'set_ordinal_ranking', {
+                'updates': [
+                    {'column': 'Var_E', 'ranking': ['1', '2', '3']},
+                ],
+            })
+            patched = cache_get(file_id, 'data_dictionary')
+            # Envelope preserved; nested feature flipped.
+            assert isinstance(patched, dict)
+            assert patched['metadata']['source'] == 'envelope-shape'
+            assert patched['features'][0]['Level_of_Measurement'] == 'ordinal'
+        finally:
+            _get_redis().delete(f'ai:pipeline:{file_id}:data_dictionary')
+
     # ── v2.25.0+: update_config feature_usage subkey ────────────────────
     # The AI's correct path to "exclude Var_3 from SFS due to VIF" —
     # NOT execute_code drop.  These tests pin the validation surface
@@ -7371,4 +7560,319 @@ class TestEmptyResponseFallbackConstants:
             "The two fallbacks must be distinct so tracing / UX can "
             "distinguish 'model gave up immediately' from 'model burned "
             "the tool budget'."
+        )
+
+
+# ---------------------------------------------------------------------------
+# v2.40.0: provider-aware system prompt selection
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestSystemPromptSelection:
+    """Pin the v2.40.0 contract: engine models (gemma, llama, qwen, ...)
+    receive the lite ~2500-token system prompt; OpenAI cloud models keep the
+    full ~9000-token prompt; defensive paths (empty/None config) default to
+    the full prompt so we never accidentally ship a stripped prompt to a
+    model that needs the full guidance.
+
+    The lite prompt MUST preserve every action-type schema so the model can
+    still emit any pipeline action — only the long-form coaching prose,
+    pipeline-step deep-dives, and verbose examples are stripped.
+    """
+
+    def test_engine_provider_returns_lite_variant(self):
+        from ai_assistant.views import (
+            _choose_system_prompt, _LITE_SYSTEM_PROMPT,
+        )
+        prompt, variant = _choose_system_prompt({'provider': 'engine'})
+        assert variant == 'lite'
+        assert prompt is _LITE_SYSTEM_PROMPT
+
+    def test_openai_provider_returns_full_variant(self):
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({'provider': 'openai'})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_empty_config_defaults_to_full(self):
+        """Defensive: a missing/empty model config should NOT silently
+        downgrade to the lite prompt — we'd rather over-ship guidance than
+        strip rules from a model whose provider we couldn't identify."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_none_config_defaults_to_full(self):
+        """Same as empty — a None config means we couldn't resolve the
+        model entry, so default to the full safety-net prompt."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt(None)
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_unknown_provider_defaults_to_full(self):
+        """Forward-compat: a future provider we don't recognize gets the
+        full prompt by default.  We will explicitly add 'engine'-class
+        providers to the lite mapping when we onboard them."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({'provider': 'anthropic'})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_lite_prompt_is_meaningfully_smaller(self):
+        """The whole point of v2.40.0 is the size win.  Lock in a lower
+        bound on the reduction so future edits to the lite prompt can't
+        regress past 50% — at that point we'd lose most of the gemma
+        budget headroom we're trying to free."""
+        from ai_assistant.views import SYSTEM_PROMPT, _LITE_SYSTEM_PROMPT
+        full_chars = len(SYSTEM_PROMPT)
+        lite_chars = len(_LITE_SYSTEM_PROMPT)
+        reduction = 1.0 - (lite_chars / full_chars)
+        assert reduction > 0.50, (
+            f"Lite prompt should be at least 50% smaller than full; "
+            f"got {reduction*100:.1f}% reduction "
+            f"({full_chars} -> {lite_chars} chars)."
+        )
+
+    def test_lite_prompt_preserves_every_action_type(self):
+        """Critical: the lite prompt must still contain every action type
+        marker so engine models can emit any pipeline action.  If a future
+        edit accidentally drops one, gemma silently loses the ability to
+        invoke that operation — and the failure mode is invisible (the
+        model just stops emitting that action block, no error)."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        required_action_types = [
+            'execute_code',
+            'update_metadata',
+            'update_config',
+            'set_ordinal_ranking',
+            'start_sfs',
+            'start_data_purifier',
+            'apply_encoding',
+            'start_modeling',
+            'update_notes',
+        ]
+        missing = [a for a in required_action_types
+                   if a not in _LITE_SYSTEM_PROMPT]
+        assert not missing, (
+            f"Lite prompt is missing action types: {missing}. "
+            f"Engine models will lose the ability to invoke them."
+        )
+
+    def test_lite_prompt_preserves_action_block_grammar(self):
+        """The triple-bracket markers <<<ACTION:...>>> + <<<END_ACTION>>>
+        are how _extract_actions parses the model's reply.  If the lite
+        prompt drops them, the model won't know how to format actions and
+        every action block will be invisible to the parser."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        assert '<<<ACTION:' in _LITE_SYSTEM_PROMPT
+        assert '<<<END_ACTION>>>' in _LITE_SYSTEM_PROMPT
+
+    def test_lite_prompt_preserves_one_action_per_turn_rule(self):
+        """RULE 3 (one action block per turn) is the load-bearing
+        procedural rule that prevents the model from emitting tangled
+        multi-action chains.  Even in the slim lite prompt it must stay."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Either 'one action block per turn' OR a nearby paraphrase.
+        assert (
+            'one action block per turn' in low
+            or 'most upstream' in low
+            or 'one action' in low
+        ), (
+            "Lite prompt must preserve the one-action-per-turn rule "
+            "or its decision rationale."
+        )
+
+    def test_lite_prompt_preserves_sfs_honesty_rule(self):
+        """RULE 5 in the full prompt: never claim 'SFS started' without
+        emitting start_sfs.  This is the rule that prevents the assistant
+        from lying about pipeline state (the failure mode that motivated
+        v2.26.0+).  The lite prompt's RULE 2 covers this."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Must mention either 'sfs started' (negated) or 'honesty' / 'state'.
+        assert (
+            'sfs started' in low
+            or 'honesty' in low
+            or 'never claim' in low
+        ), (
+            "Lite prompt must keep the orchestration-honesty rule so "
+            "engine models don't fabricate 'SFS started' / 'modeling "
+            "started' messages without firing the matching action."
+        )
+
+    def test_lite_prompt_has_tool_routing_section(self):
+        """v2.40.1: the lite prompt MUST contain an explicit TOOL ROUTING
+        section that maps user intent → required tool call.  Engine models
+        (gemma, llama, qwen) skip tool calls for analytical questions when
+        the slim context "feels" complete enough — even though the slim
+        context only carries feature names + pipeline status, NOT the
+        actual analysis numbers.  The routing table forces an explicit
+        intent→tool mapping the model can pattern-match against."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        # Header presence (case-insensitive — the actual header is uppercase
+        # but checking lowercase is forgiving against future rewrites).
+        assert 'tool routing' in _LITE_SYSTEM_PROMPT.lower(), (
+            "Lite prompt must contain a TOOL ROUTING section so engine "
+            "models know which tool to call for which kind of question."
+        )
+        # The directive 'WHEN IN DOUBT, CALL THE TOOL' is the key anti-
+        # hallucination instruction — it tilts gemma's default from
+        # 'answer directly' to 'fetch data first'.
+        assert 'when in doubt, call the tool' in _LITE_SYSTEM_PROMPT.lower()
+
+    def test_lite_prompt_routes_sfs_to_get_sfs_results(self):
+        """The motivating failure (2026-05-20 trace): user asks 'analyze
+        the SFS results' → gemma skips the tool and hallucinates.  The
+        routing table MUST explicitly map SFS-related vocabulary to
+        get_sfs_results so gemma cannot ambiguate."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Vocabulary trigger AND target tool must both appear in the
+        # routing block (signaled by the 'tool routing' header above).
+        assert 'sfs' in low
+        assert 'get_sfs_results' in _LITE_SYSTEM_PROMPT
+        # The two should be co-located — search the routing table region.
+        routing_start = low.find('tool routing')
+        routing_end = low.find('actionable operations')
+        assert routing_start >= 0 and routing_end > routing_start, (
+            "Could not locate routing section for co-location check."
+        )
+        routing_block = _LITE_SYSTEM_PROMPT[routing_start:routing_end]
+        assert 'get_sfs_results' in routing_block, (
+            "get_sfs_results must appear inside the TOOL ROUTING block, "
+            "not just somewhere in the prompt."
+        )
+        # SFS-specific keywords must trigger the route.
+        rb_low = routing_block.lower()
+        assert 'forward' in rb_low and 'backward' in rb_low, (
+            "Routing block must mention 'forward' AND 'backward' as "
+            "SFS-vocabulary triggers."
+        )
+
+    def test_lite_prompt_routes_every_registered_tool(self):
+        """Every tool the executor exposes (except invoke_skill /
+        get_skill_file, which are the auto-routed skills path) must
+        appear in the routing table.  If a future tool is added to
+        tool_executor._HANDLERS but not to the routing table, gemma
+        will silently lose the ability to discover it."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        from ai_assistant.tool_executor import _HANDLERS
+        # Skills are auto-routed pre-LLM via _auto_route_skill; the LLM
+        # never has to "decide" to call them based on the routing table.
+        skill_tools = {'invoke_skill', 'get_skill_file'}
+        analytical_tools = set(_HANDLERS.keys()) - skill_tools
+        missing = [t for t in analytical_tools
+                   if t not in _LITE_SYSTEM_PROMPT]
+        assert not missing, (
+            f"Routing table is missing analytical tools: {missing}.  "
+            f"Engine models will not know to call them."
+        )
+
+    def test_lite_prompt_size_still_under_2k_tokens(self):
+        """Even with the routing table, the lite prompt must stay under
+        ~2000 tokens (~8000 chars) so we keep the substantial budget
+        win that v2.40.0 delivered.  Token estimate: chars/4."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        chars = len(_LITE_SYSTEM_PROMPT)
+        approx_tokens = chars // 4
+        assert approx_tokens < 2000, (
+            f"Lite prompt grew to ~{approx_tokens} tokens "
+            f"({chars} chars).  v2.40.x budget is ~2000 tokens — "
+            f"either trim the routing table or split the lite variant "
+            f"into pure-lite vs lite-plus-routing tiers."
+        )
+
+    def test_lite_prompt_preserves_set_ordinal_ranking_v2_39_semantics(self):
+        """The v2.39.0 backend autonomy fix made set_ordinal_ranking
+        auto-flip Level_of_Measurement='ordinal' on its own.  The lite
+        prompt must communicate this so engine models don't emit the
+        legacy two-block update_metadata + set_ordinal_ranking chain
+        (which gemma can't reliably do — see v2.39.0 design doc)."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        assert 'auto-flip' in low or 'auto-flips' in low, (
+            "Lite prompt must mention v2.39.0 auto-flip semantics so "
+            "engine models know they don't need the legacy update_metadata "
+            "preamble."
+        )
+        # Hard-fail the legacy two-block instruction if it ever leaks back.
+        assert 'preceding update_metadata' in low, (
+            "Lite prompt must explicitly tell the model that a preceding "
+            "update_metadata is NOT required."
+        )
+
+    def test_full_prompt_is_unchanged_for_openai_callers(self):
+        """Regression guard: editing the lite prompt or adding new
+        provider mappings must not accidentally truncate the full prompt
+        that OpenAI callers depend on.  Sanity: full prompt is still
+        meaningfully large (>= 8000 tokens worth)."""
+        from ai_assistant.views import SYSTEM_PROMPT
+        # 1 token ~= 4 chars; require >= 8000 tokens.
+        assert len(SYSTEM_PROMPT) >= 32_000, (
+            "Full SYSTEM_PROMPT shrunk below 8000 tokens — was the "
+            "lite/full wiring accidentally reversed?"
+        )
+
+    def test_chat_workflow_stamps_system_prompt_variant_attribute(self,
+                                                                   monkeypatch):
+        """End-to-end span-attr contract: _chat_workflow must stamp the
+        system_prompt.variant attribute so the trace explorer can group
+        gemma calls under 'lite' and gpt calls under 'full' for AB-style
+        observability work.  Patches _call_llm + get_model_config so we
+        can observe attribute writes without real network or a live
+        inference engine."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_set_span_attr(key, value):
+            captured[key] = value
+
+        def fake_call_llm(messages, model_key, tools=None):
+            # Return a finished response with no tool calls.
+            return {
+                'choices': [{
+                    'finish_reason': 'stop',
+                    'message': {'content': 'ok', 'tool_calls': None},
+                }],
+                'usage': {},
+            }
+
+        # Engine models are dynamically discovered from the inference
+        # engine — in the test environment that lookup may return nothing,
+        # so stub get_model_config to return a deterministic provider
+        # based on the model_key string.
+        def fake_get_model_config(model_key):
+            if 'gemma' in model_key or model_key.startswith('engine-'):
+                return {'provider': 'engine', 'supports_tools': True}
+            return {'provider': 'openai', 'supports_tools': True}
+
+        monkeypatch.setattr(views, 'set_span_attr', fake_set_span_attr)
+        monkeypatch.setattr(views, '_call_llm', fake_call_llm)
+        monkeypatch.setattr(views, 'get_model_config', fake_get_model_config)
+
+        # Engine call → expect variant='lite'
+        captured.clear()
+        views._chat_workflow(
+            user_message='hi', context=None, section='general',
+            history=[], file_id=None, model='engine-gemma-4-26b',
+        )
+        assert captured.get('declarai.system_prompt.variant') == 'lite'
+        assert captured.get('declarai.system_prompt.chars', 0) > 0
+        assert captured.get('declarai.system_prompt.chars', 0) < 32_000, (
+            "Lite branch should report a chars count well below the "
+            "full prompt's ~36000."
+        )
+
+        # OpenAI call → expect variant='full'
+        captured.clear()
+        views._chat_workflow(
+            user_message='hi', context=None, section='general',
+            history=[], file_id=None, model='gpt-5.5',
+        )
+        assert captured.get('declarai.system_prompt.variant') == 'full'
+        assert captured.get('declarai.system_prompt.chars', 0) >= 32_000, (
+            "Full branch should report the full prompt size."
         )

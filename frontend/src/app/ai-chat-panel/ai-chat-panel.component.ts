@@ -311,6 +311,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     } else if (actionType === 'set_ordinal_ranking') {
       const applied = resp.applied || [];
       const errors = resp.errors || [];
+      // v2.39.0: backend now returns parallel implied_metadata_updates[]
+      // (one entry per applied column, shaped like update_metadata's
+      // applied array) so we can fan the LoM=ordinal flip onto the
+      // existing metadataUpdates$ stream alongside the ranking
+      // broadcast.  Pre-v2.39.0 backends omit the field; default to []
+      // so this branch is byte-identical to v2.38.0 against an old
+      // backend.
+      const impliedMetadata = resp.implied_metadata_updates || [];
       let msg = `✅ **Ordinal ranking set.** ${applied.length} feature(s) ranked.`;
       if (desc) msg += ` ${desc}`;
       if (applied.length) {
@@ -322,19 +330,43 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       if (errors.length) {
         msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || ''}: ${e.error}`).join(', ');
       }
+      // v2.39.0: surface the implied LoM=ordinal flips in the chat
+      // bubble so the user sees the full effect of the action.  Pre-
+      // v2.39.0 the user only saw the ranking confirmation while the
+      // Categorical Feature Encoding table silently kept showing the
+      // pre-action LoM (typically Nominal), which read as "the action
+      // did nothing" — see the gemma-4-26b screenshot in the v2.39.0
+      // commit body.
+      if (impliedMetadata.length) {
+        const cols = impliedMetadata.map((m: any) => `**${m.column}**`).join(', ');
+        msg += `\n\nAlso set Level of Measurement → Ordinal for ${cols}.`;
+      }
       this.actionSuccess = `${applied.length} ordinal ranking(s) applied.`;
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
-      // v2.24.0+: this is the procedural-chain follow-through for an
-      // earlier `update_metadata` LoM = ordinal change.  Broadcast the
-      // applied rankings so the modeling component patches each
-      // matching encoding plan entry's `entry.ranking` array in place
-      // — equivalent to the user clicking "Set Ranking" and arranging
-      // the values manually.  We do NOT re-push anything to AI Redis
-      // here: the backend action_executor already wrote the ranking
-      // through to the cached encoding_plan artifact so the
-      // assistant's NEXT get_encoding_plan call sees its own work.
+      // v2.24.0+: broadcast the applied rankings so the modeling
+      // component patches each matching encoding plan entry's
+      // `entry.ranking` array in place — equivalent to the user
+      // clicking "Set Ranking" and arranging the values manually.  We
+      // do NOT re-push anything to AI Redis here: the backend
+      // action_executor already wrote the ranking through to the
+      // cached encoding_plan artifact so the assistant's NEXT
+      // get_encoding_plan call sees its own work.
       if (applied.length) {
         this.sharedService.emitEncodingRankingUpdates(applied);
+      }
+      // v2.39.0: also patch the in-memory data dictionary cache and
+      // broadcast LoM=ordinal so the encoding plan dropdown's LoM
+      // column flips visibly in lock-step with the ranking
+      // populating.  Closes the gemma-4-26b multi-action gap by
+      // treating LoM=ordinal as an automatic invariant of
+      // set_ordinal_ranking instead of a separate update_metadata
+      // block the smaller model reliably forgot to emit.  We reuse
+      // _applyMetadataPatchesToDictionaryCache (also called from the
+      // update_metadata branch) so the cache-coherence + AI Redis
+      // re-push paths are identical to a manually-emitted LoM flip.
+      if (impliedMetadata.length) {
+        this._applyMetadataPatchesToDictionaryCache(impliedMetadata);
+        this.sharedService.emitMetadataUpdates(impliedMetadata);
       }
       this.sharedService.triggerCheckpoint('ai_action_set_ordinal_ranking');
 
