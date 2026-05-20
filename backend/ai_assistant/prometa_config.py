@@ -9,14 +9,22 @@ Configuration via environment variables:
     PROMETA_STAGE                — "staging" or "production" (default: staging)
     PROMETA_ENDPOINT_{STAGE}     — OTLP traces endpoint for this stage (required)
     PROMETA_API_KEY_{STAGE}      — API key for this stage
-    PROMETA_SOLUTION_ID          — Solution identifier (default: sol_declarai)
-    PROMETA_AGENT_NAME           — Agent display name (default: declarai-assistant)
+    PROMETA_SOLUTION_ID          — Solution identifier (default: declarai-assistant)
+    PROMETA_AGENT_NAME           — Agent display name (default: declarai-agent)
     PROMETA_AGENT_ID             — Stable customer-owned Agent id/slug.
                                    Defaults to ``{agent_name}-{stage}``, e.g.
-                                   ``declarai-assistant-staging``. We pass it
+                                   ``declarai-agent-staging``. We pass it
                                    explicitly so the SDK never falls back to a
                                    random per-process id while Prometa's Agent
                                    auto-registration design is still pending.
+
+    v2.40.2 (2026-05-21): reverted to Stream A naming on platform-team
+    request — the previous (solution_id='sol_declarai', agent_name=
+    'declarai-assistant') pair created a duplicate Agent row that the
+    platform team soft-deprecated. The auto-register dedupes by
+    ``(orgId, solutionId, agentName)`` — without this revert, the next
+    trace would either flip the deprecated row back to active OR mint
+    a fresh duplicate. See screenshot from prometa-team dated 2026-05-21.
 
     Fallback: PROMETA_ENDPOINT / PROMETA_API_KEY (without suffix) are checked
     if the stage-specific vars are not set.
@@ -31,8 +39,11 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROMETA_SOLUTION_ID = 'sol_declarai'
-DEFAULT_PROMETA_AGENT_NAME = 'declarai-assistant'
+# v2.40.2: Stream A naming — DO NOT revert without coordinating with the
+# Prometa platform team.  See the module docstring for the dedup-key
+# rationale ((orgId, solutionId, agentName) on the auto-register side).
+DEFAULT_PROMETA_SOLUTION_ID = 'declarai-assistant'
+DEFAULT_PROMETA_AGENT_NAME = 'declarai-agent'
 
 _prometa = None
 _initialized = False
