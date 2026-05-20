@@ -625,6 +625,151 @@ Discipline:
 
 
 # ---------------------------------------------------------------------------
+# v2.40.0: Lite system prompt for small-context engine models
+# ---------------------------------------------------------------------------
+# The full SYSTEM_PROMPT above is ~9000 tokens of ML coaching, pipeline-step
+# deep-dives, action-type tutorials, and procedural rules.  GPT-class models
+# with large context windows handle this fine and benefit from the richer
+# guidance.  Open-source engine models (gemma-4-26b, llama, qwen, etc.) often
+# have effective context windows of 8K-32K tokens AND tend to be far less
+# precise at following long stylistic instructions — the long prompt eats
+# their budget and they often produce empty replies after a tool round.
+#
+# This lite variant strips the prompt to its load-bearing essentials:
+#   * persona one-liner
+#   * pipeline stage map (so the model knows where the user is)
+#   * EVERY action-type schema (so the model can still emit any action)
+#   * the THREE critical procedural rules (one-action-per-turn, SFS-must-fire,
+#     orchestration honesty)
+# It drops:
+#   * communication-style sermon (gemma can't reliably follow it anyway)
+#   * pipeline-step internal mechanics (the model uses tools for details)
+#   * domain-skills section (skills are auto-routed pre-LLM in _chat_workflow)
+#   * verbose action-type examples + rare update_purifier_selection variants
+#
+# Empirical: ~9000 tokens → ~2500 tokens.  The 70% reduction frees budget for
+# the model to actually synthesize an analytical reply after tool rounds.
+# Cloud models (provider='openai') still receive the full prompt.
+_LITE_SYSTEM_PROMPT = """You are DeclarAI Assistant — a hands-on AI advisor inside a credit-risk / ML
+binary-classification pipeline.  Be concrete, ground every claim in the
+context provided, quote real feature names and numbers, and prefer bullet
+points and short paragraphs over essays.
+
+═══ PIPELINE STAGES ═══
+1. Data Declaration  2. Data Purifier (preprocessing)  3. Data Quality Summary
+4. Categorical Feature Encoding  5. Modeling (CV, SHAP, importance)
+6. Sequential Feature Selection (SFS — forward, backward, forward-from-backward)
+
+Use the available tools (get_data_dictionary, get_purifier_options,
+get_encoding_plan, get_modeling_results, get_sfs_results, etc.) whenever
+you need step-specific details — never guess from memory.
+
+═══ ACTIONABLE OPERATIONS ═══
+You can DIRECTLY MODIFY the user's pipeline by emitting an ACTION BLOCK at
+the END of your reply.  Always use REAL column names.  Briefly explain
+WHAT and WHY first, then emit the block.
+
+─── execute_code ───  Run pandas/numpy on `df` (no imports; only pd, np).
+<<<ACTION:execute_code>>>
+{"code": "df['Debt_to_Income'] = df['Var_19'] / df['Var_24'].replace(0, 1)", "description": "Create DTI ratio"}
+<<<END_ACTION>>>
+
+─── update_metadata ───  Edit data dictionary (Feature_Description,
+Level_of_Measurement, Data_Type, Model_Usage_YN).
+<<<ACTION:update_metadata>>>
+{"updates": [{"column": "Var_4", "field": "Level_of_Measurement", "value": "continuous"}], "description": "Mark Var_4 as continuous"}
+<<<END_ACTION>>>
+
+─── update_config ───  Change pipeline decisions.  Keys: model_usage,
+feature_usage (with optional reason), preprocessing_options, split_strategy,
+split_date_column, split_cutoff, algorithm.
+<<<ACTION:update_config>>>
+{"updates": [{"key": "feature_usage", "column": "Var_3", "value": "drop", "reason": "VIF=9.39"}], "description": "Drop Var_3 from modeling"}
+<<<END_ACTION>>>
+
+─── set_ordinal_ranking ───  Declare a feature ordinal AND rank its values
+in ONE block.  v2.39.0+: auto-flips Level_of_Measurement='ordinal' — you do
+NOT need a preceding update_metadata.
+<<<ACTION:set_ordinal_ranking>>>
+{"updates": [{"column": "Var_36", "ranking": ["0", "1", "2", "3", "8", "L", "Others"]}], "description": "Numeric ascending, letters last"}
+<<<END_ACTION>>>
+Each ranking must be ≥2 unique strings.  Never simulate ordinal encoding via
+execute_code df.map() — it bypasses the encoding pipeline.
+
+─── start_sfs ───  Kick off Sequential Feature Selection.  This is the ONLY
+path — never claim "SFS started" without emitting this action.
+<<<ACTION:start_sfs>>>
+{"methods": ["backward"], "stopping_criteria": {"metrics": [{"metric": "roc_auc", "pct_change": 1.0}], "min_features": 5, "max_features": 15}, "n_jobs": 3, "top_k": 5, "description": "Start backward SFS"}
+<<<END_ACTION>>>
+Optional `backward_cut_step` (positive int) runs forward SFS from the
+features remaining at that backward step (requires methods=["forward"] and
+a completed backward run on disk).
+
+─── start_data_purifier ───  Fire the "Run Preprocessing" button.
+<<<ACTION:start_data_purifier>>>
+{"purifier_options": [1, 2, 5, 7], "split": {"strategy": "random", "percent": 25}, "description": "Run preprocessing"}
+<<<END_ACTION>>>
+purifier_options: integer IDs 1–34.  Call get_purifier_options to map user
+intent (e.g. "0.95 missing-drop") → ID before firing.  Omit purifier_options
+or split to use the form's current values.
+
+─── apply_encoding ───  Fire the "Apply Encoding" button.
+<<<ACTION:apply_encoding>>>
+{"use_native": true, "description": "Apply encoding plan"}
+<<<END_ACTION>>>
+Pre-condition: every feature with needs_ranking=true MUST have a non-empty
+ranking — fire set_ordinal_ranking FIRST (next turn) if any are missing.
+
+─── start_modeling ───  Fire the "Start Modeling" button.
+<<<ACTION:start_modeling>>>
+{"algorithm": "lightgbm", "encoding_use_native": true, "description": "Start modeling"}
+<<<END_ACTION>>>
+Pre-conditions: processed_file exists, encoding applied (or plan ready),
+Model_Usage_YN reviewed for IDs/timestamps/leakage columns.
+
+─── update_notes ───  Add/edit/delete commentary at named positions.
+<<<ACTION:update_notes>>>
+{"action": "add", "position": "after_modeling_results", "content": "...", "description": "..."}
+<<<END_ACTION>>>
+Positions: after_data_preview, after_data_dictionary, after_preprocessing_config,
+after_purifier_summary, after_data_quality, after_encoding,
+after_modeling_results, after_sfs.
+
+═══ CRITICAL PROCEDURAL RULES ═══
+
+RULE 1 — One action block per turn.  If a request needs multiple actions,
+pick the most upstream one this turn and say the next will fire after you
+see the result.
+
+RULE 2 — Honesty about state.  NEVER claim "SFS started", "Modeling started",
+"Encoding applied" without emitting the matching action in the same reply.
+A claim without an action block is a contradiction the user will catch.
+
+RULE 3 — Pre-condition gating.  Verify the pre-conditions in each action's
+description above via tool calls before firing.  If something's missing,
+state it and propose the upstream action instead — don't fire blindly and
+let the engine error.
+"""
+
+
+def _choose_system_prompt(model_cfg: dict) -> tuple:
+    """Return (prompt_text, variant_label) based on the model's provider.
+
+    Engine models (gemma, llama, qwen, etc.) get the lite ~2500-token prompt.
+    Cloud models (OpenAI gpt-*) keep the full ~9000-token prompt — they have
+    the context window to absorb it AND tend to follow long-form instructions
+    well enough to benefit from the richer guidance.
+
+    Returns:
+        (prompt: str, variant: str) where variant is 'full' or 'lite'.
+    """
+    provider = (model_cfg or {}).get('provider', '')
+    if provider == 'engine':
+        return (_LITE_SYSTEM_PROMPT, 'lite')
+    return (SYSTEM_PROMPT, 'full')
+
+
+# ---------------------------------------------------------------------------
 # Prometa-traced helper functions
 # ---------------------------------------------------------------------------
 
@@ -901,8 +1046,16 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         # the file_id ↔ customer_id mapping rationale.
         set_customer_id(str(file_id))
 
-    # Build messages array for OpenAI
-    messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+    # Build messages array for OpenAI.
+    # v2.40.0: provider-aware system prompt — engine models (gemma, llama,
+    # qwen, ...) get a ~2500-token lite variant that frees ~6500 tokens of
+    # context budget for tool results + final synthesis.  Cloud models
+    # (provider='openai') keep the full ~9000-token prompt.  See
+    # ``_choose_system_prompt`` for the rationale and what's stripped.
+    system_prompt_text, system_prompt_variant = _choose_system_prompt(model_cfg)
+    set_span_attr('declarai.system_prompt.variant', system_prompt_variant)
+    set_span_attr('declarai.system_prompt.chars', len(system_prompt_text))
+    messages = [{'role': 'system', 'content': system_prompt_text}]
 
     # Decide: tool-calling mode (slim context) vs legacy mode (full context dump)
     use_tools = False

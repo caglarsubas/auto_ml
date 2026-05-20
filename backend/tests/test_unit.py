@@ -7561,3 +7561,236 @@ class TestEmptyResponseFallbackConstants:
             "distinguish 'model gave up immediately' from 'model burned "
             "the tool budget'."
         )
+
+
+# ---------------------------------------------------------------------------
+# v2.40.0: provider-aware system prompt selection
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestSystemPromptSelection:
+    """Pin the v2.40.0 contract: engine models (gemma, llama, qwen, ...)
+    receive the lite ~2500-token system prompt; OpenAI cloud models keep the
+    full ~9000-token prompt; defensive paths (empty/None config) default to
+    the full prompt so we never accidentally ship a stripped prompt to a
+    model that needs the full guidance.
+
+    The lite prompt MUST preserve every action-type schema so the model can
+    still emit any pipeline action — only the long-form coaching prose,
+    pipeline-step deep-dives, and verbose examples are stripped.
+    """
+
+    def test_engine_provider_returns_lite_variant(self):
+        from ai_assistant.views import (
+            _choose_system_prompt, _LITE_SYSTEM_PROMPT,
+        )
+        prompt, variant = _choose_system_prompt({'provider': 'engine'})
+        assert variant == 'lite'
+        assert prompt is _LITE_SYSTEM_PROMPT
+
+    def test_openai_provider_returns_full_variant(self):
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({'provider': 'openai'})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_empty_config_defaults_to_full(self):
+        """Defensive: a missing/empty model config should NOT silently
+        downgrade to the lite prompt — we'd rather over-ship guidance than
+        strip rules from a model whose provider we couldn't identify."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_none_config_defaults_to_full(self):
+        """Same as empty — a None config means we couldn't resolve the
+        model entry, so default to the full safety-net prompt."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt(None)
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_unknown_provider_defaults_to_full(self):
+        """Forward-compat: a future provider we don't recognize gets the
+        full prompt by default.  We will explicitly add 'engine'-class
+        providers to the lite mapping when we onboard them."""
+        from ai_assistant.views import _choose_system_prompt, SYSTEM_PROMPT
+        prompt, variant = _choose_system_prompt({'provider': 'anthropic'})
+        assert variant == 'full'
+        assert prompt is SYSTEM_PROMPT
+
+    def test_lite_prompt_is_meaningfully_smaller(self):
+        """The whole point of v2.40.0 is the size win.  Lock in a lower
+        bound on the reduction so future edits to the lite prompt can't
+        regress past 50% — at that point we'd lose most of the gemma
+        budget headroom we're trying to free."""
+        from ai_assistant.views import SYSTEM_PROMPT, _LITE_SYSTEM_PROMPT
+        full_chars = len(SYSTEM_PROMPT)
+        lite_chars = len(_LITE_SYSTEM_PROMPT)
+        reduction = 1.0 - (lite_chars / full_chars)
+        assert reduction > 0.50, (
+            f"Lite prompt should be at least 50% smaller than full; "
+            f"got {reduction*100:.1f}% reduction "
+            f"({full_chars} -> {lite_chars} chars)."
+        )
+
+    def test_lite_prompt_preserves_every_action_type(self):
+        """Critical: the lite prompt must still contain every action type
+        marker so engine models can emit any pipeline action.  If a future
+        edit accidentally drops one, gemma silently loses the ability to
+        invoke that operation — and the failure mode is invisible (the
+        model just stops emitting that action block, no error)."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        required_action_types = [
+            'execute_code',
+            'update_metadata',
+            'update_config',
+            'set_ordinal_ranking',
+            'start_sfs',
+            'start_data_purifier',
+            'apply_encoding',
+            'start_modeling',
+            'update_notes',
+        ]
+        missing = [a for a in required_action_types
+                   if a not in _LITE_SYSTEM_PROMPT]
+        assert not missing, (
+            f"Lite prompt is missing action types: {missing}. "
+            f"Engine models will lose the ability to invoke them."
+        )
+
+    def test_lite_prompt_preserves_action_block_grammar(self):
+        """The triple-bracket markers <<<ACTION:...>>> + <<<END_ACTION>>>
+        are how _extract_actions parses the model's reply.  If the lite
+        prompt drops them, the model won't know how to format actions and
+        every action block will be invisible to the parser."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        assert '<<<ACTION:' in _LITE_SYSTEM_PROMPT
+        assert '<<<END_ACTION>>>' in _LITE_SYSTEM_PROMPT
+
+    def test_lite_prompt_preserves_one_action_per_turn_rule(self):
+        """RULE 3 (one action block per turn) is the load-bearing
+        procedural rule that prevents the model from emitting tangled
+        multi-action chains.  Even in the slim lite prompt it must stay."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Either 'one action block per turn' OR a nearby paraphrase.
+        assert (
+            'one action block per turn' in low
+            or 'most upstream' in low
+            or 'one action' in low
+        ), (
+            "Lite prompt must preserve the one-action-per-turn rule "
+            "or its decision rationale."
+        )
+
+    def test_lite_prompt_preserves_sfs_honesty_rule(self):
+        """RULE 5 in the full prompt: never claim 'SFS started' without
+        emitting start_sfs.  This is the rule that prevents the assistant
+        from lying about pipeline state (the failure mode that motivated
+        v2.26.0+).  The lite prompt's RULE 2 covers this."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        # Must mention either 'sfs started' (negated) or 'honesty' / 'state'.
+        assert (
+            'sfs started' in low
+            or 'honesty' in low
+            or 'never claim' in low
+        ), (
+            "Lite prompt must keep the orchestration-honesty rule so "
+            "engine models don't fabricate 'SFS started' / 'modeling "
+            "started' messages without firing the matching action."
+        )
+
+    def test_lite_prompt_preserves_set_ordinal_ranking_v2_39_semantics(self):
+        """The v2.39.0 backend autonomy fix made set_ordinal_ranking
+        auto-flip Level_of_Measurement='ordinal' on its own.  The lite
+        prompt must communicate this so engine models don't emit the
+        legacy two-block update_metadata + set_ordinal_ranking chain
+        (which gemma can't reliably do — see v2.39.0 design doc)."""
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        low = _LITE_SYSTEM_PROMPT.lower()
+        assert 'auto-flip' in low or 'auto-flips' in low, (
+            "Lite prompt must mention v2.39.0 auto-flip semantics so "
+            "engine models know they don't need the legacy update_metadata "
+            "preamble."
+        )
+        # Hard-fail the legacy two-block instruction if it ever leaks back.
+        assert 'preceding update_metadata' in low, (
+            "Lite prompt must explicitly tell the model that a preceding "
+            "update_metadata is NOT required."
+        )
+
+    def test_full_prompt_is_unchanged_for_openai_callers(self):
+        """Regression guard: editing the lite prompt or adding new
+        provider mappings must not accidentally truncate the full prompt
+        that OpenAI callers depend on.  Sanity: full prompt is still
+        meaningfully large (>= 8000 tokens worth)."""
+        from ai_assistant.views import SYSTEM_PROMPT
+        # 1 token ~= 4 chars; require >= 8000 tokens.
+        assert len(SYSTEM_PROMPT) >= 32_000, (
+            "Full SYSTEM_PROMPT shrunk below 8000 tokens — was the "
+            "lite/full wiring accidentally reversed?"
+        )
+
+    def test_chat_workflow_stamps_system_prompt_variant_attribute(self,
+                                                                   monkeypatch):
+        """End-to-end span-attr contract: _chat_workflow must stamp the
+        system_prompt.variant attribute so the trace explorer can group
+        gemma calls under 'lite' and gpt calls under 'full' for AB-style
+        observability work.  Patches _call_llm + get_model_config so we
+        can observe attribute writes without real network or a live
+        inference engine."""
+        from ai_assistant import views
+
+        captured = {}
+
+        def fake_set_span_attr(key, value):
+            captured[key] = value
+
+        def fake_call_llm(messages, model_key, tools=None):
+            # Return a finished response with no tool calls.
+            return {
+                'choices': [{
+                    'finish_reason': 'stop',
+                    'message': {'content': 'ok', 'tool_calls': None},
+                }],
+                'usage': {},
+            }
+
+        # Engine models are dynamically discovered from the inference
+        # engine — in the test environment that lookup may return nothing,
+        # so stub get_model_config to return a deterministic provider
+        # based on the model_key string.
+        def fake_get_model_config(model_key):
+            if 'gemma' in model_key or model_key.startswith('engine-'):
+                return {'provider': 'engine', 'supports_tools': True}
+            return {'provider': 'openai', 'supports_tools': True}
+
+        monkeypatch.setattr(views, 'set_span_attr', fake_set_span_attr)
+        monkeypatch.setattr(views, '_call_llm', fake_call_llm)
+        monkeypatch.setattr(views, 'get_model_config', fake_get_model_config)
+
+        # Engine call → expect variant='lite'
+        captured.clear()
+        views._chat_workflow(
+            user_message='hi', context=None, section='general',
+            history=[], file_id=None, model='engine-gemma-4-26b',
+        )
+        assert captured.get('declarai.system_prompt.variant') == 'lite'
+        assert captured.get('declarai.system_prompt.chars', 0) > 0
+        assert captured.get('declarai.system_prompt.chars', 0) < 32_000, (
+            "Lite branch should report a chars count well below the "
+            "full prompt's ~36000."
+        )
+
+        # OpenAI call → expect variant='full'
+        captured.clear()
+        views._chat_workflow(
+            user_message='hi', context=None, section='general',
+            history=[], file_id=None, model='gpt-5.5',
+        )
+        assert captured.get('declarai.system_prompt.variant') == 'full'
+        assert captured.get('declarai.system_prompt.chars', 0) >= 32_000, (
+            "Full branch should report the full prompt size."
+        )
