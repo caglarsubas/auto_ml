@@ -448,6 +448,12 @@
           <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: #777;">No columns dropped in this step</div>
         </ng-template>
       </div>
+      <!-- AI Support trigger for Data Purifier Summary (v2.41.0) -->
+      <div style="margin-top: 10px; text-align: right;">
+        <button class="ai-support-btn" (click)="requestPurifierAiSupport()">
+          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+        </button>
+      </div>
     </div>
     <!-- Note: After Purifier Summary -->
     <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="pipeline-note-slot">

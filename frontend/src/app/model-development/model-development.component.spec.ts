@@ -404,4 +404,83 @@ describe('ModelDevelopmentComponent', () => {
       }, 5);
     });
   });
+
+  // ── 'Get AI Support' button for Data Purifier Summary (v2.41.0) ──────
+  // The Data Purifier Summary card now has its own dedicated AI Support
+  // button.  Unlike requestDatqAiSupport (which bundles DQ summary +
+  // model_usage + split_validation), this one scopes the context to
+  // purifier outputs only — so the LLM does not get drowned in noise
+  // when the user is specifically asking about purifier behavior.
+  describe("Data Purifier Summary 'Get AI Support' (v2.41.0)", () => {
+    beforeEach(() => {
+      // Spy on the shared requestAiSupport helper so we don't go through
+      // the data-dict refetch / aiAssistant.requestSupport stack.
+      spyOn(component, 'requestAiSupport').and.callFake(() => { /* no-op */ });
+      // ngOnInit subscribes to currentFileId$/isStarted$/etc and each
+      // calls computePreprocessingAvailable() which can reset our
+      // hand-seeded flag.  Stub it so our flag survives detectChanges().
+      spyOn(component as any, 'computePreprocessingAvailable').and.callFake(() => { /* no-op */ });
+      // Seed the 5 fields the new method pulls into the context payload.
+      component.rowCountBefore = 1000;
+      component.rowCountAfter = 870;
+      component.rowsRemovedTotal = 130;
+      component.droppedColumnsByStep = [
+        { step: 'sparsity', columns_dropped: ['var_x', 'var_y'] },
+        { step: 'missing',  columns_dropped: ['var_z'] },
+      ] as any;
+      spyOn(component, 'droppedTotalCount').and.returnValue(3);
+    });
+
+    it('requestPurifierAiSupport() builds context with all 5 purifier fields and the correct section name', () => {
+      component.requestPurifierAiSupport();
+
+      expect(component.requestAiSupport).toHaveBeenCalledTimes(1);
+      const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
+      const ctx = args[0];
+      const section = args[1];
+      const prompt = args[2];
+      expect(section).toBe('data_purifier');
+      expect(typeof prompt).toBe('string');
+      expect(prompt.length).withContext('prompt should be a meaningful directive').toBeGreaterThan(50);
+      // Context shape: exactly one top-level key, no leakage of
+      // DQ summary / model_usage / split_validation.
+      expect(Object.keys(ctx)).toEqual(['purifier_summary']);
+      expect(ctx.purifier_summary.rows_before).toBe(1000);
+      expect(ctx.purifier_summary.rows_after).toBe(870);
+      expect(ctx.purifier_summary.rows_removed).toBe(130);
+      expect(ctx.purifier_summary.total_columns_dropped).toBe(3);
+      expect(ctx.purifier_summary.dropped_by_step.length).toBe(2);
+    });
+
+    it('button renders inside .purifier-summary when droppedColumnsByStep is populated and routes click to requestPurifierAiSupport()', () => {
+      // The card is gated on `droppedColumnsByStep && length` (already
+      // seeded with 2 entries in beforeEach) AND sits inside an outer
+      // <div *ngIf="preprocessingAvailable"> wrapper.  We flip that flag
+      // AFTER an initial detectChanges() so ngOnInit subscriptions don't
+      // get to reset it between our set and the second detectChanges().
+      fixture.detectChanges();
+      (component as any).preprocessingAvailable = true;
+      fixture.detectChanges();
+
+      const btn = fixture.nativeElement.querySelector('.purifier-summary .ai-support-btn') as HTMLButtonElement;
+      expect(btn).withContext('Data Purifier AI Support button should render').toBeTruthy();
+      expect((btn.textContent || '').trim()).toContain('Get AI Support');
+
+      const spy = spyOn(component, 'requestPurifierAiSupport').and.callFake(() => { /* no-op */ });
+      btn.click();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('button is HIDDEN when droppedColumnsByStep is empty', () => {
+      // Even with preprocessingAvailable=true, no dropped steps means
+      // the .purifier-summary card itself is not rendered.
+      component.droppedColumnsByStep = [];
+      fixture.detectChanges();
+      (component as any).preprocessingAvailable = true;
+      fixture.detectChanges();
+
+      const btn = fixture.nativeElement.querySelector('.purifier-summary .ai-support-btn');
+      expect(btn).withContext('Purifier AI Support button must NOT render with no dropped steps').toBeNull();
+    });
+  });
 });

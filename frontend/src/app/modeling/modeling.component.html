@@ -682,6 +682,12 @@
               </tbody>
             </table>
           </div>
+          <!-- AI Support trigger for Forward Selection table (v2.41.0) -->
+          <div style="margin-top: 10px; text-align: right;">
+            <button class="ai-support-btn" (click)="requestAiSupport({forward: sfsForwardResults}, 'sfs_forward', 'Analyze ONLY the forward feature selection results below. Identify the inflection point where adding the next feature stops improving CV ROC-AUC meaningfully, recommend a feature-count cut-off, and flag the top 3 features by marginal contribution. Do NOT compare against backward elimination or forward-from-backward — those are separate analyses.')">
+              <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+            </button>
+          </div>
         </div>
 
         <!-- Backward Elimination Results -->
@@ -751,7 +757,14 @@
               </tbody>
             </table>
           </div>
-          
+
+          <!-- AI Support trigger for Backward Elimination table (v2.41.0) -->
+          <div style="margin-top: 10px; text-align: right;">
+            <button class="ai-support-btn" (click)="requestAiSupport({backward: sfsBackwardResults, cut_step: sfsBackwardCutStep, cut_features: sfsBackwardCutFeatures}, 'sfs_backward', 'Analyze ONLY the backward elimination results below. Identify the optimal cut step where additional removal starts hurting CV ROC-AUC, recommend which features should be dropped first based on their |drop in metric|, and flag features that look safe to remove vs risky. If a cut_step is already selected by the user, comment on whether their choice looks reasonable. Do NOT compare against forward selection or forward-from-backward — those are separate analyses.')">
+              <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+            </button>
+          </div>
+
           <!-- Remaining Features at Selected Cut Point -->
           <div *ngIf="sfsBackwardCutFeatures.length > 0" style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2e7d32;">
             <h5 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 14px; font-weight: 600;">
@@ -931,12 +944,13 @@
               </tbody>
             </table>
           </div>
+          <!-- AI Support trigger for Forward-from-Backward table (v2.41.0) -->
+          <div style="margin-top: 10px; text-align: right;">
+            <button class="ai-support-btn" (click)="requestAiSupport({forward_from_backward: sfsForwardFromBackwardResults, seed_features: sfsBackwardCutFeatures, seed_count: sfsBackwardCutFeatures.length}, 'sfs_forward_from_backward', 'Analyze ONLY the forward-from-backward results below. This is a forward selection that started from the backward-cut feature set. Evaluate whether the chained run actually improved over the backward cut point, identify which seed features carried the lift vs which new additions did the work, and recommend a final feature-count cut-off. Do NOT compare against the original forward or backward runs — those are separate analyses.')">
+              <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
+            </button>
+          </div>
         </div>
-      </div>
-      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" style="margin-top: 10px; text-align: right;">
-        <button class="ai-support-btn" (click)="requestAiSupport({forward: sfsForwardResults, backward: sfsBackwardResults, forward_from_backward: sfsForwardFromBackwardResults}, 'sfs', 'Analyze the Sequential Feature Selection results. Which features consistently improve performance? Is there a clear optimal feature count? Compare forward vs backward results. Are there features that should definitely be included or excluded?')">
-          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
-        </button>
       </div>
 
       <!-- Note: After SFS Results -->
