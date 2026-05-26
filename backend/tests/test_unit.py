@@ -7972,3 +7972,97 @@ class TestSystemPromptSelection:
         assert captured.get('declarai.system_prompt.chars', 0) >= 32_000, (
             "Full branch should report the full prompt size."
         )
+
+
+# ---------------------------------------------------------------------------
+# v2.41.1: Unicode-only formatting rule (no LaTeX in chat output)
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestSystemPromptLatexFormattingRule:
+    """v2.41.1 — pin the rule that forbids LaTeX syntax in chat output.
+
+    The chat renderer is a hand-rolled markdown subset (no MathJax/KaTeX)
+    so any LaTeX the model emits — `$\\rightarrow$`, `\\alpha`, `$$...$$` —
+    is shown to the user as raw source.  Both system prompts now instruct
+    the model to use Unicode characters directly.
+
+    The frontend has a defensive `_delatexify` pass too (covered by Karma
+    specs in `ai-chat-panel.component.spec.ts`), but the prompt-side rule
+    is the primary fix: it prevents the LLM from emitting LaTeX in the
+    first place, which keeps the message history clean for downstream
+    consumers (audit logs, retraining corpus, traces) — places the
+    frontend rendering pass cannot reach.
+
+    These tests fail-fast if a future prompt edit drops the rule.
+    """
+
+    def test_full_prompt_forbids_latex_syntax(self):
+        from ai_assistant.views import SYSTEM_PROMPT
+        # Must explicitly forbid LaTeX commands.
+        assert 'LaTeX' in SYSTEM_PROMPT, (
+            "Full system prompt must mention 'LaTeX' so the LLM knows "
+            "the keyword being banned."
+        )
+        # Must show at least one concrete LaTeX-syntax example so the
+        # model can pattern-match what's forbidden.  Use $\rightarrow$
+        # since that's the literal user-reported case from v2.41.1.
+        assert '\\rightarrow' in SYSTEM_PROMPT, (
+            "Full system prompt must show the user-reported $\\rightarrow$ "
+            "example so the LLM recognises the forbidden pattern."
+        )
+
+    def test_full_prompt_recommends_unicode_directly(self):
+        from ai_assistant.views import SYSTEM_PROMPT
+        # The flip side of the rule: the model must know what to use
+        # INSTEAD of LaTeX.  Verify a representative Unicode arrow and
+        # comparison op appear in the prompt so the model can copy from
+        # the catalogue.
+        for char in ('→', '⇒', '≤', '≥', '≠', 'α', 'β', 'σ', 'π', 'Δ', 'Σ'):
+            assert char in SYSTEM_PROMPT, (
+                f"Full system prompt should list the Unicode character "
+                f"{char!r} as a concrete substitute for the LaTeX form."
+            )
+
+    def test_lite_prompt_forbids_latex_syntax(self):
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        # The lite prompt has a tighter token budget so the rule is
+        # condensed but it MUST still appear — engine models (gemma,
+        # llama, qwen) that get the lite prompt are precisely the ones
+        # most likely to spam LaTeX from training-data bias.
+        assert 'LaTeX' in _LITE_SYSTEM_PROMPT, (
+            "Lite system prompt must mention 'LaTeX' so engine models "
+            "know the keyword being banned."
+        )
+        assert '\\rightarrow' in _LITE_SYSTEM_PROMPT, (
+            "Lite system prompt must show the $\\rightarrow$ example "
+            "so engine models recognise the forbidden pattern."
+        )
+
+    def test_lite_prompt_recommends_unicode_directly(self):
+        from ai_assistant.views import _LITE_SYSTEM_PROMPT
+        # Lite catalogue is smaller than the full prompt's, but it MUST
+        # at minimum cover the arrow + comparison families since those
+        # are the highest-volume offenders.
+        for char in ('→', '⇒', '≤', '≥', '≠'):
+            assert char in _LITE_SYSTEM_PROMPT, (
+                f"Lite system prompt should list the Unicode character "
+                f"{char!r} as a concrete substitute for LaTeX."
+            )
+
+    def test_full_prompt_warning_co_locates_with_unicode_recommendation(self):
+        """The forbid-LaTeX rule and the use-Unicode recommendation MUST
+        appear together (not in separate disconnected sections).  If a
+        future prompt edit splits them, the model sees the negative rule
+        without the positive substitute and is more likely to fall back
+        to LaTeX habits.  We pin co-location by checking both 'LaTeX' and
+        a Unicode arrow appear within the same ~500-char window."""
+        from ai_assistant.views import SYSTEM_PROMPT
+        idx = SYSTEM_PROMPT.find('LaTeX')
+        assert idx >= 0, "Expected 'LaTeX' marker missing from full prompt."
+        # 500-char window centred on the LaTeX marker.
+        window = SYSTEM_PROMPT[max(0, idx - 250):idx + 250]
+        assert '→' in window, (
+            "The forbid-LaTeX rule must be co-located with at least the "
+            "Unicode arrow `→` so the model sees the substitute next to "
+            "the prohibition."
+        )

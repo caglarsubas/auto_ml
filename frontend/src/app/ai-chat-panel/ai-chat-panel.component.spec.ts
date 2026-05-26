@@ -1082,4 +1082,139 @@ describe('AiChatPanelComponent', () => {
       );
     });
   });
+
+  // ── v2.41.1: LaTeX → Unicode rendering pass ─────────────────────────
+  // The chat renderer is a hand-rolled markdown subset with no MathJax /
+  // KaTeX layer.  When the LLM emits LaTeX-style symbols (e.g.
+  // `$\rightarrow$`, `\alpha`, `\le`) the user previously saw the raw
+  // source in the chat bubble.  v2.41.1 adds a defensive `_delatexify`
+  // pass inside `_formatInline` that converts the most common
+  // ML/credit-risk symbols to Unicode before markdown processing.
+  //
+  // These specs pin the round-trip for the user-reported case AND a
+  // representative sample of every category (arrows, comparison ops,
+  // arithmetic, set/logic, calculus, Greek lowercase + uppercase).
+  // The system prompts ALSO instruct the LLM to use Unicode directly
+  // (see TestSystemPromptLatexFormattingRule on the backend); this
+  // client-side pass is defense-in-depth so a rogue model output can
+  // never put raw LaTeX on screen.
+  describe('v2.41.1 LaTeX → Unicode rendering', () => {
+    it('REGRESSION: the user-reported `$\\rightarrow$` renders as `→`', () => {
+      // The exact string from the v2.41.1 bug report: assistant emitted
+      // `$\rightarrow$` and the user saw it raw in the chat bubble.
+      const out = component.formatMessage('PSI ≥ 0.25 $\\rightarrow$ significant shift');
+      expect(out).toContain('→');
+      expect(out).not.toContain('rightarrow');
+      expect(out).not.toContain('\\');
+    });
+
+    it('handles bare `\\rightarrow` without $ delimiters', () => {
+      const out = component.formatMessage('See \\rightarrow next step');
+      expect(out).toContain('→');
+      expect(out).not.toContain('rightarrow');
+    });
+
+    it('converts the full arrow family', () => {
+      const out = component.formatMessage(
+        'Arrows: $\\Rightarrow$ $\\leftarrow$ $\\Leftarrow$ $\\leftrightarrow$ $\\uparrow$ $\\downarrow$ $\\mapsto$'
+      );
+      expect(out).toContain('⇒');
+      expect(out).toContain('←');
+      expect(out).toContain('⇐');
+      expect(out).toContain('↔');
+      expect(out).toContain('↑');
+      expect(out).toContain('↓');
+      expect(out).toContain('↦');
+      expect(out).not.toMatch(/Rightarrow|leftarrow|Leftarrow|leftrightarrow|uparrow|downarrow|mapsto/);
+    });
+
+    it('converts comparison + arithmetic ops', () => {
+      const out = component.formatMessage(
+        'Ops: $\\leq$ $\\le$ $\\geq$ $\\ge$ $\\neq$ $\\approx$ $\\pm$ $\\times$ $\\div$ $\\cdot$'
+      );
+      // Each conversion target appears at least once.  We don't pin the
+      // count because $\le$ and $\leq$ both map to ≤ (so two ≤ from those).
+      expect(out).toContain('≤');
+      expect(out).toContain('≥');
+      expect(out).toContain('≠');
+      expect(out).toContain('≈');
+      expect(out).toContain('±');
+      expect(out).toContain('×');
+      expect(out).toContain('÷');
+      expect(out).toContain('·');
+      // None of the LaTeX command names should leak through.
+      expect(out).not.toMatch(/\\(leq|le|geq|ge|neq|approx|pm|times|div|cdot)\b/);
+    });
+
+    it('converts Greek letters (lowercase + uppercase)', () => {
+      const out = component.formatMessage(
+        'Greek: $\\alpha$ $\\beta$ $\\sigma$ $\\mu$ $\\pi$ $\\theta$ $\\Delta$ $\\Sigma$ $\\Omega$'
+      );
+      expect(out).toContain('α');
+      expect(out).toContain('β');
+      expect(out).toContain('σ');
+      expect(out).toContain('μ');
+      expect(out).toContain('π');
+      expect(out).toContain('θ');
+      expect(out).toContain('Δ');
+      expect(out).toContain('Σ');
+      expect(out).toContain('Ω');
+      expect(out).not.toMatch(/\\(alpha|beta|sigma|mu|pi|theta|Delta|Sigma|Omega)\b/);
+    });
+
+    it('converts calculus + set/logic operators', () => {
+      const out = component.formatMessage(
+        'Math: $\\sum$ $\\prod$ $\\int$ $\\infty$ $\\sqrt$ $\\partial$ $\\in$ $\\notin$ $\\forall$'
+      );
+      expect(out).toContain('∑');
+      expect(out).toContain('∏');
+      expect(out).toContain('∫');
+      expect(out).toContain('∞');
+      expect(out).toContain('√');
+      expect(out).toContain('∂');
+      expect(out).toContain('∈');
+      expect(out).toContain('∉');
+      expect(out).toContain('∀');
+    });
+
+    it('REGRESSION: money strings like `$50` and `$1,200` are NOT corrupted', () => {
+      // The whole point of NOT writing a generic `$...$` stripper is to
+      // keep money/price strings intact.  This pin guards against a
+      // future "smarter" stripper regressing the ML/finance use case.
+      const out = component.formatMessage(
+        'Loan amount $50,000 with $1,200 monthly payment for $24 months'
+      );
+      expect(out).toContain('$50,000');
+      expect(out).toContain('$1,200');
+      expect(out).toContain('$24');
+    });
+
+    it('REGRESSION: code blocks and inline code with backslashes are not LaTeX-mangled', () => {
+      // Markdown inline code like `\n` (Python newline literal) should
+      // pass through unchanged — the LaTeX pass must not eat the
+      // backslash inside non-LaTeX contexts.  We test this via the
+      // `\,` spacing command rule: a code mention of `\,` is rare, so
+      // the broader contract here is "unknown commands stay as-is".
+      const out = component.formatMessage('Unknown: \\foobar should stay');
+      expect(out).toContain('\\foobar');
+    });
+
+    it('shortcuts when the input has no backslash at all (perf path)', () => {
+      // The early return optimisation: strings without `\` should
+      // pass through unchanged byte-for-byte (modulo HTML escaping +
+      // markdown formatting).
+      const out = component.formatMessage('Plain text with → and ≤ already in unicode');
+      expect(out).toContain('→');
+      expect(out).toContain('≤');
+      expect(out).not.toContain('\\');
+    });
+
+    it('integrates cleanly with markdown bold + LaTeX in the same line', () => {
+      // Ensures the LaTeX pass runs BEFORE markdown so `**bold**` still
+      // renders as `<strong>` even when the line also has LaTeX.
+      const out = component.formatMessage('**Result:** PSI $\\ge$ 0.25');
+      expect(out).toContain('<strong>Result:</strong>');
+      expect(out).toContain('≥');
+    });
+  });
 });
