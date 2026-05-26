@@ -877,6 +877,12 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     if (!text) return '';
     let s = text
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // v2.41.1 — strip LaTeX BEFORE markdown so `$\rightarrow$` becomes
+    // `→` instead of being passed through as raw text the user sees.
+    // The system prompts also instruct the LLM to use Unicode directly,
+    // but this pass is defense-in-depth: a rogue model output can never
+    // put raw LaTeX on screen.
+    s = this._delatexify(s);
     // Headers
     s = s.replace(/^#### (.+)/, '<strong style="font-size:13px;">$1</strong>');
     s = s.replace(/^### (.+)/, '<strong style="font-size:14px;">$1</strong>');
@@ -891,6 +897,142 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     // Bullet/numbered list items
     s = s.replace(/^- (.+)/, '• $1');
     s = s.replace(/^\d+\.\s/, (m) => m);
+    return s;
+  }
+
+  /**
+   * v2.41.1 — Convert the most common LaTeX commands to Unicode.
+   *
+   * Our chat renderer is a hand-rolled markdown subset (see
+   * `_formatInline` and `_renderTable` above) — it has no MathJax /
+   * KaTeX layer.  Without this pass, content like `$\rightarrow$` or
+   * `\alpha` shows up as raw LaTeX in the chat bubble, which is what
+   * the user reported in the v2.41.1 bug.
+   *
+   * We accept BOTH `\command` and `$\command$` forms by allowing an
+   * optional `$` on each side of every pattern.  A strict `$...$`
+   * stripper for unrecognised content is deliberately omitted: a naive
+   * regex would corrupt money strings like "$50 and $60" and the win
+   * for unknown LaTeX is small (the user still sees broken-but-
+   * recognisable source).
+   *
+   * Symbol catalog covers what's plausible in a credit-risk / ML
+   * conversation: arrows, comparison & arithmetic ops, set & logic
+   * operators, calculus, full Greek alphabet (lowercase + the
+   * uppercase letters that differ from Latin).
+   */
+  private _delatexify(s: string): string {
+    if (!s || s.indexOf('\\') === -1) return s;
+    // Pattern shape: `<optional $><LaTeX command><non-letter lookahead><optional $>`.
+    // The negative lookahead `(?![a-zA-Z])` is critical: without it, `\\in`
+    // would prefix-match inside `\\int` and `\\infty`, producing garbage
+    // like `∈t$` and `∈fty$`.  Same hazard applies to `\\le` (prefix of
+    // `\\leq`/`\\leftarrow`/`\\leftrightarrow`), `\\ge` (`\\geq`), `\\ne`
+    // (`\\neq`).  We use the lookahead uniformly so rule order doesn't
+    // have to encode that knowledge — but we ALSO order longer commands
+    // first as defense-in-depth (`\\int` before `\\in`, etc.).
+    //
+    // A single rule per command handles BOTH `\command` and `$\command$`
+    // forms because the leading `\$?` and trailing `\$?` each match zero
+    // or one `$` independently.
+    const map: Array<[RegExp, string]> = [
+      // Arrows
+      [/\$?\\rightarrow(?![a-zA-Z])\$?/g, '→'],
+      [/\$?\\to(?![a-zA-Z])\$?/g, '→'],
+      [/\$?\\Rightarrow(?![a-zA-Z])\$?/g, '⇒'],
+      [/\$?\\Leftrightarrow(?![a-zA-Z])\$?/g, '⇔'],
+      [/\$?\\leftrightarrow(?![a-zA-Z])\$?/g, '↔'],
+      [/\$?\\Leftarrow(?![a-zA-Z])\$?/g, '⇐'],
+      [/\$?\\leftarrow(?![a-zA-Z])\$?/g, '←'],
+      [/\$?\\uparrow(?![a-zA-Z])\$?/g, '↑'],
+      [/\$?\\downarrow(?![a-zA-Z])\$?/g, '↓'],
+      [/\$?\\mapsto(?![a-zA-Z])\$?/g, '↦'],
+      // Comparison + arithmetic — longer commands first (`\leq` before `\le`).
+      [/\$?\\leq(?![a-zA-Z])\$?/g, '≤'],
+      [/\$?\\le(?![a-zA-Z])\$?/g, '≤'],
+      [/\$?\\geq(?![a-zA-Z])\$?/g, '≥'],
+      [/\$?\\ge(?![a-zA-Z])\$?/g, '≥'],
+      [/\$?\\neq(?![a-zA-Z])\$?/g, '≠'],
+      [/\$?\\ne(?![a-zA-Z])\$?/g, '≠'],
+      [/\$?\\approx(?![a-zA-Z])\$?/g, '≈'],
+      [/\$?\\equiv(?![a-zA-Z])\$?/g, '≡'],
+      [/\$?\\sim(?![a-zA-Z])\$?/g, '∼'],
+      [/\$?\\propto(?![a-zA-Z])\$?/g, '∝'],
+      [/\$?\\pm(?![a-zA-Z])\$?/g, '±'],
+      [/\$?\\mp(?![a-zA-Z])\$?/g, '∓'],
+      [/\$?\\times(?![a-zA-Z])\$?/g, '×'],
+      [/\$?\\div(?![a-zA-Z])\$?/g, '÷'],
+      [/\$?\\cdot(?![a-zA-Z])\$?/g, '·'],
+      [/\$?\\ast(?![a-zA-Z])\$?/g, '∗'],
+      // Set / logic — `\notin` before `\in`, longer subset before shorter.
+      [/\$?\\notin(?![a-zA-Z])\$?/g, '∉'],
+      [/\$?\\in(?![a-zA-Z])\$?/g, '∈'],
+      [/\$?\\subseteq(?![a-zA-Z])\$?/g, '⊆'],
+      [/\$?\\subset(?![a-zA-Z])\$?/g, '⊂'],
+      [/\$?\\supseteq(?![a-zA-Z])\$?/g, '⊇'],
+      [/\$?\\supset(?![a-zA-Z])\$?/g, '⊃'],
+      [/\$?\\cup(?![a-zA-Z])\$?/g, '∪'],
+      [/\$?\\cap(?![a-zA-Z])\$?/g, '∩'],
+      [/\$?\\forall(?![a-zA-Z])\$?/g, '∀'],
+      [/\$?\\exists(?![a-zA-Z])\$?/g, '∃'],
+      [/\$?\\emptyset(?![a-zA-Z])\$?/g, '∅'],
+      // Calculus / operators — `\infty` and `\int` come before `\in`
+      // (defense-in-depth ordering even though the lookahead would catch it).
+      [/\$?\\infty(?![a-zA-Z])\$?/g, '∞'],
+      [/\$?\\int(?![a-zA-Z])\$?/g, '∫'],
+      [/\$?\\sum(?![a-zA-Z])\$?/g, '∑'],
+      [/\$?\\prod(?![a-zA-Z])\$?/g, '∏'],
+      [/\$?\\partial(?![a-zA-Z])\$?/g, '∂'],
+      [/\$?\\nabla(?![a-zA-Z])\$?/g, '∇'],
+      [/\$?\\sqrt(?![a-zA-Z])\$?/g, '√'],
+      // Greek lowercase
+      [/\$?\\alpha(?![a-zA-Z])\$?/g, 'α'],
+      [/\$?\\beta(?![a-zA-Z])\$?/g, 'β'],
+      [/\$?\\gamma(?![a-zA-Z])\$?/g, 'γ'],
+      [/\$?\\delta(?![a-zA-Z])\$?/g, 'δ'],
+      [/\$?\\varepsilon(?![a-zA-Z])\$?/g, 'ε'],
+      [/\$?\\epsilon(?![a-zA-Z])\$?/g, 'ε'],
+      [/\$?\\zeta(?![a-zA-Z])\$?/g, 'ζ'],
+      [/\$?\\eta(?![a-zA-Z])\$?/g, 'η'],
+      [/\$?\\theta(?![a-zA-Z])\$?/g, 'θ'],
+      [/\$?\\iota(?![a-zA-Z])\$?/g, 'ι'],
+      [/\$?\\kappa(?![a-zA-Z])\$?/g, 'κ'],
+      [/\$?\\lambda(?![a-zA-Z])\$?/g, 'λ'],
+      [/\$?\\mu(?![a-zA-Z])\$?/g, 'μ'],
+      [/\$?\\nu(?![a-zA-Z])\$?/g, 'ν'],
+      [/\$?\\xi(?![a-zA-Z])\$?/g, 'ξ'],
+      [/\$?\\pi(?![a-zA-Z])\$?/g, 'π'],
+      [/\$?\\rho(?![a-zA-Z])\$?/g, 'ρ'],
+      [/\$?\\sigma(?![a-zA-Z])\$?/g, 'σ'],
+      [/\$?\\tau(?![a-zA-Z])\$?/g, 'τ'],
+      [/\$?\\upsilon(?![a-zA-Z])\$?/g, 'υ'],
+      [/\$?\\varphi(?![a-zA-Z])\$?/g, 'φ'],
+      [/\$?\\phi(?![a-zA-Z])\$?/g, 'φ'],
+      [/\$?\\chi(?![a-zA-Z])\$?/g, 'χ'],
+      [/\$?\\psi(?![a-zA-Z])\$?/g, 'ψ'],
+      [/\$?\\omega(?![a-zA-Z])\$?/g, 'ω'],
+      // Greek uppercase (only the ones that differ visually from Latin).
+      [/\$?\\Gamma(?![a-zA-Z])\$?/g, 'Γ'],
+      [/\$?\\Delta(?![a-zA-Z])\$?/g, 'Δ'],
+      [/\$?\\Theta(?![a-zA-Z])\$?/g, 'Θ'],
+      [/\$?\\Lambda(?![a-zA-Z])\$?/g, 'Λ'],
+      [/\$?\\Xi(?![a-zA-Z])\$?/g, 'Ξ'],
+      [/\$?\\Pi(?![a-zA-Z])\$?/g, 'Π'],
+      [/\$?\\Sigma(?![a-zA-Z])\$?/g, 'Σ'],
+      [/\$?\\Phi(?![a-zA-Z])\$?/g, 'Φ'],
+      [/\$?\\Psi(?![a-zA-Z])\$?/g, 'Ψ'],
+      [/\$?\\Omega(?![a-zA-Z])\$?/g, 'Ω'],
+      // Spacing commands the LLM may emit but which mean nothing here.
+      [/\\,/g, ' '],
+      [/\\;/g, ' '],
+      [/\\:/g, ' '],
+      [/\\!/g, ''],
+      [/\\qquad(?![a-zA-Z])/g, '    '],
+      [/\\quad(?![a-zA-Z])/g, '  '],
+    ];
+    for (const [re, repl] of map) {
+      s = s.replace(re, repl);
+    }
     return s;
   }
 
