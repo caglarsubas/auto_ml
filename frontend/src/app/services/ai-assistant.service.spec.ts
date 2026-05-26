@@ -218,5 +218,28 @@ describe('AiAssistantService', () => {
       const after = service.consumePendingContext();
       expect(after).toBeNull();
     });
+
+    // ── v2.41.0: new section names round-trip through requestSupport() ──
+    // The new 'Get AI Support' buttons (Data Purifier + per-table SFS x3)
+    // each pass a distinct section name.  Pin them here so a future
+    // rename in the templates also fails this test, not just a
+    // template-render check.  Section name is the only stable handle
+    // the backend has to tell which UI surface the user clicked from.
+    it('v2.41.0 section names (data_purifier, sfs_forward, sfs_backward, sfs_forward_from_backward) round-trip', () => {
+      const cases: Array<[string, string]> = [
+        ['data_purifier',             'Analyze the purifier output'],
+        ['sfs_forward',               'Analyze ONLY forward'],
+        ['sfs_backward',              'Analyze ONLY backward'],
+        ['sfs_forward_from_backward', 'Analyze ONLY forward-from-backward'],
+      ];
+      for (const [section, prompt] of cases) {
+        service.requestSupport({ marker: section }, section, prompt);
+        const pending = service.consumePendingContext();
+        expect(pending).withContext(`${section} should round-trip`).toBeTruthy();
+        expect(pending!.section).toBe(section);
+        expect(pending!.prompt).toBe(prompt);
+        expect((pending!.context as any).marker).toBe(section);
+      }
+    });
   });
 });

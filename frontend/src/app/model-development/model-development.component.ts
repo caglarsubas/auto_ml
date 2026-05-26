@@ -1006,6 +1006,26 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     this.requestAiSupport(context, 'data_quality', prompt);
   }
 
+  /** v2.41.0 — Dedicated AI Support trigger for the Data Purifier Summary card.
+   *
+   * Mirrors requestDatqAiSupport() but scopes the context to purifier
+   * outputs only: rows-removed totals + per-step dropped columns.
+   * Keeping scope narrow avoids drowning the LLM in DQ-summary noise
+   * when the user is specifically asking about purifier behavior. */
+  requestPurifierAiSupport(): void {
+    const context = {
+      purifier_summary: {
+        rows_before: this.rowCountBefore,
+        rows_after: this.rowCountAfter,
+        rows_removed: this.rowsRemovedTotal,
+        total_columns_dropped: this.droppedTotalCount(),
+        dropped_by_step: this.droppedColumnsByStep
+      }
+    };
+    const prompt = 'Analyze the Data Purifier Summary. Review which preprocessing steps ran, how many rows were removed in each step, and which columns were dropped (sparsity, missingness, collinearity, outliers, dedup). Flag any step that removed an unexpectedly large fraction of rows or columns. Suggest whether specific purifier_options should be tightened, relaxed, added, or removed before encoding — and call out features that may have been dropped that the user might want to keep.';
+    this.requestAiSupport(context, 'data_purifier', prompt);
+  }
+
   ngAfterViewChecked(): void {
     if (this.splitValidation && !this._splitChartDrawn && this.splitValidationCanvas) {
       this._splitChartDrawn = true;

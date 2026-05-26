@@ -1149,4 +1149,111 @@ describe('ModelingComponent', () => {
       }, 5);
     });
   });
+
+  // ── 'Get AI Support' per-table buttons in SFS Results (v2.41.0) ──────
+  // Replaces the single combined SFS button at the end of the SFS
+  // results panel.  Each per-table button passes ONLY its own data
+  // slice + a directive forbidding cross-comparison, so the LLM
+  // focuses on the table the user clicked from.  We also pin a
+  // regression guard: the combined button must no longer render even
+  // when all three result arrays are populated.
+  describe("SFS per-table 'Get AI Support' buttons (v2.41.0)", () => {
+    beforeEach(() => {
+      // requestAiSupport runs through dataService and the data-dict refetch.
+      // Spy on it so we just capture (context, section, prompt) args
+      // without triggering network calls.
+      spyOn(component, 'requestAiSupport').and.callFake(() => { /* no-op */ });
+      // SFS results section sits inside `modelingStatus?.model` gate;
+      // seed the minimum needed to render the section.  We deliberately
+      // leave model.cv / model.shap_beeswarm / model.selected_features
+      // unset so their sibling AI-support buttons do not render and
+      // pollute the per-table querySelectorAll('.ai-support-btn') count.
+      component.modelingStatus = { model: {} } as any;
+    });
+
+    it('forward-only SFS state renders exactly ONE ai-support-btn (sfs_forward) and clicking it passes the right args', () => {
+      component.sfsForwardResults = [
+        { step: 1, feature_name: 'a', cv_roc_auc: 0.71 },
+        { step: 2, feature_name: 'b', cv_roc_auc: 0.74 },
+      ] as any;
+      component.sfsBackwardResults = [];
+      component.sfsForwardFromBackwardResults = [];
+      fixture.detectChanges();
+
+      const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
+      expect(btns.length).withContext('Only the Forward SFS AI Support button should render').toBe(1);
+
+      (btns[0] as HTMLButtonElement).click();
+
+      const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
+      expect(args[1]).toBe('sfs_forward');
+      expect(Object.keys(args[0])).toEqual(['forward']);
+      expect(args[0].forward.length).toBe(2);
+    });
+
+    it('backward-only SFS state renders ONE ai-support-btn (sfs_backward) with cut_step + cut_features', () => {
+      component.sfsForwardResults = [];
+      component.sfsBackwardResults = [
+        { step: 1, feature_name: 'x', cv_roc_auc: 0.69 },
+        { step: 2, feature_name: 'y', cv_roc_auc: 0.66 },
+      ] as any;
+      component.sfsForwardFromBackwardResults = [];
+      component.sfsBackwardCutStep = 1;
+      component.sfsBackwardCutFeatures = ['x'];
+      fixture.detectChanges();
+
+      const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
+      expect(btns.length).withContext('Only the Backward SFS AI Support button should render').toBe(1);
+
+      (btns[0] as HTMLButtonElement).click();
+
+      const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
+      expect(args[1]).toBe('sfs_backward');
+      expect(Object.keys(args[0]).sort()).toEqual(['backward', 'cut_features', 'cut_step']);
+      expect(args[0].cut_step).toBe(1);
+      expect(args[0].cut_features).toEqual(['x']);
+    });
+
+    it('forward-from-backward-only state renders ONE ai-support-btn (sfs_forward_from_backward) with seed metadata', () => {
+      component.sfsForwardResults = [];
+      component.sfsBackwardResults = [];
+      component.sfsForwardFromBackwardResults = [
+        { step: 1, feature_name: 'p', cv_roc_auc: 0.72 },
+      ] as any;
+      component.sfsBackwardCutFeatures = ['p', 'q', 'r'];
+      fixture.detectChanges();
+
+      const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
+      expect(btns.length).withContext('Only the Forward-from-Backward AI Support button should render').toBe(1);
+
+      (btns[0] as HTMLButtonElement).click();
+
+      const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
+      expect(args[1]).toBe('sfs_forward_from_backward');
+      expect(Object.keys(args[0]).sort()).toEqual(['forward_from_backward', 'seed_count', 'seed_features']);
+      expect(args[0].seed_count).toBe(3);
+      expect(args[0].seed_features).toEqual(['p', 'q', 'r']);
+    });
+
+    it('REGRESSION: with all 3 result arrays populated, exactly THREE ai-support-btns render — combined button is gone', () => {
+      // This pins removal of the legacy combined SFS button at the end
+      // of the SFS results panel.  If a future edit re-adds it, this
+      // test fails with 4 buttons instead of 3, AND the section-name
+      // harvest finds 'sfs' which is rejected.
+      component.sfsForwardResults = [{ step: 1, feature_name: 'a' }] as any;
+      component.sfsBackwardResults = [{ step: 1, feature_name: 'b' }] as any;
+      component.sfsForwardFromBackwardResults = [{ step: 1, feature_name: 'c' }] as any;
+      component.sfsBackwardCutFeatures = ['b'];
+      fixture.detectChanges();
+
+      const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
+      expect(btns.length).withContext('Per-table buttons only — combined button must be removed').toBe(3);
+
+      // Click each button and harvest section names from the spy.
+      btns.forEach((b: HTMLButtonElement) => b.click());
+      const sections = (component.requestAiSupport as jasmine.Spy).calls.allArgs().map((a: any[]) => a[1]);
+      expect(sections.slice().sort()).toEqual(['sfs_backward', 'sfs_forward', 'sfs_forward_from_backward']);
+      expect(sections).not.toContain('sfs');
+    });
+  });
 });
