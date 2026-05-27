@@ -8066,3 +8066,388 @@ class TestSystemPromptLatexFormattingRule:
             "Unicode arrow `→` so the model sees the substitute next to "
             "the prohibition."
         )
+
+
+# ---------------------------------------------------------------------------
+# v2.42.0: AML A4 prompt-render contract
+# ---------------------------------------------------------------------------
+# These tests pin the structured-attribute contract that the Prometa AML
+# A4 detector reads.  Pre-v2.42.0 the detector was forced to substring-
+# match `"role":"user"` inside the `gen_ai.prompt` attribute, which the
+# openai auto-instrumentation truncates to 32 000 bytes.  Once production
+# payloads (system prompt + slim context + auto-routed skill body +
+# history + tool defs) crossed the 32 KB threshold, the truncation knife
+# landed AFTER the leading system prompt but BEFORE any user-role marker
+# — so A4 saw "1 system, 0 user, 0 asst, 0 tool" even though our
+# _chat_workflow emits proper multi-role messages.  The fix is to emit
+# the structured `prompt.role_boundaries` attribute via the SDK v0.7.1
+# `prompt_render` context manager, plus stamp the raw user query as
+# `prometa.raw.input`.
+#
+# We pin: (1) the pure helpers `_compute_role_boundaries` /
+# `_approx_tokens` / `_describe_context_components` /
+# `_sum_tool_message_tokens` (fast, no fixtures needed), and (2) the
+# wiring into `_chat_workflow` itself via a captured-attribute fake.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPromptRenderRoleBoundaryHelpers:
+    """Pure-function tests for the v2.42.0 role-boundary helpers."""
+
+    def test_approx_tokens_chars_div_4(self):
+        from ai_assistant.views import _approx_tokens
+        assert _approx_tokens(None) == 0
+        assert _approx_tokens('') == 0
+        assert _approx_tokens('1234') == 1
+        # 11 chars // 4 = 2 — matches the prometa-sdk convention.
+        assert _approx_tokens('hello world') == 2
+
+    def test_compute_role_boundaries_minimal_two_role_array(self):
+        """The minimum-viable A4-passing payload: one system + one user."""
+        import json
+        from ai_assistant.views import _compute_role_boundaries
+        msgs = [
+            {'role': 'system', 'content': 'You are an assistant.'},
+            {'role': 'user', 'content': 'Hello!'},
+        ]
+        rendered = json.dumps(msgs, ensure_ascii=False)
+        b = _compute_role_boundaries(msgs, rendered)
+        assert len(b) == 2
+        assert [x['role'] for x in b] == ['system', 'user']
+        # Boundaries must be NON-OVERLAPPING and each slice must round-trip
+        # to the original message JSON.  This is what A4 reads to verify
+        # role isolation.
+        assert b[0]['end'] <= b[1]['start']
+        assert rendered[b[0]['start']:b[0]['end']] == json.dumps(msgs[0], ensure_ascii=False)
+        assert rendered[b[1]['start']:b[1]['end']] == json.dumps(msgs[1], ensure_ascii=False)
+
+    def test_compute_role_boundaries_multi_round_with_tools(self):
+        """Realistic tool-calling turn: system + slim_context + history
+        user + history assistant + current user + assistant_with_tool_calls
+        + tool result + assistant final.  Every role must produce a
+        distinct boundary."""
+        import json
+        from ai_assistant.views import _compute_role_boundaries
+        msgs = [
+            {'role': 'system', 'content': 'You are DeclarAI.'},
+            {'role': 'system', 'content': 'Pipeline context summary:\nfile_id=42'},
+            {'role': 'user', 'content': 'previous question'},
+            {'role': 'assistant', 'content': 'previous answer'},
+            {'role': 'user', 'content': 'current question'},
+            {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'c1',
+                'type': 'function',
+                'function': {'name': 'get_data_dictionary', 'arguments': '{}'}}]},
+            {'role': 'tool', 'tool_call_id': 'c1',
+             'content': '{"features": ["Var_1", "Var_2"]}'},
+            {'role': 'assistant', 'content': 'Two features available.'},
+        ]
+        rendered = json.dumps(msgs, ensure_ascii=False)
+        b = _compute_role_boundaries(msgs, rendered)
+        assert len(b) == 8
+        roles = [x['role'] for x in b]
+        # Pin that EVERY role-type appears at least once — A4's "missing
+        # user-role" failure mode would surface here as a missing 'user'
+        # entry in the list.
+        assert set(roles) == {'system', 'user', 'assistant', 'tool'}, roles
+        # Boundaries must be monotonically non-overlapping.
+        for prev, curr in zip(b, b[1:]):
+            assert prev['end'] <= curr['start'], (prev, curr)
+
+    def test_compute_role_boundaries_returns_empty_on_empty_input(self):
+        """Defensive: empty input never produces phantom boundaries."""
+        from ai_assistant.views import _compute_role_boundaries
+        assert _compute_role_boundaries([], 'anything') == []
+        assert _compute_role_boundaries(
+            [{'role': 'user', 'content': 'x'}], '') == []
+
+    def test_compute_role_boundaries_survives_unicode_payload(self):
+        """Real chat content carries unicode (Turkish question marks,
+        emojis, math symbols introduced in v2.41.1).  json.dumps with
+        ensure_ascii=False must produce identical bytes on both sides
+        of the boundary computation."""
+        import json
+        from ai_assistant.views import _compute_role_boundaries
+        msgs = [
+            {'role': 'system', 'content': 'You are an assistant.'},
+            {'role': 'user', 'content': 'PSI ≥ 0.25 → significant shift'},
+        ]
+        rendered = json.dumps(msgs, ensure_ascii=False)
+        b = _compute_role_boundaries(msgs, rendered)
+        assert len(b) == 2
+        # The unicode chars must be inside the user slice (not lost to
+        # encoding).
+        user_slice = rendered[b[1]['start']:b[1]['end']]
+        assert '≥' in user_slice
+        assert '→' in user_slice
+
+    def test_describe_context_components_orders_match_message_assembly(self):
+        """The component list must list components in the SAME ORDER
+        they were appended to the messages array in _chat_workflow, so
+        the audit trail matches the wire shape (the C6 detector groups
+        spans by this ordered fingerprint)."""
+        from ai_assistant.views import _describe_context_components
+        # Slim-context + skill + history + user (the most populated path).
+        parts = _describe_context_components(
+            use_tools=True, has_context=False,
+            auto_skill='feature-engineering', has_history=True,
+        )
+        assert parts == [
+            'system_prompt', 'slim_context', 'conversation_history',
+            'skill:feature-engineering', 'user_query',
+        ], parts
+
+    def test_describe_context_components_minimal_path(self):
+        """Stateless chat (no file, no history, no skill) still records
+        system + user."""
+        from ai_assistant.views import _describe_context_components
+        parts = _describe_context_components(
+            use_tools=False, has_context=False,
+            auto_skill=None, has_history=False,
+        )
+        assert parts == ['system_prompt', 'user_query']
+
+    def test_describe_context_components_legacy_full_context_path(self):
+        """When tools aren't available (no cached artifacts) but a
+        context blob was passed, the legacy_full_context channel fires
+        instead of slim_context — pin this so the two paths stay
+        distinguishable in the audit."""
+        from ai_assistant.views import _describe_context_components
+        parts = _describe_context_components(
+            use_tools=False, has_context=True,
+            auto_skill=None, has_history=False,
+        )
+        assert 'legacy_full_context' in parts
+        assert 'slim_context' not in parts
+
+    def test_sum_tool_message_tokens_only_counts_tool_and_assistant(self):
+        """Tool budget = assistant + tool content (system + user are
+        accounted separately).  Verifies the helper does NOT double-count
+        system / user channels into the tool budget."""
+        from ai_assistant.views import _sum_tool_message_tokens
+        msgs = [
+            {'role': 'system', 'content': 'x' * 100},  # should NOT count
+            {'role': 'user', 'content': 'y' * 100},    # should NOT count
+            {'role': 'assistant', 'content': 'z' * 40},
+            {'role': 'tool', 'tool_call_id': 'c1', 'content': 'w' * 40},
+        ]
+        # 40 // 4 = 10 each, total 20.  Anything > 20 means we're
+        # leaking system or user content into the tool budget.
+        assert _sum_tool_message_tokens(msgs) == 20
+
+
+@pytest.mark.unit
+class TestPromptRenderWorkflowWiring:
+    """End-to-end wiring tests: _chat_workflow must invoke prompt_render
+    with the right kwargs and stamp prometa.raw.input on the workflow span.
+
+    We monkeypatch `_call_llm`, `prompt_render`, `set_span_attr`, and the
+    Redis-touching helpers so the test is a pure-function span-attr
+    contract check — no OpenAI network, no engine call, no Redis."""
+
+    def _patch_workflow_environment(self, monkeypatch, captured_attrs, captured_prompt_render):
+        from ai_assistant import views
+
+        def fake_call_llm(messages, model_key, tools=None):
+            return {
+                'choices': [{
+                    'message': {'role': 'assistant', 'content': 'ok'},
+                    'finish_reason': 'stop',
+                }],
+                'usage': {'total_tokens': 10},
+            }
+
+        def fake_set_span_attr(key, value):
+            captured_attrs[key] = value
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_prompt_render(*, template_version=None, raw_rendered_prompt=None):
+            captured_prompt_render['template_version'] = template_version
+            captured_prompt_render['raw_rendered_prompt'] = raw_rendered_prompt
+
+            class _Handle:
+                def assembled(self, **kwargs):
+                    captured_prompt_render['assembled_kwargs'] = kwargs
+            yield _Handle()
+
+        def fake_get_model_config(key):
+            return {
+                'provider': 'openai',
+                'model_id': 'gpt-test',
+                'supports_tools': False,
+                'max_tokens': 1024,
+            }
+
+        monkeypatch.setattr(views, '_call_llm', fake_call_llm)
+        monkeypatch.setattr(views, 'set_span_attr', fake_set_span_attr)
+        monkeypatch.setattr(views, 'prompt_render', fake_prompt_render)
+        monkeypatch.setattr(views, 'get_model_config', fake_get_model_config)
+        monkeypatch.setattr(views, 'cache_list_artifacts', lambda fid: [])
+        monkeypatch.setattr(views, 'set_session_id', lambda *a, **k: None)
+        monkeypatch.setattr(views, 'set_customer_id', lambda *a, **k: None)
+
+    def test_chat_workflow_invokes_prompt_render_with_role_boundaries(self, monkeypatch):
+        from ai_assistant import views
+        attrs, captured_pr = {}, {}
+        self._patch_workflow_environment(monkeypatch, attrs, captured_pr)
+
+        views._chat_workflow(
+            user_message='Explain PSI.',
+            context=None, section='general', history=[],
+            file_id=None, model='gpt-test',
+        )
+
+        # 1. prompt_render must have been invoked with template_version
+        # carrying the system_prompt_variant ('full' for openai provider).
+        assert captured_pr.get('template_version') == 'declarai-chat@full'
+
+        # 2. raw_rendered_prompt must be a valid JSON array containing
+        # BOTH a system role and a user role (the A4 contract).
+        import json as _json
+        rendered = captured_pr.get('raw_rendered_prompt')
+        assert rendered is not None
+        parsed = _json.loads(rendered)
+        roles = [m.get('role') for m in parsed]
+        assert 'system' in roles
+        assert 'user' in roles
+
+        # 3. assembled() must have been called with role_boundaries
+        # listing every role in the rendered prompt.
+        kwargs = captured_pr.get('assembled_kwargs', {})
+        boundaries = kwargs.get('role_boundaries')
+        assert boundaries is not None and len(boundaries) >= 2
+        boundary_roles = [b['role'] for b in boundaries]
+        assert 'system' in boundary_roles
+        assert 'user' in boundary_roles
+
+    def test_chat_workflow_stamps_prometa_raw_input_with_just_user_query(self, monkeypatch):
+        """The contract says prometa.raw.input MUST be the user's
+        latest query alone (not the rendered prompt).  This is what
+        the A4 detector uses to verify userInput !== rendered."""
+        from ai_assistant import views
+        attrs, captured_pr = {}, {}
+        self._patch_workflow_environment(monkeypatch, attrs, captured_pr)
+
+        question = 'What features have high VIF?'
+        views._chat_workflow(
+            user_message=question,
+            context=None, section='general', history=[],
+            file_id=None, model='gpt-test',
+        )
+
+        # prometa.raw.input must equal the user message EXACTLY — not
+        # the rendered prompt, not a snippet, not a prefix.
+        assert attrs.get('prometa.raw.input') == question
+
+        # And it MUST NOT equal raw_rendered_prompt (that would
+        # reproduce the v2.41.x byte-identity bug Prometa flagged).
+        assert attrs.get('prometa.raw.input') != captured_pr.get('raw_rendered_prompt')
+
+    def test_chat_workflow_prompt_render_assembled_carries_context_components(self, monkeypatch):
+        """C6 detector reads prompt.context_components — verify the
+        workflow lists at least system_prompt + user_query for the
+        minimal turn (no file, no history, no skill)."""
+        from ai_assistant import views
+        attrs, captured_pr = {}, {}
+        self._patch_workflow_environment(monkeypatch, attrs, captured_pr)
+
+        views._chat_workflow(
+            user_message='hi',
+            context=None, section='general', history=[],
+            file_id=None, model='gpt-test',
+        )
+
+        kwargs = captured_pr.get('assembled_kwargs', {})
+        components = kwargs.get('context_components')
+        assert components is not None
+        assert 'system_prompt' in components
+        assert 'user_query' in components
+        # The minimal turn has NO slim_context / history / skill —
+        # those entries must be ABSENT, not just empty strings.
+        assert 'slim_context' not in components
+        assert 'conversation_history' not in components
+        assert not any(c.startswith('skill:') for c in components)
+
+
+# ---------------------------------------------------------------------------
+# v2.42.0: prometa-sdk version lock — CI guard
+# ---------------------------------------------------------------------------
+# Catches future Docker-cache / pip-cache drift like the v0.6.0-in-
+# container situation that hid the A4 truncation bug from us.  The pin
+# in requirements.txt (`prometa-sdk==X.Y.Z`) must match the version
+# actually installed in the environment running the tests.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestProMetaSdkVersionLock:
+    """Defense against installed-vs-pinned drift.
+
+    The bug that motivated v2.42.0 hid for ~24 hours because
+    requirements.txt was pinned to >=0.7.1 but the running container
+    was on v0.6.0 (Docker layer cache wasn't invalidated when the pin
+    was bumped).  This test reads the pin from requirements.txt and
+    asserts the installed prometa.__version__ matches EXACTLY.  Fails
+    fast in CI / pre-commit, including on any environment where pip
+    re-resolves into a newer minor release we haven't verified."""
+
+    def _read_pin(self) -> str:
+        """Return the version literal pinned in requirements.txt.
+
+        Supports the canonical hard-pin form 'prometa-sdk==X.Y.Z'.
+        Any other form (range, no pin) is a deliberate refusal — we
+        want this lock to be obvious to readers.
+        """
+        from pathlib import Path
+        import re
+        backend_dir = Path(__file__).resolve().parent.parent
+        req = (backend_dir / 'requirements.txt').read_text()
+        for line in req.splitlines():
+            line = line.strip()
+            if line.startswith('prometa-sdk'):
+                m = re.match(r'^prometa-sdk==([0-9]+\.[0-9]+\.[0-9]+)\s*$', line)
+                assert m, (
+                    f"prometa-sdk must be HARD-PINNED in requirements.txt "
+                    f"(form: prometa-sdk==X.Y.Z); found: {line!r}"
+                )
+                return m.group(1)
+        raise AssertionError(
+            "prometa-sdk entry not found in requirements.txt — "
+            "the version lock test cannot run without a pin."
+        )
+
+    def test_installed_prometa_sdk_matches_requirements_pin(self):
+        import prometa
+        installed = prometa.__version__
+        pinned = self._read_pin()
+        assert installed == pinned, (
+            f"prometa-sdk version drift detected: installed={installed!r} "
+            f"but requirements.txt pins =={pinned!r}.  Rebuild the "
+            f"backend Docker image with --no-cache or re-run "
+            f"`pip install -r requirements.txt` to align.  This drift "
+            f"is precisely what hid the v2.41.x AML A4 truncation bug "
+            f"from us for ~24h — keep it locked."
+        )
+
+    def test_prompt_render_helper_is_importable_on_pinned_version(self):
+        """The v2.42.0 fix depends on the prompt_render helper that
+        crystallized in prometa-sdk 0.7.x.  If we ever downgrade the
+        pin, this test forces explicit acknowledgement that we'd lose
+        the A4 contract.  Read-only check — does not invoke the helper."""
+        from prometa import prompt_render
+        assert callable(prompt_render), (
+            "prompt_render must be importable; the AML A4 contract "
+            "(prompt.role_boundaries + prometa.raw.rendered_prompt) "
+            "depends on this helper landing in the SDK."
+        )
+
+    def test_raw_channel_helper_is_importable_on_pinned_version(self):
+        """Same logic as above but for the _raw_channel toggle.
+        Without it, prompt_render(raw_rendered_prompt=...) drops the
+        raw kwarg at the SDK boundary and A4 falls back to the
+        truncated gen_ai.prompt — re-introducing the v2.41.x bug."""
+        from prometa import _raw_channel
+        assert callable(_raw_channel.enable)
+        assert callable(_raw_channel.is_enabled)

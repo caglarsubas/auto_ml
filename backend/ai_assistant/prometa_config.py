@@ -139,6 +139,34 @@ def get_prometa():
         except Exception as exc_ai:
             logger.warning("Prometa OpenAI auto-instrumentation failed: %s", exc_ai)
 
+        # v2.42.0 (AML A4): enable dual-channel raw capture.  The
+        # auto-instrumentation above stamps ``gen_ai.prompt`` with a
+        # ``safe_json(messages)`` blob TRUNCATED to 32 000 bytes
+        # (``prometa/integrations/_llm_common.py:MAX_TEXT_ATTR_BYTES``).
+        # In production our messages array routinely exceeds 32 KB
+        # (system prompt + slim context + auto-routed skill body +
+        # history + tool defs), so the truncation knife lands AFTER the
+        # leading system prompt but BEFORE any ``"role":"user"`` marker.
+        # The platform's A4 detector then sees "no user role" and flags
+        # the span as `absent`.
+        #
+        # Turning raw_channel on lets us stamp the FULL role-tagged
+        # messages JSON as ``prometa.raw.rendered_prompt`` (no
+        # truncation; the platform routes it to the short-TTL
+        # ``spans_raw`` table) AND stamp the user query alone as
+        # ``prometa.raw.input`` — both via the helpers in
+        # ``ai_assistant/views.py`` and the canonical
+        # ``prompt_render`` context manager.  See plan:
+        # /Users/caglarsubasi/.windsurf/plans/plan-c19801.md.
+        try:
+            from prometa import _raw_channel as prometa_raw_channel
+            prometa_raw_channel.enable()
+            logger.info("Prometa raw-channel enabled (A4 prompt isolation contract).")
+        except (ImportError, AttributeError):
+            logger.info("Prometa raw-channel helper not available (SDK <0.7).")
+        except Exception as exc_rc:
+            logger.warning("Prometa raw-channel enable failed: %s", exc_rc)
+
     except ImportError:
         logger.warning("prometa-sdk not installed — tracing disabled. "
                        "Install with: pip install prometa-sdk")
@@ -191,6 +219,84 @@ def _make_lazy_decorator(kind: str):
 workflow = _make_lazy_decorator('workflow')
 agent = _make_lazy_decorator('agent')
 tool = _make_lazy_decorator('tool')
+
+
+# ---------------------------------------------------------------------------
+# v2.42.0 — prompt.render contract (AML A4 / B7 / C4 / C5 / C6)
+# ---------------------------------------------------------------------------
+# Lazy import + safe-no-op fallback for ``prometa.prompt_render``.
+#
+# Why a wrapper?  Direct ``from prometa import prompt_render`` would
+# break import on older SDKs (the symbol landed in v0.4.x and crystallized
+# in v0.7.x) and would also raise inside pytest where ``PROMETA_DISABLE=1``
+# turns the whole SDK into a no-op.  The wrapper below is a context
+# manager with the same interface — when the real helper is unavailable,
+# it yields a stand-in handle whose ``.assembled(...)`` method is a no-op.
+#
+# Call site (``ai_assistant/views.py::_chat_workflow``) is unconditional:
+# ``with prompt_render(template_version=..., raw_rendered_prompt=...) as p:
+#       p.assembled(role_boundaries=..., system_token_count=..., ...)``
+# so the contract attributes (``prompt.role_boundaries``,
+# ``prompt.template_version``, optional ``prometa.raw.rendered_prompt``)
+# land on a dedicated ``prompt.render`` span when the SDK is live and
+# silently drop on the floor in test/dev environments.
+# ---------------------------------------------------------------------------
+
+class _NoOpPromptRenderHandle:
+    """Stand-in returned when the SDK's prompt_render helper is unavailable.
+
+    Mirrors ``prometa.prompt._PromptRenderHandle.assembled`` signature so
+    call sites don't need to special-case the no-op path.  Every kwarg
+    accepted by the real helper is also accepted here — kwargs are
+    ignored.
+    """
+
+    def assembled(self, **_kwargs) -> None:  # noqa: D401 - thin wrapper
+        return None
+
+
+@contextmanager
+def prompt_render(*, template_version: str = None,
+                  raw_rendered_prompt: str = None):
+    """Emit a ``prompt.render`` span for the AML A4 detector.
+
+    Thin wrapper over ``prometa.prompt_render`` that degrades cleanly:
+      * Real SDK available + Prometa initialized → yields the SDK's
+        ``_PromptRenderHandle`` which stamps ``prompt.template_version`` +
+        ``prometa.raw.rendered_prompt`` (when raw_channel is enabled) on
+        the span, and whose ``.assembled(...)`` writes
+        ``prompt.role_boundaries`` + token counts.
+      * SDK missing OR Prometa not initialized OR helper raises →
+        yields ``_NoOpPromptRenderHandle()`` which absorbs ``.assembled``
+        calls silently.
+
+    The raw_channel toggle (enabled in ``get_prometa()``) gates whether
+    ``raw_rendered_prompt`` actually lands on the span — the platform's
+    short-TTL ``spans_raw`` table is opt-in.
+    """
+    # Fast path: ensure Prometa is initialized; if not, yield no-op.
+    p = get_prometa()
+    if p is None:
+        yield _NoOpPromptRenderHandle()
+        return
+    try:
+        from prometa import prompt_render as _real_prompt_render
+    except (ImportError, AttributeError):
+        # v0.6.x and earlier — symbol absent.  In production we hard-pin
+        # prometa-sdk==0.7.1 (see requirements.txt) so this branch only
+        # fires in legacy/test environments.
+        yield _NoOpPromptRenderHandle()
+        return
+    try:
+        with _real_prompt_render(
+            template_version=template_version,
+            raw_rendered_prompt=raw_rendered_prompt,
+        ) as handle:
+            yield handle
+    except Exception as exc:  # pragma: no cover - defensive
+        # Never let an observability bug take down the chat workflow.
+        logger.warning("prompt_render span failed: %s", exc)
+        yield _NoOpPromptRenderHandle()
 
 
 def has_active_span() -> bool:
