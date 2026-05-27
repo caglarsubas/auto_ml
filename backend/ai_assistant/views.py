@@ -18,6 +18,7 @@ from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
     model_route, plan_generate, current_span_id, set_input_ref,
+    prompt_render,
 )
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
@@ -1065,6 +1066,120 @@ def _auto_route_skill(user_message: str) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# v2.42.0 — AML A4 prompt-render contract helpers
+# ---------------------------------------------------------------------------
+# These helpers compute the structured attributes that the Prometa AML A4
+# detector reads (``prompt.role_boundaries``,
+# ``prompt.context_components``, token counts).  They are kept tiny and
+# pure-Python so unit tests can pin them directly without touching the
+# OpenAI client.
+#
+# Why the rename from ``role`` → ``aml_role`` in the boundaries?  The AML
+# contract groups assistant + tool messages under semantically distinct
+# channels — but the OpenAI SDK uses the literal strings "assistant" and
+# "tool" for both wire roles.  The mapping is 1:1 today so we just pass
+# the OpenAI role straight through; the helper would be the place to
+# rename if a future detector wanted (e.g.) ``policy`` separated from
+# ``system``.
+# ---------------------------------------------------------------------------
+
+def _approx_tokens(text: Optional[str]) -> int:
+    """Quick token estimate per the prometa-sdk convention (chars / 4).
+
+    Used to populate ``prompt.system_token_count`` / ``user_token_count``
+    / ``tool_token_count`` on the ``prompt.render`` span.  An exact count
+    would require pulling in tiktoken or the model's tokenizer — overkill
+    for an attribute the detector treats as a coarse signal.
+    """
+    return (len(text) // 4) if text else 0
+
+
+def _compute_role_boundaries(messages: list,
+                             rendered_json: str) -> list[dict]:
+    """Walk ``messages`` and return ``[{role, start, end}, ...]`` byte ranges.
+
+    Re-serializes each individual message and locates its slice inside
+    ``rendered_json`` (the result of ``json.dumps(messages,
+    ensure_ascii=False)`` at the call site).  Because the call site uses
+    the SAME ``json.dumps`` call to produce both ``rendered_json`` AND
+    the per-message slice, byte equality is guaranteed and the search
+    is O(n) on a moving start cursor.
+
+    Returns an empty list if any message can't be located — the contract
+    favours "no boundaries" over "wrong boundaries" so the detector
+    falls back to substring matching gracefully.
+
+    The role attribute uses the OpenAI wire string verbatim ("system",
+    "user", "assistant", "tool").  Multi-modal content (list-of-dicts
+    rather than string) is serialized identically by both passes, so
+    the boundary search still works.
+    """
+    if not messages or not rendered_json:
+        return []
+    boundaries = []
+    cursor = 0
+    for msg in messages:
+        try:
+            slice_json = json.dumps(msg, ensure_ascii=False)
+        except (TypeError, ValueError):
+            # Non-serializable message (shouldn't happen for OpenAI
+            # messages, but be defensive).  Bail rather than emit half
+            # the boundaries.
+            return []
+        idx = rendered_json.find(slice_json, cursor)
+        if idx < 0:
+            # The slice couldn't be located — this would mean json.dumps
+            # serialized the full list and the individual message
+            # differently (e.g., dict-ordering difference).  Bail.
+            return []
+        boundaries.append({
+            'role': msg.get('role', 'unknown'),
+            'start': idx,
+            'end': idx + len(slice_json),
+        })
+        cursor = idx + len(slice_json)
+    return boundaries
+
+
+def _describe_context_components(use_tools: bool,
+                                 has_context: bool,
+                                 auto_skill: Optional[str],
+                                 has_history: bool) -> list[str]:
+    """Enumerate the knowledge sources blended into this prompt.
+
+    Consumed by the AML C6 (dynamic context assembly) detector via
+    ``prompt.context_components``.  Order mirrors the order in which
+    each component is appended to the messages array in
+    ``_chat_workflow`` so the audit trail matches the wire shape.
+    """
+    parts = ['system_prompt']
+    if use_tools:
+        parts.append('slim_context')
+    elif has_context:
+        parts.append('legacy_full_context')
+    if has_history:
+        parts.append('conversation_history')
+    if auto_skill:
+        parts.append(f'skill:{auto_skill}')
+    parts.append('user_query')
+    return parts
+
+
+def _sum_tool_message_tokens(messages: list) -> int:
+    """Sum token estimates across every ``role: "tool"`` and ``role:
+    "assistant"`` message (assistant tool_calls payload counts toward the
+    tool channel for A4's accounting)."""
+    total = 0
+    for m in messages:
+        role = m.get('role')
+        if role in ('tool', 'assistant'):
+            content = m.get('content') or ''
+            if isinstance(content, str):
+                total += _approx_tokens(content)
+    return total
+
+
 @workflow(name="declarai-chat")
 def _chat_workflow(user_message: str, context: dict, section: str, history: list,
                    file_id: int = None, model: str = None) -> dict:
@@ -1152,6 +1267,49 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})
+
+    # ── v2.42.0: AML A4 prompt-render contract ─────────────────────────
+    # Emit a ``prompt.render`` span carrying structured role boundaries
+    # and the FULL (untruncated) role-tagged messages JSON.  This closes
+    # the v2.21.0+ failure mode where the openai auto-instrumentation's
+    # ``gen_ai.prompt`` attribute exceeded its 32 KB cap and got
+    # truncated mid-array, causing A4 to see a leading "role":"system"
+    # marker only — no user, assistant, or tool boundaries — and flag
+    # the span as ``absent``.  The detector reads ``prompt.role_boundaries``
+    # (structured) FIRST and falls back to substring inspection of
+    # ``prometa.raw.rendered_prompt`` (full untruncated blob) — so this
+    # block makes A4 swing back to ``present`` regardless of payload
+    # size.  Also stamp ``prometa.raw.input`` = just the user query
+    # string, distinct from the rendered prompt, so the detector can
+    # cleanly verify ``userInput !== rendered``.
+    #
+    # All four attributes are gated by the raw-channel toggle enabled
+    # in ``prometa_config.get_prometa()``.  ``prompt_render`` is a
+    # safe-no-op context manager when Prometa is disabled (test env).
+    _rendered = json.dumps(messages, ensure_ascii=False)
+    _role_boundaries = _compute_role_boundaries(messages, _rendered)
+    with prompt_render(
+        template_version=f'declarai-chat@{system_prompt_variant}',
+        raw_rendered_prompt=_rendered,
+    ) as _p:
+        _p.assembled(
+            template_version=f'declarai-chat@{system_prompt_variant}',
+            system_token_count=_approx_tokens(system_prompt_text),
+            user_token_count=_approx_tokens(user_message),
+            tool_token_count=_sum_tool_message_tokens(messages),
+            role_boundaries=_role_boundaries,
+            context_components=_describe_context_components(
+                use_tools=use_tools,
+                has_context=bool(context),
+                auto_skill=auto_skill,
+                has_history=bool(history),
+            ),
+        )
+    # Stamp the user query alone on the declarai-chat workflow span (not
+    # the prompt.render child) so it sits next to gen_ai.prompt.user
+    # for cross-checking.  set_span_attr is a no-op when no span is
+    # active or the SDK isn't installed.
+    set_span_attr('prometa.raw.input', user_message)
 
     # Tool-calling loop (only for models that support function calling)
     tools = PIPELINE_TOOLS if (use_tools and model_cfg.get('supports_tools')) else None
