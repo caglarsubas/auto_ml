@@ -27,6 +27,7 @@ from .cache import cache_list_artifacts
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
     call_openai, call_engine, MODEL_REGISTRY,
+    parse_ollama_tag,
 )
 
 # ---------------------------------------------------------------------------
@@ -846,6 +847,32 @@ def _call_llm(messages: list, model_key: str, tools: list = None) -> dict:
     # The child openai-instrumented span still carries gen_ai.system="openai"
     # because the SDK speaks OpenAI protocol regardless of the upstream.
     set_span_attr('declarai.llm.backend', provider)
+
+    # v2.43.0: explicit vendor + Ollama-tag normalization for prometa-platform's
+    # pricing-registry matcher.  Background: prometa-platform reported that
+    # 0/187 of our LLM traces had cost > 0 because the registry's
+    # ``startsWith(registryKey)`` matcher in ``models.ts`` couldn't resolve
+    # the raw ``gen_ai.request.model`` strings we emit (e.g. ``gemma4:26b``,
+    # ``nemotron-3-nano:30b``).  Two distinct miss modes were collapsed:
+    #   1. Cloud GPT calls — real, priced > 0, but registry row was missing.
+    #   2. Engine/Ollama calls — real, cost=0 by design (self-hosted), but
+    #      the registry can't tell them apart from "unknown name" misses.
+    # Stamping ``gen_ai.vendor`` explicitly + breaking the Ollama tag into
+    # ``family`` / ``tag`` / ``parameter_size`` gives the registry the
+    # signals it needs to (a) route lookups into the right catalog and
+    # (b) mark self-hosted spans as cost-by-design rather than silent-zero.
+    # See thread with prometa-platform team 2026-05-28.
+    if provider == 'openai':
+        set_span_attr('gen_ai.vendor', 'openai')
+    elif provider == 'engine':
+        set_span_attr('gen_ai.vendor', 'ollama')
+        parsed = parse_ollama_tag(model_cfg['model_id'])
+        if parsed.get('family'):
+            set_span_attr('gen_ai.model.family', parsed['family'])
+        if parsed.get('tag'):
+            set_span_attr('gen_ai.model.tag', parsed['tag'])
+        if parsed.get('parameter_size'):
+            set_span_attr('gen_ai.model.parameter_size', parsed['parameter_size'])
 
     # v2.31.0 (Phase 3a): emit a Prometa AML ``model.route`` span around
     # the provider dispatch.  DeclarAI today doesn't run a complexity-
