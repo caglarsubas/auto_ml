@@ -1,12 +1,56 @@
 # Bug report: Nemotron multi-turn tool calls return HTTP 500 (Jinja `items` on JSON-string `arguments`)
 
-**Status:** Open — diagnosed end-to-end from engine logs + chat template + DeclarAI request capture.
+**Status:** **RESOLVED 2026-05-28** — engine team shipped the recommended fix as `llm_inference_engine#9` (merged commit `ebf6dd6`) within a few hours of filing. See the resolution log immediately below; the original bug report is preserved verbatim further down for posterity.
 **Audience:** `llm-inference-engine` team
 **From:** DeclarAI (POC customer)
 **Date filed:** 2026-05-28
-**Engine commit:** running build of `/Users/caglarsubasi/Desktop/prometa/pocs/llm_inference_engine_v1` (process PID 77443, uvicorn → `inference_engine.main:app`)
+**Date resolved:** 2026-05-28 (same-day turnaround)
+**Engine commit at filing:** running build of `/Users/caglarsubasi/Desktop/prometa/pocs/llm_inference_engine_v1` (process PID 77443, uvicorn → `inference_engine.main:app`)
+**Engine commit at resolution:** `ebf6dd6` on `main` (PR `llm_inference_engine#9`)
 **Model:** `nemotron-3-nano:30b` (GGUF blob `sha256-a70437c41b3b…`)
-**Severity:** P1 — every multi-turn tool-calling conversation on Nemotron crashes on turn 2. The engine-side Nemotron XML-leak fix you shipped earlier this week unblocked turn 1; this is the next wall.
+**Severity at filing:** P1 — every multi-turn tool-calling conversation on Nemotron crashes on turn 2. The engine-side Nemotron XML-leak fix shipped earlier this week unblocked turn 1; this was the next wall.
+
+---
+
+## Resolution log — `llm_inference_engine#9` (merged 2026-05-28)
+
+The engine team adopted the recommended fix verbatim: a small static helper on `LlamaCppAdapter` that JSON-decodes `tool_calls[].function.arguments` before handing the message to the Jinja chat template, with sensible fallbacks for the empty-string and non-JSON-string cases. The change is engine-local and scoped to the `llama_cpp` adapter — vLLM and Ollama HTTP adapters intentionally keep `arguments` as a string because their upstream servers do their own templating.
+
+### Engine-side changes that landed
+
+| File | Change |
+|---|---|
+| `src/inference_engine/adapters/llama_cpp.py` | New `_arguments_for_template(raw)` static helper. Empty string → `{}` (zero-argument call is a mapping with no keys). Valid JSON → parsed (dict, list, etc.). Non-JSON string → returned unchanged so OpenAI-strict templates that index `arguments` as a string still work. Helper wired into `_to_llama_messages` at the single point where the rendered dict is built; `_to_llama_messages` switched from `@staticmethod` to `@classmethod` so it can reach the helper cleanly. No other code paths touched. |
+| `tests/test_llama_cpp_tool_arguments.py` | New file, 6 focused regression tests: JSON string → dict (the Nemotron-fix case), empty string and `"{}"` → `{}`, non-JSON garbage → raw string (fallback for OpenAI-strict templates), JSON array → list (positional-args tools), full multi-turn round-trip (user → assistant w/ tool_calls → tool result) preserves all other fields, plain chats without `tool_calls` unaffected. |
+
+### Engine-side verification (from PR #9)
+
+```
+tests/test_llama_cpp_tool_arguments.py ......  [6 new tests pass]
+tests/                                          [252/252 pass overall]
+ruff check                                      [clean]
+```
+
+### DeclarAI-side verification (post-restart, this checkout)
+
+After fast-forwarding the local engine checkout to `ebf6dd6` and restarting the native launchd agent (`make native-restart`), the exact `curl` reproduction from the "Reproduction" section below now succeeds:
+
+```
+HTTP 200 | total=2.453310s
+finish_reason: length        ← only because we capped max_tokens=64 for the smoke
+content: "Okay, the user asked me to list files, so I called the list_files function.
+         The response came back as an empty array. That means there are no files to list…"
+prompt_tokens: 268
+completion_tokens: 64
+```
+
+`grep -c 'TypeError: Can only get item pairs' /private/tmp/prometa-inference-engine.err.log` holds at 6 (all pre-fix stacks; zero new occurrences since the restart at `15:45:03`).
+
+### DeclarAI-side follow-ups
+
+- This bug report doc was kept in-repo as a historical artifact (mirrors the `docs/prometa-feedback/agent-id-auto-registration.md` convention).
+- No "Nemotron is single-turn-only" caveats need to be added to the UI — the workaround we considered while the bug was open never shipped to users.
+- DeclarAI PR `auto_ml#18` (which contained this bug report) was landed with this resolution log appended.
 
 ---
 
