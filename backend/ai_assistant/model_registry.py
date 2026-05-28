@@ -22,6 +22,7 @@ RTT.
 
 import logging
 import os
+import re
 import threading
 import time
 
@@ -104,6 +105,78 @@ _ENGINE_MODELS_TIMEOUT = float(os.environ.get('LLM_ENGINE_MODELS_TIMEOUT', '5.0'
 _engine_cache_lock = threading.Lock()
 _engine_cache: dict[str, dict] = {}
 _engine_cache_expires_at: float = 0.0
+
+
+# Parameter-size pattern: optional digits + optional decimal + b/m suffix.
+# Matches "26b", "3b", "1.5b", "8b", "e2b" (gemma's embedded variant — the
+# leading 'e' is rejected by \d+ so the scan resumes at '2b'), "e4b", "70b",
+# "1m" (tiny test models).  Anchored to end-of-string with an optional
+# ``[-_].*`` tail so suffixes like "26b-q4" still extract "26b" cleanly
+# (the leading numeric run wins) and an embedded "1B" inside a family
+# string like ``Llama-3.2-1B-Instruct-4bit`` matches because the trailing
+# ``-Instruct-4bit`` is absorbed by the optional ``[-_].*`` tail.
+_OLLAMA_PARAM_SIZE_RE = re.compile(r'(\d+(?:\.\d+)?[bm])(?:[-_].*)?$', re.IGNORECASE)
+
+
+def parse_ollama_tag(model_id: str) -> dict:
+    """Split an Ollama-style model id into ``{family, tag, parameter_size}``.
+
+    The local llm-inference-engine surfaces models with names of the form
+    ``family:variant`` — for example ``gemma4:26b``, ``llama3.2:3b``,
+    ``nemotron-3-nano:30b``, ``minimax-m2.7:cloud``.  Prometa's pricing
+    registry uses a ``startsWith(registryKey)`` matcher that doesn't
+    understand the ``:variant`` suffix or the family/size split, so it
+    treats every self-hosted span as ``cost=0`` silent-zero (see thread
+    with prometa-platform team 2026-05-28).
+
+    Returning the components separately lets ``_call_llm`` stamp them as
+    individual span attributes (``gen_ai.model.family``,
+    ``gen_ai.model.tag``, ``gen_ai.model.parameter_size``) so the
+    matcher can route on whichever facet it prefers without us breaking
+    the canonical ``gen_ai.request.model`` wire format.
+
+    Shape:
+        ``family``         — substring before the first ``:`` (or the
+                             whole id when no colon is present).  Always
+                             a string; empty input yields ``''``.
+        ``tag``            — substring after the first ``:``, or
+                             ``None`` when no colon is present.
+        ``parameter_size`` — extracted via regex.  Tried first on the
+                             tag (typical Ollama-style: ``family:26b``),
+                             then on the family as a fallback so MLX/HF
+                             converted ids like
+                             ``Llama-3.2-1B-Instruct-4bit:mlx`` still
+                             surface ``parameter_size=1b``.  ``None``
+                             when neither side carries a ``<digits>[bm]``
+                             segment.  Normalized to lowercase.  Examples:
+                                 ``gemma4:26b``                → ``"26b"``
+                                 ``gemma4:e2b``                → ``"2b"``
+                                 ``ministral-3:1.5b``          → ``"1.5b"``
+                                 ``minimax-m2.7:cloud``        → ``None``
+                                 ``Llama-3.2-1B-Instruct:mlx`` → ``"1b"``
+
+    The function never raises on malformed input — callers can stamp
+    whichever subset of fields came back non-empty without guarding.
+    """
+    if not isinstance(model_id, str) or not model_id:
+        return {'family': '', 'tag': None, 'parameter_size': None}
+    head, sep, tail = model_id.partition(':')
+    family = head
+    tag = tail if sep else None
+    parameter_size = None
+    # Try the tag first — that's where Ollama puts the size for
+    # vanilla pulls (``family:26b``).  Fall back to scanning the
+    # family for MLX/HF converted ids that encode the size in the
+    # family string (``Llama-3.2-1B-Instruct-4bit:mlx``).
+    if tag:
+        match = _OLLAMA_PARAM_SIZE_RE.search(tag)
+        if match:
+            parameter_size = match.group(1).lower()
+    if parameter_size is None and family:
+        match = _OLLAMA_PARAM_SIZE_RE.search(family)
+        if match:
+            parameter_size = match.group(1).lower()
+    return {'family': family, 'tag': tag, 'parameter_size': parameter_size}
 
 
 def _engine_key(engine_id: str) -> str:

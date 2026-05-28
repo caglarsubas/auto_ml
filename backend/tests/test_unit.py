@@ -8451,3 +8451,354 @@ class TestProMetaSdkVersionLock:
         from prometa import _raw_channel
         assert callable(_raw_channel.enable)
         assert callable(_raw_channel.is_enabled)
+
+
+# ---------------------------------------------------------------------------
+# v2.43.0: gen_ai.vendor + Ollama-tag normalization for prometa-platform's
+# pricing-registry matcher.
+#
+# Background: prometa-platform's models.ts uses ``startsWith(registryKey)``
+# against the raw ``gen_ai.request.model`` attribute.  Our Ollama-style
+# tags (``gemma4:26b``, ``nemotron-3-nano:30b``) never match because:
+#   1. The ``:variant`` suffix isn't stripped.
+#   2. The family/parameter-size split isn't surfaced.
+#   3. There's no vendor hint to route the lookup into the right catalog
+#      (cloud OpenAI vs self-hosted Ollama).
+# v2.43.0 ships ``parse_ollama_tag()`` and stamps three new span
+# attributes (``gen_ai.vendor``, ``gen_ai.model.family``,
+# ``gen_ai.model.tag``, ``gen_ai.model.parameter_size``) so the matcher
+# has the signals it needs.  These tests pin the contract on both sides
+# of the boundary — the parser AND the call site.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestParseOllamaTag:
+    """``parse_ollama_tag`` must split an Ollama model id into
+    ``{family, tag, parameter_size}`` without raising on any input."""
+
+    def test_canonical_family_colon_size_tag(self):
+        """The common case: ``family:Nb`` where N is the parameter count."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('gemma4:26b')
+        assert result == {
+            'family': 'gemma4',
+            'tag': '26b',
+            'parameter_size': '26b',
+        }
+
+    def test_hyphenated_family(self):
+        """Multi-segment families like nemotron-3-nano keep their hyphens."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('nemotron-3-nano:30b')
+        assert result == {
+            'family': 'nemotron-3-nano',
+            'tag': '30b',
+            'parameter_size': '30b',
+        }
+
+    def test_dotted_family(self):
+        """Families with version dots (llama3.2, qwen3.6) round-trip."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('llama3.2:3b')
+        assert result == {
+            'family': 'llama3.2',
+            'tag': '3b',
+            'parameter_size': '3b',
+        }
+
+    def test_decimal_parameter_size(self):
+        """Sub-billion sizes like 1.5b extract cleanly."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('ministral-3:1.5b')
+        assert result == {
+            'family': 'ministral-3',
+            'tag': '1.5b',
+            'parameter_size': '1.5b',
+        }
+
+    def test_gemma_embedded_variant(self):
+        """Gemma's ``eNb`` (embedded) tags surface a numeric param_size
+        even though the tag itself is ``e2b`` / ``e4b``.  The full tag
+        is preserved in ``tag`` so registry consumers can match either
+        the raw variant or the normalized parameter size."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('gemma4:e2b')
+        assert result['family'] == 'gemma4'
+        assert result['tag'] == 'e2b'
+        assert result['parameter_size'] == '2b'
+
+    def test_non_numeric_tag_yields_none_parameter_size(self):
+        """``cloud`` / ``latest`` / ``q4_0`` aren't parameter sizes —
+        ``parameter_size`` must be None so the registry doesn't index
+        a meaningless string."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('minimax-m2.7:cloud')
+        assert result == {
+            'family': 'minimax-m2.7',
+            'tag': 'cloud',
+            'parameter_size': None,
+        }
+
+    def test_quantization_suffix_falls_through(self):
+        """Quant-only tags like ``q4_0`` don't carry a parameter count;
+        the parser refuses to invent one."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('llama3.2:q4_0')
+        assert result['family'] == 'llama3.2'
+        assert result['tag'] == 'q4_0'
+        assert result['parameter_size'] is None
+
+    def test_size_with_quantization_suffix(self):
+        """When the tag is ``Nb-quant`` (e.g. ``26b-q4``) the leading
+        size segment wins — we want the cost matcher to find the size
+        even when an operator pulls a quantized variant."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('gemma4:26b-q4_0')
+        assert result['family'] == 'gemma4'
+        assert result['tag'] == '26b-q4_0'
+        assert result['parameter_size'] == '26b'
+
+    def test_no_colon_returns_none_tag(self):
+        """If the model id has no ``:`` we still return family but
+        leave tag + parameter_size as None — the caller will then
+        stamp only the family attribute (graceful degradation)."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('llama3.2')
+        assert result == {
+            'family': 'llama3.2',
+            'tag': None,
+            'parameter_size': None,
+        }
+
+    def test_empty_string_returns_safe_shape(self):
+        """Empty input must return the canonical shape with empty/None
+        fields — never raise — so the call site can stamp nothing
+        instead of crashing the LLM call."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('')
+        assert result == {
+            'family': '',
+            'tag': None,
+            'parameter_size': None,
+        }
+
+    def test_non_string_input_returns_safe_shape(self):
+        """Defensive: a None / int / dict input must not raise.  We
+        return the canonical empty shape so callers stay no-op."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        assert parse_ollama_tag(None) == {
+            'family': '', 'tag': None, 'parameter_size': None,
+        }
+        assert parse_ollama_tag(42) == {
+            'family': '', 'tag': None, 'parameter_size': None,
+        }
+
+    def test_uppercase_parameter_size_normalized_to_lowercase(self):
+        """The parameter_size is normalized to lowercase so the
+        registry can match without per-call casing."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('gemma4:26B')
+        assert result['parameter_size'] == '26b'
+
+    # ── family-side fallback (MLX / HF converted ids) ──────────────────
+
+    def test_mlx_converted_id_extracts_size_from_family(self):
+        """Engine occasionally surfaces MLX-converted ids like
+        ``Llama-3.2-1B-Instruct-4bit:mlx`` where the parameter size is
+        encoded in the family string instead of the tag.  The
+        family-side fallback must recover the size so prometa's
+        registry can match on it."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('Llama-3.2-1B-Instruct-4bit:mlx')
+        assert result['family'] == 'Llama-3.2-1B-Instruct-4bit'
+        assert result['tag'] == 'mlx'
+        assert result['parameter_size'] == '1b'
+
+    def test_family_fallback_does_not_overrule_explicit_tag_size(self):
+        """When the tag carries an explicit size (the common case) the
+        family-side fallback MUST NOT fire and overwrite it with a
+        spurious match from the family name.  Pinning the precedence
+        order so future refactors can't silently swap it."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        # Contrived: family contains "5B", tag contains "3b".  The
+        # parser must report 3b (from the tag), not 5b (from family).
+        result = parse_ollama_tag('llama-5B-something:3b')
+        assert result['tag'] == '3b'
+        assert result['parameter_size'] == '3b'
+
+    def test_family_fallback_yields_none_when_neither_side_has_size(self):
+        """Both family and tag are size-free → parameter_size must
+        remain None.  ``minimax-m2.7:cloud`` is the live example —
+        ``m2.7`` looks numeric but lacks the required ``[bm]`` suffix
+        so the regex correctly refuses to match."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('minimax-m2.7:cloud')
+        assert result['parameter_size'] is None
+
+    def test_family_fallback_works_without_tag(self):
+        """When the model id has no colon at all (no tag), the
+        fallback still runs against the family string."""
+        from ai_assistant.model_registry import parse_ollama_tag
+        result = parse_ollama_tag('Llama-3.2-1B-Instruct')
+        assert result['family'] == 'Llama-3.2-1B-Instruct'
+        assert result['tag'] is None
+        assert result['parameter_size'] == '1b'
+
+
+@pytest.mark.unit
+class TestGenAiVendorStamping:
+    """v2.43.0: ``_call_llm`` MUST stamp ``gen_ai.vendor`` on every LLM
+    call and, for engine-routed calls, also stamp
+    ``gen_ai.model.family``, ``gen_ai.model.tag``, and
+    ``gen_ai.model.parameter_size`` so prometa-platform's pricing
+    registry can resolve the model.  These tests pin both the call
+    site (source-level) and the field shape (parser contract)."""
+
+    def test_call_llm_source_stamps_gen_ai_vendor(self):
+        """Source-level guard: the body of ``_call_llm`` must contain
+        a ``set_span_attr('gen_ai.vendor', ...)`` call.  Without this,
+        the prometa registry has no way to route lookups into the
+        right catalog and every span falls back to silent-zero."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert "set_span_attr('gen_ai.vendor'" in source, (
+            "_call_llm must stamp gen_ai.vendor on the active span — "
+            "the prometa pricing registry depends on it for cloud-vs-"
+            "self-hosted catalog routing (v2.43.0)."
+        )
+
+    def test_call_llm_source_stamps_openai_vendor(self):
+        """For the openai branch the vendor literal must be 'openai'."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert "set_span_attr('gen_ai.vendor', 'openai')" in source, (
+            "openai branch must stamp gen_ai.vendor='openai' literally."
+        )
+
+    def test_call_llm_source_stamps_ollama_vendor(self):
+        """For the engine branch the vendor literal must be 'ollama'
+        (not 'engine' — the canonical OTel-style vendor name the
+        prometa registry consumes)."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert "set_span_attr('gen_ai.vendor', 'ollama')" in source, (
+            "engine branch must stamp gen_ai.vendor='ollama' (the "
+            "vendor name the prometa registry routes on, not the "
+            "internal provider tag 'engine')."
+        )
+
+    def test_call_llm_source_stamps_family_tag_parameter_size(self):
+        """Engine branch must stamp all three Ollama-tag components
+        so the registry can match on whichever facet it prefers."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        for attr in ('gen_ai.model.family',
+                     'gen_ai.model.tag',
+                     'gen_ai.model.parameter_size'):
+            assert f"set_span_attr('{attr}'" in source, (
+                f"_call_llm engine branch must stamp {attr}"
+            )
+
+    def test_call_llm_source_uses_parse_ollama_tag(self):
+        """The call site MUST delegate parsing to the canonical
+        ``parse_ollama_tag`` helper — not inline a regex.  This keeps
+        the parsing rules in one place so the test suite above is
+        load-bearing for the call site too."""
+        import inspect
+        from ai_assistant.views import _call_llm
+        source = inspect.getsource(_call_llm)
+        assert 'parse_ollama_tag(' in source, (
+            "_call_llm must use parse_ollama_tag() — do NOT inline "
+            "regex parsing of the Ollama tag."
+        )
+
+    def test_views_imports_parse_ollama_tag(self):
+        """Structural guard: the import line in views.py must expose
+        parse_ollama_tag from model_registry."""
+        from ai_assistant import views
+        assert hasattr(views, 'parse_ollama_tag'), (
+            "views.py must import parse_ollama_tag from model_registry."
+        )
+
+    def test_vendor_stamping_runtime_openai(self, monkeypatch):
+        """End-to-end behavioral test: monkeypatch the OpenAI client
+        + set_span_attr capture, then invoke _call_llm with an OpenAI
+        model and assert gen_ai.vendor='openai' lands."""
+        from ai_assistant import views as v
+        captured: list[tuple[str, object]] = []
+        monkeypatch.setattr(v, 'set_span_attr',
+                            lambda k, val: captured.append((k, val)))
+        monkeypatch.setattr(v, 'set_request_model', lambda _m: None)
+        # Stub out the actual OpenAI call so we don't need a key.
+        monkeypatch.setattr(v, 'call_openai',
+                            lambda *a, **kw: {'choices': []})
+        # Bypass the @agent decorator's lazy span wrapping by calling
+        # the underlying function directly.
+        inner = getattr(v._call_llm, '__wrapped__', v._call_llm)
+        monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
+        inner(messages=[{'role': 'user', 'content': 'hi'}],
+              model_key='gpt-5.5')
+        vendors = [val for k, val in captured if k == 'gen_ai.vendor']
+        assert vendors == ['openai'], (
+            f"expected exactly one gen_ai.vendor='openai' stamp, "
+            f"got {vendors}"
+        )
+
+    def test_vendor_stamping_runtime_engine(self, monkeypatch):
+        """End-to-end behavioral test: engine path stamps vendor=ollama
+        AND family/tag/parameter_size derived from the Ollama tag."""
+        from ai_assistant import views as v
+        captured: list[tuple[str, object]] = []
+        monkeypatch.setattr(v, 'set_span_attr',
+                            lambda k, val: captured.append((k, val)))
+        monkeypatch.setattr(v, 'set_request_model', lambda _m: None)
+        # Force the engine path with a fake model config.
+        monkeypatch.setattr(v, 'get_model_config', lambda _k: {
+            'provider': 'engine',
+            'model_id': 'gemma4:26b',
+            'max_tokens': 4096,
+        })
+        monkeypatch.setattr(v, 'call_engine',
+                            lambda *a, **kw: {'choices': []})
+        inner = getattr(v._call_llm, '__wrapped__', v._call_llm)
+        inner(messages=[{'role': 'user', 'content': 'hi'}],
+              model_key='engine-gemma4-26b')
+        attrs = dict(captured)
+        assert attrs.get('gen_ai.vendor') == 'ollama'
+        assert attrs.get('gen_ai.model.family') == 'gemma4'
+        assert attrs.get('gen_ai.model.tag') == '26b'
+        assert attrs.get('gen_ai.model.parameter_size') == '26b'
+
+    def test_vendor_stamping_skips_unparseable_engine_tag(self, monkeypatch):
+        """If the Ollama tag has no parameter size (e.g.
+        ``minimax-m2.7:cloud``), the call site must stamp vendor +
+        family + tag but NOT parameter_size — we don't want a junk
+        value polluting the registry's price lookup."""
+        from ai_assistant import views as v
+        captured: list[tuple[str, object]] = []
+        monkeypatch.setattr(v, 'set_span_attr',
+                            lambda k, val: captured.append((k, val)))
+        monkeypatch.setattr(v, 'set_request_model', lambda _m: None)
+        monkeypatch.setattr(v, 'get_model_config', lambda _k: {
+            'provider': 'engine',
+            'model_id': 'minimax-m2.7:cloud',
+            'max_tokens': 4096,
+        })
+        monkeypatch.setattr(v, 'call_engine',
+                            lambda *a, **kw: {'choices': []})
+        inner = getattr(v._call_llm, '__wrapped__', v._call_llm)
+        inner(messages=[{'role': 'user', 'content': 'hi'}],
+              model_key='engine-minimax-m2-7-cloud')
+        attrs = dict(captured)
+        assert attrs.get('gen_ai.vendor') == 'ollama'
+        assert attrs.get('gen_ai.model.family') == 'minimax-m2.7'
+        assert attrs.get('gen_ai.model.tag') == 'cloud'
+        assert 'gen_ai.model.parameter_size' not in attrs, (
+            "parameter_size must NOT be stamped when the tag yields "
+            "None — silent omission is the contract."
+        )
