@@ -218,11 +218,20 @@ def _ram_gb_estimate(size_bytes: int) -> int:
 def _build_engine_entry(model_data: dict) -> dict:
     """Translate one entry from the engine's ``/v1/models`` payload.
 
-    Capability metadata (architecture, reasoning, thinking_level) isn't
-    surfaced by the engine today, so we fill safe defaults that match the
-    historical hard-coded entries: dense, non-reasoning, non-thinking, tools
-    on (the engine routes tool calls through the same code path regardless
-    of whether the underlying model supports them).
+    The engine surfaces capability metadata per-model on ``/v1/models`` —
+    ``reasoning`` / ``thinking`` / ``thinking_level`` / ``tool_calling_mode``
+    — based on its ``infer_model_capabilities`` heuristic (e.g. anything
+    matching ``nemotron|deepseek-r1|qwen3-thinking|qwq|...`` is flagged as
+    reasoning).  We mirror those flags into the DeclarAI registry so the
+    frontend can render badges correctly AND so ``call_engine`` can opt
+    reasoning-family models into ``chat_template_kwargs.enable_thinking``
+    (see ``call_engine`` for why this matters — without it the chat
+    template tells Nemotron its think block is already closed and the
+    model leaks raw CoT into ``content``).
+
+    Fields missing from the engine payload fall back to safe non-reasoning
+    defaults so older engine builds that pre-date the capability surface
+    keep working unchanged.
     """
     engine_id = model_data['id']
     # The engine may surface tool_calling_mode per model; default to 'text'
@@ -236,9 +245,9 @@ def _build_engine_entry(model_data: dict) -> dict:
         'max_tokens': 4096,
         'supports_tools': True,
         'architecture': 'dense',
-        'reasoning': False,
-        'thinking': False,
-        'thinking_level': None,
+        'reasoning': bool(model_data.get('reasoning', False)),
+        'thinking': bool(model_data.get('thinking', False)),
+        'thinking_level': model_data.get('thinking_level'),
         'ram_gb': _ram_gb_estimate(int(model_data.get('size_bytes', 0))),
         'tool_calling_mode': tcm,
     }
@@ -392,6 +401,25 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
       LLM_ENGINE_BASE_URL  — defaults to http://llm-engine:8080/v1
       LLM_ENGINE_API_KEY   — bearer token (engine accepts any value when
                               its AUTH_ENABLED=false; required when on)
+
+    v2.43.1 — for reasoning-family models (Nemotron, DeepSeek-R1, Qwen3-
+    Thinking, QwQ, …) we pass ``chat_template_kwargs={'enable_thinking':
+    True}`` to the engine.  Their GGUF chat templates branch on a Jinja
+    ``enable_thinking`` variable: when it's falsy (the default when no
+    client passes it), the template pre-emits ``<think></think>`` — i.e.
+    tells the model its think block is already done — but a reasoning-
+    trained model produces CoT prose anyway, just *without* ``<think>``
+    markers.  Setting ``enable_thinking=True`` makes the template pre-emit
+    ``<think>\n`` instead, which makes the wire output more explicit when
+    the model does close the block.  The flag is a documented OpenAI-
+    extension (vLLM and Ollama HTTP both honour it the same way) so this
+    is correct configuration for reasoning models, **not a leak fix**.
+    The actual leak fix has to land engine-side: the blocking-path
+    response normalizer needs an ``expects_reasoning_prelude`` flag that
+    mirrors the streaming path, so the engine can correctly classify
+    raw-CoT-without-markers as reasoning when the model exhausts
+    ``max_tokens`` before closing ``</think>``.  Filed as engine feedback
+    in ``docs/engine-feedback/nemotron-cot-leak-blocking-normalizer.md``.
     """
     from openai import OpenAI
 
@@ -411,6 +439,12 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     if tools and model_cfg.get('supports_tools'):
         kwargs['tools'] = tools
         kwargs['tool_choice'] = 'auto'
+    # Reasoning-family models need an explicit ``enable_thinking=True`` to
+    # avoid the silent CoT-into-content leak — see docstring above.
+    if model_cfg.get('reasoning'):
+        kwargs['extra_body'] = {
+            'chat_template_kwargs': {'enable_thinking': True},
+        }
 
     response = client.chat.completions.create(**kwargs)
     return response.model_dump()

@@ -3518,6 +3518,173 @@ class TestModelRegistry:
 
 
 # ---------------------------------------------------------------------------
+# v2.43.1: Nemotron CoT-leak fix — reasoning-family models must opt into
+# chat_template_kwargs={'enable_thinking': True} on the engine call so the
+# GGUF template pre-emits ``<think>\n`` and the engine's response normalizer
+# can route the prelude to ``reasoning_content`` instead of dumping it into
+# ``content``.  Two contracts to pin:
+#   1. _build_engine_entry mirrors the engine's reasoning/thinking/level
+#      flags from /v1/models into the DeclarAI registry (was hard-coded
+#      False before this fix, which made bug #2 invisible).
+#   2. call_engine passes chat_template_kwargs.enable_thinking via
+#      OpenAI SDK's extra_body iff model_cfg['reasoning'] is True.
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestEngineEntryReasoningCapability:
+    """_build_engine_entry must mirror the engine's reasoning flags."""
+
+    def test_reasoning_flag_propagated_from_engine_payload(self):
+        from ai_assistant.model_registry import _build_engine_entry
+        cfg = _build_engine_entry({
+            'id': 'nemotron-3-nano:30b',
+            'reasoning': True,
+            'thinking': True,
+            'thinking_level': 'med',
+            'tool_calling_mode': 'native',
+            'size_bytes': 24 * 1024 ** 3,
+        })
+        assert cfg['reasoning'] is True
+        assert cfg['thinking'] is True
+        assert cfg['thinking_level'] == 'med'
+
+    def test_non_reasoning_flag_propagated_from_engine_payload(self):
+        from ai_assistant.model_registry import _build_engine_entry
+        cfg = _build_engine_entry({
+            'id': 'llama3.2:3b',
+            'reasoning': False,
+            'thinking': False,
+            'thinking_level': None,
+            'tool_calling_mode': 'text',
+            'size_bytes': 2 * 1024 ** 3,
+        })
+        assert cfg['reasoning'] is False
+        assert cfg['thinking'] is False
+        assert cfg['thinking_level'] is None
+
+    def test_missing_capability_fields_default_to_non_reasoning(self):
+        """Older engine builds that pre-date the capability surface must keep
+        working — every reasoning/thinking field has to default off so we
+        don't accidentally opt non-reasoning models into enable_thinking."""
+        from ai_assistant.model_registry import _build_engine_entry
+        cfg = _build_engine_entry({
+            'id': 'mystery-model:1b',
+            'size_bytes': 1024 ** 3,
+        })
+        assert cfg['reasoning'] is False
+        assert cfg['thinking'] is False
+        assert cfg['thinking_level'] is None
+
+
+@pytest.mark.unit
+class TestCallEngineEnableThinking:
+    """call_engine must opt reasoning models into enable_thinking on the
+    OpenAI-extension extra_body, and must NOT touch the body for non-
+    reasoning models (so we don't double-template Llama / Gemma)."""
+
+    @pytest.fixture
+    def _fake_openai_client(self, monkeypatch):
+        """Patch openai.OpenAI so the test can intercept the create() kwargs
+        without actually hitting the engine."""
+        captured = {}
+
+        class _FakeCompletions:
+            def create(self, **kwargs):
+                captured['kwargs'] = kwargs
+
+                class _FakeResp:
+                    def model_dump(self_inner):
+                        return {'id': 'test', 'choices': []}
+                return _FakeResp()
+
+        class _FakeChat:
+            def __init__(self):
+                self.completions = _FakeCompletions()
+
+        class _FakeOpenAI:
+            def __init__(self, **_):
+                self.chat = _FakeChat()
+
+        import openai
+        monkeypatch.setattr(openai, 'OpenAI', _FakeOpenAI)
+        return captured
+
+    def test_reasoning_model_gets_enable_thinking_true(self, _fake_openai_client):
+        from ai_assistant.model_registry import call_engine
+        cfg = {
+            'provider': 'engine',
+            'model_id': 'nemotron-3-nano:30b',
+            'max_tokens': 4096,
+            'temperature': 0.4,
+            'supports_tools': True,
+            'reasoning': True,
+        }
+        call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+        sent = _fake_openai_client['kwargs']
+        assert sent.get('extra_body') == {
+            'chat_template_kwargs': {'enable_thinking': True}
+        }, "reasoning models must opt into enable_thinking via extra_body"
+
+    def test_non_reasoning_model_omits_extra_body(self, _fake_openai_client):
+        from ai_assistant.model_registry import call_engine
+        cfg = {
+            'provider': 'engine',
+            'model_id': 'llama3.2:3b',
+            'max_tokens': 4096,
+            'temperature': 0.4,
+            'supports_tools': True,
+            'reasoning': False,
+        }
+        call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+        sent = _fake_openai_client['kwargs']
+        assert 'extra_body' not in sent, (
+            "non-reasoning models must NOT receive chat_template_kwargs — "
+            "Llama/Gemma chat templates have no enable_thinking branch, and "
+            "an unknown kwarg can change their rendering behavior on engine "
+            "builds that pass it through to Jinja unconditionally"
+        )
+
+    def test_reasoning_flag_missing_omits_extra_body(self, _fake_openai_client):
+        """Defensive: if model_cfg has no ``reasoning`` key at all (e.g. a
+        hand-built test config or a legacy registry entry) we must not
+        accidentally opt-in."""
+        from ai_assistant.model_registry import call_engine
+        cfg = {
+            'provider': 'engine',
+            'model_id': 'engine-only:7b',
+            'max_tokens': 4096,
+            'temperature': 0.4,
+            'supports_tools': True,
+        }
+        call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+        assert 'extra_body' not in _fake_openai_client['kwargs']
+
+    def test_reasoning_model_with_tools_keeps_both(self, _fake_openai_client):
+        """Tools and extra_body must co-exist — the failing UI scenario has
+        15 tools + Nemotron + enable_thinking all at once."""
+        from ai_assistant.model_registry import call_engine
+        cfg = {
+            'provider': 'engine',
+            'model_id': 'nemotron-3-nano:30b',
+            'max_tokens': 4096,
+            'temperature': 0.4,
+            'supports_tools': True,
+            'reasoning': True,
+        }
+        tools = [{'type': 'function', 'function': {
+            'name': 'get_data_dictionary',
+            'description': 'x',
+            'parameters': {'type': 'object', 'properties': {}},
+        }}]
+        call_engine([{'role': 'user', 'content': 'hi'}], cfg, tools=tools)
+        sent = _fake_openai_client['kwargs']
+        assert sent.get('tools') == tools
+        assert sent.get('tool_choice') == 'auto'
+        assert sent.get('extra_body') == {
+            'chat_template_kwargs': {'enable_thinking': True}
+        }
+
+
+# ---------------------------------------------------------------------------
 # Data dictionary enrichment — DB-backed fallback for stale Redis cache
 # (regression for the "Gemma says no descriptions exist" bug)
 # ---------------------------------------------------------------------------
