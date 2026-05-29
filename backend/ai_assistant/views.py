@@ -1062,6 +1062,34 @@ _TOOL_BUDGET_EXHAUSTED_FALLBACK = (
     "one pipeline step) and I'll answer it directly."
 )
 
+
+def _is_engine_server_error(exc: Exception) -> bool:
+    """True when an LLM call failed with a server-side (5xx) error.
+
+    The local inference engine returns a bare HTTP 500 — rather than a
+    graceful ``context_length_exceeded`` 400 — when the accumulating
+    tool-calling prompt (lite system prompt + slim context + the 15 tool
+    schemas + tool results) crosses a small-context model's window.  The
+    OpenAI SDK surfaces that as ``openai.InternalServerError`` (a subclass
+    of ``APIStatusError`` carrying ``status_code == 500``).
+
+    We detect it structurally — by ``status_code`` / ``status`` >= 500 or
+    the SDK exception class name — so ``_chat_workflow`` can degrade
+    gracefully without importing the openai exception hierarchy into the
+    view layer, and so tests can simulate it with a lightweight stand-in
+    exception that merely carries ``status_code = 500``.
+
+    Client (4xx) and connection/timeout errors return ``False`` so genuine
+    failures keep propagating instead of being silently swallowed.
+    """
+    status = getattr(exc, 'status_code', None)
+    if not isinstance(status, int):
+        status = getattr(exc, 'status', None)
+    if isinstance(status, int):
+        return status >= 500
+    return exc.__class__.__name__ in ('InternalServerError', 'APIError')
+
+
 # ---------------------------------------------------------------------------
 # Skill auto-routing — map user intent to a bundled skill
 # ---------------------------------------------------------------------------
@@ -1273,24 +1301,45 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         if role in ('user', 'assistant') and content:
             messages.append({'role': role, 'content': content})
 
-    # ── Skill auto-routing (model-agnostic) ──
-    # Native function-callers can hit invoke_skill themselves, but text-mode
-    # models (e.g., Gemma in text tool-calling mode) often skip tool calls.
-    # Detect feature-engineering intent in the user message and pre-load the
-    # skill body so EVERY model sees the playbook before answering.
-    # The skill loader is a @prometa_tool span itself, so the auto-route is
-    # still visible in the trace chain.
+    # ── Skill auto-routing (provider-aware) ──
+    # Detect feature-engineering intent in the user message and, for cloud
+    # models, pre-load the skill body so the model sees the playbook before
+    # answering.  Engine models skip the pre-load (it overflows their small
+    # context window — see below) and instead pull the playbook on demand via
+    # the invoke_skill tool.  The skill loader is a @prometa_tool span itself,
+    # so the auto-route stays visible in the trace chain.
     auto_skill = _auto_route_skill(user_message)
+    skill_injected = False
     if auto_skill:
-        skill_body = _load_skill_traced(auto_skill)
-        messages.append({
-            'role': 'system',
-            'content': (f"The user's question matched the '{auto_skill}' skill — "
-                        f"its playbook has been pre-loaded below.  Ground your "
-                        f"answer in these patterns and cite the relevant section.\n\n"
-                        f"{skill_body}"),
-        })
         set_span_attr('declarai.skill.auto_routed', auto_skill)
+        # v2.43.3: only PRE-LOAD the full skill playbook into the system
+        # prompt for cloud models.  Engine models run on small-context local
+        # GGUFs (e.g. nemotron-3-nano:30b ≈ 8K tokens); stacking the
+        # ~2K-token playbook on top of the lite system prompt, slim context,
+        # and the 15 tool schemas leaves no room for a tool result on the
+        # follow-up turn.  Once the model calls a tool and we append the
+        # result, the prompt crosses the engine's context window and the
+        # engine returns HTTP 500 (it should 400) — which surfaced to users
+        # as "AI Assistant error: Internal Server Error" on every
+        # feature-engineering question (reproduced against nemotron-3-nano:30b
+        # at the exact production prompt sizes).  Engine models pull the same
+        # playbook on demand via the ``invoke_skill`` tool, so guidance is
+        # preserved without the fixed per-turn context cost.  This mirrors the
+        # provider-aware budget split already in ``_choose_system_prompt``
+        # (v2.40.0); cloud models have the window to absorb the pre-load and
+        # keep it.  The engine-side defect (500 instead of a graceful
+        # context_length_exceeded 400) is filed separately as engine feedback.
+        if (model_cfg or {}).get('provider', '') != 'engine':
+            skill_body = _load_skill_traced(auto_skill)
+            messages.append({
+                'role': 'system',
+                'content': (f"The user's question matched the '{auto_skill}' skill — "
+                            f"its playbook has been pre-loaded below.  Ground your "
+                            f"answer in these patterns and cite the relevant section.\n\n"
+                            f"{skill_body}"),
+            })
+            skill_injected = True
+        set_span_attr('declarai.skill.auto_injected', skill_injected)
 
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})
@@ -1328,7 +1377,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             context_components=_describe_context_components(
                 use_tools=use_tools,
                 has_context=bool(context),
-                auto_skill=auto_skill,
+                auto_skill=auto_skill if skill_injected else None,
                 has_history=bool(history),
             ),
         )
@@ -1341,9 +1390,30 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Tool-calling loop (only for models that support function calling)
     tools = PIPELINE_TOOLS if (use_tools and model_cfg.get('supports_tools')) else None
     total_usage = {}
+    msg_obj = {}
 
     for _round in range(_MAX_TOOL_ROUNDS + 1):
-        result = _call_llm(messages, model_key, tools=tools)
+        try:
+            result = _call_llm(messages, model_key, tools=tools)
+        except Exception as exc:
+            # v2.43.3: a small-context engine model returns HTTP 500 (not a
+            # graceful context_length_exceeded 400) once the accumulating
+            # prompt — lite system prompt + slim context + the 15 tool
+            # schemas (~2.3K tokens) + tool results — crosses its window
+            # mid tool-calling.  If we've already gathered tool results,
+            # don't surface a raw "Internal Server Error": break out and let
+            # the synthesis pass below answer from the results in hand.  That
+            # pass calls the model with tools=None, dropping the tool-schema
+            # block that tips the prompt over — verified to fit where the
+            # tools-on call 500s.  Non-5xx errors (and 5xx with no tool work
+            # yet) keep propagating so genuine failures still surface.
+            if _is_engine_server_error(exc) and any(
+                    m.get('role') == 'tool' for m in messages):
+                set_span_attr('declarai.chat.engine_overflow', True)
+                set_span_attr('declarai.chat.engine_overflow_round', _round)
+                set_span_attr('declarai.chat.engine_overflow_error', str(exc)[:200])
+                break
+            raise
         _merge_usage(total_usage, result.get('usage', {}))
 
         choice = result['choices'][0]
