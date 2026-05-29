@@ -4113,6 +4113,266 @@ class TestSkillAutoRouting:
 
 
 # ---------------------------------------------------------------------------
+# v2.43.3 — engine context-window overflow on multi-turn tool calling
+# ---------------------------------------------------------------------------
+# Symptom (production): every feature-engineering question to an engine
+# model (nemotron-3-nano:30b, ~8K-token window) returned "AI Assistant
+# error: Internal Server Error".  Root cause: the follow-up tool call's
+# prompt — lite system prompt + slim context + the auto-injected ~2K-token
+# skill playbook + the 15 tool schemas (~2.3K tokens) + the tool result —
+# crossed the model's context window, and the engine returned a bare HTTP
+# 500 (not a graceful context_length_exceeded 400).  Reproduced against the
+# live engine at the exact production prompt sizes.
+#
+# Two-part fix:
+#   1. Provider-aware skill injection — engine models no longer pre-load the
+#      full playbook (they pull it on demand via invoke_skill); cloud models
+#      keep it.  TestSkillAutoInjectionProviderAware pins this.
+#   2. Graceful degradation — if the engine still 5xx's mid tool-loop (e.g.
+#      the model calls both invoke_skill AND get_data_dictionary), drop the
+#      tool schemas and fall through to the synthesis pass instead of
+#      surfacing a raw 500.  TestChatWorkflowEngineOverflowDegrades pins it.
+# ---------------------------------------------------------------------------
+
+
+def _engine_or_cloud_cfg(provider):
+    """Minimal model_cfg matching what get_model_config returns."""
+    return {
+        'provider': provider,
+        'model_id': 'nemotron-3-nano:30b' if provider == 'engine' else 'gpt-5.5',
+        'supports_tools': True,
+        'max_tokens': 4096,
+        'temperature': 0.4,
+    }
+
+
+def _tool_call_response(name='get_data_dictionary', call_id='c1'):
+    """A response that asks for one tool call (content empty — the normal
+    shape for a tool-calling round)."""
+    return {
+        'choices': [{
+            'finish_reason': 'tool_calls',
+            'message': {
+                'role': 'assistant',
+                'content': None,
+                'tool_calls': [{
+                    'id': call_id, 'type': 'function',
+                    'function': {'name': name, 'arguments': '{}'},
+                }],
+            },
+        }],
+        'usage': {'prompt_tokens': 10, 'completion_tokens': 5, 'total_tokens': 15},
+    }
+
+
+def _text_response(text):
+    """A plain final answer (no tool calls, no action blocks)."""
+    return {
+        'choices': [{'finish_reason': 'stop',
+                     'message': {'role': 'assistant', 'content': text}}],
+        'usage': {'prompt_tokens': 8, 'completion_tokens': 4, 'total_tokens': 12},
+    }
+
+
+def _run_chat_workflow(monkeypatch, *, provider, call_llm,
+                       user_message='please derive new features from the existing ones',
+                       file_id=1):
+    """Execute the real _chat_workflow body with its external collaborators
+    mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
+
+    Returns {result, llm_calls, skill_calls} so tests can assert on the
+    response AND on what was sent to the model each round."""
+    from ai_assistant import views
+
+    monkeypatch.setattr(views, 'get_model_config',
+                        lambda k: _engine_or_cloud_cfg(provider))
+    monkeypatch.setattr(views, 'cache_list_artifacts',
+                        lambda fid: ['data_dictionary'])
+    monkeypatch.setattr(views, '_build_slim_context',
+                        lambda fid, sec: 'Pipeline: boosting\nTarget: good/bad flag')
+    monkeypatch.setattr(views, 'execute_tool_call',
+                        lambda fid, name, args: f'TOOL_RESULT[{name}]')
+    # Observability helpers → silent no-ops (they are no-ops under pytest
+    # anyway; pinning them keeps the test independent of SDK state).
+    monkeypatch.setattr(views, 'set_span_attr', lambda *a, **kw: None)
+    monkeypatch.setattr(views, 'set_session_id', lambda *a, **kw: None)
+    monkeypatch.setattr(views, 'set_customer_id', lambda *a, **kw: None)
+    monkeypatch.setattr(views, 'current_span_id', lambda: None)
+
+    skill_calls = []
+
+    def fake_load_skill(name):
+        skill_calls.append(name)
+        return f'SKILL_PLAYBOOK_BODY for {name}'
+    monkeypatch.setattr(views, '_load_skill_traced', fake_load_skill)
+
+    llm_calls = []
+
+    def fake_call_llm(messages, model_key, tools=None):
+        idx = len(llm_calls)
+        llm_calls.append({
+            'messages': [dict(m) for m in messages],
+            'tools': tools,
+            'model_key': model_key,
+        })
+        return call_llm(idx, messages, tools)
+    monkeypatch.setattr(views, '_call_llm', fake_call_llm)
+
+    fn = views._chat_workflow.__wrapped__ \
+        if hasattr(views._chat_workflow, '__wrapped__') else views._chat_workflow
+    result = fn(user_message, {}, 'general', [], file_id=file_id, model='engine-x')
+    return {'result': result, 'llm_calls': llm_calls, 'skill_calls': skill_calls}
+
+
+@pytest.mark.unit
+class TestIsEngineServerError:
+    """_is_engine_server_error gates the graceful-degradation path: True only
+    for server-side 5xx (the engine's context-overflow 500), False for 4xx /
+    connection / timeout / programming errors so genuine failures propagate."""
+
+    def test_status_code_500_is_server_error(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class E(Exception):
+            status_code = 500
+        assert _is_engine_server_error(E()) is True
+
+    def test_status_code_503_is_server_error(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class E(Exception):
+            status_code = 503
+        assert _is_engine_server_error(E()) is True
+
+    def test_status_code_400_is_not_server_error(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class E(Exception):
+            status_code = 400
+        assert _is_engine_server_error(E()) is False
+
+    def test_status_attr_variant_502(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class E(Exception):
+            status = 502
+        assert _is_engine_server_error(E()) is True
+
+    def test_internalservererror_classname_without_status(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class InternalServerError(Exception):
+            pass
+        assert _is_engine_server_error(InternalServerError()) is True
+
+    def test_plain_exception_is_not_server_error(self):
+        from ai_assistant.views import _is_engine_server_error
+        assert _is_engine_server_error(ValueError('boom')) is False
+
+    def test_connection_error_classname_is_not_server_error(self):
+        from ai_assistant.views import _is_engine_server_error
+
+        class APIConnectionError(Exception):
+            pass
+        assert _is_engine_server_error(APIConnectionError()) is False
+
+
+@pytest.mark.unit
+class TestSkillAutoInjectionProviderAware:
+    """The FE skill playbook is pre-loaded into the system prompt only for
+    cloud models; engine models skip it (it overflows their small context
+    window) and pull it on demand via the invoke_skill tool."""
+
+    def test_engine_model_does_not_preload_skill_body(self, monkeypatch):
+        out = _run_chat_workflow(
+            monkeypatch, provider='engine',
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+        # The auto-router still matched (loader would be reachable), but the
+        # body must NOT have been loaded or injected for an engine model.
+        assert out['skill_calls'] == []
+        joined = ' '.join(m.get('content') or '' for m in out['llm_calls'][0]['messages'])
+        assert 'SKILL_PLAYBOOK_BODY' not in joined
+        assert 'playbook has been pre-loaded' not in joined
+
+    def test_cloud_model_preloads_skill_body(self, monkeypatch):
+        out = _run_chat_workflow(
+            monkeypatch, provider='openai',
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+        assert out['skill_calls'] == ['feature-engineering']
+        joined = ' '.join(m.get('content') or '' for m in out['llm_calls'][0]['messages'])
+        assert 'SKILL_PLAYBOOK_BODY' in joined
+        assert 'playbook has been pre-loaded' in joined
+
+
+@pytest.mark.unit
+class TestChatWorkflowEngineOverflowDegrades:
+    """When the engine 5xx's mid tool-loop (context overflow after tool
+    results accumulate), the workflow degrades to the tools-off synthesis
+    pass and returns an answer — it must never surface a raw 500."""
+
+    def test_overflow_after_tool_work_degrades_to_synthesis(self, monkeypatch):
+        class _ServerErr(Exception):
+            status_code = 500
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                # Follow-up call still carries the 15 tool schemas → overflow.
+                assert tools is not None
+                raise _ServerErr('Internal Server Error')
+            # Synthesis pass: tools dropped, so it fits.
+            assert tools is None
+            return _text_response('Here are 5 derived features: ratio_a_b, ...')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine', call_llm=call_llm)
+        assert out['result']['message'] == 'Here are 5 derived features: ratio_a_b, ...'
+        # round0 tool_calls, round1 overflow (caught), synthesis (tools off).
+        assert len(out['llm_calls']) == 3
+        assert out['llm_calls'][2]['tools'] is None
+
+    def test_non_server_error_propagates(self, monkeypatch):
+        class _ClientErr(Exception):
+            status_code = 400
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            raise _ClientErr('bad request')
+
+        with pytest.raises(_ClientErr):
+            _run_chat_workflow(monkeypatch, provider='engine', call_llm=call_llm)
+
+    def test_server_error_before_any_tool_work_propagates(self, monkeypatch):
+        class _ServerErr(Exception):
+            status_code = 500
+
+        def call_llm(idx, messages, tools):
+            raise _ServerErr('Internal Server Error')
+
+        with pytest.raises(_ServerErr):
+            _run_chat_workflow(monkeypatch, provider='engine', call_llm=call_llm)
+
+    def test_synthesis_also_failing_yields_actionable_fallback(self, monkeypatch):
+        from ai_assistant.views import _TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+        class _ServerErr(Exception):
+            status_code = 500
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            # Both the follow-up AND the synthesis pass 5xx.
+            raise _ServerErr('Internal Server Error')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine', call_llm=call_llm)
+        # No raw 500 — user sees the budget-exhausted fallback (tool work happened).
+        assert out['result']['message'] == _TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+
+# ---------------------------------------------------------------------------
 # Skill supplementary file access (get_skill_file tool + Skill.read_file)
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
