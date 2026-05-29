@@ -386,6 +386,65 @@ def call_openai(api_key: str, messages: list, model_cfg: dict,
     return response.model_dump()
 
 
+def _recover_reasoning_content(response: dict) -> dict:
+    """Salvage a real answer that the engine routed into ``reasoning_content``.
+
+    v2.43.2 — the llm-inference-engine team (PR fix/blocking-normalizer-
+    reasoning-prelude) chose the AGGRESSIVE blocking-path policy: for a
+    reasoning-family model, unanchored text (no ``<think>``/``</think>``
+    markers, no tool_calls) routes to ``reasoning_content`` regardless of
+    ``finish_reason`` — so the blocking path is byte-for-byte symmetric with
+    StreamNormalizer, which can't retract already-sent SSE frames.
+
+    Their stated trade-off: in the rare case a reasoning model emits a real
+    answer with NO ``<think>`` markers at all, that answer lands in
+    ``reasoning_content`` instead of ``content``.  They assumed DeclarAI
+    renders reasoning collapsed-by-default and could recover it.  We do NOT:
+    every consumer (``_chat_workflow`` in views.py, the Angular chat panel)
+    reads only ``message.content``.  Left unhandled, such an answer would be
+    silently dropped — ``_chat_workflow`` would see empty content, burn a
+    synthesis pass, then fall back to ``_EMPTY_RESPONSE_FALLBACK`` and the
+    user would see "the assistant did not return an answer this time."
+
+    This guard makes our consumer robust to EITHER engine policy
+    (aggressive-now or conservative-later): whenever a choice has blank
+    ``content`` but a populated ``reasoning_content`` AND no tool_calls (a
+    tool-call round legitimately has empty content), we promote
+    ``reasoning_content`` into ``content`` so downstream code sees the
+    answer.  The original ``reasoning_content`` is preserved on the message
+    for any future collapsed-CoT renderer.
+
+    Idempotent and defensive: tolerates missing keys / non-dict shapes and
+    never raises (a salvage helper must not be able to break the chat path).
+    """
+    try:
+        choices = response.get('choices') or []
+    except AttributeError:
+        return response
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        msg = choice.get('message')
+        if not isinstance(msg, dict):
+            continue
+        # A tool-call round legitimately has empty content — leave it alone.
+        if msg.get('tool_calls'):
+            continue
+        content = msg.get('content')
+        if content and content.strip():
+            continue
+        reasoning = msg.get('reasoning_content')
+        if isinstance(reasoning, str) and reasoning.strip():
+            msg['content'] = reasoning
+            choice['declarai_reasoning_recovered'] = True
+            _logger.warning(
+                "Recovered %d chars from reasoning_content into content "
+                "(engine routed an unanchored answer as reasoning).",
+                len(reasoning),
+            )
+    return response
+
+
 def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     """Call the local llm-inference-engine via its OpenAI-compatible API.
 
@@ -447,4 +506,9 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
         }
 
     response = client.chat.completions.create(**kwargs)
-    return response.model_dump()
+    # v2.43.2: the engine's aggressive blocking-path policy can route a real
+    # answer into ``reasoning_content`` when the model emits no ``<think>``
+    # markers.  We read only ``message.content`` downstream, so promote any
+    # such answer back into ``content`` before returning — see
+    # ``_recover_reasoning_content`` for the full rationale.
+    return _recover_reasoning_content(response.model_dump())
