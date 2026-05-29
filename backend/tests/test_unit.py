@@ -3685,6 +3685,195 @@ class TestCallEngineEnableThinking:
 
 
 # ---------------------------------------------------------------------------
+# v2.43.2: client-side reasoning_content recovery.
+#
+# The llm-inference-engine team (PR fix/blocking-normalizer-reasoning-prelude)
+# adopted the AGGRESSIVE blocking-path policy: unanchored text on a
+# reasoning-family model routes to ``reasoning_content`` regardless of
+# finish_reason, to stay byte-for-byte symmetric with the streaming
+# normalizer.  Their rationale assumed DeclarAI renders reasoning
+# collapsed-by-default and could recover a misrouted answer — but every
+# DeclarAI consumer reads only ``message.content``.  Without this guard a
+# real answer with no ``<think>`` markers is silently dropped (empty
+# content → synthesis pass → _EMPTY_RESPONSE_FALLBACK).
+#
+# _recover_reasoning_content promotes reasoning_content into content when
+# content is blank AND there are no tool_calls.  These tests pin that
+# contract and its integration into call_engine.
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestRecoverReasoningContent:
+    """_recover_reasoning_content salvages a misrouted answer in-place."""
+
+    def _resp(self, *, content, reasoning=None, tool_calls=None,
+              finish_reason='stop'):
+        msg = {'role': 'assistant', 'content': content}
+        if reasoning is not None:
+            msg['reasoning_content'] = reasoning
+        if tool_calls is not None:
+            msg['tool_calls'] = tool_calls
+        return {'choices': [{'finish_reason': finish_reason, 'message': msg}]}
+
+    def test_promotes_reasoning_when_content_empty(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(
+            self._resp(content='', reasoning='The real answer is 42.')
+        )
+        msg = out['choices'][0]['message']
+        assert msg['content'] == 'The real answer is 42.'
+        # Original preserved for any future collapsed-CoT renderer
+        assert msg['reasoning_content'] == 'The real answer is 42.'
+        assert out['choices'][0]['declarai_reasoning_recovered'] is True
+
+    def test_promotes_when_content_is_none(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(
+            self._resp(content=None, reasoning='Answer here.')
+        )
+        assert out['choices'][0]['message']['content'] == 'Answer here.'
+
+    def test_promotes_when_content_is_whitespace(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(
+            self._resp(content='   \n  ', reasoning='Answer here.')
+        )
+        assert out['choices'][0]['message']['content'] == 'Answer here.'
+
+    def test_does_not_touch_real_content(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(
+            self._resp(content='A genuine reply.', reasoning='internal CoT')
+        )
+        msg = out['choices'][0]['message']
+        assert msg['content'] == 'A genuine reply.'
+        assert 'declarai_reasoning_recovered' not in out['choices'][0]
+
+    def test_leaves_tool_call_round_alone(self):
+        """A tool-call round legitimately has empty content — promoting
+        reasoning_content there would corrupt the multi-turn loop."""
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(self._resp(
+            content='',
+            reasoning='thinking about which tool to call',
+            tool_calls=[{'id': 'c1', 'function': {'name': 'get_cv_results',
+                                                  'arguments': '{}'}}],
+            finish_reason='tool_calls',
+        ))
+        msg = out['choices'][0]['message']
+        assert msg['content'] == ''  # untouched
+        assert 'declarai_reasoning_recovered' not in out['choices'][0]
+
+    def test_noop_when_both_empty(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(self._resp(content='', reasoning=''))
+        assert out['choices'][0]['message']['content'] == ''
+        assert 'declarai_reasoning_recovered' not in out['choices'][0]
+
+    def test_noop_when_no_reasoning_key(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        out = _recover_reasoning_content(self._resp(content=''))
+        assert out['choices'][0]['message']['content'] == ''
+
+    def test_finish_reason_irrelevant_matches_aggressive_policy(self):
+        """The engine routes to reasoning_content regardless of finish_reason
+        (both 'stop' and 'length'); recovery must fire for either."""
+        from ai_assistant.model_registry import _recover_reasoning_content
+        for fr in ('stop', 'length'):
+            out = _recover_reasoning_content(
+                self._resp(content='', reasoning='ans', finish_reason=fr)
+            )
+            assert out['choices'][0]['message']['content'] == 'ans', fr
+
+    def test_idempotent(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        r = self._resp(content='', reasoning='ans')
+        once = _recover_reasoning_content(r)
+        twice = _recover_reasoning_content(once)
+        assert twice['choices'][0]['message']['content'] == 'ans'
+
+    def test_defensive_against_malformed_shapes(self):
+        """Never raise — a salvage helper must not be able to break chat."""
+        from ai_assistant.model_registry import _recover_reasoning_content
+        assert _recover_reasoning_content({}) == {}
+        assert _recover_reasoning_content({'choices': None}) == {'choices': None}
+        assert _recover_reasoning_content({'choices': [None, 'x']}) == {
+            'choices': [None, 'x']
+        }
+        # choice without a dict message
+        assert _recover_reasoning_content(
+            {'choices': [{'message': 'not-a-dict'}]}
+        ) == {'choices': [{'message': 'not-a-dict'}]}
+
+    def test_handles_multiple_choices(self):
+        from ai_assistant.model_registry import _recover_reasoning_content
+        resp = {'choices': [
+            {'finish_reason': 'stop',
+             'message': {'content': '', 'reasoning_content': 'first'}},
+            {'finish_reason': 'stop',
+             'message': {'content': 'real', 'reasoning_content': 'cot'}},
+        ]}
+        out = _recover_reasoning_content(resp)
+        assert out['choices'][0]['message']['content'] == 'first'
+        assert out['choices'][1]['message']['content'] == 'real'
+
+
+@pytest.mark.unit
+class TestCallEngineRecoversReasoning:
+    """call_engine must run the recovery pass on the engine's response so the
+    rest of the app (which reads only message.content) sees the answer."""
+
+    def _patch_openai(self, monkeypatch, fake_response: dict):
+        class _FakeCompletions:
+            def create(self, **kwargs):
+                class _FakeResp:
+                    def model_dump(self_inner):
+                        return fake_response
+                return _FakeResp()
+
+        class _FakeChat:
+            def __init__(self):
+                self.completions = _FakeCompletions()
+
+        class _FakeOpenAI:
+            def __init__(self, **_):
+                self.chat = _FakeChat()
+
+        import openai
+        monkeypatch.setattr(openai, 'OpenAI', _FakeOpenAI)
+
+    def test_call_engine_promotes_reasoning_content(self, monkeypatch):
+        from ai_assistant.model_registry import call_engine
+        self._patch_openai(monkeypatch, {
+            'id': 't',
+            'choices': [{
+                'finish_reason': 'stop',
+                'message': {'role': 'assistant', 'content': '',
+                            'reasoning_content': 'Recovered answer.'},
+            }],
+        })
+        cfg = {'provider': 'engine', 'model_id': 'nemotron-3-nano:30b',
+               'max_tokens': 4096, 'temperature': 0.4,
+               'supports_tools': True, 'reasoning': True}
+        out = call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+        assert out['choices'][0]['message']['content'] == 'Recovered answer.'
+
+    def test_call_engine_leaves_normal_response_unchanged(self, monkeypatch):
+        from ai_assistant.model_registry import call_engine
+        self._patch_openai(monkeypatch, {
+            'id': 't',
+            'choices': [{
+                'finish_reason': 'stop',
+                'message': {'role': 'assistant', 'content': 'Direct reply.'},
+            }],
+        })
+        cfg = {'provider': 'engine', 'model_id': 'llama3.2:3b',
+               'max_tokens': 4096, 'temperature': 0.4,
+               'supports_tools': True, 'reasoning': False}
+        out = call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+        assert out['choices'][0]['message']['content'] == 'Direct reply.'
+
+
+# ---------------------------------------------------------------------------
 # Data dictionary enrichment — DB-backed fallback for stale Redis cache
 # (regression for the "Gemma says no descriptions exist" bug)
 # ---------------------------------------------------------------------------
