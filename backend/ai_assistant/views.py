@@ -714,8 +714,12 @@ asking a generic conceptual question with no pipeline-specific reference
 
 ═══ ACTIONABLE OPERATIONS ═══
 You can DIRECTLY MODIFY the user's pipeline by emitting an ACTION BLOCK at
-the END of your reply.  Always use REAL column names.  Briefly explain
-WHAT and WHY first, then emit the block.
+the END of your reply.  Always use REAL column names.  Put your explanation
+in the VISIBLE answer, NEVER in hidden reasoning: lead with WHAT you propose
+and WHY.  When you create or transform features, FIRST write a one-line intro
+and a markdown table — Feature | Formula | Meaning | Why it helps the model,
+one row per feature — THEN emit the action block.  A bare code block with no
+explanation is NOT acceptable.
 
 ─── execute_code ───  Run pandas/numpy on `df` (no imports; only pd, np).
 <<<ACTION:execute_code>>>
@@ -1073,26 +1077,32 @@ _SYNTHESIS_PROMPT = (
 
 # v2.44.0 finalization instruction — stricter variant for reasoning-family
 # engine models (nemotron-3-nano:30b, deepseek-r1, …) whose draft was unusable:
-# empty after a truncated CoT, raw chain-of-thought prose, or code in the wrong
-# format.  Forbids CoT narration and mandates the <<<ACTION:execute_code>>>
-# block so dataset code renders an Apply button in the chat panel.
+# empty after a truncated CoT, raw chain-of-thought prose, code in the wrong
+# format, OR (v2.44.1) a bare code block with no explanation because the
+# rationale was buried in chain-of-thought.  Forbids CoT narration, REQUIRES a
+# user-facing explanation, and mandates the <<<ACTION:execute_code>>> block so
+# dataset code renders an Apply button in the chat panel.
 _FINALIZE_PROMPT = (
     'Your previous draft was NOT a usable reply — it showed internal '
-    'reasoning, was cut off, or used the wrong format.  Write the FINAL '
-    'reply to the user NOW, grounded ONLY in the tool results and pipeline '
-    'context above.  STRICT RULES:\n'
-    '1. Do NOT show your reasoning or planning.  No "okay", "let me", "we '
-    'need to", "first I will" — lead directly with the answer.\n'
-    '2. Be concise: a one-line intro, then a short bullet list or compact '
-    'table.\n'
-    '3. If you propose pandas/numpy code to modify the dataset, you MUST '
-    'emit it as EXACTLY ONE action block at the very end, in THIS exact '
-    'format — no <function=...> tags, no triple-backtick fences:\n'
+    'reasoning, was cut off, used the wrong format, OR proposed code with no '
+    'explanation.  Write the FINAL reply to the user NOW, grounded ONLY in '
+    'the tool results and pipeline context above.  STRICT RULES:\n'
+    '1. Do NOT show your private reasoning or planning.  No "okay", "let me", '
+    '"we need to", "first I will" — lead directly with the answer.\n'
+    '2. EXPLAIN your proposal so the user understands it — never reply with '
+    'code alone.  When you create or transform features, give a one-line '
+    'intro, THEN a markdown table with these columns: Feature | Formula / '
+    'transformation | Meaning | Why it helps the model.  One row per feature, '
+    'using the REAL column names and numbers from the context.\n'
+    '3. If you propose pandas/numpy code to modify the dataset, you MUST emit '
+    'it as EXACTLY ONE action block at the very end, in THIS exact format — '
+    'no <function=...> tags, no triple-backtick fences, and NO import '
+    'statements (pd and np are already available):\n'
     '<<<ACTION:execute_code>>>\n'
     '{"code": "df[\'Debt_to_Income\'] = df[\'Var_19\'] / df[\'Var_24\']'
     '.replace(0, 1)", "description": "Create Debt-to-Income ratio"}\n'
     '<<<END_ACTION>>>\n'
-    '4. Use REAL column names from the context.  Do NOT call any tools.'
+    '4. Do NOT call any tools.'
 )
 
 
@@ -1527,14 +1537,30 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         and bool((model_cfg or {}).get('reasoning'))
     )
     cot_leaked = is_engine_reasoning and _looks_like_cot_leak(assistant_message)
+    # v2.44.1: a reasoning model that buries its rationale in chain-of-thought
+    # (which we strip) and emits ONLY an execute_code action block — the user
+    # gets an Apply button with no explanation of what the new features mean or
+    # why they help.  Elaborate via the same finalization pass so the answer
+    # reads like the cloud models do (intro + feature table + Apply).
+    code_only = is_engine_reasoning and _is_code_only_reply(assistant_message)
     set_span_attr('declarai.chat.cot_leak_detected', cot_leaked)
+    set_span_attr('declarai.chat.code_only_reply', code_only)
     synthesis_required = (
         (not assistant_message.strip() or cot_leaked)
         and any(m.get('role') == 'tool' for m in messages)
-    )
+    ) or code_only
     set_span_attr('declarai.chat.synthesis_pass', synthesis_required)
     if synthesis_required:
+        # Preserve the original action block(s) so an elaboration pass that
+        # forgets to re-emit the code can't strip the user's Apply button.
+        preserved_actions = (
+            _ACTION_BLOCK_RE.findall(assistant_message) if code_only else []
+        )
         try:
+            # For a code-only reply, show the model its own proposed code so the
+            # elaboration explains THOSE exact features rather than a fresh set.
+            if code_only:
+                messages.append({'role': 'assistant', 'content': assistant_message})
             messages.append({
                 'role': 'system',
                 'content': _FINALIZE_PROMPT if is_engine_reasoning else _SYNTHESIS_PROMPT,
@@ -1548,6 +1574,16 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             # actionable fallback copy shows instead of leaked reasoning.
             if is_engine_reasoning and _looks_like_cot_leak(new_message):
                 new_message = ''
+            # If elaboration produced an explanation but dropped the action,
+            # re-attach the original block(s) so Apply still renders.
+            if (preserved_actions and new_message.strip()
+                    and not _HAS_ACTION_RE.search(new_message)):
+                new_message = (new_message.rstrip() + '\n\n'
+                               + '\n\n'.join(preserved_actions))
+            # Never downgrade a working code-only reply to empty — if
+            # elaboration failed, keep the original (functional) action block.
+            if code_only and not new_message.strip():
+                new_message = assistant_message
             assistant_message = new_message
             set_span_attr(
                 'declarai.chat.synthesis_chars',
@@ -1555,7 +1591,10 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             )
         except Exception as exc:  # pragma: no cover - network path
             set_span_attr('declarai.chat.synthesis_error', str(exc)[:200])
-            assistant_message = ''
+            # Preserve a functional code-only reply on failure; only the
+            # genuinely empty / CoT-leak paths fall through to the fallback.
+            if not code_only:
+                assistant_message = ''
 
     # v2.44.0: last-line safety net — if a reasoning model's reply is STILL
     # raw CoT here (e.g. a no-tool-work turn that skipped the finalization
@@ -1914,6 +1953,48 @@ def _looks_like_cot_leak(text: str) -> bool:
     if not text or '<<<ACTION' in text:
         return False
     return bool(_COT_OPENER_RE.match(text.lstrip()[:200]))
+
+
+# Full <<<ACTION:…>>>…<<<END_ACTION>>> block (any type), tolerant of 2-3
+# brackets — used to size the explanatory prose around an action and to
+# re-attach the original block if an elaboration pass drops it.
+_ACTION_BLOCK_RE = _re.compile(
+    r'<{2,3}\s*ACTION\s*:\s*\w+\s*>{2,3}.*?<{2,3}\s*/?\s*END_ACTION\s*>{2,3}',
+    _re.DOTALL | _re.IGNORECASE,
+)
+# Opening delimiter only — cheap "does this reply contain an action?" check.
+_HAS_ACTION_RE = _re.compile(r'<{2,3}\s*ACTION\s*:', _re.IGNORECASE)
+# execute_code specifically — feature creation / dataset transformations.  We
+# only run the rationale-elaboration pass for these (not config/start actions,
+# whose one-line confirmations don't need a feature table).
+_EXEC_ACTION_RE = _re.compile(r'<{2,3}\s*ACTION\s*:\s*execute_code\s*>{2,3}', _re.IGNORECASE)
+# Minimum words of explanatory prose (excluding any action block) we expect
+# alongside a proposed code action.  Below this, a reasoning-family model has
+# almost certainly buried its rationale in chain-of-thought and emitted code
+# only — the user sees an Apply button with no explanation.
+_MIN_RATIONALE_WORDS = 25
+
+
+def _prose_without_actions(text: str) -> str:
+    """Return *text* with any ``<<<ACTION>>>`` blocks removed (for prose sizing)."""
+    if not text:
+        return ''
+    return _ACTION_BLOCK_RE.sub('', text).strip()
+
+
+def _is_code_only_reply(text: str) -> bool:
+    """True when a reply proposes ``execute_code`` but barely explains it.
+
+    Reasoning-family engine models sometimes route the entire rationale into
+    chain-of-thought (which we strip) and emit only the ``execute_code`` action
+    block.  The user then gets an Apply button with no explanation of WHAT the
+    new features mean or WHY they help — the exact complaint this guards
+    against.  Scoped to ``execute_code`` so config/start confirmations (which
+    legitimately need only a one-liner) never trigger an elaboration pass.
+    """
+    if not text or not _EXEC_ACTION_RE.search(text):
+        return False
+    return len(_prose_without_actions(text).split()) < _MIN_RATIONALE_WORDS
 
 
 # ---------------------------------------------------------------------------
