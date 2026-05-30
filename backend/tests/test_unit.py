@@ -4492,6 +4492,45 @@ class TestEngineReplyNormalization:
         assert not _looks_like_cot_leak(
             "Okay, here.\n<<<ACTION:execute_code>>>\n{}\n<<<END_ACTION>>>")
 
+    # ── v2.44.1: code-only / thin-rationale detection ──────────────────
+    def test_prose_without_actions_strips_block(self):
+        from ai_assistant.views import _prose_without_actions
+        txt = ('Intro line.\n<<<ACTION:execute_code>>>\n{"code": "df[\'X\']=1"}\n'
+               '<<<END_ACTION>>>\nTrailing note.')
+        out = _prose_without_actions(txt)
+        assert '<<<ACTION' not in out
+        assert 'Intro line.' in out and 'Trailing note.' in out
+
+    def test_code_only_true_for_bare_exec_action(self):
+        from ai_assistant.views import _is_code_only_reply
+        # An execute_code block with no surrounding explanation.
+        assert _is_code_only_reply(
+            '<<<ACTION:execute_code>>>\n'
+            '{"code": "df[\'DTI\']=df[\'A\']/df[\'B\']", "description": "DTI"}\n'
+            '<<<END_ACTION>>>')
+        # A one-line intro is still too thin to count as a rationale.
+        assert _is_code_only_reply(
+            'Here is the code:\n<<<ACTION:execute_code>>>\n'
+            '{"code": "df[\'X\']=1"}\n<<<END_ACTION>>>')
+
+    def test_code_only_false_when_well_explained(self):
+        from ai_assistant.views import _is_code_only_reply
+        rich = ('The debt-to-income ratio divides committed debt by income to '
+                'capture repayment burden, a classic credit-risk signal that '
+                'helps the boosting model rank applicants by default risk more '
+                'reliably across the whole population.')
+        assert not _is_code_only_reply(
+            rich + '\n<<<ACTION:execute_code>>>\n{"code": "df[\'X\']=1"}\n<<<END_ACTION>>>')
+
+    def test_code_only_false_without_exec_action(self):
+        from ai_assistant.views import _is_code_only_reply
+        # No execute_code at all → never a code-only reply.
+        assert not _is_code_only_reply('Just a plain text answer with no code.')
+        # A config action (not execute_code) is a one-liner by design.
+        assert not _is_code_only_reply(
+            'Dropping Var_3.\n<<<ACTION:update_config>>>\n'
+            '{"updates": []}\n<<<END_ACTION>>>')
+
 
 @pytest.mark.unit
 class TestChatWorkflowFinalization:
@@ -4527,13 +4566,19 @@ class TestChatWorkflowFinalization:
             if idx == 0:
                 return _tool_call_response('get_data_dictionary')
             return _text_response(
-                "Create a debt-to-income ratio:\n<function=execute_code>\n"
+                "The debt-to-income ratio measures how much of a borrower's "
+                "monthly income is already committed to debt, computed as "
+                "Var_19 divided by Var_24. Higher values signal greater "
+                "repayment strain and correlate strongly with default risk, "
+                "making it a powerful predictor for the boosting model.\n"
+                "<function=execute_code>\n"
                 "<parameter=code>\ndf['DTI'] = df['Var_19'] / df['Var_24']\n"
                 "</parameter>\n</function>")
 
         out = _run_chat_workflow(monkeypatch, provider='engine',
                                  reasoning=True, call_llm=call_llm)
-        # No finalization round needed — deterministic conversion handled it.
+        # No finalization round needed — deterministic conversion handled it,
+        # and the substantial explanation means no rationale-elaboration pass.
         assert len(out['llm_calls']) == 2
         actions = out['result'].get('actions') or []
         assert len(actions) == 1
@@ -4542,19 +4587,24 @@ class TestChatWorkflowFinalization:
         assert 'debt-to-income' in out['result']['message'].lower()
 
     def test_clean_reply_with_action_passes_through(self, monkeypatch):
+        rich = ('The debt-to-income ratio (DTI) divides total debt by income '
+                'to capture repayment burden — a classic credit-risk signal '
+                'that helps the boosting model separate good applicants from '
+                'bad ones more cleanly across the population.')
+
         def call_llm(idx, messages, tools):
             if idx == 0:
                 return _tool_call_response('get_data_dictionary')
             return _text_response(
-                '**Features**\n- DTI\n\n<<<ACTION:execute_code>>>\n'
+                rich + '\n\n<<<ACTION:execute_code>>>\n'
                 '{"code": "df[\'DTI\']=df[\'A\']/df[\'B\']", "description": "DTI"}\n'
                 '<<<END_ACTION>>>')
 
         out = _run_chat_workflow(monkeypatch, provider='engine',
                                  reasoning=True, call_llm=call_llm)
-        # Clean answer + action → no finalization re-prompt.
+        # Clean, well-explained answer + action → no finalization re-prompt.
         assert len(out['llm_calls']) == 2
-        assert out['result']['message'] == '**Features**\n- DTI'
+        assert out['result']['message'] == rich
         assert out['result']['actions'][0]['type'] == 'execute_code'
 
     def test_finalization_still_leaking_yields_fallback(self, monkeypatch):
@@ -4605,6 +4655,113 @@ class TestChatWorkflowFinalization:
         synth_msgs = [m for m in out['llm_calls'][2]['messages']
                       if m.get('content') == _SYNTHESIS_PROMPT]
         assert synth_msgs, 'generic synthesis prompt not sent'
+
+
+@pytest.mark.unit
+class TestChatWorkflowCodeOnlyElaboration:
+    """v2.44.1: a reasoning-family engine model that emits ONLY an execute_code
+    action (rationale lost to chain-of-thought) gets an elaboration pass so the
+    user sees an explanation alongside the Apply button — matching the cloud
+    models' behaviour."""
+
+    _BARE = ('<<<ACTION:execute_code>>>\n'
+             '{"code": "df[\'DTI\']=df[\'Var_19\']/df[\'Var_24\']", '
+             '"description": "DTI"}\n<<<END_ACTION>>>')
+
+    def test_code_only_reply_triggers_elaboration(self, monkeypatch):
+        from ai_assistant.views import _FINALIZE_PROMPT
+        rationale = ('The debt-to-income ratio captures repayment burden and '
+                     'is a strong default predictor for boosting models, '
+                     'computed from Var_19 over Var_24 across all applicants.')
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                return _text_response(self._BARE)  # code only, no rationale
+            # Elaboration pass: tools dropped, strict finalize prompt appended.
+            assert tools is None
+            return _text_response(rationale + '\n\n' + self._BARE)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        assert len(out['llm_calls']) == 3
+        # Strict finalize prompt was sent, and the model's OWN draft was shown
+        # back to it so the explanation matches the proposed code.
+        final_msgs = out['llm_calls'][2]['messages']
+        assert any(m.get('content') == _FINALIZE_PROMPT for m in final_msgs)
+        assert any(m.get('role') == 'assistant' and 'execute_code' in (m.get('content') or '')
+                   for m in final_msgs)
+        # User now sees the rationale AND keeps the Apply action.
+        assert 'repayment burden' in out['result']['message']
+        assert out['result']['actions'][0]['type'] == 'execute_code'
+
+    def test_elaboration_dropped_action_is_reattached(self, monkeypatch):
+        rationale = ('Debt-to-income measures how committed a borrower already '
+                     'is, a classic credit-risk signal that sharpens the '
+                     'boosting model ranking across good and bad applicants.')
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                return _text_response(self._BARE)
+            # Elaboration explains but FORGETS to re-emit the action block.
+            return _text_response(rationale)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        # Original action re-attached so Apply still renders.
+        assert 'repayment' in out['result']['message'] or 'credit-risk' in out['result']['message']
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert actions[0]['payload']['code'] == "df['DTI']=df['Var_19']/df['Var_24']"
+
+    def test_elaboration_empty_preserves_original_code(self, monkeypatch):
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                return _text_response(self._BARE)
+            return _text_response('')  # elaboration produced nothing usable
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        # Functional code is never downgraded to empty — Apply survives.
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert out['result']['message'].strip()  # generic synthesized copy
+
+    def test_config_action_not_elaborated(self, monkeypatch):
+        # A thin reply whose action is update_config (not execute_code) must
+        # NOT trigger an elaboration pass — confirmations are one-liners.
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response(
+                'Dropping Var_3.\n<<<ACTION:update_config>>>\n'
+                '{"updates": [{"key": "feature_usage", "column": "Var_3", '
+                '"value": "drop"}]}\n<<<END_ACTION>>>')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        assert len(out['llm_calls']) == 2  # no elaboration
+        assert out['result']['actions'][0]['type'] == 'update_config'
+
+    def test_non_reasoning_engine_code_only_not_elaborated(self, monkeypatch):
+        # code-only elaboration is reasoning-family only; a non-reasoning
+        # engine model's bare action passes through untouched.
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response(self._BARE)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        assert len(out['llm_calls']) == 2  # no elaboration
+        assert out['result']['actions'][0]['type'] == 'execute_code'
 
 
 # ---------------------------------------------------------------------------
