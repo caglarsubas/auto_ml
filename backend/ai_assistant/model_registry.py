@@ -414,6 +414,14 @@ def _recover_reasoning_content(response: dict) -> dict:
     answer.  The original ``reasoning_content`` is preserved on the message
     for any future collapsed-CoT renderer.
 
+    v2.44.0 refinement: we promote ONLY when ``finish_reason == 'stop'`` (a
+    complete answer the engine misrouted).  When ``finish_reason == 'length'``
+    the reasoning_content is UNFINISHED chain-of-thought — the model ran out
+    of budget mid-thought — and promoting it leaks raw CoT to the user.  We
+    leave content empty in that case and tag the choice
+    ``declarai_reasoning_truncated`` so ``_chat_workflow`` runs its
+    finalization pass instead.
+
     Idempotent and defensive: tolerates missing keys / non-dict shapes and
     never raises (a salvage helper must not be able to break the chat path).
     """
@@ -434,14 +442,34 @@ def _recover_reasoning_content(response: dict) -> dict:
         if content and content.strip():
             continue
         reasoning = msg.get('reasoning_content')
-        if isinstance(reasoning, str) and reasoning.strip():
-            msg['content'] = reasoning
-            choice['declarai_reasoning_recovered'] = True
+        if not (isinstance(reasoning, str) and reasoning.strip()):
+            continue
+        # v2.44.0: do NOT promote when the model was cut off mid-thought
+        # (finish_reason == 'length').  In that case reasoning_content holds
+        # UNFINISHED chain-of-thought — not a deliverable answer — and
+        # promoting it leaks raw CoT to the user ("Okay, let's tackle this
+        # problem.  The user wants…", reproduced live as a 15.6 KB monologue).
+        # That was the exact screenshot bug.  Leaving content empty lets
+        # ``_chat_workflow``'s finalization/synthesis pass produce a clean
+        # reply from the tool results instead.  A COMPLETE answer that the
+        # engine merely misrouted into reasoning_content finishes with 'stop'
+        # (the v2.43.2 case) — those we still promote.
+        if choice.get('finish_reason') == 'length':
+            choice['declarai_reasoning_truncated'] = True
             _logger.warning(
-                "Recovered %d chars from reasoning_content into content "
-                "(engine routed an unanchored answer as reasoning).",
+                "Skipped promoting %d chars of truncated reasoning_content "
+                "(finish_reason=length) — unfinished CoT, deferring to the "
+                "finalization pass.",
                 len(reasoning),
             )
+            continue
+        msg['content'] = reasoning
+        choice['declarai_reasoning_recovered'] = True
+        _logger.warning(
+            "Recovered %d chars from reasoning_content into content "
+            "(engine routed an unanchored answer as reasoning).",
+            len(reasoning),
+        )
     return response
 
 

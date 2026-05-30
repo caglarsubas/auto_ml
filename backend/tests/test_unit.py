@@ -3774,15 +3774,32 @@ class TestRecoverReasoningContent:
         out = _recover_reasoning_content(self._resp(content=''))
         assert out['choices'][0]['message']['content'] == ''
 
-    def test_finish_reason_irrelevant_matches_aggressive_policy(self):
-        """The engine routes to reasoning_content regardless of finish_reason
-        (both 'stop' and 'length'); recovery must fire for either."""
+    def test_promotes_on_stop_skips_on_length(self):
+        """v2.44.0 contract refinement (supersedes the v2.43.2 'promote
+        regardless of finish_reason' policy): a COMPLETE answer the engine
+        misrouted into reasoning_content finishes with 'stop' and IS promoted;
+        an UNFINISHED chain-of-thought finishes with 'length' and must NOT be
+        promoted — promoting it leaks raw CoT to the user (the reproduced
+        screenshot bug).  The length case is tagged
+        ``declarai_reasoning_truncated`` and left for the finalization pass."""
         from ai_assistant.model_registry import _recover_reasoning_content
-        for fr in ('stop', 'length'):
-            out = _recover_reasoning_content(
-                self._resp(content='', reasoning='ans', finish_reason=fr)
-            )
-            assert out['choices'][0]['message']['content'] == 'ans', fr
+        # stop → promote (complete answer misrouted to reasoning_content)
+        out = _recover_reasoning_content(
+            self._resp(content='', reasoning='ans', finish_reason='stop')
+        )
+        assert out['choices'][0]['message']['content'] == 'ans'
+        assert out['choices'][0].get('declarai_reasoning_recovered') is True
+        # length → skip (truncated CoT); content stays empty + tagged truncated
+        out2 = _recover_reasoning_content(
+            self._resp(content='', reasoning='Okay, let me think…',
+                       finish_reason='length')
+        )
+        msg2 = out2['choices'][0]['message']
+        assert msg2['content'] == ''  # NOT promoted
+        assert 'declarai_reasoning_recovered' not in out2['choices'][0]
+        assert out2['choices'][0].get('declarai_reasoning_truncated') is True
+        # original reasoning preserved for any future collapsed-CoT renderer
+        assert msg2['reasoning_content'] == 'Okay, let me think…'
 
     def test_idempotent(self):
         from ai_assistant.model_registry import _recover_reasoning_content
@@ -4135,7 +4152,7 @@ class TestSkillAutoRouting:
 # ---------------------------------------------------------------------------
 
 
-def _engine_or_cloud_cfg(provider):
+def _engine_or_cloud_cfg(provider, reasoning=False):
     """Minimal model_cfg matching what get_model_config returns."""
     return {
         'provider': provider,
@@ -4143,6 +4160,7 @@ def _engine_or_cloud_cfg(provider):
         'supports_tools': True,
         'max_tokens': 4096,
         'temperature': 0.4,
+        'reasoning': reasoning,
     }
 
 
@@ -4176,7 +4194,7 @@ def _text_response(text):
 
 def _run_chat_workflow(monkeypatch, *, provider, call_llm,
                        user_message='please derive new features from the existing ones',
-                       file_id=1):
+                       file_id=1, reasoning=False):
     """Execute the real _chat_workflow body with its external collaborators
     mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
 
@@ -4185,7 +4203,7 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
     from ai_assistant import views
 
     monkeypatch.setattr(views, 'get_model_config',
-                        lambda k: _engine_or_cloud_cfg(provider))
+                        lambda k: _engine_or_cloud_cfg(provider, reasoning))
     monkeypatch.setattr(views, 'cache_list_artifacts',
                         lambda fid: ['data_dictionary'])
     monkeypatch.setattr(views, '_build_slim_context',
@@ -4370,6 +4388,223 @@ class TestChatWorkflowEngineOverflowDegrades:
         out = _run_chat_workflow(monkeypatch, provider='engine', call_llm=call_llm)
         # No raw 500 — user sees the budget-exhausted fallback (tool work happened).
         assert out['result']['message'] == _TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+
+# ---------------------------------------------------------------------------
+# v2.44.0: engine reply normalization + CoT-leak detection helpers.
+#
+# Reasoning-family engine models (nemotron-3-nano:30b, …) leak chain-of-thought
+# into content and emit code in the wrong format (vendor <function=...> XML or
+# bare markdown fences) instead of the <<<ACTION:execute_code>>> block the chat
+# panel renders as an Apply button.  These helpers clean that up.
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestEngineReplyNormalization:
+    """_strip_reasoning_markers / _convert_vendor_tool_xml_to_actions /
+    _normalize_engine_reply / _looks_like_cot_leak."""
+
+    def test_strip_paired_think_block(self):
+        from ai_assistant.views import _strip_reasoning_markers
+        assert _strip_reasoning_markers('<think>plan</think>The answer.') == 'The answer.'
+        assert _strip_reasoning_markers('A.<think>plan</think>') == 'A.'
+
+    def test_strip_orphan_close(self):
+        from ai_assistant.views import _strip_reasoning_markers
+        # reasoning prelude then answer, only the close tag present
+        assert _strip_reasoning_markers('reasoning prose</think>The answer.') == 'The answer.'
+
+    def test_strip_orphan_open_truncated(self):
+        from ai_assistant.views import _strip_reasoning_markers
+        # truncated CoT — open tag, never closed → drop from <think> on
+        assert _strip_reasoning_markers('Answer.<think>still thinking') == 'Answer.'
+        assert _strip_reasoning_markers('<think>only thinking, no answer') == ''
+
+    def test_strip_noop_without_markers(self):
+        from ai_assistant.views import _strip_reasoning_markers
+        assert _strip_reasoning_markers('Plain answer.') == 'Plain answer.'
+
+    def test_vendor_exec_xml_becomes_action_block(self):
+        from ai_assistant.views import (
+            _convert_vendor_tool_xml_to_actions, _extract_actions,
+        )
+        raw = ("Here is the code:\n<function=execute_code>\n"
+               "<parameter=code>\ndf['X'] = df['A'] / df['B']\n"
+               "</parameter>\n</function>")
+        out = _convert_vendor_tool_xml_to_actions(raw)
+        assert '<<<ACTION:execute_code>>>' in out
+        actions, clean = _extract_actions(out)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert actions[0]['payload']['code'] == "df['X'] = df['A'] / df['B']"
+        assert 'Here is the code:' in clean
+
+    def test_vendor_exec_xml_without_param_wrapper(self):
+        from ai_assistant.views import _convert_vendor_tool_xml_to_actions
+        raw = "<function=execute_code>df['Y'] = 2</function>"
+        out = _convert_vendor_tool_xml_to_actions(raw)
+        assert '<<<ACTION:execute_code>>>' in out
+        assert "df['Y'] = 2" in out
+
+    def test_vendor_conversion_noop_without_function_tag(self):
+        from ai_assistant.views import _convert_vendor_tool_xml_to_actions
+        assert _convert_vendor_tool_xml_to_actions('no tags here') == 'no tags here'
+
+    def test_normalize_is_noop_for_cloud(self):
+        from ai_assistant.views import _normalize_engine_reply
+        raw = '<think>cot</think>answer'
+        # provider='openai' → untouched even though markers are present
+        assert _normalize_engine_reply(raw, {'provider': 'openai'}) == raw
+
+    def test_normalize_engine_strips_and_converts(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = ("<think>deciding</think>Create a ratio.\n"
+               "<function=execute_code><parameter=code>df['R']=df['A']/df['B']"
+               "</parameter></function>")
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        assert '<think>' not in out
+        actions, clean = _extract_actions(out)
+        assert actions and actions[0]['payload']['code'] == "df['R']=df['A']/df['B']"
+        assert 'Create a ratio.' in clean
+
+    def test_normalize_drops_leaked_non_exec_function_xml(self):
+        from ai_assistant.views import _normalize_engine_reply
+        raw = 'Summary text.\n<function=get_feature_stats>\n</function>'
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        assert '<function' not in out
+        assert out == 'Summary text.'
+
+    def test_cot_leak_detected_on_thinking_openers(self):
+        from ai_assistant.views import _looks_like_cot_leak
+        assert _looks_like_cot_leak("Okay, let's tackle this. The user wants…")
+        assert _looks_like_cot_leak('We need to derive several features first.')
+        assert _looks_like_cot_leak('The user wants new columns.')
+        assert _looks_like_cot_leak('Let me think about which ratios help.')
+
+    def test_cot_leak_not_flagged_for_clean_answer(self):
+        from ai_assistant.views import _looks_like_cot_leak
+        assert not _looks_like_cot_leak('**Proposed features**\n- Debt_to_Income')
+        assert not _looks_like_cot_leak('Here are 5 derived features you can add.')
+        assert not _looks_like_cot_leak('')
+
+    def test_cot_leak_ignored_when_action_block_present(self):
+        from ai_assistant.views import _looks_like_cot_leak
+        # Even with a CoT opener, an action block makes the reply usable.
+        assert not _looks_like_cot_leak(
+            "Okay, here.\n<<<ACTION:execute_code>>>\n{}\n<<<END_ACTION>>>")
+
+
+@pytest.mark.unit
+class TestChatWorkflowFinalization:
+    """v2.44.0: reasoning-family engine models get a strict finalization
+    re-prompt when their reply is raw CoT, and vendor-XML code is converted
+    to an Apply action without an extra LLM call."""
+
+    def test_cot_leak_triggers_finalization_reprompt(self, monkeypatch):
+        from ai_assistant.views import _FINALIZE_PROMPT
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                # Finished reply that is raw chain-of-thought (finish=stop).
+                return _text_response("Okay, let's tackle this. We need to "
+                                      "derive ratios from the columns.")
+            # Finalization pass: tools dropped, strict prompt appended.
+            assert tools is None
+            return _text_response('**Derived features**\n- Debt_to_Income')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        assert out['result']['message'] == '**Derived features**\n- Debt_to_Income'
+        assert len(out['llm_calls']) == 3
+        # The strict finalization instruction was the one appended.
+        finalize_msgs = [m for m in out['llm_calls'][2]['messages']
+                         if m.get('content') == _FINALIZE_PROMPT]
+        assert finalize_msgs, 'finalization prompt not sent'
+
+    def test_vendor_xml_code_becomes_apply_action_no_extra_call(self, monkeypatch):
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response(
+                "Create a debt-to-income ratio:\n<function=execute_code>\n"
+                "<parameter=code>\ndf['DTI'] = df['Var_19'] / df['Var_24']\n"
+                "</parameter>\n</function>")
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        # No finalization round needed — deterministic conversion handled it.
+        assert len(out['llm_calls']) == 2
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert actions[0]['payload']['code'] == "df['DTI'] = df['Var_19'] / df['Var_24']"
+        assert 'debt-to-income' in out['result']['message'].lower()
+
+    def test_clean_reply_with_action_passes_through(self, monkeypatch):
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response(
+                '**Features**\n- DTI\n\n<<<ACTION:execute_code>>>\n'
+                '{"code": "df[\'DTI\']=df[\'A\']/df[\'B\']", "description": "DTI"}\n'
+                '<<<END_ACTION>>>')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        # Clean answer + action → no finalization re-prompt.
+        assert len(out['llm_calls']) == 2
+        assert out['result']['message'] == '**Features**\n- DTI'
+        assert out['result']['actions'][0]['type'] == 'execute_code'
+
+    def test_finalization_still_leaking_yields_fallback(self, monkeypatch):
+        from ai_assistant.views import _TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                return _text_response('We need to think harder about this.')
+            # Finalization ALSO leaks CoT → blanked → fallback copy shown.
+            return _text_response('Okay, let me reconsider the columns.')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=True, call_llm=call_llm)
+        assert out['result']['message'] == _TOOL_BUDGET_EXHAUSTED_FALLBACK
+        assert len(out['llm_calls']) == 3
+
+    def test_cloud_cot_opener_not_finalized(self, monkeypatch):
+        # A cloud model reply that happens to open with "Okay," must NOT be
+        # treated as a leak (normalization + finalization are engine-only).
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response("Okay, here's the analysis you asked for.")
+
+        out = _run_chat_workflow(monkeypatch, provider='openai',
+                                 call_llm=call_llm)
+        assert out['result']['message'] == "Okay, here's the analysis you asked for."
+        assert len(out['llm_calls']) == 2
+
+    def test_non_reasoning_engine_uses_generic_synthesis_on_empty(self, monkeypatch):
+        # A non-reasoning engine model with empty final content still gets the
+        # generic synthesis pass (not the strict reasoning finalizer).
+        from ai_assistant.views import _SYNTHESIS_PROMPT
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            if idx == 1:
+                return _text_response('')  # empty → synthesis required
+            assert tools is None
+            return _text_response('Here is the summary.')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        assert out['result']['message'] == 'Here is the summary.'
+        synth_msgs = [m for m in out['llm_calls'][2]['messages']
+                      if m.get('content') == _SYNTHESIS_PROMPT]
+        assert synth_msgs, 'generic synthesis prompt not sent'
 
 
 # ---------------------------------------------------------------------------
