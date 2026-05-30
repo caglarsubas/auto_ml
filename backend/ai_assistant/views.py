@@ -1062,6 +1062,39 @@ _TOOL_BUDGET_EXHAUSTED_FALLBACK = (
     "one pipeline step) and I'll answer it directly."
 )
 
+# v2.27.2 synthesis instruction — generic forced final answer used after the
+# tool budget is exhausted with empty content (non-reasoning engine models and
+# the cloud fallback path).
+_SYNTHESIS_PROMPT = (
+    'You executed tool calls but did not produce a final answer.  Using '
+    'ONLY the tool results above plus the pipeline context, write a concise '
+    'reply to the user now.  Do not call any more tools.'
+)
+
+# v2.44.0 finalization instruction — stricter variant for reasoning-family
+# engine models (nemotron-3-nano:30b, deepseek-r1, …) whose draft was unusable:
+# empty after a truncated CoT, raw chain-of-thought prose, or code in the wrong
+# format.  Forbids CoT narration and mandates the <<<ACTION:execute_code>>>
+# block so dataset code renders an Apply button in the chat panel.
+_FINALIZE_PROMPT = (
+    'Your previous draft was NOT a usable reply — it showed internal '
+    'reasoning, was cut off, or used the wrong format.  Write the FINAL '
+    'reply to the user NOW, grounded ONLY in the tool results and pipeline '
+    'context above.  STRICT RULES:\n'
+    '1. Do NOT show your reasoning or planning.  No "okay", "let me", "we '
+    'need to", "first I will" — lead directly with the answer.\n'
+    '2. Be concise: a one-line intro, then a short bullet list or compact '
+    'table.\n'
+    '3. If you propose pandas/numpy code to modify the dataset, you MUST '
+    'emit it as EXACTLY ONE action block at the very end, in THIS exact '
+    'format — no <function=...> tags, no triple-backtick fences:\n'
+    '<<<ACTION:execute_code>>>\n'
+    '{"code": "df[\'Debt_to_Income\'] = df[\'Var_19\'] / df[\'Var_24\']'
+    '.replace(0, 1)", "description": "Create Debt-to-Income ratio"}\n'
+    '<<<END_ACTION>>>\n'
+    '4. Use REAL column names from the context.  Do NOT call any tools.'
+)
+
 
 def _is_engine_server_error(exc: Exception) -> bool:
     """True when an LLM call failed with a server-side (5xx) error.
@@ -1455,7 +1488,14 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # Extract final response
     assistant_message = msg_obj.get('content', '') or ''
 
-    # ── v2.27.2 synthesis pass ──────────────────────────────────────────
+    # ── v2.44.0 engine reply normalization ──────────────────────────────
+    # Before deciding on a finalization pass, clean the raw engine reply:
+    # strip <think> CoT markers and convert vendor <function=execute_code>
+    # XML (and drop other leaked tool-call XML) so the chat panel can render
+    # an Apply button.  No-op for cloud (provider='openai') replies.
+    assistant_message = _normalize_engine_reply(assistant_message, model_cfg)
+
+    # ── v2.27.2 synthesis / v2.44.0 finalization pass ───────────────────
     # Pre-v2.27.2 the loop could exit with an assistant message that has
     # `tool_calls` populated but `content=null`.  This happened when the
     # model kept calling tools through round 5 (the no-tools forced
@@ -1474,8 +1514,22 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # error, model returns blank), `_TOOL_BUDGET_EXHAUSTED_FALLBACK`
     # ensures the user sees an actionable message instead of a blank
     # bubble.
+    #
+    # v2.44.0: reasoning-family engine models (nemotron, …) ALSO need this
+    # pass when the reply reads as raw chain-of-thought even though it's
+    # non-empty (finish_reason='stop' but the model narrated its plan
+    # instead of answering — the reproduced run2/run4 failure modes).  For
+    # those we re-prompt with `_FINALIZE_PROMPT`, which forbids CoT and
+    # mandates the action-block format for code; the no-tools call also
+    # drops the ~2.3K-token tool schemas, freeing budget for a clean reply.
+    is_engine_reasoning = (
+        (model_cfg or {}).get('provider') == 'engine'
+        and bool((model_cfg or {}).get('reasoning'))
+    )
+    cot_leaked = is_engine_reasoning and _looks_like_cot_leak(assistant_message)
+    set_span_attr('declarai.chat.cot_leak_detected', cot_leaked)
     synthesis_required = (
-        not assistant_message.strip()
+        (not assistant_message.strip() or cot_leaked)
         and any(m.get('role') == 'tool' for m in messages)
     )
     set_span_attr('declarai.chat.synthesis_pass', synthesis_required)
@@ -1483,17 +1537,18 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         try:
             messages.append({
                 'role': 'system',
-                'content': (
-                    'You executed tool calls but did not produce a final '
-                    'answer.  Using ONLY the tool results above plus the '
-                    'pipeline context, write a concise reply to the user '
-                    'now.  Do not call any more tools.'
-                ),
+                'content': _FINALIZE_PROMPT if is_engine_reasoning else _SYNTHESIS_PROMPT,
             })
             synth = _call_llm(messages, model_key, tools=None)
             _merge_usage(total_usage, synth.get('usage', {}))
             synth_msg = synth.get('choices', [{}])[0].get('message', {}) or {}
-            assistant_message = synth_msg.get('content', '') or ''
+            new_message = _normalize_engine_reply(
+                synth_msg.get('content', '') or '', model_cfg)
+            # If the finalization STILL reads as raw CoT, blank it so the
+            # actionable fallback copy shows instead of leaked reasoning.
+            if is_engine_reasoning and _looks_like_cot_leak(new_message):
+                new_message = ''
+            assistant_message = new_message
             set_span_attr(
                 'declarai.chat.synthesis_chars',
                 len(assistant_message),
@@ -1501,6 +1556,14 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         except Exception as exc:  # pragma: no cover - network path
             set_span_attr('declarai.chat.synthesis_error', str(exc)[:200])
             assistant_message = ''
+
+    # v2.44.0: last-line safety net — if a reasoning model's reply is STILL
+    # raw CoT here (e.g. a no-tool-work turn that skipped the finalization
+    # pass, or finalization failed), blank it so the empty-response fallback
+    # shows instead of leaking the model's internal monologue to the user.
+    if is_engine_reasoning and _looks_like_cot_leak(assistant_message):
+        set_span_attr('declarai.chat.cot_leak_blanked', True)
+        assistant_message = ''
 
     # Cost, tokens, and conversation turns are handled by auto-instrumentation (v0.3.3+).
     # The Conversation panel reads gen_ai.prompt.user (pre-extracted by the SDK) and
@@ -1735,6 +1798,122 @@ class AIActionExecuteView(APIView):
             return Response(result, status=http_status)
         finally:
             prometa_flush()
+
+
+# ---------------------------------------------------------------------------
+# v2.44.0: engine reply normalization + chain-of-thought leak detection
+# ---------------------------------------------------------------------------
+# Reasoning-family engine models (nemotron-3-nano:30b, deepseek-r1, …) have
+# three recurring failure modes on the final-answer turn, all reproduced
+# against the live engine:
+#   (a) truncated CoT promoted into content — handled upstream in
+#       model_registry._recover_reasoning_content (no promote on
+#       finish_reason='length');
+#   (b) a FINISHED reply that is still raw CoT prose ("Okay, let's tackle…");
+#   (c) code emitted as vendor tool-call XML (<function=execute_code>…) or bare
+#       markdown fences instead of the <<<ACTION:execute_code>>> block the
+#       chat panel turns into an Apply button.
+# These helpers clean (c) deterministically and detect (b) so _chat_workflow
+# can re-prompt with a strict finalization instruction.  All are no-ops for
+# cloud (provider='openai') replies, which already follow the contract.
+
+_THINK_BLOCK_RE = _re.compile(r'<think\b[^>]*>.*?</think\s*>', _re.DOTALL | _re.IGNORECASE)
+_THINK_ORPHAN_OPEN_RE = _re.compile(r'<think\b[^>]*>.*$', _re.DOTALL | _re.IGNORECASE)
+_THINK_CLOSE_RE = _re.compile(r'</think\s*>', _re.IGNORECASE)
+_VENDOR_EXEC_FN_RE = _re.compile(
+    r'<function\s*=\s*execute_code\s*>(.*?)</function\s*>',
+    _re.DOTALL | _re.IGNORECASE,
+)
+_VENDOR_CODE_PARAM_RE = _re.compile(
+    r'<parameter\s*=\s*code\s*>(.*?)</parameter\s*>',
+    _re.DOTALL | _re.IGNORECASE,
+)
+_VENDOR_FN_ANY_RE = _re.compile(r'<function\b[^>]*>.*?</function\s*>', _re.DOTALL | _re.IGNORECASE)
+_VENDOR_FN_TRUNC_RE = _re.compile(r'<function\b[^>]*>.*$', _re.DOTALL | _re.IGNORECASE)
+# Thinking-aloud openers a polished answer would never start with.
+_COT_OPENER_RE = _re.compile(
+    r'\s*(?:okay\b|ok\b|alright\b|all right\b|so,|now,|hmm\b|well,|let me\b|'
+    r'let\'s\b|let us\b|first,|first i\b|i need to\b|i\'ll\b|i will\b|'
+    r'we need to\b|we should\b|we can\b|we\'ll\b|we have to\b|'
+    r'the user (?:wants|is asking|asked|needs)\b|'
+    r'to (?:answer|solve|tackle) this\b)',
+    _re.IGNORECASE,
+)
+
+
+def _strip_reasoning_markers(text: str) -> str:
+    """Remove ``<think>…</think>`` reasoning blocks from an engine reply."""
+    if not text or ('<think' not in text.lower() and '</think>' not in text.lower()):
+        return text
+    s = _THINK_BLOCK_RE.sub('', text)
+    # Orphan close (reasoning prelude then the answer): keep only the tail.
+    if _THINK_CLOSE_RE.search(s):
+        s = _THINK_CLOSE_RE.split(s)[-1]
+    # Orphan open (truncated CoT, never closed): drop from <think> onward.
+    s = _THINK_ORPHAN_OPEN_RE.sub('', s)
+    return s.strip()
+
+
+def _convert_vendor_tool_xml_to_actions(text: str) -> str:
+    """Convert a model-emitted ``<function=execute_code>`` tool-call into the
+    ``<<<ACTION:execute_code>>>`` block the chat panel renders as an Apply
+    button.
+
+    Weak engine models sometimes emit code as vendor function-call XML
+    (``<function=execute_code><parameter=code>…</parameter></function>``)
+    instead of the DeclarAI action-block format.  Since execute_code is a
+    DeclarAI action — not an engine tool — that XML can NEVER become a real
+    tool_call; without this conversion the user just sees raw XML and gets no
+    Apply button.  Other (real engine-tool) function-call leaks are stripped
+    by ``_normalize_engine_reply``.
+    """
+    if not text or '<function' not in text.lower():
+        return text
+
+    def _repl(match):
+        inner = match.group(1) or ''
+        pm = _VENDOR_CODE_PARAM_RE.search(inner)
+        code = (pm.group(1) if pm else inner)
+        # Drop any stray param/function tags if the wrapper was malformed.
+        code = _re.sub(r'</?(?:parameter|function)\b[^>]*>', '', code).strip()
+        if not code:
+            return ''
+        payload = json.dumps({
+            'code': code,
+            'description': 'Run the proposed pandas transformation',
+        })
+        return f'\n\n<<<ACTION:execute_code>>>\n{payload}\n<<<END_ACTION>>>'
+
+    return _VENDOR_EXEC_FN_RE.sub(_repl, text)
+
+
+def _normalize_engine_reply(text: str, model_cfg: dict) -> str:
+    """Clean a raw engine reply before action extraction (no-op for cloud).
+
+    Strips ``<think>`` reasoning markers, converts ``<function=execute_code>``
+    XML into a proper action block, and drops any other leaked vendor
+    function-call XML (real tool-call attempts the engine failed to parse).
+    """
+    if (model_cfg or {}).get('provider') != 'engine' or not text:
+        return text
+    text = _strip_reasoning_markers(text)
+    text = _convert_vendor_tool_xml_to_actions(text)
+    text = _VENDOR_FN_ANY_RE.sub('', text)
+    text = _VENDOR_FN_TRUNC_RE.sub('', text)
+    return text.strip()
+
+
+def _looks_like_cot_leak(text: str) -> bool:
+    """True when an engine reply reads as raw chain-of-thought, not an answer.
+
+    Conservative: only fires when the text OPENS with a thinking-aloud marker
+    ("Okay, let's…", "We need to…", "The user wants…") AND carries no action
+    block.  A polished final answer leads with the result, not a plan, so this
+    rarely misfires on a good reply.
+    """
+    if not text or '<<<ACTION' in text:
+        return False
+    return bool(_COT_OPENER_RE.match(text.lstrip()[:200]))
 
 
 # ---------------------------------------------------------------------------
