@@ -1082,27 +1082,67 @@ _SYNTHESIS_PROMPT = (
 # rationale was buried in chain-of-thought.  Forbids CoT narration, REQUIRES a
 # user-facing explanation, and mandates the <<<ACTION:execute_code>>> block so
 # dataset code renders an Apply button in the chat panel.
+# v2.44.2: rule #1 + the generic action-block example below were added to
+# stop the prompt itself from seeding the WRONG topic.  The prior wording
+# led with feature-table guidance and a concrete ``Debt_to_Income`` example,
+# which — on the tools-off fallback after an overflow, with a prior
+# feature-engineering turn still in history — biased reasoning models into
+# regenerating that feature table instead of answering the user's actual
+# (e.g. data-purification) question.  The feature-table format is now
+# explicitly CONDITIONAL on the user having asked for features.
 _FINALIZE_PROMPT = (
     'Your previous draft was NOT a usable reply — it showed internal '
     'reasoning, was cut off, used the wrong format, OR proposed code with no '
-    'explanation.  Write the FINAL reply to the user NOW, grounded ONLY in '
-    'the tool results and pipeline context above.  STRICT RULES:\n'
-    '1. Do NOT show your private reasoning or planning.  No "okay", "let me", '
+    'explanation.  Write the FINAL reply to the user NOW, answering their '
+    'MOST RECENT question, grounded ONLY in the tool results and pipeline '
+    'context above.  STRICT RULES:\n'
+    '1. Answer the CURRENT question directly.  Do NOT continue, repeat, or '
+    'reuse the format of a previous turn\'s topic unless the user explicitly '
+    'asked you to.\n'
+    '2. Do NOT show your private reasoning or planning.  No "okay", "let me", '
     '"we need to", "first I will" — lead directly with the answer.\n'
-    '2. EXPLAIN your proposal so the user understands it — never reply with '
-    'code alone.  When you create or transform features, give a one-line '
-    'intro, THEN a markdown table with these columns: Feature | Formula / '
-    'transformation | Meaning | Why it helps the model.  One row per feature, '
-    'using the REAL column names and numbers from the context.\n'
-    '3. If you propose pandas/numpy code to modify the dataset, you MUST emit '
+    '3. EXPLAIN your proposal so the user understands it — never reply with '
+    'code alone.  ONLY when the user asked you to create or transform '
+    'features, give a one-line intro THEN a markdown table with columns: '
+    'Feature | Formula / transformation | Meaning | Why it helps the model '
+    '(one row per feature, REAL column names).  For any other question, use '
+    'whatever format best fits that question.\n'
+    '4. If you propose pandas/numpy code to modify the dataset, you MUST emit '
     'it as EXACTLY ONE action block at the very end, in THIS exact format — '
     'no <function=...> tags, no triple-backtick fences, and NO import '
     'statements (pd and np are already available):\n'
     '<<<ACTION:execute_code>>>\n'
-    '{"code": "df[\'Debt_to_Income\'] = df[\'Var_19\'] / df[\'Var_24\']'
-    '.replace(0, 1)", "description": "Create Debt-to-Income ratio"}\n'
+    '{"code": "df[\'new_column\'] = df[\'Var_19\'] / df[\'Var_24\']'
+    '.replace(0, 1)", "description": "Short description of the operation"}\n'
     '<<<END_ACTION>>>\n'
-    '4. Do NOT call any tools.'
+    '5. Do NOT call any tools.'
+)
+
+# v2.44.2 — per-turn topic anchor.  Reasoning-family engine models on a small
+# context window occasionally anchor on the PREVIOUS turn (e.g. a
+# just-created feature table) and answer THAT topic instead of the current
+# question — reproduced from a screenshot where a data-purification question
+# was answered with the prior turn's derived-features table.  When earlier
+# turns exist, inject this short instruction immediately before the user
+# message so the model treats the current question as standalone.  Cheap
+# (~50 tokens) and provider-agnostic; a no-op for the first turn and harmless
+# for cloud models that don't drift.
+#
+# v2.44.3 — reword to kill a literal-mirroring failure.  The prior phrasing
+# "Answer the user's NEXT message AS A STANDALONE QUESTION" was parsed by
+# nemotron-3-nano:30b as an instruction to PRODUCE a standalone question, so it
+# echoed the user's prompt back reframed as a question (e.g. "what are the
+# purification steps … how to sort/configure them?" → "Which purification
+# steps should be prioritized …?") instead of answering — reproduced from a
+# screenshot.  The anchor now states the next message IS a question and the
+# model must ANSWER it, explicitly forbidding echoing it back or replying with
+# a question of its own.
+_TURN_FOCUS_PROMPT = (
+    'The user\'s NEXT message is a NEW, self-contained question about the '
+    'CURRENT pipeline step.  ANSWER it directly with concrete analysis.  Do '
+    'NOT restate, rephrase, or echo the question back, and NEVER reply with a '
+    'question of your own.  Do NOT continue, repeat, or reuse the format of '
+    'the previous turn\'s topic unless the user explicitly refers back to it.'
 )
 
 
@@ -1383,6 +1423,17 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             })
             skill_injected = True
         set_span_attr('declarai.skill.auto_injected', skill_injected)
+
+    # ── v2.44.2: per-turn topic anchor ─────────────────────────────────
+    # When prior turns are present, re-anchor the model on the current
+    # question right before it (see _TURN_FOCUS_PROMPT).  Skipped on the
+    # first turn — there's no previous topic to drift toward.  ``has_history``
+    # is stamped so a recurrence of the topic-drift screenshot is filterable
+    # in the trace (inspect prometa.raw.rendered_prompt + the completion).
+    set_span_attr('declarai.chat.has_history', bool(history))
+    if history:
+        messages.append({'role': 'system', 'content': _TURN_FOCUS_PROMPT})
+        set_span_attr('declarai.chat.turn_focus_injected', True)
 
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})
