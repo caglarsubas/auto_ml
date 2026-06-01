@@ -1,6 +1,7 @@
 # Bug report: Nemotron CoT leak into `content` on the blocking-path response normalizer
 
-**Status:** Open — diagnosed end-to-end via repeated A/B probe + engine code read.
+**Status:** RESOLVED (2026-05-30) — engine blocking-path normalizer fix verified live; chain-of-thought no longer leaks into `content`. Two optional ergonomic follow-ups remain (see [Residual follow-ups](#residual-follow-ups-optional-low-priority)).
+**Originally filed:** Open — diagnosed end-to-end via repeated A/B probe + engine code read.
 **Audience:** `llm-inference-engine` team
 **From:** DeclarAI (POC customer)
 **Date filed:** 2026-05-28
@@ -10,7 +11,39 @@
 
 ---
 
-## Symptom
+## Resolution (2026-05-30 — engine fix verified live)
+
+The `llm-inference-engine` team shipped the blocking-path fix (the AGGRESSIVE `expects_reasoning_prelude` policy — unanchored text on a reasoning-family model routes to `reasoning_content` regardless of `finish_reason`, making the blocking path byte-symmetric with `StreamNormalizer`). DeclarAI re-probed `nemotron-3-nano:30b` live against the running engine and confirms the P1 leak is **closed**.
+
+**`finish_reason == "length"`** (tight `max_tokens=350` — the original failure condition):
+- `content` length: **0** — no CoT in `content`
+- `reasoning_content` length: 1438 — the unfinished thought is correctly routed here (`"We need to propose 3-5 new features derived from existing ones…"`)
+- choice keys: `['finish_reason', 'index', 'logprobs', 'message']`
+
+**`finish_reason == "stop"`** (`max_tokens` ∈ {4096, 8192, 16384} — realistic UI prompt stack: lite system prompt + 3.8 KB slim context + skill snippet + 12 tools):
+- `content`: clean formatted answer (a `**Proposed derived features**` markdown table)
+- `reasoning_content`: 4936–6689 chars, cleanly separated
+- no markers leaked into `content` at any budget
+
+So the P1 symptom (raw chain-of-thought rendered to the user) no longer reproduces. The original recommendation — **Option A point 1** (on `finish_reason=="length"`: `reasoning_content=text`, `content=None`) — is implemented and working.
+
+### DeclarAI client-side refinement (`auto_ml` v2.44.0)
+
+The aggressive policy moved the burden to the client for one sub-case: when `finish_reason=="length"`, `reasoning_content` holds UNFINISHED thought, not a deliverable answer. v2.44.0:
+- `_recover_reasoning_content` promotes `reasoning_content`→`content` ONLY on `finish_reason=="stop"` (a complete answer the engine merely misrouted); on `"length"` it leaves `content` empty and tags the choice `declarai_reasoning_truncated`.
+- `_chat_workflow` then runs a strict finalization re-prompt (tools off) to produce a clean answer from the tool results already in hand.
+- Live recheck: **12/12** runs of the original failing question returned a clean answer with an `execute_code` Apply action and zero CoT leak.
+
+## Residual follow-ups (optional, low priority)
+
+Neither blocks DeclarAI; both are ergonomic improvements for any reasoning-family client.
+
+1. **Structured truncation flag (P3, small).** The choice payload exposes no signal that reasoning was truncated — keys are just `['finish_reason', 'index', 'logprobs', 'message']`. Clients must infer it from `content=="" AND reasoning_content!="" AND finish_reason=="length"`. Re-raising **Option A point 2** below: surface `reasoning_truncated: true` (or `model_reasoning_unanchored: true`) on the choice so every client doesn't reimplement the same heuristic.
+2. **Reasoning/thinking budget knob (P3–P4, feature).** Root cause of the residual `finish_reason=="length"` empty-answer case: on large prompt stacks the model spends its entire `max_tokens` thinking and never emits an answer. A `reasoning_max_tokens` / `thinking_budget` (cap thinking, then force the answer) would fix this at the source. DeclarAI's finalization pass handles it adequately for now.
+
+---
+
+## Symptom (as originally filed)
 
 A blocking `POST /v1/chat/completions` against `nemotron-3-nano:30b` with a large system-prompt stack + 15 tools returns:
 

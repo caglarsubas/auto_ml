@@ -4194,7 +4194,7 @@ def _text_response(text):
 
 def _run_chat_workflow(monkeypatch, *, provider, call_llm,
                        user_message='please derive new features from the existing ones',
-                       file_id=1, reasoning=False):
+                       file_id=1, reasoning=False, history=None):
     """Execute the real _chat_workflow body with its external collaborators
     mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
 
@@ -4238,7 +4238,8 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
 
     fn = views._chat_workflow.__wrapped__ \
         if hasattr(views._chat_workflow, '__wrapped__') else views._chat_workflow
-    result = fn(user_message, {}, 'general', [], file_id=file_id, model='engine-x')
+    result = fn(user_message, {}, 'general', history or [],
+                file_id=file_id, model='engine-x')
     return {'result': result, 'llm_calls': llm_calls, 'skill_calls': skill_calls}
 
 
@@ -4322,6 +4323,105 @@ class TestSkillAutoInjectionProviderAware:
         joined = ' '.join(m.get('content') or '' for m in out['llm_calls'][0]['messages'])
         assert 'SKILL_PLAYBOOK_BODY' in joined
         assert 'playbook has been pre-loaded' in joined
+
+
+@pytest.mark.unit
+class TestChatWorkflowTurnFocusAnchor:
+    """v2.44.2: when prior turns exist, a short topic-anchor system message is
+    injected immediately before the user message so reasoning models answer
+    the CURRENT question instead of drifting back to the previous turn's topic
+    (the data-purification-answered-as-features screenshot).  First turn (no
+    history) must NOT inject it."""
+
+    _PURIF_Q = ('what are the data purification steps in the flow? how to sort '
+                'them while implementing and configure them better?')
+    _HISTORY = [
+        {'role': 'user', 'content': 'which new features can be derived? create them.'},
+        {'role': 'assistant', 'content': 'Proposed derived features:\n| Feature | Formula |\n| Debt_To_Income | Var_19/Var_24 |'},
+    ]
+
+    def test_turn_focus_injected_when_history_present(self, monkeypatch):
+        from ai_assistant.views import _TURN_FOCUS_PROMPT
+        out = _run_chat_workflow(
+            monkeypatch, provider='engine', reasoning=True,
+            user_message=self._PURIF_Q, history=self._HISTORY,
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+        msgs = out['llm_calls'][0]['messages']
+        contents = [m.get('content') or '' for m in msgs]
+        assert _TURN_FOCUS_PROMPT in contents
+        # It must sit immediately before the current user message.
+        user_idx = max(i for i, m in enumerate(msgs)
+                       if m.get('role') == 'user' and m.get('content') == self._PURIF_Q)
+        assert msgs[user_idx - 1].get('content') == _TURN_FOCUS_PROMPT
+        assert msgs[user_idx - 1].get('role') == 'system'
+
+    def test_turn_focus_absent_on_first_turn(self, monkeypatch):
+        from ai_assistant.views import _TURN_FOCUS_PROMPT
+        out = _run_chat_workflow(
+            monkeypatch, provider='engine', reasoning=True,
+            user_message=self._PURIF_Q, history=[],
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _TURN_FOCUS_PROMPT not in contents
+
+    def test_turn_focus_injected_for_cloud_models_too(self, monkeypatch):
+        # Provider-agnostic — harmless for cloud, useful if a cloud model ever drifts.
+        from ai_assistant.views import _TURN_FOCUS_PROMPT
+        out = _run_chat_workflow(
+            monkeypatch, provider='openai',
+            user_message=self._PURIF_Q, history=self._HISTORY,
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _TURN_FOCUS_PROMPT in contents
+
+    def test_turn_focus_does_not_instruct_producing_a_question(self):
+        # v2.44.3 regression: the prior wording ("Answer the user's NEXT
+        # message AS A STANDALONE QUESTION") made nemotron-3-nano:30b echo the
+        # user's prompt back reframed as a question instead of answering.  The
+        # anchor must NEVER tell the model to produce / phrase a question.
+        from ai_assistant.views import _TURN_FOCUS_PROMPT
+        lowered = _TURN_FOCUS_PROMPT.lower()
+        assert 'as a standalone question' not in lowered
+        # It must direct the model to ANSWER, not to mirror the prompt.
+        assert 'answer' in lowered
+        assert ('echo' in lowered or 'restate' in lowered or 'rephrase' in lowered)
+        assert 'never reply with a question' in lowered
+
+    def test_turn_focus_still_blocks_previous_topic_drift(self):
+        # The v2.44.2 anti-drift guarantee must survive the v2.44.3 reword.
+        from ai_assistant.views import _TURN_FOCUS_PROMPT
+        lowered = _TURN_FOCUS_PROMPT.lower()
+        assert 'previous turn' in lowered
+        assert 'current' in lowered
+
+
+@pytest.mark.unit
+class TestFinalizePromptIsTopicNeutral:
+    """v2.44.2: the finalization prompt must NOT seed the feature-engineering
+    topic.  Its feature-table guidance is CONDITIONAL on the user asking for
+    features, it leads by anchoring on the current question, and its code
+    example uses a generic column name (not Debt_to_Income)."""
+
+    def test_finalize_prompt_anchors_current_question(self):
+        from ai_assistant.views import _FINALIZE_PROMPT
+        low = _FINALIZE_PROMPT.lower()
+        assert 'most recent question' in low
+        assert 'answer the current question' in low
+
+    def test_finalize_prompt_feature_table_is_conditional(self):
+        from ai_assistant.views import _FINALIZE_PROMPT
+        # The table is gated behind 'ONLY when the user asked ... features'.
+        assert 'only when the user asked you to create or transform' in _FINALIZE_PROMPT.lower()
+
+    def test_finalize_prompt_example_is_generic(self):
+        from ai_assistant.views import _FINALIZE_PROMPT
+        # The concrete Debt_to_Income seed (which biased the drift) is gone.
+        assert 'Debt_to_Income' not in _FINALIZE_PROMPT
+        assert 'Debt-to-Income' not in _FINALIZE_PROMPT
+        assert "new_column" in _FINALIZE_PROMPT
 
 
 @pytest.mark.unit
