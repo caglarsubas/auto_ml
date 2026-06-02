@@ -651,3 +651,67 @@
   align-items: center;
   line-height: 0;
 }
+
+/* ============================================
+   Hyperparameter help: (i) info icon + tooltip
+   ============================================ */
+.hp-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #f0dede;
+  color: #740505;
+  border: 1px solid #e2c4c4;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  user-select: none;
+  flex-shrink: 0;
+  text-transform: none;        /* table headers uppercase their text — keep the glyph as 'i' */
+  letter-spacing: normal;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.hp-info::before {
+  content: 'i';
+}
+
+.hp-info:hover {
+  background: #740505;
+  color: #fff;
+  border-color: #740505;
+  transform: scale(1.12);
+}
+
+/* Header cells lay out label + icon inline. */
+.hp-th-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Form-field labels keep the icon on the same baseline as the label text. */
+.hp-field-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Wider, readable tooltip for the longer explanations (overrides Material's
+   narrow default). Angular Material v18 = MDC tooltips: width/typography live
+   on .mdc-tooltip__surface. Rendered in the CDK overlay, so ::ng-deep makes the
+   rule global (the overlay is outside this component's view). */
+::ng-deep .hp-tip .mdc-tooltip__surface {
+  max-width: 280px !important;
+  font-size: 12.5px !important;
+  line-height: 1.5 !important;
+  white-space: normal !important;
+  text-align: left !important;
+  padding: 9px 12px !important;
+}

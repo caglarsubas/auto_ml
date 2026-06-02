@@ -5,11 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ModelingComponent } from './modeling.component';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
 import { AiAssistantService } from '../services/ai-assistant.service';
+import { of } from 'rxjs';
 
 describe('ModelingComponent', () => {
   let component: ModelingComponent;
@@ -23,6 +25,7 @@ describe('ModelingComponent', () => {
         FormsModule,
         MatDialogModule,
         MatSnackBarModule,
+        MatTooltipModule,
         BrowserAnimationsModule,
       ],
       declarations: [ModelingComponent],
@@ -1254,6 +1257,308 @@ describe('ModelingComponent', () => {
       const sections = (component.requestAiSupport as jasmine.Spy).calls.allArgs().map((a: any[]) => a[1]);
       expect(sections.slice().sort()).toEqual(['sfs_backward', 'sfs_forward', 'sfs_forward_from_backward']);
       expect(sections).not.toContain('sfs');
+    });
+  });
+
+  // ── Hyperparameter Tuning (random joint search + validation curves) ──
+  describe('Hyperparameter Tuning', () => {
+    let dataService: DataService;
+    let sharedService: SharedService;
+
+    beforeEach(() => {
+      dataService = TestBed.inject(DataService);
+      sharedService = TestBed.inject(SharedService);
+      component.currentFileId = 1;
+    });
+
+    it('initializes the editable param space with XGBoost defaults', () => {
+      expect(component.hpParamSpace.length).toBe(9);
+      const names = component.hpParamSpace.map(r => r.name);
+      expect(names).toContain('n_estimators');
+      expect(names).toContain('learning_rate');
+      // 6 enabled by default (regularizers off).
+      expect(component.hpEnabledCount()).toBe(6);
+    });
+
+    it('buildHpParamSpacePayload emits the backend object shape with int rounding', () => {
+      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+      row.min = 2.7 as any; row.max = 9.2 as any;
+      const space = (component as any).buildHpParamSpacePayload();
+      expect(space['max_depth'].type).toBe('int');
+      expect(space['max_depth'].min).toBe(3);   // rounded
+      expect(space['max_depth'].max).toBe(9);
+      expect(space['learning_rate'].log).toBeTrue();
+      expect(space['n_estimators'].enabled).toBeTrue();
+    });
+
+    it('startHyperparam posts the config + sets running state', () => {
+      const spy = spyOn(dataService, 'startHyperparam').and.returnValue(of({ status: 'started', message: 'go', space_warnings: [] }));
+      spyOn(component as any, 'startHyperparamStatusPolling');  // avoid the polling interval
+      const procSpy = spyOn(sharedService, 'setActiveProcess');
+
+      component.hpNIter = 25; component.hpNJobs = 4; component.hpPrimaryMetric = 'f1';
+      component.hpSearchMethod = 'bayesian'; component.hpDefaultPieces = 5;
+      component.startHyperparam();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [fileId, opts] = spy.calls.mostRecent().args as any[];
+      expect(fileId).toBe(1);
+      expect(opts.nIter).toBe(25);
+      expect(opts.nJobs).toBe(4);
+      expect(opts.primaryMetric).toBe('f1');
+      expect(opts.searchMethod).toBe('bayesian');
+      expect(opts.gridPointsPerParam).toBe(6);   // hpDefaultPieces (5) + 1
+      expect(opts.gridPointsPerParamMap['max_depth']).toBeGreaterThan(0);
+      expect(opts.paramSpace['max_depth']).toBeTruthy();
+      expect(component.hpRunning).toBeTrue();
+      expect(procSpy).toHaveBeenCalledWith({ type: 'hyperparam', file_id: 1 });
+    });
+
+    // ── Search-method recommendation (mirrors backend thresholds) ──
+    it('hpEstimateGridCandidates multiplies per-param #checkpoints', () => {
+      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth' || r.name === 'learning_rate'));
+      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;     // 2..10 int
+      const lr = component.hpParamSpace.find(r => r.name === 'learning_rate')!;  // 0.01..0.3
+      lr.log = false;
+      md.walkStep = (10 - 2) / 3;        // 3 pieces -> 4 checkpoints
+      lr.walkStep = (0.3 - 0.01) / 3;    // 3 pieces -> 4 checkpoints
+      expect(component.hpCheckpoints(md)).toBe(4);
+      expect(component.hpCheckpoints(lr)).toBe(4);
+      expect(component.hpEstimateGridCandidates()).toBe(16);  // 4 x 4
+    });
+
+    it('hpRecommendedMethod picks grid for a tiny space', () => {
+      component.resetHpParamSpace();   // 20-piece defaults
+      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth'));
+      component.hpCvFolds = 3; component.hpNJobs = 3;
+      // max_depth (2..10) de-dupes to 9 checkpoints -> 9*3/3 = 9 fits/worker.
+      expect(component.hpCheckpoints(component.hpParamSpace.find(r => r.name === 'max_depth')!)).toBe(9);
+      expect(component.hpFitsPerJob()).toBeLessThan(100);
+      expect(component.hpRecommendedMethod()).toBe('grid');
+    });
+
+    it('hpRecommendedMethod picks random for a mid space and bayesian for a large one', () => {
+      component.resetHpParamSpace();
+      component.hpCvFolds = 3; component.hpNJobs = 1;
+      // Pin each param to exactly 5 checkpoints via Walk_Step (span / 4).
+      const ck5 = (name: string) => {
+        const r = component.hpParamSpace.find(x => x.name === name)!;
+        r.log = false; r.walkStep = (Number(r.max) - Number(r.min)) / 4;
+      };
+      ['max_depth', 'learning_rate', 'subsample'].forEach(ck5);
+      component.hpParamSpace.forEach(r => r.enabled = ['max_depth', 'learning_rate', 'subsample'].includes(r.name));
+      // 3 params @5 = 125 cand * 3 / 1 = 375 fits/worker -> random.
+      expect(component.hpEstimateGridCandidates()).toBe(125);
+      expect(component.hpRecommendedMethod()).toBe('random');
+      // 6 params @5 = 15625 cand -> bayesian.
+      ['n_estimators', 'min_child_weight', 'colsample_bytree'].forEach(ck5);
+      component.hpParamSpace.forEach(r => r.enabled = ['n_estimators', 'max_depth', 'learning_rate', 'min_child_weight', 'subsample', 'colsample_bytree'].includes(r.name));
+      expect(component.hpEstimateGridCandidates()).toBe(15625);
+      expect(component.hpRecommendedMethod()).toBe('bayesian');
+    });
+
+    it('hpResolvedMethod honors an explicit method over the recommendation', () => {
+      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth'));  // would recommend grid
+      component.hpSearchMethod = 'bayesian';
+      expect(component.hpResolvedMethod()).toBe('bayesian');
+      component.hpSearchMethod = 'auto';
+      expect(component.hpResolvedMethod()).toBe('grid');
+    });
+
+    // ── Walk_Step → #checkpoints granularity ──
+    it('walkStep defaults split each range into 20 pieces (21 checkpoints, int de-dup)', () => {
+      component.resetHpParamSpace();
+      expect(component.hpDefaultPieces).toBe(20);
+      const ne = component.hpParamSpace.find(r => r.name === 'n_estimators')!;      // 50..600 int
+      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;          // 2..10 int
+      const mcw = component.hpParamSpace.find(r => r.name === 'min_child_weight')!;  // 1..10 int
+      const ss = component.hpParamSpace.find(r => r.name === 'subsample')!;          // 0.5..1.0 float
+      expect(ne.walkStep).toBeCloseTo(27.5, 6);    // (600-50)/20
+      expect(component.hpCheckpoints(ne)).toBe(21); // wide int range -> full 21
+      expect(component.hpCheckpoints(ss)).toBe(21); // float -> 21
+      expect(component.hpCheckpoints(md)).toBe(9);  // 2..10 -> only 9 distinct ints
+      expect(component.hpCheckpoints(mcw)).toBe(10); // 1..10 -> 10 distinct ints
+    });
+
+    it('applyDefaultPiecesToAll re-seeds every Walk_Step and clamps pieces to [2,200]', () => {
+      component.resetHpParamSpace();
+      component.hpDefaultPieces = 10;
+      component.applyDefaultPiecesToAll();
+      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;   // 2..10
+      expect(md.walkStep).toBeCloseTo(0.8, 6);   // 8 / 10
+      component.hpDefaultPieces = 0; component.applyDefaultPiecesToAll();
+      expect(component.hpDefaultPieces).toBe(2);
+      component.hpDefaultPieces = 9999; component.applyDefaultPiecesToAll();
+      expect(component.hpDefaultPieces).toBe(200);
+    });
+
+    it('a larger Walk_Step yields fewer #checkpoints', () => {
+      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;   // 2..10
+      md.walkStep = 2;     // step 2 over span 8 -> 5 checkpoints [2,4,6,8,10]
+      expect(component.hpCheckpoints(md)).toBe(5);
+      md.walkStep = 4;     // step 4 -> 3 checkpoints [2,6,10]
+      expect(component.hpCheckpoints(md)).toBe(3);
+    });
+
+    it('buildHpPointsMapPayload mirrors the #checkpoints column for every row', () => {
+      component.resetHpParamSpace();
+      const map = (component as any).buildHpPointsMapPayload();
+      for (const row of component.hpParamSpace) {
+        expect(map[row.name]).toBe(component.hpCheckpoints(row));
+      }
+    });
+
+    // ── Info-icon help (i) tooltips ──
+    it('hpHelp provides a non-empty explanation for every param row, column and control', () => {
+      // No hyperparameter row may render an empty tooltip.
+      for (const row of component.hpParamSpace) {
+        expect(component.hpHelp[row.name])
+          .withContext(`missing hpHelp for hyperparameter "${row.name}"`)
+          .toBeTruthy();
+      }
+      // Column headers + search/compute control fields.
+      const keys = ['_tune', '_hyperparameter', '_type', '_min', '_max', '_log',
+        '_walk_step', '_checkpoints',
+        '_search_method', '_grid_points', '_n_iter', '_cv_folds', '_n_jobs', '_metric', '_curve_points'];
+      for (const k of keys) {
+        expect(component.hpHelp[k]).withContext(`missing hpHelp for "${k}"`).toBeTruthy();
+      }
+    });
+
+    it('startHyperparam refuses when no param is enabled', () => {
+      const alertSpy = spyOn(window, 'alert');
+      const startSpy = spyOn(dataService, 'startHyperparam');
+      component.hpParamSpace.forEach(r => r.enabled = false);
+      component.startHyperparam();
+      expect(alertSpy).toHaveBeenCalled();
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(component.hpRunning).toBeFalse();
+    });
+
+    it('passes the SFS-selected features (forward_from_backward wins)', () => {
+      const spy = spyOn(dataService, 'startHyperparam').and.returnValue(of({ status: 'started' }));
+      spyOn(component as any, 'startHyperparamStatusPolling');
+      component.sfsBackwardRemainingFeatures = ['a', 'b', 'c'];
+      component.sfsForwardFromBackwardResults = [{ step: 1, selected_features: ['a', 'b'] }] as any;
+      component.startHyperparam();
+      const opts = (spy.calls.mostRecent().args as any[])[1];
+      expect(opts.features).toEqual(['a', 'b']);
+    });
+
+    it('fetchHyperparamResults populates results state', () => {
+      spyOn(dataService, 'getHyperparamResults').and.returnValue(of({
+        status: 'completed',
+        best_points: { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9, cv_std: 0.01, test: 0.88, train: 0.97 } },
+        validation_curves: [{ param: 'max_depth', values: [2, 4, 6], cv_mean: [0.8, 0.9, 0.85], cv_std: [0, 0, 0], train_mean: [0.9, 0.95, 0.99], train_std: [0, 0, 0] }],
+        emphasized: { most_cv_gain: 'max_depth', most_overfitting: 'learning_rate', most_shrinkage: 'subsample' },
+        param_importance: { cv_gain: { max_depth: 0.7 } },
+        guidance: [{ param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' }],
+        duration_seconds: 12.3,
+      }));
+      component.fetchHyperparamResults();
+      expect(component.hpBestPoints['roc_auc'].cv_mean).toBe(0.9);
+      expect(component.hpValidationCurves.length).toBe(1);
+      expect(component.hpEmphasisParam('most_cv_gain')).toBe('max_depth');
+      expect(component.hpGuidance.length).toBe(1);
+      expect(component.hpDurationSeconds).toBe(12.3);
+    });
+
+    it('hpBestPointRows returns rows only for present metrics, in metric order', () => {
+      component.hpBestPoints = {
+        f1: { cv_mean: 0.5 }, roc_auc: { cv_mean: 0.9 },
+      };
+      const rows = component.hpBestPointRows();
+      expect(rows.map(r => r.metric)).toEqual(['roc_auc', 'f1']);  // roc_auc first per hpMetricOptions order
+    });
+
+    it('hpNum formats numbers, integers, null and NaN', () => {
+      expect(component.hpNum(0.123456)).toBe('0.1235');
+      expect(component.hpNum(5)).toBe('5');
+      expect(component.hpNum(null)).toBe('—');
+      expect(component.hpNum(NaN)).toBe('—');
+    });
+
+    it('applyHpGuidance narrows the matching param range and enables it', () => {
+      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+      row.enabled = false;
+      component.applyHpGuidance({ param: 'max_depth', type: 'zoom_in', suggested_range: [3, 7] });
+      expect(row.min).toBe(3);
+      expect(row.max).toBe(7);
+      expect(row.enabled).toBeTrue();
+      expect(component.hpSelectedRanges['max_depth']).toEqual([3, 7]);
+    });
+
+    it('brush-select (onHpRangeSelected) updates the space with int rounding', () => {
+      (component as any).onHpRangeSelected('max_depth', 2.3, 6.8);
+      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+      expect(row.min).toBe(2);
+      expect(row.max).toBe(7);
+      expect(component.hpSelectedRanges['max_depth']).toEqual([2, 7]);
+      component.clearHpRange('max_depth');
+      expect(component.hpSelectedRanges['max_depth']).toBeUndefined();
+    });
+
+    it('stopHyperparam signals a stop while running', () => {
+      const spy = spyOn(dataService, 'stopHyperparam').and.returnValue(of({ status: 'stop_requested' }));
+      component.hpRunning = true;
+      component.stopHyperparam();
+      expect(spy).toHaveBeenCalledWith(1);
+      expect(component.hpStopping).toBeTrue();
+    });
+
+    it('resetHpParamSpace restores defaults and clears brushed ranges', () => {
+      component.hpParamSpace = [{ name: 'x', label: 'x', type: 'int', min: 0, max: 1, log: false, enabled: true }];
+      component.hpSelectedRanges = { max_depth: [2, 5] };
+      component.resetHpParamSpace();
+      expect(component.hpParamSpace.length).toBe(9);
+      expect(component.hpSelectedRanges).toEqual({});
+    });
+
+    // ── AI bridge: hyperparamStartRequests$ → startHyperparam() ─────
+    it('AI hyperparamStartRequests$ mirrors config onto the form and kicks off tuning', (done) => {
+      const startSpy = spyOn(component, 'startHyperparam').and.callFake(() => { /* no-op */ });
+      fixture.detectChanges(); // wire ngOnInit subscriptions
+      sharedService.emitHyperparamStartRequest({
+        enabled_params: ['max_depth', 'subsample'],
+        param_space: { max_depth: { min: 3, max: 8, log: false, enabled: true } } as any,
+        n_iter: 75,
+        cv_folds: 5,
+        n_jobs: 8,
+        primary_metric: 'pr_auc',
+        validation_curve_points: 12,
+        search_method: 'bayesian',
+        grid_points_per_param: 7,
+      });
+      setTimeout(() => {
+        // enabled_params enabled exactly those rows (rest disabled).
+        const enabledNames = component.hpParamSpace.filter(r => r.enabled).map(r => r.name).sort();
+        expect(enabledNames).toEqual(['max_depth', 'subsample']);
+        // param_space override landed on the max_depth row.
+        const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+        expect(md.min).toBe(3);
+        expect(md.max).toBe(8);
+        // scalar fields mirrored.
+        expect(component.hpNIter).toBe(75);
+        expect(component.hpCvFolds).toBe(5);
+        expect(component.hpNJobs).toBe(8);
+        expect(component.hpPrimaryMetric).toBe('pr_auc');
+        expect(component.hpValidationCurvePoints).toBe(12);
+        expect(component.hpSearchMethod).toBe('bayesian');
+        expect(component.hpDefaultPieces).toBe(6);   // 7 grid points -> 6 pieces
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        done();
+      }, 5);
+    });
+
+    it('AI hyperparamStartRequests$ ignores an unsupported primary_metric', (done) => {
+      spyOn(component, 'startHyperparam').and.callFake(() => { /* no-op */ });
+      fixture.detectChanges();
+      const before = component.hpPrimaryMetric;
+      sharedService.emitHyperparamStartRequest({ primary_metric: 'rmse' as any });
+      setTimeout(() => {
+        expect(component.hpPrimaryMetric).toBe(before); // unchanged
+        done();
+      }, 5);
     });
   });
 });

@@ -251,6 +251,76 @@ export class DataService {
     );
   }
 
+  // ===== Hyperparameter Tuning (random joint search + validation curves) =====
+  // Mirrors the SFS service methods: start a background tuning run, poll its
+  // status, stop it gracefully, and fetch persisted results.
+
+  // Start hyperparameter tuning with an editable param space + compute config.
+  startHyperparam(fileId: number, options: {
+    paramSpace?: any;
+    fixedParams?: any;
+    features?: string[];
+    nIter?: number;
+    cvFolds?: number;
+    nJobs?: number;
+    primaryMetric?: string;
+    threshold?: number;
+    validationCurvePoints?: number;
+    searchMethod?: string;
+    gridPointsPerParam?: number;
+    gridPointsPerParamMap?: { [param: string]: number };
+  } = {}): Observable<any> {
+    const payload: any = { file_id: fileId };
+    if (options.paramSpace) payload.param_space = options.paramSpace;
+    if (options.fixedParams) payload.fixed_params = options.fixedParams;
+    if (options.features && options.features.length) payload.features = options.features;
+    if (typeof options.nIter === 'number') payload.n_iter = options.nIter;
+    if (typeof options.cvFolds === 'number') payload.cv_folds = options.cvFolds;
+    if (typeof options.nJobs === 'number') payload.n_jobs = options.nJobs;
+    if (options.primaryMetric) payload.primary_metric = options.primaryMetric;
+    if (typeof options.threshold === 'number') payload.threshold = options.threshold;
+    if (typeof options.validationCurvePoints === 'number') payload.validation_curve_points = options.validationCurvePoints;
+    if (options.searchMethod) payload.search_method = options.searchMethod;
+    if (typeof options.gridPointsPerParam === 'number') payload.grid_points_per_param = options.gridPointsPerParam;
+    if (options.gridPointsPerParamMap) payload.grid_points_per_param_map = options.gridPointsPerParamMap;
+    return this.http.post(`${this.apiUrl}modeling/hyperparam/start/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error starting hyperparameter tuning:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  // Get hyperparameter-tuning progress/status.
+  getHyperparamStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/hyperparam/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting hyperparameter status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get hyperparameter status'));
+      })
+    );
+  }
+
+  // Request a graceful stop of an in-flight tuning run.
+  stopHyperparam(fileId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/hyperparam/stop/${fileId}/`, {}).pipe(
+      catchError((error: any) => {
+        console.error('Error stopping hyperparameter tuning:', error);
+        return throwError(() => new Error(error.message || 'Failed to stop hyperparameter tuning'));
+      })
+    );
+  }
+
+  // Get persisted hyperparameter-tuning results.
+  getHyperparamResults(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/hyperparam/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting hyperparameter results:', error);
+        return throwError(() => new Error(error.message || 'Failed to get hyperparameter results'));
+      })
+    );
+  }
+
   // Get feature explainability data (SHAP beeswarm + partial dependence)
   getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[]): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };

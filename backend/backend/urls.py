@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
-from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView
+from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
 from django.conf import settings
@@ -32,6 +32,10 @@ urlpatterns = [
     path('api/modeling/sfs/status/<int:file_id>/', SFSStatusView.as_view(), name='sfs-status'),
     path('api/modeling/sfs/stop/<int:file_id>/', SFSStopView.as_view(), name='sfs-stop'),
     path('api/modeling/sfs/<int:file_id>/', SFSResultsView.as_view(), name='sfs-results'),
+    path('api/modeling/hyperparam/start/', HyperparamStartView.as_view(), name='hyperparam-start'),
+    path('api/modeling/hyperparam/status/<int:file_id>/', HyperparamStatusView.as_view(), name='hyperparam-status'),
+    path('api/modeling/hyperparam/stop/<int:file_id>/', HyperparamStopView.as_view(), name='hyperparam-stop'),
+    path('api/modeling/hyperparam/<int:file_id>/', HyperparamResultsView.as_view(), name='hyperparam-results'),
     path('api/encoding/analyze/', EncodingAnalyzeView.as_view(), name='encoding-analyze'),
     path('api/encoding/apply/', EncodingApplyView.as_view(), name='encoding-apply'),
     path('api/modeling/vif-detail/', VifDetailView.as_view(), name='vif-detail'),

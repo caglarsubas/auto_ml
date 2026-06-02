@@ -1153,6 +1153,244 @@
         </div>
       </div>
 
+      <!-- ===================================================================
+           Hyperparameter Tuning (random joint search + validation curves)
+           Appears after SFS produces a feature set.
+           =================================================================== -->
+      <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0 || hpResults || hpRunning"
+           class="hp-section" style="margin-top: 28px; padding: 20px; border: 2px solid #740505; border-radius: 8px; background: #fffafa;">
+
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+          <div>
+            <h3 style="color: #740505; margin: 0;">Hyperparameter Tuning</h3>
+            <div style="font-size: 13px; color:#666; margin-top: 4px;">
+              Grid / random / Bayesian search over the boosting model's hyperparameters with per-parameter cross-validation curves.
+              Tunes on the <strong>{{ getFinalSelectedFeatures().length || hpResults?.feature_count || 'selected' }}</strong> SFS-selected features.
+              <span *ngIf="hpResults?.search_method" style="margin-left: 8px; padding: 1px 8px; background: #740505; color: #fff; border-radius: 10px; font-size: 11px; font-weight: 600;">{{ hpMethodLabel(hpResults.search_method) }}</span>
+              <span *ngIf="hpDurationSeconds !== null" style="margin-left: 8px; color: #1976d2; font-weight: 500;">⏱ {{ hpDurationSeconds }}s</span>
+            </div>
+          </div>
+          <button *ngIf="hpResults && !hpRunning" (click)="restartHyperparam()"
+                  style="padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">
+            🔄 Reset Tuning
+          </button>
+        </div>
+
+        <!-- ===== Progress (running) ===== -->
+        <div *ngIf="hpRunning" style="margin: 12px 0; padding: 16px; background: #fff; border: 1px solid #f0d6d6; border-radius: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 600; color: #740505;">{{ hpMessage || 'Tuning running...' }}</span>
+            <button (click)="stopHyperparam()" [disabled]="hpStopping"
+                    style="padding: 6px 14px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">
+              {{ hpStopping ? 'Stopping...' : '⏹ Stop' }}
+            </button>
+          </div>
+          <div style="height: 10px; background: #eee; border-radius: 5px; overflow: hidden;">
+            <div [style.width.%]="(hpProgress || 0) * 100"
+                 style="height: 100%; background: linear-gradient(90deg, #740505, #b34); transition: width 0.4s ease;"></div>
+          </div>
+          <div style="margin-top: 6px; font-size: 12px; color: #666; display: flex; gap: 16px;">
+            <span>{{ ((hpProgress || 0) * 100) | number:'1.0-0' }}%</span>
+            <span *ngIf="hpCompletedTrials">Trials evaluated: {{ hpCompletedTrials }}</span>
+            <span *ngIf="hpCurrentBest?.cv_mean != null">Best {{ hpMetricLabel(hpCurrentBest.metric) }}: {{ hpNum(hpCurrentBest.cv_mean) }}</span>
+          </div>
+        </div>
+
+        <!-- ===== Results ===== -->
+        <div *ngIf="hpResults && !hpRunning">
+
+          <!-- Best metric space points -->
+          <h4 style="color: #740505; margin: 16px 0 8px;">Best Metric Space Points</h4>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: #740505; color: white;">
+                  <th style="padding: 8px; text-align: left;">Metric</th>
+                  <th style="padding: 8px; text-align: right;">CV (mean ± std)</th>
+                  <th style="padding: 8px; text-align: right;">Test</th>
+                  <th style="padding: 8px; text-align: right;">Train</th>
+                  <th style="padding: 8px; text-align: left;">Best config</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of hpBestPointRows(); let i = index" [style.background]="i % 2 === 0 ? '#fff' : '#fbf3f3'">
+                  <td style="padding: 8px; font-weight: 600;">{{ hpMetricLabel(row.metric) }}</td>
+                  <td style="padding: 8px; text-align: right; color: #2ca02c; font-weight: 600;">{{ hpNum(row.cv_mean) }} <span style="color:#999; font-weight:400;">± {{ hpNum(row.cv_std, 3) }}</span></td>
+                  <td style="padding: 8px; text-align: right;">{{ hpNum(row.test) }}</td>
+                  <td style="padding: 8px; text-align: right; color:#1f77b4;">{{ hpNum(row.train) }}</td>
+                  <td style="padding: 8px; font-family: monospace; font-size: 11px; color:#555;">{{ hpParamsSummary(row.params) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Emphasized hyperparameters -->
+          <h4 style="color: #740505; margin: 20px 0 8px;">Most Impactful Hyperparameters</h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+            <div style="padding: 12px; border-radius: 6px; background: #fff3e0; border-left: 4px solid #ff9800;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #e65100; font-weight: 600;">Most Overfitting</div>
+              <div style="font-size: 16px; font-weight: 700; margin-top: 4px;">{{ hpEmphasisParam('most_overfitting') || '—' }}</div>
+              <div *ngIf="hpImportance('overfitting', hpEmphasisParam('most_overfitting')) as imp" style="font-size: 11px; color:#888; margin-top: 2px;">drives {{ (imp * 100) | number:'1.0-0' }}% of train−CV gap</div>
+            </div>
+            <div style="padding: 12px; border-radius: 6px; background: #e8f5e9; border-left: 4px solid #2e7d32;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #1b5e20; font-weight: 600;">Most CV-Performance Gain</div>
+              <div style="font-size: 16px; font-weight: 700; margin-top: 4px;">{{ hpEmphasisParam('most_cv_gain') || '—' }}</div>
+              <div *ngIf="hpImportance('cv_gain', hpEmphasisParam('most_cv_gain')) as imp" style="font-size: 11px; color:#888; margin-top: 2px;">drives {{ (imp * 100) | number:'1.0-0' }}% of CV score variance</div>
+            </div>
+            <div style="padding: 12px; border-radius: 6px; background: #e3f2fd; border-left: 4px solid #1976d2;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #0d47a1; font-weight: 600;">Most Shrinkage (CV→Test)</div>
+              <div style="font-size: 16px; font-weight: 700; margin-top: 4px;">{{ hpEmphasisParam('most_shrinkage') || '—' }}</div>
+              <div *ngIf="hpImportance('shrinkage', hpEmphasisParam('most_shrinkage')) as imp" style="font-size: 11px; color:#888; margin-top: 2px;">drives {{ (imp * 100) | number:'1.0-0' }}% of CV−test gap</div>
+            </div>
+          </div>
+
+          <!-- Verbal guidance -->
+          <div *ngIf="hpGuidance.length > 0" style="margin-top: 20px;">
+            <h4 style="color: #740505; margin: 0 0 8px;">Suggested Next Search Space</h4>
+            <div *ngFor="let g of hpGuidance" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 6px; background: #fff; border: 1px solid #eee; border-radius: 6px;">
+              <span [style.background]="g.type === 'zoom_in' ? '#2e7d32' : '#1976d2'"
+                    style="padding: 3px 8px; border-radius: 12px; color: white; font-size: 11px; font-weight: 600; white-space: nowrap;">
+                {{ g.type === 'zoom_in' ? '🔍 Zoom in' : '🔎 Zoom out' }}
+              </span>
+              <span style="font-weight: 600; font-family: monospace;">{{ g.param }}</span>
+              <span style="flex: 1; font-size: 12px; color: #555;">{{ g.rationale }}</span>
+              <button (click)="applyHpGuidance(g)"
+                      style="padding: 5px 12px; background: #740505; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;">
+                Apply [{{ g.suggested_range[0] }}, {{ g.suggested_range[1] }}]
+              </button>
+            </div>
+          </div>
+
+          <!-- Validation curves (interactive: drag horizontally to brush a sub-region) -->
+          <h4 style="color: #740505; margin: 20px 0 8px;">
+            Cross-Validation Curves
+            <span style="font-size: 11px; font-weight: 400; color: #888;">— drag horizontally on a chart to select a sub-region for the next run</span>
+          </h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px;">
+            <div *ngFor="let curve of hpValidationCurves" style="border: 1px solid #eee; border-radius: 6px; padding: 8px; background: #fff;">
+              <div [id]="'hp-curve-' + curve.param" style="width: 100%; height: 300px;"></div>
+              <div *ngIf="hpSelectedRanges[curve.param]" style="margin-top: 4px; font-size: 12px; color: #2e7d32; display: flex; align-items: center; gap: 8px;">
+                ✓ Next run range: [{{ hpSelectedRanges[curve.param][0] }}, {{ hpSelectedRanges[curve.param][1] }}]
+                <button (click)="clearHpRange(curve.param)" style="padding: 2px 8px; background: #eee; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Configuration / Next-run panel (hidden while running) ===== -->
+        <div *ngIf="!hpRunning">
+          <h4 style="color: #740505; margin: 20px 0 8px;">{{ hpResults ? 'Configure Next Search' : 'Search Space & Compute' }}</h4>
+
+          <!-- Editable hyperparameter space -->
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: #f5e9e9; color: #740505;">
+                  <th style="padding: 8px; text-align: center;"><span class="hp-th-label">Tune<span class="hp-info" [matTooltip]="hpHelp['_tune']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: left;"><span class="hp-th-label">Hyperparameter<span class="hp-info" [matTooltip]="hpHelp['_hyperparameter']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: left;"><span class="hp-th-label">Type<span class="hp-info" [matTooltip]="hpHelp['_type']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: right;"><span class="hp-th-label">Min<span class="hp-info" [matTooltip]="hpHelp['_min']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: right;"><span class="hp-th-label">Max<span class="hp-info" [matTooltip]="hpHelp['_max']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: center;"><span class="hp-th-label">Log scale<span class="hp-info" [matTooltip]="hpHelp['_log']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: right;"><span class="hp-th-label">Walk_Step<span class="hp-info" [matTooltip]="hpHelp['_walk_step']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                  <th style="padding: 8px; text-align: right;"><span class="hp-th-label">#checkpoints<span class="hp-info" [matTooltip]="hpHelp['_checkpoints']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of hpParamSpace" [style.opacity]="row.enabled ? 1 : 0.5">
+                  <td style="padding: 6px; text-align: center;">
+                    <input type="checkbox" [(ngModel)]="row.enabled" />
+                  </td>
+                  <td style="padding: 6px; font-weight: 500;"><span class="hp-field-label" style="font-family: monospace;">{{ row.label }}<span class="hp-info" [matTooltip]="hpHelp[row.name]" matTooltipPosition="right" matTooltipClass="hp-tip"></span></span></td>
+                  <td style="padding: 6px; color: #888;">{{ row.type }}</td>
+                  <td style="padding: 6px; text-align: right;">
+                    <input type="number" [(ngModel)]="row.min" [disabled]="!row.enabled"
+                           style="width: 90px; padding: 4px; border: 1px solid #ddd; border-radius: 4px; text-align: right;" />
+                  </td>
+                  <td style="padding: 6px; text-align: right;">
+                    <input type="number" [(ngModel)]="row.max" [disabled]="!row.enabled"
+                           style="width: 90px; padding: 4px; border: 1px solid #ddd; border-radius: 4px; text-align: right;" />
+                  </td>
+                  <td style="padding: 6px; text-align: center;">
+                    <input type="checkbox" [(ngModel)]="row.log" [disabled]="!row.enabled || row.type !== 'float'" />
+                  </td>
+                  <td style="padding: 6px; text-align: right;">
+                    <input type="number" min="0" step="any" [(ngModel)]="row.walkStep" [disabled]="!row.enabled"
+                           style="width: 90px; padding: 4px; border: 1px solid #ddd; border-radius: 4px; text-align: right;" />
+                  </td>
+                  <td style="padding: 6px; text-align: right; font-variant-numeric: tabular-nums; color: #740505; font-weight: 600;">{{ hpCheckpoints(row) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top: 6px;">
+            <button (click)="resetHpParamSpace()" style="padding: 4px 10px; background: #eee; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Reset space to defaults</button>
+          </div>
+
+          <!-- Search method + live recommendation -->
+          <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; align-items: flex-end;">
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Search method<span class="hp-info" [matTooltip]="hpHelp['_search_method']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <select [(ngModel)]="hpSearchMethod" style="width: 190px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                <option *ngFor="let o of hpSearchMethodOptions" [value]="o.value">{{ o.label }}</option>
+              </select>
+            </label>
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Default pieces / param<span class="hp-info" [matTooltip]="hpHelp['_grid_points']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <input type="number" min="2" max="100" [(ngModel)]="hpDefaultPieces" (change)="applyDefaultPiecesToAll()" style="width: 120px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </label>
+            <div style="flex: 1; min-width: 280px; font-size: 12px; color: #555; padding: 8px 12px; background: #f5f0f0; border-left: 3px solid #740505; border-radius: 4px;">
+              <span *ngIf="hpSearchMethod === 'auto'">🧭 {{ hpRecommendationText() }}</span>
+              <span *ngIf="hpSearchMethod !== 'auto'">
+                Will run <strong>{{ hpMethodLabel(hpResolvedMethod()) }}</strong>.
+                <span style="color:#888;">Auto would pick {{ hpMethodLabel(hpRecommendedMethod()) }} (~{{ hpEstimateGridCandidates().toLocaleString() }} grid configs).</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Search + compute controls -->
+          <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; align-items: flex-end;">
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Search trials (n_iter)<span class="hp-info" [matTooltip]="hpHelp['_n_iter']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <input type="number" min="2" max="500" [(ngModel)]="hpNIter" [disabled]="hpResolvedMethod() === 'grid'"
+                     style="width: 110px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </label>
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">CV folds<span class="hp-info" [matTooltip]="hpHelp['_cv_folds']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <input type="number" min="2" max="10" [(ngModel)]="hpCvFolds" style="width: 90px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </label>
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Compute power (n_jobs)<span class="hp-info" [matTooltip]="hpHelp['_n_jobs']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <input type="number" min="1" max="32" [(ngModel)]="hpNJobs" style="width: 110px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </label>
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Curve metric<span class="hp-info" [matTooltip]="hpHelp['_metric']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <select [(ngModel)]="hpPrimaryMetric" style="width: 130px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                <option *ngFor="let m of hpMetricOptions" [value]="m">{{ hpMetricLabel(m) }}</option>
+              </select>
+            </label>
+            <label style="display: flex; flex-direction: column; font-size: 12px; color: #555;">
+              <span class="hp-field-label">Curve points<span class="hp-info" [matTooltip]="hpHelp['_curve_points']" matTooltipPosition="above" matTooltipClass="hp-tip"></span></span>
+              <input type="number" min="2" max="25" [(ngModel)]="hpValidationCurvePoints" style="width: 100px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </label>
+          </div>
+
+          <div *ngIf="hpSpaceWarnings.length > 0" style="margin-top: 10px; padding: 8px 12px; background: #fff8e1; border-left: 3px solid #ffb300; border-radius: 4px; font-size: 12px; color: #795548;">
+            <div *ngFor="let w of hpSpaceWarnings">⚠ {{ w }}</div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <button (click)="startHyperparam()" [disabled]="hpEnabledCount() === 0"
+                    style="padding: 10px 22px; background: #740505; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
+                    [style.opacity]="hpEnabledCount() === 0 ? 0.5 : 1">
+              {{ hpResults ? '▶ Run Next Search' : '▶ Start Hyperparameter Tuning' }}
+            </button>
+            <span style="margin-left: 10px; font-size: 12px; color: #888;">{{ hpEnabledCount() }} hyperparameter(s) enabled</span>
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
 </div>

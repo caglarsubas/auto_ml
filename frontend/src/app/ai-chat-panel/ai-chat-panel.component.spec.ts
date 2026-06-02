@@ -1217,4 +1217,68 @@ describe('AiChatPanelComponent', () => {
       expect(out).toContain('≥');
     });
   });
+
+  // ── start_hyperparameter response handling (Phase 3) ──────────────────
+  // The dedicated path for the AI to fire the "Start Hyperparameter Tuning"
+  // button.  The chat panel forwards the validated config on
+  // hyperparamStartRequests$ so the modeling component mirrors the tuning
+  // form fields and calls startHyperparam().
+  describe('_handleActionResult start_hyperparameter flow', () => {
+    const validApplied = {
+      param_space: null,
+      enabled_params: ['max_depth', 'learning_rate'],
+      n_iter: 60,
+      cv_folds: 4,
+      n_jobs: 6,
+      primary_metric: 'f1',
+      validation_curve_points: 10,
+      search_method: 'bayesian',
+      grid_points_per_param: 5,
+    };
+
+    it('should broadcast the validated config on hyperparamStartRequests$', (done) => {
+      sharedService.hyperparamStartRequests$.subscribe(received => {
+        expect(received).toEqual(validApplied);
+        done();
+      });
+      (component as any)._handleActionResult('start_hyperparameter', {
+        applied: validApplied,
+        description: 'Tune depth + learning rate, 60 trials',
+      });
+    });
+
+    it('should NOT broadcast when applied is missing', () => {
+      const emitSpy = spyOn(sharedService, 'emitHyperparamStartRequest');
+      (component as any)._handleActionResult('start_hyperparameter', { description: 'malformed' });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should add a chat message summarising the tuning config', () => {
+      (component as any)._handleActionResult('start_hyperparameter', {
+        applied: validApplied,
+        description: 'Tune depth + learning rate',
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('Hyperparameter tuning started');
+      expect(lastMsg.content).toContain('60');          // n_iter
+      expect(lastMsg.content).toContain('n_jobs');       // compute-power label
+      expect(lastMsg.content).toContain('max_depth');    // enabled param
+      expect(lastMsg.content).toContain('f1');           // curve metric
+      expect(lastMsg.content).toContain('bayesian');     // search method
+    });
+
+    it('should trigger ai_action_start_hyperparameter checkpoint substep', () => {
+      const cpSpy = spyOn(sharedService, 'triggerCheckpoint');
+      (component as any)._handleActionResult('start_hyperparameter', { applied: validApplied });
+      expect(cpSpy).toHaveBeenCalledWith('ai_action_start_hyperparameter');
+    });
+
+    it('should render "form defaults" when enabled_params is empty', () => {
+      (component as any)._handleActionResult('start_hyperparameter', {
+        applied: { ...validApplied, enabled_params: [] },
+      });
+      const lastMsg = aiService.getMessages().slice(-1)[0];
+      expect(lastMsg.content).toContain('_form defaults_');
+    });
+  });
 });
