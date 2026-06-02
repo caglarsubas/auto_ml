@@ -17,6 +17,9 @@ from joblib import dump as joblib_dump
 import xgboost as xgb
 import shap
 from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
+from modeling.hyperparam_utils import (
+    run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
+)
 from modeling.models import PipelineRun
 import threading
 import pickle
@@ -26,6 +29,35 @@ warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid valu
 
 # Global dict to track SFS progress per file_id
 SFS_PROGRESS = {}
+
+# Global dict to track hyperparameter-tuning progress per file_id (mirrors
+# SFS_PROGRESS).  The background thread updates it via a status callback and
+# checks 'stop_requested' cooperatively for graceful stop.
+HYPERPARAM_PROGRESS = {}
+
+
+def _hp_sanitize_json(o):
+    """Recursively replace NaN/Inf with None and numpy scalars with Python
+    types so the hyperparameter results dict is strict-JSON serializable
+    (NaN would break the browser's JSON.parse)."""
+    try:
+        if isinstance(o, (np.floating,)):
+            o = float(o)
+        elif isinstance(o, (np.integer,)):
+            return int(o)
+        elif isinstance(o, (np.bool_,)):
+            return bool(o)
+        elif isinstance(o, (np.ndarray,)):
+            return [_hp_sanitize_json(x) for x in o.tolist()]
+    except Exception:
+        pass
+    if isinstance(o, dict):
+        return {k: _hp_sanitize_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_hp_sanitize_json(x) for x in o]
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    return o
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -1815,6 +1847,266 @@ class SFSStatusView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class HyperparamStartView(APIView):
+    """Start hyperparameter tuning (random joint search + validation curves).
+
+    Runs after SFS: tunes the boosting model over an editable hyperparameter
+    space on the SFS-selected feature set.  Mirrors SFSStartView — background
+    thread, HYPERPARAM_PROGRESS registry, JSON persistence, graceful stop.
+
+    Payload: {
+        file_id: int,
+        param_space?: {param: {type, min, max, log, enabled}},  # editable space
+        fixed_params?: {param: value},        # values for disabled params
+        features?: [str],                     # SFS-selected features (default: all)
+        n_iter?: int = 40,                    # random-search trials
+        cv_folds?: int = 3,
+        n_jobs?: int = 1,                     # parallel workers (compute power)
+        primary_metric?: str = 'roc_auc',
+        threshold?: float = 0.5,
+        validation_curve_points?: int = 8
+    }
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body) if request.body else {}
+            file_id = data.get('file_id')
+            if not file_id:
+                return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ── in-flight guard — refuse to spawn a duplicate run ──
+            current = HYPERPARAM_PROGRESS.get(file_id)
+            if current and current.get('status') == 'running':
+                return Response({
+                    'error': (f'Hyperparameter tuning already running for file_id={file_id} '
+                              f"(progress={current.get('progress', 0.0):.0%}). "
+                              f'Wait for it to finish or stop it first.'),
+                    'status': 'already_running'
+                }, status=status.HTTP_409_CONFLICT)
+
+            # Clamp user inputs to sane bounds.
+            param_space = data.get('param_space')
+            fixed_params = data.get('fixed_params')
+            features = data.get('features') or None
+            n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
+            cv_folds = max(2, min(int(data.get('cv_folds', 3)), 10))
+            n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
+            primary_metric = data.get('primary_metric', 'roc_auc')
+            threshold = float(data.get('threshold', 0.5))
+            curve_points = max(2, min(int(data.get('validation_curve_points', 8)), 25))
+            search_method = str(data.get('search_method', 'auto')).strip().lower()
+            if search_method not in ('auto', 'grid', 'random', 'bayesian'):
+                search_method = 'auto'
+            grid_points_per_param = max(2, min(int(data.get('grid_points_per_param', 5)), 12))
+            # Per-param checkpoint counts from the UI Walk_Step column (optional).
+            grid_points_per_param_map = data.get('grid_points_per_param_map')
+            if not isinstance(grid_points_per_param_map, dict):
+                grid_points_per_param_map = None
+
+            # Load training data persisted by ModelingStartView.
+            train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+            if not os.path.exists(train_data_path):
+                return Response({
+                    'error': 'Training data not found. Please run modeling (and SFS) first.',
+                    'status': 'error'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            with open(train_data_path, 'rb') as f:
+                train_data = pickle.load(f)
+            X_train = train_data['X_train']
+            y_train = train_data['y_train']
+            X_valid = train_data['X_valid']
+            y_valid = train_data['y_valid']
+
+            # Echo the clamped/validated space so the UI can reflect adjustments.
+            clean_space, space_warnings = validate_param_space(param_space)
+            # Sanitize the per-param checkpoint map against the validated space
+            # (known names only, each clamped to [2, 500]) so the recommendation
+            # echo matches what the search engine will actually run.
+            points_map = {}
+            if isinstance(grid_points_per_param_map, dict):
+                for _name, _cnt in grid_points_per_param_map.items():
+                    if _name in clean_space:
+                        try:
+                            points_map[_name] = max(2, min(int(_cnt), 500))
+                        except (TypeError, ValueError):
+                            pass
+            # Resolve the search method now so the start response can show the
+            # recommendation + which method will actually run.
+            recommendation = recommend_search_method(
+                clean_space, cv_folds, n_jobs, grid_points_per_param,
+                points_map=points_map or None)
+            resolved_method = recommendation['method'] if search_method == 'auto' else search_method
+
+            import time as _time
+            start_time = _time.time()
+            HYPERPARAM_PROGRESS[file_id] = {
+                'status': 'running',
+                'message': 'Starting hyperparameter tuning...',
+                'progress': 0.0,
+                'completed_trials': 0,
+                'current_best': None,
+                'error': None,
+                'duration_seconds': None,
+                'stop_requested': False,
+            }
+
+            hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
+            os.makedirs(hp_dir, exist_ok=True)
+            hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
+
+            def update_progress(info):
+                HYPERPARAM_PROGRESS[file_id].update(info)
+
+            def run_thread():
+                try:
+                    results = run_hyperparam_search_with_progress(
+                        X_train=X_train, y_train=y_train,
+                        X_test=X_valid, y_test=y_valid,
+                        param_space=param_space, fixed_params=fixed_params,
+                        n_iter=n_iter, cv_folds=cv_folds, n_jobs=n_jobs,
+                        primary_metric=primary_metric, threshold=threshold,
+                        validation_curve_points=curve_points, features=features,
+                        search_method=search_method, grid_points_per_param=grid_points_per_param,
+                        grid_points_per_param_map=grid_points_per_param_map,
+                        status_callback=update_progress,
+                        stop_flag=HYPERPARAM_PROGRESS[file_id],
+                    )
+                    elapsed = round(_time.time() - start_time, 1)
+                    results['duration_seconds'] = elapsed
+                    safe = _hp_sanitize_json(results)
+                    with open(hp_path, 'w', encoding='utf-8') as wf:
+                        json.dump(safe, wf, indent=2)
+                    final_status = results.get('status', 'completed')
+                    HYPERPARAM_PROGRESS[file_id].update({
+                        'status': final_status,
+                        'progress': 1.0 if final_status == 'completed' else HYPERPARAM_PROGRESS[file_id].get('progress', 0.0),
+                        'message': ('Hyperparameter tuning completed' if final_status == 'completed'
+                                    else f'Hyperparameter tuning {final_status}'),
+                        'duration_seconds': elapsed,
+                    })
+                    print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
+                except Exception as e:
+                    elapsed = round(_time.time() - start_time, 1)
+                    HYPERPARAM_PROGRESS[file_id].update({
+                        'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
+                        'error': str(e), 'duration_seconds': elapsed,
+                    })
+                    print(f"[Hyperparam] Error for file_id={file_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            thread = threading.Thread(target=run_thread)
+            thread.daemon = True
+            thread.start()
+
+            return Response({
+                'status': 'started',
+                'message': f'Hyperparameter tuning started in background '
+                           f'({resolved_method} search, n_jobs={n_jobs})',
+                'file_id': file_id,
+                'param_space': clean_space,
+                'space_warnings': space_warnings,
+                'n_iter': n_iter,
+                'cv_folds': cv_folds,
+                'n_jobs': n_jobs,
+                'primary_metric': primary_metric,
+                'validation_curve_points': curve_points,
+                'search_method': resolved_method,
+                'search_method_requested': search_method,
+                'grid_points_per_param': grid_points_per_param,
+                'grid_points_per_param_map': points_map,
+                'recommendation': recommendation,
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class HyperparamStatusView(APIView):
+    """Get current hyperparameter-tuning progress/status for a file_id."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            if file_id not in HYPERPARAM_PROGRESS:
+                hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
+                if os.path.exists(hp_path):
+                    try:
+                        with open(hp_path, 'r', encoding='utf-8') as rf:
+                            file_status = json.load(rf).get('status', 'completed')
+                    except Exception:
+                        file_status = 'completed'
+                    if file_status == 'running':
+                        return Response({
+                            'status': 'interrupted',
+                            'message': 'Tuning was interrupted (server restart). Re-run to continue.',
+                            'progress': 0.0, 'file_id': file_id
+                        }, status=status.HTTP_200_OK)
+                    return Response({
+                        'status': file_status, 'message': f'Hyperparameter tuning {file_status}',
+                        'progress': 1.0 if file_status == 'completed' else 0.0, 'file_id': file_id
+                    }, status=status.HTTP_200_OK)
+                return Response({
+                    'status': 'not_started',
+                    'message': 'Hyperparameter tuning has not been started yet',
+                    'progress': 0.0, 'file_id': file_id
+                }, status=status.HTTP_200_OK)
+
+            return Response({'file_id': file_id, **HYPERPARAM_PROGRESS[file_id]}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class HyperparamStopView(APIView):
+    """Request a graceful stop of an in-flight hyperparameter-tuning run."""
+
+    def post(self, request, file_id: int, *args, **kwargs):
+        try:
+            if file_id in HYPERPARAM_PROGRESS and HYPERPARAM_PROGRESS[file_id].get('status') == 'running':
+                HYPERPARAM_PROGRESS[file_id]['stop_requested'] = True
+                HYPERPARAM_PROGRESS[file_id]['message'] = 'Stop requested — finishing current trial...'
+                return Response({'status': 'stop_requested', 'file_id': file_id}, status=status.HTTP_200_OK)
+            return Response({
+                'status': 'not_running',
+                'message': 'No hyperparameter tuning is currently running for this file_id',
+                'file_id': file_id
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class HyperparamResultsView(APIView):
+    """Return persisted hyperparameter-tuning results for a given file_id."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        try:
+            hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
+            if not os.path.exists(hp_path):
+                return Response({'error': 'Hyperparameter results not found', 'hyperparam_completed': False},
+                                status=status.HTTP_404_NOT_FOUND)
+            with open(hp_path, 'r', encoding='utf-8') as f:
+                hp_data = json.load(f)
+            return Response({'hyperparam_completed': hp_data.get('status') == 'completed', **hp_data},
+                            status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e), 'hyperparam_completed': False},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @method_decorator(csrf_exempt, name='dispatch')

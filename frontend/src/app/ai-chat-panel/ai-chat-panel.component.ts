@@ -550,6 +550,38 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       });
       this.sharedService.triggerCheckpoint('ai_action_start_modeling');
 
+    } else if (actionType === 'start_hyperparameter') {
+      // Phase 3: dedicated path for the AI to fire the "Start
+      // Hyperparameter Tuning" button (the pipeline step after SFS).
+      // The validated config goes via hyperparamStartRequests$ to the
+      // modeling component, which mirrors it onto the tuning form fields
+      // and calls startHyperparam() — the same code path the manual
+      // click takes (active-process registration + status polling).
+      const applied = resp.applied || null;
+      let msg = `✅ **Hyperparameter tuning started.**`;
+      if (desc) msg += ` ${desc}`;
+      if (applied && typeof applied === 'object') {
+        const enabled = Array.isArray(applied.enabled_params) && applied.enabled_params.length
+          ? applied.enabled_params.map((p: string) => `\`${p}\``).join(', ')
+          : '_form defaults_';
+        const method = applied.search_method || 'auto';
+        msg += '\n\n' + [
+          `- **Search method**: \`${method}\`${method === 'auto' ? ' _(picks grid/random/bayesian by fit count)_' : ''}`,
+          `- **Trials (n_iter)**: ${applied.n_iter ?? '?'}`,
+          `- **CV folds**: ${applied.cv_folds ?? '?'}`,
+          `- **Compute power (n_jobs)**: ${applied.n_jobs ?? '?'}`,
+          `- **Curve metric**: \`${applied.primary_metric ?? 'roc_auc'}\``,
+          `- **Curve points**: ${applied.validation_curve_points ?? '?'}`,
+          `- **Tuned params**: ${enabled}`,
+        ].join('\n');
+      }
+      this.actionSuccess = 'Hyperparameter tuning started.';
+      this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
+      if (applied && typeof applied === 'object') {
+        this.sharedService.emitHyperparamStartRequest(applied);
+      }
+      this.sharedService.triggerCheckpoint('ai_action_start_hyperparameter');
+
     } else if (actionType === 'update_notes') {
       const noteAction = resp.note_action || 'add';
       const position = resp.position || '';

@@ -271,6 +271,42 @@ export class SharedService {
     this.sfsStartRequestsSubject.next(request);
   }
 
+  // Broadcast hyperparameter-tuning start requests from the AI assistant's
+  // `start_hyperparameter` action.  The chat panel emits the validated
+  // config; the modeling component mirrors it onto the tuning form fields
+  // (hpParamSpace enabled flags + ranges, hpNIter / hpCvFolds / hpNJobs /
+  // hpPrimaryMetric / hpValidationCurvePoints) and calls startHyperparam()
+  // — the same code path the manual "Start Hyperparameter Tuning" click
+  // takes (active-process registration + status polling).  Subject (not
+  // BehaviorSubject) so late subscribers can't auto-restart a stale run.
+  private hyperparamStartRequestsSubject = new Subject<{
+    param_space?: any;
+    enabled_params?: string[] | null;
+    n_iter?: number;
+    cv_folds?: number;
+    n_jobs?: number;
+    primary_metric?: string;
+    validation_curve_points?: number;
+    search_method?: string;
+    grid_points_per_param?: number;
+  }>();
+  hyperparamStartRequests$ = this.hyperparamStartRequestsSubject.asObservable();
+
+  emitHyperparamStartRequest(request: {
+    param_space?: any;
+    enabled_params?: string[] | null;
+    n_iter?: number;
+    cv_folds?: number;
+    n_jobs?: number;
+    primary_metric?: string;
+    validation_curve_points?: number;
+    search_method?: string;
+    grid_points_per_param?: number;
+  }): void {
+    if (!request || typeof request !== 'object') return;
+    this.hyperparamStartRequestsSubject.next(request);
+  }
+
   // ── Pipeline-orchestration channels (v2.26.0+) ─────────────────────
   //
   // These three Subjects close the "AI cannot click pipeline buttons"

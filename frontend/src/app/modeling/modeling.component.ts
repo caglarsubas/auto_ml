@@ -78,6 +78,103 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   sfsModalExpanded: boolean = false;
   fullscreenPlotId: string | null = null;  // Per-plot fullscreen ('shap'|'gain'|'stability'|'performance'|null)
 
+  // ===== Hyperparameter Tuning state (random joint search + validation curves) =====
+  // Runs after SFS on the SFS-selected feature set.  Mirrors the SFS lifecycle:
+  // background run, status polling, JSON-persisted results.
+  hpRunning: boolean = false;
+  hpStopping: boolean = false;
+  hpStopped: boolean = false;
+  hpProgress: number = 0;
+  hpMessage: string = '';
+  hpDurationSeconds: number | null = null;
+  hpCompletedTrials: number = 0;
+  hpCurrentBest: any | null = null;
+  private hpPolling: Subscription | null = null;
+
+  // Editable hyperparameter space (array form for *ngFor; converted to the
+  // backend object shape on start).  Each row: {name,label,type,min,max,log,
+  // enabled,walkStep}.  walkStep is the per-param grid step size (granularity);
+  // it defaults to (max-min)/hpDefaultPieces and drives the derived #checkpoints
+  // column.  Mirrors backend DEFAULT_PARAM_SPACE (XGBoost boosting knobs).
+  hpParamSpace: any[] = [
+    { name: 'n_estimators',     label: 'n_estimators',      type: 'int',   min: 50,   max: 600, log: false, enabled: true,  walkStep: 27.5 },
+    { name: 'max_depth',        label: 'max_depth',         type: 'int',   min: 2,    max: 10,  log: false, enabled: true,  walkStep: 0.4 },
+    { name: 'learning_rate',    label: 'learning_rate',     type: 'float', min: 0.01, max: 0.3, log: true,  enabled: true,  walkStep: 0.0145 },
+    { name: 'min_child_weight', label: 'min_child_weight',  type: 'int',   min: 1,    max: 10,  log: false, enabled: true,  walkStep: 0.45 },
+    { name: 'subsample',        label: 'subsample',         type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true,  walkStep: 0.025 },
+    { name: 'colsample_bytree', label: 'colsample_bytree',  type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true,  walkStep: 0.025 },
+    { name: 'gamma',            label: 'gamma (min split loss)', type: 'float', min: 0, max: 5, log: false, enabled: false, walkStep: 0.25 },
+    { name: 'reg_alpha',        label: 'reg_alpha (L1)',    type: 'float', min: 0,    max: 5,   log: false, enabled: false, walkStep: 0.25 },
+    { name: 'reg_lambda',       label: 'reg_lambda (L2)',   type: 'float', min: 0,    max: 5,   log: false, enabled: false, walkStep: 0.25 },
+  ];
+  hpNIter: number = 40;
+  hpCvFolds: number = 3;
+  hpNJobs: number = 3;            // compute power — parallel workers (like SFS)
+  hpPrimaryMetric: string = 'roc_auc';
+  hpValidationCurvePoints: number = 8;
+  readonly hpMetricOptions: string[] = ['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc'];
+
+  // Search method: 'auto' applies the fit-count heuristic (grid < 100 fits/worker,
+  // random <= 500, else bayesian); the user can force any concrete method.
+  hpSearchMethod: 'auto' | 'grid' | 'random' | 'bayesian' = 'auto';
+  // Bulk "set-all" default: splits every param's min-max range into this many
+  // pieces, seeding each row's walkStep (=> #checkpoints = pieces+1, before int
+  // de-dup).  Per-row walkStep edits override it.  Default 20 pieces.
+  hpDefaultPieces: number = 20;
+  readonly hpSearchMethodOptions: { value: string; label: string }[] = [
+    { value: 'auto', label: 'Auto (recommended)' },
+    { value: 'grid', label: 'Grid — exhaustive' },
+    { value: 'random', label: 'Random' },
+    { value: 'bayesian', label: 'Bayesian (SMBO)' },
+  ];
+  // Thresholds mirror backend recommend_search_method() so the UI preview matches.
+  private readonly HP_FITS_GRID_MAX = 100;
+  private readonly HP_FITS_RANDOM_MAX = 500;
+
+  // Plain-English help shown via the (i) info-icon tooltips in the tuning panel.
+  // Per-hyperparameter entries are keyed by row.name; column/control entries use
+  // an underscore prefix to avoid colliding with param names.
+  readonly hpHelp: { [key: string]: string } = {
+    // ── table columns ──
+    _tune: 'Include this hyperparameter in the search. Unchecked params stay fixed at the model default.',
+    _hyperparameter: 'An XGBoost setting that controls how the model learns. Tuning searches for the values that maximise the chosen metric.',
+    _type: 'int = whole numbers only; float = decimal values. Controls how values are sampled across the min–max range.',
+    _min: 'Lower bound of the search range for this hyperparameter.',
+    _max: 'Upper bound of the search range for this hyperparameter.',
+    _log: 'Sample values geometrically (…0.001, 0.01, 0.1…) instead of evenly — ideal for params spanning orders of magnitude such as learning_rate. Float params only.',
+    _walk_step: 'Grid step size for this hyperparameter — the gap between consecutive checkpoints across its min–max range. Smaller = finer granularity = more #checkpoints. Defaults to (max−min) ÷ pieces.',
+    _checkpoints: 'Number of distinct grid values this hyperparameter contributes (derived from Walk_Step; integer params de-duplicate). The product of all enabled #checkpoints is the total grid-config count shown on the right.',
+    // ── per-hyperparameter (keyed by row.name) ──
+    n_estimators: 'Number of boosting rounds (trees). More trees fit more complex patterns but risk overfitting and train slower.',
+    max_depth: 'Maximum depth of each tree. Higher captures richer feature interactions but is more prone to overfitting.',
+    learning_rate: 'Step-size shrinkage (eta) applied to each tree. Lower values generalise better but need more trees.',
+    min_child_weight: 'Minimum sum of instance weight (hessian) required in a child node. Higher = more conservative splits, less overfitting.',
+    subsample: 'Fraction of training rows randomly sampled per boosting round. Below 1 adds randomness that combats overfitting.',
+    colsample_bytree: 'Fraction of features randomly sampled per tree. Lower values decorrelate trees and reduce overfitting.',
+    gamma: 'Minimum loss reduction required to make a further split (min split loss). Higher = fewer, more conservative splits.',
+    reg_alpha: 'L1 regularisation on leaf weights. Higher values push weights to zero (sparsity), reducing overfitting.',
+    reg_lambda: 'L2 regularisation on leaf weights. Higher values shrink weights smoothly, reducing overfitting.',
+    // ── search + compute controls ──
+    _search_method: 'How value combinations are explored. Auto picks the method from the search-space size; Grid tries every combination; Random samples n_iter combinations; Bayesian (SMBO) learns from past trials to focus on promising regions.',
+    _grid_points: 'Bulk control: splits every hyperparameter\'s min–max range into this many pieces, setting each row\'s Walk_Step at once (#checkpoints = pieces + 1). Edit a row\'s Walk_Step to override it individually. Higher = finer but exponentially more grid combinations.',
+    _n_iter: 'Number of hyperparameter combinations to evaluate for Random / Bayesian search. Ignored by Grid, which evaluates every combination.',
+    _cv_folds: 'Cross-validation folds. Each combination is trained k times on different data splits and averaged for a robust score. Higher = more reliable but slower.',
+    _n_jobs: 'Parallel workers (CPU cores) used to evaluate trials. Higher = faster but uses more CPU and memory.',
+    _metric: 'The performance metric that is optimised and plotted on the validation curves (e.g. ROC-AUC, F1).',
+    _curve_points: 'Number of values sampled per hyperparameter when drawing its validation curve (metric-vs-value plot).',
+  };
+
+  // Results
+  hpResults: any | null = null;
+  hpBestPoints: any = {};
+  hpValidationCurves: any[] = [];
+  hpEmphasized: any = {};
+  hpParamImportance: any = {};
+  hpGuidance: any[] = [];
+  hpSpaceWarnings: string[] = [];
+  // Brush-selected sub-region per param (drives the next run's range).
+  hpSelectedRanges: { [param: string]: [number, number] } = {};
+
   // Pipeline commentary notes (synced via SharedService)
   pipelineNotes: { [position: string]: string } = {};
   editingNotePosition: string | null = null;
@@ -523,6 +620,63 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       // form-binding change detection settles before startSfs() reads
       // the field values.
       setTimeout(() => this.startSfs(), 0);
+    });
+
+    // Phase 3: subscribe to AI assistant hyperparameter-start requests.
+    // When the AI emits a start_hyperparameter action, the chat panel
+    // broadcasts the validated config here.  We mirror it onto the
+    // tuning form fields (enabled params, per-param ranges, n_iter /
+    // cv_folds / n_jobs / metric / curve-points), then call
+    // startHyperparam() — the exact code path a manual "Start
+    // Hyperparameter Tuning" click takes (active-process registration
+    // + status polling).  startHyperparam() derives the SFS-selected
+    // features itself, so the AI never specifies features.
+    this.sharedService.hyperparamStartRequests$.subscribe((req) => {
+      if (!req || typeof req !== 'object') return;
+      // enabled_params: enable exactly the named params (disable the rest).
+      if (Array.isArray(req.enabled_params) && req.enabled_params.length > 0) {
+        const wanted = new Set(req.enabled_params);
+        for (const row of this.hpParamSpace) {
+          row.enabled = wanted.has(row.name);
+        }
+      }
+      // param_space: per-param range / log / enabled overrides (known names).
+      if (req.param_space && typeof req.param_space === 'object') {
+        for (const name of Object.keys(req.param_space)) {
+          const row = this.hpParamSpace.find((r) => r.name === name);
+          const spec = (req.param_space as any)[name];
+          if (!row || !spec || typeof spec !== 'object') continue;
+          let rangeChanged = false;
+          if (typeof spec.min === 'number') { row.min = spec.min; rangeChanged = true; }
+          if (typeof spec.max === 'number') { row.max = spec.max; rangeChanged = true; }
+          if (typeof spec.log === 'boolean') row.log = spec.log;
+          if (typeof spec.enabled === 'boolean') row.enabled = spec.enabled;
+          // Re-default this row's Walk_Step to the current pieces when the AI
+          // changes its range, so #checkpoints stays a clean min-max split.
+          if (rangeChanged) row.walkStep = this.hpDefaultWalkStep(row);
+        }
+      }
+      if (typeof req.n_iter === 'number') this.hpNIter = req.n_iter;
+      if (typeof req.cv_folds === 'number') this.hpCvFolds = req.cv_folds;
+      if (typeof req.n_jobs === 'number') this.hpNJobs = req.n_jobs;
+      if (typeof req.primary_metric === 'string' && this.hpMetricOptions.includes(req.primary_metric)) {
+        this.hpPrimaryMetric = req.primary_metric;
+      }
+      if (typeof req.validation_curve_points === 'number') {
+        this.hpValidationCurvePoints = req.validation_curve_points;
+      }
+      const _sm = (req as any).search_method;
+      if (typeof _sm === 'string' && ['auto', 'grid', 'random', 'bayesian'].includes(_sm)) {
+        this.hpSearchMethod = _sm as any;
+      }
+      if (typeof (req as any).grid_points_per_param === 'number') {
+        // AI specifies grid points (checkpoints) per param; translate to pieces
+        // (= checkpoints − 1) and re-split every row's Walk_Step accordingly.
+        this.hpDefaultPieces = Math.max(2, Math.round((req as any).grid_points_per_param) - 1);
+        this.applyDefaultPiecesToAll();
+      }
+      // Defer kickoff so pending form-binding change detection settles.
+      setTimeout(() => this.startHyperparam(), 0);
     });
 
     // v2.26.0+: subscribe to AI assistant Modeling-start requests.
@@ -1021,6 +1175,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
   ngOnDestroy(): void {
     this.stopStatusPolling();
     this.stopSfsStatusPolling();
+    this.stopHyperparamStatusPolling();
   }
 
   // ===== Pipeline Checkpoint =====
@@ -2488,6 +2643,483 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.sfsBackwardCutFeatures = [];
       }
     });
+  }
+
+  // ======================================================================
+  // Hyperparameter Tuning (random joint search + validation curves)
+  // ======================================================================
+
+  /** Reset the editable param space back to sensible XGBoost defaults. */
+  resetHpParamSpace(): void {
+    this.hpParamSpace = [
+      { name: 'n_estimators',     label: 'n_estimators',      type: 'int',   min: 50,   max: 600, log: false, enabled: true },
+      { name: 'max_depth',        label: 'max_depth',         type: 'int',   min: 2,    max: 10,  log: false, enabled: true },
+      { name: 'learning_rate',    label: 'learning_rate',     type: 'float', min: 0.01, max: 0.3, log: true,  enabled: true },
+      { name: 'min_child_weight', label: 'min_child_weight',  type: 'int',   min: 1,    max: 10,  log: false, enabled: true },
+      { name: 'subsample',        label: 'subsample',         type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true },
+      { name: 'colsample_bytree', label: 'colsample_bytree',  type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true },
+      { name: 'gamma',            label: 'gamma (min split loss)', type: 'float', min: 0, max: 5, log: false, enabled: false },
+      { name: 'reg_alpha',        label: 'reg_alpha (L1)',    type: 'float', min: 0,    max: 5,   log: false, enabled: false },
+      { name: 'reg_lambda',       label: 'reg_lambda (L2)',   type: 'float', min: 0,    max: 5,   log: false, enabled: false },
+    ];
+    this.hpDefaultPieces = 20;
+    this.applyDefaultPiecesToAll();   // seed each row's Walk_Step from the 20-piece default
+    this.hpSelectedRanges = {};
+  }
+
+  /** Convert the editable array space into the backend object shape. */
+  private buildHpParamSpacePayload(): any {
+    const space: any = {};
+    for (const row of this.hpParamSpace) {
+      space[row.name] = {
+        type: row.type,
+        min: row.type === 'int' ? Math.round(Number(row.min)) : Number(row.min),
+        max: row.type === 'int' ? Math.round(Number(row.max)) : Number(row.max),
+        log: !!row.log,
+        enabled: !!row.enabled,
+      };
+    }
+    return space;
+  }
+
+  /** Per-param #checkpoints map (name -> count), mirroring the #checkpoints column. */
+  private buildHpPointsMapPayload(): { [param: string]: number } {
+    const map: { [param: string]: number } = {};
+    for (const row of this.hpParamSpace) {
+      map[row.name] = this.hpCheckpoints(row);
+    }
+    return map;
+  }
+
+  /** Final SFS-selected feature set used as the tuning input (best available). */
+  getFinalSelectedFeatures(): string[] {
+    if (this.sfsForwardFromBackwardResults?.length) {
+      const last = this.sfsForwardFromBackwardResults[this.sfsForwardFromBackwardResults.length - 1];
+      if (last?.selected_features?.length) return last.selected_features;
+    }
+    if (this.sfsBackwardCutFeatures?.length) return this.sfsBackwardCutFeatures;
+    if (this.sfsBackwardRemainingFeatures?.length) return this.sfsBackwardRemainingFeatures;
+    if (this.sfsForwardResults?.length) {
+      const last = this.sfsForwardResults[this.sfsForwardResults.length - 1];
+      if (last?.selected_features?.length) return last.selected_features;
+    }
+    return [];
+  }
+
+  /** Number of enabled params in the editable space. */
+  hpEnabledCount(): number {
+    return this.hpParamSpace.filter(r => r.enabled).length;
+  }
+
+  // ── Walk_Step → #checkpoints granularity (drives the grid-config estimate) ──
+
+  /**
+   * Default Walk_Step for a row: splits its min-max range into `pieces`
+   * (defaults to hpDefaultPieces) equal steps, so #checkpoints ≈ pieces + 1
+   * before integer de-dup.  Falls back to a sane step for a degenerate range.
+   */
+  private hpDefaultWalkStep(row: any, pieces?: number): number {
+    let p = Math.round(Number(pieces ?? this.hpDefaultPieces));
+    if (!isFinite(p) || p < 2) p = 20;
+    const span = Number(row.max) - Number(row.min);
+    if (!(span > 0)) return row.type === 'int' ? 1 : 0.01;
+    return +(span / p).toFixed(6);
+  }
+
+  /** Re-seed every row's Walk_Step from the global "pieces" default (set-all). */
+  applyDefaultPiecesToAll(): void {
+    let pieces = Math.round(Number(this.hpDefaultPieces));
+    if (!isFinite(pieces) || pieces < 2) pieces = 2;
+    if (pieces > 200) pieces = 200;
+    this.hpDefaultPieces = pieces;
+    for (const row of this.hpParamSpace) {
+      row.walkStep = this.hpDefaultWalkStep(row, pieces);
+    }
+  }
+
+  /** Grid checkpoint count a row would request, derived from its Walk_Step. */
+  private hpRequestedPoints(row: any): number {
+    const span = Number(row.max) - Number(row.min);
+    const step = Number(row.walkStep);
+    if (!(span > 0) || !(step > 0)) return 2;
+    return Math.max(2, Math.round(span / step) + 1);
+  }
+
+  // ── Search-method recommendation (mirrors backend recommend_search_method) ──
+
+  /** Grid sweep values for one param row at its Walk_Step granularity. */
+  private hpGridValues(row: any): number[] {
+    const pts = this.hpRequestedPoints(row);
+    const lo = Number(row.min), hi = Number(row.max);
+    const seq: number[] = [];
+    if (row.log && lo > 0) {
+      const a = Math.log(lo), b = Math.log(hi);
+      for (let i = 0; i < pts; i++) seq.push(Math.exp(a + (b - a) * i / (pts - 1)));
+    } else {
+      for (let i = 0; i < pts; i++) seq.push(lo + (hi - lo) * i / (pts - 1));
+    }
+    if (row.type === 'int') {
+      return Array.from(new Set(seq.map(v => Math.round(v)))).sort((p, q) => p - q);
+    }
+    return seq.map(v => +v.toFixed(6));
+  }
+
+  /**
+   * #checkpoints for a row — the count of distinct grid values it contributes
+   * (integer params de-duplicate, so a tiny int range yields fewer points).
+   * The product of all enabled rows' #checkpoints is hpEstimateGridCandidates().
+   */
+  hpCheckpoints(row: any): number {
+    return Math.max(1, this.hpGridValues(row).length);
+  }
+
+  /** Candidate count an exhaustive grid over the enabled params would enumerate. */
+  hpEstimateGridCandidates(): number {
+    let count = 1;
+    for (const row of this.hpParamSpace) {
+      if (!row.enabled) continue;
+      count *= Math.max(1, this.hpGridValues(row).length);
+    }
+    return count;
+  }
+
+  /** Exhaustive-grid fit count per parallel worker (candidates * cv / n_jobs). */
+  hpFitsPerJob(): number {
+    const folds = Math.max(2, Number(this.hpCvFolds) || 3);
+    const workers = Math.max(1, Number(this.hpNJobs) || 1);
+    return (this.hpEstimateGridCandidates() * folds) / workers;
+  }
+
+  /** The method 'auto' would pick, by the fit-count thresholds. */
+  hpRecommendedMethod(): 'grid' | 'random' | 'bayesian' {
+    const f = this.hpFitsPerJob();
+    if (f < this.HP_FITS_GRID_MAX) return 'grid';
+    if (f <= this.HP_FITS_RANDOM_MAX) return 'random';
+    return 'bayesian';
+  }
+
+  /** The method that will actually run given the user's selection. */
+  hpResolvedMethod(): 'grid' | 'random' | 'bayesian' {
+    return this.hpSearchMethod === 'auto' ? this.hpRecommendedMethod() : this.hpSearchMethod;
+  }
+
+  hpMethodLabel(m: string): string {
+    const map: any = { grid: 'Grid (exhaustive)', random: 'Random', bayesian: 'Bayesian (SMBO)', auto: 'Auto' };
+    return map[m] || m;
+  }
+
+  /** One-line rationale for the recommendation chip shown next to the selector. */
+  hpRecommendationText(): string {
+    const f = this.hpFitsPerJob();
+    const cand = this.hpEstimateGridCandidates();
+    const rec = this.hpRecommendedMethod();
+    const per = f >= 1000 ? `${(f / 1000).toFixed(1)}k` : `${Math.round(f)}`;
+    return `Exhaustive grid ≈ ${cand.toLocaleString()} configs (~${per} fits/worker) → recommends ${this.hpMethodLabel(rec)}`;
+  }
+
+  /** Start hyperparameter tuning with the current editable config. */
+  startHyperparam(): void {
+    if (!this.currentFileId) return;
+    const enabled = this.hpParamSpace.filter(r => r.enabled);
+    if (enabled.length === 0) {
+      alert('Enable at least one hyperparameter to tune.');
+      return;
+    }
+    for (const r of enabled) {
+      if (Number(r.min) > Number(r.max)) {
+        alert(`${r.label}: min must be <= max`);
+        return;
+      }
+    }
+
+    this.hpRunning = true;
+    this.hpStopping = false;
+    this.hpStopped = false;
+    this.hpProgress = 0;
+    this.hpMessage = 'Starting hyperparameter tuning...';
+    this.hpCompletedTrials = 0;
+    this.hpCurrentBest = null;
+    this.hpSpaceWarnings = [];
+
+    const features = this.getFinalSelectedFeatures();
+    this.sharedService.setActiveProcess({ type: 'hyperparam', file_id: this.currentFileId });
+    this.dataService.startHyperparam(this.currentFileId, {
+      paramSpace: this.buildHpParamSpacePayload(),
+      features: features.length ? features : undefined,
+      nIter: this.hpNIter,
+      cvFolds: this.hpCvFolds,
+      nJobs: this.hpNJobs,
+      primaryMetric: this.hpPrimaryMetric,
+      validationCurvePoints: this.hpValidationCurvePoints,
+      searchMethod: this.hpSearchMethod,
+      gridPointsPerParam: Math.max(2, Math.round(Number(this.hpDefaultPieces)) + 1),
+      gridPointsPerParamMap: this.buildHpPointsMapPayload(),
+    }).subscribe({
+      next: (resp: any) => {
+        console.log('[Hyperparam] Started:', resp);
+        this.hpMessage = resp.message || 'Tuning running...';
+        this.hpSpaceWarnings = resp.space_warnings || [];
+        this.startHyperparamStatusPolling();
+      },
+      error: (err: any) => {
+        console.error('[Hyperparam] Failed to start:', err);
+        this.hpRunning = false;
+        const msg = err?.error?.error || err?.message || err;
+        this.hpMessage = 'Failed to start tuning: ' + msg;
+        this.sharedService.setActiveProcess(null);
+      }
+    });
+  }
+
+  /** Request a graceful stop (current trial finishes, then partial results saved). */
+  stopHyperparam(): void {
+    if (!this.currentFileId || !this.hpRunning) return;
+    this.hpStopping = true;
+    this.hpMessage = 'Stopping after the current trial completes...';
+    this.dataService.stopHyperparam(this.currentFileId).subscribe({
+      next: (resp: any) => console.log('[Hyperparam] Stop signal sent:', resp),
+      error: (err: any) => {
+        console.error('[Hyperparam] Stop request failed:', err);
+        this.hpStopping = false;
+      }
+    });
+  }
+
+  /** Reset tuning UI to the config panel (keeps the edited space). */
+  restartHyperparam(): void {
+    this.hpResults = null;
+    this.hpBestPoints = {};
+    this.hpValidationCurves = [];
+    this.hpEmphasized = {};
+    this.hpParamImportance = {};
+    this.hpGuidance = [];
+    this.hpSelectedRanges = {};
+    this.hpStopped = false;
+    this.hpRunning = false;
+    this.hpProgress = 0;
+    this.hpMessage = '';
+  }
+
+  /** Poll tuning status/progress every second. */
+  private startHyperparamStatusPolling(): void {
+    if (this.currentFileId == null) return;
+    if (this.hpPolling) this.hpPolling.unsubscribe();
+
+    this.hpPolling = interval(1000).subscribe(() => {
+      if (this.currentFileId == null) return;
+      this.dataService.getHyperparamStatus(this.currentFileId).subscribe({
+        next: (st: any) => {
+          this.hpProgress = st.progress || 0;
+          this.hpMessage = st.message || 'Running...';
+          if (typeof st.completed_trials === 'number') this.hpCompletedTrials = st.completed_trials;
+          if (st.current_best) this.hpCurrentBest = st.current_best;
+
+          const status = st.status;
+          if (status === 'completed') {
+            this.stopHyperparamStatusPolling();
+            this.hpRunning = false; this.hpStopping = false; this.hpStopped = false;
+            this.hpProgress = 1.0;
+            this.hpDurationSeconds = st.duration_seconds || null;
+            this.hpMessage = 'Hyperparameter tuning completed!';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchHyperparamResults(), 400);
+          } else if (status === 'stopped' || status === 'interrupted') {
+            this.stopHyperparamStatusPolling();
+            this.hpRunning = false; this.hpStopping = false; this.hpStopped = true;
+            this.hpDurationSeconds = st.duration_seconds || null;
+            this.hpMessage = status === 'interrupted'
+              ? 'Tuning was interrupted (server restart).'
+              : 'Tuning stopped — partial results may be available';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchHyperparamResults(), 400);
+          } else if (status === 'error') {
+            this.stopHyperparamStatusPolling();
+            this.hpRunning = false; this.hpStopping = false;
+            this.hpDurationSeconds = st.duration_seconds || null;
+            this.hpMessage = 'Tuning failed: ' + (st.error || 'Unknown error');
+            this.sharedService.setActiveProcess(null);
+          }
+        },
+        error: (err: any) => {
+          console.error('[Hyperparam-Status] Polling error:', err);
+          this.stopHyperparamStatusPolling();
+          this.hpRunning = false;
+          this.hpMessage = 'Failed to get tuning status';
+        }
+      });
+    });
+  }
+
+  private stopHyperparamStatusPolling(): void {
+    if (this.hpPolling) {
+      this.hpPolling.unsubscribe();
+      this.hpPolling = null;
+    }
+  }
+
+  /** Fetch persisted tuning results and render the validation curves. */
+  fetchHyperparamResults(): void {
+    if (!this.currentFileId) return;
+    this.dataService.getHyperparamResults(this.currentFileId).subscribe({
+      next: (data: any) => {
+        console.log('[Hyperparam] Results received:', data);
+        this.hpResults = data;
+        this.hpBestPoints = data.best_points || {};
+        this.hpValidationCurves = data.validation_curves || [];
+        this.hpEmphasized = data.emphasized || {};
+        this.hpParamImportance = data.param_importance || {};
+        this.hpGuidance = data.guidance || [];
+        if (typeof data.duration_seconds === 'number') this.hpDurationSeconds = data.duration_seconds;
+        setTimeout(() => this.drawHyperparamCurves(), 100);
+        try { this.pushModelingCheckpoint('hyperparam_completed'); } catch {}
+      },
+      error: (err: any) => console.warn('[Hyperparam] Failed to fetch results:', err)
+    });
+  }
+
+  /** Rows for the "best metric space points" table. */
+  hpBestPointRows(): any[] {
+    const rows: any[] = [];
+    for (const m of this.hpMetricOptions) {
+      const bp = this.hpBestPoints?.[m];
+      if (bp) rows.push({ metric: m, ...bp });
+    }
+    return rows;
+  }
+
+  /** Human label for a metric key. */
+  hpMetricLabel(m: string): string {
+    const map: any = {
+      roc_auc: 'ROC-AUC', pr_auc: 'PR-AUC', f1: 'F1', f2: 'F2',
+      precision: 'Precision', recall: 'Recall', accuracy: 'Accuracy', mcc: 'MCC',
+    };
+    return map[m] || m;
+  }
+
+  /** Compact numeric formatter for the tables. */
+  hpNum(v: any, digits: number = 4): string {
+    if (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) return '—';
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    return Number.isInteger(n) ? String(n) : n.toFixed(digits);
+  }
+
+  /** Compact one-line summary of a config's params for table cells. */
+  hpParamsSummary(params: any): string {
+    if (!params) return '';
+    return Object.keys(params)
+      .map(k => `${k}=${this.hpNum(params[k], 3)}`)
+      .join(', ');
+  }
+
+  /** Emphasis badge helpers: which param drives overfitting/CV-gain/shrinkage. */
+  hpEmphasisParam(kind: 'most_cv_gain' | 'most_overfitting' | 'most_shrinkage'): string | null {
+    return this.hpEmphasized?.[kind] || null;
+  }
+
+  /** Importance share (0..1) of a param for a given target, for badge tooltips. */
+  hpImportance(target: 'cv_gain' | 'overfitting' | 'shrinkage', param: string | null): number | null {
+    if (!param) return null;
+    const v = this.hpParamImportance?.[target]?.[param];
+    return typeof v === 'number' ? v : null;
+  }
+
+  /** Apply a backend guidance suggestion (zoom in/out) to the editable space. */
+  applyHpGuidance(g: any): void {
+    if (!g || !g.param || !Array.isArray(g.suggested_range)) return;
+    const row = this.hpParamSpace.find(r => r.name === g.param);
+    if (!row) return;
+    let [lo, hi] = g.suggested_range;
+    if (row.type === 'int') { lo = Math.round(lo); hi = Math.round(hi); }
+    // Keep within non-negative for params that must be >= 0.
+    if (['n_estimators', 'min_child_weight', 'gamma', 'reg_alpha', 'reg_lambda', 'subsample', 'colsample_bytree', 'learning_rate'].includes(row.name)) {
+      lo = Math.max(0, lo);
+    }
+    row.min = lo; row.max = hi; row.enabled = true;
+    this.hpSelectedRanges[g.param] = [lo, hi];
+  }
+
+  /** Record a brush-selected sub-region and push it into the editable space. */
+  private onHpRangeSelected(param: string, lo: number, hi: number): void {
+    const row = this.hpParamSpace.find(r => r.name === param);
+    if (!row) return;
+    let a = lo, b = hi;
+    if (row.type === 'int') { a = Math.round(a); b = Math.round(b); }
+    else { a = +a.toFixed(6); b = +b.toFixed(6); }
+    if (a === b) return;
+    row.min = a; row.max = b; row.enabled = true;
+    this.hpSelectedRanges[param] = [a, b];
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  /** Clear a brushed sub-region selection for a param. */
+  clearHpRange(param: string): void {
+    if (this.hpSelectedRanges[param]) {
+      delete this.hpSelectedRanges[param];
+      try { this.cdr.detectChanges(); } catch {}
+    }
+  }
+
+  /** Draw all per-hyperparameter validation curves with Plotly. */
+  private async drawHyperparamCurves(): Promise<void> {
+    if (!this.isBrowser) return;
+    if (this.plotlyReady) { await this.plotlyReady; }
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) return;
+    for (const curve of this.hpValidationCurves) {
+      this.drawOneHpCurve(curve);
+    }
+  }
+
+  /** Draw a single validation curve (train vs CV mean +/- std bands) with
+   *  horizontal box-select so the user can brush a sub-region for the next run. */
+  private drawOneHpCurve(curve: any, attempt: number = 0): void {
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) { if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250); return; }
+    const elId = 'hp-curve-' + curve.param;
+    const el = document.getElementById(elId);
+    if (!el) { if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250); return; }
+
+    const x = curve.values || [];
+    const cvMean = curve.cv_mean || [];
+    const cvStd = curve.cv_std || [];
+    const trMean = curve.train_mean || [];
+    const trStd = curve.train_std || [];
+    const upper = (m: any[], s: any[]) => m.map((v: any, i: number) => (v == null ? null : v + (s[i] || 0)));
+    const lower = (m: any[], s: any[]) => m.map((v: any, i: number) => (v == null ? null : v - (s[i] || 0)));
+
+    const traces: any[] = [
+      // Training band (mean +/- std)
+      { x, y: upper(trMean, trStd), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+      { x, y: lower(trMean, trStd), type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(31,119,180,0.15)', hoverinfo: 'skip', showlegend: false },
+      // CV band (mean +/- std)
+      { x, y: upper(cvMean, cvStd), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+      { x, y: lower(cvMean, cvStd), type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(44,160,44,0.15)', hoverinfo: 'skip', showlegend: false },
+      // Mean lines
+      { x, y: trMean, type: 'scatter', mode: 'lines+markers', name: 'Training Score', line: { color: '#1f77b4', width: 2 }, marker: { size: 6 } },
+      { x, y: cvMean, type: 'scatter', mode: 'lines+markers', name: 'Cross Validation Score', line: { color: '#2ca02c', width: 2 }, marker: { size: 6 } },
+    ];
+
+    const layout: any = {
+      title: { text: `Validation Curve — ${curve.param}`, font: { size: 13 } },
+      xaxis: { title: { text: curve.param, font: { size: 11 } }, zeroline: false },
+      yaxis: { title: { text: (curve.metric || this.hpPrimaryMetric).toUpperCase(), font: { size: 11 } }, zeroline: false },
+      dragmode: 'select', selectdirection: 'h',
+      margin: { l: 52, r: 16, t: 36, b: 44 }, height: 300,
+      legend: { orientation: 'h', x: 0, y: -0.28, font: { size: 10 } },
+      plot_bgcolor: '#fff',
+    };
+    const config: any = { responsive: true, displayModeBar: true, displaylogo: false };
+
+    Plotly.newPlot(el, traces, layout, config).then(() => {
+      (el as any).on('plotly_selected', (ev: any) => {
+        if (ev && ev.range && Array.isArray(ev.range.x) && ev.range.x.length === 2) {
+          const a = ev.range.x[0], b = ev.range.x[1];
+          this.onHpRangeSelected(curve.param, Math.min(a, b), Math.max(a, b));
+        }
+      });
+      (el as any).on('plotly_deselect', () => this.clearHpRange(curve.param));
+    }).catch((e: any) => console.warn('[Hyperparam] curve draw failed:', e));
   }
 
   /**

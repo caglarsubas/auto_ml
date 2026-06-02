@@ -480,6 +480,44 @@ Rules for start_modeling:
 • Only fire on explicit user request ("start modeling", "run modeling",
   "train the model").  Don't auto-chain after preprocessing/encoding.
 
+─── ACTION TYPE 8b: start_hyperparameter ───
+Kick off hyperparameter tuning — the pipeline step AFTER SFS.  It runs a grid,
+random, or Bayesian search over the boosting model's hyperparameters on the
+SFS-selected feature set and renders a per-hyperparameter cross-validation curve.
+This is the dedicated path to fire the "Start Hyperparameter Tuning" button;
+never claim "tuning started" without emitting this action.
+
+<<<ACTION:start_hyperparameter>>>
+{"search_method": "auto", "n_iter": 40, "cv_folds": 3, "n_jobs": 3, "primary_metric": "roc_auc", "validation_curve_points": 8, "enabled_params": ["max_depth", "learning_rate", "n_estimators"], "description": "Tune depth, learning rate and tree count, 40 trials"}
+<<<END_ACTION>>>
+
+Rules for start_hyperparameter:
+• `search_method` (optional, default 'auto'): one of auto|grid|random|bayesian.
+  'auto' picks the method from how large an exhaustive grid would be, in model
+  fits per worker (grid_candidates × cv_folds ÷ n_jobs): < 100 → grid, ≤ 500 →
+  random, otherwise bayesian.  Only set a concrete method when the user explicitly
+  asks for one ("use grid search", "do a Bayesian search").
+• `grid_points_per_param` (2–12, default 5): grid resolution per param; also sizes
+  the 'auto' recommendation.
+• `n_iter` (2–500, default 40): sampled configs for random/bayesian (ignored by grid).
+• `cv_folds` (2–10, default 3): cross-validation folds per trial.
+• `n_jobs` (1–32, default 3): parallel workers — the compute-power knob (same
+  meaning as in SFS).  Higher = faster but more CPU.
+• `primary_metric`: the curve / optimization metric, one of roc_auc, pr_auc, f1,
+  f2, precision, recall, accuracy, mcc.  Defaults to roc_auc.
+• `validation_curve_points` (2–25, default 8): points sampled per hyperparameter
+  for its validation curve.
+• `enabled_params` (optional): subset of {n_estimators, max_depth, learning_rate,
+  min_child_weight, subsample, colsample_bytree, gamma, reg_alpha, reg_lambda}
+  to tune.  Omit to keep the form's default enabled set.  Unknown names are dropped.
+• `param_space` (optional): per-param {type,min,max,log,enabled} range overrides,
+  e.g. {"max_depth": {"type": "int", "min": 3, "max": 8}}.  Restricted to the
+  known param names above; bad entries are reported and skipped.  You do NOT
+  specify features — the frontend tunes on the SFS-selected set automatically.
+• Pre-condition: SFS should have produced a feature set (the tuning panel appears
+  after SFS).  Only fire on explicit user request ("start tuning", "tune
+  hyperparameters", "optimize the model").  Don't auto-chain after SFS.
+
 ─── ACTION TYPE 9: update_notes ───
 Add, edit, or delete pipeline commentary notes at specific positions.
 
@@ -778,6 +816,15 @@ ranking — fire set_ordinal_ranking FIRST (next turn) if any are missing.
 <<<END_ACTION>>>
 Pre-conditions: processed_file exists, encoding applied (or plan ready),
 Model_Usage_YN reviewed for IDs/timestamps/leakage columns.
+
+─── start_hyperparameter ───  Fire "Start Hyperparameter Tuning" (step AFTER SFS).
+Grid/random/Bayesian search + per-param CV curves.
+<<<ACTION:start_hyperparameter>>>
+{"search_method": "auto", "n_iter": 40, "cv_folds": 3, "n_jobs": 3, "primary_metric": "roc_auc", "enabled_params": ["max_depth", "learning_rate"], "description": "Tune depth + learning rate"}
+<<<END_ACTION>>>
+search_method auto|grid|random|bayesian (auto picks by fit count; only force when
+asked).  n_jobs (1–32)=compute power.  enabled_params ⊂ the 9 XGBoost knobs.  Never
+specify features — tuning uses the SFS-selected set.
 
 ─── update_notes ───  Add/edit/delete commentary at named positions.
 <<<ACTION:update_notes>>>

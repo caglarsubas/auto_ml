@@ -1731,6 +1731,175 @@ def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ACTION: start_hyperparameter — initiate hyperparameter tuning
+# ---------------------------------------------------------------------------
+#
+# Procedural context: hyperparameter tuning is the pipeline step AFTER
+# SFS.  It runs a random joint search over the boosting model's
+# hyperparameters on the SFS-selected feature set and renders a
+# per-hyperparameter cross-validation curve for each enabled param.
+# The pipeline UI exposes a "Start Hyperparameter Tuning" button with
+# an editable search-space table (min/max/log/enabled per param) plus
+# n_iter / cv_folds / n_jobs / curve-metric / curve-points controls.
+#
+# This action mirrors that button click: it forwards a validated config
+# the frontend mirrors onto the tuning form fields, then calls the same
+# startHyperparam() method a manual click takes (which derives the
+# SFS-selected features itself — the AI does NOT specify features).
+#
+# Validation rules
+# ----------------
+# * `n_iter` (2..500), `cv_folds` (2..10), `n_jobs` (1..32),
+#   `validation_curve_points` (2..25) — clamped positive ints.
+# * `primary_metric` ∈ the 8 UI curve metrics; defaults to roc_auc.
+# * `enabled_params` (optional) — subset of the known XGBoost knobs to
+#   tune; unknown names are dropped.  Omit to keep the form's defaults.
+# * `param_space` (optional) — per-param {type,min,max,log,enabled}
+#   overrides, restricted to the known param names.  Bad entries are
+#   reported in `errors` and skipped.
+#
+# Returns the validated config in `applied` for the frontend chat panel
+# to forward via `hyperparamStartRequests$` to the modeling component.
+
+# Known editable hyperparameter names (mirror frontend hpParamSpace and
+# the engine DEFAULT_PARAM_SPACE in modeling/hyperparam_utils.py).
+_HP_PARAM_NAMES = frozenset({
+    'n_estimators', 'max_depth', 'learning_rate', 'min_child_weight',
+    'subsample', 'colsample_bytree', 'gamma', 'reg_alpha', 'reg_lambda',
+})
+_HP_INT_PARAMS = frozenset({'n_estimators', 'max_depth', 'min_child_weight'})
+# Metrics the frontend curve-metric selector supports.
+_HP_METRICS = ('roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc')
+# Search methods.  'auto' applies the fit-count heuristic (grid/random/bayesian).
+_HP_SEARCH_METHODS = ('auto', 'grid', 'random', 'bayesian')
+
+
+@tool(name="start-hyperparameter")
+def start_hyperparameter(file_id: int, payload: dict) -> dict:
+    """
+    Validate and broadcast a hyperparameter-tuning start request.
+
+    payload: {
+        "search_method": "auto",       # auto|grid|random|bayesian (auto = fit-count heuristic)
+        "grid_points_per_param": 5,    # grid resolution per param (2..12)
+        "n_iter": 40,                  # search trials for random/bayesian (2..500)
+        "cv_folds": 3,                 # CV folds (2..10)
+        "n_jobs": 3,                   # parallel workers / compute power (1..32)
+        "primary_metric": "roc_auc",   # curve metric (one of the 8 UI metrics)
+        "validation_curve_points": 8,  # points per curve (2..25)
+        "enabled_params": ["max_depth", "learning_rate"],   # optional subset
+        "param_space": {               # optional per-param overrides
+            "max_depth": {"type": "int", "min": 3, "max": 8, "log": false, "enabled": true}
+        },
+        "description": "Tune depth + learning rate, 60 trials"
+    }
+    """
+    description = payload.get('description', '')
+
+    # ── in-flight guard — refuse to spawn a duplicate run ──
+    # Mirrors start_sfs: even if the model bypasses the slim-context
+    # warnings, it cannot clobber an in-flight HYPERPARAM_PROGRESS entry.
+    try:
+        from modeling.views import HYPERPARAM_PROGRESS
+        live = HYPERPARAM_PROGRESS.get(file_id) if isinstance(HYPERPARAM_PROGRESS, dict) else None
+        live_status = live.get('status') if isinstance(live, dict) else None
+    except Exception:
+        live, live_status = None, None
+    if live_status == 'running':
+        progress = live.get('progress', 0.0) if isinstance(live, dict) else 0.0
+        return {
+            'status': 'error',
+            'action_type': 'start_hyperparameter',
+            'description': description,
+            'error': (
+                f'Hyperparameter tuning is already running for file_id={file_id} '
+                f'(progress={progress:.0%}). Refusing to spawn a duplicate run — '
+                f'wait for it to complete or have the user click Stop first.'
+            ),
+            'errors': ['hyperparam_already_running'],
+        }
+
+    def _pos_int(v, default):
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            return default
+        return iv if iv > 0 else default
+
+    n_iter = max(2, min(_pos_int(payload.get('n_iter', 40), 40), 500))
+    cv_folds = max(2, min(_pos_int(payload.get('cv_folds', 3), 3), 10))
+    n_jobs = max(1, min(_pos_int(payload.get('n_jobs', 3), 3), 32))
+    validation_curve_points = max(2, min(_pos_int(payload.get('validation_curve_points', 8), 8), 25))
+
+    primary_metric = payload.get('primary_metric', 'roc_auc')
+    if not isinstance(primary_metric, str) or primary_metric not in _HP_METRICS:
+        primary_metric = 'roc_auc'
+
+    # ── search_method + grid resolution ──
+    search_method = payload.get('search_method', 'auto')
+    if not isinstance(search_method, str) or search_method.strip().lower() not in _HP_SEARCH_METHODS:
+        search_method = 'auto'
+    else:
+        search_method = search_method.strip().lower()
+    grid_points_per_param = max(2, min(_pos_int(payload.get('grid_points_per_param', 5), 5), 12))
+
+    # ── enabled_params (optional subset) ──
+    enabled_raw = payload.get('enabled_params', None)
+    enabled_params = None
+    if isinstance(enabled_raw, list):
+        ep = [p for p in enabled_raw if isinstance(p, str) and p in _HP_PARAM_NAMES]
+        enabled_params = ep or None  # None → leave the form's enabled set
+
+    # ── param_space (optional per-param overrides, known names only) ──
+    space_raw = payload.get('param_space', None)
+    param_space = None
+    space_errors: list = []
+    if isinstance(space_raw, dict):
+        cleaned: dict = {}
+        for name, spec in space_raw.items():
+            if name not in _HP_PARAM_NAMES or not isinstance(spec, dict):
+                space_errors.append(str(name))
+                continue
+            ptype = spec.get('type')
+            if ptype not in ('int', 'float'):
+                ptype = 'int' if name in _HP_INT_PARAMS else 'float'
+            try:
+                lo = float(spec.get('min'))
+                hi = float(spec.get('max'))
+            except (TypeError, ValueError):
+                space_errors.append(str(name))
+                continue
+            if lo > hi:
+                lo, hi = hi, lo
+            cleaned[name] = {
+                'type': ptype,
+                'min': int(round(lo)) if ptype == 'int' else lo,
+                'max': int(round(hi)) if ptype == 'int' else hi,
+                'log': bool(spec.get('log', False)),
+                'enabled': bool(spec.get('enabled', True)),
+            }
+        param_space = cleaned or None
+
+    return {
+        'status': 'success',
+        'action_type': 'start_hyperparameter',
+        'description': description,
+        'applied': {
+            'param_space': param_space,
+            'enabled_params': enabled_params,
+            'n_iter': n_iter,
+            'cv_folds': cv_folds,
+            'n_jobs': n_jobs,
+            'primary_metric': primary_metric,
+            'validation_curve_points': validation_curve_points,
+            'search_method': search_method,
+            'grid_points_per_param': grid_points_per_param,
+        },
+        'errors': space_errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # ACTION: update_notes — add/edit/delete pipeline commentary notes
 # ---------------------------------------------------------------------------
 
@@ -1784,6 +1953,7 @@ HANDLERS = {
     'update_purifier_selection': update_purifier_selection,
     'apply_encoding': apply_encoding,
     'start_modeling': start_modeling,
+    'start_hyperparameter': start_hyperparameter,
     'update_notes': update_notes,
 }
 
