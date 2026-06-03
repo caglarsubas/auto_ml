@@ -9,6 +9,28 @@ export interface AiAction {
   editedPayload?: any;
 }
 
+export type AiIntentLabel = 'A' | 'B' | 'C' | 'D' | 'E';
+
+export interface PendingAiContext {
+  context: any;
+  section: string;
+  prompt: string;
+  intentLabels?: AiIntentLabel[];
+  intentSource?: string;
+}
+
+export const AI_SUPPORT_INTENTS_BY_SECTION: { [section: string]: AiIntentLabel[] } = {
+  data_quality: ['C'],
+  data_purifier: ['C'],
+  encoding: ['C'],
+  cv: ['C'],
+  shap: ['C'],
+  selected_features: ['C'],
+  sfs_forward: ['C'],
+  sfs_backward: ['C'],
+  sfs_forward_from_backward: ['C'],
+};
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -42,8 +64,8 @@ export class AiAssistantService {
   private panelOpenSubject = new BehaviorSubject<boolean>(false);
   panelOpen$: Observable<boolean> = this.panelOpenSubject.asObservable();
 
-  private pendingContextSubject = new BehaviorSubject<{ context: any; section: string; prompt: string } | null>(null);
-  pendingContext$: Observable<{ context: any; section: string; prompt: string } | null> = this.pendingContextSubject.asObservable();
+  private pendingContextSubject = new BehaviorSubject<PendingAiContext | null>(null);
+  pendingContext$: Observable<PendingAiContext | null> = this.pendingContextSubject.asObservable();
 
   togglePanel(): void {
     this.panelOpenSubject.next(!this.panelOpenSubject.getValue());
@@ -112,12 +134,22 @@ export class AiAssistantService {
   }
 
   /** Called by "Get AI Support" buttons to inject context and open panel */
-  requestSupport(context: any, section: string, prompt: string): void {
-    this.pendingContextSubject.next({ context, section, prompt });
+  requestSupport(context: any, section: string, prompt: string,
+                 intentLabels?: AiIntentLabel[],
+                 intentSource: string = 'get_ai_support_button'): void {
+    const labels = (intentLabels && intentLabels.length > 0)
+      ? intentLabels
+      : (AI_SUPPORT_INTENTS_BY_SECTION[section] || []);
+    this.pendingContextSubject.next({
+      context,
+      section,
+      prompt,
+      ...(labels.length > 0 ? { intentLabels: labels, intentSource } : {}),
+    });
     this.openPanel();
   }
 
-  consumePendingContext(): { context: any; section: string; prompt: string } | null {
+  consumePendingContext(): PendingAiContext | null {
     const pending = this.pendingContextSubject.getValue();
     this.pendingContextSubject.next(null);
     return pending;

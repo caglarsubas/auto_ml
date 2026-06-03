@@ -401,6 +401,23 @@ describe('DataService', () => {
       req.flush({ message: 'Response' });
     });
 
+    it('sendAiChat should include preclassified intent labels when provided', () => {
+      service.sendAiChat(
+        'Analyze the current summary',
+        {},
+        'data_quality',
+        [],
+        42,
+        'gpt-5.5',
+        ['C'],
+        'get_ai_support_button',
+      ).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
+      expect(req.request.body.intent_labels).toEqual(['C']);
+      expect(req.request.body.intent_source).toBe('get_ai_support_button');
+      req.flush({ message: 'Response' });
+    });
+
     it('pushAiCache should POST artifacts with file_id', () => {
       service.pushAiCache(1, { split_validation: { splits: [] } }).subscribe(res => {
         expect(res.status).toBe('success');

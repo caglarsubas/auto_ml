@@ -214,6 +214,8 @@ describe('AiAssistantService', () => {
       expect(pending).toBeTruthy();
       expect(pending!.section).toBe('cv');
       expect(pending!.prompt).toBe('Why low AUC?');
+      expect(pending!.intentLabels).toEqual(['C']);
+      expect(pending!.intentSource).toBe('get_ai_support_button');
 
       const after = service.consumePendingContext();
       expect(after).toBeNull();
@@ -238,8 +240,19 @@ describe('AiAssistantService', () => {
         expect(pending).withContext(`${section} should round-trip`).toBeTruthy();
         expect(pending!.section).toBe(section);
         expect(pending!.prompt).toBe(prompt);
+        expect(pending!.intentLabels).toEqual(['C']);
+        expect(pending!.intentSource).toBe('get_ai_support_button');
         expect((pending!.context as any).marker).toBe(section);
       }
+    });
+
+    it('requestSupport should allow explicit multi-intent overrides', () => {
+      service.requestSupport({ x: 1 }, 'custom_flow_button', 'Set and run it', ['D', 'E'], 'custom_button');
+      const pending = service.consumePendingContext();
+
+      expect(pending).toBeTruthy();
+      expect(pending!.intentLabels).toEqual(['D', 'E']);
+      expect(pending!.intentSource).toBe('custom_button');
     });
   });
 });

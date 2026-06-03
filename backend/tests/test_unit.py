@@ -4233,6 +4233,62 @@ class TestSkillAutoRouting:
         assert _auto_route_skill(msg) is None
 
 
+@pytest.mark.unit
+class TestAssistantIntentClassifier:
+    """Chat turns are classified before any LLM/tool/action work happens."""
+
+    def test_general_information_question_is_a(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents('What is PSI in general?')
+
+        assert out['labels'] == ['A']
+        assert out['preclassified'] is False
+
+    def test_pipeline_flow_mechanism_question_is_b(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents('How does the default preprocessing flow work?')
+
+        assert out['labels'] == ['B']
+
+    def test_current_status_question_is_c(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents(
+            'Analyze the current SFS results and selected features.',
+            section='sfs_backward',
+            context={'backward': []},
+        )
+
+        assert out['labels'] == ['C']
+
+    def test_compound_edit_and_execute_question_is_d_and_e(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents(
+            'Set max_features to 20 and then start SFS.',
+            section='modeling',
+        )
+
+        assert out['labels'] == ['D', 'E']
+        assert len(out['decomposition']) >= 2
+
+    def test_preclassified_labels_bypass_classifier(self):
+        from ai_assistant.intent_classifier import resolve_intent_classification
+
+        out = resolve_intent_classification(
+            'Analyze the Data Quality Summary.',
+            section='data_quality',
+            preclassified_labels=['C'],
+            preclassified_source='get_ai_support_button',
+        )
+
+        assert out['labels'] == ['C']
+        assert out['source'] == 'get_ai_support_button'
+        assert out['preclassified'] is True
+
+
 # ---------------------------------------------------------------------------
 # v2.43.3 — engine context-window overflow on multi-turn tool calling
 # ---------------------------------------------------------------------------
@@ -9556,6 +9612,45 @@ class TestPromptRenderWorkflowWiring:
         # And it MUST NOT equal raw_rendered_prompt (that would
         # reproduce the v2.41.x byte-identity bug Prometa flagged).
         assert attrs.get('prometa.raw.input') != captured_pr.get('raw_rendered_prompt')
+
+    def test_chat_workflow_stamps_classifier_intent_attrs(self, monkeypatch):
+        from ai_assistant import views
+        attrs, captured_pr = {}, {}
+        self._patch_workflow_environment(monkeypatch, attrs, captured_pr)
+
+        views._chat_workflow(
+            user_message='Set max_features to 20 and then start SFS.',
+            context={}, section='modeling', history=[],
+            file_id=None, model='gpt-test',
+        )
+
+        assert attrs.get('declarai.intent.labels') == 'D,E'
+        assert attrs.get('declarai.intent.label_names') == (
+            'configuration_editing_execution,flow_process_execution'
+        )
+        assert attrs.get('declarai.intent.source') == 'deterministic_classifier'
+        assert attrs.get('declarai.intent.preclassified') is False
+        assert attrs.get('prometa.intent.labels') == 'D,E'
+
+    def test_chat_workflow_uses_preclassified_button_intents(self, monkeypatch):
+        from ai_assistant import views
+        attrs, captured_pr = {}, {}
+        self._patch_workflow_environment(monkeypatch, attrs, captured_pr)
+
+        out = views._chat_workflow(
+            user_message='Analyze the Data Quality Summary.',
+            context={}, section='data_quality', history=[],
+            file_id=None, model='gpt-test',
+            intent_labels=['C'],
+            intent_source='get_ai_support_button',
+        )
+
+        assert attrs.get('declarai.intent.labels') == 'C'
+        assert attrs.get('declarai.intent.source') == 'get_ai_support_button'
+        assert attrs.get('declarai.intent.preclassified') is True
+        assert attrs.get('prometa.intent.labels') == 'C'
+        assert out['intent_labels'] == ['C']
+        assert out['intent_source'] == 'get_ai_support_button'
 
     def test_chat_workflow_prompt_render_assembled_carries_context_components(self, monkeypatch):
         """C6 detector reads prompt.context_components — verify the

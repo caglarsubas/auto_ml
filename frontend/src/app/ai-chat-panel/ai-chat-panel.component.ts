@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { AiAssistantService, AiAction, ChatMessage } from '../services/ai-assistant.service';
+import { AiAssistantService, AiAction, AiIntentLabel, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
@@ -73,7 +73,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           if (ctx) {
             this.currentContext = ctx.context;
             this.currentSection = ctx.section;
-            this.sendMessage(ctx.prompt);
+            this.sendMessage(ctx.prompt, ctx.intentLabels, ctx.intentSource);
           }
         }
       })
@@ -91,7 +91,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     this.subscriptions.unsubscribe();
   }
 
-  sendMessage(message?: string): void {
+  sendMessage(message?: string, intentLabels?: AiIntentLabel[], intentSource?: string): void {
     const text = (message || this.userInput || '').trim();
     if (!text || this.isLoading) return;
 
@@ -140,7 +140,9 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       this.currentSection || 'general',
       history,
       fileId ?? undefined,
-      this.selectedModel
+      this.selectedModel,
+      intentLabels,
+      intentSource
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
