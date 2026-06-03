@@ -59,6 +59,26 @@ describe('AiChatPanelComponent', () => {
     expect(aiService.isPanelOpen()).toBeTrue();
   });
 
+  it('should forward preclassified button intent labels to /chat/', () => {
+    spyOn(dataService, 'getAiModels').and.returnValue(of({
+      models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
+      default: 'gpt-5.5',
+    }));
+    const sendSpy = spyOn(dataService, 'sendAiChat').and.returnValue(of({ message: 'ok' }));
+    sharedService.setCurrentFileId(42);
+
+    fixture.detectChanges();
+    aiService.requestSupport({ summary: [] }, 'data_quality', 'Analyze the current summary');
+
+    expect(sendSpy).toHaveBeenCalled();
+    const args = sendSpy.calls.mostRecent().args;
+    expect(args[0]).toBe('Analyze the current summary');
+    expect(args[2]).toBe('data_quality');
+    expect(args[4]).toBe(42);
+    expect(args[6]).toEqual(['C']);
+    expect(args[7]).toBe('get_ai_support_button');
+  });
+
   // ── update_metadata response handling (v2.23.0+) ──────────────────────
   // The AI assistant's update_metadata action returns an `applied` array
   // describing the LoM/description changes it made.  The chat panel must

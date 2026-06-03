@@ -24,6 +24,7 @@ from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
 from .cache import cache_list_artifacts
+from .intent_classifier import resolve_intent_classification
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
     call_openai, call_engine, MODEL_REGISTRY,
@@ -1365,9 +1366,36 @@ def _sum_tool_message_tokens(messages: list) -> int:
     return total
 
 
+def _stamp_intent_attrs(intent: dict) -> None:
+    """Expose the resolved A-E intent labels to Prometa span attributes."""
+    labels = intent.get('labels') or []
+    label_names = intent.get('label_names') or []
+    labels_csv = ','.join(labels)
+    names_csv = ','.join(label_names)
+    source = intent.get('source') or 'unknown'
+    version = intent.get('classifier_version') or 'unknown'
+    preclassified = bool(intent.get('preclassified'))
+
+    # App-specific attributes for DeclarAI dashboards.
+    set_span_attr('declarai.intent.labels', labels_csv)
+    set_span_attr('declarai.intent.label_names', names_csv)
+    set_span_attr('declarai.intent.count', len(labels))
+    set_span_attr('declarai.intent.source', source)
+    set_span_attr('declarai.intent.preclassified', preclassified)
+    set_span_attr('declarai.intent.classifier_version', version)
+
+    # Candidate canonical attributes for prometa-platform to index.
+    set_span_attr('prometa.intent.labels', labels_csv)
+    set_span_attr('prometa.intent.label_names', names_csv)
+    set_span_attr('prometa.intent.source', source)
+    set_span_attr('prometa.intent.preclassified', preclassified)
+
+
 @workflow(name="declarai-chat")
 def _chat_workflow(user_message: str, context: dict, section: str, history: list,
-                   file_id: int = None, model: str = None) -> dict:
+                   file_id: int = None, model: str = None,
+                   intent_labels: list = None,
+                   intent_source: str = None) -> dict:
     """Core chat workflow with multi-turn tool calling.
 
     If file_id is provided and Redis has cached artifacts, uses the slim context
@@ -1376,10 +1404,18 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     """
     model_key = model or DEFAULT_MODEL
     model_cfg = get_model_config(model_key)
+    intent = resolve_intent_classification(
+        user_message,
+        section=section or '',
+        context=context or {},
+        preclassified_labels=intent_labels,
+        preclassified_source=intent_source,
+    )
 
     # ── Workflow-level tracing attributes ──
     set_span_attr('declarai.section', section or 'general')
     set_span_attr('declarai.model', model_key)
+    _stamp_intent_attrs(intent)
     if file_id is not None:
         set_span_attr('declarai.file_id', file_id)
         set_session_id(f'declarai-file-{file_id}')
@@ -1771,6 +1807,8 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     response_data = {
         'message': clean_message,
         'usage': total_usage,
+        'intent_labels': intent['labels'],
+        'intent_source': intent['source'],
     }
     if actions:
         response_data['actions'] = actions
@@ -1826,10 +1864,14 @@ class AIAssistantView(APIView):
                 )
 
             model = data.get('model')  # optional model selector
+            intent_labels = data.get('intent_labels') or data.get('intentLabels')
+            intent_source = data.get('intent_source') or data.get('intentSource')
 
             response_data = _chat_workflow(user_message, context, section, history,
                                            file_id=int(file_id) if file_id else None,
-                                           model=model)
+                                           model=model,
+                                           intent_labels=intent_labels,
+                                           intent_source=intent_source)
             return Response(response_data, status=status.HTTP_200_OK)
 
         except EnvironmentError as e:

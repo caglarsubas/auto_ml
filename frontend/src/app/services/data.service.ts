@@ -479,13 +479,23 @@ export class DataService {
 
   // ===== AI Assistant =====
 
-  sendAiChat(message: string, context: any, section: string, history: Array<{role: string; content: string}>, fileId?: number, model?: string): Observable<any> {
+  sendAiChat(message: string, context: any, section: string,
+             history: Array<{role: string; content: string}>,
+             fileId?: number, model?: string,
+             intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E'>,
+             intentSource?: string): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {
       body.file_id = fileId;
     }
     if (model) {
       body.model = model;
+    }
+    if (intentLabels && intentLabels.length > 0) {
+      body.intent_labels = intentLabels;
+    }
+    if (intentSource) {
+      body.intent_source = intentSource;
     }
     return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
       catchError((err: any) => {
