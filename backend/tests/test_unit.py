@@ -621,6 +621,7 @@ class TestInferDetailedStep:
         'modeling_started': '3b_modeling',
         'modeling_completed': '3b_modeling',
         'sfs_backward_completed': '3ci_sfs_backward',
+        'hyperparam_completed': '3d_hyperparameter_tuning',
     }
 
     def _infer(self, current_step, modeling_sub, file_id):
@@ -636,6 +637,8 @@ class TestInferDetailedStep:
                     return self._SUB_MAP[modeling_sub]
                 if modeling_sub.startswith('sfs_'):
                     return '3c_sfs'
+                if modeling_sub.startswith('hyperparam_'):
+                    return '3d_hyperparameter_tuning'
             return '3a_encoding' if current_step == 'modeling' else '3c_sfs'
         return '1a_pipeline_declaration'
 
@@ -665,6 +668,9 @@ class TestInferDetailedStep:
 
     def test_sfs_generic_substep(self):
         assert self._infer('modeling', 'sfs_forward_completed', 1) == '3c_sfs'
+
+    def test_hyperparam_substep(self):
+        assert self._infer('sfs', 'hyperparam_completed', 1) == '3d_hyperparameter_tuning'
 
     def test_sfs_step_no_substep(self):
         assert self._infer('sfs', '', None) == '3c_sfs'

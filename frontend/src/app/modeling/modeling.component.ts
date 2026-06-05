@@ -1409,6 +1409,26 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       sfsModelPaths: this.sfsModelPaths,
       sfsDurationSeconds: this.sfsDurationSeconds,
       sfsStopped: this.sfsStopped,
+      // Hyperparameter-tuning state
+      hpResults: this.hpResults,
+      hpRunning: this.hpRunning,
+      hpStopped: this.hpStopped,
+      hpProgress: this.hpProgress,
+      hpMessage: this.hpMessage,
+      hpDurationSeconds: this.hpDurationSeconds,
+      hpParamSpace: this.hpParamSpace,
+      hpNIter: this.hpNIter,
+      hpCvFolds: this.hpCvFolds,
+      hpNJobs: this.hpNJobs,
+      hpPrimaryMetric: this.hpPrimaryMetric,
+      hpValidationCurvePoints: this.hpValidationCurvePoints,
+      hpSearchMethod: this.hpSearchMethod,
+      hpBestPoints: this.hpBestPoints,
+      hpValidationCurves: this.hpValidationCurves,
+      hpEmphasized: this.hpEmphasized,
+      hpParamImportance: this.hpParamImportance,
+      hpGuidance: this.hpGuidance,
+      hpSpaceWarnings: this.hpSpaceWarnings,
     };
     this.sharedService.setModelingCheckpoint(state);
     this.sharedService.triggerCheckpoint(substep);
@@ -1449,6 +1469,30 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     this.sfsModelPaths = state.sfsModelPaths || {};
     this.sfsDurationSeconds = state.sfsDurationSeconds ?? null;
     this.sfsStopped = state.sfsStopped || false;
+
+    // Hyperparameter-tuning state
+    this.hpResults = state.hpResults || null;
+    this.hpRunning = !!state.hpRunning;
+    this.hpStopped = !!state.hpStopped;
+    this.hpProgress = state.hpProgress ?? 0;
+    this.hpMessage = state.hpMessage || '';
+    this.hpDurationSeconds = state.hpDurationSeconds ?? null;
+    if (state.hpParamSpace) this.hpParamSpace = state.hpParamSpace;
+    if (state.hpNIter != null) this.hpNIter = state.hpNIter;
+    if (state.hpCvFolds != null) this.hpCvFolds = state.hpCvFolds;
+    if (state.hpNJobs != null) this.hpNJobs = state.hpNJobs;
+    if (state.hpPrimaryMetric) this.hpPrimaryMetric = state.hpPrimaryMetric;
+    if (state.hpValidationCurvePoints != null) this.hpValidationCurvePoints = state.hpValidationCurvePoints;
+    if (state.hpSearchMethod) this.hpSearchMethod = state.hpSearchMethod;
+    this.hpBestPoints = state.hpBestPoints || {};
+    this.hpValidationCurves = state.hpValidationCurves || [];
+    this.hpEmphasized = state.hpEmphasized || {};
+    this.hpParamImportance = state.hpParamImportance || {};
+    this.hpGuidance = state.hpGuidance || [];
+    this.hpSpaceWarnings = state.hpSpaceWarnings || [];
+    if (this.hpResults) {
+      setTimeout(() => this.drawHyperparamCurves(), 100);
+    }
 
     // Re-sort selected features if modeling status is present
     if (this.modelingStatus) {
@@ -1589,6 +1633,55 @@ export class ModelingComponent implements OnInit, AfterViewInit {
           console.warn('[Modeling] Resume: could not fetch SFS status:', err);
           this.sfsRunning = false;
           this.sfsMessage = '';
+          this.sharedService.setActiveProcess(null);
+        }
+      });
+    } else if (proc.type === 'hyperparam') {
+      this.hpRunning = true;
+      this.hpMessage = 'Checking hyperparameter tuning status...';
+      this.dataService.getHyperparamStatus(proc.file_id).subscribe({
+        next: (statusData: any) => {
+          const s = statusData.status;
+          this.hpProgress = statusData.progress || 0;
+          this.hpMessage = statusData.message || 'Tuning running...';
+          if (typeof statusData.completed_trials === 'number') this.hpCompletedTrials = statusData.completed_trials;
+          if (statusData.current_best) this.hpCurrentBest = statusData.current_best;
+          if (s === 'completed') {
+            this.hpRunning = false;
+            this.hpProgress = 1.0;
+            this.hpDurationSeconds = statusData.duration_seconds || null;
+            this.hpMessage = 'Hyperparameter tuning completed!';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchHyperparamResults(), 400);
+          } else if (s === 'running') {
+            this.startHyperparamStatusPolling();
+            this.pushModelingCheckpoint('hyperparam_running');
+          } else if (s === 'stopped' || s === 'interrupted') {
+            this.hpRunning = false;
+            this.hpStopped = true;
+            this.hpDurationSeconds = statusData.duration_seconds || null;
+            this.hpMessage = s === 'interrupted'
+              ? 'Tuning was interrupted (server restart).'
+              : 'Tuning stopped — partial results may be available';
+            this.sharedService.setActiveProcess(null);
+            setTimeout(() => this.fetchHyperparamResults(), 400);
+            this.pushModelingCheckpoint('hyperparam_stopped');
+          } else if (s === 'error') {
+            this.hpRunning = false;
+            this.hpDurationSeconds = statusData.duration_seconds || null;
+            this.hpMessage = 'Tuning failed: ' + (statusData.error || 'Unknown error');
+            this.sharedService.setActiveProcess(null);
+          } else {
+            this.hpRunning = false;
+            this.hpMessage = '';
+            this.sharedService.setActiveProcess(null);
+            this.fetchHyperparamResults();
+          }
+        },
+        error: (err: any) => {
+          console.warn('[Modeling] Resume: could not fetch hyperparameter status:', err);
+          this.hpRunning = false;
+          this.hpMessage = '';
           this.sharedService.setActiveProcess(null);
         }
       });
@@ -2860,6 +2953,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         this.hpMessage = resp.message || 'Tuning running...';
         this.hpSpaceWarnings = resp.space_warnings || [];
         this.startHyperparamStatusPolling();
+        this.pushModelingCheckpoint('hyperparam_running');
       },
       error: (err: any) => {
         console.error('[Hyperparam] Failed to start:', err);
@@ -2932,6 +3026,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
               : 'Tuning stopped — partial results may be available';
             this.sharedService.setActiveProcess(null);
             setTimeout(() => this.fetchHyperparamResults(), 400);
+            this.pushModelingCheckpoint('hyperparam_stopped');
           } else if (status === 'error') {
             this.stopHyperparamStatusPolling();
             this.hpRunning = false; this.hpStopping = false;
