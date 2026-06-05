@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
-    model_route, plan_generate, current_span_id, set_input_ref,
+    model_route, plan_generate, current_span_id, current_trace_id, set_input_ref,
     prompt_render,
 )
 from .tool_definitions import PIPELINE_TOOLS
@@ -1420,9 +1420,11 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     set_span_attr('declarai.section', section or 'general')
     set_span_attr('declarai.model', model_key)
     _stamp_intent_attrs(intent)
+    session_id = None
     if file_id is not None:
+        session_id = f'declarai-file-{file_id}'
         set_span_attr('declarai.file_id', file_id)
-        set_session_id(f'declarai-file-{file_id}')
+        set_session_id(session_id)
         # v2.30.0 (Phase 2): per-span customer_id override.  Joins every
         # span emitted from this chat turn — and its child agent / tool /
         # cache spans via parent-attribute inheritance — under one
@@ -1846,21 +1848,22 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             }
             for item in rag_result['results']
         ]
+    # v2.45.0: snapshot target ids for assistant-answer feedback.  The
+    # feedback POST arrives after this workflow has ended, so the backend
+    # records a standalone ``feedback.record`` span and needs best-effort
+    # ids to attach it back to the original turn.  ``current_span_id()``
+    # is also still used by action Apply as the cross-trace parent link.
+    chat_span_id = current_span_id()
+    if chat_span_id:
+        response_data['chat_span_id'] = str(chat_span_id)
+    chat_trace_id = current_trace_id()
+    if chat_trace_id:
+        response_data['chat_trace_id'] = str(chat_trace_id)
+    if session_id:
+        response_data['chat_session_id'] = session_id
+
     if actions:
         response_data['actions'] = actions
-        # v2.38.0: snapshot the chat span id so the frontend can pass it
-        # back when applying any of these actions.  ``current_span_id()``
-        # returns None when:
-        #   * SDK is unavailable (test mode, dev box without endpoint)
-        #   * we're outside any @workflow / @tool / @agent context
-        # In all cases the frontend treats a missing id as "no cross-
-        # trace link" and skips the link header on the apply call, so
-        # the legacy v2.25.0..v2.37.0 behaviour is preserved.  The
-        # link is purely-additive observability sugar — it never
-        # changes action dispatch semantics.
-        chat_span_id = current_span_id()
-        if chat_span_id:
-            response_data['chat_span_id'] = str(chat_span_id)
 
     return response_data
 

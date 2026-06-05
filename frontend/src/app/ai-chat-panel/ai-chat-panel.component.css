@@ -738,3 +738,125 @@
   background: #e8f5e9;
   border-radius: 4px;
 }
+
+/* Assistant answer feedback */
+.message-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.feedback-icon-btn,
+.feedback-star-btn,
+.feedback-comment-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fff;
+  color: #777;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.feedback-icon-btn:hover:not(:disabled),
+.feedback-star-btn:hover:not(:disabled),
+.feedback-comment-btn:hover:not(:disabled) {
+  border-color: #bdbdbd;
+  background: #fafafa;
+  color: #333;
+}
+
+.feedback-icon-btn.active,
+.feedback-comment-btn.active {
+  border-color: #740505;
+  background: #fff5f5;
+  color: #740505;
+}
+
+.feedback-stars {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 2px;
+}
+
+.feedback-star-btn {
+  border-color: transparent;
+  background: transparent;
+  color: #c7c7c7;
+}
+
+.feedback-star-btn.active {
+  color: #b7791f;
+}
+
+.feedback-submit-btn {
+  min-width: 62px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid #740505;
+  border-radius: 4px;
+  background: #740505;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.feedback-submit-btn:hover:not(:disabled) {
+  background: #920707;
+}
+
+.feedback-submit-btn:disabled,
+.feedback-icon-btn:disabled,
+.feedback-star-btn:disabled,
+.feedback-comment-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.message-feedback.submitted .feedback-submit-btn {
+  border-color: #2e7d32;
+  background: #2e7d32;
+}
+
+.feedback-comment-row {
+  flex-basis: 100%;
+  margin-top: 3px;
+}
+
+.feedback-comment-input {
+  width: 100%;
+  min-height: 48px;
+  max-height: 110px;
+  box-sizing: border-box;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+  color: #333;
+}
+
+.feedback-comment-input:focus {
+  outline: none;
+  border-color: #740505;
+  box-shadow: 0 0 0 2px rgba(116, 5, 5, 0.1);
+}
+
+.feedback-error {
+  flex-basis: 100%;
+  color: #c62828;
+  font-size: 11px;
+  margin-top: 2px;
+}

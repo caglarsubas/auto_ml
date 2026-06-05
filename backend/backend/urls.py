@@ -6,6 +6,7 @@ from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
 from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
+from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -45,6 +46,7 @@ urlpatterns = [
     path('api/pipeline/<int:pk>/report/', PipelineReportView.as_view(), name='pipeline-report'),
     path('api/ai-assistant/chat/', AIAssistantView.as_view(), name='ai-assistant-chat'),
     path('api/ai-assistant/execute-action/', AIActionExecuteView.as_view(), name='ai-assistant-execute-action'),
+    path('api/ai-assistant/feedback/', AIFeedbackView.as_view(), name='ai-assistant-feedback'),
     path('api/ai-assistant/cache/', AICachePushView.as_view(), name='ai-assistant-cache'),
     path('api/ai-assistant/models/', AIModelListView.as_view(), name='ai-assistant-models'),
 ]

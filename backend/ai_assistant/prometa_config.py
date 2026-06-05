@@ -746,6 +746,22 @@ def current_span_id():
         return None
 
 
+def current_trace_id():
+    """Return the trace_id of the currently-active Prometa span, or None.
+
+    Prometa SDK 0.9.0 exposes ``current_span_id()`` publicly, while trace
+    id access still lives on the active span object.  This wrapper keeps
+    that best-effort lookup in one place so callers can target feedback
+    records without depending on SDK-private modules directly.
+    """
+    try:
+        from prometa import _context
+        span = _context.current_span()
+        return getattr(span, 'trace_id', None) if span is not None else None
+    except Exception:
+        return None
+
+
 def set_input_ref(ref_span_id) -> bool:
     """Declare that the active span consumed ``ref_span_id``'s output.
 
@@ -787,5 +803,37 @@ def set_input_ref(ref_span_id) -> bool:
         return False
     try:
         return bool(_sdk_set_input_ref(str(ref_span_id)))
+    except Exception:
+        return False
+
+
+def set_user_feedback(**kwargs) -> bool:
+    """Stamp user feedback on the currently-active Prometa span if possible.
+
+    This is the in-trace path.  UI-submitted feedback normally arrives
+    after ``declarai-chat`` has ended and should use
+    ``record_user_feedback`` instead.
+    """
+    try:
+        from prometa import set_user_feedback as _sdk_set_user_feedback
+    except ImportError:
+        return False
+    try:
+        return bool(_sdk_set_user_feedback(**kwargs))
+    except Exception:
+        return False
+
+
+def record_user_feedback(**kwargs) -> bool:
+    """Emit a standalone Prometa ``feedback.record`` span if configured."""
+    p = get_prometa()
+    if p is None:
+        return False
+    try:
+        from prometa import record_user_feedback as _sdk_record_user_feedback
+    except ImportError:
+        return False
+    try:
+        return bool(_sdk_record_user_feedback(**kwargs))
     except Exception:
         return False

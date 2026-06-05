@@ -505,6 +505,27 @@ export class DataService {
     );
   }
 
+  submitAiFeedback(payload: {
+    liked?: boolean;
+    rating?: number;
+    comment?: string;
+    source?: string;
+    feedback_id?: string;
+    target_trace_id?: string;
+    target_span_id?: string;
+    target_session_id?: string;
+    conversation_id?: string;
+    submitted_at?: string;
+    file_id?: number;
+  }): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/feedback/`, payload).pipe(
+      catchError((err: any) => {
+        console.error('Error submitting AI feedback:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
   getAiModels(): Observable<any> {
     return this.http.get(`${this.apiUrl}ai-assistant/models/`).pipe(
       catchError((err: any) => {

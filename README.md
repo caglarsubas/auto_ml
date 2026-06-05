@@ -253,7 +253,7 @@ Model deployment interface (under development):
 
 The backend's AI Assistant emits structured agent telemetry through
 [`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
-(≥ 0.5.0) to the **Prometa Agentic Lifecycle Intelligence Platform**
+(≥ 0.9.0) to the **Prometa Agentic Lifecycle Intelligence Platform**
 for tracing, evaluation, and lifecycle governance.
 
 **Integration point**:
@@ -293,6 +293,8 @@ without Prometa wired up.
 - AML v0.4 instrumentation primitives (`guardrail`, `pii_filter`,
   `memory_read`, `record_retry_attempt`, …) for the platform's
   41-feature agent-maturity scoring.
+- Assistant-answer feedback helpers (`record_user_feedback`,
+  `set_user_feedback`) for thumbs, ratings, and redacted user comments.
 
 See the [SDK README](https://github.com/prometa-ai/orchestra-python-sdk)
 for the complete API surface and the platform's
@@ -406,7 +408,7 @@ auto-ml/
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
 | openai | ≥ 1.0 | LLM client for AI Assistant action layer |
-| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.5.0 | Agent telemetry — emits OTLP traces to the Prometa platform via `@prometa.workflow / .agent / .tool` decorators |
+| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.9.0 | Agent telemetry — emits OTLP traces and assistant-answer feedback to the Prometa platform |
 | redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend

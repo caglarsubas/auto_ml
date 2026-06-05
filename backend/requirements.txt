@@ -18,7 +18,7 @@ statsmodels>=0.14
 
 # AI Assistant
 openai>=1.0
-prometa-sdk==0.7.1
+prometa-sdk==0.9.0
 redis>=5.0
 
 # Testing dependencies

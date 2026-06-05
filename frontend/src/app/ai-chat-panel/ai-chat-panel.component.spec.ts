@@ -1008,6 +1008,8 @@ describe('AiChatPanelComponent', () => {
         message: 'I prepared an action.',
         actions: [{ type: 'update_notes', payload: { description: 'note' } }],
         chat_span_id: 'chat-span-abc123',
+        chat_trace_id: 'trace-abc123',
+        chat_session_id: 'declarai-file-1',
       }));
       spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
 
@@ -1018,6 +1020,8 @@ describe('AiChatPanelComponent', () => {
 
       const last = aiService.getMessages().slice(-1)[0];
       expect(last.chatSpanId).toBe('chat-span-abc123');
+      expect(last.chatTraceId).toBe('trace-abc123');
+      expect(last.chatSessionId).toBe('declarai-file-1');
     });
 
     it('should leave chatSpanId undefined when /chat/ response omits the field', () => {
@@ -1100,6 +1104,63 @@ describe('AiChatPanelComponent', () => {
         { description: 'note' },
         undefined,                    // ← key assertion: no link forwarded
       );
+    });
+  });
+
+  describe('assistant answer feedback', () => {
+    beforeEach(() => {
+      sharedService.setCurrentFileId(42);
+    });
+
+    it('submitFeedback should send thumbs/rating/comment with Prometa target ids', () => {
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'Useful answer',
+        timestamp: new Date(),
+        chatSpanId: 'span-1',
+        chatTraceId: 'trace-1',
+        chatSessionId: 'declarai-file-42',
+        feedback: {
+          liked: true,
+          rating: 4,
+          comment: 'This clarified the PSI threshold.',
+          feedbackId: 'feedback-1',
+        },
+      });
+      const submitSpy = spyOn(dataService, 'submitAiFeedback').and.returnValue(
+        of({ status: 'success', feedback_id: 'feedback-1' })
+      );
+
+      component.submitFeedback(0);
+
+      expect(submitSpy).toHaveBeenCalled();
+      const payload = submitSpy.calls.mostRecent().args[0];
+      expect(payload.liked).toBeTrue();
+      expect(payload.rating).toBe(4);
+      expect(payload.comment).toBe('This clarified the PSI threshold.');
+      expect(payload.source).toBe('declarai-ai-chat-panel');
+      expect(payload.feedback_id).toBe('feedback-1');
+      expect(payload.target_trace_id).toBe('trace-1');
+      expect(payload.target_span_id).toBe('span-1');
+      expect(payload.target_session_id).toBe('declarai-file-42');
+      expect(payload.conversation_id).toBe('declarai-file-42');
+      expect(payload.file_id).toBe(42);
+      expect(payload.submitted_at).toBeTruthy();
+      expect(aiService.getMessages()[0].feedback?.submitted).toBeTrue();
+    });
+
+    it('submitFeedback should require a thumb, rating, or comment before POSTing', () => {
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'Answer',
+        timestamp: new Date(),
+      });
+      const submitSpy = spyOn(dataService, 'submitAiFeedback');
+
+      component.submitFeedback(0);
+
+      expect(submitSpy).not.toHaveBeenCalled();
+      expect(aiService.getMessages()[0].feedback?.error).toContain('Choose a thumb');
     });
   });
 

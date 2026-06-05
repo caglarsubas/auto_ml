@@ -149,6 +149,37 @@ describe('AiAssistantService', () => {
       // missing) must be treated identically to omitted — never stamped.
       expect(msgs[msgs.length - 1].chatSpanId).toBeUndefined();
     });
+
+    it('should persist trace and session ids when provided for feedback targeting', () => {
+      service.addMessage({ role: 'assistant', content: '...', timestamp: new Date(), loading: true });
+      service.updateLastMessage('Done', [], 'span-1', 'trace-1', 'declarai-file-42');
+      const msg = service.getMessages().slice(-1)[0];
+      expect(msg.chatSpanId).toBe('span-1');
+      expect(msg.chatTraceId).toBe('trace-1');
+      expect(msg.chatSessionId).toBe('declarai-file-42');
+    });
+  });
+
+  // ── feedback state ─────────────────────────────────────────────────
+  describe('feedback state', () => {
+    it('should patch feedback state on assistant messages', () => {
+      service.addMessage({ role: 'assistant', content: 'A1', timestamp: new Date() });
+
+      service.updateMessageFeedback(0, { liked: true });
+      service.updateMessageFeedback(0, { rating: 5 });
+
+      const feedback = service.getMessages()[0].feedback!;
+      expect(feedback.liked).toBeTrue();
+      expect(feedback.rating).toBe(5);
+    });
+
+    it('should ignore feedback patches for user messages', () => {
+      service.addMessage({ role: 'user', content: 'Q1', timestamp: new Date() });
+
+      service.updateMessageFeedback(0, { liked: true });
+
+      expect(service.getMessages()[0].feedback).toBeUndefined();
+    });
   });
 
   // ── markActionApplied ──────────────────────────────────────────────

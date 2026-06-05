@@ -11,6 +11,17 @@ export interface AiAction {
 
 export type AiIntentLabel = 'A' | 'B' | 'C' | 'D' | 'E' | 'R';
 
+export interface AiFeedbackState {
+  liked?: boolean;
+  rating?: number;
+  comment?: string;
+  commentOpen?: boolean;
+  submitting?: boolean;
+  submitted?: boolean;
+  error?: string;
+  feedbackId?: string;
+}
+
 export interface PendingAiContext {
   context: any;
   section: string;
@@ -52,6 +63,9 @@ export interface ChatMessage {
    * link" and the apply call simply omits the `parent_span_id` field.
    */
   chatSpanId?: string;
+  chatTraceId?: string;
+  chatSessionId?: string;
+  feedback?: AiFeedbackState;
 }
 
 @Injectable({
@@ -92,7 +106,8 @@ export class AiAssistantService {
     this.messagesSubject.next(messages);
   }
 
-  updateLastMessage(content: string, actions?: AiAction[], chatSpanId?: string): void {
+  updateLastMessage(content: string, actions?: AiAction[], chatSpanId?: string,
+                    chatTraceId?: string, chatSessionId?: string): void {
     const messages = [...this.messagesSubject.getValue()];
     if (messages.length > 0) {
       messages[messages.length - 1] = {
@@ -106,9 +121,25 @@ export class AiAssistantService {
         // are unaffected and an absent id keeps the message clean
         // rather than writing `chatSpanId: undefined`.
         ...(chatSpanId ? { chatSpanId } : {}),
+        ...(chatTraceId ? { chatTraceId } : {}),
+        ...(chatSessionId ? { chatSessionId } : {}),
       };
       this.messagesSubject.next(messages);
     }
+  }
+
+  updateMessageFeedback(messageIndex: number, patch: Partial<AiFeedbackState>): void {
+    const messages = [...this.messagesSubject.getValue()];
+    const msg = messages[messageIndex];
+    if (!msg || msg.role !== 'assistant') return;
+    messages[messageIndex] = {
+      ...msg,
+      feedback: {
+        ...(msg.feedback || {}),
+        ...patch,
+      },
+    };
+    this.messagesSubject.next(messages);
   }
 
   /** Mark an action on a specific message as applied */
