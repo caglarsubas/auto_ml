@@ -67,6 +67,31 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.showSteps['modeling']).toBeFalse();
   });
 
+  it('should include hyperparameter tuning as the post-SFS pipeline flow sub-step', () => {
+    const modelingStep = component.navMainSteps.find((step) => step.id === 'modeling');
+    expect(modelingStep?.subSteps.map((sub) => sub.label)).toContain('Hyperparameter Tuning');
+  });
+
+  it('should mark hyperparameter tuning in progress after SFS and completed after results', () => {
+    const sharedService = TestBed.inject(SharedService);
+
+    sharedService.setModelingCheckpoint({
+      substep: 'sfs_completed',
+      modelingStatus: { model: {} },
+      sfsBackwardResults: [{ step: 1 }],
+    });
+    expect(component.getSubStepStatus('2c')).toBe('completed');
+    expect(component.getSubStepStatus('2d')).toBe('in_progress');
+
+    sharedService.setModelingCheckpoint({
+      substep: 'hyperparam_completed',
+      modelingStatus: { model: {} },
+      sfsBackwardResults: [{ step: 1 }],
+      hpResults: { best_params: {} },
+    });
+    expect(component.getSubStepStatus('2d')).toBe('completed');
+  });
+
   // ── dataPurifierStartRequests$ subscription (v2.26.0+) ──────────────
   // AI's `start_data_purifier` action broadcasts here; this component
   // patches selectedOptions + split form fields and calls

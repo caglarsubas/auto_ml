@@ -10,6 +10,7 @@
       </mat-form-field>
     </div>
 
+    <div id="encoding-anchor"></div>
     <!-- Encoding Plan (auto-loaded after algorithm selection) -->
     <div *ngIf="selectedAlgorithm && (encodingPlan.length > 0 || encodingAnalyzing || encodingError)" style="margin-top: 16px; margin-bottom: 16px;">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -437,6 +438,7 @@
         </div>
       </div>
 
+      <div id="sfs-anchor"></div>
       <!-- Sequential Feature Selection (SFS) Configuration Panel -->
       <div *ngIf="sfsReady && !sfsRunning && (sfsForwardResults.length === 0 && sfsBackwardResults.length === 0)" style="margin-top: 24px; padding: 20px; border: 2px solid #740505; border-radius: 8px; background: #fff9f9;">
         <h3 style="color: #740505; margin-top: 0;">Sequential Feature Selection (SFS)</h3>
@@ -1153,8 +1155,9 @@
         </div>
       </div>
 
+      <div id="hyperparam-anchor"></div>
       <!-- ===================================================================
-           Hyperparameter Tuning (random joint search + validation curves)
+             Hyperparameter Tuning (random joint search + validation curves)
            Appears after SFS produces a feature set.
            =================================================================== -->
       <div *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0 || hpResults || hpRunning"

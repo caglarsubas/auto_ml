@@ -2251,6 +2251,7 @@ class PipelineRunListView(APIView):
             'modeling_started': '3b_modeling',
             'modeling_completed': '3b_modeling',
             'sfs_backward_completed': '3ci_sfs_backward',
+            'hyperparam_completed': '3d_hyperparameter_tuning',
         }
         if current_step == 'declaration':
             return '1b_data_declaration' if file_id else '1a_pipeline_declaration'
@@ -2264,6 +2265,8 @@ class PipelineRunListView(APIView):
                     return _SUB_MAP[modeling_sub]
                 if modeling_sub.startswith('sfs_'):
                     return '3c_sfs'
+                if modeling_sub.startswith('hyperparam_'):
+                    return '3d_hyperparameter_tuning'
             return '3a_encoding' if current_step == 'modeling' else '3c_sfs'
         return '1a_pipeline_declaration'
 

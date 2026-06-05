@@ -162,6 +162,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
         { id: '2a', label: 'Categorical Encoding' },
         { id: '2b', label: 'Model Training & CV' },
         { id: '2c', label: 'Feature Selection (SFS)' },
+        { id: '2d', label: 'Hyperparameter Tuning' },
       ]
     },
     {
@@ -1324,7 +1325,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
           // Map declaration substeps to detailed taxonomy
           if (substep === 'decl_data_imported') this.detailedStep = '1b_data_declaration';
           else if (substep === 'decl_dictionary_generated') this.detailedStep = '1c_dictionary_declaration';
-        } else if (substep.startsWith('sfs_')) {
+        } else if (substep.startsWith('sfs_') || substep.startsWith('hyperparam_')) {
           step = 'sfs';
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
         } else {
@@ -1353,7 +1354,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
         if (substep !== this._lastModelingSubstep) {
           console.log(`[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`);
           this._lastModelingSubstep = substep;
-          const step = substep.startsWith('sfs_') ? 'sfs' : 'modeling';
+          const step = (substep.startsWith('sfs_') || substep.startsWith('hyperparam_')) ? 'sfs' : 'modeling';
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
           this.saveCheckpoint(step);
         }
@@ -1803,7 +1804,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
   private static readonly DETAILED_STEPS: string[] = [
     '1a_pipeline_declaration', '1b_data_declaration', '1c_dictionary_declaration',
     '2a_purifier_declaration', '2b_data_quality_summary',
-    '3a_encoding', '3b_modeling', '3c_sfs', '3ci_sfs_backward'
+    '3a_encoding', '3b_modeling', '3c_sfs', '3ci_sfs_backward', '3d_hyperparameter_tuning'
   ];
 
   private static readonly DETAILED_LABELS: {[k: string]: string} = {
@@ -1815,7 +1816,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     '3a_encoding': 'Categorical Feature Encoding',
     '3b_modeling': 'Modeling',
     '3c_sfs': 'SFS',
-    '3ci_sfs_backward': 'SFS Backward'
+    '3ci_sfs_backward': 'SFS Backward',
+    '3d_hyperparameter_tuning': 'Hyperparameter Tuning'
   };
 
   /** Map a modeling child-component substep to the detailed taxonomy */
@@ -1824,6 +1826,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     if (substep === 'modeling_started' || substep === 'modeling_completed') return '3b_modeling';
     if (substep === 'sfs_backward_completed') return '3ci_sfs_backward';
     if (substep.startsWith('sfs_')) return '3c_sfs';
+    if (substep.startsWith('hyperparam_')) return '3d_hyperparameter_tuning';
     return this.detailedStep; // keep current if unknown
   }
 
@@ -2749,6 +2752,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
         '2a': 'encoding-anchor',
         '2b': 'modeling-anchor',
         '2c': 'sfs-anchor',
+        '2d': 'hyperparam-anchor',
       };
       const anchorId = anchorMap[subStepId];
       if (anchorId) {
@@ -2805,17 +2809,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
       case '2a': // Categorical Encoding
         if (mc && mc.substep && ['encoding_completed', 'modeling_started', 'modeling_completed',
             'sfs_running', 'sfs_stopped', 'sfs_backward_completed', 'sfs_forward_completed',
-            'sfs_completed', 'sfs_forward_from_backward_completed'].includes(mc.substep)) return 'completed';
+            'sfs_completed', 'sfs_forward_from_backward_completed', 'hyperparam_running',
+            'hyperparam_stopped', 'hyperparam_completed'].includes(mc.substep)) return 'completed';
         if (mc && mc.substep === 'algorithm_selected') return 'in_progress';
         if (this.modelingAvailable && !mc?.substep) return 'in_progress';
         return 'pending';
       case '2b': // Model Training & CV
-        if (mc && mc.modelingStatus?.model) return 'completed';
+        if (mc && (mc.modelingStatus?.model || mc.substep?.startsWith('hyperparam_'))) return 'completed';
         if (mc && (mc.substep === 'modeling_started' || mc.substep === 'encoding_completed')) return 'in_progress';
         return 'pending';
       case '2c': // SFS
-        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'completed';
+        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0 || mc.sfsForwardFromBackwardResults?.length > 0 || mc.substep?.startsWith('hyperparam_'))) return 'completed';
         if (mc && mc.modelingStatus?.model && !(mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'in_progress';
+        return 'pending';
+      case '2d': // Hyperparameter Tuning
+        if (mc && (mc.substep === 'hyperparam_completed' || mc.hpResults)) return 'completed';
+        if (mc && (mc.substep === 'hyperparam_running' || mc.substep === 'hyperparam_stopped')) return 'in_progress';
+        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0 || mc.sfsForwardFromBackwardResults?.length > 0)) return 'in_progress';
         return 'pending';
 
       // Future steps
