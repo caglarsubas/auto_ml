@@ -4389,7 +4389,8 @@ def _text_response(text):
 
 def _run_chat_workflow(monkeypatch, *, provider, call_llm,
                        user_message='please derive new features from the existing ones',
-                       file_id=1, reasoning=False, history=None):
+                       file_id=1, reasoning=False, history=None,
+                       span_id=None, trace_id=None):
     """Execute the real _chat_workflow body with its external collaborators
     mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
 
@@ -4410,7 +4411,8 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
     monkeypatch.setattr(views, 'set_span_attr', lambda *a, **kw: None)
     monkeypatch.setattr(views, 'set_session_id', lambda *a, **kw: None)
     monkeypatch.setattr(views, 'set_customer_id', lambda *a, **kw: None)
-    monkeypatch.setattr(views, 'current_span_id', lambda: None)
+    monkeypatch.setattr(views, 'current_span_id', lambda: span_id)
+    monkeypatch.setattr(views, 'current_trace_id', lambda: trace_id)
 
     skill_calls = []
 
@@ -7049,6 +7051,156 @@ class TestCrossTraceRefs:
             'action_executor.py must import set_input_ref from '
             'prometa_config (v2.38.0)'
         )
+
+
+# ---------------------------------------------------------------------------
+# v2.45.0: assistant-response feedback → Prometa feedback.record
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAssistantResponseFeedback:
+    """Feedback API validation and Prometa SDK call wiring."""
+
+    class _FakeRequest:
+        def __init__(self, data):
+            self.data = data
+            self.user = None
+
+    def test_feedback_view_requires_a_signal(self):
+        from ai_assistant.feedback import AIFeedbackView
+
+        resp = AIFeedbackView().post(self._FakeRequest({
+            'target_span_id': 'span-1',
+        }))
+
+        assert resp.status_code == 400
+        assert resp.data['errors']['feedback'] == 'Provide liked, rating, or comment.'
+
+    def test_feedback_view_validates_liked_and_rating(self):
+        from ai_assistant.feedback import AIFeedbackView
+
+        resp = AIFeedbackView().post(self._FakeRequest({
+            'liked': 'yes',
+            'rating': 6,
+        }))
+
+        assert resp.status_code == 400
+        assert 'liked' in resp.data['errors']
+        assert 'rating' in resp.data['errors']
+
+    def test_feedback_records_prometa_event_with_target_ids(self, monkeypatch):
+        from ai_assistant import feedback as feedback_mod
+
+        captured = {}
+        monkeypatch.setattr(feedback_mod, 'record_user_feedback',
+                            lambda **kw: captured.update(kw) or True)
+        monkeypatch.setattr(feedback_mod, 'set_user_feedback',
+                            lambda **kw: (_ for _ in ()).throw(AssertionError('set_user_feedback should not be used')))
+        monkeypatch.setattr(feedback_mod, 'prometa_flush', lambda: None)
+
+        resp = feedback_mod.AIFeedbackView().post(self._FakeRequest({
+            'liked': True,
+            'rating': 5,
+            'comment': 'Clear and helpful.',
+            'source': 'declarai-ai-chat-panel',
+            'feedback_id': 'feedback-1',
+            'user_id': 'analyst-123',
+            'submitted_at': '2026-06-05T01:02:03Z',
+            'chat_trace_id': 'trace-abc',
+            'chat_span_id': 'span-def',
+            'conversation_id': 'declarai-file-42',
+        }))
+
+        assert resp.status_code == 200
+        assert resp.data['prometa_recorded'] is True
+        assert resp.data['prometa_method'] == 'record_user_feedback'
+        assert captured == {
+            'liked': True,
+            'rating': 5,
+            'comment': 'Clear and helpful.',
+            'source': 'declarai-ai-chat-panel',
+            'feedback_id': 'feedback-1',
+            'user_id': 'analyst-123',
+            'submitted_at': '2026-06-05T01:02:03Z',
+            'target_trace_id': 'trace-abc',
+            'target_span_id': 'span-def',
+            'target_session_id': 'declarai-file-42',
+        }
+
+    def test_feedback_derives_session_id_from_file_id(self, monkeypatch):
+        from ai_assistant import feedback as feedback_mod
+
+        captured = {}
+        monkeypatch.setattr(feedback_mod, 'record_user_feedback',
+                            lambda **kw: captured.update(kw) or True)
+        monkeypatch.setattr(feedback_mod, 'prometa_flush', lambda: None)
+
+        resp = feedback_mod.AIFeedbackView().post(self._FakeRequest({
+            'liked': False,
+            'file_id': 77,
+            'target_span_id': 'span-77',
+        }))
+
+        assert resp.status_code == 200
+        assert captured['target_session_id'] == 'declarai-file-77'
+        assert captured['target_span_id'] == 'span-77'
+
+    def test_feedback_redacts_pii_comment_and_drops_unsafe_user_id(self, monkeypatch):
+        from ai_assistant import feedback as feedback_mod
+
+        captured = {}
+        monkeypatch.setattr(feedback_mod, 'record_user_feedback',
+                            lambda **kw: captured.update(kw) or True)
+        monkeypatch.setattr(feedback_mod, 'prometa_flush', lambda: None)
+
+        resp = feedback_mod.AIFeedbackView().post(self._FakeRequest({
+            'comment': 'Contact me at person@example.com or 415-555-1212.',
+            'user_id': 'person@example.com',
+            'target_span_id': 'span-safe',
+        }))
+
+        assert resp.status_code == 200
+        assert resp.data['comment_redacted'] is True
+        assert resp.data['user_id_included'] is False
+        assert captured['user_id'] is None
+        assert 'person@example.com' not in captured['comment']
+        assert '415-555-1212' not in captured['comment']
+        assert '[redacted-email]' in captured['comment']
+        assert '[redacted-phone]' in captured['comment']
+
+    def test_feedback_allows_raw_comment_and_user_id_when_explicit(self, monkeypatch):
+        from ai_assistant import feedback as feedback_mod
+
+        captured = {}
+        monkeypatch.setattr(feedback_mod, 'record_user_feedback',
+                            lambda **kw: captured.update(kw) or True)
+        monkeypatch.setattr(feedback_mod, 'prometa_flush', lambda: None)
+
+        resp = feedback_mod.AIFeedbackView().post(self._FakeRequest({
+            'liked': True,
+            'comment': 'Email person@example.com about this answer.',
+            'user_id': 'person@example.com',
+            'allow_pii': True,
+        }))
+
+        assert resp.status_code == 200
+        assert captured['comment'] == 'Email person@example.com about this answer.'
+        assert captured['user_id'] == 'person@example.com'
+
+    def test_chat_workflow_returns_feedback_target_ids(self, monkeypatch):
+        out = _run_chat_workflow(
+            monkeypatch,
+            provider='openai',
+            file_id=42,
+            span_id='span-abc',
+            trace_id='trace-def',
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+
+        assert out['result']['chat_span_id'] == 'span-abc'
+        assert out['result']['chat_trace_id'] == 'trace-def'
+        assert out['result']['chat_session_id'] == 'declarai-file-42'
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { AiAssistantService, AiAction, AiIntentLabel, ChatMessage } from '../services/ai-assistant.service';
+import { AiAssistantService, AiAction, AiFeedbackState, AiIntentLabel, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
@@ -19,6 +19,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private currentSection: string = '';
   private subscriptions = new Subscription();
   private shouldScrollToBottom = false;
+  feedbackStars = [1, 2, 3, 4, 5];
+  private feedbackSequence = 0;
 
   // Model selector
   availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number; tool_calling_mode?: string}> = [];
@@ -161,6 +163,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           resp.message || fallbackMsg,
           actions,
           resp.chat_span_id,
+          resp.chat_trace_id,
+          resp.chat_session_id,
         );
         this.isLoading = false;
       },
@@ -792,6 +796,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           resp.message || correctionFallback,
           actions,
           resp.chat_span_id,
+          resp.chat_trace_id,
+          resp.chat_session_id,
         );
         this.isLoading = false;
         // Clear the error since the AI has provided a correction
@@ -1081,6 +1087,110 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       general: 'General',
     };
     return labels[section] || section;
+  }
+
+  setFeedbackLiked(messageIndex: number, liked: boolean): void {
+    const msg = this.aiService.getMessages()[messageIndex];
+    if (!msg || msg.feedback?.submitted || msg.feedback?.submitting) return;
+    this.aiService.updateMessageFeedback(messageIndex, { liked, error: undefined });
+  }
+
+  setFeedbackRating(messageIndex: number, rating: number): void {
+    const msg = this.aiService.getMessages()[messageIndex];
+    if (!msg || msg.feedback?.submitted || msg.feedback?.submitting) return;
+    const nextRating = msg.feedback?.rating === rating ? undefined : rating;
+    this.aiService.updateMessageFeedback(messageIndex, { rating: nextRating, error: undefined });
+  }
+
+  toggleFeedbackComment(messageIndex: number): void {
+    const msg = this.aiService.getMessages()[messageIndex];
+    if (!msg || msg.feedback?.submitted || msg.feedback?.submitting) return;
+    this.aiService.updateMessageFeedback(messageIndex, {
+      commentOpen: !msg.feedback?.commentOpen,
+      error: undefined,
+    });
+  }
+
+  onFeedbackCommentChange(messageIndex: number, value: string): void {
+    const msg = this.aiService.getMessages()[messageIndex];
+    if (!msg || msg.feedback?.submitted || msg.feedback?.submitting) return;
+    this.aiService.updateMessageFeedback(messageIndex, { comment: value, error: undefined });
+  }
+
+  canSubmitFeedback(msg: ChatMessage): boolean {
+    const feedback = msg.feedback || {};
+    return !!(
+      feedback.liked !== undefined ||
+      feedback.rating ||
+      (feedback.comment || '').trim()
+    );
+  }
+
+  submitFeedback(messageIndex: number): void {
+    const msg = this.aiService.getMessages()[messageIndex];
+    if (!msg || msg.role !== 'assistant' || msg.feedback?.submitted || msg.feedback?.submitting) return;
+
+    const feedback: AiFeedbackState = msg.feedback || {};
+    const comment = (feedback.comment || '').trim();
+    if (!this.canSubmitFeedback(msg)) {
+      this.aiService.updateMessageFeedback(messageIndex, {
+        error: 'Choose a thumb, star rating, or add a comment.',
+      });
+      return;
+    }
+
+    const feedbackId = feedback.feedbackId || this.newFeedbackId(messageIndex);
+    const payload: any = {
+      source: 'declarai-ai-chat-panel',
+      feedback_id: feedbackId,
+      submitted_at: new Date().toISOString(),
+    };
+    if (feedback.liked !== undefined) payload.liked = feedback.liked;
+    if (feedback.rating) payload.rating = feedback.rating;
+    if (comment) payload.comment = comment;
+    if (msg.chatTraceId) payload.target_trace_id = msg.chatTraceId;
+    if (msg.chatSpanId) payload.target_span_id = msg.chatSpanId;
+    if (msg.chatSessionId) {
+      payload.target_session_id = msg.chatSessionId;
+      payload.conversation_id = msg.chatSessionId;
+    }
+    const fileId = this.sharedService.getCurrentFileId();
+    if (fileId != null) payload.file_id = fileId;
+
+    this.aiService.updateMessageFeedback(messageIndex, {
+      submitting: true,
+      error: undefined,
+      feedbackId,
+    });
+    this.dataService.submitAiFeedback(payload).subscribe({
+      next: (resp: any) => {
+        this.aiService.updateMessageFeedback(messageIndex, {
+          submitting: false,
+          submitted: true,
+          commentOpen: false,
+          feedbackId: resp?.feedback_id || feedbackId,
+          error: undefined,
+        });
+      },
+      error: (err: any) => {
+        const msgText = err?.error?.errors
+          ? Object.values(err.error.errors).join(' ')
+          : (err?.error?.error || err?.message || 'Feedback could not be submitted.');
+        this.aiService.updateMessageFeedback(messageIndex, {
+          submitting: false,
+          error: msgText,
+        });
+      },
+    });
+  }
+
+  private newFeedbackId(messageIndex: number): string {
+    const cryptoObj = globalThis.crypto;
+    if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+      return cryptoObj.randomUUID();
+    }
+    this.feedbackSequence += 1;
+    return `declarai-feedback-${Date.now()}-${messageIndex}-${this.feedbackSequence}`;
   }
 
   private scrollToBottom(): void {

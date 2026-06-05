@@ -194,6 +194,68 @@
           <div *ngIf="actionError" class="action-error">{{ actionError }}</div>
           <div *ngIf="actionSuccess" class="action-success">{{ actionSuccess }}</div>
         </div>
+        <div
+          class="message-feedback"
+          *ngIf="msg.role === 'assistant' && !msg.loading && !msg.autoCorrection"
+          [class.submitted]="msg.feedback?.submitted"
+        >
+          <button
+            type="button"
+            class="feedback-icon-btn"
+            [class.active]="msg.feedback?.liked === true"
+            [disabled]="msg.feedback?.submitted || msg.feedback?.submitting"
+            (click)="setFeedbackLiked(mi, true)"
+            title="Thumbs up"
+          >&#128077;</button>
+          <button
+            type="button"
+            class="feedback-icon-btn"
+            [class.active]="msg.feedback?.liked === false"
+            [disabled]="msg.feedback?.submitted || msg.feedback?.submitting"
+            (click)="setFeedbackLiked(mi, false)"
+            title="Thumbs down"
+          >&#128078;</button>
+          <div class="feedback-stars" aria-label="Optional star rating">
+            <button
+              type="button"
+              *ngFor="let star of feedbackStars"
+              class="feedback-star-btn"
+              [class.active]="(msg.feedback?.rating || 0) >= star"
+              [disabled]="msg.feedback?.submitted || msg.feedback?.submitting"
+              (click)="setFeedbackRating(mi, star)"
+              [title]="star + ' star rating'"
+            >&#9733;</button>
+          </div>
+          <button
+            type="button"
+            class="feedback-comment-btn"
+            [class.active]="msg.feedback?.commentOpen"
+            [disabled]="msg.feedback?.submitted || msg.feedback?.submitting"
+            (click)="toggleFeedbackComment(mi)"
+            title="Add comment"
+          >&#9998;</button>
+          <button
+            type="button"
+            class="feedback-submit-btn"
+            [disabled]="msg.feedback?.submitted || msg.feedback?.submitting || !canSubmitFeedback(msg)"
+            (click)="submitFeedback(mi)"
+            title="Submit feedback"
+          >
+            <span *ngIf="!msg.feedback?.submitting && !msg.feedback?.submitted">Submit</span>
+            <span *ngIf="msg.feedback?.submitting">Sending...</span>
+            <span *ngIf="msg.feedback?.submitted">&#10003; Sent</span>
+          </button>
+          <div class="feedback-comment-row" *ngIf="msg.feedback?.commentOpen && !msg.feedback?.submitted">
+            <textarea
+              class="feedback-comment-input"
+              [value]="msg.feedback?.comment || ''"
+              (input)="onFeedbackCommentChange(mi, $any($event.target).value)"
+              placeholder="Optional comment"
+              rows="2"
+            ></textarea>
+          </div>
+          <div class="feedback-error" *ngIf="msg.feedback?.error">{{ msg.feedback?.error }}</div>
+        </div>
         <div class="chat-message-section" *ngIf="msg.section">
           {{ getSectionLabel(msg.section) }}
         </div>

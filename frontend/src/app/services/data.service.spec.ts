@@ -401,6 +401,31 @@ describe('DataService', () => {
       req.flush({ message: 'Response' });
     });
 
+    it('submitAiFeedback should POST feedback payload with target ids', () => {
+      service.submitAiFeedback({
+        liked: true,
+        rating: 5,
+        comment: 'Helpful answer',
+        source: 'declarai-ai-chat-panel',
+        feedback_id: 'feedback-1',
+        target_trace_id: 'trace-1',
+        target_span_id: 'span-1',
+        target_session_id: 'declarai-file-42',
+        submitted_at: '2026-06-05T01:02:03.000Z',
+      }).subscribe(res => {
+        expect(res.status).toBe('success');
+      });
+
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/feedback/`);
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body.liked).toBeTrue();
+      expect(req.request.body.rating).toBe(5);
+      expect(req.request.body.target_trace_id).toBe('trace-1');
+      expect(req.request.body.target_span_id).toBe('span-1');
+      expect(req.request.body.target_session_id).toBe('declarai-file-42');
+      req.flush({ status: 'success', feedback_id: 'feedback-1' });
+    });
+
     it('sendAiChat should include preclassified intent labels when provided', () => {
       service.sendAiChat(
         'Analyze the current summary',
