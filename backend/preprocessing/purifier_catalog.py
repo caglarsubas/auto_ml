@@ -177,7 +177,7 @@ PURIFIER_OPTIONS: list[dict] = [
 # Purifier Declaration screen.  Centralized here so /api/preprocessing/
 # options/ can expose them and the frontend can eventually drop its
 # duplicated `defaultOptionIds` array.
-DEFAULT_SELECTED_IDS: list[int] = [1, 2, 3, 4, 7, 11, 17, 23, 28, 32]
+DEFAULT_SELECTED_IDS: list[int] = [1, 2, 3, 4, 7, 23, 28, 32]
 
 
 # ── Internal lookup table ────────────────────────────────────────

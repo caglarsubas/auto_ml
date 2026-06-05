@@ -793,7 +793,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
     { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05', group: 6 },
   ];
 
-  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 11, 17, 23, 28, 32];
+  private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 23, 28, 32];
   selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
 
   constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog, public aiAssistant: AiAssistantService) {}

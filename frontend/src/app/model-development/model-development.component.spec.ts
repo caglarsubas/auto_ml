@@ -55,6 +55,13 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.selectedPipeline).toBe('');
   });
 
+  it('should preselect combined sparsity/missing purifier option without separate duplicates', () => {
+    const ids = component.selectedOptions.map((o: any) => o.id).sort((a: number, b: number) => a - b);
+    expect(ids).toEqual([1, 2, 3, 4, 7, 23, 28, 32]);
+    expect(ids).not.toContain(11);
+    expect(ids).not.toContain(17);
+  });
+
   it('should have showSteps flags all false initially', () => {
     expect(component.showSteps['declaration']).toBeFalse();
     expect(component.showSteps['modeling']).toBeFalse();
@@ -235,7 +242,7 @@ describe('ModelDevelopmentComponent', () => {
 
     it('should REPLACE selectedOptions on wholesale-form broadcast', (done) => {
       spyOn(dataService, 'pushAiCache').and.returnValue(of({ status: 'success' }));
-      // Seed with the v2.27.x default set so we can verify it gets
+      // Seed with the redundant screenshot selection so we can verify it gets
       // wholesale-replaced.
       component.selectedOptions = component.purifierOptions
         .filter((o: any) => [1, 2, 3, 4, 7, 11, 17, 23, 28, 32].includes(o.id));

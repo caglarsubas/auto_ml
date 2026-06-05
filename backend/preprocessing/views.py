@@ -93,7 +93,7 @@ class PreprocessingOptionsView(APIView):
           },
           ...
         ],
-        "default_selected_ids": [1, 2, 3, 4, 7, 11, 17, 23, 28, 32]
+        "default_selected_ids": [1, 2, 3, 4, 7, 23, 28, 32]
       }
     """
 
