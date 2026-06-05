@@ -482,7 +482,7 @@ export class DataService {
   sendAiChat(message: string, context: any, section: string,
              history: Array<{role: string; content: string}>,
              fileId?: number, model?: string,
-             intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E'>,
+             intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'R'>,
              intentSource?: string): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {

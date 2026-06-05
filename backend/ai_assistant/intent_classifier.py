@@ -11,9 +11,9 @@ import re
 from typing import Iterable
 
 
-CLASSIFIER_VERSION = "intent-v1"
+CLASSIFIER_VERSION = "intent-v2-rag"
 
-INTENT_LABELS = ("A", "B", "C", "D", "E")
+INTENT_LABELS = ("A", "B", "C", "D", "E", "R")
 
 INTENT_LABEL_NAMES = {
     "A": "general_information_gathering",
@@ -21,6 +21,7 @@ INTENT_LABEL_NAMES = {
     "C": "current_status_information_gathering",
     "D": "configuration_editing_execution",
     "E": "flow_process_execution",
+    "R": "knowledge_bank_rag_call",
 }
 
 INTENT_LABEL_DESCRIPTIONS = {
@@ -29,13 +30,14 @@ INTENT_LABEL_DESCRIPTIONS = {
     "C": "Current flow status, flags, configuration, results, or data inspection.",
     "D": "Edit/update flow configuration, parameters, metadata, or data.",
     "E": "Trigger a pipeline/process step, or move backward/forward in the flow.",
+    "R": "Retrieve stable platform guidance, disclosure, glossary, or user-manual docs.",
 }
 
 _LABEL_SET = set(INTENT_LABELS)
 
 
 def normalize_intent_labels(labels) -> list[str]:
-    """Return unique A-E labels in canonical order, ignoring invalid input."""
+    """Return unique known labels in canonical order, ignoring invalid input."""
     if labels is None:
         return []
     if isinstance(labels, str):
@@ -87,7 +89,7 @@ def classify_query_intents(user_message: str,
                            *,
                            section: str = "",
                            context: dict | None = None) -> dict:
-    """Classify a free-text user message into one or more A-E labels.
+    """Classify a free-text user message into one or more intent labels.
 
     The implementation decomposes compound requests into short clauses, labels
     each clause, then unions the results in canonical order.
@@ -200,6 +202,17 @@ _GENERAL_INFO_RE = re.compile(
     re.IGNORECASE,
 )
 
+_RAG_TERMS_RE = re.compile(
+    r"\b("
+    r"rag|knowledge bank|manual|user manual|guide|guideline|documentation|docs|"
+    r"glossary|terminology|term|terms|abbreviation|abbreviations|definition|"
+    r"define|disclosure|assumption|assumptions|calculation|calculations|"
+    r"formula|formulas|methodology|rationale|capabilities|how to use|"
+    r"assistant usage|settings|configurations"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def _classify_segment(segment: str, *, section: str, has_context: bool) -> list[str]:
     lower = segment.lower()
@@ -211,6 +224,12 @@ def _classify_segment(segment: str, *, section: str, has_context: bool) -> list[
     has_config_edit = bool(_CONFIG_EDIT_RE.search(segment))
     has_execution = bool(_EXECUTION_RE.search(segment))
     has_general_info = bool(_GENERAL_INFO_RE.search(segment))
+    has_direct_rag_term = bool(_RAG_TERMS_RE.search(segment))
+    has_explicit_current_anchor = bool(re.search(
+        r"\b(current|ongoing|now|status|state|progress|result|results|my|this|these|our)\b",
+        lower,
+    ))
+    is_doc_only_query = has_direct_rag_term and not has_explicit_current_anchor
     section_is_pipeline = bool(section and section != "general")
 
     if has_execution and (has_flow_term or section_is_pipeline):
@@ -219,14 +238,18 @@ def _classify_segment(segment: str, *, section: str, has_context: bool) -> list[
     if has_config_edit and (
         has_flow_term
         or section_is_pipeline
-        or re.search(r"\b(config|setting|parameter|threshold|feature|column|note|ranking|algorithm)\b",
-                     lower)
+        or re.search(
+            r"\b(config|setting|parameter|threshold|feature|column|note|"
+            r"ranking|algorithm|max_features|min_features|top_k|n_jobs)\b",
+            lower,
+        )
     ):
         labels.add("D")
 
     is_command = has_config_edit or has_execution
     if (
         not is_command
+        and not is_doc_only_query
         and (
             has_current_term
             or (section_is_pipeline and (has_context or has_flow_term))
@@ -241,4 +264,31 @@ def _classify_segment(segment: str, *, section: str, has_context: bool) -> list[
     if has_general_info and not labels.intersection({"B", "C", "D", "E"}):
         labels.add("A")
 
+    if _should_call_knowledge_bank(
+        has_direct_rag_term=has_direct_rag_term,
+        has_general_info=has_general_info,
+        has_flow_info=has_flow_info,
+        has_current_term=has_current_term,
+        has_config_edit=has_config_edit,
+        has_execution=has_execution,
+    ):
+        labels.add("R")
+
     return [label for label in INTENT_LABELS if label in labels]
+
+
+def _should_call_knowledge_bank(*,
+                                has_direct_rag_term: bool,
+                                has_general_info: bool,
+                                has_flow_info: bool,
+                                has_current_term: bool,
+                                has_config_edit: bool,
+                                has_execution: bool) -> bool:
+    """Return True when stable docs should be retrieved for this segment."""
+    if has_config_edit or has_execution:
+        return False
+    if has_direct_rag_term:
+        return True
+    if has_current_term:
+        return False
+    return has_general_info or has_flow_info

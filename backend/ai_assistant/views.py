@@ -25,6 +25,7 @@ from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
 from .cache import cache_list_artifacts
 from .intent_classifier import resolve_intent_classification
+from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
     call_openai, call_engine, MODEL_REGISTRY,
@@ -1331,7 +1332,8 @@ def _compute_role_boundaries(messages: list,
 def _describe_context_components(use_tools: bool,
                                  has_context: bool,
                                  auto_skill: Optional[str],
-                                 has_history: bool) -> list[str]:
+                                 has_history: bool,
+                                 has_knowledge_bank: bool = False) -> list[str]:
     """Enumerate the knowledge sources blended into this prompt.
 
     Consumed by the AML C6 (dynamic context assembly) detector via
@@ -1344,6 +1346,8 @@ def _describe_context_components(use_tools: bool,
         parts.append('slim_context')
     elif has_context:
         parts.append('legacy_full_context')
+    if has_knowledge_bank:
+        parts.append('knowledge_bank')
     if has_history:
         parts.append('conversation_history')
     if auto_skill:
@@ -1367,7 +1371,7 @@ def _sum_tool_message_tokens(messages: list) -> int:
 
 
 def _stamp_intent_attrs(intent: dict) -> None:
-    """Expose the resolved A-E intent labels to Prometa span attributes."""
+    """Expose the resolved intent labels to Prometa span attributes."""
     labels = intent.get('labels') or []
     label_names = intent.get('label_names') or []
     labels_csv = ','.join(labels)
@@ -1459,6 +1463,27 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             'content': f'The user is currently viewing the following pipeline output '
                        f'(section: {section}):\n\n{context_str}',
         })
+
+    # ── Knowledge-bank RAG ───────────────────────────────────────────
+    # The deterministic intent classifier owns the decision to retrieve
+    # stable docs.  When it emits R, pull compact Markdown snippets from the
+    # versioned knowledge bank and inject them as system context.  Live
+    # pipeline tools still handle current file-specific values.
+    rag_result = None
+    has_knowledge_bank_context = False
+    if 'R' in (intent.get('labels') or []):
+        rag_result = retrieve_knowledge_context(user_message)
+        knowledge_context = (rag_result or {}).get('context') or ''
+        if knowledge_context:
+            messages.append({
+                'role': 'system',
+                'content': knowledge_context,
+            })
+            has_knowledge_bank_context = True
+        set_span_attr('declarai.rag.in_prompt', has_knowledge_bank_context)
+    else:
+        set_span_attr('declarai.rag.called', False)
+        set_span_attr('declarai.rag.in_prompt', False)
 
     # Add conversation history (last 20 messages to stay within token limits)
     for msg in history[-20:]:
@@ -1556,6 +1581,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
                 has_context=bool(context),
                 auto_skill=auto_skill if skill_injected else None,
                 has_history=bool(history),
+                has_knowledge_bank=has_knowledge_bank_context,
             ),
         )
     # Stamp the user query alone on the declarai-chat workflow span (not
@@ -1810,6 +1836,16 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         'intent_labels': intent['labels'],
         'intent_source': intent['source'],
     }
+    if rag_result and rag_result.get('results'):
+        response_data['rag_sources'] = [
+            {
+                'source': item['source'],
+                'title': item['title'],
+                'heading': item['heading'],
+                'chunk_id': item['chunk_id'],
+            }
+            for item in rag_result['results']
+        ]
     if actions:
         response_data['actions'] = actions
         # v2.38.0: snapshot the chat span id so the frontend can pass it

@@ -4242,7 +4242,7 @@ class TestAssistantIntentClassifier:
 
         out = classify_query_intents('What is PSI in general?')
 
-        assert out['labels'] == ['A']
+        assert out['labels'] == ['A', 'R']
         assert out['preclassified'] is False
 
     def test_pipeline_flow_mechanism_question_is_b(self):
@@ -4250,7 +4250,7 @@ class TestAssistantIntentClassifier:
 
         out = classify_query_intents('How does the default preprocessing flow work?')
 
-        assert out['labels'] == ['B']
+        assert out['labels'] == ['B', 'R']
 
     def test_current_status_question_is_c(self):
         from ai_assistant.intent_classifier import classify_query_intents
@@ -4262,6 +4262,15 @@ class TestAssistantIntentClassifier:
         )
 
         assert out['labels'] == ['C']
+
+    def test_user_manual_question_includes_rag_label(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents(
+            'Show me the platform manual and glossary for assistant usage.'
+        )
+
+        assert out['labels'] == ['R']
 
     def test_compound_edit_and_execute_question_is_d_and_e(self):
         from ai_assistant.intent_classifier import classify_query_intents
@@ -4287,6 +4296,32 @@ class TestAssistantIntentClassifier:
         assert out['labels'] == ['C']
         assert out['source'] == 'get_ai_support_button'
         assert out['preclassified'] is True
+
+
+@pytest.mark.unit
+class TestKnowledgeBankRetrieval:
+    """Knowledge-bank retrieval returns cited snippets from versioned docs."""
+
+    def test_retrieves_glossary_context_for_metric_question(self):
+        from ai_assistant.knowledge_bank import retrieve_knowledge_context
+
+        out = retrieve_knowledge_context('What does PSI mean?')
+
+        assert out['results']
+        assert '[KB1]' in out['context']
+        joined = '\n'.join(r['snippet'] for r in out['results'])
+        assert 'Population Stability Index' in joined
+        assert any(r['source'] == 'terminology-glossary.md'
+                   for r in out['results'])
+
+    def test_retrieves_assistant_guide_for_usage_question(self):
+        from ai_assistant.knowledge_bank import retrieve_knowledge_context
+
+        out = retrieve_knowledge_context('How should I use the assistant actions?')
+
+        assert out['results']
+        sources = {r['source'] for r in out['results']}
+        assert 'assistant-usage-and-action-guide.md' in sources
 
 
 # ---------------------------------------------------------------------------
@@ -4401,6 +4436,39 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
     result = fn(user_message, {}, 'general', history or [],
                 file_id=file_id, model='engine-x')
     return {'result': result, 'llm_calls': llm_calls, 'skill_calls': skill_calls}
+
+
+@pytest.mark.unit
+class TestKnowledgeBankRagWorkflow:
+    """When intent includes R, _chat_workflow retrieves and injects docs."""
+
+    def test_rag_intent_injects_knowledge_bank_context(self, monkeypatch):
+        out = _run_chat_workflow(
+            monkeypatch, provider='openai',
+            user_message='What does PSI mean in the DeclarAI platform?',
+            call_llm=lambda idx, messages, tools: _text_response('PSI means stability.'),
+        )
+
+        assert out['result']['intent_labels'] == ['A', 'R']
+        assert out['result']['rag_sources']
+        joined = '\n'.join(m.get('content') or ''
+                           for m in out['llm_calls'][0]['messages'])
+        assert 'Knowledge bank context retrieved for this turn.' in joined
+        assert '[KB1]' in joined
+        assert 'Population Stability Index' in joined
+
+    def test_non_rag_turn_does_not_inject_knowledge_bank_context(self, monkeypatch):
+        out = _run_chat_workflow(
+            monkeypatch, provider='openai',
+            user_message='Set max_features to 20 and then start SFS.',
+            call_llm=lambda idx, messages, tools: _text_response('Prepared.'),
+        )
+
+        assert out['result']['intent_labels'] == ['D', 'E']
+        assert 'rag_sources' not in out['result']
+        joined = '\n'.join(m.get('content') or ''
+                           for m in out['llm_calls'][0]['messages'])
+        assert 'Knowledge bank context retrieved for this turn.' not in joined
 
 
 @pytest.mark.unit
@@ -9463,6 +9531,20 @@ class TestPromptRenderRoleBoundaryHelpers:
         assert parts == [
             'system_prompt', 'slim_context', 'conversation_history',
             'skill:feature-engineering', 'user_query',
+        ], parts
+
+    def test_describe_context_components_places_knowledge_bank_after_context(self):
+        """Knowledge-bank context is injected after slim/legacy pipeline
+        context and before history so stable docs do not outrank live data."""
+        from ai_assistant.views import _describe_context_components
+        parts = _describe_context_components(
+            use_tools=True, has_context=False,
+            auto_skill='feature-engineering', has_history=True,
+            has_knowledge_bank=True,
+        )
+        assert parts == [
+            'system_prompt', 'slim_context', 'knowledge_bank',
+            'conversation_history', 'skill:feature-engineering', 'user_query',
         ], parts
 
     def test_describe_context_components_minimal_path(self):
