@@ -9,7 +9,7 @@ export interface AiAction {
   editedPayload?: any;
 }
 
-export type AiIntentLabel = 'A' | 'B' | 'C' | 'D' | 'E';
+export type AiIntentLabel = 'A' | 'B' | 'C' | 'D' | 'E' | 'R';
 
 export interface PendingAiContext {
   context: any;
