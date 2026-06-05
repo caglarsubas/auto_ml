@@ -28,7 +28,7 @@ CONTEXT = {
     "pipeline_config": {
         "target_definition": "good/bad flag of credit applications within the 12 months period of its usage",
         "pipeline_type": "boosting",
-        "purifier_options": [1, 2, 3, 4, 7, 11, 17, 23, 28, 32],
+        "purifier_options": [1, 2, 3, 4, 7, 23, 28, 32],
     },
     "selected_features": [
         "FE_Debt_To_Income", "FE_Credit_Utilization", "FE_Income_Verification_Diff",

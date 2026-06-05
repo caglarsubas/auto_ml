@@ -318,6 +318,7 @@ class TestPreprocessingOptionsAPI:
     def test_options_endpoint_default_selected_ids_subset_of_catalog(self, api_client):
         response = api_client.get('/api/preprocessing/options/')
         assert response.status_code == 200
+        assert response.data['default_selected_ids'] == [1, 2, 3, 4, 7, 23, 28, 32]
         catalog_ids = {e['id'] for e in response.data['options']}
         for opt_id in response.data['default_selected_ids']:
             assert opt_id in catalog_ids, f"default id {opt_id} not in catalog"

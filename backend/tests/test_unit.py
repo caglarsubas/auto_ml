@@ -8073,6 +8073,13 @@ class TestPurifierCatalog:
         for opt_id in DEFAULT_SELECTED_IDS:
             assert get_option(opt_id) is not None, f"default id {opt_id} not in catalog"
 
+    def test_default_selected_ids_use_combined_sparsity_missing_drop(self):
+        from preprocessing.purifier_catalog import DEFAULT_SELECTED_IDS
+        assert DEFAULT_SELECTED_IDS == [1, 2, 3, 4, 7, 23, 28, 32]
+        assert 11 not in DEFAULT_SELECTED_IDS
+        assert 17 not in DEFAULT_SELECTED_IDS
+        assert 23 in DEFAULT_SELECTED_IDS
+
 
 @pytest.mark.unit
 class TestPurifierApplyOptions:

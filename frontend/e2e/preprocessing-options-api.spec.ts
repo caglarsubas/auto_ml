@@ -96,6 +96,7 @@ test.describe('GET /api/preprocessing/options/ — canonical purifier catalog', 
     }
     expect(response.status()).toBe(200);
     const body = await response.json();
+    expect(body.default_selected_ids).toEqual([1, 2, 3, 4, 7, 23, 28, 32]);
     const catalogIds = new Set<number>(body.options.map((o: { id: number }) => o.id));
     for (const optId of body.default_selected_ids) {
       expect(catalogIds.has(optId), `default id ${optId} not in catalog`).toBe(true);
