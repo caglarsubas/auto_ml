@@ -4241,20 +4241,37 @@ class TestSkillAutoRouting:
 
 @pytest.mark.unit
 class TestAssistantIntentClassifier:
-    """Chat turns are classified before any LLM/tool/action work happens."""
+    """Chat turns are classified by LLM before retrieval/tool/action work."""
+
+    def _llm_response(self, labels, *, confidence='high', uncertain=False):
+        import json
+        return json.dumps({
+            'labels': labels,
+            'confidence': confidence,
+            'uncertain': uncertain,
+            'decomposition': [{'segment': 'latest user turn', 'labels': labels}],
+            'reason': 'test fixture',
+        })
 
     def test_general_information_question_is_a(self):
         from ai_assistant.intent_classifier import classify_query_intents
 
-        out = classify_query_intents('What is PSI in general?')
+        out = classify_query_intents(
+            'What is PSI in general?',
+            llm_classifier=lambda messages: self._llm_response(['A', 'R']),
+        )
 
         assert out['labels'] == ['A', 'R']
+        assert out['source'] == 'llm_classifier'
         assert out['preclassified'] is False
 
     def test_pipeline_flow_mechanism_question_is_b(self):
         from ai_assistant.intent_classifier import classify_query_intents
 
-        out = classify_query_intents('How does the default preprocessing flow work?')
+        out = classify_query_intents(
+            'How does the default preprocessing flow work?',
+            llm_classifier=lambda messages: self._llm_response(['B', 'R']),
+        )
 
         assert out['labels'] == ['B', 'R']
 
@@ -4265,6 +4282,7 @@ class TestAssistantIntentClassifier:
             'Analyze the current SFS results and selected features.',
             section='sfs_backward',
             context={'backward': []},
+            llm_classifier=lambda messages: self._llm_response(['C']),
         )
 
         assert out['labels'] == ['C']
@@ -4273,7 +4291,8 @@ class TestAssistantIntentClassifier:
         from ai_assistant.intent_classifier import classify_query_intents
 
         out = classify_query_intents(
-            'Show me the platform manual and glossary for assistant usage.'
+            'Show me the platform manual and glossary for assistant usage.',
+            llm_classifier=lambda messages: self._llm_response(['R']),
         )
 
         assert out['labels'] == ['R']
@@ -4284,19 +4303,39 @@ class TestAssistantIntentClassifier:
         out = classify_query_intents(
             'Set max_features to 20 and then start SFS.',
             section='modeling',
+            llm_classifier=lambda messages: self._llm_response(['D', 'E']),
         )
 
         assert out['labels'] == ['D', 'E']
-        assert len(out['decomposition']) >= 2
+        assert out['source'] == 'llm_classifier'
+        assert out['confidence'] == 'high'
+
+    def test_llm_uncertain_uses_narrow_regex_fallback(self):
+        from ai_assistant.intent_classifier import classify_query_intents
+
+        out = classify_query_intents(
+            'how do we calculating feature-wise VIF values in this platform',
+            llm_classifier=lambda messages: self._llm_response(
+                [], confidence='low', uncertain=True),
+        )
+
+        assert out['labels'] == ['B', 'R']
+        assert out['source'] == 'definite_regex_fallback'
+        assert out['fallback_reason'] == 'llm_uncertain'
+        assert out['uncertain'] is True
 
     def test_preclassified_labels_bypass_classifier(self):
         from ai_assistant.intent_classifier import resolve_intent_classification
+
+        def fail_if_called(_messages):
+            raise AssertionError('preclassified labels should bypass LLM')
 
         out = resolve_intent_classification(
             'Analyze the Data Quality Summary.',
             section='data_quality',
             preclassified_labels=['C'],
             preclassified_source='get_ai_support_button',
+            llm_classifier=fail_if_called,
         )
 
         assert out['labels'] == ['C']
@@ -4396,7 +4435,8 @@ def _text_response(text):
 def _run_chat_workflow(monkeypatch, *, provider, call_llm,
                        user_message='please derive new features from the existing ones',
                        file_id=1, reasoning=False, history=None,
-                       span_id=None, trace_id=None):
+                       span_id=None, trace_id=None,
+                       intent_labels_for_turn=None):
     """Execute the real _chat_workflow body with its external collaborators
     mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
 
@@ -4419,6 +4459,32 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
     monkeypatch.setattr(views, 'set_customer_id', lambda *a, **kw: None)
     monkeypatch.setattr(views, 'current_span_id', lambda: span_id)
     monkeypatch.setattr(views, 'current_trace_id', lambda: trace_id)
+
+    def fake_resolve_intent(user_message, **_kwargs):
+        from ai_assistant.intent_classifier import INTENT_LABEL_NAMES
+        labels = intent_labels_for_turn
+        if labels is None:
+            if 'max_features' in user_message and 'start SFS' in user_message:
+                labels = ['D', 'E']
+            elif 'PSI' in user_message:
+                labels = ['A', 'R']
+            else:
+                labels = ['A']
+        return {
+            'labels': labels,
+            'label_names': [
+                INTENT_LABEL_NAMES[label]
+                for label in labels
+            ],
+            'source': 'llm_classifier',
+            'preclassified': False,
+            'classifier_version': 'intent-v3-llm-rag',
+            'confidence': 'high',
+            'uncertain': False,
+            'fallback_reason': '',
+            'decomposition': [{'segment': user_message, 'labels': labels}],
+        }
+    monkeypatch.setattr(views, 'resolve_intent_classification', fake_resolve_intent)
 
     skill_calls = []
 
@@ -8903,9 +8969,34 @@ class TestChatWorkflowSynthesisPass:
         _call_llm returns `llm_responses[i]` (or the last entry if exhausted).
         """
         from ai_assistant import views
+        import json as _json
         calls = []
 
         def fake_call_llm(messages, model_key, tools=None):
+            first = (messages[0].get('content') if messages else '') or ''
+            if "DeclarAI's intent classifier" in first:
+                return {
+                    'choices': [{
+                        'finish_reason': 'stop',
+                        'message': {
+                            'role': 'assistant',
+                            'content': _json.dumps({
+                                'labels': ['A'],
+                                'confidence': 'high',
+                                'uncertain': False,
+                                'decomposition': [{
+                                    'segment': 'test',
+                                    'labels': ['A'],
+                                }],
+                            }),
+                        },
+                    }],
+                    'usage': {
+                        'prompt_tokens': 1,
+                        'completion_tokens': 1,
+                        'total_tokens': 2,
+                    },
+                }
             idx = min(len(calls), len(llm_responses) - 1)
             calls.append({
                 'tools_provided': tools is not None,
@@ -9042,7 +9133,8 @@ class TestChatWorkflowSynthesisPass:
         total_usage so the cost dashboard reflects the true spend."""
         from ai_assistant import views
 
-        # 6 in-loop rounds @ 10 tokens each + 1 synthesis @ 25 tokens.
+        # 1 classifier call @ 1 token each side + 6 in-loop rounds @ 10
+        # tokens each + 1 synthesis @ 25 tokens.
         responses = [
             _mock_llm_response(
                 tool_calls=_purifier_tool_call(f'tc_{i}'), tokens=10,
@@ -9060,12 +9152,13 @@ class TestChatWorkflowSynthesisPass:
 
         usage = result['usage']
         # Each mock response declares prompt_tokens=tokens, completion_tokens=tokens.
-        # 6 loop calls @ tokens=10 → 60 + 60 = 120 prompt + 120 completion = 240 total.
+        # 1 classifier call @ tokens=1 → 1 prompt + 1 completion = 2 total.
+        # 6 loop calls @ tokens=10 → 60 prompt + 60 completion = 120 total.
         # 1 synthesis call @ tokens=25 → 25 prompt + 25 completion = 50 total.
-        # Grand totals: 145 prompt, 145 completion, 290 total.
-        assert usage.get('prompt_tokens') == 6 * 10 + 25
-        assert usage.get('completion_tokens') == 6 * 10 + 25
-        assert usage.get('total_tokens') == 6 * 20 + 50
+        # Grand totals: 86 prompt, 86 completion, 172 total.
+        assert usage.get('prompt_tokens') == 1 + 6 * 10 + 25
+        assert usage.get('completion_tokens') == 1 + 6 * 10 + 25
+        assert usage.get('total_tokens') == 2 + 6 * 20 + 50
 
     def test_synthesis_pass_uses_tools_none(self, monkeypatch):
         """The whole point of the synthesis pass is to disable tools so the
@@ -9764,6 +9857,28 @@ class TestPromptRenderWorkflowWiring:
         from ai_assistant import views
 
         def fake_call_llm(messages, model_key, tools=None):
+            import json as _json
+            first = (messages[0].get('content') if messages else '') or ''
+            if "DeclarAI's intent classifier" in first:
+                payload = (messages[1].get('content') if len(messages) > 1 else '') or ''
+                labels = ['D', 'E'] if 'max_features' in payload else ['A']
+                if 'Explain PSI' in payload:
+                    labels = ['A', 'R']
+                return {
+                    'choices': [{
+                        'message': {
+                            'role': 'assistant',
+                            'content': _json.dumps({
+                                'labels': labels,
+                                'confidence': 'high',
+                                'uncertain': False,
+                                'decomposition': [{'segment': 'test', 'labels': labels}],
+                            }),
+                        },
+                        'finish_reason': 'stop',
+                    }],
+                    'usage': {'total_tokens': 3},
+                }
             return {
                 'choices': [{
                     'message': {'role': 'assistant', 'content': 'ok'},
@@ -9875,7 +9990,8 @@ class TestPromptRenderWorkflowWiring:
         assert attrs.get('declarai.intent.label_names') == (
             'configuration_editing_execution,flow_process_execution'
         )
-        assert attrs.get('declarai.intent.source') == 'deterministic_classifier'
+        assert attrs.get('declarai.intent.source') == 'llm_classifier'
+        assert attrs.get('declarai.intent.confidence') == 'high'
         assert attrs.get('declarai.intent.preclassified') is False
         assert attrs.get('prometa.intent.labels') == 'D,E'
 

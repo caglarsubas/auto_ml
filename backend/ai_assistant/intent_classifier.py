@@ -1,17 +1,20 @@
 """Intent classification for DeclarAI assistant chat turns.
 
-The classifier is intentionally deterministic.  It runs before the chat LLM
-does any tool use or action proposal, and it avoids spending a second LLM call
-just to label traces.  Button-triggered prompts can pass preclassified labels
-from the frontend; those labels are normalized here and used directly.
+Free-text turns are classified by an LLM before the assistant does retrieval,
+tool use, or action proposal.  Regex/pattern matching is intentionally limited
+to a narrow fallback used only when the classifier LLM explicitly reports
+uncertainty or returns an unusable payload.  Button-triggered prompts can pass
+trusted preclassified labels from the frontend; those labels bypass the LLM so
+deterministic "Get AI Support" prompts do not spend extra tokens.
 """
 from __future__ import annotations
 
+import json
 import re
-from typing import Iterable
+from typing import Callable, Iterable
 
 
-CLASSIFIER_VERSION = "intent-v2-rag"
+CLASSIFIER_VERSION = "intent-v3-llm-rag"
 
 INTENT_LABELS = ("A", "B", "C", "D", "E", "R")
 
@@ -34,6 +37,46 @@ INTENT_LABEL_DESCRIPTIONS = {
 }
 
 _LABEL_SET = set(INTENT_LABELS)
+_UNCERTAIN_CONFIDENCES = {"low", "uncertain", "unsure", "not_sure", "unknown"}
+
+
+INTENT_CLASSIFIER_SYSTEM_PROMPT = """You are DeclarAI's intent classifier.
+
+Classify the latest user message BEFORE any assistant retrieval, pipeline tool,
+or executable action runs. Return JSON only; do not answer the user.
+
+Labels are multi-label and canonical:
+- A: general data-science or ML education not tied to current pipeline state.
+- B: platform or default pipeline-flow explanation.
+- C: current pipeline status, current metrics/results/settings/data inspection.
+- D: edit/update configuration, metadata, parameters, feature usage, or data.
+- E: execute/run/start/apply a pipeline process step.
+- R: retrieve knowledge-bank docs for stable platform guidance, terminology,
+     glossary, user manual, technical disclosure, assumptions, methodology, or
+     "how the platform calculates/does X" questions.
+
+Important routing rules:
+- Use R for questions such as "how does this platform calculate VIF?",
+  "what does PSI mean?", "show the manual/glossary", "technical disclosure",
+  or "what assumptions/calculations are made?".
+- Use C when the user asks for live/current loaded-data artifacts, current
+  scores, current selected features, current SFS rows, or current settings.
+- Use both C and R when the user asks for a definition/methodology AND current
+  pipeline values.
+- Use D/E for actionable modification or execution requests.
+- If you are not sure, set uncertain=true, confidence="low", and labels=[].
+
+JSON schema:
+{
+  "labels": ["A", "R"],
+  "confidence": "high" | "medium" | "low",
+  "uncertain": false,
+  "decomposition": [
+    {"segment": "user clause", "labels": ["A", "R"]}
+  ],
+  "reason": "short private routing rationale"
+}
+"""
 
 
 def normalize_intent_labels(labels) -> list[str]:
@@ -41,7 +84,10 @@ def normalize_intent_labels(labels) -> list[str]:
     if labels is None:
         return []
     if isinstance(labels, str):
-        raw = re.split(r"[\s,;|]+", labels.strip())
+        text = labels
+        for sep in (",", ";", "|", "\n", "\t"):
+            text = text.replace(sep, " ")
+        raw = text.split()
     elif isinstance(labels, Iterable):
         raw = list(labels)
     else:
@@ -55,16 +101,36 @@ def normalize_intent_labels(labels) -> list[str]:
     return [label for label in INTENT_LABELS if label in seen]
 
 
-def resolve_intent_classification(user_message: str,
-                                  *,
-                                  section: str = "",
-                                  context: dict | None = None,
-                                  preclassified_labels=None,
-                                  preclassified_source: str | None = None) -> dict:
-    """Resolve intent labels, preferring trusted preclassified button labels.
+def build_intent_classifier_messages(user_message: str,
+                                     *,
+                                     section: str = "",
+                                     context: dict | None = None) -> list[dict]:
+    """Build the compact LLM classifier prompt."""
+    context_keys = []
+    if isinstance(context, dict):
+        context_keys = sorted(str(k) for k in context.keys())[:30]
+    payload = {
+        "user_message": user_message or "",
+        "current_section": section or "general",
+        "has_pipeline_context": bool(context),
+        "context_keys": context_keys,
+    }
+    return [
+        {"role": "system", "content": INTENT_CLASSIFIER_SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
 
-    Returns a small dict suitable for both API responses and span attributes.
-    """
+
+def resolve_intent_classification(
+    user_message: str,
+    *,
+    section: str = "",
+    context: dict | None = None,
+    preclassified_labels=None,
+    preclassified_source: str | None = None,
+    llm_classifier: Callable[[list[dict]], str | dict] | None = None,
+) -> dict:
+    """Resolve intent labels, preferring trusted preclassified button labels."""
     labels = normalize_intent_labels(preclassified_labels)
     if labels:
         source = (preclassified_source or "preclassified").strip() or "preclassified"
@@ -76,219 +142,208 @@ def resolve_intent_classification(user_message: str,
                 "segment": f"preclassified:{source}",
                 "labels": labels,
             }],
+            confidence="high",
+            uncertain=False,
         )
 
     return classify_query_intents(
         user_message,
         section=section,
         context=context or {},
+        llm_classifier=llm_classifier,
     )
 
 
-def classify_query_intents(user_message: str,
-                           *,
-                           section: str = "",
-                           context: dict | None = None) -> dict:
-    """Classify a free-text user message into one or more intent labels.
+def classify_query_intents(
+    user_message: str,
+    *,
+    section: str = "",
+    context: dict | None = None,
+    llm_classifier: Callable[[list[dict]], str | dict] | None = None,
+) -> dict:
+    """Classify a free-text user message using the LLM classifier."""
+    messages = build_intent_classifier_messages(
+        user_message,
+        section=section,
+        context=context or {},
+    )
 
-    The implementation decomposes compound requests into short clauses, labels
-    each clause, then unions the results in canonical order.
-    """
-    text = (user_message or "").strip()
-    segments = _decompose_query(text)
-    section_key = (section or "").strip().lower()
-    has_context = bool(context)
+    if llm_classifier is None:
+        return _build_result(
+            labels=["A"],
+            source="llm_classifier_unavailable",
+            preclassified=False,
+            decomposition=[{"segment": user_message or "", "labels": ["A"]}],
+            confidence="low",
+            uncertain=True,
+            fallback_reason="no_llm_classifier",
+        )
 
-    segment_results = []
-    found = set()
-    for segment in segments:
-        labels = _classify_segment(segment, section=section_key, has_context=has_context)
-        for label in labels:
-            found.add(label)
-        segment_results.append({
-            "segment": segment,
-            "labels": labels,
-        })
+    raw = llm_classifier(messages)
+    parsed = parse_llm_intent_response(raw)
+    if _llm_payload_is_uncertain(parsed):
+        return _definite_pattern_fallback(
+            user_message,
+            reason=parsed.get("fallback_reason") or "llm_uncertain",
+        )
 
-    if not found:
-        found.add("A")
-
-    labels = [label for label in INTENT_LABELS if label in found]
+    labels = normalize_intent_labels(parsed.get("labels"))
+    decomposition = _normalize_decomposition(
+        parsed.get("decomposition") or parsed.get("segments"),
+        default_segment=user_message,
+        default_labels=labels,
+    )
     return _build_result(
         labels=labels,
-        source="deterministic_classifier",
+        source="llm_classifier",
         preclassified=False,
-        decomposition=segment_results,
+        decomposition=decomposition,
+        confidence=_normalize_confidence(parsed.get("confidence")) or "medium",
+        uncertain=False,
+        reason=str(parsed.get("reason") or "")[:500],
     )
+
+
+def parse_llm_intent_response(raw) -> dict:
+    """Parse the classifier LLM response into a dict.
+
+    Accepts either an already-decoded dict or a string containing a JSON object.
+    No regex is used here; fallback regex is reserved for uncertain decisions.
+    """
+    if isinstance(raw, dict):
+        return raw
+    text = str(raw or "").strip()
+    if not text:
+        return {"uncertain": True, "fallback_reason": "empty_llm_response"}
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return {"uncertain": True, "fallback_reason": "missing_json_object"}
+    try:
+        return json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return {"uncertain": True, "fallback_reason": "invalid_json"}
 
 
 def _build_result(*, labels: list[str], source: str,
-                  preclassified: bool, decomposition: list[dict]) -> dict:
+                  preclassified: bool, decomposition: list[dict],
+                  confidence: str | None = None,
+                  uncertain: bool = False,
+                  fallback_reason: str | None = None,
+                  reason: str = "") -> dict:
+    labels = normalize_intent_labels(labels) or ["A"]
     return {
         "labels": labels,
         "label_names": [INTENT_LABEL_NAMES[label] for label in labels],
         "source": source,
         "preclassified": preclassified,
         "classifier_version": CLASSIFIER_VERSION,
+        "confidence": confidence or ("low" if uncertain else "medium"),
+        "uncertain": bool(uncertain),
+        "fallback_reason": fallback_reason or "",
+        "reason": reason,
         "decomposition": decomposition,
     }
 
 
-def _decompose_query(text: str) -> list[str]:
-    if not text:
-        return []
-    parts = re.split(
-        r"(?:[.!?;\n]+|\b(?:and then|then|also|plus|and)\b)",
-        text,
-        flags=re.IGNORECASE,
-    )
-    cleaned = [p.strip(" \t\r\n,:") for p in parts if p and p.strip(" \t\r\n,:")]
-    return cleaned or [text]
+def _normalize_decomposition(raw, *,
+                             default_segment: str,
+                             default_labels: list[str]) -> list[dict]:
+    if not isinstance(raw, list):
+        return [{"segment": default_segment or "", "labels": default_labels}]
+    out = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        labels = normalize_intent_labels(item.get("labels"))
+        if labels:
+            out.append({
+                "segment": str(item.get("segment") or default_segment or ""),
+                "labels": labels,
+            })
+    return out or [{"segment": default_segment or "", "labels": default_labels}]
 
 
-_FLOW_TERMS_RE = re.compile(
-    r"\b("
-    r"pipeline|flow|workflow|step|stage|process|preprocessing|preprocess|"
-    r"purifier|data quality|encoding|modeling|model training|sfs|"
-    r"sequential feature selection|feature selection|hyperparameter|tuning"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_CURRENT_TERMS_RE = re.compile(
-    r"\b("
-    r"current|ongoing|now|status|state|progress|result|results|summary|"
-    r"metric|metrics|score|scores|value|values|row|rows|column|columns|"
-    r"flag|flags|configuration|config|setting|settings|"
-    r"selected feature|selected features|encoding plan|purifier summary|"
-    r"modeling status|sfs status|what happened|how many|which feature|"
-    r"which features|show|review|analyze|interpret|compare"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_FLOW_INFO_RE = re.compile(
-    r"\b("
-    r"how does|how do|how should|how is|explain|what are|what is|"
-    r"default|mechanism|sequence|order|steps|stages|flow|workflow|pipeline"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_CONFIG_EDIT_RE = re.compile(
-    r"\b("
-    r"set|change|update|edit|modify|configure|adjust|switch|select|choose|"
-    r"drop|keep|exclude|include|mark|unmark|rank|rename|create|derive|add|"
-    r"remove|delete|save|clear|tighten|relax|replace|use|implement"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_EXECUTION_RE = re.compile(
-    r"\b("
-    r"run|start|apply|trigger|execute|kick off|launch|resume|continue|stop|"
-    r"rerun|restart|move|go|proceed|advance|next step|previous step|"
-    r"step back|go back|train|preprocess|encode|tune|optimize"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_GENERAL_INFO_RE = re.compile(
-    r"\b("
-    r"what is|what does|explain|teach|define|why|when should|best practice|"
-    r"rule of thumb|data science|machine learning|statistics|statistical|"
-    r"roc-auc|pr-auc|auc|psi|csi|vif|shap|woe|iv|xgboost|lightgbm|catboost"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_RAG_TERMS_RE = re.compile(
-    r"\b("
-    r"rag|knowledge bank|manual|user manual|guide|guideline|documentation|docs|"
-    r"glossary|terminology|term|terms|abbreviation|abbreviations|definition|"
-    r"define|disclosure|assumption|assumptions|calculation|calculations|"
-    r"formula|formulas|methodology|rationale|capabilities|how to use|"
-    r"assistant usage|settings|configurations"
-    r")\b",
-    re.IGNORECASE,
-)
+def _normalize_confidence(value) -> str:
+    confidence = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if confidence in {"high", "medium", "low"}:
+        return confidence
+    if confidence in _UNCERTAIN_CONFIDENCES:
+        return "low"
+    return ""
 
 
-def _classify_segment(segment: str, *, section: str, has_context: bool) -> list[str]:
-    lower = segment.lower()
-    labels = set()
-
-    has_flow_term = bool(_FLOW_TERMS_RE.search(segment))
-    has_current_term = bool(_CURRENT_TERMS_RE.search(segment))
-    has_flow_info = bool(_FLOW_INFO_RE.search(segment)) and has_flow_term
-    has_config_edit = bool(_CONFIG_EDIT_RE.search(segment))
-    has_execution = bool(_EXECUTION_RE.search(segment))
-    has_general_info = bool(_GENERAL_INFO_RE.search(segment))
-    has_direct_rag_term = bool(_RAG_TERMS_RE.search(segment))
-    has_explicit_current_anchor = bool(re.search(
-        r"\b(current|ongoing|now|status|state|progress|result|results|my|this|these|our)\b",
-        lower,
-    ))
-    is_doc_only_query = has_direct_rag_term and not has_explicit_current_anchor
-    section_is_pipeline = bool(section and section != "general")
-
-    if has_execution and (has_flow_term or section_is_pipeline):
-        labels.add("E")
-
-    if has_config_edit and (
-        has_flow_term
-        or section_is_pipeline
-        or re.search(
-            r"\b(config|setting|parameter|threshold|feature|column|note|"
-            r"ranking|algorithm|max_features|min_features|top_k|n_jobs)\b",
-            lower,
-        )
-    ):
-        labels.add("D")
-
-    is_command = has_config_edit or has_execution
-    if (
-        not is_command
-        and not is_doc_only_query
-        and (
-            has_current_term
-            or (section_is_pipeline and (has_context or has_flow_term))
-            or (re.search(r"\b(my|this|these|our)\b", lower) and has_flow_term)
-        )
-    ):
-        labels.add("C")
-
-    if has_flow_info and not labels.intersection({"C", "D", "E"}):
-        labels.add("B")
-
-    if has_general_info and not labels.intersection({"B", "C", "D", "E"}):
-        labels.add("A")
-
-    if _should_call_knowledge_bank(
-        has_direct_rag_term=has_direct_rag_term,
-        has_general_info=has_general_info,
-        has_flow_info=has_flow_info,
-        has_current_term=has_current_term,
-        has_config_edit=has_config_edit,
-        has_execution=has_execution,
-    ):
-        labels.add("R")
-
-    return [label for label in INTENT_LABELS if label in labels]
-
-
-def _should_call_knowledge_bank(*,
-                                has_direct_rag_term: bool,
-                                has_general_info: bool,
-                                has_flow_info: bool,
-                                has_current_term: bool,
-                                has_config_edit: bool,
-                                has_execution: bool) -> bool:
-    """Return True when stable docs should be retrieved for this segment."""
-    if has_config_edit or has_execution:
-        return False
-    if has_direct_rag_term:
+def _llm_payload_is_uncertain(payload: dict) -> bool:
+    if not isinstance(payload, dict):
         return True
-    if has_current_term:
-        return False
-    return has_general_info or has_flow_info
+    confidence = str(payload.get("confidence") or "").strip().lower()
+    labels = normalize_intent_labels(payload.get("labels"))
+    return (
+        bool(payload.get("uncertain"))
+        or confidence in _UNCERTAIN_CONFIDENCES
+        or not labels
+    )
+
+
+_DEFINITE_EXECUTION_RE = re.compile(
+    r"\b(start|run|apply|execute|trigger|kick off|train)\b.*\b("
+    r"sfs|modeling|model|encoding|preprocessing|purifier|hyperparameter|tuning"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_DEFINITE_EDIT_RE = re.compile(
+    r"\b(set|change|update|edit|configure|adjust|drop|exclude|include|select|choose)\b"
+    r".*\b(max_features|min_features|top_k|n_jobs|feature|column|algorithm|"
+    r"setting|settings|config|threshold|model_usage|feature_usage)\b",
+    re.IGNORECASE,
+)
+
+_DEFINITE_RAG_RE = re.compile(
+    r"\b(how (do|does|is)|what (is|does)|define|explain)\b.*\b("
+    r"calculate|calculated|calculating|calculation|formula|methodology|meaning|"
+    r"mean|vif|psi|csi|shap|auc|pr-auc|roc-auc|manual|glossary|knowledge bank|"
+    r"documentation|technical disclosure|platform"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_DEFINITE_CURRENT_RE = re.compile(
+    r"\b(current|status|result|results|my|this|these|our|show|analyze|review)\b"
+    r".*\b(sfs|selected features|shap|vif|psi|metric|metrics|score|scores|"
+    r"data quality|encoding plan)\b",
+    re.IGNORECASE,
+)
+
+_DEFINITE_PLATFORM_FLOW_RE = re.compile(
+    r"\b(platform|pipeline|flow|workflow|step|stage|preprocessing|encoding|"
+    r"modeling|sfs|hyperparameter)\b",
+    re.IGNORECASE,
+)
+
+
+def _definite_pattern_fallback(user_message: str, *, reason: str) -> dict:
+    """Very narrow fallback used only after LLM uncertainty/unusable output."""
+    text = user_message or ""
+    labels = set()
+    if _DEFINITE_EDIT_RE.search(text):
+        labels.add("D")
+    if _DEFINITE_EXECUTION_RE.search(text):
+        labels.add("E")
+    if _DEFINITE_CURRENT_RE.search(text):
+        labels.add("C")
+    if _DEFINITE_RAG_RE.search(text):
+        labels.add("R")
+        if not labels.intersection({"A", "B", "C"}):
+            labels.add("B" if _DEFINITE_PLATFORM_FLOW_RE.search(text) else "A")
+
+    ordered = [label for label in INTENT_LABELS if label in labels] or ["A"]
+    return _build_result(
+        labels=ordered,
+        source="definite_regex_fallback",
+        preclassified=False,
+        decomposition=[{"segment": text, "labels": ordered}],
+        confidence="low",
+        uncertain=True,
+        fallback_reason=reason,
+    )

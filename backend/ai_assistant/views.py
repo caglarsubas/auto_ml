@@ -1379,6 +1379,9 @@ def _stamp_intent_attrs(intent: dict) -> None:
     source = intent.get('source') or 'unknown'
     version = intent.get('classifier_version') or 'unknown'
     preclassified = bool(intent.get('preclassified'))
+    confidence = intent.get('confidence') or ''
+    uncertain = bool(intent.get('uncertain'))
+    fallback_reason = intent.get('fallback_reason') or ''
 
     # App-specific attributes for DeclarAI dashboards.
     set_span_attr('declarai.intent.labels', labels_csv)
@@ -1387,12 +1390,18 @@ def _stamp_intent_attrs(intent: dict) -> None:
     set_span_attr('declarai.intent.source', source)
     set_span_attr('declarai.intent.preclassified', preclassified)
     set_span_attr('declarai.intent.classifier_version', version)
+    set_span_attr('declarai.intent.confidence', confidence)
+    set_span_attr('declarai.intent.uncertain', uncertain)
+    if fallback_reason:
+        set_span_attr('declarai.intent.fallback_reason', fallback_reason)
 
     # Candidate canonical attributes for prometa-platform to index.
     set_span_attr('prometa.intent.labels', labels_csv)
     set_span_attr('prometa.intent.label_names', names_csv)
     set_span_attr('prometa.intent.source', source)
     set_span_attr('prometa.intent.preclassified', preclassified)
+    set_span_attr('prometa.intent.confidence', confidence)
+    set_span_attr('prometa.intent.uncertain', uncertain)
 
 
 @workflow(name="declarai-chat")
@@ -1408,17 +1417,30 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     """
     model_key = model or DEFAULT_MODEL
     model_cfg = get_model_config(model_key)
+    total_usage = {}
+
+    def _classify_intent_with_llm(messages: list):
+        result = _call_llm(messages, model_key, tools=None)
+        _merge_usage(total_usage, result.get('usage', {}))
+        choice = (result.get('choices') or [{}])[0]
+        msg = choice.get('message') or {}
+        return msg.get('content', '') or ''
+
+    # Stamp coarse request metadata before the classifier LLM call so that
+    # its child span still inherits the workflow-level routing context.
+    set_span_attr('declarai.section', section or 'general')
+    set_span_attr('declarai.model', model_key)
+
     intent = resolve_intent_classification(
         user_message,
         section=section or '',
         context=context or {},
         preclassified_labels=intent_labels,
         preclassified_source=intent_source,
+        llm_classifier=_classify_intent_with_llm,
     )
 
     # ── Workflow-level tracing attributes ──
-    set_span_attr('declarai.section', section or 'general')
-    set_span_attr('declarai.model', model_key)
     _stamp_intent_attrs(intent)
     session_id = None
     if file_id is not None:
@@ -1594,7 +1616,6 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     # Tool-calling loop (only for models that support function calling)
     tools = PIPELINE_TOOLS if (use_tools and model_cfg.get('supports_tools')) else None
-    total_usage = {}
     msg_obj = {}
 
     for _round in range(_MAX_TOOL_ROUNDS + 1):
