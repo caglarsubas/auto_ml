@@ -20,6 +20,8 @@ from ai_assistant.tool_definitions import PIPELINE_TOOLS
 READ_TOOL_PREFIX = "declarai."
 PREPARE_ACTION_PREFIX = "declarai.prepare."
 DIRECT_ACTION_PREFIX = "declarai.action."
+CATALOG_TOOL_NAME = "declarai.get_mcp_tool_catalog"
+TOOL_METADATA_VERSION = "declarai-mcp-tools-v1"
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,9 @@ class ReadToolSpec:
     title: str
     description: str
     input_schema: dict[str, Any]
+    scope: str = auth.SCOPE_PIPELINE_READ
+    risk: str = "low"
+    destructive: bool = False
 
 
 @dataclass(frozen=True)
@@ -180,6 +185,123 @@ def get_action_spec(action_type: str) -> ActionSpec | None:
     return None
 
 
+def build_tool_meta(
+    *,
+    category: str,
+    required_scopes: list[str],
+    risk: str,
+    side_effects: bool,
+    destructive: bool,
+    idempotent: bool,
+    approval_required: bool,
+    action_type: str | None = None,
+    target_action_risk: str | None = None,
+    guardrails_required: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return namespaced metadata for MCP hosts that consume Tool._meta."""
+    meta: dict[str, Any] = {
+        "declarai.tool_metadata_version": TOOL_METADATA_VERSION,
+        "declarai.category": category,
+        "declarai.required_scopes": required_scopes,
+        "declarai.risk": risk,
+        "declarai.side_effects": side_effects,
+        "declarai.destructive": destructive,
+        "declarai.idempotent": idempotent,
+        "declarai.approval_required": approval_required,
+        "declarai.guardrails_required": guardrails_required or _guardrails_for(
+            risk=risk,
+            side_effects=side_effects,
+            destructive=destructive,
+        ),
+    }
+    if action_type:
+        meta["declarai.action_type"] = action_type
+    if target_action_risk:
+        meta["declarai.target_action_risk"] = target_action_risk
+    return meta
+
+
+def build_tool_catalog(*, include_direct_actions: bool = False) -> dict[str, Any]:
+    """Return Prometa-friendly tool governance metadata.
+
+    MCP ``tools/list`` exposes annotations and optional ``_meta``. Some hosts
+    still ignore custom metadata, so DeclarAI also exposes this explicit catalog
+    for scope binding and deployment review.
+    """
+    tools: list[dict[str, Any]] = []
+    tools.append(
+        _catalog_entry(
+            name=CATALOG_TOOL_NAME,
+            title="Get MCP tool catalog",
+            category="catalog",
+            required_scopes=[auth.SCOPE_PIPELINE_READ],
+            risk="low",
+            read_only=True,
+            side_effects=False,
+            destructive=False,
+            idempotent=True,
+            approval_required=False,
+        )
+    )
+    for spec in get_read_tool_specs():
+        tools.append(
+            _catalog_entry(
+                name=spec.mcp_name,
+                title=spec.title,
+                category="read",
+                required_scopes=[spec.scope],
+                risk=spec.risk,
+                read_only=True,
+                side_effects=False,
+                destructive=spec.destructive,
+                idempotent=True,
+                approval_required=False,
+            )
+        )
+    for spec in get_action_specs():
+        tools.append(
+            _catalog_entry(
+                name=spec.prepare_name,
+                title=spec.title,
+                category="prepare_action",
+                required_scopes=[auth.SCOPE_ACTION_PREPARE],
+                risk="low",
+                read_only=True,
+                side_effects=False,
+                destructive=False,
+                idempotent=True,
+                approval_required=False,
+                action_type=spec.action_type,
+                target_action_risk=spec.risk,
+                guardrails_required=["review_action_block"],
+            )
+        )
+        if include_direct_actions:
+            tools.append(
+                _catalog_entry(
+                    name=spec.direct_name,
+                    title=spec.title.replace("Prepare", "Execute", 1),
+                    category="direct_action",
+                    required_scopes=[spec.scope],
+                    risk=spec.risk,
+                    read_only=False,
+                    side_effects=True,
+                    destructive=spec.destructive,
+                    idempotent=False,
+                    approval_required=auth.approval_required(),
+                    action_type=spec.action_type,
+                )
+            )
+    return {
+        "server": "DeclarAI Auto-ML",
+        "catalog_version": TOOL_METADATA_VERSION,
+        "default_scopes": sorted(auth.DEFAULT_SCOPES),
+        "direct_actions_registered": include_direct_actions,
+        "scope_env": "DECLARAI_MCP_SCOPES",
+        "tools": tools,
+    }
+
+
 def _schema_with_file_id(parameters: dict[str, Any]) -> dict[str, Any]:
     """Copy an OpenAI parameters schema and make ``file_id`` explicit."""
     schema = copy.deepcopy(parameters) if isinstance(parameters, dict) else {}
@@ -200,3 +322,53 @@ def _schema_with_file_id(parameters: dict[str, Any]) -> dict[str, Any]:
     schema["required"] = required
     schema.setdefault("additionalProperties", False)
     return schema
+
+
+def _catalog_entry(
+    *,
+    name: str,
+    title: str,
+    category: str,
+    required_scopes: list[str],
+    risk: str,
+    read_only: bool,
+    side_effects: bool,
+    destructive: bool,
+    idempotent: bool,
+    approval_required: bool,
+    action_type: str | None = None,
+    target_action_risk: str | None = None,
+    guardrails_required: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "title": title,
+        "category": category,
+        "required_scopes": required_scopes,
+        "risk": risk,
+        "read_only": read_only,
+        "side_effects": side_effects,
+        "destructive": destructive,
+        "idempotent": idempotent,
+        "approval_required": approval_required,
+        "action_type": action_type,
+        "target_action_risk": target_action_risk,
+        "guardrails_required": guardrails_required
+        if guardrails_required is not None
+        else _guardrails_for(
+            risk=risk,
+            side_effects=side_effects,
+            destructive=destructive,
+        ),
+    }
+
+
+def _guardrails_for(*, risk: str, side_effects: bool, destructive: bool) -> list[str]:
+    guardrails: list[str] = []
+    if side_effects:
+        guardrails.append("human_approval")
+    if risk in {"high", "critical"}:
+        guardrails.append("risk_gate")
+    if destructive:
+        guardrails.append("dataset_backup")
+    return guardrails
