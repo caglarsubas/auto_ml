@@ -645,3 +645,55 @@ Ship the MCP integration in two phases:
 2. Governed action MCP server: start with "prepare action" tools, then selectively enable direct execution for low-risk actions (`update_notes`, maybe `update_purifier_selection`) before high-risk compute and dataset mutation actions.
 
 This preserves the platform's current safety model while making the same tool surface portable to any MCP-compatible agent host.
+
+## Implemented Server
+
+The repository includes a FastMCP-based server under:
+
+```text
+backend/ai_assistant/mcp_server/
+```
+
+Run it from the backend directory with stdio transport:
+
+```bash
+python manage.py run_mcp_server
+```
+
+Run it as a local Streamable HTTP server:
+
+```bash
+python manage.py run_mcp_server --transport streamable-http --host 127.0.0.1 --port 8000
+```
+
+MCP Inspector can connect to:
+
+```text
+http://127.0.0.1:8000/mcp
+```
+
+The server registers:
+
+- `declarai.get_*` read tools for the existing assistant inspection surface.
+- `declarai.prepare.*` action-preparation tools that return reviewable DeclarAI action blocks without mutating state.
+- `declarai.action.*` direct-execution tools only when explicitly enabled.
+
+Default scopes:
+
+```text
+declarai.pipeline.read,declarai.action.prepare
+```
+
+Enable direct side-effecting action tools only for a controlled deployment:
+
+```bash
+export DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true
+export DECLARAI_MCP_SCOPES=declarai.pipeline.read,declarai.action.prepare,declarai.notes.write,declarai.metadata.write,declarai.config.write,declarai.dataset.write,declarai.pipeline.run
+python manage.py run_mcp_server --transport streamable-http --direct-actions
+```
+
+Direct action calls require `approval_id` by default. For trusted local-only automation, this can be disabled with:
+
+```bash
+export DECLARAI_MCP_REQUIRE_APPROVAL=false
+```
