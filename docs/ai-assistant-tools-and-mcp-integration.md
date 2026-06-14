@@ -697,3 +697,123 @@ Direct action calls require `approval_id` by default. For trusted local-only aut
 ```bash
 export DECLARAI_MCP_REQUIRE_APPROVAL=false
 ```
+
+### Prometa Binding Contract
+
+Current recommended shape for the POC is Prometa on-prem or same-network
+Prometa connected to an internal DeclarAI Streamable HTTP endpoint:
+
+```bash
+python manage.py run_mcp_server --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+For Prometa SaaS, put this endpoint behind public HTTPS with MCP-aware OAuth or
+an equivalent resource-server gateway before registering it in Prometa. The
+Django management command is the MCP application surface; production internet
+exposure should add TLS termination, Origin validation, token audience checks,
+and per-agent scopes at the ingress layer.
+
+The server publishes governance metadata in two ways:
+
+- every MCP `Tool` has `_meta` keys such as `declarai.required_scopes`,
+  `declarai.risk`, `declarai.side_effects`, `declarai.destructive`,
+  `declarai.approval_required`, and `declarai.guardrails_required`;
+- `declarai.get_mcp_tool_catalog` returns the same metadata as a structured
+  catalog for hosts that do not consume custom `Tool._meta`.
+
+Read-only tools:
+
+```text
+declarai.get_mcp_tool_catalog
+declarai.get_split_validation
+declarai.get_dq_summary
+declarai.get_feature_stats
+declarai.get_vif_decomposition
+declarai.get_encoding_plan
+declarai.get_selected_features
+declarai.get_shap_details
+declarai.get_sfs_results
+declarai.get_cv_results
+declarai.get_pipeline_notes
+declarai.get_pipeline_config
+declarai.get_purifier_options
+declarai.get_data_dictionary
+declarai.invoke_skill
+declarai.get_skill_file
+```
+
+Required scope for all read-only tools:
+
+```text
+declarai.pipeline.read
+```
+
+Prepare-action tools are review-only. They return DeclarAI action blocks but do
+not mutate data, metadata, config, notes, or pipeline state. They are annotated
+as read-only, non-destructive, and idempotent. Required scope for every
+`declarai.prepare.*` tool:
+
+```text
+declarai.action.prepare
+```
+
+Direct action tools are only registered when both are true:
+
+```bash
+export DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true
+python manage.py run_mcp_server --direct-actions
+```
+
+Direct action scope map:
+
+| MCP tool | Scope | Risk | Destructive | Mandatory guardrails |
+| --- | --- | --- | --- | --- |
+| `declarai.action.execute_code` | `declarai.dataset.write` | high | yes | human approval, risk gate, dataset backup |
+| `declarai.action.update_metadata` | `declarai.metadata.write` | medium | no | human approval |
+| `declarai.action.update_config` | `declarai.config.write` | medium | no | human approval |
+| `declarai.action.set_ordinal_ranking` | `declarai.metadata.write` | medium | no | human approval |
+| `declarai.action.start_sfs` | `declarai.pipeline.run` | high | no | human approval, risk gate |
+| `declarai.action.start_data_purifier` | `declarai.pipeline.run` | high | no | human approval, risk gate |
+| `declarai.action.update_purifier_selection` | `declarai.config.write` | medium | no | human approval |
+| `declarai.action.apply_encoding` | `declarai.pipeline.run` | high | no | human approval, risk gate |
+| `declarai.action.start_modeling` | `declarai.pipeline.run` | high | no | human approval, risk gate |
+| `declarai.action.start_hyperparameter` | `declarai.pipeline.run` | high | no | human approval, risk gate |
+| `declarai.action.update_notes` | `declarai.notes.write` | low | no | human approval |
+
+Annotation contract:
+
+- read tools: `readOnlyHint=true`, `destructiveHint=false`,
+  `idempotentHint=true`;
+- prepare tools: `readOnlyHint=true`, `destructiveHint=false`,
+  `idempotentHint=true`;
+- direct action tools: `readOnlyHint=false`, `idempotentHint=false`, and
+  `destructiveHint=true` only for `declarai.action.execute_code`.
+
+MCP observability spans:
+
+- `declarai-mcp-catalog` for governance catalog calls;
+- `declarai-mcp-read-tool` for read tool calls;
+- `declarai-mcp-prepare-action` for review-only action preparation;
+- `declarai-mcp-direct-action` for side-effecting action execution;
+
+The emitted attributes include `declarai.mcp.operation`,
+`declarai.mcp.tool_name`, `declarai.mcp.file_id`, `declarai.mcp.action_type`,
+`declarai.mcp.required_scopes`, `declarai.mcp.risk`,
+`declarai.mcp.side_effects`, `declarai.mcp.destructive`,
+`declarai.mcp.approval_id`, `declarai.mcp.ok`,
+`declarai.mcp.result_chars`, and elapsed timing attributes.
+
+Optional deployment labels can be supplied with:
+
+```bash
+export DECLARAI_MCP_CLIENT_ID=prometa-builder
+export DECLARAI_MCP_SESSION_ID=prometa-sync-session
+export DECLARAI_MCP_TRANSPORT=streamable-http
+```
+
+Runtime boundary as of this implementation: DeclarAI hosts the MCP tool
+surface and can execute direct action tools when explicitly enabled. Prometa can
+discover, govern, and bundle agents from that surface. The production
+`tools/call` executor loop should be chosen per deployment: either Prometa hosts
+the agent executor and calls DeclarAI MCP tools, or DeclarAI runs the signed
+Prometa bundle next to the MCP host.
