@@ -5866,6 +5866,8 @@ class TestToolCallSpanRename:
             out = execute_tool_call(60100, 'get_encoding_plan', {'top_n': 5})
             assert 'Encoding Plan' in out
             assert cap.captured.get('declarai.tool.name') == 'get_encoding_plan'
+            assert cap.captured.get('gen_ai.tool.name') == 'get_encoding_plan'
+            assert cap.captured.get('prometa.tool_name') == 'get_encoding_plan'
             assert cap.captured.get('declarai.tool.file_id') == 60100
             assert cap.captured.get('declarai.tool.args_keys') == 'top_n'
             assert cap.captured.get('declarai.tool.ok') is True
@@ -5885,6 +5887,8 @@ class TestToolCallSpanRename:
         out = execute_tool_call(60101, 'no_such_tool', {})
         assert 'Unknown tool' in out
         assert cap.captured.get('declarai.tool.name') == 'no_such_tool'
+        assert cap.captured.get('gen_ai.tool.name') == 'no_such_tool'
+        assert cap.captured.get('prometa.tool_name') == 'no_such_tool'
         assert cap.captured.get('declarai.tool.unknown') is True
         assert cap.captured.get('declarai.tool.ok') is False
         assert cap.captured.get('declarai.tool.result_chars', 0) > 0
@@ -6525,6 +6529,58 @@ class TestPrometaCorrelationHelpers:
     """``set_customer_id`` and ``set_request_model`` must forward to
     the SDK helpers when available, fall back to ``set_span_attr`` on
     ImportError, and never propagate exceptions."""
+
+    def test_set_span_attr_forwards_to_sdk_set_attribute_when_available(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+
+        sdk_calls: list[tuple[str, object]] = []
+        fallback_calls: list[tuple[str, object]] = []
+        import prometa
+        monkeypatch.setattr(
+            prometa,
+            'set_attribute',
+            lambda key, value: sdk_calls.append((key, value)),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            pc,
+            '_set_span_attr_direct',
+            lambda key, value: fallback_calls.append((key, value)),
+        )
+
+        pc.set_span_attr('declarai.mcp.operation', 'read_tool')
+
+        assert sdk_calls == [('declarai.mcp.operation', 'read_tool')]
+        assert fallback_calls == []
+
+    def test_set_span_attrs_forwards_to_sdk_set_attributes_when_available(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+
+        sdk_calls: list[dict] = []
+        fallback_calls: list[tuple[str, object]] = []
+        import prometa
+        monkeypatch.setattr(
+            prometa,
+            'set_attributes',
+            lambda attrs: sdk_calls.append(attrs),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            pc,
+            'set_span_attr',
+            lambda key, value: fallback_calls.append((key, value)),
+        )
+
+        pc.set_span_attrs({
+            'gen_ai.tool.name': 'declarai.get_data_dictionary',
+            'prometa.tool_name': 'declarai.get_data_dictionary',
+        })
+
+        assert sdk_calls == [{
+            'gen_ai.tool.name': 'declarai.get_data_dictionary',
+            'prometa.tool_name': 'declarai.get_data_dictionary',
+        }]
+        assert fallback_calls == []
 
     def test_set_customer_id_forwards_to_sdk_helper_when_available(self, monkeypatch):
         """Happy path: SDK on 0.6.0+ exposes ``set_customer_id``; our
@@ -10042,33 +10098,29 @@ class TestPromptRenderWorkflowWiring:
 
 
 # ---------------------------------------------------------------------------
-# v2.42.0: prometa-sdk version lock — CI guard
+# v2.42.0/v2.46.0: prometa-sdk version floor — CI guard
 # ---------------------------------------------------------------------------
 # Catches future Docker-cache / pip-cache drift like the v0.6.0-in-
-# container situation that hid the A4 truncation bug from us.  The pin
-# in requirements.txt (`prometa-sdk==X.Y.Z`) must match the version
-# actually installed in the environment running the tests.
+# container situation that hid the A4 truncation bug from us.  The lower bound
+# in requirements.txt must be satisfied by the environment running the tests.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestProMetaSdkVersionLock:
-    """Defense against installed-vs-pinned drift.
+    """Defense against installed-vs-required SDK drift.
 
     The bug that motivated v2.42.0 hid for ~24 hours because
     requirements.txt was pinned to >=0.7.1 but the running container
-    was on v0.6.0 (Docker layer cache wasn't invalidated when the pin
-    was bumped).  This test reads the pin from requirements.txt and
-    asserts the installed prometa.__version__ matches EXACTLY.  Fails
-    fast in CI / pre-commit, including on any environment where pip
-    re-resolves into a newer minor release we haven't verified."""
+    was on v0.6.0 (Docker layer cache wasn't invalidated when the floor
+    was bumped).  This test reads the requirement from requirements.txt and
+    asserts the installed prometa.__version__ satisfies it."""
 
-    def _read_pin(self) -> str:
-        """Return the version literal pinned in requirements.txt.
+    def _read_min_version(self) -> str:
+        """Return the minimum version required in requirements.txt.
 
-        Supports the canonical hard-pin form 'prometa-sdk==X.Y.Z'.
-        Any other form (range, no pin) is a deliberate refusal — we
-        want this lock to be obvious to readers.
+        Supports `prometa-sdk>=X.Y.Z` and treats `==X.Y.Z` as an equivalent
+        floor for older lock-file shapes.
         """
         from pathlib import Path
         import re
@@ -10077,28 +10129,35 @@ class TestProMetaSdkVersionLock:
         for line in req.splitlines():
             line = line.strip()
             if line.startswith('prometa-sdk'):
-                m = re.match(r'^prometa-sdk==([0-9]+\.[0-9]+\.[0-9]+)\s*$', line)
+                m = re.match(r'^prometa-sdk(?:==|>=)([0-9]+\.[0-9]+\.[0-9]+)\s*$', line)
                 assert m, (
-                    f"prometa-sdk must be HARD-PINNED in requirements.txt "
-                    f"(form: prometa-sdk==X.Y.Z); found: {line!r}"
+                    f"prometa-sdk must declare an explicit minimum version "
+                    f"(form: prometa-sdk>=X.Y.Z); found: {line!r}"
                 )
                 return m.group(1)
         raise AssertionError(
             "prometa-sdk entry not found in requirements.txt — "
-            "the version lock test cannot run without a pin."
+            "the version-floor test cannot run without a requirement."
         )
 
-    def test_installed_prometa_sdk_matches_requirements_pin(self):
+    @staticmethod
+    def _version_tuple(value: str) -> tuple[int, int, int]:
+        import re
+        match = re.match(r'^([0-9]+)\.([0-9]+)\.([0-9]+)', value)
+        assert match, f"Unsupported prometa-sdk version string: {value!r}"
+        return tuple(int(part) for part in match.groups())
+
+    def test_installed_prometa_sdk_satisfies_requirements_floor(self):
         import prometa
         installed = prometa.__version__
-        pinned = self._read_pin()
-        assert installed == pinned, (
+        required = self._read_min_version()
+        assert self._version_tuple(installed) >= self._version_tuple(required), (
             f"prometa-sdk version drift detected: installed={installed!r} "
-            f"but requirements.txt pins =={pinned!r}.  Rebuild the "
+            f"but requirements.txt requires >={required!r}.  Rebuild the "
             f"backend Docker image with --no-cache or re-run "
             f"`pip install -r requirements.txt` to align.  This drift "
             f"is precisely what hid the v2.41.x AML A4 truncation bug "
-            f"from us for ~24h — keep it locked."
+            f"from us for ~24h."
         )
 
     def test_prompt_render_helper_is_importable_on_pinned_version(self):

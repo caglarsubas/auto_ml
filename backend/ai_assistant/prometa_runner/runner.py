@@ -44,9 +44,14 @@ class PrometaOnPremBundleRunner:
             raise BundlePolicyError("Prometa bundle content must be an object.")
         self.content: Mapping[str, Any] = content
         preflight_bundle(self.content)
-        self.agent_id = str(self.content["manifest"]["agentId"])
-        solution_id = self.content["manifest"].get("solutionId")
+        manifest = self.content["manifest"]
+        self.agent_id = str(manifest["agentId"])
+        agent_name = manifest.get("name")
+        solution_id = manifest.get("solutionId")
+        solution_name = manifest.get("solutionName")
+        self.agent_name = agent_name if isinstance(agent_name, str) else None
         self.solution_id = solution_id if isinstance(solution_id, str) else None
+        self.solution_name = solution_name if isinstance(solution_name, str) else None
         self._mcp_server = mcp_server
         self._owns_mcp_server = mcp_server is None
         self._direct_actions_registered = False
@@ -105,6 +110,8 @@ class PrometaOnPremBundleRunner:
         return {
             "agentId": self.agent_id,
             "solutionId": self.solution_id,
+            "solutionName": self.solution_name,
+            "agentName": self.agent_name,
             "manifest": self.content.get("manifest"),
             "signed": bool(self.envelope.get("signed")),
             "algorithm": self.envelope.get("algorithm"),
@@ -155,16 +162,31 @@ class PrometaOnPremBundleRunner:
         call_args: dict[str, Any],
     ) -> dict[str, Any]:
         with span_timer("declarai.prometa.bundle"):
-            stamp_bundle_identity(self.agent_id, self.solution_id)
+            stamp_bundle_identity(
+                self.agent_id,
+                self.solution_id,
+                self.solution_name,
+                self.agent_name,
+            )
             set_span_attr("declarai.prometa.bundle.operation", operation)
-            token = set_current_bundle_identity(self.agent_id, self.solution_id)
+            token = set_current_bundle_identity(
+                self.agent_id,
+                self.solution_id,
+                self.solution_name,
+                self.agent_name,
+            )
             try:
                 mcp_server = self._get_mcp_server(operation)
                 content_items, structured = await mcp_server.call_tool(
                     operation,
                     call_args,
                 )
-                stamp_bundle_identity(self.agent_id, self.solution_id)
+                stamp_bundle_identity(
+                    self.agent_id,
+                    self.solution_id,
+                    self.solution_name,
+                    self.agent_name,
+                )
                 set_span_attr("declarai.prometa.bundle.ok", True)
                 return {
                     "operation": operation,

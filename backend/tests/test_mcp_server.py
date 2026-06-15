@@ -164,6 +164,31 @@ class TestMcpActionHelpers:
         assert stamped[0]["required_scopes"] == ["declarai.action.prepare"]
         assert stamped[-1]["ok"] is True
 
+    def test_mcp_context_stamps_generic_tool_classifier_keys(self, monkeypatch):
+        from ai_assistant.mcp_server import observability
+
+        captured = {}
+        monkeypatch.setattr(
+            observability,
+            "set_span_attrs",
+            lambda attrs: captured.update(attrs),
+        )
+        monkeypatch.setattr(
+            observability,
+            "set_span_attr",
+            lambda key, value: captured.__setitem__(key, value),
+        )
+
+        observability.stamp_mcp_context(
+            operation="read_tool",
+            tool_name="declarai.get_data_dictionary",
+        )
+
+        assert captured["declarai.mcp.tool_name"] == "declarai.get_data_dictionary"
+        assert captured["mcp.tool.name"] == "declarai.get_data_dictionary"
+        assert captured["gen_ai.tool.name"] == "declarai.get_data_dictionary"
+        assert captured["prometa.tool_name"] == "declarai.get_data_dictionary"
+
 
 @pytest.mark.unit
 class TestMcpServer:

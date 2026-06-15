@@ -282,8 +282,8 @@ def prompt_render(*, template_version: str = None,
     try:
         from prometa import prompt_render as _real_prompt_render
     except (ImportError, AttributeError):
-        # v0.6.x and earlier — symbol absent.  In production we hard-pin
-        # prometa-sdk==0.7.1 (see requirements.txt) so this branch only
+        # v0.6.x and earlier — symbol absent.  In production we require
+        # prometa-sdk>=0.10.1 (see requirements.txt) so this branch only
         # fires in legacy/test environments.
         yield _NoOpPromptRenderHandle()
         return
@@ -356,8 +356,8 @@ def child_only_tool(name: str = None, **kwargs):
     return decorator
 
 
-def set_span_attr(key: str, value) -> None:
-    """Set an attribute on the current Prometa span (no-op if SDK unavailable)."""
+def _set_span_attr_direct(key: str, value) -> None:
+    """Fallback for SDKs that predate the public set_attribute helper."""
     try:
         from prometa._context import current_span
         span = current_span()
@@ -365,6 +365,37 @@ def set_span_attr(key: str, value) -> None:
             span.attributes[key] = value
     except Exception:
         pass
+
+
+def set_span_attr(key: str, value) -> None:
+    """Set an attribute on the current Prometa span.
+
+    SDK 0.10.1 exposes the public ``set_attribute`` helper used for
+    producer-owned metadata such as ``declarai.mcp.*``.  Keep the direct span
+    fallback so older local/test SDKs still degrade safely.
+    """
+    try:
+        from prometa import set_attribute as _sdk_set_attribute
+        _sdk_set_attribute(key, value)
+    except (ImportError, AttributeError):
+        _set_span_attr_direct(key, value)
+    except Exception:
+        _set_span_attr_direct(key, value)
+
+
+def set_span_attrs(attributes: dict) -> None:
+    """Set several attributes on the current Prometa span."""
+    if not attributes:
+        return
+    try:
+        from prometa import set_attributes as _sdk_set_attributes
+        _sdk_set_attributes(dict(attributes))
+    except (ImportError, AttributeError):
+        for key, value in attributes.items():
+            set_span_attr(key, value)
+    except Exception:
+        for key, value in attributes.items():
+            _set_span_attr_direct(key, value)
 
 
 def stamp_elapsed(prefix: str, t0_ns: int) -> int:

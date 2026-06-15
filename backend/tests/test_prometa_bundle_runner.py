@@ -36,6 +36,7 @@ def _content(
             "status": "published",
             "agentId": agent_id,
             "solutionId": "sol-1",
+            "solutionName": "DeclarAI Solution",
             "deployable": deployable,
         },
         "systemPrompt": "# Auto-ML Copilot",
@@ -264,7 +265,39 @@ class TestPrometaBundleRunner:
 
         assert result["structured"] == {"status": "prepared"}
         assert captured["operation"] == "declarai.prepare.update_notes"
-        assert captured["identity"] == ("agt-prometa-1", "sol-1")
+        assert captured["identity"] == (
+            "agt-prometa-1",
+            "sol-1",
+            "DeclarAI Solution",
+            "Auto-ML Copilot",
+        )
+
+    def test_bundle_identity_stamps_prometa_agent_id_and_solution_name(self, monkeypatch):
+        from ai_assistant.prometa_runner import telemetry
+
+        captured = {}
+        monkeypatch.setattr(
+            telemetry,
+            "set_span_attrs",
+            lambda attrs: captured.update(attrs),
+        )
+
+        telemetry.stamp_bundle_identity(
+            "agt-prometa-1",
+            "sol-1",
+            "DeclarAI Solution",
+            "Auto-ML Copilot",
+        )
+
+        assert captured["prometa.agent_id"] == "agt-prometa-1"
+        assert captured["gen_ai.agent.id"] == "agt-prometa-1"
+        assert captured["prometa.solution_id"] == "DeclarAI Solution"
+        assert captured["gen_ai.agent.name"] == "Auto-ML Copilot"
+        assert captured["declarai.prometa.bundle.solution_id"] == "sol-1"
+        assert (
+            captured["declarai.prometa.bundle.solution_name"]
+            == "DeclarAI Solution"
+        )
 
     def test_runner_injects_approval_id_for_direct_action(self):
         from ai_assistant.prometa_runner.runner import PrometaOnPremBundleRunner

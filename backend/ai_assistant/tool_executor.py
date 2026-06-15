@@ -984,7 +984,9 @@ def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
     Emits a ``tool-call`` span (renamed from ``rag-tool-dispatch`` — we never
     did retrieval-augmented generation; this is straight function-calling
     against a Redis cache).  Span attributes:
-      - declarai.tool.name           which tool the LLM invoked
+      - declarai.tool.name           producer-owned tool name metadata
+      - gen_ai.tool.name             generic tool classifier key
+      - prometa.tool_name            Prometa tool registration/classifier key
       - declarai.tool.file_id        pipeline file id
       - declarai.tool.args_keys      comma-separated argument names
       - declarai.tool.ok             whether the handler ran to completion
@@ -1007,6 +1009,8 @@ def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
     """
     with span_timer('declarai.tool'):
         set_span_attr('declarai.tool.name', tool_name)
+        set_span_attr('gen_ai.tool.name', tool_name)
+        set_span_attr('prometa.tool_name', tool_name)
         set_span_attr('declarai.tool.file_id', file_id)
         set_span_attr('declarai.tool.args_keys',
                       ','.join(sorted(arguments.keys())) if arguments else '')
