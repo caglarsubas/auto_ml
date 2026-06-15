@@ -21,6 +21,7 @@ openai>=1.0
 prometa-sdk==0.9.0
 redis>=5.0
 mcp>=1.27,<2
+cryptography>=42
 
 # Testing dependencies
 pytest>=8.0
