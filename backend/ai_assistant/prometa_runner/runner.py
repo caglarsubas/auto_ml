@@ -109,7 +109,7 @@ class PrometaOnPremBundleRunner:
             "signed": bool(self.envelope.get("signed")),
             "algorithm": self.envelope.get("algorithm"),
             "canonicalization": self.envelope.get("canonicalization")
-            or "json-stable-sort-keys-utf8-no-ascii-escape-v1",
+            or "json-sorted-keys-utf8",
             "tools": tools,
         }
 

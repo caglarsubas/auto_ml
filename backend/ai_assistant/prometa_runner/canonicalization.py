@@ -9,8 +9,10 @@ from collections.abc import Mapping
 from typing import Any
 
 
-CANONICALIZATION_ALGORITHM = "json-stable-sort-keys-utf8-no-ascii-escape-v1"
-LEGACY_CANONICALIZATION_ALGORITHMS = frozenset({None, ""})
+CANONICALIZATION_ALGORITHM = "json-sorted-keys-utf8"
+LEGACY_CANONICALIZATION_ALGORITHMS = frozenset(
+    {None, "", "json-stable-sort-keys-utf8-no-ascii-escape-v1"}
+)
 SUPPORTED_CANONICALIZATION_ALGORITHMS = frozenset(
     {CANONICALIZATION_ALGORITHM, *LEGACY_CANONICALIZATION_ALGORITHMS}
 )

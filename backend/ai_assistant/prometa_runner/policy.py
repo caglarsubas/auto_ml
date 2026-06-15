@@ -125,11 +125,16 @@ def approval_required_for_tool(tool: Mapping[str, Any]) -> bool:
 
 
 def guardrails_required_for_tool(tool: Mapping[str, Any]) -> list[str]:
-    explicit = _str_list(tool.get("requiredGuardrails"))
-    if not explicit:
-        explicit = _str_list(tool.get("required_guardrails"))
-    if explicit:
-        return [_normalize_guardrail(value) for value in explicit]
+    if "requiredGuardrails" in tool:
+        return [
+            _normalize_guardrail(value)
+            for value in _str_list(tool.get("requiredGuardrails"))
+        ]
+    if "required_guardrails" in tool:
+        return [
+            _normalize_guardrail(value)
+            for value in _str_list(tool.get("required_guardrails"))
+        ]
 
     required: list[str] = []
     if approval_required_for_tool(tool):
