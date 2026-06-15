@@ -115,22 +115,35 @@ python manage.py run_prometa_bundle \
 
 ## Telemetry Correlation
 
-The runner stamps Prometa bundle identity into the active MCP spans:
+The runner stamps Prometa bundle identity into the active MCP spans. When the
+bundle carries both `solutionId` and `solutionName`, `prometa.solution_id` uses
+`solutionName` because Prometa's fallback resolver keys by solution name.
 
 ```text
 gen_ai.agent.id
+gen_ai.agent.name
 prometa.agent.id
 prometa.agent_id
 prometa.solution.id
 prometa.solution_id
+prometa.agent_name
 declarai.prometa.bundle.agent_id
 declarai.prometa.bundle.solution_id
+declarai.prometa.bundle.solution_name
 ```
 
 The existing MCP spans keep emitting:
 
 ```text
 declarai.mcp.*
+```
+
+They also emit tenant-neutral tool classifier/source keys:
+
+```text
+gen_ai.tool.name
+prometa.tool_name
+mcp.tool.name
 ```
 
 This lets Prometa join DeclarAI-run tool calls back to the Agent Registry row

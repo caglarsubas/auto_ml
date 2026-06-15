@@ -11,6 +11,7 @@ from ai_assistant.prometa_config import (
     set_customer_id,
     set_session_id,
     set_span_attr,
+    set_span_attrs,
     span_timer,
     workflow,
 )
@@ -36,7 +37,14 @@ def stamp_mcp_context(
     """Stamp DeclarAI MCP attributes on the active Prometa span."""
     set_span_attr("declarai.mcp.operation", operation)
     if tool_name:
-        set_span_attr("declarai.mcp.tool_name", tool_name)
+        set_span_attrs(
+            {
+                "declarai.mcp.tool_name": tool_name,
+                "mcp.tool.name": tool_name,
+                "gen_ai.tool.name": tool_name,
+                "prometa.tool_name": tool_name,
+            }
+        )
     if file_id is not None:
         set_span_attr("declarai.mcp.file_id", file_id)
         set_session_id(f"declarai-file-{file_id}")

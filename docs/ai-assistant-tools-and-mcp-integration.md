@@ -801,7 +801,10 @@ The emitted attributes include `declarai.mcp.operation`,
 `declarai.mcp.required_scopes`, `declarai.mcp.risk`,
 `declarai.mcp.side_effects`, `declarai.mcp.destructive`,
 `declarai.mcp.approval_id`, `declarai.mcp.ok`,
-`declarai.mcp.result_chars`, and elapsed timing attributes.
+`declarai.mcp.result_chars`, and elapsed timing attributes. MCP tool spans
+also stamp `gen_ai.tool.name` and `prometa.tool_name` for Prometa's
+tenant-neutral tool classification, while `mcp.tool.name` remains source
+metadata and `declarai.mcp.*` remains DeclarAI-owned producer metadata.
 
 Optional deployment labels can be supplied with:
 

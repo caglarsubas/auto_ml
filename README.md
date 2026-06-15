@@ -253,7 +253,7 @@ Model deployment interface (under development):
 
 The backend's AI Assistant emits structured agent telemetry through
 [`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
-(≥ 0.9.0) to the **Prometa Agentic Lifecycle Intelligence Platform**
+(≥ 0.10.1) to the **Prometa Agentic Lifecycle Intelligence Platform**
 for tracing, evaluation, and lifecycle governance.
 
 **Integration point**:
@@ -271,9 +271,10 @@ carrying token usage, cost, prompt/completion text, and model name.
 |---|---|---|
 | `PROMETA_ENDPOINT` | (off) | OTLP ingest URL, e.g. `https://prometa.example.com/api/v2/otlp/v1/traces` |
 | `PROMETA_API_KEY` | (off) | Prometa tenant API key |
-| `PROMETA_SOLUTION_ID` | `declarai` | Logical solution identifier in the platform's registry |
-| `PROMETA_AGENT_NAME` | `ai-assistant` | Logical agent name (auto-registered) |
-| `PROMETA_STAGE` | `development` | `development` / `staging` / `production` |
+| `PROMETA_SOLUTION_ID` | `declarai-assistant` | Logical solution identifier in the platform's registry |
+| `PROMETA_AGENT_NAME` | `declarai-agent` | Logical agent name (auto-registered) |
+| `PROMETA_AGENT_ID` | `declarai-agent-staging` | Stable agent id/slug; use the Prometa bundle `agentId` for runner executions |
+| `PROMETA_STAGE` | `staging` | `development` / `staging` / `production` |
 
 Leaving `PROMETA_ENDPOINT` unset disables telemetry entirely
 (no-op decorators, no network calls). The SDK and platform are
@@ -290,6 +291,10 @@ without Prometa wired up.
   `set_request_model`, `set_tool_name`) that light up the platform's
   canonical correlation chain — opt-in extras that bridge AI Assistant
   telemetry to the org's CRM / data warehouse identifiers.
+- Public span metadata setters (`set_attribute`, `set_attributes`) used by
+  DeclarAI's wrapper to preserve producer-owned fields such as
+  `declarai.mcp.*` while emitting tenant-neutral tool keys
+  `gen_ai.tool.name` and `prometa.tool_name`.
 - AML v0.4 instrumentation primitives (`guardrail`, `pii_filter`,
   `memory_read`, `record_retry_attempt`, …) for the platform's
   41-feature agent-maturity scoring.
@@ -408,7 +413,7 @@ auto-ml/
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
 | openai | ≥ 1.0 | LLM client for AI Assistant action layer |
-| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.9.0 | Agent telemetry — emits OTLP traces and assistant-answer feedback to the Prometa platform |
+| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.10.1 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
 | redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend
