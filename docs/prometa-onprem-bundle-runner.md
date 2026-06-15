@@ -35,7 +35,7 @@ The runner expects the bundle envelope:
 Canonicalization is:
 
 ```text
-json-stable-sort-keys-utf8-no-ascii-escape-v1
+json-sorted-keys-utf8
 ```
 
 Python verification mirrors Prometa's TypeScript implementation:
@@ -47,9 +47,10 @@ Python verification mirrors Prometa's TypeScript implementation:
 - do not ASCII-escape non-ASCII text;
 - reject NaN/Infinity.
 
-The runner accepts Prometa's current envelope without a `canonicalization`
-field as this algorithm, and also accepts the explicit field when Prometa adds
-it. Unknown canonicalization values are rejected.
+The runner accepts Prometa's explicit `canonicalization` field with this value.
+For compatibility with earlier local test bundles, it also accepts a missing
+field or the provisional `json-stable-sort-keys-utf8-no-ascii-escape-v1` label
+as the same byte contract. Unknown canonicalization values are rejected.
 
 ## Preflight Policy
 
@@ -66,7 +67,8 @@ For tool calls, the runner enforces:
 
 - `approvalRequired` / `approval_required` when Prometa carries it;
 - `requiredGuardrails` / `required_guardrails` when Prometa carries it;
-- fallback inference for current bundle shapes:
+- fallback inference only for older bundle shapes that do not carry
+  `requiredGuardrails`:
   - `declarai.action.*` requires `human_approval`;
   - high/critical risk tools require `risk_gate`;
   - `declarai.action.execute_code` also requires `dataset_backup`.

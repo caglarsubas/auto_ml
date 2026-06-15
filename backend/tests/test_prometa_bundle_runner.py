@@ -77,7 +77,7 @@ def _content(
     }
 
 
-def _signed_envelope(content):
+def _signed_envelope(content, *, canonicalization="json-sorted-keys-utf8"):
     private_key = Ed25519PrivateKey.generate()
     public_key_b64 = base64.b64encode(
         private_key.public_key().public_bytes(
@@ -94,7 +94,7 @@ def _signed_envelope(content):
         "publicKey": public_key_b64,
         "signature": signature,
         "signed": True,
-        "canonicalization": "json-stable-sort-keys-utf8-no-ascii-escape-v1",
+        "canonicalization": canonicalization,
     }
 
 
@@ -113,6 +113,16 @@ class TestPrometaBundleSignature:
         from ai_assistant.prometa_runner.signature import verify_bundle_signature
 
         envelope = _signed_envelope(_content())
+
+        assert verify_bundle_signature(envelope) is True
+
+    def test_accepts_previous_canonicalization_label_for_existing_bundles(self):
+        from ai_assistant.prometa_runner.signature import verify_bundle_signature
+
+        envelope = _signed_envelope(
+            _content(),
+            canonicalization="json-stable-sort-keys-utf8-no-ascii-escape-v1",
+        )
 
         assert verify_bundle_signature(envelope) is True
 
@@ -214,6 +224,17 @@ class TestPrometaBundlePolicy:
         }
 
         assert guardrails_required_for_tool(tool) == ["human_approval"]
+
+    def test_policy_treats_explicit_empty_required_guardrails_as_authoritative(self):
+        from ai_assistant.prometa_runner.policy import guardrails_required_for_tool
+
+        tool = {
+            "operation": "declarai.action.execute_code",
+            "riskLevel": "high",
+            "requiredGuardrails": [],
+        }
+
+        assert guardrails_required_for_tool(tool) == []
 
 
 @pytest.mark.unit
