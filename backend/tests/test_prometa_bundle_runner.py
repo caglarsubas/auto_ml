@@ -337,3 +337,33 @@ class TestPrometaBundleRunner:
         )
 
         assert captured["arguments"]["approval_id"] == "approval-1"
+
+    def test_runner_handles_fastmcp_read_tool_list_result(self, monkeypatch):
+        pytest.importorskip("mcp")
+        monkeypatch.delenv("DECLARAI_MCP_SCOPES", raising=False)
+        from ai_assistant.prometa_runner.runner import PrometaOnPremBundleRunner
+
+        tool = {
+            "name": "Get pipeline config",
+            "source": "mcp",
+            "operation": "declarai.get_pipeline_config",
+            "sideEffects": "read-only",
+            "riskLevel": "low",
+            "authBinding": "service-account",
+            "scopes": ["declarai.pipeline.read"],
+            "approvalRequired": False,
+            "requiredGuardrails": [],
+        }
+        runner = PrometaOnPremBundleRunner(
+            _signed_envelope(_content(tools=[tool])),
+        )
+
+        result = runner.call_tool(
+            "declarai.get_pipeline_config",
+            {"file_id": 99999},
+        )
+
+        assert result["operation"] == "declarai.get_pipeline_config"
+        assert result["structured"] is None
+        assert result["content"]
+        assert "pipeline configuration" in result["content"][0].lower()

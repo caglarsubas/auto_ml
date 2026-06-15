@@ -177,9 +177,11 @@ class PrometaOnPremBundleRunner:
             )
             try:
                 mcp_server = self._get_mcp_server(operation)
-                content_items, structured = await mcp_server.call_tool(
-                    operation,
-                    call_args,
+                content_items, structured = self._normalize_mcp_result(
+                    await mcp_server.call_tool(
+                        operation,
+                        call_args,
+                    )
                 )
                 stamp_bundle_identity(
                     self.agent_id,
@@ -191,10 +193,7 @@ class PrometaOnPremBundleRunner:
                 return {
                     "operation": operation,
                     "structured": structured,
-                    "content": [
-                        getattr(item, "text", str(item))
-                        for item in (content_items or [])
-                    ],
+                    "content": self._content_texts(content_items),
                 }
             except Exception as exc:
                 set_span_attr("declarai.prometa.bundle.ok", False)
@@ -202,6 +201,28 @@ class PrometaOnPremBundleRunner:
                 raise
             finally:
                 reset_current_bundle_identity(token)
+
+    @staticmethod
+    def _normalize_mcp_result(result: Any) -> tuple[list[Any], Any]:
+        if isinstance(result, tuple) and len(result) == 2:
+            content_items, structured = result
+            return list(content_items or []), structured
+        if isinstance(result, list):
+            return result, None
+        content_items = getattr(result, "content", None)
+        if content_items is not None:
+            structured = (
+                getattr(result, "structuredContent", None)
+                or getattr(result, "structured_content", None)
+            )
+            return list(content_items or []), structured
+        if isinstance(result, Mapping):
+            return [], result
+        return [result], None
+
+    @staticmethod
+    def _content_texts(content_items: list[Any]) -> list[str]:
+        return [getattr(item, "text", str(item)) for item in (content_items or [])]
 
     def _get_mcp_server(self, operation: str):
         needs_direct_actions = operation.startswith("declarai.action.")
