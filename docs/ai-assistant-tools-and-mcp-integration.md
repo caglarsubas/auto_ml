@@ -811,9 +811,9 @@ export DECLARAI_MCP_SESSION_ID=prometa-sync-session
 export DECLARAI_MCP_TRANSPORT=streamable-http
 ```
 
-Runtime boundary as of this implementation: DeclarAI hosts the MCP tool
-surface and can execute direct action tools when explicitly enabled. Prometa can
-discover, govern, and bundle agents from that surface. The production
-`tools/call` executor loop should be chosen per deployment: either Prometa hosts
-the agent executor and calls DeclarAI MCP tools, or DeclarAI runs the signed
-Prometa bundle next to the MCP host.
+Settled runtime boundary: Prometa discovers, governs, signs, and observes;
+DeclarAI runs. Prometa does not call DeclarAI `tools/call`. DeclarAI executes
+approved MCP operations from the signed Prometa bundle next to the MCP host.
+The DeclarAI-owned on-prem runner foundation lives in
+`backend/ai_assistant/prometa_runner/` and is documented in
+[`docs/prometa-onprem-bundle-runner.md`](prometa-onprem-bundle-runner.md).

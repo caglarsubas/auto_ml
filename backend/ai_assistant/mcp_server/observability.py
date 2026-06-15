@@ -14,6 +14,8 @@ from ai_assistant.prometa_config import (
     span_timer,
     workflow,
 )
+from ai_assistant.prometa_runner.context import get_current_bundle_identity
+from ai_assistant.prometa_runner.telemetry import stamp_bundle_identity
 
 
 def stamp_mcp_context(
@@ -58,6 +60,10 @@ def stamp_mcp_context(
         set_span_attr("declarai.mcp.error", error[:200])
     if result_chars is not None:
         set_span_attr("declarai.mcp.result_chars", result_chars)
+
+    bundle_identity = get_current_bundle_identity()
+    if bundle_identity is not None:
+        stamp_bundle_identity(*bundle_identity)
 
     client_id = os.environ.get("DECLARAI_MCP_CLIENT_ID")
     if client_id:
