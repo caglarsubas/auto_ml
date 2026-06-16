@@ -151,4 +151,70 @@ describe('DeclarationComponent', () => {
       expect(component.dataDictionary).toEqual([]);
     });
   });
+
+  // ── getExcludedFeatures() — "Excluded from model" badge count ─────────
+  // Regression: variableModelUsage is persisted to a GLOBAL localStorage key
+  // (dict_model_usage_v1), so 'No' entries from a previously-loaded dataset
+  // survive into the next one. The badge must count only features present in
+  // the CURRENT dataDictionary, matching exactly the dropdowns rendered.
+  describe('getExcludedFeatures() badge count', () => {
+    it('should count only current-dictionary features set to No', () => {
+      component.dataDictionary = [
+        { Feature_Name: 'AppID', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Application_Datetime', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Target', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Var_1', Model_Usage_YN: 'Yes' },
+        { Feature_Name: 'Var_2', Model_Usage_YN: 'Yes' },
+      ];
+      component.variableModelUsage = {};
+      expect(component.getExcludedFeatures().length).toBe(3);
+      expect(component.getExcludedFeatures().sort()).toEqual(
+        ['AppID', 'Application_Datetime', 'Target']);
+    });
+
+    it('should ignore stale No entries for features not in current dictionary', () => {
+      // Current dataset has only 3 features excluded.
+      component.dataDictionary = [
+        { Feature_Name: 'AppID', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Application_Datetime', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Target', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Var_1', Model_Usage_YN: 'Yes' },
+        { Feature_Name: 'Var_2', Model_Usage_YN: 'Yes' },
+      ];
+      // 24 stale 'No' entries left over from a previously-loaded dataset.
+      const stale: { [k: string]: string } = {};
+      for (let i = 0; i < 24; i++) {
+        stale['Old_Var_' + i] = 'No';
+      }
+      component.variableModelUsage = { ...stale };
+      // Must be 3, NOT 27.
+      expect(component.getExcludedFeatures().length).toBe(3);
+      expect(component.getExcludedFeatures()).not.toContain('Old_Var_0');
+    });
+
+    it('should honour user override (Yes) over backend No', () => {
+      component.dataDictionary = [
+        { Feature_Name: 'AppID', Model_Usage_YN: 'No' },
+        { Feature_Name: 'Target', Model_Usage_YN: 'No' },
+      ];
+      // User flipped AppID back to Yes.
+      component.variableModelUsage = { AppID: 'Yes' };
+      expect(component.getExcludedFeatures()).toEqual(['Target']);
+    });
+
+    it('should honour user override (No) over backend Yes', () => {
+      component.dataDictionary = [
+        { Feature_Name: 'Var_1', Model_Usage_YN: 'Yes' },
+        { Feature_Name: 'Var_2', Model_Usage_YN: 'Yes' },
+      ];
+      component.variableModelUsage = { Var_2: 'No' };
+      expect(component.getExcludedFeatures()).toEqual(['Var_2']);
+    });
+
+    it('should return empty array when dictionary is empty despite stale entries', () => {
+      component.dataDictionary = [];
+      component.variableModelUsage = { Old_Var_0: 'No', Old_Var_1: 'No' };
+      expect(component.getExcludedFeatures()).toEqual([]);
+    });
+  });
 });

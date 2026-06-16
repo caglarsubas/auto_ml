@@ -685,27 +685,14 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
   // Get list of features marked as 'No' (excluded from model)
   getExcludedFeatures(): string[] {
-    // Include both user-set values and backend-determined values
-    const excluded: string[] = [];
-    
-    // Add user-set 'No' values
-    Object.keys(this.variableModelUsage).forEach(f => {
-      if (this.variableModelUsage[f] === 'No') {
-        excluded.push(f);
-      }
-    });
-    
-    // Add backend-determined 'No' values that user hasn't overridden
-    this.dataDictionary.forEach(feature => {
-      const featureName = feature.Feature_Name;
-      if (feature.Model_Usage_YN === 'No' && 
-          this.variableModelUsage[featureName] === undefined &&
-          !excluded.includes(featureName)) {
-        excluded.push(featureName);
-      }
-    });
-    
-    return excluded;
+    // Only count features present in the CURRENT data dictionary, resolved via
+    // the same getModelUsage() path the dropdown renders. This prevents stale
+    // 'No' entries left in localStorage by a previously-loaded dataset (the
+    // modelUsageKey is global, not per-file) from inflating the count.
+    return this.dataDictionary
+      .map(feature => feature?.Feature_Name)
+      .filter((featureName): featureName is string =>
+        !!featureName && this.getModelUsage(featureName) === 'No');
   }
   
 }
