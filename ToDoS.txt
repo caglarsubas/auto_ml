@@ -7,7 +7,7 @@ z: bug-fix or hot-fix
 
 
 !CFH!
-- let assistant modify any configuration parameter in the pipeline that user can do via frontend (e.g. LoM change and ordinal raking)
+- Assistant said that: I would not manually drop all high-VIF features before SFS. Use SFS to choose among correlated clusters. our pre-coded pipeline flow does not include such kind of an SFS run. can the assistant modify the relevant code-block temporarily and handle the job if user says 'ok do what you recommended'?
 - start hyperparameter
 - add 'view details' button right under the progress-bar of SFS-running, when clicek user should see the selected feature, its description, cv based performance metric of model including the new feature, percentage change of performance metrıc as ın table format:
 - stopping criteria selections via %-change of metrics and min-max feature count.
@@ -23,7 +23,19 @@ After the implementation is complete and functional, here are potential future i
 - History Tracking - Save multiple SFS runs for comparison
 
 
+Target Variable Definition:
 good/bag flag of credit applications within the 12 months period of its usage
+
+Assistant Questions in order:
 according to the project goal and the feature descriptions we have, which new features can be derived from others in the aim of increasing the predictive performance of boosting algorithms. create these suggested features in our dataset.
+what are the data purification steps in the flow? how to sort them while implementing and configure them better according to the data and problem we have?
+change the outlier cleaning interval for numerical features to 0.05-0.95 and start the preprocessing step
 according to the feature-description, which of them can be ordinal categorical rather than being nominal as labeled as default?
+did you set rankings of these new ordinal variables
+start the modeling step
 please explain what is happening in SHAP Beeswarm plot with feature-wise examples.
+which features should be dropped before SFS due to high VIF values
+with which features has Var-8 has higher collinearity causing high VIF value
+drop Variable 'FE_Contactability_Score' due to high VIF value from modeling usage list and start the SFS step
+trigger the Backward SFS process now with Parallel Workers (n_jobs) is equal to 10?
+pit step-10 as the cutoff point of backward elimination and start the forward selection
