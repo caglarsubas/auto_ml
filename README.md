@@ -311,6 +311,42 @@ for the chain semantics.
 ### Prerequisites
 - Docker & Docker Compose
 
+### Configure the LLM engine bearer key
+
+DeclarAI AutoML talks to `llm_inference_engine` through the OpenAI-compatible
+`/v1` API. The engine bearer key is tenant-specific and must come from a
+private secret channel, not GitHub issues, pull requests, or committed files.
+
+Copy the example file and fill in the private key:
+
+```bash
+cp .env.example .env
+```
+
+For local Docker-to-host development, keep the base URL as:
+
+```bash
+LLM_ENGINE_BASE_URL=http://host.docker.internal:8080/v1
+```
+
+Set the provisioned DeclarAI AutoML engine key in the same `.env` file or in
+the deployment secret manager:
+
+```bash
+LLM_ENGINE_API_KEY=<provided through secure secret handoff>
+```
+
+After the secret is installed, verify from the backend runtime/container:
+
+```bash
+curl -s "$LLM_ENGINE_BASE_URL/models" \
+  -H "Authorization: Bearer $LLM_ENGINE_API_KEY" | jq .data[0]
+```
+
+Expected result: HTTP 200 with model data. A `401 missing bearer token` or
+`401 invalid api key` means the secret was not passed into AutoML or does not
+match the engine-side key file.
+
 ### Run
 ```bash
 docker compose up --build -d
