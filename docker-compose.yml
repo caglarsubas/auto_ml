@@ -6,7 +6,8 @@ services:
     ports:
       - "8001:8001"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - DJANGO_ALLOWED_HOSTS=*
       - DATQ_MAX_CELLS=20000000
@@ -22,7 +23,9 @@ services:
       # host. Use 8090 if you're running the containerised topology with
       # nginx in front of multiple engine replicas.
       - LLM_ENGINE_BASE_URL=${LLM_ENGINE_BASE_URL:-http://host.docker.internal:8080/v1}
-      - LLM_ENGINE_API_KEY=${LLM_ENGINE_API_KEY:-sk-engine-local}
+      # Required when engine auth is enabled. Do not commit the raw key; set it
+      # in .env or the deployment secret manager for the declarai-auto-ml tenant.
+      - LLM_ENGINE_API_KEY=${LLM_ENGINE_API_KEY:?set LLM_ENGINE_API_KEY from the private engine secret handoff}
     depends_on:
       - redis
     # Mount project root for live-reload development (Django autoreload)

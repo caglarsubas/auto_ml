@@ -3626,6 +3626,46 @@ class TestModelRegistry:
         for m in models:
             assert 'tool_calling_mode' in m, f"Model '{m['key']}' missing tool_calling_mode in list output"
 
+    def test_fetch_engine_models_uses_configured_bearer_key(self, monkeypatch):
+        """Engine discovery must send the deployment-provided bearer key."""
+        from ai_assistant import model_registry as mr
+        import urllib.request
+
+        captured = {}
+
+        class _FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return (
+                    b'{"data":[{"id":"llama3.2:3b",'
+                    b'"size_bytes":2147483648}]}'
+                )
+
+        def _fake_urlopen(req, timeout):
+            captured['url'] = req.full_url
+            captured['authorization'] = req.get_header('Authorization')
+            captured['timeout'] = timeout
+            return _FakeResponse()
+
+        monkeypatch.setenv('LLM_ENGINE_BASE_URL', 'http://engine.local:8080/v1/')
+        monkeypatch.setenv('LLM_ENGINE_API_KEY', 'sk-dec-test-key')
+        monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+        monkeypatch.setattr(mr, '_ENGINE_MODELS_TIMEOUT', 12.0)
+
+        models = mr._fetch_engine_models()
+
+        assert captured == {
+            'url': 'http://engine.local:8080/v1/models',
+            'authorization': 'Bearer sk-dec-test-key',
+            'timeout': 12.0,
+        }
+        assert 'engine-llama3.2-3b' in models
+
 
 # ---------------------------------------------------------------------------
 # v2.43.1: Nemotron CoT-leak fix — reasoning-family models must opt into
@@ -3711,7 +3751,8 @@ class TestCallEngineEnableThinking:
                 self.completions = _FakeCompletions()
 
         class _FakeOpenAI:
-            def __init__(self, **_):
+            def __init__(self, **kwargs):
+                captured['init_kwargs'] = kwargs
                 self.chat = _FakeChat()
 
         import openai
@@ -3733,6 +3774,24 @@ class TestCallEngineEnableThinking:
         assert sent.get('extra_body') == {
             'chat_template_kwargs': {'enable_thinking': True}
         }, "reasoning models must opt into enable_thinking via extra_body"
+
+    def test_call_engine_uses_configured_engine_auth(self, monkeypatch, _fake_openai_client):
+        from ai_assistant.model_registry import call_engine
+        monkeypatch.setenv('LLM_ENGINE_BASE_URL', 'http://engine.local:8080/v1')
+        monkeypatch.setenv('LLM_ENGINE_API_KEY', 'sk-dec-test-key')
+        cfg = {
+            'provider': 'engine',
+            'model_id': 'llama3.2:3b',
+            'max_tokens': 4096,
+            'temperature': 0.4,
+            'supports_tools': True,
+            'reasoning': False,
+        }
+
+        call_engine([{'role': 'user', 'content': 'hi'}], cfg)
+
+        assert _fake_openai_client['init_kwargs']['api_key'] == 'sk-dec-test-key'
+        assert _fake_openai_client['init_kwargs']['base_url'] == 'http://engine.local:8080/v1'
 
     def test_non_reasoning_model_omits_extra_body(self, _fake_openai_client):
         from ai_assistant.model_registry import call_engine
