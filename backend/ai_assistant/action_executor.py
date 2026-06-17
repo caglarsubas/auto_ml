@@ -22,7 +22,7 @@ from declaration.models import Declaration, DataDictionary
 
 from .prometa_config import (
     workflow, tool, set_span_attr, set_session_id, set_customer_id,
-    schema_validate, set_input_ref,
+    schema_validate, set_input_ref, stamp_mcp_tool_marker,
 )
 
 
@@ -62,6 +62,14 @@ _SAFE_BUILTINS = {
     'False': False,
     'None': None,
 }
+
+
+def _stamp_action_mcp_marker(action_type: str) -> None:
+    """Mark direct action handler spans with their governed MCP tool name."""
+    stamp_mcp_tool_marker(
+        action_type.replace('_', '-'),
+        mcp_tool_name=f'declarai.action.{action_type}',
+    )
 
 
 def _load_dataframe(file_id: int) -> tuple:
@@ -336,6 +344,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
         "description": "Human-readable summary of what the code does"
     }
     """
+    _stamp_action_mcp_marker('execute_code')
     code = payload.get('code', '').strip()
     description = payload.get('description', '')
     if not code:
@@ -475,6 +484,7 @@ def update_metadata(file_id: int, payload: dict) -> dict:
         "description": "..."
     }
     """
+    _stamp_action_mcp_marker('update_metadata')
     updates = payload.get('updates', [])
     description = payload.get('description', '')
     if not updates:
@@ -536,6 +546,7 @@ def update_config(file_id: int, payload: dict) -> dict:
         "description": "..."
     }
     """
+    _stamp_action_mcp_marker('update_config')
     updates = payload.get('updates', [])
     description = payload.get('description', '')
     if not updates:
@@ -658,6 +669,7 @@ def start_sfs(file_id: int, payload: dict) -> dict:
         "description": "Start backward SFS, excluding Var_3 (VIF=9.39)"
     }
     """
+    _stamp_action_mcp_marker('start_sfs')
     description = payload.get('description', '')
 
     # ── v2.35.0: in-flight guard — refuse to spawn a duplicate run ──
@@ -953,6 +965,7 @@ def start_data_purifier(file_id: int, payload: dict) -> dict:
         "description": "Run preprocessing with default purifier options"
     }
     """
+    _stamp_action_mcp_marker('start_data_purifier')
     description = payload.get('description', '')
 
     # ── purifier_options ───────────────────────────────────────────
@@ -1132,6 +1145,7 @@ def update_purifier_selection(file_id: int, payload: dict) -> dict:
         Action result dict with `applied` shape documented in the
         module-level comment block.
     """
+    _stamp_action_mcp_marker('update_purifier_selection')
     # Imported lazily so importing this module never triggers a Django
     # apps registry walk through preprocessing's own imports.  Matches
     # the lazy-import pattern in _handle_get_purifier_options.
@@ -1422,6 +1436,7 @@ def apply_encoding(file_id: int, payload: dict) -> dict:
         "description": "Apply encoding plan with native library"
     }
     """
+    _stamp_action_mcp_marker('apply_encoding')
     description = payload.get('description', '')
     raw_use_native = payload.get('use_native', True)
     if not isinstance(raw_use_native, bool):
@@ -1489,6 +1504,7 @@ def start_modeling(file_id: int, payload: dict) -> dict:
         "description": "Start modeling with LightGBM"
     }
     """
+    _stamp_action_mcp_marker('start_modeling')
     description = payload.get('description', '')
 
     raw_algo = payload.get('algorithm', None)
@@ -1606,6 +1622,7 @@ def set_ordinal_ranking(file_id: int, payload: dict) -> dict:
     they observe is the encoding-plan dropdown also flipping to
     'Ordinal' when the ranking lands.
     """
+    _stamp_action_mcp_marker('set_ordinal_ranking')
     updates = payload.get('updates', [])
     description = payload.get('description', '')
     if not isinstance(updates, list) or not updates:
@@ -1794,6 +1811,7 @@ def start_hyperparameter(file_id: int, payload: dict) -> dict:
         "description": "Tune depth + learning rate, 60 trials"
     }
     """
+    _stamp_action_mcp_marker('start_hyperparameter')
     description = payload.get('description', '')
 
     # ── in-flight guard — refuse to spawn a duplicate run ──
@@ -1915,6 +1933,7 @@ def update_notes(file_id: int, payload: dict) -> dict:
         "description": "..."
     }
     """
+    _stamp_action_mcp_marker('update_notes')
     action = payload.get('action', 'add')
     position = payload.get('position', '')
     content = payload.get('content', '')

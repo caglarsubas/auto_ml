@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 # rationale ((orgId, solutionId, agentName) on the auto-register side).
 DEFAULT_PROMETA_SOLUTION_ID = 'declarai-assistant'
 DEFAULT_PROMETA_AGENT_NAME = 'declarai-agent'
+DEFAULT_DECLARAI_MCP_SERVER_NAME = 'declarai'
 
 _prometa = None
 _initialized = False
@@ -200,6 +201,14 @@ def _make_lazy_decorator(kind: str):
     def decorator_factory(name, **kwargs):
         def decorator(fn):
             _traced = [None]  # mutable container for one-time caching
+            traced_fn = fn
+            if kind == 'tool':
+                marker_name = name or getattr(fn, '__name__', 'tool')
+
+                @functools.wraps(fn)
+                def traced_fn(*args, **kw):
+                    stamp_mcp_tool_marker(marker_name)
+                    return fn(*args, **kw)
 
             @functools.wraps(fn)
             def wrapper(*args, **kw):
@@ -207,9 +216,9 @@ def _make_lazy_decorator(kind: str):
                     p = get_prometa()
                     if p:
                         real_decorator = getattr(p, kind)(name=name, **kwargs)
-                        _traced[0] = real_decorator(fn)
+                        _traced[0] = real_decorator(traced_fn)
                     else:
-                        _traced[0] = fn
+                        _traced[0] = traced_fn
                 return _traced[0](*args, **kw)
             return wrapper
         return decorator
@@ -396,6 +405,39 @@ def set_span_attrs(attributes: dict) -> None:
     except Exception:
         for key, value in attributes.items():
             _set_span_attr_direct(key, value)
+
+
+def stamp_mcp_tool_marker(
+    tool_name: str,
+    *,
+    mcp_tool_name: str = None,
+    server_name: str = DEFAULT_DECLARAI_MCP_SERVER_NAME,
+) -> None:
+    """Stamp the standard MCP discovery markers on a tool-like span.
+
+    Prometa's MCP telemetry discovery keys off either ``mcp.*`` attributes or
+    the namespaced ``declarai.mcp.*`` producer metadata.  Use this helper on
+    every DeclarAI tool/cache/skill span, including spans that are reached via
+    the legacy in-process dispatcher rather than an external MCP ``tools/call``.
+
+    ``tool_name`` is the local classifier/display name already used by
+    ``gen_ai.tool.name`` and ``prometa.tool_name``. ``mcp_tool_name`` can be the
+    fully-qualified MCP catalog name when it differs, for example
+    ``declarai.get_pipeline_config`` for the internal ``get_pipeline_config``
+    dispatcher call.
+    """
+    if not tool_name:
+        return
+    resolved_mcp_tool_name = mcp_tool_name or tool_name
+    attrs = {
+        'mcp.server.name': server_name,
+        'mcp.tool.name': resolved_mcp_tool_name,
+        'declarai.mcp.tool_name': resolved_mcp_tool_name,
+        'gen_ai.tool.name': tool_name,
+        'prometa.tool_name': tool_name,
+    }
+    for key, value in attrs.items():
+        set_span_attr(key, value)
 
 
 def stamp_elapsed(prefix: str, t0_ns: int) -> int:

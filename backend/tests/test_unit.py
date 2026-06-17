@@ -4256,14 +4256,20 @@ class TestInvokeSkillTool:
         """The dedicated traced loader stamps declarai.skill.* attributes so
         each skill invocation appears as a distinct child span."""
         from ai_assistant import tool_executor as te
+        from ai_assistant import prometa_config
         captured = {}
 
         def fake_set(key, value):
             captured[key] = value
 
         monkeypatch.setattr(te, 'set_span_attr', fake_set)
+        monkeypatch.setattr(prometa_config, 'set_span_attr', fake_set)
         result = te._load_skill_traced('feature-engineering')
         assert 'BEGIN SKILL CONTENT' in result
+        assert captured.get('mcp.server.name') == 'declarai'
+        assert captured.get('mcp.tool.name') == 'declarai.invoke_skill'
+        assert captured.get('gen_ai.tool.name') == 'skill-invoke'
+        assert captured.get('prometa.tool_name') == 'skill-invoke'
         assert captured.get('declarai.skill.name') == 'feature-engineering'
         assert captured.get('declarai.skill.found') is True
         assert isinstance(captured.get('declarai.skill.body_chars'), int)
@@ -5383,17 +5389,23 @@ class TestGetSkillFileTool:
 
     def test_load_skill_file_traced_sets_span_attributes(self, monkeypatch):
         from ai_assistant import tool_executor as te
+        from ai_assistant import prometa_config
         captured = {}
 
         def fake_set(key, value):
             captured[key] = value
 
         monkeypatch.setattr(te, 'set_span_attr', fake_set)
+        monkeypatch.setattr(prometa_config, 'set_span_attr', fake_set)
         result = te._load_skill_file_traced(
             'feature-engineering',
             'references/feature_engineering_best_practices.md',
         )
         assert 'BEGIN FILE CONTENT' in result
+        assert captured.get('mcp.server.name') == 'declarai'
+        assert captured.get('mcp.tool.name') == 'declarai.get_skill_file'
+        assert captured.get('gen_ai.tool.name') == 'skill-file-read'
+        assert captured.get('prometa.tool_name') == 'skill-file-read'
         assert captured.get('declarai.skill.name') == 'feature-engineering'
         assert captured.get('declarai.skill.file_path') == \
             'references/feature_engineering_best_practices.md'
@@ -5467,6 +5479,10 @@ class TestRedisSpanInstrumentation:
 
         try:
             assert result == {'k': 'v'}
+            assert cap.captured.get('mcp.server.name') == 'declarai'
+            assert cap.captured.get('mcp.tool.name') == 'redis-get'
+            assert cap.captured.get('gen_ai.tool.name') == 'redis-get'
+            assert cap.captured.get('prometa.tool_name') == 'redis-get'
             assert cap.captured.get('declarai.cache.file_id') == 42424
             assert cap.captured.get('declarai.cache.artifact') == 'test_span_artifact'
             assert cap.captured.get('declarai.cache.hit') is True
@@ -5610,6 +5626,10 @@ class TestCacheReadSpans:
             cap.captured.clear()
             data = read_pipeline_config(53000)
             assert data == {'pipeline_type': 'classification'}
+            assert cap.captured.get('mcp.server.name') == 'declarai'
+            assert cap.captured.get('mcp.tool.name') == 'cache-read:pipeline_config'
+            assert cap.captured.get('gen_ai.tool.name') == 'cache-read:pipeline_config'
+            assert cap.captured.get('prometa.tool_name') == 'cache-read:pipeline_config'
             assert cap.captured.get('declarai.cache.artifact') == 'pipeline_config'
             assert cap.captured.get('declarai.cache.hit') is True
             assert cap.captured.get('declarai.cache.shape') == 'dict'
@@ -5924,6 +5944,10 @@ class TestToolCallSpanRename:
             cap.captured.clear()
             out = execute_tool_call(60100, 'get_encoding_plan', {'top_n': 5})
             assert 'Encoding Plan' in out
+            assert cap.captured.get('mcp.server.name') == 'declarai'
+            assert cap.captured.get('mcp.tool.name') == 'declarai.get_encoding_plan'
+            assert cap.captured.get('declarai.mcp.tool_name') == \
+                'declarai.get_encoding_plan'
             assert cap.captured.get('declarai.tool.name') == 'get_encoding_plan'
             assert cap.captured.get('gen_ai.tool.name') == 'get_encoding_plan'
             assert cap.captured.get('prometa.tool_name') == 'get_encoding_plan'
@@ -5945,6 +5969,8 @@ class TestToolCallSpanRename:
 
         out = execute_tool_call(60101, 'no_such_tool', {})
         assert 'Unknown tool' in out
+        assert cap.captured.get('mcp.server.name') == 'declarai'
+        assert cap.captured.get('mcp.tool.name') == 'declarai.no_such_tool'
         assert cap.captured.get('declarai.tool.name') == 'no_such_tool'
         assert cap.captured.get('gen_ai.tool.name') == 'no_such_tool'
         assert cap.captured.get('prometa.tool_name') == 'no_such_tool'
@@ -5977,6 +6003,34 @@ class TestToolCallSpanRename:
         assert 'Error executing get_dq_summary' in out
         assert cap.captured.get('declarai.tool.ok') is False
         assert 'simulated handler failure' in cap.captured.get('declarai.tool.error', '')
+
+
+@pytest.mark.unit
+class TestActionToolMcpMarkers:
+    """Direct action handler spans must point at their governed MCP tools."""
+
+    def test_update_notes_stamps_direct_action_mcp_marker(self, monkeypatch):
+        from ai_assistant.action_executor import update_notes
+
+        cap = _SpanCapture()
+        _patch_span_attr(monkeypatch, 'ai_assistant.action_executor', capture=cap)
+
+        result = update_notes(
+            60104,
+            {
+                'action': 'add',
+                'position': 'after_data_preview',
+                'content': 'Reviewed.',
+            },
+        )
+
+        assert result['status'] == 'success'
+        assert cap.captured.get('mcp.server.name') == 'declarai'
+        assert cap.captured.get('mcp.tool.name') == 'declarai.action.update_notes'
+        assert cap.captured.get('declarai.mcp.tool_name') == \
+            'declarai.action.update_notes'
+        assert cap.captured.get('gen_ai.tool.name') == 'update-notes'
+        assert cap.captured.get('prometa.tool_name') == 'update-notes'
 
 
 @pytest.mark.unit

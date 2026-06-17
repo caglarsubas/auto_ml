@@ -8,6 +8,7 @@ import os
 from collections.abc import Iterable
 
 from ai_assistant.prometa_config import (
+    DEFAULT_DECLARAI_MCP_SERVER_NAME,
     set_customer_id,
     set_session_id,
     set_span_attr,
@@ -39,6 +40,7 @@ def stamp_mcp_context(
     if tool_name:
         set_span_attrs(
             {
+                "mcp.server.name": DEFAULT_DECLARAI_MCP_SERVER_NAME,
                 "declarai.mcp.tool_name": tool_name,
                 "mcp.tool.name": tool_name,
                 "gen_ai.tool.name": tool_name,

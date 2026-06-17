@@ -184,6 +184,7 @@ class TestMcpActionHelpers:
             tool_name="declarai.get_data_dictionary",
         )
 
+        assert captured["mcp.server.name"] == "declarai"
         assert captured["declarai.mcp.tool_name"] == "declarai.get_data_dictionary"
         assert captured["mcp.tool.name"] == "declarai.get_data_dictionary"
         assert captured["gen_ai.tool.name"] == "declarai.get_data_dictionary"
