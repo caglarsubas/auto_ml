@@ -1109,6 +1109,30 @@ class TestExtractActions:
         assert 'pandas' in actions[0]['payload']['code']
         assert '<<<ACTION' not in clean
 
+    def test_loose_multiline_execute_code_json_is_salvaged(self):
+        """Mistral can emit raw newlines inside the JSON code string."""
+        msg = '''Creating features.
+<<<ACTION:execute_code>>>
+{
+  "code": "
+# Credit Utilization Ratio
+df['credit_utilization_ratio'] = df['Var_19'] / df['Var_4'].replace(0, 1)
+
+# Income-to-Debt Ratio
+df['income_to_debt_ratio'] = df['Var_23'] / df['Var_19'].replace(0, 1)
+",
+  "description": "Create two derived ratios"
+}
+<<<END_ACTION>>>'''
+        actions, clean = self._extract(msg)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        code = actions[0]['payload']['code']
+        assert "credit_utilization_ratio" in code
+        assert "income_to_debt_ratio" in code
+        assert actions[0]['payload']['description'] == 'Create two derived ratios'
+        assert 'Creating features.' in clean
+
     def test_extra_whitespace_in_delimiters(self):
         """LLM adds spaces inside the angle brackets."""
         msg = '<<< ACTION : update_notes >>>{"content":"a"}<<< END_ACTION >>>'
@@ -4998,6 +5022,41 @@ class TestEngineReplyNormalization:
             'Dropping Var_3.\n<<<ACTION:update_config>>>\n'
             '{"updates": []}\n<<<END_ACTION>>>')
 
+    # ── v2.45.1: partial-success detection for non-reasoning engine models ──
+    def test_partial_success_detects_trailing_table_header(self):
+        from ai_assistant.views import _looks_like_incomplete_success_reply
+        msg = (
+            'Below is a table of proposed features.\n\n'
+            '| Feature | Formula | Meaning'
+        )
+        assert _looks_like_incomplete_success_reply(
+            msg,
+            'create these suggested features in our dataset',
+        )
+
+    def test_partial_success_detects_promised_missing_action(self):
+        from ai_assistant.views import _looks_like_incomplete_success_reply
+        msg = (
+            'Below is a table of proposed features. I will implement these '
+            'using execute_code next.'
+        )
+        assert _looks_like_incomplete_success_reply(
+            msg,
+            'derive and create new features in the dataset',
+        )
+
+    def test_partial_success_ignores_complete_table_without_mutation(self):
+        from ai_assistant.views import _looks_like_incomplete_success_reply
+        msg = (
+            '| Feature | Formula | Meaning |\n'
+            '| --- | --- | --- |\n'
+            '| DTI | debt / income | repayment burden |'
+        )
+        assert not _looks_like_incomplete_success_reply(
+            msg,
+            'which features could help the model?',
+        )
+
 
 @pytest.mark.unit
 class TestChatWorkflowFinalization:
@@ -5122,6 +5181,56 @@ class TestChatWorkflowFinalization:
         synth_msgs = [m for m in out['llm_calls'][2]['messages']
                       if m.get('content') == _SYNTHESIS_PROMPT]
         assert synth_msgs, 'generic synthesis prompt not sent'
+
+    def test_non_reasoning_engine_partial_table_uses_compact_retry(self, monkeypatch):
+        from ai_assistant.views import _PARTIAL_REPLY_RETRY_PROMPT
+
+        final = (
+            'Here are the strongest derived features.\n\n'
+            '| Feature | Formula / transformation | Meaning | Why it helps the model |\n'
+            '| --- | --- | --- | --- |\n'
+            '| DTI | Var_19 / Var_24 | debt burden | separates risky borrowers |\n\n'
+            '<<<ACTION:execute_code>>>\n'
+            '{"code": "df[\'DTI\']=df[\'Var_19\']/df[\'Var_24\'].replace(0, 1)", '
+            '"description": "Create DTI"}\n'
+            '<<<END_ACTION>>>'
+        )
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('invoke_skill')
+            if idx == 1:
+                return _text_response(
+                    'Below is a table of proposed features.\n\n'
+                    '| Feature | Formula | Meaning'
+                )
+            assert tools is None
+            return _text_response(final)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        assert len(out['llm_calls']) == 3
+        retry_messages = out['llm_calls'][2]['messages']
+        assert retry_messages[0]['content'] == _PARTIAL_REPLY_RETRY_PROMPT
+        assert all('TOOL_RESULT[invoke_skill]' not in (m.get('content') or '')
+                   for m in retry_messages)
+        assert 'strongest derived features' in out['result']['message']
+        assert out['result']['actions'][0]['type'] == 'execute_code'
+
+    def test_partial_retry_still_partial_falls_back(self, monkeypatch):
+        from ai_assistant.views import _TOOL_BUDGET_EXHAUSTED_FALLBACK
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('invoke_skill')
+            if idx == 1:
+                return _text_response('| Feature | Formula | Meaning')
+            return _text_response('| Feature | Formula | Meaning')
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        assert len(out['llm_calls']) == 3
+        assert out['result']['message'] == _TOOL_BUDGET_EXHAUSTED_FALLBACK
 
 
 @pytest.mark.unit
