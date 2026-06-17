@@ -1167,6 +1167,35 @@ _FINALIZE_PROMPT = (
     '5. Do NOT call any tools.'
 )
 
+# v2.45.1 — compact retry for engine replies that are non-empty but plainly
+# unfinished.  ``ministral-3:14b`` can return ``finish_reason='stop'`` after
+# ``invoke_skill`` while the visible content ends on a markdown table header and
+# contains no Apply action.  A blind retry with the full transcript repeats the
+# same failure because it resends the bulky skill result; this prompt is used
+# with a compact message set built by ``_build_partial_reply_retry_messages``.
+_PARTIAL_REPLY_RETRY_PROMPT = (
+    'Your previous reply was structurally incomplete even though the engine '
+    'reported success.  Rewrite the FINAL answer from scratch now.  Use only '
+    'the compact pipeline context, the current user request, and the previous '
+    'draft as a clue for what failed.  Do NOT continue the broken draft.\n'
+    'STRICT RULES:\n'
+    '1. Keep the answer concise and finish every markdown table you start.\n'
+    '2. If the user asked you to create, derive, engineer, add, or transform '
+    'dataset features, include a short intro, then a complete markdown table '
+    'with columns: Feature | Formula / transformation | Meaning | Why it '
+    'helps the model.\n'
+    '3. For dataset mutations, emit EXACTLY ONE action block at the very end '
+    'using this format, with valid JSON and no markdown fences:\n'
+    '<<<ACTION:execute_code>>>\n'
+    '{"code": "df[\'new_column\'] = df[\'Var_19\'] / df[\'Var_24\']'
+    '.replace(0, 1)", "description": "Short description of the operation"}\n'
+    '<<<END_ACTION>>>\n'
+    '4. Do NOT call tools.  Do NOT mention internal retries or engine errors.'
+)
+
+_PARTIAL_RETRY_CONTEXT_CHARS = 8000
+_PARTIAL_RETRY_DRAFT_CHARS = 1600
+
 # v2.44.2 — per-turn topic anchor.  Reasoning-family engine models on a small
 # context window occasionally anchor on the PREVIOUS turn (e.g. a
 # just-created feature table) and answer THAT topic instead of the current
@@ -1469,6 +1498,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     # Decide: tool-calling mode (slim context) vs legacy mode (full context dump)
     use_tools = False
+    compact_retry_context = ''
     if file_id is not None:
         available = cache_list_artifacts(file_id)
         if available:
@@ -1476,12 +1506,14 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     if use_tools:
         slim = _build_slim_context(file_id, section)
+        compact_retry_context = slim
         messages.append({
             'role': 'system',
             'content': f'Pipeline context summary (use tools for details):\n\n{slim}',
         })
     elif context:
         context_str = _format_context(context, section)
+        compact_retry_context = context_str
         messages.append({
             'role': 'system',
             'content': f'The user is currently viewing the following pipeline output '
@@ -1726,12 +1758,17 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # why they help.  Elaborate via the same finalization pass so the answer
     # reads like the cloud models do (intro + feature table + Apply).
     code_only = is_engine_reasoning and _is_code_only_reply(assistant_message)
+    partial_success = (
+        (model_cfg or {}).get('provider') == 'engine'
+        and _looks_like_incomplete_success_reply(assistant_message, user_message)
+    )
     set_span_attr('declarai.chat.cot_leak_detected', cot_leaked)
     set_span_attr('declarai.chat.code_only_reply', code_only)
+    set_span_attr('declarai.chat.partial_success_detected', partial_success)
     synthesis_required = (
         (not assistant_message.strip() or cot_leaked)
         and any(m.get('role') == 'tool' for m in messages)
-    ) or code_only
+    ) or code_only or partial_success
     set_span_attr('declarai.chat.synthesis_pass', synthesis_required)
     if synthesis_required:
         # Preserve the original action block(s) so an elaboration pass that
@@ -1740,15 +1777,24 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             _ACTION_BLOCK_RE.findall(assistant_message) if code_only else []
         )
         try:
-            # For a code-only reply, show the model its own proposed code so the
-            # elaboration explains THOSE exact features rather than a fresh set.
-            if code_only:
-                messages.append({'role': 'assistant', 'content': assistant_message})
-            messages.append({
-                'role': 'system',
-                'content': _FINALIZE_PROMPT if is_engine_reasoning else _SYNTHESIS_PROMPT,
-            })
-            synth = _call_llm(messages, model_key, tools=None)
+            if partial_success:
+                retry_messages = _build_partial_reply_retry_messages(
+                    user_message=user_message,
+                    compact_context=compact_retry_context,
+                    previous_reply=assistant_message,
+                )
+                synth = _call_llm(retry_messages, model_key, tools=None)
+            else:
+                # For a code-only reply, show the model its own proposed code
+                # so the elaboration explains THOSE exact features rather than
+                # a fresh set.
+                if code_only:
+                    messages.append({'role': 'assistant', 'content': assistant_message})
+                messages.append({
+                    'role': 'system',
+                    'content': _FINALIZE_PROMPT if is_engine_reasoning else _SYNTHESIS_PROMPT,
+                })
+                synth = _call_llm(messages, model_key, tools=None)
             _merge_usage(total_usage, synth.get('usage', {}))
             synth_msg = synth.get('choices', [{}])[0].get('message', {}) or {}
             new_message = _normalize_engine_reply(
@@ -1756,6 +1802,10 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             # If the finalization STILL reads as raw CoT, blank it so the
             # actionable fallback copy shows instead of leaked reasoning.
             if is_engine_reasoning and _looks_like_cot_leak(new_message):
+                new_message = ''
+            if partial_success and _looks_like_incomplete_success_reply(
+                    new_message, user_message):
+                set_span_attr('declarai.chat.partial_success_retry_failed', True)
                 new_message = ''
             # If elaboration produced an explanation but dropped the action,
             # re-attach the original block(s) so Apply still renders.
@@ -2078,6 +2128,23 @@ _COT_OPENER_RE = _re.compile(
     r'to (?:answer|solve|tackle) this\b)',
     _re.IGNORECASE,
 )
+_DATASET_MUTATION_REQUEST_RE = _re.compile(
+    r'\b(?:create|derive|engineer|add|generate|build|construct|make|transform)'
+    r'\b.{0,80}\b(?:feature|features|column|columns|variable|variables)\b'
+    r'|\b(?:feature|features|column|columns|variable|variables)\b.{0,80}'
+    r'\b(?:create|derive|engineer|add|generate|build|construct|make|transform)\b',
+    _re.IGNORECASE | _re.DOTALL,
+)
+_PROMISED_DATASET_ACTION_RE = _re.compile(
+    r'\b(?:i\'ll|i will|i can|let me|next,?\s*i(?:\'ll| will)?|'
+    r'using\s+execute_code|with\s+execute_code|click\s+apply|apply button)'
+    r'\b',
+    _re.IGNORECASE,
+)
+_TABLE_HEADER_HINTS = {
+    'feature', 'formula', 'meaning', 'why', 'transformation', 'recommended',
+    'rationale', 'metric', 'value', 'step', 'description',
+}
 
 
 def _strip_reasoning_markers(text: str) -> str:
@@ -2155,6 +2222,114 @@ def _looks_like_cot_leak(text: str) -> bool:
     return bool(_COT_OPENER_RE.match(text.lstrip()[:200]))
 
 
+def _requests_dataset_mutation(text: str) -> bool:
+    """True when the user's turn asks the assistant to modify/create columns."""
+    if not text:
+        return False
+    return bool(_DATASET_MUTATION_REQUEST_RE.search(text))
+
+
+def _strip_markdown_cell_markup(cell: str) -> str:
+    """Normalize a markdown table cell for lightweight header detection."""
+    return cell.strip().strip('*`_ ').lower()
+
+
+def _looks_like_markdown_table_header(line: str) -> bool:
+    """Detect a markdown table header line such as ``| Feature | Formula |``."""
+    if not line or line.count('|') < 2:
+        return False
+    cells = [
+        _strip_markdown_cell_markup(c)
+        for c in line.strip().strip('|').split('|')
+    ]
+    cells = [c for c in cells if c]
+    if len(cells) < 2:
+        return False
+    hits = sum(1 for c in cells if any(h in c for h in _TABLE_HEADER_HINTS))
+    return hits >= 2
+
+
+def _ends_with_unfinished_markdown_table(text: str) -> bool:
+    """True when the visible reply stops at a table header/separator.
+
+    This catches the live ``ministral-3:14b`` failure where the response ended
+    on ``| Feature | Formula | Meaning`` while still reporting
+    ``finish_reason='stop'``.  A complete markdown table has a separator and at
+    least one data row after the header; a header as the final non-empty line is
+    structurally incomplete.
+    """
+    if not text:
+        return False
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return False
+    tail = lines[-1]
+    if _re.fullmatch(r'\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?', tail):
+        return True
+    return _looks_like_markdown_table_header(tail)
+
+
+def _looks_like_incomplete_success_reply(text: str, user_message: str) -> bool:
+    """Detect non-empty engine replies that should not be shown as final.
+
+    Some local engine adapters can surface a truncated or malformed response
+    with ``finish_reason='stop'``.  That bypasses the existing empty-response
+    and CoT guards because the message has content.  Keep this conservative and
+    structural: retry when the answer ends mid-table, or when a dataset
+    mutation request produced prose that promises an action but no action block.
+    """
+    if not text or not text.strip() or _HAS_ACTION_RE.search(text):
+        return False
+    if _ends_with_unfinished_markdown_table(text):
+        return True
+
+    mutation_requested = _requests_dataset_mutation(user_message)
+    if not mutation_requested:
+        return False
+
+    low = text.lower()
+    if _PROMISED_DATASET_ACTION_RE.search(text):
+        return True
+    if 'proposed' in low and 'feature' in low and ('formula' in low or 'transformation' in low):
+        return True
+    return False
+
+
+def _build_partial_reply_retry_messages(
+    *,
+    user_message: str,
+    compact_context: str,
+    previous_reply: str,
+) -> list:
+    """Build a compact retry transcript for malformed successful replies.
+
+    The important part is what this omits: tool schemas, full history, and the
+    bulky ``invoke_skill`` result that triggered the malformed Mistral answer.
+    The model gets enough current context to finish the job, but not the same
+    overstuffed prompt that caused the first failure.
+    """
+    context = (compact_context or '').strip()
+    if len(context) > _PARTIAL_RETRY_CONTEXT_CHARS:
+        context = context[:_PARTIAL_RETRY_CONTEXT_CHARS].rstrip()
+        context += '\n...[compact context truncated]'
+    draft = (previous_reply or '').strip()
+    if len(draft) > _PARTIAL_RETRY_DRAFT_CHARS:
+        draft = draft[-_PARTIAL_RETRY_DRAFT_CHARS:].lstrip()
+        draft = '[previous draft tail]\n' + draft
+    return [
+        {'role': 'system', 'content': _PARTIAL_REPLY_RETRY_PROMPT},
+        {
+            'role': 'system',
+            'content': 'Compact pipeline context:\n\n' + (context or '(none)'),
+        },
+        {
+            'role': 'assistant',
+            'content': 'Previous incomplete draft to replace:\n\n' + draft,
+        },
+        {'role': 'user', 'content': user_message},
+    ]
+
+
 # Full <<<ACTION:…>>>…<<<END_ACTION>>> block (any type), tolerant of 2-3
 # brackets — used to size the explanatory prose around an action and to
 # re-attach the original block if an elaboration pass drops it.
@@ -2228,6 +2403,10 @@ def _extract_actions(message: str):
             payload = json.loads(payload_str)
             actions.append({'type': action_type, 'payload': payload})
         except json.JSONDecodeError:
+            payload = _try_parse_loose_action_payload(action_type, payload_str)
+            if payload is not None:
+                actions.append({'type': action_type, 'payload': payload})
+                continue
             # If JSON parsing fails, skip this action block
             print(f"[AI] Failed to parse action block: {payload_str[:200]}")
     # Remove action blocks from the visible message
@@ -2259,6 +2438,41 @@ def _extract_actions(message: str):
                 clean = before_block
 
     return actions, clean
+
+
+def _try_parse_loose_action_payload(action_type: str, payload_str: str):
+    """Recover common engine-emitted ``execute_code`` JSON mistakes.
+
+    Local models often understand the action-block contract but miss strict
+    JSON escaping, especially for multiline pandas code:
+
+        {"code": "
+        df['x'] = ...
+        ", "description": "..."}
+
+    That is invalid JSON because raw newlines appear inside the string, but it
+    is still an unambiguous execute_code payload.  Keep the salvage narrow to
+    avoid guessing arbitrary malformed actions.
+    """
+    if (action_type or '').lower() != 'execute_code' or not payload_str:
+        return None
+    match = _re.search(
+        r'"code"\s*:\s*"(?P<code>.*?)"\s*,\s*"description"\s*:\s*"(?P<description>.*?)"',
+        payload_str,
+        _re.DOTALL | _re.IGNORECASE,
+    )
+    if not match:
+        return None
+    code = match.group('code').strip()
+    description = match.group('description').strip()
+    if not code:
+        return None
+    code = code.replace('\\n', '\n').replace('\\"', '"')
+    description = description.replace('\\n', '\n').replace('\\"', '"')
+    return {
+        'code': code,
+        'description': description or 'Run the proposed pandas transformation',
+    }
 
 
 def _try_parse_truncated_json(text: str):
