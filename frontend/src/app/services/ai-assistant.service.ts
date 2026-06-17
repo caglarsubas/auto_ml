@@ -40,6 +40,7 @@ export const AI_SUPPORT_INTENTS_BY_SECTION: { [section: string]: AiIntentLabel[]
   sfs_forward: ['C'],
   sfs_backward: ['C'],
   sfs_forward_from_backward: ['C'],
+  hyperparameter_results: ['C'],
 };
 
 export interface ChatMessage {

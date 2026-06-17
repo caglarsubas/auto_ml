@@ -3107,6 +3107,38 @@ export class ModelingComponent implements OnInit, AfterViewInit {
       .join(', ');
   }
 
+  /** Context payload for the Hyperparameter Results AI Support button. */
+  getHyperparamResultsContext(): any {
+    return {
+      hyperparameter_results: {
+        status: this.hpResults?.status || 'completed',
+        search_method: this.hpResults?.search_method || this.hpResolvedMethod(),
+        feature_count: this.hpResults?.feature_count ?? this.getFinalSelectedFeatures().length,
+        selected_features: this.getFinalSelectedFeatures(),
+        duration_seconds: this.hpDurationSeconds,
+        best_points: this.hpBestPoints || {},
+        best_point_rows: this.hpBestPointRows(),
+        emphasized: this.hpEmphasized || {},
+        param_importance: this.hpParamImportance || {},
+        guidance: this.hpGuidance || [],
+        validation_curves: this.hpValidationCurves || [],
+        selected_next_ranges: this.hpSelectedRanges || {},
+      },
+      next_search_config: {
+        search_method: this.hpSearchMethod,
+        resolved_method: this.hpResolvedMethod(),
+        recommended_method: this.hpRecommendedMethod(),
+        enabled_params: this.hpParamSpace.filter(r => r.enabled).map(r => r.name),
+        param_space: this.hpParamSpace,
+        n_iter: this.hpNIter,
+        cv_folds: this.hpCvFolds,
+        n_jobs: this.hpNJobs,
+        primary_metric: this.hpPrimaryMetric,
+        validation_curve_points: this.hpValidationCurvePoints,
+      },
+    };
+  }
+
   /** Emphasis badge helpers: which param drives overfitting/CV-gain/shrinkage. */
   hpEmphasisParam(kind: 'most_cv_gain' | 'most_overfitting' | 'most_shrinkage'): string | null {
     return this.hpEmphasized?.[kind] || null;
