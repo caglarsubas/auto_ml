@@ -458,6 +458,27 @@ describe('AiChatPanelComponent', () => {
         { column: 'Var_3', value: 'drop' },
       ]);
     });
+
+    it('should mirror preprocessing_options updates into the purifier selector', (done) => {
+      // Regression guard for the 28 -> 29 purifier swap: update_config
+      // can return success, but the left-hand Data Purifier UI must also
+      // receive the new checkbox set.
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received).toEqual({
+          form: 'wholesale',
+          purifier_options: [1, 2, 3, 4, 7, 23, 29, 32],
+          add: [],
+          remove: [],
+        });
+        done();
+      });
+      (component as any)._handleActionResult('update_config', {
+        applied: [
+          { key: 'preprocessing_options', value: [1, 2, 3, 4, 7, 23, 29, 32] },
+        ],
+        errors: [],
+      });
+    });
   });
 
   // ── start_sfs response handling (v2.25.0+) ────────────────────────────

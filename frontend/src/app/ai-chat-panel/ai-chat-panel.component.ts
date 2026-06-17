@@ -637,9 +637,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           if (upd.reason) entry.reason = String(upd.reason);
           featureUsageBatch.push(entry);
         }
+      } else if (upd.key === 'preprocessing_options') {
+        if (Array.isArray(upd.value)) {
+          const purifierOptions = upd.value
+            .map((id: any) => Number(id))
+            .filter((id: number) => Number.isInteger(id));
+          this.sharedService.emitPurifierSelectionUpdate({
+            form: 'wholesale',
+            purifier_options: purifierOptions,
+            add: [],
+            remove: [],
+          });
+        }
       }
-      // Other config keys (preprocessing_options, split_strategy, etc.) are handled
-      // by triggering a checkpoint which the parent components pick up
+      // Other config keys (split_strategy, etc.) are handled by triggering a
+      // checkpoint which the parent components pick up.
     }
     if (featureUsageBatch.length) {
       this.sharedService.emitFeatureUsageUpdates(featureUsageBatch);
