@@ -1463,6 +1463,51 @@ describe('ModelingComponent', () => {
       expect(component.hpDurationSeconds).toBe(12.3);
     });
 
+    it('getHyperparamResultsContext packages completed results and next-search config', () => {
+      component.hpResults = { status: 'completed', search_method: 'random', feature_count: 12 } as any;
+      component.hpBestPoints = { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9 } };
+      component.hpValidationCurves = [{ param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] }] as any;
+      component.hpEmphasized = { most_cv_gain: 'max_depth' };
+      component.hpParamImportance = { cv_gain: { max_depth: 0.7 } };
+      component.hpGuidance = [{ param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' }];
+      component.hpSelectedRanges = { max_depth: [2, 6] };
+      component.hpNIter = 44;
+      component.hpPrimaryMetric = 'roc_auc';
+
+      const ctx = component.getHyperparamResultsContext();
+
+      expect(ctx.hyperparameter_results.search_method).toBe('random');
+      expect(ctx.hyperparameter_results.feature_count).toBe(12);
+      expect(ctx.hyperparameter_results.best_points.roc_auc.cv_mean).toBe(0.9);
+      expect(ctx.hyperparameter_results.validation_curves.length).toBe(1);
+      expect(ctx.hyperparameter_results.selected_next_ranges.max_depth).toEqual([2, 6]);
+      expect(ctx.next_search_config.n_iter).toBe(44);
+      expect(ctx.next_search_config.primary_metric).toBe('roc_auc');
+      expect(ctx.next_search_config.enabled_params.length).toBeGreaterThan(0);
+    });
+
+    it("renders a Hyperparameter Results 'Get AI Support' button and routes the scoped context", () => {
+      spyOn(component, 'requestAiSupport').and.callFake(() => { /* no-op */ });
+      component.modelingStatus = { model: {} } as any;
+      component.hpResults = { status: 'completed', search_method: 'grid', feature_count: 8 } as any;
+      component.hpBestPoints = { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9 } };
+      component.hpValidationCurves = [{ param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] }] as any;
+      component.hpRunning = false;
+      fixture.detectChanges();
+
+      const btns = fixture.nativeElement.querySelectorAll('.hp-section .ai-support-btn');
+      expect(btns.length).withContext('Only the hyperparameter-results support button should render in hp-section').toBe(1);
+      expect((btns[0].textContent || '').trim()).toContain('Get AI Support');
+
+      (btns[0] as HTMLButtonElement).click();
+
+      const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
+      expect(args[1]).toBe('hyperparameter_results');
+      expect(args[0].hyperparameter_results.best_points.roc_auc.cv_mean).toBe(0.9);
+      expect(args[0].hyperparameter_results.validation_curves.length).toBe(1);
+      expect(args[2]).toContain('Analyze ONLY the completed hyperparameter tuning results');
+    });
+
     it('hpBestPointRows returns rows only for present metrics, in metric order', () => {
       component.hpBestPoints = {
         f1: { cv_mean: 0.5 }, roc_auc: { cv_mean: 0.9 },
