@@ -10,7 +10,12 @@ import json
 import logging
 from typing import Any, Optional
 
-from .prometa_config import tool as prometa_tool, set_span_attr, span_timer
+from .prometa_config import (
+    tool as prometa_tool,
+    set_span_attr,
+    span_timer,
+    stamp_mcp_tool_marker,
+)
 from .skill_registry import get_skill, list_skills
 
 from .cache import (
@@ -47,6 +52,7 @@ def _not_available(name: str) -> str:
 
 def _stamp_read_attrs(artifact: str, data: Any) -> None:
     """Stamp common attributes on a ``cache-read:<artifact>`` span."""
+    stamp_mcp_tool_marker(f'cache-read:{artifact}')
     set_span_attr('declarai.cache.artifact', artifact)
     if data is None:
         set_span_attr('declarai.cache.hit', False)
@@ -208,6 +214,7 @@ def read_sfs_status(file_id: int) -> dict:
     ``modeling.views.SFSStatusView`` so the assistant and the UI agree
     on what state SFS is in.
     """
+    stamp_mcp_tool_marker('state-read:sfs_status')
     # Local import: ``modeling.views`` imports ``ai_assistant.cache``
     # transitively for tracing decorators; importing it at module load
     # would create a circular dependency.  Inside a function call all
@@ -766,6 +773,7 @@ def _load_skill_traced(skill_name: str) -> str:
       - declarai.skill.elapsed_ms   elapsed time in milliseconds
     """
     with span_timer('declarai.skill'):
+        stamp_mcp_tool_marker('skill-invoke', mcp_tool_name='declarai.invoke_skill')
         set_span_attr('declarai.skill.name', skill_name)
         skill = get_skill(skill_name)
         if not skill:
@@ -921,6 +929,7 @@ def _load_skill_file_traced(skill_name: str, rel_path: str) -> str:
       - declarai.skill.elapsed_ms     elapsed time in milliseconds
     """
     with span_timer('declarai.skill'):
+        stamp_mcp_tool_marker('skill-file-read', mcp_tool_name='declarai.get_skill_file')
         set_span_attr('declarai.skill.name', skill_name)
         set_span_attr('declarai.skill.file_path', rel_path)
         skill = get_skill(skill_name)
@@ -1008,9 +1017,9 @@ def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
         A human-readable string with the tool result.
     """
     with span_timer('declarai.tool'):
+        mcp_tool_name = f'declarai.{tool_name}'
+        stamp_mcp_tool_marker(tool_name, mcp_tool_name=mcp_tool_name)
         set_span_attr('declarai.tool.name', tool_name)
-        set_span_attr('gen_ai.tool.name', tool_name)
-        set_span_attr('prometa.tool_name', tool_name)
         set_span_attr('declarai.tool.file_id', file_id)
         set_span_attr('declarai.tool.args_keys',
                       ','.join(sorted(arguments.keys())) if arguments else '')
@@ -1023,11 +1032,13 @@ def execute_tool_call(file_id: int, tool_name: str, arguments: dict) -> str:
             return result
         try:
             result = handler(file_id, arguments)
+            stamp_mcp_tool_marker(tool_name, mcp_tool_name=mcp_tool_name)
             set_span_attr('declarai.tool.ok', True)
             set_span_attr('declarai.tool.result_chars', len(result))
             logger.info("Tool %s executed for file_id=%s (result length=%d)", tool_name, file_id, len(result))
             return result
         except Exception as exc:
+            stamp_mcp_tool_marker(tool_name, mcp_tool_name=mcp_tool_name)
             set_span_attr('declarai.tool.ok', False)
             set_span_attr('declarai.tool.error', str(exc)[:200])
             logger.error("Tool execution error (%s): %s", tool_name, exc)

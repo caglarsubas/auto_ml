@@ -17,7 +17,13 @@ import logging
 import os
 from typing import Any, Optional
 
-from .prometa_config import child_only_tool, set_span_attr, span_timer, cache_lookup
+from .prometa_config import (
+    child_only_tool,
+    set_span_attr,
+    span_timer,
+    cache_lookup,
+    stamp_mcp_tool_marker,
+)
 
 # ---------------------------------------------------------------------------
 # Tracing policy for cache ops (v2.22.3+)
@@ -105,6 +111,7 @@ def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) ->
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
+        stamp_mcp_tool_marker('redis-set')
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.artifact', artifact)
         set_span_attr('declarai.cache.ttl', ttl)
@@ -156,6 +163,7 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
     # — the existing legacy span shape continues unchanged.
     with cache_lookup('tool_call', key=cache_key) as ch:
         with span_timer('declarai.cache'):
+            stamp_mcp_tool_marker('redis-get')
             set_span_attr('declarai.cache.file_id', file_id)
             set_span_attr('declarai.cache.artifact', artifact)
             r = _get_redis()
@@ -207,6 +215,7 @@ def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_T
       - declarai.cache.elapsed_ms   elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
+        stamp_mcp_tool_marker('redis-set-bulk')
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.keys', ','.join(artifacts.keys()))
         set_span_attr('declarai.cache.key_count', len(artifacts))
@@ -248,6 +257,7 @@ def cache_delete(file_id: int, artifact: str) -> bool:
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
+        stamp_mcp_tool_marker('redis-delete')
         set_span_attr('declarai.cache.file_id', file_id)
         set_span_attr('declarai.cache.artifact', artifact)
         r = _get_redis()
@@ -282,6 +292,7 @@ def cache_list_artifacts(file_id: int) -> list[str]:
       - declarai.cache.elapsed_ms  elapsed time in milliseconds
     """
     with span_timer('declarai.cache'):
+        stamp_mcp_tool_marker('redis-list')
         set_span_attr('declarai.cache.file_id', file_id)
         prefix = f"ai:pipeline:{file_id}:"
         set_span_attr('declarai.cache.prefix', prefix)
