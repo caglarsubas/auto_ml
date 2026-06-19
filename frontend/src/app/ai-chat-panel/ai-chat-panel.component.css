@@ -98,7 +98,10 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 1000;
   min-width: 200px;
-  overflow: hidden;
+  max-height: min(420px, calc(100vh - 96px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .model-option {

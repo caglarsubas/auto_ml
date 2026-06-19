@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, HostListener } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { AiAssistantService, AiAction, AiFeedbackState, AiIntentLabel, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
@@ -11,6 +11,7 @@ import { SharedService } from '../services/shared.service';
 })
 export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('chatContainer') chatContainer!: ElementRef;
+  @ViewChild('modelSelectorWrapper') modelSelectorWrapper?: ElementRef<HTMLElement>;
 
   messages: ChatMessage[] = [];
   userInput: string = '';
@@ -832,6 +833,17 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   toggleModelSelector(): void {
     this.showModelSelector = !this.showModelSelector;
+  }
+
+  @HostListener('document:click', ['$event'])
+  closeModelSelectorOnOutsideClick(event: MouseEvent): void {
+    if (!this.showModelSelector) return;
+
+    const wrapper = this.modelSelectorWrapper?.nativeElement;
+    const target = event.target;
+    if (!wrapper || !(target instanceof Node) || !wrapper.contains(target)) {
+      this.showModelSelector = false;
+    }
   }
 
   selectModel(modelKey: string): void {
