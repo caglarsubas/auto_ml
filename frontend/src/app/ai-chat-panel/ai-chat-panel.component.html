@@ -7,7 +7,7 @@
     </div>
     <div class="chat-header-actions">
       <!-- Model selector -->
-      <div class="model-selector-wrapper">
+      <div class="model-selector-wrapper" #modelSelectorWrapper>
         <button class="chat-action-btn model-selector-btn" (click)="toggleModelSelector()" title="Select model">
           <span class="model-selector-label">{{ getSelectedModelName() }}</span>
           <span class="model-selector-caret">&#9660;</span>

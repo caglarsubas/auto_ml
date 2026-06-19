@@ -59,6 +59,47 @@ describe('AiChatPanelComponent', () => {
     expect(aiService.isPanelOpen()).toBeTrue();
   });
 
+  describe('model selector dropdown', () => {
+    beforeEach(() => {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [
+          { key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' },
+          { key: 'gemma4:26b', display_name: 'gemma4:26b', provider: 'engine' },
+        ],
+        default: 'gpt-5.5',
+      }));
+    });
+
+    it('should close when clicking outside the selector frame', () => {
+      fixture.detectChanges();
+      component.showModelSelector = true;
+
+      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(component.showModelSelector).toBeFalse();
+    });
+
+    it('should stay open when clicking inside the selector frame', () => {
+      fixture.detectChanges();
+      component.showModelSelector = true;
+      fixture.detectChanges();
+
+      const wrapper: HTMLElement = fixture.nativeElement.querySelector('.model-selector-wrapper');
+      wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(component.showModelSelector).toBeTrue();
+    });
+
+    it('should close after selecting a model', () => {
+      component.showModelSelector = true;
+
+      component.selectModel('gemma4:26b');
+
+      expect(component.selectedModel).toBe('gemma4:26b');
+      expect(component.showModelSelector).toBeFalse();
+    });
+  });
+
   it('should forward preclassified button intent labels to /chat/', () => {
     spyOn(dataService, 'getAiModels').and.returnValue(of({
       models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
