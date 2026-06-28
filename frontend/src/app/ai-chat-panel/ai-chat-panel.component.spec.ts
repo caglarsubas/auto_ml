@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { FormsModule } from '@angular/forms';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AiChatPanelComponent } from './ai-chat-panel.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
@@ -1166,6 +1166,164 @@ describe('AiChatPanelComponent', () => {
         { description: 'note' },
         undefined,                    // ← key assertion: no link forwarded
       );
+    });
+
+    it('auto-applies a corrected execute_code action after the first Apply fails', () => {
+      const action: any = {
+        type: 'execute_code',
+        payload: { code: "df['bad'] = missing_name" },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared code.',
+        timestamp: new Date(),
+        actions: [action],
+        chatSpanId: 'original-chat-span',
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
+        throwError(() => ({ error: { error: 'NameError: missing_name' } })),
+        of({
+          status: 'success',
+          description: 'fixed',
+          changes: { columns_added: ['fixed'], columns_removed: [], rows_before: 2, rows_after: 2 },
+          preview: { total_columns: 3, total_rows: 2 },
+        }),
+      );
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'I fixed the variable reference.',
+        actions: [{ type: 'execute_code', payload: { code: "df['fixed'] = 1" } }],
+        chat_span_id: 'correction-chat-span',
+      }));
+
+      component.applyAction(messageIndex, 0, action);
+
+      expect(execSpy.calls.count()).toBe(2);
+      expect(execSpy.calls.argsFor(0)).toEqual([
+        1,
+        'execute_code',
+        { code: "df['bad'] = missing_name" },
+        'original-chat-span',
+      ]);
+      expect(execSpy.calls.argsFor(1)).toEqual([
+        1,
+        'execute_code',
+        { code: "df['fixed'] = 1" },
+        'correction-chat-span',
+      ]);
+      const correctionMsg = aiService.getMessages().find(m =>
+        m.role === 'assistant' && m.content.includes('Applying the corrected operation now')
+      );
+      expect(correctionMsg).toBeTruthy();
+      expect(correctionMsg?.actions).toBeUndefined();
+      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeTrue();
+      expect(component.actionSuccess).toBe('Code executed successfully.');
+      expect(component.actionError).toBeNull();
+    });
+
+    it('iteratively auto-fixes consecutive execute_code failures up to success', () => {
+      const action: any = {
+        type: 'execute_code',
+        payload: { code: "df['x'] = missing_one" },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared code.',
+        timestamp: new Date(),
+        actions: [action],
+        chatSpanId: 'original-chat-span',
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
+        throwError(() => ({ error: { error: 'NameError: missing_one' } })),
+        throwError(() => ({ error: { error: 'KeyError: Var_404' } })),
+        of({
+          status: 'success',
+          description: 'fixed',
+          changes: { columns_added: ['x'], columns_removed: [], rows_before: 2, rows_after: 2 },
+          preview: { total_columns: 3, total_rows: 2 },
+        }),
+      );
+      const chatSpy = spyOn(dataService, 'sendAiChat').and.returnValues(
+        of({
+          message: 'First correction.',
+          actions: [{ type: 'execute_code', payload: { code: "df['x'] = df['Var_404']" } }],
+          chat_span_id: 'correction-span-1',
+        }),
+        of({
+          message: 'Second correction.',
+          actions: [{ type: 'execute_code', payload: { code: "df['x'] = 1" } }],
+          chat_span_id: 'correction-span-2',
+        }),
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      expect(chatSpy.calls.count()).toBe(2);
+      expect(execSpy.calls.count()).toBe(3);
+      expect(execSpy.calls.argsFor(2)).toEqual([
+        1,
+        'execute_code',
+        { code: "df['x'] = 1" },
+        'correction-span-2',
+      ]);
+      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeTrue();
+      expect(component.actionSuccess).toBe('Code executed successfully.');
+      expect(component.actionError).toBeNull();
+    });
+
+    it('stops automatic execute_code correction after the retry cap', () => {
+      const action: any = {
+        type: 'execute_code',
+        payload: { code: "df['x'] = still_bad" },
+        applied: false,
+      };
+      aiService.addMessage({
+        role: 'assistant',
+        content: 'I prepared code.',
+        timestamp: new Date(),
+        actions: [action],
+        chatSpanId: 'original-chat-span',
+      });
+      const messageIndex = aiService.getMessages().length - 1;
+
+      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
+        throwError(() => ({ error: { error: 'NameError: still_bad' } })),
+        throwError(() => ({ error: { error: 'NameError: still_bad_1' } })),
+        throwError(() => ({ error: { error: 'NameError: still_bad_2' } })),
+        throwError(() => ({ error: { error: 'NameError: still_bad_3' } })),
+      );
+      const chatSpy = spyOn(dataService, 'sendAiChat').and.returnValues(
+        of({
+          message: 'Correction 1.',
+          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_1" } }],
+          chat_span_id: 'correction-span-1',
+        }),
+        of({
+          message: 'Correction 2.',
+          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_2" } }],
+          chat_span_id: 'correction-span-2',
+        }),
+        of({
+          message: 'Correction 3.',
+          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_3" } }],
+          chat_span_id: 'correction-span-3',
+        }),
+      );
+
+      component.applyAction(messageIndex, 0, action);
+
+      expect(chatSpy.calls.count()).toBe(3);
+      expect(execSpy.calls.count()).toBe(4);
+      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeFalse();
+      const finalMsg = aiService.getMessages().slice(-1)[0];
+      expect(finalMsg.content).toContain('I tried 3 automatic correction attempts');
+      expect(finalMsg.content).toContain('NameError: still_bad_3');
+      expect(component.actionError).toContain('NameError: still_bad_3');
     });
   });
 
