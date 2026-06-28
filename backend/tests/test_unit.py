@@ -4936,6 +4936,59 @@ class TestEngineReplyNormalization:
         assert '<<<ACTION:execute_code>>>' in out
         assert "df['Y'] = 2" in out
 
+    def test_markdown_json_execute_code_becomes_action_block(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''The error suggests the first code-run failed. Here's the corrected action block:
+
+```json
+{
+  "code": "
+Extract years from Var_6 and Var_9 using a simple suffix slice.
+df['Var_6_year'] = pd.to_numeric(df['Var_6'].astype(str).str[-4:], errors='coerce').fillna(0)
+df['Var_9_year'] = pd.to_numeric(df['Var_9'].astype(str).str[-4:], errors='coerce').fillna(2024)
+",
+  "description": "Create corrected year extraction helper columns"
+}
+```'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        assert '<<<ACTION:execute_code>>>' in out
+        actions, clean = _extract_actions(out)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert "df['Var_6_year']" in actions[0]['payload']['code']
+        assert actions[0]['payload']['description'] == (
+            'Create corrected year extraction helper columns'
+        )
+        assert 'The error suggests' in clean
+
+    def test_single_backtick_markdown_json_execute_code_becomes_action_block(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''Here's the corrected action block:
+
+`json
+{
+  "code": "
+df['Debt_to_Income_Ratio'] = df['Var_19'] / df['Var_24'].replace(0, 1)
+",
+  "description": "Create DTI"
+}
+`'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        actions, clean = _extract_actions(out)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert "df['Debt_to_Income_Ratio']" in actions[0]['payload']['code']
+        assert 'corrected action block' in clean
+
+    def test_markdown_json_conversion_requires_action_hint(self):
+        from ai_assistant.views import _convert_markdown_execute_code_json_to_actions
+        raw = '''Example payload:
+
+```json
+{"code": "df['X'] = 1", "description": "Example only"}
+```'''
+        assert _convert_markdown_execute_code_json_to_actions(raw) == raw
+
     def test_vendor_conversion_noop_without_function_tag(self):
         from ai_assistant.views import _convert_vendor_tool_xml_to_actions
         assert _convert_vendor_tool_xml_to_actions('no tags here') == 'no tags here'
@@ -5206,6 +5259,33 @@ class TestChatWorkflowFinalization:
         assert actions[0]['type'] == 'execute_code'
         assert actions[0]['payload']['code'] == "df['DTI'] = df['Var_19'] / df['Var_24']"
         assert 'debt-to-income' in out['result']['message'].lower()
+
+    def test_markdown_json_code_becomes_apply_action_no_retry(self, monkeypatch):
+        raw = '''The error suggests the first run failed, so here is the corrected action block:
+
+```json
+{
+  "code": "
+df['Var_6_year'] = pd.to_numeric(df['Var_6'].astype(str).str[-4:], errors='coerce').fillna(0)
+df['Debt_to_Income_Ratio'] = df['Var_19'] / df['Var_24'].replace(0, 1)
+",
+  "description": "Create corrected derived features"
+}
+```'''
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_data_dictionary')
+            return _text_response(raw)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        assert len(out['llm_calls']) == 2
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        assert "df['Debt_to_Income_Ratio']" in actions[0]['payload']['code']
+        assert 'corrected action block' in out['result']['message']
 
     def test_clean_reply_with_action_passes_through(self, monkeypatch):
         rich = ('The debt-to-income ratio (DTI) divides total debt by income '
