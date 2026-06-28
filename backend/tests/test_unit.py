@@ -4989,6 +4989,48 @@ df['Debt_to_Income_Ratio'] = df['Var_19'] / df['Var_24'].replace(0, 1)
 ```'''
         assert _convert_markdown_execute_code_json_to_actions(raw) == raw
 
+    def test_action_heading_markdown_json_blocks_become_multiple_actions(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''Action: Optimized Purification
+```json
+{
+  "purifier_options": [1, 2, 3, 4, 29, 8, 18, 33],
+  "split": {"strategy": "random", "percent": 25},
+  "description": "Run optimized purification."
+}
+```
+
+Action: Exclude Critical Features from Missingness Drop
+```json
+{
+  "updates": [
+    {"key": "feature_usage", "column": "Var_24", "value": "drop", "reason": "protect signal"}
+  ],
+  "description": "Mark critical feature for exclusion from SFS."
+}
+```
+
+Action: Add Temporal Validation for Dates
+```json
+{
+  "code": "df['Valid_Date_Flag'] = df['Var_6'].notna().astype(int)",
+  "description": "Create valid-date flag."
+}
+```
+
+I will now execute these actions in sequence.'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        actions, clean = _extract_actions(out)
+        assert [a['type'] for a in actions] == [
+            'start_data_purifier',
+            'update_config',
+            'execute_code',
+        ]
+        assert actions[0]['payload']['split']['percent'] == 25
+        assert actions[1]['payload']['updates'][0]['key'] == 'feature_usage'
+        assert "df['Valid_Date_Flag']" in actions[2]['payload']['code']
+        assert 'I will now execute these actions' in clean
+
     def test_vendor_conversion_noop_without_function_tag(self):
         from ai_assistant.views import _convert_vendor_tool_xml_to_actions
         assert _convert_vendor_tool_xml_to_actions('no tags here') == 'no tags here'
@@ -5286,6 +5328,40 @@ df['Debt_to_Income_Ratio'] = df['Var_19'] / df['Var_24'].replace(0, 1)
         assert actions[0]['type'] == 'execute_code'
         assert "df['Debt_to_Income_Ratio']" in actions[0]['payload']['code']
         assert 'corrected action block' in out['result']['message']
+
+    def test_action_heading_markdown_json_returns_multiple_apply_actions(self, monkeypatch):
+        raw = '''Action: Optimized Purification
+```json
+{
+  "purifier_options": [1, 2, 3, 4, 29, 8, 18, 33],
+  "split": {"strategy": "random", "percent": 25},
+  "description": "Run optimized purification."
+}
+```
+
+Action: Add Temporal Validation for Dates
+```json
+{
+  "code": "df['Valid_Date_Flag'] = df['Var_6'].notna().astype(int)",
+  "description": "Create valid-date flag."
+}
+```
+I will now execute these actions in sequence.'''
+
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _tool_call_response('get_purifier_options')
+            return _text_response(raw)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        actions = out['result'].get('actions') or []
+        assert [a['type'] for a in actions] == [
+            'start_data_purifier',
+            'execute_code',
+        ]
+        assert actions[0]['payload']['purifier_options'] == [1, 2, 3, 4, 29, 8, 18, 33]
+        assert "df['Valid_Date_Flag']" in actions[1]['payload']['code']
 
     def test_clean_reply_with_action_passes_through(self, monkeypatch):
         rich = ('The debt-to-income ratio (DTI) divides total debt by income '

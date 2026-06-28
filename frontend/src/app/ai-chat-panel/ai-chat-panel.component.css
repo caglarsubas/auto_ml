@@ -625,9 +625,27 @@
   background: #f3e5f5;
 }
 
+.action-type-start_data_purifier,
+.action-type-update_purifier_selection {
+  border-color: #c5cae9;
+  background: #f6f7ff;
+}
+
+.action-type-start_sfs,
+.action-type-apply_encoding,
+.action-type-set_ordinal_ranking {
+  border-color: #b2dfdb;
+  background: #eefaf8;
+}
+
 .action-type-update_metadata .action-header { color: #2e7d32; }
 .action-type-update_config .action-header { color: #e65100; }
 .action-type-update_notes .action-header { color: #6a1b9a; }
+.action-type-start_data_purifier .action-header,
+.action-type-update_purifier_selection .action-header { color: #3949ab; }
+.action-type-start_sfs .action-header,
+.action-type-apply_encoding .action-header,
+.action-type-set_ordinal_ranking .action-header { color: #00796b; }
 
 .action-detail {
   font-size: 11px;
@@ -653,6 +671,20 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.action-json {
+  background: rgba(255, 255, 255, 0.68);
+  color: #333;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
 }
 
 /* Auto-correction collapsible one-liner */

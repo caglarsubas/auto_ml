@@ -218,6 +218,31 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     }
   }
 
+  isSpecializedAction(actionType: string): boolean {
+    return [
+      'execute_code',
+      'update_metadata',
+      'update_config',
+      'update_notes',
+    ].includes(actionType);
+  }
+
+  getActionTitle(actionType: string): string {
+    const titles: Record<string, string> = {
+      start_data_purifier: 'Start Data Purifier',
+      update_purifier_selection: 'Update Purifier Selection',
+      start_sfs: 'Start Sequential Feature Selection',
+      set_ordinal_ranking: 'Set Ordinal Ranking',
+      apply_encoding: 'Apply Encoding',
+    };
+    if (titles[actionType]) return titles[actionType];
+    return actionType
+      .split('_')
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
   /** Execute any AI action via the general-purpose backend endpoint */
   applyAction(messageIndex: number, actionIndex: number, action: AiAction): void {
     if (action.applied || this.actionApplying) return;
