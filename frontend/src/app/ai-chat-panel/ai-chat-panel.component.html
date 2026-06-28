@@ -168,6 +168,23 @@
               ></textarea>
             </ng-container>
 
+            <!-- ── generic action renderer for pipeline operations without a custom card ── -->
+            <ng-container *ngIf="!isSpecializedAction(act.type)">
+              <div class="action-header">
+                <span class="action-icon">&#9881;</span>
+                <span class="action-title">{{ getActionTitle(act.type) }}</span>
+              </div>
+              <div class="action-detail" *ngIf="act.payload?.description && !act.applied">{{ act.payload.description }}</div>
+              <pre class="action-json" *ngIf="!act.editing && !act.applied">{{ act.payload | json }}</pre>
+              <textarea
+                *ngIf="act.editing && !act.applied"
+                class="action-edit-textarea"
+                [value]="getEditableText(act)"
+                (input)="onEditChange(act, $any($event.target).value)"
+                spellcheck="false"
+              ></textarea>
+            </ng-container>
+
             <!-- Button row: Edit + Apply / Applied badge -->
             <div *ngIf="!act.applied" class="action-btn-row">
               <button

@@ -2406,9 +2406,12 @@ _MARKDOWN_JSON_FENCE_RE = _re.compile(
     r'^\s*`+\s*(?:json)?\s*\n(.*?)\n\s*`+\s*(?=\n|$)',
     _re.DOTALL | _re.IGNORECASE | _re.MULTILINE,
 )
-_MARKDOWN_EXECUTE_CODE_HINT_RE = _re.compile(
-    r'\b(?:action\s+block|corrected\s+(?:action|operation)|execute_code|'
-    r'apply\s+button|click\s+\*?\*?apply|pandas\s+transformation|dataframe)\b',
+_MARKDOWN_ACTION_HINT_RE = _re.compile(
+    r'\b(?:action\s+block|action\s*:|corrected\s+(?:action|operation)|'
+    r'execute_code|update_config|start_data_purifier|update_purifier_selection|'
+    r'start_sfs|apply_encoding|set_ordinal_ranking|update_metadata|'
+    r'run\s+preprocessing|data\s+purifier|purifier|configuration|config|'
+    r'apply\s+button|click\s+\*?\*?apply|pandas\s+transformation|dataframe)',
     _re.IGNORECASE,
 )
 # Thinking-aloud openers a polished answer would never start with.
@@ -2495,7 +2498,7 @@ def _payload_looks_like_execute_code(payload: dict) -> bool:
     return bool(_re.search(r'\b(?:df|pd|np)\b|DataFrame', code))
 
 
-def _parse_markdown_execute_code_payload(body: str):
+def _parse_markdown_action_payload(body: str):
     raw = (body or '').strip()
     if not raw:
         return None
@@ -2505,41 +2508,108 @@ def _parse_markdown_execute_code_payload(body: str):
         parsed = _try_parse_loose_action_payload('execute_code', raw)
         if parsed is None:
             parsed, _ = _try_parse_truncated_json(raw)
-    return parsed if _payload_looks_like_execute_code(parsed) else None
+    return parsed if isinstance(parsed, dict) else None
 
 
-def _convert_markdown_execute_code_json_to_actions(text: str) -> str:
-    """Convert bare fenced ``{"code": ...}`` JSON into an action block.
+def _infer_markdown_action_type(payload: dict, context: str) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+
+    ctx = (context or '').lower()
+    explicit_types = (
+        'execute_code',
+        'update_metadata',
+        'update_config',
+        'set_ordinal_ranking',
+        'start_sfs',
+        'start_data_purifier',
+        'update_purifier_selection',
+        'apply_encoding',
+        'update_notes',
+    )
+    for action_type in explicit_types:
+        if action_type in ctx or action_type.replace('_', ' ') in ctx:
+            return action_type
+
+    updates = payload.get('updates')
+    if isinstance(updates, list) and updates:
+        if any(isinstance(u, dict) and 'ranking' in u for u in updates):
+            return 'set_ordinal_ranking'
+        if any(isinstance(u, dict) and 'field' in u for u in updates):
+            return 'update_metadata'
+        if any(isinstance(u, dict) and 'key' in u for u in updates):
+            return 'update_config'
+
+    if _payload_looks_like_execute_code(payload):
+        return 'execute_code'
+
+    if 'methods' in payload and 'stopping_criteria' in payload:
+        return 'start_sfs'
+
+    if 'purifier_options' in payload:
+        if (
+            'split' in payload
+            or 'run' in ctx
+            or 'start' in ctx
+            or 'execute' in ctx
+            or 'preprocess' in ctx
+        ):
+            return 'start_data_purifier'
+        return 'update_purifier_selection'
+
+    if 'add' in payload or 'remove' in payload:
+        return 'update_purifier_selection'
+
+    if 'use_native' in payload:
+        return 'apply_encoding'
+
+    if 'content' in payload and ('position' in payload or 'action' in payload):
+        return 'update_notes'
+
+    return None
+
+
+def _convert_markdown_action_json_to_actions(text: str) -> str:
+    """Convert bare fenced action JSON into canonical DeclarAI action blocks.
 
     Some engine models follow the payload schema but miss the outer
-    ``<<<ACTION:execute_code>>>`` wrapper, usually writing prose like "Here's
-    the corrected action block" followed by a ```json fence.  Without this
-    conversion the chat panel only displays inert markdown, so no Apply button
-    exists and the dataframe / data dictionary never change.
+    ``<<<ACTION:...>>>`` wrapper, usually writing prose like "Action: ..."
+    followed by a ```json fence. Without this conversion the chat panel only
+    displays inert markdown, so no Apply button exists and no pipeline state
+    changes.
     """
     if not text or '`' not in text or _HAS_ACTION_RE.search(text):
         return text
-    if not _MARKDOWN_EXECUTE_CODE_HINT_RE.search(text):
+    if not _MARKDOWN_ACTION_HINT_RE.search(text):
         return text
 
     def _repl(match):
-        payload = _parse_markdown_execute_code_payload(match.group(1))
+        payload = _parse_markdown_action_payload(match.group(1))
         if payload is None:
             return match.group(0)
+        context = text[max(0, match.start() - 500):match.start()]
+        action_type = _infer_markdown_action_type(payload, context)
+        if action_type is None:
+            return match.group(0)
         payload = {
-            'code': payload.get('code', ''),
             'description': (
                 payload.get('description')
-                or 'Run the proposed pandas transformation'
+                or 'Run the proposed pipeline operation'
             ),
+            **{k: v for k, v in payload.items() if k != 'description'},
         }
         return (
-            '\n\n<<<ACTION:execute_code>>>\n'
+            f'\n\n<<<ACTION:{action_type}>>>\n'
             + json.dumps(payload, ensure_ascii=False)
             + '\n<<<END_ACTION>>>'
         )
 
     return _MARKDOWN_JSON_FENCE_RE.sub(_repl, text)
+
+
+def _convert_markdown_execute_code_json_to_actions(text: str) -> str:
+    """Backward-compatible wrapper for older tests/imports."""
+    return _convert_markdown_action_json_to_actions(text)
 
 
 def _normalize_engine_reply(text: str, model_cfg: dict) -> str:
@@ -2554,7 +2624,7 @@ def _normalize_engine_reply(text: str, model_cfg: dict) -> str:
         return text
     text = _strip_reasoning_markers(text)
     text = _convert_vendor_tool_xml_to_actions(text)
-    text = _convert_markdown_execute_code_json_to_actions(text)
+    text = _convert_markdown_action_json_to_actions(text)
     text = _VENDOR_FN_ANY_RE.sub('', text)
     text = _VENDOR_FN_TRUNC_RE.sub('', text)
     return text.strip()
