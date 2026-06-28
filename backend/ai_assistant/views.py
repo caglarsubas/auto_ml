@@ -2402,6 +2402,15 @@ _VENDOR_CODE_PARAM_RE = _re.compile(
 )
 _VENDOR_FN_ANY_RE = _re.compile(r'<function\b[^>]*>.*?</function\s*>', _re.DOTALL | _re.IGNORECASE)
 _VENDOR_FN_TRUNC_RE = _re.compile(r'<function\b[^>]*>.*$', _re.DOTALL | _re.IGNORECASE)
+_MARKDOWN_JSON_FENCE_RE = _re.compile(
+    r'^\s*`+\s*(?:json)?\s*\n(.*?)\n\s*`+\s*(?=\n|$)',
+    _re.DOTALL | _re.IGNORECASE | _re.MULTILINE,
+)
+_MARKDOWN_EXECUTE_CODE_HINT_RE = _re.compile(
+    r'\b(?:action\s+block|corrected\s+(?:action|operation)|execute_code|'
+    r'apply\s+button|click\s+\*?\*?apply|pandas\s+transformation|dataframe)\b',
+    _re.IGNORECASE,
+)
 # Thinking-aloud openers a polished answer would never start with.
 _COT_OPENER_RE = _re.compile(
     r'\s*(?:okay\b|ok\b|alright\b|all right\b|so,|now,|hmm\b|well,|let me\b|'
@@ -2420,7 +2429,8 @@ _DATASET_MUTATION_REQUEST_RE = _re.compile(
 )
 _PROMISED_DATASET_ACTION_RE = _re.compile(
     r'\b(?:i\'ll|i will|i can|let me|next,?\s*i(?:\'ll| will)?|'
-    r'using\s+execute_code|with\s+execute_code|click\s+apply|apply button)'
+    r'using\s+execute_code|with\s+execute_code|click\s+apply|apply button|'
+    r'action\s+block|corrected\s+(?:action|operation))'
     r'\b',
     _re.IGNORECASE,
 )
@@ -2476,17 +2486,75 @@ def _convert_vendor_tool_xml_to_actions(text: str) -> str:
     return _VENDOR_EXEC_FN_RE.sub(_repl, text)
 
 
+def _payload_looks_like_execute_code(payload: dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    code = payload.get('code')
+    if not isinstance(code, str) or not code.strip():
+        return False
+    return bool(_re.search(r'\b(?:df|pd|np)\b|DataFrame', code))
+
+
+def _parse_markdown_execute_code_payload(body: str):
+    raw = (body or '').strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = _try_parse_loose_action_payload('execute_code', raw)
+        if parsed is None:
+            parsed, _ = _try_parse_truncated_json(raw)
+    return parsed if _payload_looks_like_execute_code(parsed) else None
+
+
+def _convert_markdown_execute_code_json_to_actions(text: str) -> str:
+    """Convert bare fenced ``{"code": ...}`` JSON into an action block.
+
+    Some engine models follow the payload schema but miss the outer
+    ``<<<ACTION:execute_code>>>`` wrapper, usually writing prose like "Here's
+    the corrected action block" followed by a ```json fence.  Without this
+    conversion the chat panel only displays inert markdown, so no Apply button
+    exists and the dataframe / data dictionary never change.
+    """
+    if not text or '`' not in text or _HAS_ACTION_RE.search(text):
+        return text
+    if not _MARKDOWN_EXECUTE_CODE_HINT_RE.search(text):
+        return text
+
+    def _repl(match):
+        payload = _parse_markdown_execute_code_payload(match.group(1))
+        if payload is None:
+            return match.group(0)
+        payload = {
+            'code': payload.get('code', ''),
+            'description': (
+                payload.get('description')
+                or 'Run the proposed pandas transformation'
+            ),
+        }
+        return (
+            '\n\n<<<ACTION:execute_code>>>\n'
+            + json.dumps(payload, ensure_ascii=False)
+            + '\n<<<END_ACTION>>>'
+        )
+
+    return _MARKDOWN_JSON_FENCE_RE.sub(_repl, text)
+
+
 def _normalize_engine_reply(text: str, model_cfg: dict) -> str:
     """Clean a raw engine reply before action extraction (no-op for cloud).
 
     Strips ``<think>`` reasoning markers, converts ``<function=execute_code>``
-    XML into a proper action block, and drops any other leaked vendor
-    function-call XML (real tool-call attempts the engine failed to parse).
+    XML or bare fenced execute_code JSON into a proper action block, and drops
+    any other leaked vendor function-call XML (real tool-call attempts the
+    engine failed to parse).
     """
     if (model_cfg or {}).get('provider') != 'engine' or not text:
         return text
     text = _strip_reasoning_markers(text)
     text = _convert_vendor_tool_xml_to_actions(text)
+    text = _convert_markdown_execute_code_json_to_actions(text)
     text = _VENDOR_FN_ANY_RE.sub('', text)
     text = _VENDOR_FN_TRUNC_RE.sub('', text)
     return text.strip()
