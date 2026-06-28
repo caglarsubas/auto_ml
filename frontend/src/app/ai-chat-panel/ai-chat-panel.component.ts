@@ -12,6 +12,7 @@ import { SharedService } from '../services/shared.service';
 export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('chatContainer') chatContainer!: ElementRef;
   @ViewChild('modelSelectorWrapper') modelSelectorWrapper?: ElementRef<HTMLElement>;
+  private static readonly MAX_AUTO_CORRECTION_ATTEMPTS = 3;
 
   messages: ChatMessage[] = [];
   userInput: string = '';
@@ -256,8 +257,17 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         const fullError = traceback ? errMsg + '\n' + traceback : errMsg;
         this.actionError = fullError;
 
-        // Auto-send the error back to the AI for self-correction
-        this._requestErrorCorrection(action.type, payload, fullError);
+        // Auto-send the error back to the AI for self-correction. The user's
+        // first Apply is treated as consent for bounded execute_code repairs.
+        this._requestErrorCorrection(
+          action.type,
+          payload,
+          fullError,
+          1,
+          parentSpanId,
+          messageIndex,
+          actionIndex,
+        );
       }
     });
   }
@@ -729,7 +739,15 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   /** Automatically send the failed action + error back to the AI for self-correction */
-  private _requestErrorCorrection(actionType: string, payload: any, errorText: string): void {
+  private _requestErrorCorrection(
+    actionType: string,
+    payload: any,
+    errorText: string,
+    attempt: number = 1,
+    parentSpanId?: string,
+    acceptedMessageIndex?: number,
+    acceptedActionIndex?: number,
+  ): void {
     // Build a concise description of what failed
     let codeSnippet = '';
     if (actionType === 'execute_code') {
@@ -744,11 +762,18 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       `**Error:**\n\`\`\`\n${errorText}\n\`\`\`\n\n` +
       `Please analyze the error and provide a corrected action block. ` +
       `Remember: only pandas (pd), numpy (np), and the DataFrame (df) are available in the sandbox. ` +
-      `No imports, no open(), no __import__. Fix the issue and respond with the corrected action.`;
+      `No imports, no open(), no __import__. Fix the issue and respond with the corrected action.` +
+      (actionType === 'execute_code'
+        ? `\n\nThis is automated correction attempt ${attempt} of ${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}. ` +
+          `The user already approved applying this implementation, so return exactly one corrected execute_code action block. ` +
+          `Do not ask the user to press Apply again.`
+        : '');
 
     // Extract the first line of the error for the collapsed summary
     const firstErrorLine = errorText.split('\n')[0].trim();
-    const summary = `Action failed: ${firstErrorLine} — requesting AI correction...`;
+    const summary = actionType === 'execute_code'
+      ? `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}...`
+      : `Action failed: ${firstErrorLine} — requesting AI correction...`;
 
     // Add the error as a user-role message, marked as auto-correction (collapsed by default)
     this.aiService.addMessage({
@@ -798,6 +823,28 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           payload: a.payload,
           applied: false,
         }));
+        const shouldAutoApply = this._shouldAutoApplyCorrection(actionType, actions, attempt);
+        if (shouldAutoApply) {
+          const message = resp.message || 'I prepared a corrected operation.';
+          this.aiService.updateLastMessage(
+            `${message}\n\nApplying the corrected operation now...`,
+            [],
+            resp.chat_span_id,
+            resp.chat_trace_id,
+            resp.chat_session_id,
+          );
+          this.isLoading = false;
+          this.actionError = null;
+          this._executeAutoCorrectedAction(
+            actions[0].type,
+            actions[0].payload,
+            attempt,
+            resp.chat_span_id || parentSpanId,
+            acceptedMessageIndex,
+            acceptedActionIndex,
+          );
+          return;
+        }
         const correctionFallback = actions.length > 0
           ? 'I\'ve prepared a corrected operation. Review the details below and click **Apply** to execute.'
           : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
@@ -820,6 +867,71 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
         this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
         this.isLoading = false;
+      }
+    });
+  }
+
+  private _shouldAutoApplyCorrection(actionType: string, actions: AiAction[], attempt: number): boolean {
+    return actionType === 'execute_code'
+      && attempt <= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS
+      && actions.length === 1
+      && actions[0].type === 'execute_code'
+      && !!actions[0].payload;
+  }
+
+  private _executeAutoCorrectedAction(
+    actionType: string,
+    payload: any,
+    attempt: number,
+    parentSpanId?: string,
+    acceptedMessageIndex?: number,
+    acceptedActionIndex?: number,
+  ): void {
+    const fileId = this.sharedService.getCurrentFileId();
+    if (!fileId) {
+      this.actionError = 'No dataset loaded. Please upload data first.';
+      return;
+    }
+
+    this.actionApplying = true;
+    this.actionError = null;
+    this.actionSuccess = null;
+
+    this.dataService.executeAiAction(fileId, actionType, payload, parentSpanId).subscribe({
+      next: (resp: any) => {
+        this.actionApplying = false;
+        this.actionError = null;
+        if (acceptedMessageIndex !== undefined && acceptedActionIndex !== undefined) {
+          this.aiService.markActionApplied(acceptedMessageIndex, acceptedActionIndex);
+        }
+        this._handleActionResult(actionType, resp);
+      },
+      error: (err: any) => {
+        this.actionApplying = false;
+        const errMsg = err?.error?.error || err?.error?.message || 'Action failed.';
+        const traceback = err?.error?.traceback || '';
+        const fullError = traceback ? errMsg + '\n' + traceback : errMsg;
+        this.actionError = fullError;
+
+        if (attempt >= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS) {
+          const max = AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS;
+          this.aiService.addMessage({
+            role: 'assistant',
+            content: `I tried ${max} automatic correction attempts, but the code still failed. The last error was:\n\n\`\`\`\n${fullError}\n\`\`\``,
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        this._requestErrorCorrection(
+          actionType,
+          payload,
+          fullError,
+          attempt + 1,
+          parentSpanId,
+          acceptedMessageIndex,
+          acceptedActionIndex,
+        );
       }
     });
   }
