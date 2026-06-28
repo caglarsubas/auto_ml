@@ -1673,6 +1673,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
                 break
             raise
         _merge_usage(total_usage, result.get('usage', {}))
+        result = _normalize_llm_response_schema(result, model_cfg, tools)
 
         choice = result['choices'][0]
         finish_reason = choice.get('finish_reason', '')
@@ -2087,6 +2088,288 @@ class AIActionExecuteView(APIView):
             return Response(result, status=http_status)
         finally:
             prometa_flush()
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible tool-call normalization
+# ---------------------------------------------------------------------------
+# The rest of DeclarAI's chat path speaks the OpenAI contract:
+# ``message.tool_calls[]`` with JSON-string ``function.arguments``. Some local
+# models do not reliably return that shape even when the inference engine was
+# given tools. They may instead emit a whole-message text marker such as
+# ``get_split_validation[ARGS]()`` or vendor XML. Normalize those into the same
+# schema at the boundary, then let the existing tool loop execute them.
+_TEXT_TOOL_CALL_RE = _re.compile(
+    r'^\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*'
+    r'(?:\[\s*ARGS\s*\])?\s*\((?P<args>[\s\S]*)\)\s*$',
+    _re.IGNORECASE,
+)
+_XML_TEXT_TOOL_CALL_RE = _re.compile(
+    r'^\s*(?:<tool_call>\s*)?'
+    r'<function\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*>'
+    r'(?P<body>[\s\S]*?)'
+    r'</function\s*>\s*(?:</tool_call>\s*)?\s*$',
+    _re.IGNORECASE,
+)
+_XML_TEXT_TOOL_PARAM_RE = _re.compile(
+    r'<parameter\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*>'
+    r'(?P<value>[\s\S]*?)</parameter\s*>',
+    _re.IGNORECASE,
+)
+_NAMED_TOOL_ARG_RE = _re.compile(
+    r'\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*'
+    r'(?:"(?P<dq>[^"]*)"|\'(?P<sq>[^\']*)\'|(?P<bare>[^,]+?))\s*'
+    r'(?:,|$)',
+    _re.DOTALL,
+)
+_INT_ARG_RE = _re.compile(r'[-+]?\d+')
+_FLOAT_ARG_RE = _re.compile(r'[-+]?(?:\d+\.\d*|\d*\.\d+)')
+_INVALID_TOOL_ARG = object()
+
+
+def _normalize_llm_response_schema(response: dict, model_cfg: dict, tools: list = None) -> dict:
+    """Coerce model-emitted text tool markers into OpenAI ``tool_calls``.
+
+    This is intentionally provider-agnostic and schema-gated. A reply is
+    converted only when ALL of these are true:
+      * the current request actually supplied tools,
+      * the assistant content is a bare tool marker, not prose,
+      * the tool name exists in the supplied catalog, and
+      * the parsed arguments satisfy that tool's parameter schema.
+
+    That gives us one compatibility layer for Gemma, Qwen, Mistral, and any
+    future engine model, while preserving the native tool-call happy path.
+    """
+    if not tools or not isinstance(response, dict):
+        return response
+
+    tool_index = _tool_definition_index(tools)
+    if not tool_index:
+        return response
+
+    choices = response.get('choices')
+    if not isinstance(choices, list):
+        return response
+
+    normalized = False
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        msg = choice.get('message')
+        if not isinstance(msg, dict) or msg.get('tool_calls'):
+            continue
+        tool_call = _parse_text_tool_call(msg.get('content'), tool_index)
+        if not tool_call:
+            continue
+        msg['role'] = msg.get('role') or 'assistant'
+        msg['content'] = None
+        msg['tool_calls'] = [tool_call]
+        choice['finish_reason'] = 'tool_calls'
+        choice['declarai_text_tool_call_normalized'] = True
+        normalized = True
+
+    if normalized:
+        set_span_attr('declarai.chat.text_tool_call_normalized', True)
+        set_span_attr('declarai.chat.text_tool_call_provider',
+                      (model_cfg or {}).get('provider', 'unknown'))
+    return response
+
+
+def _tool_definition_index(tools: list) -> dict:
+    """Return case-insensitive lookup for supplied OpenAI function tools."""
+    index = {}
+    for spec in tools or []:
+        if not isinstance(spec, dict):
+            continue
+        fn = spec.get('function') or {}
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get('name')
+        if not isinstance(name, str) or not name:
+            continue
+        index[name] = (name, fn)
+        index[name.lower()] = (name, fn)
+    return index
+
+
+def _strip_single_code_fence(text: str) -> str:
+    """Remove a single wrapper fence around a leaked tool marker."""
+    s = (text or '').strip()
+    if not s.startswith('```') or not s.endswith('```'):
+        return s
+    lines = s.splitlines()
+    if len(lines) < 2:
+        return s
+    return '\n'.join(lines[1:-1]).strip()
+
+
+def _parse_text_tool_call(content, tool_index: dict):
+    if not isinstance(content, str) or not content.strip():
+        return None
+
+    text = _strip_single_code_fence(content)
+    parsed = _parse_args_marker_tool_call(text) or _parse_xml_text_tool_call(text)
+    if not parsed:
+        return None
+
+    raw_name, raw_args = parsed
+    resolved = tool_index.get(raw_name) or tool_index.get(raw_name.lower())
+    if not resolved:
+        return None
+
+    canonical_name, fn_def = resolved
+    args = _coerce_and_validate_tool_args(raw_args, fn_def)
+    if args is None:
+        return None
+
+    return {
+        'id': f'call_text_{canonical_name}',
+        'type': 'function',
+        'function': {
+            'name': canonical_name,
+            'arguments': json.dumps(args, ensure_ascii=False),
+        },
+    }
+
+
+def _parse_args_marker_tool_call(text: str):
+    match = _TEXT_TOOL_CALL_RE.match(text or '')
+    if not match:
+        return None
+    args = _parse_tool_args_text(match.group('args') or '')
+    if args is None:
+        return None
+    return match.group('name'), args
+
+
+def _parse_xml_text_tool_call(text: str):
+    match = _XML_TEXT_TOOL_CALL_RE.match(text or '')
+    if not match:
+        return None
+    body = (match.group('body') or '').strip()
+    if not body:
+        return match.group('name'), {}
+
+    params = {}
+    for pm in _XML_TEXT_TOOL_PARAM_RE.finditer(body):
+        params[pm.group('name')] = (pm.group('value') or '').strip()
+    leftover = _XML_TEXT_TOOL_PARAM_RE.sub('', body).strip()
+    if params and not leftover:
+        return match.group('name'), params
+
+    args = _parse_tool_args_text(leftover or body)
+    if args is None:
+        return None
+    return match.group('name'), args
+
+
+def _parse_tool_args_text(raw_args: str):
+    raw = (raw_args or '').strip()
+    if not raw or raw.upper() == 'ARGS':
+        return {}
+    if raw.startswith('{') and raw.endswith('}'):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return _parse_named_tool_args(raw)
+
+
+def _parse_named_tool_args(raw: str):
+    out = {}
+    pos = 0
+    while pos < len(raw):
+        match = _NAMED_TOOL_ARG_RE.match(raw, pos)
+        if not match:
+            return None
+        value = (
+            match.group('dq')
+            if match.group('dq') is not None
+            else match.group('sq')
+            if match.group('sq') is not None
+            else match.group('bare')
+        )
+        out[match.group('name')] = _coerce_scalar_tool_arg((value or '').strip())
+        pos = match.end()
+    return out
+
+
+def _coerce_scalar_tool_arg(value: str):
+    low = value.lower()
+    if low == 'true':
+        return True
+    if low == 'false':
+        return False
+    if low in ('null', 'none'):
+        return None
+    if _INT_ARG_RE.fullmatch(value):
+        return int(value)
+    if _FLOAT_ARG_RE.fullmatch(value):
+        return float(value)
+    return value
+
+
+def _coerce_and_validate_tool_args(args: dict, fn_def: dict):
+    if not isinstance(args, dict):
+        return None
+    params = fn_def.get('parameters') or {}
+    if params.get('type') not in (None, 'object'):
+        return None
+
+    props = params.get('properties') or {}
+    required = set(params.get('required') or [])
+    if any(key not in args or args.get(key) in (None, '') for key in required):
+        return None
+    if not props and args:
+        return None
+
+    out = {}
+    for key, value in args.items():
+        spec = props.get(key)
+        if spec is None:
+            return None
+        coerced = _coerce_tool_arg_for_schema(value, spec)
+        if coerced is _INVALID_TOOL_ARG:
+            return None
+        enum = spec.get('enum')
+        if enum is not None and coerced not in enum:
+            return None
+        out[key] = coerced
+    return out
+
+
+def _coerce_tool_arg_for_schema(value, spec: dict):
+    typ = spec.get('type')
+    if typ == 'string':
+        return value if isinstance(value, str) else _INVALID_TOOL_ARG
+    if typ == 'integer':
+        if isinstance(value, bool):
+            return _INVALID_TOOL_ARG
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str) and _INT_ARG_RE.fullmatch(value.strip()):
+            return int(value)
+        return _INVALID_TOOL_ARG
+    if typ == 'number':
+        if isinstance(value, bool):
+            return _INVALID_TOOL_ARG
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if _INT_ARG_RE.fullmatch(stripped) or _FLOAT_ARG_RE.fullmatch(stripped):
+                return float(stripped)
+        return _INVALID_TOOL_ARG
+    if typ == 'boolean':
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in ('true', 'false'):
+            return value.strip().lower() == 'true'
+        return _INVALID_TOOL_ARG
+    return value
 
 
 # ---------------------------------------------------------------------------

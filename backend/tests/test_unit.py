@@ -5059,6 +5059,101 @@ class TestEngineReplyNormalization:
 
 
 @pytest.mark.unit
+class TestOpenAICompatibilityToolCallNormalizer:
+    """Model-agnostic compatibility layer for local models that emit tool calls
+    as text instead of OpenAI ``message.tool_calls``."""
+
+    def test_args_marker_becomes_openai_tool_call(self):
+        import json as _json
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        from ai_assistant.views import _normalize_llm_response_schema
+
+        out = _normalize_llm_response_schema(
+            _text_response('get_split_validation[ARGS]()'),
+            {'provider': 'engine'},
+            PIPELINE_TOOLS,
+        )
+
+        choice = out['choices'][0]
+        msg = choice['message']
+        assert choice['finish_reason'] == 'tool_calls'
+        assert msg['content'] is None
+        assert msg['tool_calls'][0]['function']['name'] == 'get_split_validation'
+        assert _json.loads(msg['tool_calls'][0]['function']['arguments']) == {}
+
+    def test_named_args_are_schema_validated_and_coerced(self):
+        import json as _json
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        from ai_assistant.views import _normalize_llm_response_schema
+
+        out = _normalize_llm_response_schema(
+            _text_response('get_selected_features[ARGS](top_n=5)'),
+            {'provider': 'engine'},
+            PIPELINE_TOOLS,
+        )
+
+        tc = out['choices'][0]['message']['tool_calls'][0]
+        assert tc['function']['name'] == 'get_selected_features'
+        assert _json.loads(tc['function']['arguments']) == {'top_n': 5}
+
+    def test_vendor_xml_tool_marker_becomes_openai_tool_call(self):
+        import json as _json
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        from ai_assistant.views import _normalize_llm_response_schema
+
+        out = _normalize_llm_response_schema(
+            _text_response(
+                '<tool_call><function=get_dq_summary>'
+                '<parameter=feature>Income</parameter>'
+                '</function></tool_call>'
+            ),
+            {'provider': 'engine'},
+            PIPELINE_TOOLS,
+        )
+
+        tc = out['choices'][0]['message']['tool_calls'][0]
+        assert tc['function']['name'] == 'get_dq_summary'
+        assert _json.loads(tc['function']['arguments']) == {'feature': 'Income'}
+
+    def test_missing_required_args_are_not_guessed(self):
+        from ai_assistant.tool_definitions import PIPELINE_TOOLS
+        from ai_assistant.views import _normalize_llm_response_schema
+
+        out = _normalize_llm_response_schema(
+            _text_response('get_feature_stats[ARGS]()'),
+            {'provider': 'engine'},
+            PIPELINE_TOOLS,
+        )
+
+        choice = out['choices'][0]
+        msg = choice['message']
+        assert choice['finish_reason'] == 'stop'
+        assert msg.get('tool_calls') is None
+        assert msg['content'] == 'get_feature_stats[ARGS]()'
+
+    def test_chat_workflow_executes_text_tool_marker_before_answering(self, monkeypatch):
+        def call_llm(idx, messages, tools):
+            if idx == 0:
+                return _text_response('get_split_validation[ARGS]()')
+            assert any(
+                m.get('role') == 'tool'
+                and m.get('content') == 'TOOL_RESULT[get_split_validation]'
+                for m in messages
+            )
+            return _text_response('The split validation looks balanced.')
+
+        out = _run_chat_workflow(
+            monkeypatch,
+            provider='engine',
+            user_message='check the train test split validation',
+            call_llm=call_llm,
+        )
+
+        assert len(out['llm_calls']) == 2
+        assert out['result']['message'] == 'The split validation looks balanced.'
+
+
+@pytest.mark.unit
 class TestChatWorkflowFinalization:
     """v2.44.0: reasoning-family engine models get a strict finalization
     re-prompt when their reply is raw CoT, and vendor-XML code is converted
