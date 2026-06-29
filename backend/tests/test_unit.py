@@ -5031,6 +5031,38 @@ I will now execute these actions in sequence.'''
         assert "df['Valid_Date_Flag']" in actions[2]['payload']['code']
         assert 'I will now execute these actions' in clean
 
+    def test_python_code_fence_becomes_execute_code_action(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''The error occurs because Var_3 contains non-numeric values.
+
+Here's the corrected code block:
+
+---
+`python
+**Parse timestamps (if not already datetime)**
+df['Application_Datetime'] = pd.to_datetime(df['Application_Datetime'],
+    errors='coerce')
+df['Var_6'] = pd.to_datetime(df['Var_6'], errors='coerce')
+
+**Convert Var_3 to numeric (0/1) and handle non-numeric values**
+df['Var_3_numeric'] = pd.to_numeric(df['Var_3'], errors='coerce').fillna(0).astype(int)
+
+**Legal Action Risk (recency): Use years since last legal action (0 if no action)**
+df['legal_action_risk'] = df['Var_3_numeric'] * (
+    (df['Application_Datetime'] - df['Var_6']).dt.days / 365
+).replace([np.inf, -np.inf], 0).fillna(0)
+`'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        actions, clean = _extract_actions(out)
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        code = actions[0]['payload']['code']
+        assert "df['Var_3_numeric']" in code
+        assert "df['legal_action_risk']" in code
+        assert '# Parse timestamps' in code
+        assert '**Parse timestamps' not in code
+        assert 'corrected code block' in clean
+
     def test_vendor_conversion_noop_without_function_tag(self):
         from ai_assistant.views import _convert_vendor_tool_xml_to_actions
         assert _convert_vendor_tool_xml_to_actions('no tags here') == 'no tags here'
@@ -5362,6 +5394,37 @@ I will now execute these actions in sequence.'''
         ]
         assert actions[0]['payload']['purifier_options'] == [1, 2, 3, 4, 29, 8, 18, 33]
         assert "df['Valid_Date_Flag']" in actions[1]['payload']['code']
+
+    def test_python_correction_fence_returns_execute_code_action(self, monkeypatch):
+        raw = '''The error occurs because Var_3 contains non-numeric values.
+
+Here's the corrected code block:
+
+`python
+Parse timestamps (if not already datetime)
+df['Application_Datetime'] = pd.to_datetime(df['Application_Datetime'], errors='coerce')
+df['Var_6'] = pd.to_datetime(df['Var_6'], errors='coerce')
+
+Convert Var_3 to numeric (0/1) and handle non-numeric values
+df['Var_3_numeric'] = pd.to_numeric(df['Var_3'], errors='coerce').fillna(0).astype(int)
+
+Legal Action Risk (recency): Use years since last legal action (0 if no action)
+df['legal_action_risk'] = df['Var_3_numeric'] * (
+    (df['Application_Datetime'] - df['Var_6']).dt.days / 365
+).replace([np.inf, -np.inf], 0).fillna(0)
+`'''
+
+        def call_llm(idx, messages, tools):
+            return _text_response(raw)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        code = actions[0]['payload']['code']
+        assert "df['legal_action_risk']" in code
+        assert '# Legal Action Risk' in code
 
     def test_clean_reply_with_action_passes_through(self, monkeypatch):
         rich = ('The debt-to-income ratio (DTI) divides total debt by income '
