@@ -2406,8 +2406,13 @@ _MARKDOWN_JSON_FENCE_RE = _re.compile(
     r'^\s*`+\s*(?:json)?\s*\n(.*?)\n\s*`+\s*(?=\n|$)',
     _re.DOTALL | _re.IGNORECASE | _re.MULTILINE,
 )
+_MARKDOWN_PYTHON_FENCE_RE = _re.compile(
+    r'^\s*`+\s*(?:python|py)\s*\n(.*?)\n\s*`+\s*(?=\n|$)',
+    _re.DOTALL | _re.IGNORECASE | _re.MULTILINE,
+)
 _MARKDOWN_ACTION_HINT_RE = _re.compile(
     r'\b(?:action\s+block|action\s*:|corrected\s+(?:action|operation)|'
+    r'corrected\s+code\s+block|'
     r'execute_code|update_config|start_data_purifier|update_purifier_selection|'
     r'start_sfs|apply_encoding|set_ordinal_ranking|update_metadata|'
     r'run\s+preprocessing|data\s+purifier|purifier|configuration|config|'
@@ -2433,7 +2438,7 @@ _DATASET_MUTATION_REQUEST_RE = _re.compile(
 _PROMISED_DATASET_ACTION_RE = _re.compile(
     r'\b(?:i\'ll|i will|i can|let me|next,?\s*i(?:\'ll| will)?|'
     r'using\s+execute_code|with\s+execute_code|click\s+apply|apply button|'
-    r'action\s+block|corrected\s+(?:action|operation))'
+    r'action\s+block|corrected\s+(?:action|operation)|corrected\s+code\s+block)'
     r'\b',
     _re.IGNORECASE,
 )
@@ -2612,19 +2617,96 @@ def _convert_markdown_execute_code_json_to_actions(text: str) -> str:
     return _convert_markdown_action_json_to_actions(text)
 
 
+def _line_looks_like_python_code(line: str, *, continuing: bool = False) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if stripped.startswith(('#', '@')):
+        return True
+    if continuing:
+        return True
+    if _re.match(
+        r'^(?:df|pd|np)\s*(?:\.|\[|\()|^(?:[A-Za-z_]\w*\s*=)',
+        stripped,
+    ):
+        return True
+    if _re.match(
+        r'^(?:if|elif|else|for|while|try|except|finally|with|def|class|return|'
+        r'break|continue|pass|raise)\b',
+        stripped,
+    ):
+        return True
+    if stripped[0] in ')]},.|&+-*/':
+        return True
+    return False
+
+
+def _sanitize_fenced_python_action_code(code: str) -> str:
+    """Comment out prose headings inside model-emitted python fences.
+
+    Weak engine models often put section labels in the code fence, for example
+    ``Parse timestamps (if not already datetime)`` before real pandas lines.
+    Those labels are useful as comments but invalid Python as raw statements.
+    """
+    cleaned: list[str] = []
+    paren_depth = 0
+    for raw_line in (code or '').splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        normalized = stripped.replace('**', '').replace('__', '').strip('` ')
+        continuing = paren_depth > 0
+        if stripped and not _line_looks_like_python_code(normalized, continuing=continuing):
+            indent = raw_line[:len(raw_line) - len(raw_line.lstrip())]
+            line = f'{indent}# {normalized}'
+            stripped = line.strip()
+        elif stripped != normalized:
+            indent = raw_line[:len(raw_line) - len(raw_line.lstrip())]
+            line = f'{indent}{normalized}'
+            stripped = line.strip()
+
+        cleaned.append(line)
+        scan = stripped.split('#', 1)[0]
+        paren_depth = max(0, paren_depth + scan.count('(') - scan.count(')'))
+    return '\n'.join(cleaned).strip()
+
+
+def _convert_markdown_python_code_to_actions(text: str) -> str:
+    """Convert bare fenced dataframe Python into an execute_code action."""
+    if not text or '`' not in text or _HAS_ACTION_RE.search(text):
+        return text
+    if not _MARKDOWN_ACTION_HINT_RE.search(text):
+        return text
+
+    def _repl(match):
+        code = _sanitize_fenced_python_action_code(match.group(1))
+        if not code or not _payload_looks_like_execute_code({'code': code}):
+            return match.group(0)
+        payload = json.dumps(
+            {
+                'code': code,
+                'description': 'Run the corrected pandas transformation',
+            },
+            ensure_ascii=False,
+        )
+        return f'\n\n<<<ACTION:execute_code>>>\n{payload}\n<<<END_ACTION>>>'
+
+    return _MARKDOWN_PYTHON_FENCE_RE.sub(_repl, text)
+
+
 def _normalize_engine_reply(text: str, model_cfg: dict) -> str:
     """Clean a raw engine reply before action extraction (no-op for cloud).
 
     Strips ``<think>`` reasoning markers, converts ``<function=execute_code>``
-    XML or bare fenced execute_code JSON into a proper action block, and drops
-    any other leaked vendor function-call XML (real tool-call attempts the
-    engine failed to parse).
+    XML, bare fenced action JSON, or bare fenced dataframe Python into a proper
+    action block, and drops any other leaked vendor function-call XML (real
+    tool-call attempts the engine failed to parse).
     """
     if (model_cfg or {}).get('provider') != 'engine' or not text:
         return text
     text = _strip_reasoning_markers(text)
     text = _convert_vendor_tool_xml_to_actions(text)
     text = _convert_markdown_action_json_to_actions(text)
+    text = _convert_markdown_python_code_to_actions(text)
     text = _VENDOR_FN_ANY_RE.sub('', text)
     text = _VENDOR_FN_TRUNC_RE.sub('', text)
     return text.strip()
