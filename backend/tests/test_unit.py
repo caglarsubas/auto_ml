@@ -5063,6 +5063,38 @@ df['legal_action_risk'] = df['Var_3_numeric'] * (
         assert '**Parse timestamps' not in code
         assert 'corrected code block' in clean
 
+    def test_standalone_python_mutation_fence_becomes_execute_code_action(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''`python
+Create Debt_to_Income ratio
+df['Debt_to_Income'] = df['Var_19'] / df['Var_24'].replace(0, 1)
+
+Create Credit_Utilization ratio
+df['Credit_Utilization'] = df['Var_18'] / df['Var_17'].replace(0, 1)
+`'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        actions, clean = _extract_actions(out)
+        assert clean == ''
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        code = actions[0]['payload']['code']
+        assert "df['Debt_to_Income']" in code
+        assert '# Create Debt_to_Income ratio' in code
+
+    def test_explanatory_python_fence_without_action_hint_stays_markdown(self):
+        from ai_assistant.views import _normalize_engine_reply, _extract_actions
+        raw = '''Example only:
+
+`python
+df['Debt_to_Income'] = df['Var_19'] / df['Var_24'].replace(0, 1)
+`
+
+Do not run this yet.'''
+        out = _normalize_engine_reply(raw, {'provider': 'engine'})
+        actions, clean = _extract_actions(out)
+        assert actions == []
+        assert "df['Debt_to_Income']" in clean
+
     def test_vendor_conversion_noop_without_function_tag(self):
         from ai_assistant.views import _convert_vendor_tool_xml_to_actions
         assert _convert_vendor_tool_xml_to_actions('no tags here') == 'no tags here'
@@ -5425,6 +5457,27 @@ df['legal_action_risk'] = df['Var_3_numeric'] * (
         code = actions[0]['payload']['code']
         assert "df['legal_action_risk']" in code
         assert '# Legal Action Risk' in code
+
+    def test_standalone_python_correction_returns_execute_code_action(self, monkeypatch):
+        raw = '''`python
+Create Debt_to_Income ratio
+df['Debt_to_Income'] = df['Var_19'] / df['Var_24'].replace(0, 1)
+
+Create Credit_Utilization ratio
+df['Credit_Utilization'] = df['Var_18'] / df['Var_17'].replace(0, 1)
+`'''
+
+        def call_llm(idx, messages, tools):
+            return _text_response(raw)
+
+        out = _run_chat_workflow(monkeypatch, provider='engine',
+                                 reasoning=False, call_llm=call_llm)
+        actions = out['result'].get('actions') or []
+        assert len(actions) == 1
+        assert actions[0]['type'] == 'execute_code'
+        code = actions[0]['payload']['code']
+        assert "df['Credit_Utilization']" in code
+        assert '# Create Credit_Utilization ratio' in code
 
     def test_clean_reply_with_action_passes_through(self, monkeypatch):
         rich = ('The debt-to-income ratio (DTI) divides total debt by income '
