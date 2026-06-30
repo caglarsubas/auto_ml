@@ -2503,6 +2503,28 @@ def _payload_looks_like_execute_code(payload: dict) -> bool:
     return bool(_re.search(r'\b(?:df|pd|np)\b|DataFrame', code))
 
 
+def _code_looks_like_dataframe_mutation(code: str) -> bool:
+    if not code:
+        return False
+    return bool(_re.search(
+        r'(?m)^\s*(?:'
+        r'df\s*(?:\[[^\n]+\]|\.\s*(?:loc|iloc|at|iat)\s*\[[^\n]+\])\s*='
+        r'|df\s*='
+        r'|df\.\w+\s*\(.*\binplace\s*=\s*True'
+        r')',
+        code,
+        _re.DOTALL,
+    ))
+
+
+def _python_fence_is_standalone(text: str, match) -> bool:
+    remainder = f'{text[:match.start()]}{text[match.end():]}'.strip()
+    if not remainder:
+        return True
+    remainder = _re.sub(r'^[\s\-*_`#>:.]+|[\s\-*_`#>:.]+$', '', remainder).strip()
+    return not remainder
+
+
 def _parse_markdown_action_payload(body: str):
     raw = (body or '').strip()
     if not raw:
@@ -2674,13 +2696,17 @@ def _convert_markdown_python_code_to_actions(text: str) -> str:
     """Convert bare fenced dataframe Python into an execute_code action."""
     if not text or '`' not in text or _HAS_ACTION_RE.search(text):
         return text
-    if not _MARKDOWN_ACTION_HINT_RE.search(text):
-        return text
+    has_action_hint = bool(_MARKDOWN_ACTION_HINT_RE.search(text))
 
     def _repl(match):
         code = _sanitize_fenced_python_action_code(match.group(1))
         if not code or not _payload_looks_like_execute_code({'code': code}):
             return match.group(0)
+        if not has_action_hint:
+            if not _python_fence_is_standalone(text, match):
+                return match.group(0)
+            if not _code_looks_like_dataframe_mutation(code):
+                return match.group(0)
         payload = json.dumps(
             {
                 'code': code,
