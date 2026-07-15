@@ -55,11 +55,16 @@ class TestPipelineRunModel:
 
     def test_pipeline_run_ordering(self):
         """Runs are ordered by most recently updated (descending)."""
+        from datetime import timedelta
+        from django.utils import timezone
         from modeling.models import PipelineRun
-        import time
         run1 = PipelineRun.objects.create(name='First')
-        time.sleep(0.05)
         run2 = PipelineRun.objects.create(name='Second')
+        # Pin updated_at deterministically (auto_now would otherwise depend on
+        # wall-clock resolution; .update() bypasses auto_now).
+        now = timezone.now()
+        PipelineRun.objects.filter(pk=run1.pk).update(updated_at=now - timedelta(seconds=1))
+        PipelineRun.objects.filter(pk=run2.pk).update(updated_at=now)
         runs = list(PipelineRun.objects.all())
         assert runs[0].name == 'Second'
         assert runs[1].name == 'First'
