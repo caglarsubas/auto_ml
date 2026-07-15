@@ -7,6 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
     "serve:ssr:frontend": "node dist/frontend/server/server.mjs"

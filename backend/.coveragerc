@@ -1,0 +1,29 @@
+[run]
+# Measure the application packages, not the test suite or generated code.
+source =
+    ai_assistant
+    declaration
+    deployment
+    encoding
+    evaluation
+    feature_card
+    modeling
+    preprocessing
+branch = True
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    */management/commands/*
+    manage.py
+    conftest.py
+
+[report]
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:

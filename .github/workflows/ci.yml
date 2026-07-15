@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly full run at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend: Django + DRF pytest suite
+  # ---------------------------------------------------------------------------
+  backend-tests:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Never emit Prometa OTLP telemetry from CI runs.
+      PROMETA_DISABLE: "1"
+      # The redis service is reachable on localhost from the job container.
+      REDIS_URL: redis://localhost:6379/0
+      DJANGO_SETTINGS_MODULE: backend.settings
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libmagic1 file libgomp1
+
+      - name: Install Python dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Select test scope
+        id: scope
+        run: |
+          # Fast feedback on PRs; full suite on main / nightly / manual runs.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "markers=unit or regression" >> "$GITHUB_OUTPUT"
+          else
+            echo "markers=unit or functional or regression or integration or uat" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run pytest
+        working-directory: backend
+        run: |
+          mkdir -p ../test-reports
+          python -m pytest -m "${{ steps.scope.outputs.markers }}" \
+            --tb=short \
+            --junitxml=../test-reports/backend-junit.xml \
+            --cov --cov-report=xml:../test-reports/backend-coverage.xml \
+            --cov-report=term-missing
+
+      - name: Enforce skip budget
+        if: always()
+        run: python .github/scripts/check_skip_budget.py test-reports/backend-junit.xml --max-skips 15
+
+      - name: Upload backend reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: test-reports/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Frontend: Angular Karma/Jasmine unit tests (headless Chrome)
+  # ---------------------------------------------------------------------------
+  frontend-unit:
+    name: Frontend unit tests (Karma)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm run test:ci
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Frontend: Playwright E2E (heavy; runs on main / nightly / manual only)
+  # ---------------------------------------------------------------------------
+  frontend-e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    env:
+      CI: "true"
+      # E2E credentials are supplied by repository secrets. When absent the
+      # login-dependent journeys are expected to fail; the API-contract specs
+      # still exercise the stack. Seed a dedicated test user for these.
+      E2E_USER: ${{ secrets.E2E_USER }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      # The backend compose service requires an engine key; a dummy value is
+      # sufficient for UI journeys that never register an 'engine' model.
+      LLM_ENGINE_API_KEY: ${{ secrets.LLM_ENGINE_API_KEY || 'ci-dummy-key' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start backend stack (backend + redis)
+        run: docker compose up -d --build backend redis
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8001/api/ >/dev/null 2>&1 || \
+               curl -s http://localhost:8001/ >/dev/null 2>&1; then
+              echo "Backend is up"; break
+            fi
+            echo "Waiting for backend ($i)..."; sleep 2
+          done
+
+      - name: Serve frontend (production build)
+        working-directory: frontend
+        run: |
+          npm run build
+          npx --yes http-server dist/frontend/browser -p 4300 -s &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4300/ >/dev/null 2>&1; then
+              echo "Frontend is up"; break
+            fi
+            echo "Waiting for frontend ($i)..."; sleep 2
+          done
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          if-no-files-found: ignore
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v

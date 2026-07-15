@@ -40,6 +40,15 @@ backend/media/
 # Test reports
 test-reports/
 
+# Coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+/frontend/coverage
+/frontend/playwright-report
+/frontend/test-results
+
 # Environment variables (API keys)
 .env
 
