@@ -680,11 +680,36 @@ class TestHyperparamWorkflow:
         assert resp.data['validation_curves'][0]['param'] == 'max_depth'
         assert resp.data['emphasized']['most_cv_gain'] == 'max_depth'
 
-    def test_start_poll_results_lifecycle(self, api_client, _use_tmp_media, media_root):
-        """Bounded real run: POST start -> poll status to terminal -> GET results."""
-        import time as _time
+    def test_start_poll_results_lifecycle(self, api_client, _use_tmp_media, media_root, monkeypatch):
+        """Bounded real run: POST start -> results ready synchronously -> GET results.
+
+        The production endpoint runs the search in a daemon thread. Here we
+        replace ``threading`` in the modeling view so the worker executes
+        synchronously inside the request. This removes the previous 180s
+        poll-with-skip loop and makes the outcome deterministic regardless of
+        machine load.
+        """
         import pickle
+        import types
         from sklearn.datasets import make_classification
+        from modeling import views as modeling_views
+
+        class _SyncThread:
+            """Run the worker inline so results exist when start() returns."""
+            def __init__(self, target=None, *args, **kwargs):
+                self._target = target
+                self.daemon = False
+
+            def start(self):
+                if self._target is not None:
+                    self._target()
+
+            def join(self, *args, **kwargs):
+                pass
+
+        monkeypatch.setattr(
+            modeling_views, 'threading', types.SimpleNamespace(Thread=_SyncThread)
+        )
 
         file_id = 8124
         X, y = make_classification(n_samples=80, n_features=5, n_informative=3,
@@ -709,40 +734,14 @@ class TestHyperparamWorkflow:
         assert start.status_code == 200
         assert start.data['status'] == 'started'
 
-        # Generous budget: the search finishes in a few seconds when this test
-        # runs alone, but it executes after ~890 others and a loaded box can be
-        # markedly slower.  The status endpoint only reports a terminal state
-        # *after* the worker has written its results JSON, so observing
-        # 'completed' here also guarantees the read-back below finds the file.
-        terminal = None
-        deadline = _time.time() + 180.0
-        while _time.time() < deadline:
-            st = api_client.get(f'/api/modeling/hyperparam/status/{file_id}/')
-            if st.data.get('status') in ('completed', 'error', 'stopped'):
-                terminal = st.data['status']
-                break
-            _time.sleep(0.5)
-
-        if terminal is None:
-            # Load-induced slowdown, not a logic error (this path is green in
-            # isolation).  Ask the worker to stop and wait for it to actually
-            # reach a terminal state: that means it has finished and won't touch
-            # HYPERPARAM_PROGRESS after the autouse fixture clears it (which
-            # would otherwise crash the daemon thread).  Then skip rather than
-            # false-failing the suite.
-            api_client.post(f'/api/modeling/hyperparam/stop/{file_id}/', {},
-                            content_type='application/json')
-            for _ in range(60):
-                st = api_client.get(f'/api/modeling/hyperparam/status/{file_id}/')
-                if st.data.get('status') in ('completed', 'error', 'stopped'):
-                    terminal = st.data['status']
-                    break
-                _time.sleep(0.5)
-            if terminal != 'completed':
-                pytest.skip('hyperparam worker did not finish within the time '
-                            'budget under load (search is green in isolation)')
-
-        assert terminal == 'completed', f'tuning did not complete (status={terminal})'
+        # The worker ran synchronously (patched threading), so the status is
+        # already terminal and the results JSON has been written.
+        st = api_client.get(f'/api/modeling/hyperparam/status/{file_id}/')
+        terminal = st.data.get('status')
+        assert terminal == 'completed', (
+            f'tuning did not complete (status={terminal}, '
+            f'message={st.data.get("message")})'
+        )
 
         resp = api_client.get(f'/api/modeling/hyperparam/{file_id}/')
         assert resp.status_code == 200

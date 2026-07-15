@@ -1,14 +1,10 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login } from './pages/login.page';
 
 test.describe('Preprocessing & Data Quality Journey', () => {
   test.beforeEach(async ({ page }) => {
-    // Full login → pipeline start → file upload flow
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
     await page.click('a[routerLink="/model-development"]');
     await expect(page).toHaveURL(/\/model-development/);
 
@@ -39,8 +35,8 @@ test.describe('Preprocessing & Data Quality Journey', () => {
     await expect(preprocessBtn).toBeVisible({ timeout: 15_000 });
     await preprocessBtn.click();
 
-    // Wait for the Data Purifier section to render
-    await page.waitForTimeout(1_000);
+    // Wait for the Data Purifier section to render (condition, not a fixed sleep)
+    await expect(page.locator('text=Data Purifier Declaration')).toBeVisible({ timeout: 20_000 });
   });
 
   test('should show Data Purifier Declaration after file upload', async ({ page }) => {

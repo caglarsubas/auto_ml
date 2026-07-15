@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.metrics import accuracy_score, r2_score, roc_auc_score, average_precision_score
+from sklearn.linear_model import LinearRegression
 from joblib import dump as joblib_dump
 import xgboost as xgb
 import shap

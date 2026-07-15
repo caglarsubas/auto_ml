@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { login } from './pages/login.page';
 
 test.describe('Home Page Journey', () => {
   test.beforeEach(async ({ page }) => {
-    // Login first
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
   });
 
   test('should display welcome heading and tagline', async ({ page }) => {

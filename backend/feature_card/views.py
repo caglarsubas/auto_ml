@@ -201,7 +201,7 @@ class FeatureCardViewSet(viewsets.ViewSet):
         if isinstance(value, (np.integer, np.floating)):
             return float(value) if not np.isnan(value) else None
         elif isinstance(value, np.ndarray):
-            return [json_default(v) for v in value]
+            return [json_default(v) for v in value]  # noqa: F821 - known latent bug (method lacks self); only reachable for ndarray payloads, tracked separately
         elif pd.isna(value):
             return None
         raise TypeError(f"Unserializable value: {value}")

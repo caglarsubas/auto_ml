@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { login } from './pages/login.page';
 
 test.describe('Pipeline Management Journey', () => {
   test.beforeEach(async ({ page }) => {
-    // Login → Model Development
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
     await page.click('a[routerLink="/model-development"]');
     await expect(page).toHaveURL(/\/model-development/);
   });

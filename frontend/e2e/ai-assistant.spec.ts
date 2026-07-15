@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { login } from './pages/login.page';
 
 test.describe('AI Assistant Panel Journey', () => {
   test.beforeEach(async ({ page }) => {
-    // Login → Model Development
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
     await page.click('a[routerLink="/model-development"]');
     await expect(page).toHaveURL(/\/model-development/);
   });
@@ -45,10 +41,9 @@ test.describe('AI Assistant Panel Journey', () => {
     // Left panel should start visible (default)
     const leftPanel = page.locator('.panel-left');
 
-    // Toggle off
+    // Toggle off — the left panel should hide
     await page.click('.toggle-btn:has-text("Navigation")');
-    // Panel might hide
-    await page.waitForTimeout(500);
+    await expect(leftPanel).toBeHidden({ timeout: 5_000 });
 
     // Toggle back on
     await page.click('.toggle-btn:has-text("Navigation")');

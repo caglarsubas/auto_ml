@@ -16,6 +16,7 @@
  *      so the suite never false-fails in a fresh environment.
  */
 import { test, expect, Page } from '@playwright/test';
+import { login } from './pages/login.page';
 
 const PANEL = 'Hyperparameter Tuning';
 
@@ -67,14 +68,6 @@ async function mockHyperparamEndpoints(page: Page): Promise<void> {
   });
 }
 
-async function login(page: Page): Promise<void> {
-  await page.goto('/login');
-  await page.fill('#username', 'caglarsubas@gmail.com');
-  await page.fill('#password', 'con3e7ne');
-  await page.click('button.login-button');
-  await expect(page).toHaveURL(/\/home/, { timeout: 15_000 });
-}
-
 test.describe('Hyperparameter Tuning panel (post-SFS)', () => {
   test('config controls render and a Start→results cycle works (mocked)', async ({ page }) => {
     await mockHyperparamEndpoints(page);
@@ -103,7 +96,8 @@ test.describe('Hyperparameter Tuning panel (post-SFS)', () => {
       return;
     }
     await loadButtons.first().click();
-    await page.waitForTimeout(2_000);
+    // Let the pipeline-load network activity settle instead of a fixed sleep.
+    await page.waitForLoadState('networkidle');
 
     // The tuning panel only appears for pipelines that advanced through SFS.
     const panelHeading = page.getByRole('heading', { name: PANEL }).first();

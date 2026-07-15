@@ -4,6 +4,7 @@ Provides shared fixtures used across all test categories.
 """
 import io
 import os
+import random
 
 # Disable Prometa OTLP export for the entire test session so test runs don't
 # emit sessions like `declarai-file-99999` into the platform's Session Explorer.
@@ -16,6 +17,20 @@ import pytest
 import pandas as pd
 import numpy as np
 from django.conf import settings
+
+# Fixed seed so that fixtures built on numpy/random produce the same data every
+# run. This removes a class of "passes locally, fails in CI" flakiness for tests
+# that assert on generated values. Individual tests that need fresh entropy can
+# reseed inside their own body.
+RANDOM_SEED = 42
+
+
+@pytest.fixture(autouse=True)
+def _seed_randomness():
+    """Seed numpy and stdlib RNGs before every test for deterministic data."""
+    np.random.seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
+    yield
 
 
 @pytest.fixture

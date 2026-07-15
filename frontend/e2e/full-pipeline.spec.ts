@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login, LoginPage } from './pages/login.page';
+import { TEST_CREDENTIALS } from './fixtures/credentials';
 
 /**
  * Full end-to-end pipeline journey:
@@ -12,12 +14,12 @@ import path from 'path';
 test.describe('Full Pipeline Journey (Happy Path)', () => {
   test('complete pipeline from login to data quality', async ({ page }) => {
     // ── 1. Login ──
-    await page.goto('/login');
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
     await expect(page.locator('h1')).toContainText('Welcome back');
 
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
+    await loginPage.fill(TEST_CREDENTIALS.username, TEST_CREDENTIALS.password);
+    await loginPage.submit();
     await expect(page).toHaveURL(/\/home/);
 
     // ── 2. Navigate to Model Development ──
@@ -76,7 +78,6 @@ test.describe('Full Pipeline Journey (Happy Path)', () => {
     await preprocessBtn.scrollIntoViewIfNeeded();
     await expect(preprocessBtn).toBeVisible({ timeout: 15_000 });
     await preprocessBtn.click();
-    await page.waitForTimeout(1_000);
 
     // ── 9. Verify Preprocessing Section Appears ──
     const purifierHeading = page.locator('text=Data Purifier Declaration');
@@ -103,12 +104,7 @@ test.describe('Full Pipeline Journey (Happy Path)', () => {
 
 test.describe('Pipeline Resume & Persistence', () => {
   test('should persist pipeline state across page reloads', async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
 
     // Go to model development
     await page.click('a[routerLink="/model-development"]');

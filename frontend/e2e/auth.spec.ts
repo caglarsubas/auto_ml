@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { TEST_CREDENTIALS } from './fixtures/credentials';
 
 test.describe('Authentication Journey', () => {
   test.beforeEach(async ({ page }) => {
@@ -28,8 +29,8 @@ test.describe('Authentication Journey', () => {
   });
 
   test('should login successfully and navigate to home', async ({ page }) => {
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
+    await page.fill('#username', TEST_CREDENTIALS.username);
+    await page.fill('#password', TEST_CREDENTIALS.password);
     await page.click('button.login-button');
 
     await expect(page).toHaveURL(/\/home/);

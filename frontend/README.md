@@ -1,27 +1,60 @@
-# Frontend
+# DeclarAI Frontend
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 18.0.4.
+Angular 18 single-page application for the DeclarAI AutoML platform. Generated
+with the [Angular CLI](https://github.com/angular/angular-cli) and served on
+port `4300` in the docker-compose stack.
 
 ## Development server
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+```bash
+npm start        # ng serve (http://localhost:4200 locally, 4300 in Docker)
+```
 
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+The app reloads automatically on source changes.
 
 ## Build
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+```bash
+npm run build    # artifacts in dist/frontend
+```
 
-## Running unit tests
+## Testing
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+See the repository [testing guide](../docs/testing.md) for the full strategy.
 
-## Running end-to-end tests
+### Unit tests (Karma + Jasmine)
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+```bash
+npm test         # interactive (watch mode)
+npm run test:ci  # headless Chrome + coverage (used by CI)
+```
+
+Karma is configured in `karma.conf.js` with a `ChromeHeadlessCI` launcher and
+coverage thresholds. Coverage reports land in `coverage/`.
+
+### End-to-end tests (Playwright)
+
+```bash
+npm run test:e2e         # headless
+npm run test:e2e:headed  # headed
+```
+
+- Config: `playwright.config.ts` (`baseURL` from `E2E_BASE_URL`, default
+  `http://localhost:4300`). The stack must be running, or set
+  `E2E_WEB_SERVER_CMD` to let Playwright start it.
+- Credentials come from `E2E_USER` / `E2E_PASSWORD` — never hard-code them
+  (see `e2e/fixtures/credentials.ts`).
+- Shared login lives in `e2e/pages/login.page.ts`.
+
+## Linting & formatting
+
+```bash
+npm run lint          # ESLint (angular-eslint)
+npm run format        # Prettier write
+npm run format:check  # Prettier check
+```
 
 ## Further help
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Run `ng help` or see the
+[Angular CLI reference](https://angular.dev/tools/cli).

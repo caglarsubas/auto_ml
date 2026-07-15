@@ -394,12 +394,13 @@ auto-ml/
 │   │   └── views.py          # Feature statistics, distribution, quality summary
 │   ├── evaluation/           # Model evaluation (planned)
 │   ├── deployment/           # Model deployment (planned)
-│   ├── tests/                # Test suite
-│   │   ├── test_unit.py      # 25 unit tests
-│   │   ├── test_functional.py # 13 functional tests
-│   │   ├── test_regression.py # 6 regression tests
-│   │   ├── test_integration.py # 4 integration tests
-│   │   └── test_uat.py       # 5 UAT tests
+│   ├── tests/                # Test suite (~1009 tests)
+│   │   ├── unit/             # Unit tests split by domain (declaration, encoding,
+│   │   │                     #   modeling, hyperparam, preprocessing, ai_*, ...)
+│   │   ├── test_functional.py # Functional (API endpoint) tests
+│   │   ├── test_regression.py # Regression tests (fixed bugs)
+│   │   ├── test_integration.py # Integration (multi-step) tests
+│   │   └── test_uat.py       # UAT (end-to-end journey) tests
 │   ├── conftest.py           # Shared pytest fixtures
 │   ├── pytest.ini            # Test configuration with markers
 │   └── requirements.txt      # Python dependencies
@@ -467,33 +468,63 @@ auto-ml/
 
 ## Testing
 
-The project has a comprehensive test suite with 5 categories, enforced by a **pre-commit git hook** that blocks commits if any test fails.
+The project is tested across three layers, all enforced by CI
+(`.github/workflows/ci.yml`). See [docs/testing.md](docs/testing.md) for the
+full strategy.
+
+| Layer | Framework | Count |
+|-------|-----------|------:|
+| Backend | pytest + pytest-django | ~1009 |
+| Frontend unit | Karma + Jasmine | ~433 |
+| Frontend E2E | Playwright | ~72 |
+
+### Backend
 
 ```bash
-# Run all tests inside Docker
-docker exec auto-ml-backend-1 python -m pytest -v
+# Native (no Docker) — requires backend requirements installed
+cd backend && python -m pytest              # all
+python -m pytest -m unit                     # by marker (unit/functional/regression/integration/uat)
+python -m pytest --cov --cov-report=term     # with coverage
 
-# Run by category
-docker exec auto-ml-backend-1 python -m pytest -m unit -v
-docker exec auto-ml-backend-1 python -m pytest -m functional -v
-docker exec auto-ml-backend-1 python -m pytest -m regression -v
-docker exec auto-ml-backend-1 python -m pytest -m integration -v
-docker exec auto-ml-backend-1 python -m pytest -m uat -v
-
-# Unified runner with grouped reporting
-./run_tests.sh
+# Unified runner (auto-detects Docker vs native)
+./run_tests.sh                 # all categories
+./run_tests.sh --quick         # unit + regression
+./run_tests.sh --mode native   # force native pytest (no container)
 ```
 
-| Category | Count | Scope |
-|----------|-------|-------|
-| **Unit** | 25 | Models, serializers, utility functions |
-| **Functional** | 13 | API endpoint behavior |
-| **Regression** | 6 | Previously fixed bugs (str dtype, CSS, etc.) |
-| **Integration** | 4 | Multi-component workflows |
-| **UAT** | 5 | End-to-end user scenarios |
-| **Total** | **53** | — |
+| Marker | Count | Scope |
+|--------|------:|-------|
+| **unit** | ~832 | Models, serializers, utilities, AI assistant, SFS, hyperparam |
+| **functional** | ~118 | API endpoint behavior |
+| **regression** | ~34 | Previously fixed bugs |
+| **integration** | ~16 | Multi-component workflows |
+| **uat** | ~9 | End-to-end user scenarios |
+
+Some cache/telemetry tests require Redis (`REDIS_URL`); they skip when it is
+unavailable and run in CI (which provides a Redis service).
+
+### Frontend
+
+```bash
+cd frontend
+npm run test:ci        # headless Karma unit tests + coverage
+npm run test:e2e       # Playwright E2E (needs the stack running)
+npm run lint           # ESLint (angular-eslint)
+npm run format:check   # Prettier
+```
+
+E2E credentials come from `E2E_USER` / `E2E_PASSWORD` (see
+`frontend/e2e/fixtures/credentials.ts`).
 
 **Important**: All CSV uploads in tests must include `column_separator: 'comma'` because the backend defaults to semicolon.
+
+### Pre-commit hooks (optional)
+
+```bash
+pip install pre-commit
+pre-commit install                        # lint/format on commit
+pre-commit install --hook-type pre-push   # quick backend tests on push
+```
 
 ---
 

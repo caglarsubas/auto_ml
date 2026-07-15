@@ -1,0 +1,34 @@
+# Backend tooling config. Pytest configuration intentionally stays in
+# pytest.ini; this file currently only configures Ruff.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["**/migrations/**"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+# Legacy cleanup backlog: the codes below are violated by pre-existing code and
+# are ignored project-wide for now so the lint gate is green on adoption. Burn
+# these down over time and delete entries as they reach zero. Newly-enforced
+# rules (notably F821 undefined-name, which already caught two real bugs) stay
+# active so regressions are blocked going forward.
+ignore = [
+    "E501",  # line-too-long (long f-strings / HTML templates)
+    "F401",  # unused-import
+    "F541",  # f-string-missing-placeholders
+    "E722",  # bare-except
+    "F841",  # unused local variable
+    "E702",  # multiple-statements-on-one-line (semicolon)
+    "E401",  # multiple-imports-on-one-line
+    "E741",  # ambiguous-variable-name
+    "E402",  # module-import-not-at-top-of-file
+    "E721",  # type-comparison
+    "E731",  # lambda-assignment
+]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest-django provides a `settings` fixture that intentionally shadows the
+# module-level import in these files.
+"conftest.py" = ["F811"]
+"tests/**" = ["F811"]
