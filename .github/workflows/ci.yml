@@ -58,10 +58,14 @@ jobs:
         id: scope
         run: |
           # Fast feedback on PRs; full suite on main / nightly / manual runs.
+          # Coverage is only gated on the full suite (the quick PR subset has
+          # lower coverage by construction).
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "markers=unit or regression" >> "$GITHUB_OUTPUT"
+            echo "covfail=" >> "$GITHUB_OUTPUT"
           else
             echo "markers=unit or functional or regression or integration or uat" >> "$GITHUB_OUTPUT"
+            echo "covfail=--cov-fail-under=50" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run pytest
@@ -72,7 +76,7 @@ jobs:
             --tb=short \
             --junitxml=../test-reports/backend-junit.xml \
             --cov --cov-report=xml:../test-reports/backend-coverage.xml \
-            --cov-report=term-missing
+            --cov-report=term-missing ${{ steps.scope.outputs.covfail }}
 
       - name: Enforce skip budget
         if: always()
@@ -117,6 +121,49 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage/
           if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Backend static analysis (ruff)
+  # ---------------------------------------------------------------------------
+  backend-lint:
+    name: Backend lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install "ruff>=0.9"
+      - name: Ruff check
+        working-directory: backend
+        run: ruff check .
+
+  # ---------------------------------------------------------------------------
+  # Frontend static analysis (ESLint + Prettier)
+  # ---------------------------------------------------------------------------
+  frontend-lint:
+    name: Frontend lint (ESLint + Prettier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+      - name: Prettier check (advisory)
+        working-directory: frontend
+        # Formatting is not yet enforced on the legacy tree; surface diffs
+        # without failing the build. Flip to a hard gate once formatted.
+        continue-on-error: true
+        run: npm run format:check
 
   # ---------------------------------------------------------------------------
   # Frontend: Playwright E2E (heavy; runs on main / nightly / manual only)
