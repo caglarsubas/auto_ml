@@ -1,14 +1,10 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { login } from './pages/login.page';
 
 test.describe('Declaration (Data Upload) Journey', () => {
   test.beforeEach(async ({ page }) => {
-    // Login → Home → Model Development → Start pipeline
-    await page.goto('/login');
-    await page.fill('#username', 'caglarsubas@gmail.com');
-    await page.fill('#password', 'con3e7ne');
-    await page.click('button.login-button');
-    await expect(page).toHaveURL(/\/home/);
+    await login(page);
     await page.click('a[routerLink="/model-development"]');
     await expect(page).toHaveURL(/\/model-development/);
 
@@ -120,12 +116,10 @@ test.describe('Declaration (Data Upload) Journey', () => {
     const noHeaderFile = path.resolve(__dirname, 'fixtures/test_data_no_header.csv');
     await fileInput.setInputFiles(noHeaderFile);
 
-    // Wait for auto-detection to process the file
-    await page.waitForTimeout(500);
-
-    // The checkbox should be automatically checked since the file has no header
+    // The checkbox should be automatically checked since the file has no header.
+    // expect() auto-retries, so it waits for auto-detection without a fixed sleep.
     const checkbox = page.locator('#firstLineHeader');
-    await expect(checkbox).toBeChecked();
+    await expect(checkbox).toBeChecked({ timeout: 5_000 });
   });
 
   test('should keep checkbox unchecked for CSV with headers', async ({ page }) => {
@@ -133,12 +127,9 @@ test.describe('Declaration (Data Upload) Journey', () => {
     const headerFile = path.resolve(__dirname, 'fixtures/test_data.csv');
     await fileInput.setInputFiles(headerFile);
 
-    // Wait for auto-detection
-    await page.waitForTimeout(500);
-
-    // The checkbox should remain unchecked since the file has proper headers
+    // The checkbox should remain unchecked since the file has proper headers.
     const checkbox = page.locator('#firstLineHeader');
-    await expect(checkbox).not.toBeChecked();
+    await expect(checkbox).not.toBeChecked({ timeout: 5_000 });
   });
 
   test('should show "Add note" button after data preview', async ({ page }) => {
