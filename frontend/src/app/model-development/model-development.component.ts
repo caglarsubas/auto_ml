@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
@@ -21,7 +21,7 @@ interface PurifierOption {
   styleUrls: ['./model-development.component.css']
 })
 
-export class ModelDevelopmentComponent implements OnInit, AfterViewChecked {
+export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDestroy {
   @ViewChild('splitValidationCanvas') splitValidationCanvas!: ElementRef<HTMLCanvasElement>;
   private _splitChartDrawn = false;
   currentRoute: string = '';

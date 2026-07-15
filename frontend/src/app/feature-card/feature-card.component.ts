@@ -8,7 +8,7 @@ import { forkJoin } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 
-declare var Plotly: any;
+declare let Plotly: any;
 
 interface FeatureData {
   Feature_Name: string;
@@ -152,7 +152,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
-    @Inject(PLATFORM_ID) platformId: Object,
+    @Inject(PLATFORM_ID) platformId: object,
     private dataService: DataService,
     public dialogRef: MatDialogRef<FeatureCardComponent>,
   ) {

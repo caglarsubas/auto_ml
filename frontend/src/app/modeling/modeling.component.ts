@@ -1,6 +1,6 @@
 import { Component, OnInit, Inject, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { PLATFORM_ID } from '@angular/core';
+import { PLATFORM_ID, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
@@ -17,7 +17,7 @@ interface PurifierOption { id: number; name: string; }
   templateUrl: './modeling.component.html',
   styleUrls: ['./modeling.component.css']
 })
-export class ModelingComponent implements OnInit, AfterViewInit {
+export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   selectedOptionIds: number[] = [];
   selectedOptionNames: string[] = [];
   runPreview: any | null = null;
@@ -267,7 +267,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05' },
   ];
 
-  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: Object, private cdr: ChangeDetectorRef, private dialog: MatDialog, private aiAssistant: AiAssistantService) {
+  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: object, private cdr: ChangeDetectorRef, private dialog: MatDialog, private aiAssistant: AiAssistantService) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 
@@ -952,8 +952,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     const col = this.sfSortColumn;
     const dir = this.sfSortDirection === 'asc' ? 1 : -1;
     this.sortedSelectedFeatures = [...features].sort((a: any, b: any) => {
-      let va = a[col];
-      let vb = b[col];
+      const va = a[col];
+      const vb = b[col];
       // Handle nulls — push them to the end
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
@@ -1032,8 +1032,8 @@ export class ModelingComponent implements OnInit, AfterViewInit {
     const col = this.vifDetailSortColumn;
     const dir = this.vifDetailSortDirection === 'asc' ? 1 : -1;
     this.vifDetailContributions = [...this.vifDetailContributions].sort((a: any, b: any) => {
-      let va = a[col];
-      let vb = b[col];
+      const va = a[col];
+      const vb = b[col];
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
@@ -1997,7 +1997,7 @@ export class ModelingComponent implements OnInit, AfterViewInit {
         const csi = meta.csi;
         const impact = meta.impact;
         // Build hover text: show description if available, otherwise feature name
-        let hoverParts = [];
+        const hoverParts = [];
         if (desc) {
           hoverParts.push(`<b>${desc}</b>`);
         } else {

@@ -19,7 +19,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router, 
     private authService: AuthService,
-    @Inject(PLATFORM_ID) private platformId: Object
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
     this.isBrowser = isPlatformBrowser(this.platformId);
   }
