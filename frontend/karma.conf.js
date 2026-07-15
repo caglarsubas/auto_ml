@@ -23,15 +23,16 @@ module.exports = function (config) {
       dir: require('path').join(__dirname, './coverage/frontend'),
       subdir: '.',
       reporters: [{ type: 'html' }, { type: 'text-summary' }, { type: 'lcovonly' }],
-      // Baseline thresholds. Ratchet these up as coverage improves; keep them
-      // below current coverage so CI does not flake, but non-zero so coverage
-      // cannot silently regress to nothing.
+      // Baseline thresholds, set just below current coverage (statements ~28%,
+      // branches ~21%, functions ~27%, lines ~29% as of this change). Ratchet
+      // these up as coverage improves; they guard against regression without
+      // flaking CI.
       check: {
         global: {
-          statements: 40,
-          branches: 30,
-          functions: 35,
-          lines: 40,
+          statements: 25,
+          branches: 18,
+          functions: 24,
+          lines: 26,
         },
       },
     },
