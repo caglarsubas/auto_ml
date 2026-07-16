@@ -29,7 +29,7 @@ from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
     get_model_config, list_models, DEFAULT_MODEL,
     call_openai, call_engine, MODEL_REGISTRY,
-    parse_ollama_tag,
+    parse_ollama_tag, engine_status,
 )
 
 # ---------------------------------------------------------------------------
@@ -3632,7 +3632,12 @@ class AIModelListView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
+        # Evaluate list_models() first: it triggers the engine-discovery refresh
+        # whose outcome engine_status() then reports, so the two stay consistent
+        # within a single response.
+        models = list_models()
         return Response({
-            'models': list_models(),
+            'models': models,
             'default': DEFAULT_MODEL,
+            'engine': engine_status(),
         })

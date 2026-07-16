@@ -203,6 +203,91 @@ class TestModelRegistry:
         }
         assert 'engine-llama3.2-3b' in models
 
+
+@pytest.mark.unit
+class TestEngineDiscoveryHealth:
+    """engine_status() must make a cloud-only fallback OBSERVABLE.
+
+    Root bug: when engine ``/v1/models`` discovery fails, DeclarAI serves only
+    the static OpenAI models — and pre-fix that was indistinguishable from a
+    healthy OpenAI-only deployment, so the frontend silently froze on GPT-only
+    (see the reproduced dropdown screenshot).  ``engine_status()`` now reports
+    the outcome of the most recent discovery attempt so the degradation is
+    explained rather than silent.
+    """
+
+    def test_status_available_after_successful_discovery(self, _stub_engine_models):
+        from ai_assistant.model_registry import engine_status, list_models
+        # list_models() runs a refresh through the stubbed fetch.
+        list_models()
+        status = engine_status()
+        assert status['available'] is True
+        assert status['model_count'] == len(_stub_engine_models)
+        assert status['last_error'] is None
+        assert status['checked_at'] is not None
+
+    def test_status_degraded_and_explained_on_discovery_failure(self, monkeypatch):
+        from ai_assistant import model_registry as mr
+        # Engine unreachable → fetch yields None with a recorded reason.
+        monkeypatch.setattr(mr, '_fetch_engine_models', lambda: None)
+        monkeypatch.setattr(
+            mr, '_engine_last_error',
+            'URLError: <urlopen error [Errno 111] Connection refused>',
+        )
+        mr.invalidate_engine_cache()
+
+        models = mr.list_models()
+        status = mr.engine_status()
+
+        # Assistant stays usable: the static cloud models are still served.
+        assert [m['key'] for m in models if m['provider'] == 'openai']
+        assert all(m['provider'] == 'openai' for m in models)
+        # ...but the degradation is now observable, not silent.
+        assert status['available'] is False
+        assert status['model_count'] == 0
+        assert 'Connection refused' in status['last_error']
+        assert status['checked_at'] is not None
+        mr.invalidate_engine_cache()
+
+    def test_discovery_failure_retains_last_known_good_models(self, monkeypatch):
+        """A transient failure must not wipe a previously-discovered list — the
+        last-known-good engine models keep serving, flagged as degraded."""
+        from ai_assistant import model_registry as mr
+        good = {
+            mr._engine_key('foo:3b'): mr._build_engine_entry(
+                {'id': 'foo:3b', 'size_bytes': 3 * 1024 ** 3}
+            )
+        }
+        # 1) Engine healthy — discover foo:3b.
+        monkeypatch.setattr(mr, '_fetch_engine_models', lambda: good)
+        mr.invalidate_engine_cache()
+        assert 'engine-foo-3b' in {m['key'] for m in mr.list_models()}
+        assert mr.engine_status()['available'] is True
+
+        # 2) Engine goes down — force a *live TTL-style* re-fetch that fails.
+        #    Expire the cache WITHOUT the aggressive invalidate() (which would
+        #    drop the last-known-good) to mirror the production degrade path.
+        monkeypatch.setattr(mr, '_fetch_engine_models', lambda: None)
+        monkeypatch.setattr(mr, '_engine_last_error', 'TimeoutError: timed out')
+        with mr._engine_cache_lock:
+            mr._engine_cache_expires_at = 0.0
+
+        keys = {m['key'] for m in mr.list_models()}
+        status = mr.engine_status()
+        # Last-known-good engine model still served (graceful, not wiped)...
+        assert 'engine-foo-3b' in keys
+        # ...but status reports the engine is currently unreachable.
+        assert status['available'] is False
+        assert 'timed out' in status['last_error']
+        assert status['model_count'] == 1  # the retained entry
+        mr.invalidate_engine_cache()
+
+    def test_status_returns_a_copy_not_the_shared_dict(self):
+        from ai_assistant.model_registry import engine_status
+        snap = engine_status()
+        snap['injected'] = 'should-not-leak'
+        assert 'injected' not in engine_status()
+
 # ---------------------------------------------------------------------------
 # v2.43.1: Nemotron CoT-leak fix — reasoning-family models must opt into
 # chat_template_kwargs={'enable_thinking': True} on the engine call so the
