@@ -285,6 +285,65 @@ describe('SharedService', () => {
     });
   });
 
+  // ── pipelineCodelines ──────────────────────────────────────────────────
+  describe('pipelineCodelines', () => {
+    it('should default to empty object', () => {
+      expect(service.getPipelineCodelines()).toEqual({});
+    });
+
+    it('should set and get codelines', () => {
+      const cell = {
+        id: 'cl-1',
+        position: 'after_data_preview',
+        mode: 'code',
+        code: 'print(df.shape)',
+        intent: '',
+        updatedAt: '2026-07-20T00:00:00Z',
+      };
+      service.setPipelineCodelines({ after_data_preview: cell });
+      expect(service.getPipelineCodelines()['after_data_preview']).toEqual(cell);
+    });
+
+    it('should update a single codeline', () => {
+      const cell = {
+        id: 'cl-1',
+        position: 'after_encoding',
+        mode: 'intent',
+        code: '',
+        intent: 'Plot A vs B',
+        updatedAt: '2026-07-20T00:00:00Z',
+      };
+      service.updatePipelineCodeline('after_encoding', cell);
+      expect(service.getPipelineCodelines()['after_encoding'].intent).toBe('Plot A vs B');
+    });
+
+    it('should delete a codeline', () => {
+      service.updatePipelineCodeline('after_data_preview', {
+        id: 'cl-1',
+        position: 'after_data_preview',
+        mode: 'code',
+        code: 'x = 1',
+        intent: '',
+        updatedAt: '2026-07-20T00:00:00Z',
+      });
+      service.deletePipelineCodeline('after_data_preview');
+      expect(service.getPipelineCodelines()['after_data_preview']).toBeUndefined();
+    });
+
+    it('should remove empty codeline on update with null', () => {
+      service.updatePipelineCodeline('after_data_preview', {
+        id: 'cl-1',
+        position: 'after_data_preview',
+        mode: 'code',
+        code: 'x = 1',
+        intent: '',
+        updatedAt: '2026-07-20T00:00:00Z',
+      });
+      service.updatePipelineCodeline('after_data_preview', null);
+      expect(service.getPipelineCodelines()['after_data_preview']).toBeUndefined();
+    });
+  });
+
   // ── aiCumulativeContext ────────────────────────────────────────────────
   describe('aiCumulativeContext', () => {
     it('should default to empty object', () => {

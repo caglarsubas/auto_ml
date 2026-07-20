@@ -483,7 +483,8 @@ export class DataService {
              history: Array<{role: string; content: string}>,
              fileId?: number, model?: string,
              intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'R'>,
-             intentSource?: string): Observable<any> {
+             intentSource?: string,
+             source?: 'codeline' | 'panel'): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {
       body.file_id = fileId;
@@ -496,6 +497,9 @@ export class DataService {
     }
     if (intentSource) {
       body.intent_source = intentSource;
+    }
+    if (source) {
+      body.source = source;
     }
     return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
       catchError((err: any) => {

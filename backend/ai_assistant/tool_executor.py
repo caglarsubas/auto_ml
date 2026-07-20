@@ -30,6 +30,7 @@ from .cache import (
     ARTIFACT_SFS_RESULTS,
     ARTIFACT_CV_RESULTS,
     ARTIFACT_PIPELINE_NOTES,
+    ARTIFACT_PIPELINE_CODELINES,
     ARTIFACT_PIPELINE_CONFIG,
     ARTIFACT_DATA_DICTIONARY,
 )
@@ -362,6 +363,14 @@ def read_pipeline_notes(file_id: int) -> Optional[dict]:
     with span_timer('declarai.cache'):
         data = cache_get(file_id, ARTIFACT_PIPELINE_NOTES)
         _stamp_read_attrs(ARTIFACT_PIPELINE_NOTES, data)
+        return data
+
+
+@prometa_tool(name="cache-read:pipeline_codelines")
+def read_pipeline_codelines(file_id: int) -> Optional[dict]:
+    with span_timer('declarai.cache'):
+        data = cache_get(file_id, ARTIFACT_PIPELINE_CODELINES)
+        _stamp_read_attrs(ARTIFACT_PIPELINE_CODELINES, data)
         return data
 
 
@@ -703,6 +712,27 @@ def _handle_get_pipeline_notes(file_id: int, args: dict) -> str:
     return '\n'.join(lines) if len(lines) > 1 else "No pipeline notes have been saved."
 
 
+def _handle_get_pipeline_codelines(file_id: int, args: dict) -> str:
+    data = read_pipeline_codelines(file_id)
+    if not data:
+        return "No pipeline codelines have been saved."
+    lines = ["Pipeline Codelines:"]
+    for position, cell in data.items():
+        if not isinstance(cell, dict):
+            continue
+        mode = cell.get('mode') or 'code'
+        code = (cell.get('code') or '').strip()
+        intent = (cell.get('intent') or '').strip()
+        snippet = intent if mode == 'intent' and intent else code
+        if not snippet:
+            continue
+        # Keep tool payloads compact for the LLM context window
+        if len(snippet) > 400:
+            snippet = snippet[:400] + '…'
+        lines.append(f"  [{position}] ({mode}): {snippet}")
+    return '\n'.join(lines) if len(lines) > 1 else "No pipeline codelines have been saved."
+
+
 def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
     # NOTE: the dict keys below MUST match what the frontend writes in
     # ``model-development.component.ts::getPipelineConfig`` (the cache
@@ -977,6 +1007,7 @@ _HANDLERS = {
     'get_sfs_results': _handle_get_sfs_results,
     'get_cv_results': _handle_get_cv_results,
     'get_pipeline_notes': _handle_get_pipeline_notes,
+    'get_pipeline_codelines': _handle_get_pipeline_codelines,
     'get_pipeline_config': _handle_get_pipeline_config,
     'get_data_dictionary': _handle_get_data_dictionary,
     'get_purifier_options': _handle_get_purifier_options,

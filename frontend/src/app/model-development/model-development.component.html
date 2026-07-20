@@ -385,6 +385,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline position="after_preprocessing_config"></app-pipeline-codeline>
 
     <!-- Run preprocessing to compute Data Quality summary -->
     <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
@@ -472,6 +473,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" position="after_purifier_summary"></app-pipeline-codeline>
 
     <!-- Split Validation Chart -->
     <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafbfc;">
@@ -517,6 +519,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline *ngIf="splitValidation" position="after_split_validation"></app-pipeline-codeline>
 
     <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
       <h2>Data Quality</h2>
@@ -736,6 +739,7 @@
           <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
+      <app-pipeline-codeline position="after_data_quality"></app-pipeline-codeline>
 
       <div style="margin-top: 12px; margin-bottom: 30px; display: flex; gap: 12px; align-items: center;">
         <button class="next-button" (click)="goToModelingFromDQ()" [disabled]="!(datqSummary && datqSummary.length)">

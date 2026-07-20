@@ -443,6 +443,24 @@ describe('DataService', () => {
       req.flush({ message: 'Response' });
     });
 
+    it('sendAiChat should include source=codeline when provided', () => {
+      service.sendAiChat(
+        'Create a ratio feature',
+        { codeline_position: 'after_data_preview' },
+        'codeline_after_data_preview',
+        [],
+        42,
+        undefined,
+        undefined,
+        undefined,
+        'codeline',
+      ).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
+      expect(req.request.body.source).toBe('codeline');
+      expect(req.request.body.section).toBe('codeline_after_data_preview');
+      req.flush({ message: 'Done', actions: [] });
+    });
+
     it('pushAiCache should POST artifacts with file_id', () => {
       service.pushAiCache(1, { split_validation: { splits: [] } }).subscribe(res => {
         expect(res.status).toBe('success');

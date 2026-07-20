@@ -1,0 +1,155 @@
+<div class="pipeline-codeline-slot">
+  <!-- Empty state -->
+  <div *ngIf="!expanded && !hasContent" class="pipeline-codeline-add" (click)="addCodeline()">
+    <span class="pipeline-codeline-add-icon">+</span>
+    <span class="pipeline-codeline-add-label">Add Codeline</span>
+  </div>
+
+  <!-- Collapsed summary -->
+  <div *ngIf="!expanded && hasContent" class="pipeline-codeline-summary" (dblclick)="expanded = true">
+    <div class="pipeline-codeline-summary-main">
+      <span class="pipeline-codeline-badge">{{ cell?.mode === 'intent' ? 'Intent' : 'Code' }}</span>
+      <span class="pipeline-codeline-summary-text">
+        {{ (cell?.mode === 'intent' ? cell?.intent : cell?.code) || 'Empty Codeline' }}
+      </span>
+    </div>
+    <div class="pipeline-codeline-actions">
+      <button type="button" class="pipeline-codeline-btn edit" (click)="expanded = true" title="Edit">&#9998;</button>
+      <button type="button" class="pipeline-codeline-btn delete" (click)="deleteCodeline()" title="Delete">&times;</button>
+    </div>
+  </div>
+
+  <!-- Expanded editor -->
+  <div *ngIf="expanded && cell" class="pipeline-codeline-editor">
+    <div class="pipeline-codeline-toolbar">
+      <div class="pipeline-codeline-mode-toggle">
+        <button type="button"
+                class="mode-btn"
+                [class.active]="cell.mode === 'code'"
+                (click)="setMode('code')">Code</button>
+        <button type="button"
+                class="mode-btn"
+                [class.active]="cell.mode === 'intent'"
+                (click)="setMode('intent')">Intent</button>
+      </div>
+      <div class="pipeline-codeline-toolbar-right">
+        <button type="button" class="pipeline-codeline-btn done" (click)="collapse()">Done</button>
+        <button type="button" class="pipeline-codeline-btn delete" (click)="deleteCodeline()" title="Delete">&times;</button>
+      </div>
+    </div>
+
+    <div *ngIf="cell.mode === 'code'" class="pipeline-codeline-code-pane">
+      <textarea
+        class="pipeline-codeline-textarea code"
+        [ngModel]="cell.code"
+        (ngModelChange)="onCodeChanged($event)"
+        placeholder="Write pandas/numpy code using df, pd, np (and plt for charts). Imports are injected."
+        rows="6"
+        spellcheck="false"></textarea>
+      <div class="pipeline-codeline-run-bar">
+        <button type="button"
+                class="run-btn exploratory"
+                [disabled]="isBusy"
+                (click)="runExploratory()"
+                title="Run without changing the dataset">
+          {{ isBusy && cell.lastRun?.runKind === 'exploratory' ? 'Running…' : 'Run' }}
+        </button>
+        <button type="button"
+                class="run-btn apply"
+                [disabled]="isBusy"
+                (click)="applyToDataset()"
+                title="Execute and save changes to the dataset">
+          {{ isBusy && cell.lastRun?.runKind === 'apply' ? 'Applying…' : 'Apply to dataset' }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="cell.mode === 'intent'" class="pipeline-codeline-intent-pane">
+      <textarea
+        class="pipeline-codeline-textarea intent"
+        [ngModel]="cell.intent"
+        (ngModelChange)="onIntentChanged($event)"
+        placeholder="Describe what you want: create features, plot a distribution, summarize a column…"
+        rows="4"></textarea>
+      <div class="pipeline-codeline-run-bar">
+        <button type="button"
+                class="run-btn assistant"
+                [disabled]="isBusy"
+                (click)="askAssistant()">
+          {{ isBusy && cell.lastRun?.runKind === 'assistant' ? 'Asking…' : 'Ask Assistant' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Output pane -->
+    <div *ngIf="cell.lastRun && cell.lastRun.status !== 'idle'" class="pipeline-codeline-output">
+      <div class="output-header">
+        <span class="output-status"
+              [class.ok]="cell.lastRun.status === 'success'"
+              [class.err]="cell.lastRun.status === 'error'"
+              [class.busy]="cell.lastRun.status === 'running'">
+          {{ cell.lastRun.status === 'running' ? 'Running' :
+             cell.lastRun.status === 'success' ? 'Success' : 'Error' }}
+          <ng-container *ngIf="cell.lastRun.runKind"> · {{ cell.lastRun.runKind }}</ng-container>
+        </span>
+      </div>
+
+      <div *ngIf="cell.lastRun.error" class="output-error">{{ cell.lastRun.error }}</div>
+
+      <div *ngIf="cell.lastRun.assistantText" class="output-assistant">
+        <div class="output-label">Assistant</div>
+        <pre class="output-pre">{{ cell.lastRun.assistantText }}</pre>
+        <button *ngIf="cell.lastRun.generatedCode"
+                type="button"
+                class="run-btn use-code"
+                (click)="useGeneratedCode()">
+          Use generated code
+        </button>
+      </div>
+
+      <div *ngIf="cell.lastRun.stdout" class="output-stdout">
+        <div class="output-label">Stdout</div>
+        <pre class="output-pre">{{ cell.lastRun.stdout }}</pre>
+      </div>
+
+      <div *ngIf="cell.lastRun.changes" class="output-changes">
+        <div class="output-label">Dataset changes</div>
+        <div class="changes-line">
+          Rows: {{ cell.lastRun.changes.rows_before }} → {{ cell.lastRun.changes.rows_after }}
+        </div>
+        <div *ngIf="cell.lastRun.changes.columns_added?.length" class="changes-line">
+          Added: {{ cell.lastRun.changes.columns_added.join(', ') }}
+        </div>
+        <div *ngIf="cell.lastRun.changes.columns_removed?.length" class="changes-line">
+          Removed: {{ cell.lastRun.changes.columns_removed.join(', ') }}
+        </div>
+      </div>
+
+      <div *ngIf="previewRows.length" class="output-preview">
+        <div class="output-label">Preview</div>
+        <div class="preview-scroll">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th *ngFor="let col of previewColumns">{{ col }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of previewRows">
+                <td *ngFor="let col of previewColumns">{{ cellValue(row, col) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div *ngIf="cell.lastRun.images?.length" class="output-images">
+        <div class="output-label">Charts</div>
+        <img *ngFor="let src of cell.lastRun.images"
+             [src]="src"
+             alt="Codeline chart"
+             class="output-chart" />
+      </div>
+    </div>
+  </div>
+</div>

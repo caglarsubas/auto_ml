@@ -38,4 +38,7 @@ which features should be dropped before SFS due to high VIF values
 with which features has Var-8 has higher collinearity causing high VIF value
 drop Variable 'FE_Contactability_Score' due to high VIF value from modeling usage list and start the SFS step
 trigger the Backward SFS process now with Parallel Workers (n_jobs) is equal to 10?
-pit step-10 as the cutoff point of backward elimination and start the forward selection
+which cutoff point/step you suggest for the result of the backward sfs that we are going to start with forward sfs
+put step-x as the cutoff point of backward elimination and start the forward selection
+start the hyperparameter process with gamma search and reg_lambda search opened. and make n_jobs=10
+how to determine the next search space of hyperparameters according to the last results?

@@ -364,10 +364,11 @@
   padding: 10px 12px;
   font-size: 13px;
   font-family: inherit;
-  resize: none;
+  resize: vertical;
   outline: none;
-  min-height: 20px;
-  max-height: 100px;
+  height: 40px;
+  min-height: 40px;
+  max-height: 300px;
   line-height: 1.4;
   transition: border-color 0.15s;
 }

@@ -605,6 +605,86 @@ class TestAIActionExecuteWorkflow:
         assert resp.data['status'] == 'success'
         assert 'A_to_B' in resp.data['changes']['columns_added']
 
+    def test_execute_code_exploratory_does_not_mutate(self, api_client, _use_tmp_media):
+        """Exploratory Codeline runs must not persist dataset changes."""
+        df = pd.DataFrame({
+            'A': [10, 20, 30, 40, 50],
+            'B': [1, 2, 3, 4, 5],
+            'Target': [0, 1, 0, 1, 0],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'exploratory_code_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'execute_code',
+                'payload': {
+                    'code': 'print(df.shape)\ndf["Ratio"] = df["A"] / df["B"]\nresult = df[["A", "Ratio"]].head(2)',
+                    'description': 'Exploratory ratio check',
+                    'mode': 'exploratory',
+                },
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+        assert resp.data['mode'] == 'exploratory'
+        assert resp.data['changes'] is None
+        assert '5' in (resp.data.get('stdout') or '')
+        assert resp.data.get('preview') is not None
+        assert 'Ratio' in resp.data['preview']['columns']
+
+        # Dataset on disk must remain unchanged
+        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
+        assert resp.status_code == 200
+        assert 'Ratio' not in resp.data['columns']
+        assert set(resp.data['columns']) == {'A', 'B', 'Target'}
+
+    def test_execute_code_apply_still_mutates(self, api_client, _use_tmp_media):
+        """Explicit apply mode (default) still mutates the dataset."""
+        df = pd.DataFrame({
+            'A': [10, 20, 30],
+            'B': [1, 2, 3],
+        })
+        buf = io.BytesIO()
+        df.to_csv(buf, index=False)
+        buf.seek(0)
+        buf.name = 'apply_code_test.csv'
+
+        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert resp.status_code == 201
+        file_id = resp.data['id']
+
+        resp = api_client.post(
+            '/api/ai-assistant/execute-action/',
+            data=json.dumps({
+                'file_id': file_id,
+                'action_type': 'execute_code',
+                'payload': {
+                    'code': 'df["Sum"] = df["A"] + df["B"]',
+                    'description': 'Apply sum column',
+                    'mode': 'apply',
+                },
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['status'] == 'success'
+        assert resp.data['mode'] == 'apply'
+        assert 'Sum' in resp.data['changes']['columns_added']
+
+        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
+        assert resp.status_code == 200
+        assert 'Sum' in resp.data['columns']
+
     def test_upload_then_update_metadata(self, api_client, _use_tmp_media):
         """Upload CSV → update metadata description via AI action."""
         df = pd.DataFrame({'Age': [25, 30], 'Target': [0, 1]})

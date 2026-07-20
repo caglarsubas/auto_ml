@@ -1,0 +1,368 @@
+.pipeline-codeline-slot {
+  margin: 8px 0 12px;
+  position: relative;
+}
+
+.pipeline-codeline-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #b0bec5;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #78909c;
+  font-size: 12px;
+  transition: all 0.2s;
+  background: transparent;
+}
+
+.pipeline-codeline-add:hover {
+  border-color: #00897b;
+  color: #00897b;
+  background: #f1faf9;
+}
+
+.pipeline-codeline-add-icon {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pipeline-codeline-add-label {
+  font-weight: 500;
+}
+
+.pipeline-codeline-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #e0f2f1;
+  border-left: 3px solid #00897b;
+  border-radius: 6px;
+  background: #f1faf9;
+  cursor: default;
+}
+
+.pipeline-codeline-summary:hover {
+  border-color: #b2dfdb;
+  box-shadow: 0 1px 4px rgba(0, 137, 123, 0.08);
+}
+
+.pipeline-codeline-summary-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-codeline-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #00695c;
+  background: #e0f2f1;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.pipeline-codeline-summary-text {
+  font-size: 12px;
+  color: #37474f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline-codeline-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.pipeline-codeline-summary:hover .pipeline-codeline-actions {
+  opacity: 1;
+}
+
+.pipeline-codeline-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pipeline-codeline-btn.edit {
+  color: #00897b;
+}
+
+.pipeline-codeline-btn.edit:hover {
+  background: #e0f2f1;
+}
+
+.pipeline-codeline-btn.delete {
+  color: #d32f2f;
+  font-size: 18px;
+}
+
+.pipeline-codeline-btn.delete:hover {
+  background: #ffebee;
+}
+
+.pipeline-codeline-btn.done {
+  color: #fff;
+  background: #00897b;
+  font-size: 12px;
+  padding: 4px 12px;
+  font-weight: 500;
+}
+
+.pipeline-codeline-btn.done:hover {
+  background: #00796b;
+}
+
+.pipeline-codeline-editor {
+  border: 1px solid #b2dfdb;
+  border-left: 3px solid #00897b;
+  border-radius: 6px;
+  background: #fafefe;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pipeline-codeline-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pipeline-codeline-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pipeline-codeline-mode-toggle {
+  display: inline-flex;
+  border: 1px solid #b2dfdb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  border: none;
+  background: #fff;
+  color: #607d8b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: #00897b;
+  color: #fff;
+}
+
+.pipeline-codeline-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #80cbc4;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 72px;
+  background: #fff;
+  color: #263238;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pipeline-codeline-textarea.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.pipeline-codeline-textarea:focus {
+  border-color: #00897b;
+  box-shadow: 0 0 0 2px rgba(0, 137, 123, 0.15);
+}
+
+.pipeline-codeline-textarea::placeholder {
+  color: #90a4ae;
+  font-style: italic;
+}
+
+.pipeline-codeline-run-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.run-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+}
+
+.run-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.run-btn.exploratory {
+  background: #00897b;
+}
+
+.run-btn.exploratory:hover:not(:disabled) {
+  background: #00796b;
+}
+
+.run-btn.apply {
+  background: #455a64;
+}
+
+.run-btn.apply:hover:not(:disabled) {
+  background: #37474f;
+}
+
+.run-btn.assistant {
+  background: #1565c0;
+}
+
+.run-btn.assistant:hover:not(:disabled) {
+  background: #0d47a1;
+}
+
+.run-btn.use-code {
+  background: #00897b;
+  margin-top: 6px;
+}
+
+.pipeline-codeline-output {
+  margin-top: 4px;
+  border-top: 1px solid #e0f2f1;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.output-header {
+  display: flex;
+  align-items: center;
+}
+
+.output-status {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #607d8b;
+}
+
+.output-status.ok {
+  color: #2e7d32;
+}
+
+.output-status.err {
+  color: #c62828;
+}
+
+.output-status.busy {
+  color: #ef6c00;
+}
+
+.output-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #607d8b;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.output-error {
+  background: #ffebee;
+  color: #b71c1c;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.output-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: #eceff1;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.changes-line {
+  font-size: 12px;
+  color: #37474f;
+  margin-bottom: 2px;
+}
+
+.preview-scroll {
+  overflow: auto;
+  max-height: 220px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.preview-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+  background: #fff;
+}
+
+.preview-table th,
+.preview-table td {
+  border-bottom: 1px solid #eee;
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.preview-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #455a64;
+  position: sticky;
+  top: 0;
+}
+
+.output-chart {
+  display: block;
+  max-width: 100%;
+  margin-top: 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fff;
+}

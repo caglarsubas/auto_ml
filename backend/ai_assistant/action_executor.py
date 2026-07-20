@@ -11,10 +11,15 @@ The design is intentionally open-ended: the AI writes real pandas code
 and the executor runs it inside a restricted sandbox.
 """
 
+import base64
+import io
 import os
 import re
 import shutil
+import sys
 import traceback
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from django.conf import settings
@@ -123,6 +128,119 @@ def _build_preview(df: pd.DataFrame) -> dict:
         'total_columns': len(df.columns),
         'columns': df.columns.tolist(),
         'top_rows': df_clean.head(5).to_dict(orient='records'),
+    }
+
+
+def _build_series_preview(series: pd.Series) -> dict:
+    """Build a small preview for a pandas Series (exploratory display)."""
+    clean = series.replace({np.nan: None})
+    head = clean.head(20)
+    return {
+        'total_rows': len(series),
+        'total_columns': 1,
+        'columns': [series.name or 'value'],
+        'top_rows': [{series.name or 'value': v} for v in head.tolist()],
+    }
+
+
+def _strip_import_lines(code: str) -> str:
+    """Remove import lines — pd/np (and optionally plt) are injected into the sandbox."""
+    return '\n'.join(
+        line for line in code.splitlines()
+        if not line.strip().startswith(('import ', 'from '))
+    )
+
+
+def _capture_matplotlib_images() -> list:
+    """Capture open matplotlib figures as base64 PNG data-URLs. Returns [] if unavailable."""
+    images = []
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        for fig_num in plt.get_fignums():
+            fig = plt.figure(fig_num)
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight')
+            buf.seek(0)
+            b64 = base64.b64encode(buf.read()).decode('ascii')
+            images.append(f'data:image/png;base64,{b64}')
+        plt.close('all')
+    except Exception:
+        pass
+    return images
+
+
+def _pick_exploratory_preview(sandbox: dict, df_before: pd.DataFrame) -> Optional[dict]:
+    """Prefer result / _ / modified df for exploratory table preview."""
+    for key in ('result', '_'):
+        val = sandbox.get(key)
+        if isinstance(val, pd.DataFrame):
+            return _build_preview(val)
+        if isinstance(val, pd.Series):
+            return _build_series_preview(val)
+
+    df_result = sandbox.get('df')
+    if isinstance(df_result, pd.DataFrame):
+        # Always show a preview of the working frame after exploratory runs
+        return _build_preview(df_result)
+
+    return _build_preview(df_before)
+
+
+def _run_exploratory(file_id: int, code: str, description: str) -> dict:
+    """Execute code against a DataFrame copy without mutating the dataset on disk."""
+    df, _data_file, _file_path = _load_dataframe(file_id)
+    code = _strip_import_lines(code)
+
+    stdout_buf = io.StringIO()
+    sandbox = {
+        '__builtins__': _SAFE_BUILTINS,
+        'pd': pd,
+        'np': np,
+        'df': df.copy(),
+    }
+
+    # Optional matplotlib for charts in exploratory mode
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        plt.close('all')
+        sandbox['plt'] = plt
+    except Exception:
+        pass
+
+    old_stdout = sys.stdout
+    try:
+        sys.stdout = stdout_buf
+        exec(code, sandbox)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'mode': 'exploratory',
+            'error': f'Code execution failed: {str(e)}',
+            'traceback': traceback.format_exc(),
+            'stdout': stdout_buf.getvalue(),
+            'preview': None,
+            'images': [],
+            'changes': None,
+        }
+    finally:
+        sys.stdout = old_stdout
+
+    images = _capture_matplotlib_images()
+    preview = _pick_exploratory_preview(sandbox, df)
+
+    return {
+        'status': 'success',
+        'action_type': 'execute_code',
+        'mode': 'exploratory',
+        'description': description,
+        'stdout': stdout_buf.getvalue(),
+        'preview': preview,
+        'images': images,
+        'changes': None,
     }
 
 
@@ -341,20 +459,27 @@ def execute_code(file_id: int, payload: dict) -> dict:
 
     payload: {
         "code": "df['New_Col'] = df['A'] / df['B']\\ndf.drop(columns=['C'], inplace=True)",
-        "description": "Human-readable summary of what the code does"
+        "description": "Human-readable summary of what the code does",
+        "mode": "apply" | "exploratory"   # default: apply
     }
+
+    - apply (default): mutates the dataset on disk (existing behavior).
+    - exploratory: runs on a copy, captures stdout/preview/images, never saves.
     """
     _stamp_action_mcp_marker('execute_code')
     code = payload.get('code', '').strip()
     description = payload.get('description', '')
+    mode = (payload.get('mode') or 'apply').strip().lower()
+    if mode not in ('apply', 'exploratory'):
+        mode = 'apply'
     if not code:
-        return {'status': 'error', 'error': 'No code provided'}
+        return {'status': 'error', 'error': 'No code provided', 'mode': mode}
+
+    if mode == 'exploratory':
+        return _run_exploratory(file_id, code, description)
 
     # Strip import lines — np and pd are already in the sandbox
-    code = '\n'.join(
-        line for line in code.splitlines()
-        if not line.strip().startswith(('import ', 'from '))
-    )
+    code = _strip_import_lines(code)
 
     df, data_file, file_path = _load_dataframe(file_id)
     cols_before = list(df.columns)
@@ -382,6 +507,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
         _remove_backup(backup_path)
         return {
             'status': 'error',
+            'mode': 'apply',
             'error': f'Code execution failed: {str(e)}',
             'traceback': traceback.format_exc(),
         }
@@ -389,7 +515,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
     df_result = sandbox.get('df', df)
     if not isinstance(df_result, pd.DataFrame):
         _remove_backup(backup_path)
-        return {'status': 'error', 'error': 'Result is not a DataFrame — did you reassign `df`?'}
+        return {'status': 'error', 'mode': 'apply', 'error': 'Result is not a DataFrame — did you reassign `df`?'}
 
     # --- Structural validation: original columns must survive ---
     cols_after = set(df_result.columns)
@@ -399,6 +525,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
         _restore_backup(backup_path, file_path)
         return {
             'status': 'error',
+            'mode': 'apply',
             'error': (
                 f'Code execution corrupted the DataFrame — '
                 f'{len(missing_original)} of {len(cols_before)} original columns disappeared. '
@@ -413,6 +540,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
         _restore_backup(backup_path, file_path)
         return {
             'status': 'error',
+            'mode': 'apply',
             'error': (
                 'Code execution corrupted column headers (got auto-generated integer names). '
                 'Dataset has been restored from backup.'
@@ -436,6 +564,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
         _restore_backup(backup_path, file_path)
         return {
             'status': 'error',
+            'mode': 'apply',
             'error': 'File save verification failed — columns corrupted during write. Dataset restored from backup.',
         }
 
@@ -456,7 +585,10 @@ def execute_code(file_id: int, payload: dict) -> dict:
     return {
         'status': 'success',
         'action_type': 'execute_code',
+        'mode': 'apply',
         'description': description,
+        'stdout': '',
+        'images': [],
         'changes': {
             'columns_added': added,
             'columns_removed': removed,

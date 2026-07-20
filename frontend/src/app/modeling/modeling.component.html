@@ -154,6 +154,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline position="after_encoding"></app-pipeline-codeline>
 
     <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
       <button mat-raised-button color="accent"
@@ -437,6 +438,7 @@
           <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
+      <app-pipeline-codeline position="after_modeling_results"></app-pipeline-codeline>
 
       <div id="sfs-anchor"></div>
       <!-- Sequential Feature Selection (SFS) Configuration Panel -->
@@ -972,6 +974,7 @@
           <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
         </div>
       </div>
+      <app-pipeline-codeline *ngIf="sfsForwardResults.length > 0 || sfsBackwardResults.length > 0 || sfsForwardFromBackwardResults.length > 0" position="after_sfs"></app-pipeline-codeline>
 
       <!-- SFS Detail Modal -->
       <div *ngIf="showSfsModal && selectedSfsStep" class="sfs-modal-overlay" (click)="closeSfsModal()">

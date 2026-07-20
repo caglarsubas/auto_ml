@@ -88,6 +88,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline *ngIf="previewData" position="after_data_preview"></app-pipeline-codeline>
 
     <div *ngIf="showDataDictionaryCollection">
       <h3>Dictionary Declaration</h3>
@@ -174,6 +175,7 @@
         <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
       </div>
     </div>
+    <app-pipeline-codeline *ngIf="dataDictionary.length > 0" position="after_data_dictionary"></app-pipeline-codeline>
 
   </div>
 

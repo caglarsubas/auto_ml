@@ -310,6 +310,22 @@ PIPELINE_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_pipeline_codelines",
+            "description": (
+                "Get user-authored pipeline Codeline cells (inline code or natural-language "
+                "intent attached to pipeline sections). Call this when the user asks about "
+                "prior Codeline work, exploratory code, or intents they wrote in the flow."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_pipeline_config",
             "description": (
                 "Get the full pipeline configuration: target definition, pipeline type, "

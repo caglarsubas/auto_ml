@@ -583,6 +583,7 @@ class TestCacheReadSpans:
         ('read_sfs_results',        'sfs_results'),
         ('read_cv_results',         'cv_results'),
         ('read_pipeline_notes',     'pipeline_notes'),
+        ('read_pipeline_codelines', 'pipeline_codelines'),
         ('read_pipeline_config',    'pipeline_config'),
         ('read_data_dictionary',    'data_dictionary'),
     ])
