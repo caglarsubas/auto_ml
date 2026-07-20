@@ -82,7 +82,12 @@ MODEL_REGISTRY = {
     # so ``llama3.2:3b`` becomes ``engine-llama3.2-3b``.
 }
 
-DEFAULT_MODEL = 'gpt-5.5'
+# Preferred default is the local gemma4:26b engine model.  Cloud GPT is only
+# used when the engine has not advertised gemma4:26b (cold boot / unreachable).
+PREFERRED_DEFAULT_MODEL = 'engine-gemma4-26b'
+CLOUD_FALLBACK_MODEL = 'gpt-5.5'
+# Public alias kept for existing imports; always the preferred engine key.
+DEFAULT_MODEL = PREFERRED_DEFAULT_MODEL
 
 # Metadata keys surfaced to the frontend model selector
 _MODEL_META_KEYS = (
@@ -371,10 +376,44 @@ def _registry_snapshot() -> dict[str, dict]:
     return snapshot
 
 
+def resolve_default_model(snapshot=None) -> str:
+    """Return the model key that should be the UI/chat default.
+
+    Prefers ``engine-gemma4-26b`` (``gemma4:26b``) when the inference engine
+    has advertised it.  Falls back to any ``gemma4*26b`` engine entry, then
+    to ``gpt-5.5`` so the assistant stays usable when the engine is down.
+    """
+    snap = snapshot if snapshot is not None else _registry_snapshot()
+    if PREFERRED_DEFAULT_MODEL in snap:
+        return PREFERRED_DEFAULT_MODEL
+    for key, cfg in snap.items():
+        model_id = str(cfg.get('model_id') or '').lower()
+        if model_id == 'gemma4:26b' or (
+            model_id.startswith('gemma4') and '26b' in model_id
+        ):
+            return key
+        if key == 'engine-gemma4-26b' or (
+            key.startswith('engine-gemma4') and '26b' in key
+        ):
+            return key
+    if CLOUD_FALLBACK_MODEL in snap:
+        return CLOUD_FALLBACK_MODEL
+    # Last resort: first registered model, else the preferred key string
+    if snap:
+        return next(iter(snap.keys()))
+    return PREFERRED_DEFAULT_MODEL
+
+
 def get_model_config(model_key: str) -> dict:
-    """Return config for a model key, falling back to default."""
+    """Return config for a model key, falling back to the resolved default."""
     snapshot = _registry_snapshot()
-    return snapshot.get(model_key, snapshot[DEFAULT_MODEL])
+    if model_key in snapshot:
+        return snapshot[model_key]
+    default_key = resolve_default_model(snapshot)
+    if default_key in snapshot:
+        return snapshot[default_key]
+    # Extremely defensive: prefer cloud fallback dict from static registry
+    return MODEL_REGISTRY[CLOUD_FALLBACK_MODEL]
 
 
 def list_models() -> list:

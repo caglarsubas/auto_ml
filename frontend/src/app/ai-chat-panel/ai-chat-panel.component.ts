@@ -26,7 +26,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   // Model selector
   availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number; tool_calling_mode?: string}> = [];
-  selectedModel: string = 'gpt-5.5';
+  selectedModel: string = 'engine-gemma4-26b';
   showModelSelector: boolean = false;
   // Engine-discovery health from the backend (see ai_assistant.model_registry
   // engine_status()).  When `available` is false the local inference engine is
@@ -990,7 +990,11 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         // transient blip doesn't wipe a good dropdown.  Only fall back to the
         // cloud default when we have nothing at all to show (first load).
         if (!this.availableModels.length) {
-          this.availableModels = [{key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'}];
+          this.availableModels = [
+            {key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine'},
+            {key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'},
+          ];
+          this.selectedModel = 'engine-gemma4-26b';
         }
       }
     });

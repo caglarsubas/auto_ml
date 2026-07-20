@@ -172,15 +172,17 @@ describe('AiChatPanelComponent', () => {
       expect(component.availableModels.length).toBe(2); // not wiped
     });
 
-    it('falls back to the cloud model only when there is nothing to show', () => {
+    it('falls back to gemma4 then cloud when there is nothing to show', () => {
       component.availableModels = [];
       spyOn(dataService, 'getAiModels').and.returnValue(throwError(() => new Error('network')));
 
       component.loadModels(true);
 
       expect(component.availableModels).toEqual([
+        { key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine' },
         { key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai' },
       ]);
+      expect(component.selectedModel).toBe('engine-gemma4-26b');
     });
 
     it('shows the degraded banner when the engine is unavailable', () => {

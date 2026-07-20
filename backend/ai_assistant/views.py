@@ -27,7 +27,7 @@ from .cache import cache_list_artifacts
 from .intent_classifier import resolve_intent_classification
 from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
-    get_model_config, list_models, DEFAULT_MODEL,
+    get_model_config, list_models, resolve_default_model,
     call_openai, call_engine, MODEL_REGISTRY,
     parse_ollama_tag, engine_status,
 )
@@ -1459,7 +1459,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     ``source`` is ``'codeline'`` when the request comes from an inline Codeline
     cell, or ``'panel'`` / omitted for the right-side AI Assistant.
     """
-    model_key = model or DEFAULT_MODEL
+    model_key = model or resolve_default_model()
     model_cfg = get_model_config(model_key)
     total_usage = {}
     chat_source = (source or 'panel').strip().lower()
@@ -3662,6 +3662,6 @@ class AIModelListView(APIView):
         models = list_models()
         return Response({
             'models': models,
-            'default': DEFAULT_MODEL,
+            'default': resolve_default_model(),
             'engine': engine_status(),
         })

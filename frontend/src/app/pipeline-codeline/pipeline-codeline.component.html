@@ -33,6 +33,33 @@
                 (click)="setMode('intent')">Intent</button>
       </div>
       <div class="pipeline-codeline-toolbar-right">
+        <div class="codeline-model-selector-wrapper" #modelSelectorWrapper>
+          <button type="button"
+                  class="codeline-model-selector-btn"
+                  (click)="toggleModelSelector()"
+                  title="Select model for Ask Assistant">
+            <span class="codeline-model-selector-label">{{ getSelectedModelName() }}</span>
+            <span class="codeline-model-selector-caret">&#9660;</span>
+          </button>
+          <div class="codeline-model-selector-dropdown" *ngIf="showModelSelector">
+            <div class="codeline-model-selector-status" *ngIf="engineStatus && !engineStatus.available">
+              <span class="codeline-model-selector-status-text">Local engine unavailable — cloud models only.</span>
+              <button type="button" class="codeline-model-selector-status-retry" (click)="loadModels()">Retry</button>
+            </div>
+            <button
+              type="button"
+              *ngFor="let m of availableModels"
+              class="codeline-model-option"
+              [class.active]="m.key === (cell.model || defaultModelKey)"
+              (click)="selectModel(m.key)"
+            >
+              <span class="codeline-model-option-name">{{ m.display_name }}</span>
+              <span class="codeline-model-option-ram" *ngIf="m.ram_gb">{{ m.ram_gb }} GB</span>
+              <span class="codeline-model-option-provider">{{ m.provider }}</span>
+              <span class="codeline-model-option-check" *ngIf="m.key === (cell.model || defaultModelKey)">&#10003;</span>
+            </button>
+          </div>
+        </div>
         <button type="button" class="pipeline-codeline-btn done" (click)="collapse()">Done</button>
         <button type="button" class="pipeline-codeline-btn delete" (click)="deleteCodeline()" title="Delete">&times;</button>
       </div>

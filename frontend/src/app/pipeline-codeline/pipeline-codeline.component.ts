@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
@@ -21,9 +21,18 @@ export interface PipelineCodeline {
   mode: 'code' | 'intent';
   code: string;
   intent: string;
+  model?: string;
   lastRun?: PipelineCodelineLastRun;
   updatedAt: string;
 }
+
+type AiModelOption = {
+  key: string;
+  display_name: string;
+  provider: string;
+  ram_gb?: number;
+  tool_calling_mode?: string;
+};
 
 @Component({
   selector: 'app-pipeline-codeline',
@@ -32,6 +41,7 @@ export interface PipelineCodeline {
 })
 export class PipelineCodelineComponent implements OnInit, OnDestroy {
   @Input() position!: string;
+  @ViewChild('modelSelectorWrapper') modelSelectorWrapper?: ElementRef<HTMLElement>;
 
   cell: PipelineCodeline | null = null;
   expanded = false;
@@ -42,6 +52,11 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
   previewColumns: string[] = [];
   previewRows: any[] = [];
 
+  availableModels: AiModelOption[] = [];
+  defaultModelKey = 'engine-gemma4-26b';
+  showModelSelector = false;
+  engineStatus: { available: boolean; model_count?: number; last_error?: string | null } | null = null;
+
   constructor(
     private sharedService: SharedService,
     private dataService: DataService,
@@ -49,6 +64,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.fileId = this.sharedService.getCurrentFileId();
+    this.loadModels(true);
     this.subs.push(
       this.sharedService.currentFileId$.subscribe((id) => {
         this.fileId = id;
@@ -61,7 +77,11 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
           // Sync from shared state (checkpoint restore / cross-component).
           // Do not force-expand — respect the user's Done/collapse choice.
           const wasEmpty = !this.cell;
-          this.cell = { ...existing };
+          const nextCell: PipelineCodeline = {
+            ...existing,
+            model: existing.model || this.defaultModelKey,
+          };
+          this.cell = nextCell;
           if (wasEmpty) {
             this.expanded = false;
           }
@@ -89,6 +109,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
   addCodeline(): void {
     this.cell = this.createEmptyCell();
     this.expanded = true;
+    this.loadModels(true);
     this.persist(true);
   }
 
@@ -101,11 +122,13 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       return;
     }
     this.expanded = false;
+    this.showModelSelector = false;
   }
 
   deleteCodeline(): void {
     this.cell = null;
     this.expanded = false;
+    this.showModelSelector = false;
     this.previewColumns = [];
     this.previewRows = [];
     this.sharedService.deletePipelineCodeline(this.position);
@@ -128,6 +151,65 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
     if (!this.cell) return;
     this.cell.intent = value;
     this.persist();
+  }
+
+  loadModels(applyDefault: boolean = false): void {
+    this.dataService.getAiModels().subscribe({
+      next: (resp: any) => {
+        this.availableModels = resp.models || [];
+        this.engineStatus = resp.engine || null;
+        if (resp.default) {
+          this.defaultModelKey = resp.default;
+        }
+        if (applyDefault && this.cell) {
+          const current = this.cell.model;
+          const known = this.availableModels.some((m) => m.key === current);
+          if (!current || !known) {
+            this.cell.model = this.defaultModelKey;
+            this.persist();
+          }
+        }
+      },
+      error: () => {
+        if (!this.availableModels.length) {
+          this.availableModels = [
+            { key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine' },
+            { key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai' },
+          ];
+          this.defaultModelKey = 'engine-gemma4-26b';
+        }
+      },
+    });
+  }
+
+  toggleModelSelector(): void {
+    this.showModelSelector = !this.showModelSelector;
+    if (this.showModelSelector) {
+      this.loadModels();
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  closeModelSelectorOnOutsideClick(event: MouseEvent): void {
+    if (!this.showModelSelector) return;
+    const wrapper = this.modelSelectorWrapper?.nativeElement;
+    const target = event.target;
+    if (!wrapper || !(target instanceof Node) || !wrapper.contains(target)) {
+      this.showModelSelector = false;
+    }
+  }
+
+  selectModel(modelKey: string): void {
+    if (!this.cell) return;
+    this.cell.model = modelKey;
+    this.showModelSelector = false;
+    this.persist(true);
+  }
+
+  getSelectedModelName(): string {
+    const key = this.cell?.model || this.defaultModelKey;
+    const model = this.availableModels.find((m) => m.key === key);
+    return model ? model.display_name : key;
   }
 
   runExploratory(): void {
@@ -163,6 +245,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       codeline_position: this.position,
       codeline_code: this.cell.code || '',
     };
+    const model = this.cell.model || this.defaultModelKey;
 
     this.dataService
       .sendAiChat(
@@ -171,7 +254,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
         `codeline_${this.position}`,
         [],
         this.fileId ?? undefined,
-        undefined,
+        model,
         undefined,
         undefined,
         'codeline',
@@ -297,6 +380,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       mode: 'code',
       code: '',
       intent: '',
+      model: this.defaultModelKey,
       lastRun: { status: 'idle' },
       updatedAt: new Date().toISOString(),
     };
