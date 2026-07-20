@@ -28,6 +28,11 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number; tool_calling_mode?: string}> = [];
   selectedModel: string = 'gpt-5.5';
   showModelSelector: boolean = false;
+  // Engine-discovery health from the backend (see ai_assistant.model_registry
+  // engine_status()).  When `available` is false the local inference engine is
+  // unreachable and the list is cloud-only — surfaced in the dropdown so the
+  // degradation is visible instead of silent.
+  engineStatus: {available: boolean; model_count?: number; last_error?: string | null} | null = null;
 
   // ── v2.27.2 — defensive empty-response copy ─────────────────────────
   // The backend now always returns a meaningful `message` even when the
@@ -51,17 +56,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   ) {}
 
   ngOnInit(): void {
-    // Fetch available models
-    this.dataService.getAiModels().subscribe({
-      next: (resp: any) => {
-        this.availableModels = resp.models || [];
-        this.selectedModel = resp.default || 'gpt-5.5';
-      },
-      error: () => {
-        // Fallback — just show OpenAI
-        this.availableModels = [{key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'}];
-      }
-    });
+    // Fetch available models (applying the backend's default selection).
+    this.loadModels(true);
 
     this.subscriptions.add(
       this.aiService.messages$.subscribe(msgs => {
@@ -968,8 +964,45 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     }
   }
 
+  /**
+   * Fetch the model list + engine-discovery status from the backend.
+   *
+   * Called on init AND every time the selector is opened.  The list is
+   * otherwise fetched only once (ngOnInit), so a transient engine-discovery
+   * miss at startup — which makes the backend serve a cloud-only list — would
+   * stay frozen until a full page reload.  Re-fetching on open lets that
+   * degraded state self-heal the moment the user reopens the dropdown.
+   *
+   * @param applyDefault  Adopt the backend's default model.  True only on the
+   *   initial load; on a re-fetch we keep the user's current selection.
+   */
+  loadModels(applyDefault: boolean = false): void {
+    this.dataService.getAiModels().subscribe({
+      next: (resp: any) => {
+        this.availableModels = resp.models || [];
+        this.engineStatus = resp.engine || null;
+        if (applyDefault && resp.default) {
+          this.selectedModel = resp.default;
+        }
+      },
+      error: () => {
+        // Network/backend error: keep whatever list we already have so a
+        // transient blip doesn't wipe a good dropdown.  Only fall back to the
+        // cloud default when we have nothing at all to show (first load).
+        if (!this.availableModels.length) {
+          this.availableModels = [{key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'}];
+        }
+      }
+    });
+  }
+
   toggleModelSelector(): void {
     this.showModelSelector = !this.showModelSelector;
+    // Re-fetch on open so a cold-boot engine-discovery miss self-heals without
+    // a page reload (see loadModels).
+    if (this.showModelSelector) {
+      this.loadModels();
+    }
   }
 
   @HostListener('document:click', ['$event'])

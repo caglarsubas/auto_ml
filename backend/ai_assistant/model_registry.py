@@ -106,6 +106,26 @@ _engine_cache_lock = threading.Lock()
 _engine_cache: dict[str, dict] = {}
 _engine_cache_expires_at: float = 0.0
 
+# Engine-discovery health, surfaced via ``engine_status()`` and the /models
+# endpoint.  Its whole reason to exist: when the engine is briefly unreachable
+# DeclarAI falls back to a cloud-only model list, and pre-this-change that
+# fallback was **silent** — the frontend couldn't tell "engine has no models"
+# apart from "engine discovery failed", so a transient cold-boot miss looked
+# identical to a healthy OpenAI-only deployment.  We now record the outcome of
+# every real discovery attempt so the degradation is observable and explained.
+# Mutated only while holding ``_engine_cache_lock``.
+_engine_health: dict = {
+    'available': False,   # did the most recent discovery attempt succeed?
+    'model_count': 0,     # engine models currently in the served snapshot
+    'last_error': None,   # short string describing the most recent failure
+    'checked_at': None,   # wall-clock epoch seconds of the last attempt (None = never)
+}
+# Scratch slot: ``_fetch_engine_models`` stashes its failure reason here on the
+# error path so ``_refresh_engine_models`` (which owns ``_engine_health``) can
+# fold it into the structured health dict under the lock.  Only ever written on
+# a failure; the caller sets ``last_error`` back to None on success.
+_engine_last_error: "str | None" = None
+
 
 # Parameter-size pattern: optional digits + optional decimal + b/m suffix.
 # Matches "26b", "3b", "1.5b", "8b", "e2b" (gemma's embedded variant — the
@@ -274,6 +294,8 @@ def _fetch_engine_models() -> dict[str, dict] | None:
         with urllib.request.urlopen(req, timeout=_ENGINE_MODELS_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        global _engine_last_error
+        _engine_last_error = f"{type(exc).__name__}: {exc}"
         _logger.warning("engine /v1/models fetch failed: %s", exc)
         return None
 
@@ -310,14 +332,30 @@ def _refresh_engine_models(force: bool = False) -> dict[str, dict]:
             return _engine_cache
 
         fetched = _fetch_engine_models()
+        checked_at = time.time()
         if fetched is None:
-            # Keep the old cache but back off briefly so we don't hammer a
-            # restarting engine on every Django request.
+            # Discovery failed.  Keep the last-known-good cache (which may be
+            # empty on cold boot) so the assistant stays up, but record WHY so
+            # ``engine_status()`` / the /models endpoint can report a degraded
+            # engine instead of silently serving cloud-only.  Back off briefly
+            # so we don't hammer a restarting engine on every Django request.
             _engine_cache_expires_at = now + min(_ENGINE_MODELS_TTL_SECONDS, 5.0)
+            _engine_health.update({
+                'available': False,
+                'model_count': len(_engine_cache),
+                'last_error': _engine_last_error or 'engine discovery failed',
+                'checked_at': checked_at,
+            })
             return _engine_cache
 
         _engine_cache = fetched
         _engine_cache_expires_at = now + _ENGINE_MODELS_TTL_SECONDS
+        _engine_health.update({
+            'available': True,
+            'model_count': len(fetched),
+            'last_error': None,
+            'checked_at': checked_at,
+        })
         return _engine_cache
 
 
@@ -353,11 +391,42 @@ def list_models() -> list:
     ]
 
 
-def invalidate_engine_cache() -> None:
-    """Drop the engine model cache — useful for tests and ops poking."""
-    global _engine_cache_expires_at
+def engine_status() -> dict:
+    """Health snapshot of engine model discovery, for the /models endpoint & ops.
+
+    Returns a *copy* so callers can't mutate the shared health dict.  Fields:
+        ``available``   — did the most recent discovery attempt succeed?
+        ``model_count`` — engine models currently in the served list.
+        ``last_error``  — reason for the most recent failure (None when healthy).
+        ``checked_at``  — epoch seconds of the last attempt (None = not yet checked).
+
+    This is the signal that turns a cloud-only model list from a *silent*
+    fallback into an *explained* degraded state the frontend can surface.
+    """
     with _engine_cache_lock:
+        return dict(_engine_health)
+
+
+def invalidate_engine_cache() -> None:
+    """Drop the engine model cache — useful for tests and ops poking.
+
+    Clears both the cached engine entries and the discovery-health snapshot, so
+    the next ``_refresh_engine_models()`` re-discovers from scratch and
+    ``engine_status()`` reports unavailable / unchecked until it does.  (Note
+    this is deliberately more aggressive than the *live* TTL-expiry path in
+    ``_refresh_engine_models``, which keeps the last-known-good entries as a
+    fallback while the engine restarts.)
+    """
+    global _engine_cache_expires_at, _engine_cache
+    with _engine_cache_lock:
+        _engine_cache = {}
         _engine_cache_expires_at = 0.0
+        _engine_health.update({
+            'available': False,
+            'model_count': 0,
+            'last_error': None,
+            'checked_at': None,
+        })
 
 
 # ---------------------------------------------------------------------------

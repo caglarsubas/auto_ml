@@ -13,6 +13,12 @@
           <span class="model-selector-caret">&#9660;</span>
         </button>
         <div class="model-selector-dropdown" *ngIf="showModelSelector">
+          <!-- Degraded state: local engine unreachable → cloud-only list.
+               Makes the fallback visible instead of a silent GPT-only list. -->
+          <div class="model-selector-status" *ngIf="engineStatus && !engineStatus.available">
+            <span class="model-selector-status-text">⚠ Local engine unavailable — showing cloud models only.</span>
+            <button type="button" class="model-selector-status-retry" (click)="loadModels()">Retry</button>
+          </div>
           <button
             *ngFor="let m of availableModels"
             class="model-option"

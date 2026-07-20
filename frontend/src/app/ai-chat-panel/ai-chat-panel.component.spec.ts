@@ -100,6 +100,118 @@ describe('AiChatPanelComponent', () => {
     });
   });
 
+  // ── engine-aware model loading (self-healing dropdown) ─────────────────
+  // The list was previously fetched once (ngOnInit); a transient engine
+  // discovery miss at startup would freeze the dropdown on cloud-only until a
+  // page reload.  loadModels() re-fetches on every open, and engineStatus
+  // surfaces the backend's degraded state instead of hiding it.
+  describe('engine-aware model loading', () => {
+    it('captures engine status from the models response', () => {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
+        default: 'gpt-5.5',
+        engine: { available: false, model_count: 0, last_error: 'Connection refused' },
+      }));
+
+      component.loadModels(true);
+
+      expect(component.engineStatus).toEqual(
+        jasmine.objectContaining({ available: false }),
+      );
+    });
+
+    it('re-fetches models when the selector is opened, but not when closed', () => {
+      const spy = spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [
+          { key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' },
+          { key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine' },
+        ],
+        default: 'gpt-5.5',
+        engine: { available: true, model_count: 1, last_error: null },
+      }));
+
+      // Opening the dropdown triggers a fresh fetch...
+      component.showModelSelector = false;
+      component.toggleModelSelector();
+
+      expect(component.showModelSelector).toBeTrue();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(component.availableModels.length).toBe(2);
+      expect(component.engineStatus?.available).toBeTrue();
+
+      // ...and closing it again does NOT re-fetch.
+      component.toggleModelSelector();
+      expect(component.showModelSelector).toBeFalse();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the user selection on re-fetch (only initial load applies the default)', () => {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [
+          { key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' },
+          { key: 'engine-gemma4-26b', display_name: 'gemma4:26b', provider: 'engine' },
+        ],
+        default: 'gpt-5.5',
+      }));
+      component.selectedModel = 'engine-gemma4-26b'; // user picked an engine model
+
+      component.loadModels(); // re-fetch (applyDefault = false)
+
+      expect(component.selectedModel).toBe('engine-gemma4-26b');
+    });
+
+    it('keeps the existing list when a re-fetch errors (no wipe on a blip)', () => {
+      component.availableModels = [
+        { key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' },
+        { key: 'engine-gemma4-26b', display_name: 'gemma4:26b', provider: 'engine' },
+      ];
+      spyOn(dataService, 'getAiModels').and.returnValue(throwError(() => new Error('network')));
+
+      component.loadModels();
+
+      expect(component.availableModels.length).toBe(2); // not wiped
+    });
+
+    it('falls back to the cloud model only when there is nothing to show', () => {
+      component.availableModels = [];
+      spyOn(dataService, 'getAiModels').and.returnValue(throwError(() => new Error('network')));
+
+      component.loadModels(true);
+
+      expect(component.availableModels).toEqual([
+        { key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai' },
+      ]);
+    });
+
+    it('shows the degraded banner when the engine is unavailable', () => {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
+        default: 'gpt-5.5',
+        engine: { available: false, model_count: 0, last_error: 'timeout' },
+      }));
+      fixture.detectChanges(); // ngOnInit → loadModels(true)
+      component.showModelSelector = true;
+      fixture.detectChanges();
+
+      const banner = fixture.nativeElement.querySelector('.model-selector-status');
+      expect(banner).toBeTruthy();
+      expect(banner.textContent).toContain('Local engine unavailable');
+    });
+
+    it('hides the degraded banner when the engine is available', () => {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({
+        models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
+        default: 'gpt-5.5',
+        engine: { available: true, model_count: 3, last_error: null },
+      }));
+      fixture.detectChanges();
+      component.showModelSelector = true;
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.model-selector-status')).toBeNull();
+    });
+  });
+
   it('should forward preclassified button intent labels to /chat/', () => {
     spyOn(dataService, 'getAiModels').and.returnValue(of({
       models: [{ key: 'gpt-5.5', display_name: 'GPT-5.5', provider: 'openai' }],
