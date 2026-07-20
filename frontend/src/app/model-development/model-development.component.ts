@@ -961,6 +961,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (notes && Object.keys(notes).length > 0) {
       artifacts['pipeline_notes'] = notes;
     }
+    // Pipeline codelines (compact summaries for assistant context)
+    const codelines = this.sharedService.getPipelineCodelines();
+    if (codelines && Object.keys(codelines).length > 0) {
+      artifacts['pipeline_codelines'] = codelines;
+    }
     // Fire and forget — cache push is best-effort
     this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
       error: (err: any) => console.warn('[AI Cache] push failed:', err),
@@ -1929,6 +1934,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       modeling: this.sharedService.getModelingCheckpoint() || null,
       active_process: this.sharedService.getActiveProcess() || null,
       pipeline_notes: this.sharedService.getPipelineNotes() || {},
+      pipeline_codelines: this.sharedService.getPipelineCodelines() || {},
     };
   }
 
@@ -2075,6 +2081,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         // ── 5b. Restore pipeline notes ──
         this.pipelineNotes = s.pipeline_notes || {};
         this.sharedService.setPipelineNotes(this.pipelineNotes);
+
+        // ── 5c. Restore pipeline codelines ──
+        this.sharedService.setPipelineCodelines(s.pipeline_codelines || {});
 
         // ── 6. Restore modeling inner state via SharedService (before component initializes) ──
         if (s.modeling) {

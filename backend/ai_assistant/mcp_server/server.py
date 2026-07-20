@@ -376,6 +376,22 @@ def _register_read_tools(mcp) -> None:
         )
 
     @mcp.tool(
+        name="declarai.get_pipeline_codelines",
+        title="Get pipeline codelines",
+        description=descriptions["get_pipeline_codelines"],
+        annotations=read_annotations,
+        meta=_read_tool_meta(read_specs["get_pipeline_codelines"]),
+        structured_output=False,
+    )
+    def get_pipeline_codelines(file_id: int) -> str:
+        return _run_read_tool(
+            file_id,
+            "declarai.get_pipeline_codelines",
+            "get_pipeline_codelines",
+            {},
+        )
+
+    @mcp.tool(
         name="declarai.get_pipeline_config",
         title="Get pipeline config",
         description=descriptions["get_pipeline_config"],

@@ -273,6 +273,16 @@ class TestUserPipelineManagementJourney:
             'modeling': {'substep': 'modeling_completed'},
             'detailed_step': '3b_modeling',
             'pipeline_notes': {'after_data_preview': 'Good distribution'},
+            'pipeline_codelines': {
+                'after_data_preview': {
+                    'id': 'cl-test-1',
+                    'position': 'after_data_preview',
+                    'mode': 'code',
+                    'code': 'print(df.shape)',
+                    'intent': '',
+                    'updatedAt': '2026-07-20T00:00:00Z',
+                }
+            },
         }
         resp = api_client.put(
             f'/api/pipeline/{pk1}/',
@@ -293,6 +303,7 @@ class TestUserPipelineManagementJourney:
         assert resp.status_code == 200
         assert resp.data['current_step'] == 'modeling'
         assert resp.data['state']['pipeline_notes']['after_data_preview'] == 'Good distribution'
+        assert resp.data['state']['pipeline_codelines']['after_data_preview']['code'] == 'print(df.shape)'
 
         # Delete second pipeline
         resp = api_client.delete(f'/api/pipeline/{pk2}/')

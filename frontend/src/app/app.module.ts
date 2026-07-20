@@ -36,6 +36,7 @@ import { SharedService } from './services/shared.service';
 import { LoginComponent } from './login/login.component';
 import { AiChatPanelComponent } from './ai-chat-panel/ai-chat-panel.component';
 import { AiAssistantService } from './services/ai-assistant.service';
+import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline.component';
 
 @NgModule({
   declarations: [
@@ -49,7 +50,8 @@ import { AiAssistantService } from './services/ai-assistant.service';
     ModelDevelopmentComponent,
     HomeComponent,
     LoginComponent,
-    AiChatPanelComponent
+    AiChatPanelComponent,
+    PipelineCodelineComponent
   ],
   imports: [
     BrowserModule,

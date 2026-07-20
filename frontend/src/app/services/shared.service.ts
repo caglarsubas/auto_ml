@@ -497,6 +497,34 @@ export class SharedService {
     this.pipelineNotesSubject.next(notes);
   }
 
+  // Pipeline Codeline cells (Jupyter-style code/intent, keyed by position)
+  private pipelineCodelinesSubject = new BehaviorSubject<{ [position: string]: any }>({});
+  pipelineCodelines$: Observable<{ [position: string]: any }> = this.pipelineCodelinesSubject.asObservable();
+
+  setPipelineCodelines(codelines: { [position: string]: any }): void {
+    this.pipelineCodelinesSubject.next(codelines || {});
+  }
+
+  getPipelineCodelines(): { [position: string]: any } {
+    return this.pipelineCodelinesSubject.getValue();
+  }
+
+  updatePipelineCodeline(position: string, cell: any | null): void {
+    const codelines = { ...this.pipelineCodelinesSubject.getValue() };
+    if (cell && (cell.code?.trim() || cell.intent?.trim() || cell.lastRun)) {
+      codelines[position] = cell;
+    } else {
+      delete codelines[position];
+    }
+    this.pipelineCodelinesSubject.next(codelines);
+  }
+
+  deletePipelineCodeline(position: string): void {
+    const codelines = { ...this.pipelineCodelinesSubject.getValue() };
+    delete codelines[position];
+    this.pipelineCodelinesSubject.next(codelines);
+  }
+
   // Cumulative AI context: always-fresh snapshot of ALL pipeline data accumulated so far
   private aiCumulativeContextSubject = new BehaviorSubject<any>({});
   aiCumulativeContext$: Observable<any> = this.aiCumulativeContextSubject.asObservable();

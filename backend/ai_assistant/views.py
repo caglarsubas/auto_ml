@@ -744,6 +744,8 @@ User asks about ... → CALL THIS TOOL FIRST:
   → get_pipeline_config
 • pipeline notes / saved commentary
   → get_pipeline_notes
+• pipeline codelines / cell intents
+  → get_pipeline_codelines
 • VIF decomposition / which features cause Var_X's high VIF / feature pairs
   → get_vif_decomposition
 
@@ -1433,20 +1435,36 @@ def _stamp_intent_attrs(intent: dict) -> None:
     set_span_attr('prometa.intent.uncertain', uncertain)
 
 
+_CODELINE_SOURCE_BIAS = (
+    'The user is working inside an inline Codeline cell in the pipeline flow. '
+    'Prefer concrete, pin-ready answers: emit <<<ACTION:execute_code>>> blocks for '
+    'analysis or feature engineering the user can Run (exploratory) or Apply to dataset '
+    'from the cell. Keep prose concise; put executable pandas/numpy code in the action. '
+    'Do not ask the user to switch to the right-side chat panel.'
+)
+
+
 @workflow(name="declarai-chat")
 def _chat_workflow(user_message: str, context: dict, section: str, history: list,
                    file_id: int = None, model: str = None,
                    intent_labels: list = None,
-                   intent_source: str = None) -> dict:
+                   intent_source: str = None,
+                   source: str = None) -> dict:
     """Core chat workflow with multi-turn tool calling.
 
     If file_id is provided and Redis has cached artifacts, uses the slim context
     + tool calling approach. Otherwise falls back to the legacy _format_context.
     Supports multiple LLM providers via model_key.
+
+    ``source`` is ``'codeline'`` when the request comes from an inline Codeline
+    cell, or ``'panel'`` / omitted for the right-side AI Assistant.
     """
     model_key = model or DEFAULT_MODEL
     model_cfg = get_model_config(model_key)
     total_usage = {}
+    chat_source = (source or 'panel').strip().lower()
+    if chat_source not in ('codeline', 'panel'):
+        chat_source = 'panel'
 
     def _classify_intent_with_llm(messages: list):
         result = _call_llm(messages, model_key, tools=None)
@@ -1459,6 +1477,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # its child span still inherits the workflow-level routing context.
     set_span_attr('declarai.section', section or 'general')
     set_span_attr('declarai.model', model_key)
+    set_span_attr('declarai.chat_source', chat_source)
 
     intent = resolve_intent_classification(
         user_message,
@@ -1495,6 +1514,8 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     set_span_attr('declarai.system_prompt.variant', system_prompt_variant)
     set_span_attr('declarai.system_prompt.chars', len(system_prompt_text))
     messages = [{'role': 'system', 'content': system_prompt_text}]
+    if chat_source == 'codeline':
+        messages.append({'role': 'system', 'content': _CODELINE_SOURCE_BIAS})
 
     # Decide: tool-calling mode (slim context) vs legacy mode (full context dump)
     use_tools = False
@@ -1977,12 +1998,15 @@ class AIAssistantView(APIView):
             model = data.get('model')  # optional model selector
             intent_labels = data.get('intent_labels') or data.get('intentLabels')
             intent_source = data.get('intent_source') or data.get('intentSource')
+            # Origin of the request: inline Codeline cell vs right-side panel
+            chat_source = data.get('source') or 'panel'
 
             response_data = _chat_workflow(user_message, context, section, history,
                                            file_id=int(file_id) if file_id else None,
                                            model=model,
                                            intent_labels=intent_labels,
-                                           intent_source=intent_source)
+                                           intent_source=intent_source,
+                                           source=chat_source)
             return Response(response_data, status=status.HTTP_200_OK)
 
         except EnvironmentError as e:

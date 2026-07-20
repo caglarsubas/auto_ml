@@ -46,12 +46,22 @@ class TestPipelineRunModel:
             'declaration': {'file_id': 42},
             'modeling': {'substep': 'encoding_completed', 'encodingPlan': [{'feature': 'Region'}]},
             'pipeline_notes': {'after_data_preview': 'Looks good'},
+            'pipeline_codelines': {
+                'after_data_preview': {
+                    'id': 'cl-1',
+                    'position': 'after_data_preview',
+                    'mode': 'code',
+                    'code': 'print(df.shape)',
+                    'intent': '',
+                }
+            },
         }
         run = PipelineRun.objects.create(name='State Test', state=state)
         run.refresh_from_db()
         assert run.state['declaration']['file_id'] == 42
         assert run.state['modeling']['substep'] == 'encoding_completed'
         assert run.state['pipeline_notes']['after_data_preview'] == 'Looks good'
+        assert run.state['pipeline_codelines']['after_data_preview']['code'] == 'print(df.shape)'
 
     def test_pipeline_run_ordering(self):
         """Runs are ordered by most recently updated (descending)."""
