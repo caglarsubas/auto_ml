@@ -28,6 +28,7 @@ from declaration.models import Declaration, DataDictionary
 from .prometa_config import (
     workflow, tool, set_span_attr, set_session_id, set_customer_id,
     schema_validate, set_input_ref, stamp_mcp_tool_marker,
+    stamp_codeline_capability,
 )
 
 
@@ -190,6 +191,7 @@ def _pick_exploratory_preview(sandbox: dict, df_before: pd.DataFrame) -> Optiona
 
 def _run_exploratory(file_id: int, code: str, description: str) -> dict:
     """Execute code against a DataFrame copy without mutating the dataset on disk."""
+    set_span_attr('declarai.execute_code.mode', 'exploratory')
     df, _data_file, _file_path = _load_dataframe(file_id)
     code = _strip_import_lines(code)
 
@@ -472,6 +474,7 @@ def execute_code(file_id: int, payload: dict) -> dict:
     mode = (payload.get('mode') or 'apply').strip().lower()
     if mode not in ('apply', 'exploratory'):
         mode = 'apply'
+    set_span_attr('declarai.execute_code.mode', mode)
     if not code:
         return {'status': 'error', 'error': 'No code provided', 'mode': mode}
 
@@ -2145,7 +2148,7 @@ def _build_completion_message(result: dict, action_type: str) -> str:
 
 @workflow(name="declarai-action")
 def dispatch_action(file_id: int, action_type: str, payload: dict,
-                    *, parent_span_id: str = None) -> dict:
+                    *, parent_span_id: str = None, source: str = None) -> dict:
     """Route an action to the correct handler.
 
     Args:
@@ -2162,6 +2165,8 @@ def dispatch_action(file_id: int, action_type: str, payload: dict,
             instrumentation), the link is simply omitted — action
             dispatch semantics are unchanged.  Keyword-only so positional
             call sites that pre-date v2.38.0 are stable.
+        source: ``'codeline'`` when launched from an inline Codeline cell,
+            ``'panel'`` / omitted for the right-side AI Assistant.
     """
     # Set prompt attribute so Prometa Conversation panel shows the action request
     description = payload.get('description', '') if isinstance(payload, dict) else ''
@@ -2187,6 +2192,30 @@ def dispatch_action(file_id: int, action_type: str, payload: dict,
     if parent_span_id:
         set_input_ref(parent_span_id)
         set_span_attr('declarai.action.parent_span_id', parent_span_id)
+
+    action_source = (source or 'panel').strip().lower()
+    if action_source not in ('codeline', 'panel'):
+        action_source = 'panel'
+    set_span_attr('declarai.action.source', action_source)
+    if action_source == 'codeline' and action_type == 'execute_code':
+        mode = None
+        position = None
+        attempt_int = None
+        if isinstance(payload, dict):
+            mode = payload.get('mode') or 'apply'
+            position = payload.get('codeline_position')
+            attempt = payload.get('auto_correction_attempt')
+            try:
+                attempt_int = int(attempt) if attempt is not None else None
+            except (TypeError, ValueError):
+                attempt_int = None
+        stamp_codeline_capability(
+            kind='execution',
+            position=position,
+            mode=mode,
+            source=action_source,
+            auto_correction_attempt=attempt_int,
+        )
 
     handler = HANDLERS.get(action_type)
     if not handler:

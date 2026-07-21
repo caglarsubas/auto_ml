@@ -126,12 +126,6 @@
       <div *ngIf="cell.lastRun.assistantText" class="output-assistant">
         <div class="output-label">Assistant</div>
         <pre class="output-pre">{{ cell.lastRun.assistantText }}</pre>
-        <button *ngIf="cell.lastRun.generatedCode"
-                type="button"
-                class="run-btn use-code"
-                (click)="useGeneratedCode()">
-          Use generated code
-        </button>
       </div>
 
       <div *ngIf="cell.lastRun.stdout" class="output-stdout">

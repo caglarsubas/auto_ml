@@ -368,11 +368,6 @@
   background: #0d47a1;
 }
 
-.run-btn.use-code {
-  background: #00897b;
-  margin-top: 6px;
-}
-
 .pipeline-codeline-output {
   margin-top: 4px;
   border-top: 1px solid #e0f2f1;

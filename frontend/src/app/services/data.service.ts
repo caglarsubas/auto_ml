@@ -458,7 +458,8 @@ export class DataService {
   // ===== AI Action Execution (general-purpose) =====
 
   executeAiAction(fileId: number, actionType: string, payload: any,
-                  parentSpanId?: string): Observable<any> {
+                  parentSpanId?: string,
+                  source?: 'codeline' | 'panel'): Observable<any> {
     const body: any = {
       file_id: fileId,
       action_type: actionType,
@@ -468,6 +469,9 @@ export class DataService {
     // backend treats missing/empty as "no link" (legacy semantics).
     if (parentSpanId) {
       body.parent_span_id = parentSpanId;
+    }
+    if (source) {
+      body.source = source;
     }
     return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, body).pipe(
       catchError((err: any) => {

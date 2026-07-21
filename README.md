@@ -253,7 +253,7 @@ Model deployment interface (under development):
 
 The backend's AI Assistant emits structured agent telemetry through
 [`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
-(≥ 0.10.1) to the **Prometa Agentic Lifecycle Intelligence Platform**
+(≥ 0.18.2) to the **Prometa Agentic Lifecycle Intelligence Platform**
 for tracing, evaluation, and lifecycle governance.
 
 **Integration point**:
@@ -450,7 +450,7 @@ auto-ml/
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
 | openai | ≥ 1.0 | LLM client for AI Assistant action layer |
-| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.10.1 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
+| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.18.2 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
 | redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend
