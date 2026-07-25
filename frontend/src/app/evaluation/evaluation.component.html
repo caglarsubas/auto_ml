@@ -41,7 +41,7 @@
     </div>
 
     <div *ngIf="metrics.confusion" style="margin-top: 14px; font-size: 13px;">
-      Confusion @ {{ metrics.threshold }} —
+      Confusion at threshold {{ metrics.threshold }} —
       TP {{ metrics.confusion.tp }}, FP {{ metrics.confusion.fp }},
       TN {{ metrics.confusion.tn }}, FN {{ metrics.confusion.fn }}
     </div>
