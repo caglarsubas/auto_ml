@@ -803,7 +803,11 @@ class ModelingStartView(APIView):
                                     pr = float(average_precision_score(y_va, p))
                                 except Exception:
                                     pass
-                                cv_details.append({'roc_auc': roc, 'pr_auc': pr, 'best_iteration': int(getattr(bst, 'best_iteration', getattr(bst, 'best_ntree_limit', 0)))})
+                                cv_details.append({
+                                    'roc_auc': roc,
+                                    'pr_auc': pr,
+                                    'best_iteration': int(fold_adapter.best_iteration or 0),
+                                })
                                 # ROC/PR curves on fixed grids
                                 try:
                                     # Suppress numpy warnings for invalid values during interpolation
