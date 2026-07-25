@@ -89,7 +89,7 @@ METRIC_NAMES: List[str] = list(METRIC_DIRECTION.keys())
 #   * < 100 fits/worker   -> grid     (exhaustive search is cheap)
 #   * <= 500 fits/worker  -> random   (grid too big; sample n_iter configs)
 #   * > 500 fits/worker   -> bayesian (large space; SMBO with RF surrogate)
-SEARCH_METHODS: Tuple[str, ...] = ('grid', 'random', 'bayesian')
+SEARCH_METHODS: Tuple[str, ...] = ('grid', 'random', 'bayesian', 'optuna')
 _DEFAULT_GRID_POINTS = 5          # grid resolution per param when method=grid
 _GRID_MAX_CANDIDATES = 2000       # safety cap for an explicit grid run
 _FITS_PER_JOB_GRID_MAX = 100      # < this -> grid
@@ -162,7 +162,12 @@ def _has_categorical(X: pd.DataFrame) -> bool:
     )
 
 
-def _build_xgb_params(config: Dict[str, Any], nthread: int, has_cat: bool) -> Tuple[Dict[str, Any], int]:
+def _build_xgb_params(
+    config: Dict[str, Any],
+    nthread: int,
+    has_cat: bool,
+    scale_pos_weight: Optional[float] = None,
+) -> Tuple[Dict[str, Any], int]:
     """Translate a sampled config into (xgb.train params, num_boost_round)."""
     params: Dict[str, Any] = {
         'objective': 'binary:logistic',
@@ -172,6 +177,8 @@ def _build_xgb_params(config: Dict[str, Any], nthread: int, has_cat: bool) -> Tu
     }
     if has_cat:
         params['enable_categorical'] = True
+    if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
+        params['scale_pos_weight'] = float(scale_pos_weight)
     for key, val in config.items():
         if key == 'n_estimators':
             continue
@@ -179,6 +186,35 @@ def _build_xgb_params(config: Dict[str, Any], nthread: int, has_cat: bool) -> Tu
         params[xgb_key] = int(val) if key in ('max_depth', 'min_child_weight') else float(val)
     num_boost_round = int(config.get('n_estimators', DEFAULT_FIXED_PARAMS['n_estimators']))
     return params, num_boost_round
+
+
+def _train_xgb_with_early_stop(
+    params: Dict[str, Any],
+    dtrain: xgb.DMatrix,
+    dvalid: Optional[xgb.DMatrix],
+    num_boost_round: int,
+    early_stopping_rounds: int = 50,
+) -> xgb.Booster:
+    """Train with early stopping when a validation matrix is available."""
+    if dvalid is not None and early_stopping_rounds and early_stopping_rounds > 0:
+        return xgb.train(
+            params,
+            dtrain,
+            num_boost_round=num_boost_round,
+            evals=[(dvalid, 'valid')],
+            early_stopping_rounds=early_stopping_rounds,
+            verbose_eval=False,
+        )
+    return xgb.train(params, dtrain, num_boost_round=num_boost_round, verbose_eval=False)
+
+
+def _predict_best(booster: xgb.Booster, dmat: xgb.DMatrix) -> np.ndarray:
+    try:
+        if hasattr(booster, 'best_iteration') and booster.best_iteration is not None and booster.best_iteration >= 0:
+            return booster.predict(dmat, iteration_range=(0, int(booster.best_iteration) + 1))
+    except Exception:
+        pass
+    return booster.predict(dmat)
 
 
 def _compute_metrics(y_true: np.ndarray, y_proba: np.ndarray, threshold: float = 0.5) -> Dict[str, float]:
@@ -393,12 +429,15 @@ def _evaluate_config(
     X_test: pd.DataFrame, y_test: pd.Series,
     config: Dict[str, Any], cv_folds: int, has_cat: bool,
     nthread: int, threshold: float,
+    scale_pos_weight: Optional[float] = None,
+    early_stopping_rounds: int = 50,
 ) -> Dict[str, Any]:
-    """Cross-validate one config and also fit on full train -> test/train metrics.
+    """Cross-validate one config and also fit on full train -> valid/train metrics.
 
+    ``X_test`` here is the modeling validation holdout (not the locked outer test).
     Returns a trial dict with cv (mean+std per metric), train, test metric maps.
     """
-    params, num_round = _build_xgb_params(config, nthread, has_cat)
+    params, num_round = _build_xgb_params(config, nthread, has_cat, scale_pos_weight=scale_pos_weight)
     t0 = time.time()
 
     skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
@@ -406,8 +445,8 @@ def _evaluate_config(
     for tr_idx, va_idx in skf.split(X_train, y_train):
         dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
         dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
-        booster = xgb.train(params, dtr, num_boost_round=num_round, verbose_eval=False)
-        proba = booster.predict(dva)
+        booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
+        proba = _predict_best(booster, dva)
         fold_metrics.append(_compute_metrics(y_train.iloc[va_idx].values, proba, threshold))
 
     cv: Dict[str, Dict[str, float]] = {}
@@ -419,18 +458,19 @@ def _evaluate_config(
         else:
             cv[m] = {'mean': float('nan'), 'std': float('nan')}
 
-    # Full-fit on train for train + test (generalization) metrics.
+    # Full-fit on train with early stopping on the modeling validation holdout.
     dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=has_cat)
     dtest = xgb.DMatrix(X_test, label=y_test, enable_categorical=has_cat)
-    full = xgb.train(params, dtrain, num_boost_round=num_round, verbose_eval=False)
-    train_metrics = _compute_metrics(y_train.values, full.predict(dtrain), threshold)
-    test_metrics = _compute_metrics(y_test.values, full.predict(dtest), threshold)
+    full = _train_xgb_with_early_stop(params, dtrain, dtest, num_round, early_stopping_rounds)
+    train_metrics = _compute_metrics(y_train.values, _predict_best(full, dtrain), threshold)
+    test_metrics = _compute_metrics(y_test.values, _predict_best(full, dtest), threshold)
 
     return {
         'params': config,
         'cv': cv,
         'train': train_metrics,
         'test': test_metrics,
+        'best_iteration': int(getattr(full, 'best_iteration', num_round) or num_round),
         'fit_time': round(time.time() - t0, 3),
     }
 
@@ -439,18 +479,20 @@ def _evaluate_cv_only(
     X_train: pd.DataFrame, y_train: pd.Series,
     config: Dict[str, Any], cv_folds: int, has_cat: bool,
     nthread: int, threshold: float, metric: str,
+    scale_pos_weight: Optional[float] = None,
+    early_stopping_rounds: int = 50,
 ) -> Tuple[float, float, float, float]:
     """Lightweight CV used for validation curves: returns
     (train_mean, train_std, cv_mean, cv_std) for a single ``metric``."""
-    params, num_round = _build_xgb_params(config, nthread, has_cat)
+    params, num_round = _build_xgb_params(config, nthread, has_cat, scale_pos_weight=scale_pos_weight)
     skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
     tr_scores, cv_scores = [], []
     for tr_idx, va_idx in skf.split(X_train, y_train):
         dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
         dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
-        booster = xgb.train(params, dtr, num_boost_round=num_round, verbose_eval=False)
-        tr_scores.append(_compute_metrics(y_train.iloc[tr_idx].values, booster.predict(dtr), threshold)[metric])
-        cv_scores.append(_compute_metrics(y_train.iloc[va_idx].values, booster.predict(dva), threshold)[metric])
+        booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
+        tr_scores.append(_compute_metrics(y_train.iloc[tr_idx].values, _predict_best(booster, dtr), threshold)[metric])
+        cv_scores.append(_compute_metrics(y_train.iloc[va_idx].values, _predict_best(booster, dva), threshold)[metric])
     tr_scores = np.array([s for s in tr_scores if np.isfinite(s)], dtype=float)
     cv_scores = np.array([s for s in cv_scores if np.isfinite(s)], dtype=float)
     return (
@@ -577,7 +619,7 @@ def run_hyperparam_search_with_progress(
     param_space: Optional[Dict[str, Any]] = None,
     fixed_params: Optional[Dict[str, Any]] = None,
     n_iter: int = 40,
-    cv_folds: int = 3,
+    cv_folds: int = 5,
     n_jobs: int = 1,
     primary_metric: str = 'roc_auc',
     threshold: float = 0.5,
@@ -589,6 +631,8 @@ def run_hyperparam_search_with_progress(
     grid_points_per_param_map: Optional[Dict[str, int]] = None,
     status_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     stop_flag: Optional[Dict[str, Any]] = None,
+    scale_pos_weight: Optional[float] = None,
+    early_stopping_rounds: int = 50,
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -617,6 +661,17 @@ def run_hyperparam_search_with_progress(
     nthread = 1 if n_jobs and n_jobs > 1 else 0
     enabled_params = [p for p, s in space.items() if s.get('enabled')]
     rng = np.random.default_rng(random_state)
+
+    # Auto scale_pos_weight from train labels when not supplied
+    if scale_pos_weight is None:
+        try:
+            pos = float((np.asarray(y_train) == 1).sum())
+            neg = float((np.asarray(y_train) == 0).sum())
+            if pos > 0:
+                scale_pos_weight = round(neg / pos, 6)
+        except Exception:
+            scale_pos_weight = None
+    results_scale_pos_weight = scale_pos_weight
 
     # ── Resolve the search method (grid / random / bayesian / auto) ──
     grid_points_per_param = max(2, int(grid_points_per_param or _DEFAULT_GRID_POINTS))
@@ -661,6 +716,9 @@ def run_hyperparam_search_with_progress(
         'space_warnings': list(space_warnings),
         'threshold': threshold,
         'cv_folds': cv_folds,
+        'scale_pos_weight': results_scale_pos_weight,
+        'early_stopping_rounds': early_stopping_rounds,
+        'holdout_role': 'validation',  # X_test arg is modeling valid, not locked outer test
         'feature_count': int(X_train.shape[1]),
         'features': list(X_train.columns),
         'trials': [],
@@ -683,7 +741,7 @@ def run_hyperparam_search_with_progress(
             results['space_warnings'].append(
                 f'Grid exceeded {_GRID_MAX_CANDIDATES} candidates; down-sampled to the cap.')
         n_search = len(search_configs)
-    elif method == 'bayesian':
+    elif method in ('bayesian', 'optuna'):
         n_search = int(n_iter)
     else:  # random
         search_configs = [_sample_config(space, fixed, rng) for _ in range(n_iter)]
@@ -714,8 +772,11 @@ def run_hyperparam_search_with_progress(
         out: List[Dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=max(1, n_jobs)) as pool:
             futures = {
-                pool.submit(_evaluate_config, X_train, y_train, X_test, y_test,
-                            cfg, cv_folds, has_cat, nthread, threshold): i
+                pool.submit(
+                    _evaluate_config, X_train, y_train, X_test, y_test,
+                    cfg, cv_folds, has_cat, nthread, threshold,
+                    scale_pos_weight, early_stopping_rounds,
+                ): i
                 for i, cfg in enumerate(cfgs)
             }
             for fut in as_completed(futures):
@@ -739,6 +800,70 @@ def run_hyperparam_search_with_progress(
 
     try:
         # ---------- Phase A: hyperparameter search ----------
+        if method == 'optuna':
+            emit(f'Starting Optuna TPE search ({n_iter} trials)...')
+            try:
+                import optuna
+                optuna.logging.set_verbosity(optuna.logging.WARNING)
+            except ImportError:
+                results['space_warnings'].append(
+                    'Optuna is not installed; falling back to Bayesian SMBO.')
+                method = 'bayesian'
+                results['search_method'] = method
+            else:
+                direction = METRIC_DIRECTION.get(primary_metric, 1)
+                study = optuna.create_study(
+                    direction='maximize' if direction > 0 else 'minimize',
+                    sampler=optuna.samplers.TPESampler(seed=random_state),
+                )
+
+                def _suggest_config(trial: 'optuna.Trial') -> Dict[str, Any]:
+                    cfg: Dict[str, Any] = {}
+                    for name, spec in space.items():
+                        if not spec.get('enabled'):
+                            cfg[name] = fixed.get(name, DEFAULT_FIXED_PARAMS.get(name))
+                            continue
+                        t = spec.get('type')
+                        if t == 'categorical':
+                            cfg[name] = trial.suggest_categorical(name, list(spec['values']))
+                        elif t == 'int':
+                            lo, hi = int(spec['min']), int(spec['max'])
+                            if spec.get('log') and lo >= 1:
+                                cfg[name] = trial.suggest_int(name, lo, hi, log=True)
+                            else:
+                                cfg[name] = trial.suggest_int(name, lo, hi)
+                        else:
+                            lo, hi = float(spec['min']), float(spec['max'])
+                            if spec.get('log') and lo > 0:
+                                cfg[name] = trial.suggest_float(name, lo, hi, log=True)
+                            else:
+                                cfg[name] = trial.suggest_float(name, lo, hi)
+                    return cfg
+
+                def _objective(trial: 'optuna.Trial') -> float:
+                    if is_stop():
+                        raise optuna.TrialPruned()
+                    cfg = _suggest_config(trial)
+                    result = _evaluate_config(
+                        X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
+                        nthread, threshold, scale_pos_weight, early_stopping_rounds,
+                    )
+                    trials.append(result)
+                    done_units[0] += 1
+                    mean = result['cv'].get(primary_metric, {}).get('mean')
+                    emit(
+                        f'Optuna search: {len(trials)}/{n_iter} trials',
+                        {'completed_trials': len(trials),
+                         'current_best': {'metric': primary_metric, 'cv_mean': mean}},
+                    )
+                    if mean is None or not np.isfinite(mean):
+                        return float('-inf') if direction > 0 else float('inf')
+                    return float(mean)
+
+                study.optimize(_objective, n_trials=int(n_iter), n_jobs=1, catch=(Exception,))
+                results['optuna_best_value'] = study.best_value if study.trials else None
+                results['optuna_best_params'] = study.best_params if study.trials else None
+
         if method == 'bayesian':
             emit(f'Starting Bayesian search ({n_iter} trials, SMBO + RF surrogate)...')
             n_warm = min(n_iter, max(8, 2 * max(1, len(enabled_params))))
@@ -768,7 +893,7 @@ def run_hyperparam_search_with_progress(
                 if not new:
                     break  # stop requested or every config in the batch failed
                 trials.extend(new)
-        else:
+        elif method in ('grid', 'random'):
             label = 'Grid' if method == 'grid' else 'Random'
             emit(f'Starting {label.lower()} search ({n_search} configs)...')
             trials.extend(evaluate_batch(search_configs or []))
@@ -848,8 +973,11 @@ def run_hyperparam_search_with_progress(
             point_results: Dict[int, Tuple[float, float, float, float]] = {}
             with ThreadPoolExecutor(max_workers=max(1, n_jobs)) as pool:
                 futs = {
-                    pool.submit(_evaluate_cv_only, X_train, y_train, cfg, cv_folds,
-                                has_cat, nthread, threshold, primary_metric): idx
+                    pool.submit(
+                        _evaluate_cv_only, X_train, y_train, cfg, cv_folds,
+                        has_cat, nthread, threshold, primary_metric,
+                        scale_pos_weight, early_stopping_rounds,
+                    ): idx
                     for idx, cfg in enumerate(point_configs)
                 }
                 for fut in as_completed(futs):

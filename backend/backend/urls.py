@@ -6,6 +6,8 @@ from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
 from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
+from evaluation.views import EvaluationRunView, EvaluationStatusView
+from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
 from django.conf import settings
@@ -40,6 +42,11 @@ urlpatterns = [
     path('api/encoding/analyze/', EncodingAnalyzeView.as_view(), name='encoding-analyze'),
     path('api/encoding/apply/', EncodingApplyView.as_view(), name='encoding-apply'),
     path('api/modeling/vif-detail/', VifDetailView.as_view(), name='vif-detail'),
+    path('api/evaluation/run/', EvaluationRunView.as_view(), name='evaluation-run'),
+    path('api/evaluation/status/<int:file_id>/', EvaluationStatusView.as_view(), name='evaluation-status'),
+    path('api/deployment/bundle/', DeploymentBundleView.as_view(), name='deployment-bundle'),
+    path('api/deployment/score/', DeploymentScoreView.as_view(), name='deployment-score'),
+    path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
     path('api/pipeline/', PipelineRunListView.as_view(), name='pipeline-list'),
     path('api/pipeline/create/', PipelineRunCreateView.as_view(), name='pipeline-create'),
     path('api/pipeline/<int:pk>/', PipelineRunDetailView.as_view(), name='pipeline-detail'),

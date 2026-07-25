@@ -107,6 +107,7 @@ def apply_encoding(
     plan: List[Dict],
     target_col: str = 'Target',
     use_native: bool = True,
+    fit_idx: Optional[pd.Index] = None,
 ) -> Tuple[pd.DataFrame, List[Dict]]:
     """
     Apply encoding to *df* according to *plan*.
@@ -114,6 +115,10 @@ def apply_encoding(
     When *use_native* is True the primary strategy for every feature is
     ``native_categorical`` (convert to ``pd.Categorical``).  The modelling
     code must then pass ``enable_categorical=True`` to XGBoost ``DMatrix``.
+
+    When *fit_idx* is provided, supervised encoders (target / frequency) and
+    unsupervised maps (label / ordinal category inventory) are fitted on the
+    fit rows only, then applied to the full frame — leakage-safe for modeling.
 
     Returns ``(encoded_df, report)`` where *report* documents per-feature
     encoding details including mappings and before/after statistics.
@@ -173,6 +178,7 @@ def apply_encoding(
             encoded, feat_report = _apply_fallback(
                 encoded, feature, strategy, ranking, target_col, feat_report,
                 manual_mapping=manual_mapping,
+                fit_idx=fit_idx,
             )
 
         report.append(feat_report)
@@ -192,14 +198,15 @@ def _apply_fallback(
     target_col: str,
     feat_report: Dict,
     manual_mapping: Optional[Dict] = None,
+    fit_idx: Optional[pd.Index] = None,
 ) -> Tuple[pd.DataFrame, Dict]:
     if fallback == 'label_encoding':
-        df, mapping = _label_encode(df, feature)
+        df, mapping = _label_encode(df, feature, fit_idx=fit_idx)
         feat_report['mapping'] = mapping
         feat_report['strategy_applied'] = 'label_encoding'
 
     elif fallback == 'one_hot_encoding':
-        df, mapping, new_cols = _ohe_encode(df, feature)
+        df, mapping, new_cols = _ohe_encode(df, feature, fit_idx=fit_idx)
         feat_report['mapping'] = mapping
         feat_report['new_columns'] = new_cols
         feat_report['strategy_applied'] = 'one_hot_encoding'
@@ -211,18 +218,18 @@ def _apply_fallback(
             feat_report['strategy_applied'] = 'ordinal_encoding'
         else:
             # No ranking supplied → fall back to label encoding
-            df, mapping = _label_encode(df, feature)
+            df, mapping = _label_encode(df, feature, fit_idx=fit_idx)
             feat_report['mapping'] = mapping
             feat_report['strategy_applied'] = 'label_encoding'
             feat_report['fallback_reason'] += ' (no ranking provided → label encoding)'
 
     elif fallback == 'target_encoding':
-        df, mapping = _target_encode(df, feature, target_col)
+        df, mapping = _target_encode(df, feature, target_col, fit_idx=fit_idx)
         feat_report['mapping'] = mapping
         feat_report['strategy_applied'] = 'target_encoding'
 
     elif fallback == 'frequency_encoding':
-        df, mapping = _frequency_encode(df, feature)
+        df, mapping = _frequency_encode(df, feature, fit_idx=fit_idx)
         feat_report['mapping'] = mapping
         feat_report['strategy_applied'] = 'frequency_encoding'
 
@@ -241,25 +248,48 @@ def _apply_fallback(
     return df, feat_report
 
 
-def _label_encode(df: pd.DataFrame, feature: str) -> Tuple[pd.DataFrame, Dict]:
+def _label_encode(
+    df: pd.DataFrame,
+    feature: str,
+    fit_idx: Optional[pd.Index] = None,
+) -> Tuple[pd.DataFrame, Dict]:
     series = df[feature].copy()
     null_ph = '__NULL__'
     series = series.fillna(null_ph)
-    unique_sorted = sorted(series.unique(), key=str)
+    fit_series = series.loc[fit_idx] if fit_idx is not None and len(fit_idx) else series
+    unique_sorted = sorted(fit_series.unique(), key=str)
     mapping = {str(v): i for i, v in enumerate(unique_sorted)}
     df[feature] = series.map(lambda x: mapping.get(str(x), -1)).astype(int)
-    return df, {'type': 'label_encoding', 'mapping': mapping}
+    return df, {'type': 'label_encoding', 'mapping': mapping, 'fit_on_train_only': fit_idx is not None}
 
 
-def _ohe_encode(df: pd.DataFrame, feature: str) -> Tuple[pd.DataFrame, Dict, List[str]]:
+def _ohe_encode(
+    df: pd.DataFrame,
+    feature: str,
+    fit_idx: Optional[pd.Index] = None,
+) -> Tuple[pd.DataFrame, Dict, List[str]]:
     series = df[feature].copy()
     null_cat = f'{feature}_NULL'
     series = series.fillna(null_cat)
-    dummies = pd.get_dummies(series, prefix=feature, dtype=int)
+    fit_series = series.loc[fit_idx] if fit_idx is not None and len(fit_idx) else series
+    # Fit category inventory on train; apply consistently to full frame
+    cats = sorted(fit_series.astype(str).unique().tolist(), key=str)
+    dummies = pd.get_dummies(series.astype(str), prefix=feature, dtype=int)
+    expected = [f'{feature}_{c}' for c in cats]
+    for col in expected:
+        if col not in dummies.columns:
+            dummies[col] = 0
+    # Drop unexpected (test-only) levels to keep schema freeze-friendly
+    dummies = dummies.reindex(columns=expected, fill_value=0)
     new_cols = list(dummies.columns)
     df = df.drop(columns=[feature])
     df = pd.concat([df, dummies], axis=1)
-    return df, {'type': 'one_hot_encoding', 'columns': new_cols, 'original_feature': feature}, new_cols
+    return df, {
+        'type': 'one_hot_encoding',
+        'columns': new_cols,
+        'original_feature': feature,
+        'fit_on_train_only': fit_idx is not None,
+    }, new_cols
 
 
 def _ordinal_encode(df: pd.DataFrame, feature: str, ranking: List[str]) -> Tuple[pd.DataFrame, Dict]:
@@ -269,31 +299,130 @@ def _ordinal_encode(df: pd.DataFrame, feature: str, ranking: List[str]) -> Tuple
     return df, {'type': 'ordinal_encoding', 'ranking': ranking, 'mapping': mapping}
 
 
-def _target_encode(df: pd.DataFrame, feature: str, target_col: str) -> Tuple[pd.DataFrame, Dict]:
+def _target_encode(
+    df: pd.DataFrame,
+    feature: str,
+    target_col: str,
+    fit_idx: Optional[pd.Index] = None,
+    n_folds: int = 5,
+    smoothing: float = 10.0,
+) -> Tuple[pd.DataFrame, Dict]:
+    """Target encode with optional OOF on train + holdout apply.
+
+    When *fit_idx* is provided:
+      - Train rows get out-of-fold means (StratifiedKFold when possible)
+      - A smoothed train mapping is applied to non-train rows
+    Otherwise falls back to in-sample means (legacy analyze/apply path).
+    """
     if target_col not in df.columns:
-        return _label_encode(df, feature)
+        return _label_encode(df, feature, fit_idx=fit_idx)
 
-    global_mean = float(df[target_col].mean())
-    # Treat nulls as a category for target encoding
-    series_filled = df[feature].fillna('__NULL__')
-    means = df.assign(**{feature: series_filled}).groupby(feature)[target_col].mean()
-    mapping = {str(k): round(float(v), 6) for k, v in means.items()}
+    from sklearn.model_selection import StratifiedKFold, KFold
+
+    y = pd.to_numeric(df[target_col], errors='coerce')
+    series_filled = df[feature].fillna('__NULL__').astype(str)
+    encoded = pd.Series(index=df.index, dtype=float)
+
+    if fit_idx is not None and len(fit_idx):
+        fit_idx = pd.Index([i for i in fit_idx if i in df.index])
+    else:
+        fit_idx = None
+
+    if fit_idx is not None and len(fit_idx) >= 2:
+        y_fit = y.loc[fit_idx]
+        global_mean = float(y_fit.mean()) if y_fit.notna().any() else 0.0
+        x_fit = series_filled.loc[fit_idx]
+        oof = pd.Series(index=fit_idx, dtype=float)
+        n_splits = min(n_folds, len(fit_idx))
+        used_oof = False
+
+        if n_splits >= 2:
+            try:
+                if y_fit.nunique(dropna=True) >= 2:
+                    splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+                    splits = list(splitter.split(np.zeros(len(fit_idx)), y_fit.fillna(0).astype(int)))
+                else:
+                    splitter = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                    splits = list(splitter.split(np.zeros(len(fit_idx))))
+            except Exception:
+                splitter = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                splits = list(splitter.split(np.zeros(len(fit_idx))))
+
+            for tr, va in splits:
+                tr_labels = fit_idx[tr]
+                va_labels = fit_idx[va]
+                tr_x = x_fit.loc[tr_labels]
+                tr_y = y_fit.loc[tr_labels]
+                stats = pd.DataFrame({'x': tr_x, 'y': tr_y}).groupby('x')['y'].agg(['mean', 'count'])
+                # Bayesian smoothing toward global mean
+                smooth = (stats['count'] * stats['mean'] + smoothing * global_mean) / (stats['count'] + smoothing)
+                mapping_fold = {str(k): float(v) for k, v in smooth.items()}
+                oof.loc[va_labels] = x_fit.loc[va_labels].map(
+                    lambda v: mapping_fold.get(str(v), global_mean)
+                ).astype(float)
+            encoded.loc[fit_idx] = oof
+            used_oof = True
+
+        # Full-train mapping for holdout rows (and train if OOF unavailable)
+        stats_full = pd.DataFrame({'x': x_fit, 'y': y_fit}).groupby('x')['y'].agg(['mean', 'count'])
+        smooth_full = (stats_full['count'] * stats_full['mean'] + smoothing * global_mean) / (
+            stats_full['count'] + smoothing
+        )
+        mapping = {str(k): round(float(v), 6) for k, v in smooth_full.items()}
+        if not used_oof:
+            encoded.loc[fit_idx] = x_fit.map(lambda v: mapping.get(str(v), global_mean)).astype(float)
+        holdout = df.index.difference(fit_idx)
+        if len(holdout):
+            encoded.loc[holdout] = series_filled.loc[holdout].map(
+                lambda v: mapping.get(str(v), global_mean)
+            ).astype(float)
+        # Any remaining NaNs → prior
+        encoded = encoded.fillna(global_mean)
+        df[feature] = encoded.astype(float)
+        return df, {
+            'type': 'target_encoding',
+            'mapping': mapping,
+            'global_mean': global_mean,
+            'smoothing': smoothing,
+            'oof': used_oof,
+            'fit_on_train_only': True,
+        }
+
+    # Legacy in-sample path (standalone encoding apply without split)
+    global_mean = float(y.mean()) if y.notna().any() else 0.0
+    means = pd.DataFrame({'x': series_filled, 'y': y}).groupby('x')['y'].mean()
+    mapping = {str(k): round(float(v), 6) for k, v in means.items() if pd.notna(v)}
     null_mean = mapping.get('__NULL__', global_mean)
-    df[feature] = df[feature].map(
-        lambda x: mapping.get(str(x), global_mean) if pd.notna(x) else null_mean,
+    df[feature] = series_filled.map(
+        lambda x: mapping.get(str(x), null_mean if str(x) == '__NULL__' else global_mean),
     ).astype(float)
-    return df, {'type': 'target_encoding', 'mapping': mapping, 'global_mean': global_mean}
+    return df, {
+        'type': 'target_encoding',
+        'mapping': mapping,
+        'global_mean': global_mean,
+        'oof': False,
+        'fit_on_train_only': False,
+    }
 
 
-def _frequency_encode(df: pd.DataFrame, feature: str) -> Tuple[pd.DataFrame, Dict]:
+def _frequency_encode(
+    df: pd.DataFrame,
+    feature: str,
+    fit_idx: Optional[pd.Index] = None,
+) -> Tuple[pd.DataFrame, Dict]:
     """Replace each category (including nulls) with its volume-share (frequency ratio)."""
     null_ph = '__NULL__'
     series = df[feature].fillna(null_ph)
-    total = len(series)
-    vc = series.value_counts()
+    fit_series = series.loc[fit_idx] if fit_idx is not None and len(fit_idx) else series
+    total = max(len(fit_series), 1)
+    vc = fit_series.value_counts()
     mapping = {str(k): round(float(v) / total, 6) for k, v in vc.items()}
     df[feature] = series.map(lambda x: mapping.get(str(x), 0.0)).astype(float)
-    return df, {'type': 'frequency_encoding', 'mapping': mapping}
+    return df, {
+        'type': 'frequency_encoding',
+        'mapping': mapping,
+        'fit_on_train_only': fit_idx is not None,
+    }
 
 
 def _manual_group_encode(df: pd.DataFrame, feature: str, manual_mapping: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict]:

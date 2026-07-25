@@ -186,6 +186,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   // Pipeline and algorithm selection
   selectedPipeline: string = '';
   availableAlgorithms: string[] = [];
+  /** Algorithms currently trainable via BoosterAdapter. */
+  implementedAlgorithms: string[] = ['xgboost', 'lightgbm', 'catboost'];
   selectedAlgorithm: string | null = null;
 
   // Data quality summary and date columns for feature-card
@@ -395,17 +397,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.sharedService.selectedPipeline$.subscribe((p) => {
       this.selectedPipeline = p;
-      // Provide algorithm options based on pipeline
+      // Provide algorithm options based on pipeline (keep LGBM/CatBoost visible as planned)
       if (p === 'boosting') {
         this.availableAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
+        this.implementedAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
       } else if (p === 'logit') {
         this.availableAlgorithms = ['logistic_regression'];
+        this.implementedAlgorithms = [];
       } else {
         this.availableAlgorithms = [];
+        this.implementedAlgorithms = [];
       }
-      // Reset previous selection if it is not valid anymore
+      // Prefer an implemented algorithm when selection is empty or planned-only
       if (!this.availableAlgorithms.includes(this.selectedAlgorithm || '')) {
-        this.selectedAlgorithm = null;
+        this.selectedAlgorithm = this.implementedAlgorithms[0] || null;
+      } else if (
+        this.selectedAlgorithm &&
+        this.implementedAlgorithms.length &&
+        !this.implementedAlgorithms.includes(this.selectedAlgorithm)
+      ) {
+        this.selectedAlgorithm = this.implementedAlgorithms[0];
       }
     });
 
@@ -693,7 +704,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // Patch the form fields if the AI specified them — otherwise
       // leave the user's existing form values intact.
       if (typeof req.algorithm === 'string' && req.algorithm.trim()) {
-        this.selectedAlgorithm = req.algorithm.trim();
+        const requested = req.algorithm.trim();
+        // Keep product flow: AI may request planned boosters, but train XGBoost.
+        if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(requested)) {
+          this.selectedAlgorithm = 'xgboost';
+          console.warn(`[Modeling] AI requested ${requested}; using xgboost (planned booster).`);
+        } else {
+          this.selectedAlgorithm = requested;
+        }
       }
       if (typeof req.encoding_use_native === 'boolean') {
         this.encodingUseNative = req.encoding_use_native;
@@ -744,8 +762,23 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ===== Encoding Plan Methods =====
 
+  isAlgorithmImplemented(algo: string | null): boolean {
+    if (!algo) return false;
+    if (this.selectedPipeline === 'boosting') {
+      return this.implementedAlgorithms.includes(algo);
+    }
+    return this.availableAlgorithms.includes(algo);
+  }
+
   onAlgorithmChange(algo: string): void {
-    this.selectedAlgorithm = algo;
+    // Keep product surface for planned boosters, but do not silently train XGBoost as them
+    if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(algo)) {
+      this.selectedAlgorithm = 'xgboost';
+      console.warn(`[Modeling] ${algo} is planned; training uses XGBoost for now.`);
+      algo = 'xgboost';
+    } else {
+      this.selectedAlgorithm = algo;
+    }
     // Auto-trigger encoding analysis when algorithm is selected
     if (algo && this.currentFileId != null && this.processedFilePath) {
       this.ensureDictionaryThenAnalyze();
@@ -926,6 +959,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       'xgboost': 'XGBoost',
       'lightgbm': 'LightGBM',
       'catboost': 'CatBoost',
+      'logistic_regression': 'Logistic Regression',
     };
     return labels[algo || ''] || algo || 'Boosting';
   }
@@ -1056,6 +1090,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.availableAlgorithms.length > 0 && !this.selectedAlgorithm) {
       console.error('Please select an algorithm before starting modeling');
       return;
+    }
+    if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(this.selectedAlgorithm)) {
+      this.selectedAlgorithm = 'xgboost';
     }
     // Get list of variables to exclude (Model_Usage='No')
     const excludedVariables = Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');

@@ -22,6 +22,12 @@ from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
 from modeling.models import PipelineRun
+from modeling.split_contract import (
+    resolve_modeling_splits, fit_numeric_imputer, transform_numeric_impute,
+    normalize_boosting_algorithm,
+)
+from modeling.lineage import build_lineage, save_lineage
+from modeling.booster_adapters import get_adapter, available_boosting_algorithms
 import threading
 import pickle
 
@@ -82,6 +88,17 @@ class ModelingStartView(APIView):
         if not processed_file:
             return Response({'error': 'processed_file is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Resolve booster; hard-fail if package missing (no silent XGB fallback)
+        resolved_algorithm, algo_error = normalize_boosting_algorithm(algorithm)
+        if algo_error:
+            avail = available_boosting_algorithms()
+            return Response({
+                'error': algo_error,
+                'supported_algorithms': [k for k, v in avail.items() if v],
+                'all_algorithms': sorted(avail.keys()),
+            }, status=status.HTTP_400_BAD_REQUEST)
+        algorithm = resolved_algorithm
+
         # Validate declaration exists
         try:
             Declaration.objects.get(pk=file_id)
@@ -108,6 +125,7 @@ class ModelingStartView(APIView):
 
         # do quick metrics and modeling pass (XGBoost classification preferred)
         model_info = {}
+        encoded_file_rel = None
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
 
@@ -190,15 +208,58 @@ class ModelingStartView(APIView):
                 keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
                 X_raw = X_raw[keep_cols].copy()
 
-                # ── Apply encoding via plan (if provided) or fallback to native ──
+                # Resolve canonical train/valid/test BEFORE encoding/impute so
+                # supervised transforms fit on train only and outer test stays locked.
                 encoding_report = []
                 encoded_file_rel = None
+                split_meta = {}
+                impute_means: dict = {}
+                scale_pos_weight = None
+                X_test = y_test = X_test_raw = None
+
+                # Preliminary target encoding for split stratification
+                try:
+                    n_unique_pre = y.nunique(dropna=True)
+                    is_classification = 2 <= n_unique_pre <= 50
+                except Exception:
+                    is_classification = True
+
+                y_encoded_pre = None
+                if is_classification:
+                    try:
+                        y_num_pre = pd.to_numeric(y, errors='coerce')
+                        uniq_pre = y_num_pre.dropna().unique().tolist()
+                        uniq_int_pre = sorted({int(v) for v in uniq_pre if float(v) in (0.0, 1.0)})
+                        if len(uniq_int_pre) == 2 and set(uniq_int_pre) == {0, 1}:
+                            y_encoded_pre = y_num_pre.fillna(0).astype(int)
+                        else:
+                            raise ValueError('not binary 0/1')
+                    except Exception:
+                        y_encoded_pre, _ = pd.factorize(y)
+
+                if y_encoded_pre is not None:
+                    train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                        X_raw, y_encoded_pre, file_id=int(file_id),
+                    )
+                    print(
+                        f"[ModelingStart] Split source={split_meta.get('source')} "
+                        f"strategy={split_meta.get('strategy')} "
+                        f"train={len(train_idx)} valid={len(valid_idx)} test={len(test_idx)} "
+                        f"used_pp={split_meta.get('used_preprocessing_split')}"
+                    )
+                else:
+                    train_idx = valid_idx = test_idx = None
+
+                # ── Apply encoding via plan (if provided) or fallback to native ──
                 if has_encoding_plan:
                     from encoding.encoding_utils import apply_encoding as _apply_enc
                     # Temporarily attach Target for target_encoding, then drop it
                     X_with_target = X_raw.copy()
                     X_with_target[target_col] = y.values
-                    X_with_target, enc_report_list = _apply_enc(X_with_target, encoding_plan, target_col=target_col, use_native=use_native)
+                    X_with_target, enc_report_list = _apply_enc(
+                        X_with_target, encoding_plan, target_col=target_col,
+                        use_native=use_native, fit_idx=train_idx,
+                    )
                     if target_col in X_with_target.columns:
                         X_with_target = X_with_target.drop(columns=[target_col])
                     X_raw = X_with_target
@@ -243,14 +304,9 @@ class ModelingStartView(APIView):
                 print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
                 X_raw = X_raw.dropna(axis=1, how='all')
-                # Filled copy for modeling: fill numeric NaNs with mean, categorical NaNs are handled natively
-                X = X_raw.copy()
-                num_cols_for_fill = X.select_dtypes(include=['number']).columns
-                if len(num_cols_for_fill) > 0:
-                    X[num_cols_for_fill] = X[num_cols_for_fill].fillna(X[num_cols_for_fill].mean())
 
                 # If no features remain, skip training
-                if X.shape[1] >= 1 and len(y) >= 5:
+                if X_raw.shape[1] >= 1 and len(y) >= 5:
                     # Determine problem type: classification if few unique classes
                     try:
                         n_unique = y.nunique(dropna=True)
@@ -270,19 +326,24 @@ class ModelingStartView(APIView):
                                 raise ValueError('not binary 0/1')
                         except Exception:
                             y_encoded, y_categories = pd.factorize(y)
-                        # Train/valid split with stratification for stability
-                        X_train, X_valid, y_train, y_valid = train_test_split(
-                            X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
-                        )
-                        # Raw (unfilled) view for the same train and validation rows
-                        try:
-                            X_train_raw = X_raw.loc[X_train.index]
-                        except Exception:
-                            X_train_raw = X_train.copy()
-                        try:
-                            X_valid_raw = X_raw.loc[X_valid.index]
-                        except Exception:
-                            X_valid_raw = X_valid.copy()
+
+                        if train_idx is None:
+                            train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                                X_raw, y_encoded, file_id=int(file_id),
+                            )
+
+                        # Fit numeric impute on train only; transform all partitions
+                        X_train_raw = X_raw.loc[train_idx]
+                        X_valid_raw = X_raw.loc[valid_idx]
+                        X_test_raw = X_raw.loc[test_idx]
+                        impute_means = fit_numeric_imputer(X_train_raw)
+                        X_train = transform_numeric_impute(X_train_raw, impute_means)
+                        X_valid = transform_numeric_impute(X_valid_raw, impute_means)
+                        X_test = transform_numeric_impute(X_test_raw, impute_means)
+                        y_train = y_encoded.loc[train_idx]
+                        y_valid = y_encoded.loc[valid_idx]
+                        y_test = y_encoded.loc[test_idx]
+                        X = transform_numeric_impute(X_raw, impute_means)
 
                         num_classes = int(len(np.unique(y_train)))
                         objective = 'binary:logistic' if num_classes == 2 else 'multi:softprob'
@@ -314,59 +375,36 @@ class ModelingStartView(APIView):
                         }
                         if num_classes > 2:
                             params['num_class'] = num_classes
+                        elif num_classes == 2:
+                            # Class imbalance: scale_pos_weight = neg/pos on train
+                            pos = float((y_train == 1).sum())
+                            neg = float((y_train == 0).sum())
+                            if pos > 0:
+                                scale_pos_weight = round(neg / pos, 6)
+                                params['scale_pos_weight'] = scale_pos_weight
 
-                        # DMatrix with feature names for consistent importances/SHAP
-                        feature_names = list(map(str, X.columns.tolist()))
-                        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names, enable_categorical=enable_cat)
-                        dvalid = xgb.DMatrix(X_valid, label=y_valid, feature_names=feature_names, enable_categorical=enable_cat)
-
-                        booster = xgb.train(
-                            params,
-                            dtrain,
-                            num_boost_round=500,
-                            evals=[(dvalid, 'valid')],
-                            early_stopping_rounds=50,
-                            verbose_eval=False,
+                        # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
+                        feature_names = list(map(str, X_train.columns.tolist()))
+                        adapter = get_adapter(algorithm)
+                        adapter.train(
+                            X_train, y_train, X_valid, y_valid, params,
+                            num_boost_round=500, early_stopping_rounds=50,
                         )
+                        booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
+                        enable_cat = bool(adapter.enable_categorical or enable_cat)
 
                         # Quality metric on validation
                         try:
-                            # Predict with best iteration (prefer iteration_range; avoid ntree_limit=0 in xgboost>=2)
-                            if hasattr(booster, 'best_iteration') and booster.best_iteration is not None and booster.best_iteration >= 0:
-                                try:
-                                    yhat = booster.predict(dvalid, iteration_range=(0, int(booster.best_iteration) + 1))
-                                except Exception:
-                                    yhat = booster.predict(dvalid)
-                            elif hasattr(booster, 'best_ntree_limit') and booster.best_ntree_limit is not None and int(booster.best_ntree_limit) > 0:
-                                yhat = booster.predict(dvalid, ntree_limit=int(booster.best_ntree_limit))
-                            else:
-                                yhat = booster.predict(dvalid)
-
+                            y_prob = adapter.predict_proba(X_valid)
                             if num_classes == 2:
-                                # yhat shape: (n_samples,) probabilities for class 1
-                                y_prob = yhat.ravel()
                                 valid_auc = float(roc_auc_score(y_valid, y_prob))
                             else:
-                                # multiclass prob matrix
                                 valid_auc = None
                         except Exception:
                             valid_auc = None
 
-                        # Built-in gain importances
-                        raw_gain = booster.get_score(importance_type='gain') or {}
-                        # Map f0.. to column names
                         feat_names = feature_names
-                        def _fname_to_col(fn: str) -> str:
-                            if fn.startswith('f') and fn[1:].isdigit():
-                                idx = int(fn[1:])
-                                if 0 <= idx < len(feat_names):
-                                    return feat_names[idx]
-                            return fn
-                        gain_items = sorted(
-                            (( _fname_to_col(k), float(v) ) for k, v in raw_gain.items()),
-                            key=lambda kv: kv[1], reverse=True
-                        )
-                        gain_importance = [ {'feature': k, 'score': v} for k, v in gain_items ]
+                        gain_importance = adapter.gain_importance()
 
                         # SHAP mean |impact| and compact beeswarm payload
                         try:
@@ -729,6 +767,7 @@ class ModelingStartView(APIView):
                             shap_beeswarm = None
 
                         # Cross-Validation metrics (ROC-AUC, PR-AUC) + curve points
+                        # Run on train+valid only — outer test stays locked for Evaluation.
                         cv_details = []
                         try:
                             from sklearn.metrics import roc_curve, precision_recall_curve
@@ -742,25 +781,17 @@ class ModelingStartView(APIView):
                             y_all_list = []
                             p_all_list = []
                             base_pr_list = []
-                            for tr_idx, va_idx in skf.split(X.values, y_encoded):
-                                X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
-                                y_tr, y_va = y_encoded[tr_idx], y_encoded[va_idx]
-                                dtr = xgb.DMatrix(X_tr, label=y_tr, feature_names=feature_names, enable_categorical=enable_cat)
-                                dva = xgb.DMatrix(X_va, label=y_va, feature_names=feature_names, enable_categorical=enable_cat)
-                                bst = xgb.train(params, dtr, num_boost_round=500, evals=[(dva, 'valid')], early_stopping_rounds=50, verbose_eval=False)
-                                # predict proba of positive class
-                                try:
-                                    if hasattr(bst, 'best_iteration') and bst.best_iteration is not None and bst.best_iteration >= 0:
-                                        try:
-                                            p = bst.predict(dva, iteration_range=(0, int(bst.best_iteration) + 1)).ravel()
-                                        except Exception:
-                                            p = bst.predict(dva).ravel()
-                                    elif hasattr(bst, 'best_ntree_limit') and bst.best_ntree_limit is not None and int(bst.best_ntree_limit) > 0:
-                                        p = bst.predict(dva, ntree_limit=int(bst.best_ntree_limit)).ravel()
-                                    else:
-                                        p = bst.predict(dva).ravel()
-                                except Exception:
-                                    p = bst.predict(dva).ravel()
+                            X_cv = pd.concat([X_train, X_valid], axis=0)
+                            y_cv = pd.concat([y_train, y_valid], axis=0)
+                            for tr_idx, va_idx in skf.split(X_cv.values, y_cv):
+                                X_tr, X_va = X_cv.iloc[tr_idx], X_cv.iloc[va_idx]
+                                y_tr, y_va = y_cv.iloc[tr_idx], y_cv.iloc[va_idx]
+                                fold_adapter = get_adapter(algorithm)
+                                fold_adapter.train(
+                                    X_tr, y_tr, X_va, y_va, params,
+                                    num_boost_round=500, early_stopping_rounds=50,
+                                )
+                                p = fold_adapter.predict_proba(X_va)
                                 # AUCs
                                 roc = None
                                 pr = None
@@ -863,11 +894,11 @@ class ModelingStartView(APIView):
                         except Exception:
                             cv_summary = None
 
-                        # Save model
+                        # Save model via adapter
                         models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
                         os.makedirs(models_dir, exist_ok=True)
-                        model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
-                        booster.save_model(model_path)
+                        model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                        adapter.save(model_path)
 
                         print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
                         
@@ -883,13 +914,31 @@ class ModelingStartView(APIView):
                             'y_train': y_train,
                             'X_valid': X_valid,
                             'y_valid': y_valid,
+                            'X_test': X_test,
+                            'y_test': y_test,
                             'X_train_raw': X_train_raw,
                             'X_valid_raw': X_valid_raw,
-                            'feature_names': list(X_train.columns)
+                            'X_test_raw': X_test_raw,
+                            'feature_names': list(X_train.columns),
+                            'impute_means': impute_means,
+                            'split_meta': split_meta,
+                            'scale_pos_weight': scale_pos_weight,
+                            'algorithm': algorithm,
                         }
                         with open(train_data_path, 'wb') as f:
                             pickle.dump(train_data, f)
                         print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
+
+                        # Locked outer-test AUC (never used for early stopping / HP)
+                        test_auc = None
+                        try:
+                            yhat_test = adapter.predict_proba(X_test)
+                            if num_classes == 2:
+                                test_auc = float(roc_auc_score(y_test, yhat_test.ravel()))
+                            else:
+                                test_auc = float(roc_auc_score(y_test, yhat_test, multi_class='ovr', average='weighted'))
+                        except Exception as te:
+                            print(f"[ModelingStart] Outer test AUC skipped: {te}")
                         
                         # Log categorical feature gain importances for validation
                         cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
@@ -899,11 +948,13 @@ class ModelingStartView(APIView):
                             print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
 
                         model_info = {
-                            'model_type': 'xgboost_classifier',
+                            'model_type': f'{algorithm}_classifier',
+                            'algorithm': algorithm,
                             'valid_auc': valid_auc,
-                            'best_iteration': int(getattr(booster, 'best_iteration', getattr(booster, 'best_ntree_limit', 0))),
+                            'test_auc': test_auc,
+                            'best_iteration': int(adapter.best_iteration or 0),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
-                            'feature_count': int(X.shape[1]),
+                            'feature_count': int(X_train.shape[1]),
                             'categorical_features_used': cat_cols,
                             'enable_categorical': enable_cat,
                             'encoding_report': encoding_report,
@@ -916,13 +967,52 @@ class ModelingStartView(APIView):
                             'beeswarm_png': beeswarm_png,
                             'shap_beeswarm': shap_beeswarm,
                             'sfs_ready': True,  # Training data saved, ready for SFS
+                            'split': {
+                                **(split_meta or {}),
+                                'n_train': int(len(X_train)),
+                                'n_valid': int(len(X_valid)),
+                                'n_test': int(len(X_test)),
+                            },
+                            'scale_pos_weight': scale_pos_weight,
+                            'impute_fit_on_train_only': True,
                         }
+
+                        try:
+                            lineage = build_lineage(
+                                int(file_id),
+                                algorithm=algorithm or 'xgboost',
+                                processed_file=processed_file,
+                                split_meta=model_info.get('split'),
+                                encoding_plan=encoding_plan if has_encoding_plan else None,
+                                encoding_use_native=use_native,
+                                feature_names=list(X_train.columns),
+                                excluded_variables=excluded_cols_for_modeling,
+                                model_params=params,
+                                metrics={
+                                    'valid_auc': valid_auc,
+                                    'test_auc': test_auc,
+                                    'best_iteration': model_info.get('best_iteration'),
+                                },
+                                model_path=model_info.get('model_path'),
+                                impute_means=impute_means,
+                                scale_pos_weight=scale_pos_weight,
+                                n_train=len(X_train),
+                                n_valid=len(X_valid),
+                                n_test=len(X_test),
+                            )
+                            model_info['lineage_path'] = save_lineage(int(file_id), lineage)
+                            model_info['lineage_id'] = lineage.get('lineage_id')
+                        except Exception as lin_err:
+                            print(f"[ModelingStart] lineage save failed: {lin_err}")
                     else:
-                        # Regression fallback as before
+                        # Regression fallback as before (boosting path is classification-first)
                         y_num = pd.to_numeric(y, errors='coerce')
                         if y_num.notna().sum() >= 5:
-                            y_num = y_num.fillna(y_num.mean())
-                            X_train, X_test, y_train, y_test = train_test_split(X, y_num, test_size=0.2, random_state=42)
+                            X_reg = X_raw.select_dtypes(include=['number']).copy()
+                            means_reg = fit_numeric_imputer(X_reg)
+                            X_reg = transform_numeric_impute(X_reg, means_reg)
+                            y_num = y_num.fillna(float(y_num.mean()))
+                            X_train, X_test, y_train, y_test = train_test_split(X_reg, y_num, test_size=0.2, random_state=42)
                             reg = LinearRegression()
                             reg.fit(X_train, y_train)
                             y_pred = reg.predict(X_test)
@@ -941,7 +1031,7 @@ class ModelingStartView(APIView):
                             'model_type': model_type,
                             'score': score,
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT) if model_path else None,
-                            'feature_count': int(X.shape[1])
+                            'feature_count': int(X_raw.shape[1])
                         }
                 else:
                     model_info = {'warning': 'Insufficient features or rows to train'}
@@ -1894,7 +1984,7 @@ class HyperparamStartView(APIView):
             fixed_params = data.get('fixed_params')
             features = data.get('features') or None
             n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
-            cv_folds = max(2, min(int(data.get('cv_folds', 3)), 10))
+            cv_folds = max(2, min(int(data.get('cv_folds', 5)), 10))
             n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
             primary_metric = data.get('primary_metric', 'roc_auc')
             threshold = float(data.get('threshold', 0.5))
@@ -1922,6 +2012,8 @@ class HyperparamStartView(APIView):
             y_train = train_data['y_train']
             X_valid = train_data['X_valid']
             y_valid = train_data['y_valid']
+            # Prefer train-fitted imbalance weight; never score the locked outer test here
+            hp_scale_pos_weight = train_data.get('scale_pos_weight')
 
             # Echo the clamped/validated space so the UI can reflect adjustments.
             clean_space, space_warnings = validate_param_space(param_space)
@@ -1967,7 +2059,7 @@ class HyperparamStartView(APIView):
                 try:
                     results = run_hyperparam_search_with_progress(
                         X_train=X_train, y_train=y_train,
-                        X_test=X_valid, y_test=y_valid,
+                        X_test=X_valid, y_test=y_valid,  # modeling valid holdout (not outer test)
                         param_space=param_space, fixed_params=fixed_params,
                         n_iter=n_iter, cv_folds=cv_folds, n_jobs=n_jobs,
                         primary_metric=primary_metric, threshold=threshold,
@@ -1976,6 +2068,8 @@ class HyperparamStartView(APIView):
                         grid_points_per_param_map=grid_points_per_param_map,
                         status_callback=update_progress,
                         stop_flag=HYPERPARAM_PROGRESS[file_id],
+                        scale_pos_weight=hp_scale_pos_weight,
+                        early_stopping_rounds=50,
                     )
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed

@@ -238,13 +238,13 @@ Automated feature selection using sequential forward and/or backward search:
 
 ### 8. Evaluation
 
-Model performance evaluation (under development):
+Model performance evaluation (outer-test metrics, threshold table, model card):
 - Summary metrics display
 - Comparison across model variants
 
 ### 9. Deployment
 
-Model deployment interface (under development):
+Model deployment interface (score bundle + batch CSV scoring):
 - Export and serve trained models
 
 ---
@@ -392,8 +392,8 @@ auto-ml/
 │   │   └── sfs_utils.py      # Forward/backward SFS with progress tracking
 │   ├── feature_card/         # Per-feature explainability
 │   │   └── views.py          # Feature statistics, distribution, quality summary
-│   ├── evaluation/           # Model evaluation (planned)
-│   ├── deployment/           # Model deployment (planned)
+│   ├── evaluation/           # Outer-test evaluation + model card
+│   ├── deployment/           # Score bundle + batch scoring
 │   ├── tests/                # Test suite (~1009 tests)
 │   │   ├── unit/             # Unit tests split by domain (declaration, encoding,
 │   │   │                     #   modeling, hyperparam, preprocessing, ai_*, ...)
@@ -563,6 +563,6 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - **Parallel execution** — Multi-core SFS (n_jobs parameter)
 - **Causality features** in the explainability tab
 - **3-layer layout** — Left progress navigation, middle workspace, right assistant chat
-- **LightGBM & CatBoost** — Full algorithm implementations (currently XGBoost only)
+- **Optuna TPE** — Optional hyperparameter search method alongside grid / random / Bayesian
 - **Logistic regression pipeline** — Scorecard-oriented workflow
 - **Anomaly detection pipeline** — Unsupervised modeling support

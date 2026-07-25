@@ -1,1 +1,47 @@
-<p>deployment works!</p>
+<div class="deployment-container" style="padding: 8px 4px 24px;">
+  <h2>Deployment</h2>
+  <p style="color: #555; max-width: 720px; font-size: 14px;">
+    Freeze the trained XGBoost model with its feature schema, impute means, and categorical levels into a score bundle.
+    Batch-score a CSV that matches the frozen schema.
+  </p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0;">
+    <button mat-raised-button color="primary"
+            [disabled]="currentFileId == null || isBundling"
+            (click)="createBundle()">
+      {{ isBundling ? 'Creating bundle…' : 'Create score bundle' }}
+    </button>
+    <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px;">
+      <span>Score CSV</span>
+      <input type="file" accept=".csv,.xlsx,.xls"
+             [disabled]="!bundle || isScoring"
+             (change)="onScoreFile($event)" />
+    </label>
+  </div>
+
+  <div *ngIf="error" style="color: #c62828; margin-bottom: 12px;">{{ error }}</div>
+
+  <div *ngIf="bundle" style="margin-top: 12px; max-width: 820px;">
+    <h3>Bundle</h3>
+    <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; background: #fafafa; font-size: 13px;">
+      <div>Path: <code>{{ bundle.bundle_path }}</code></div>
+      <div *ngIf="bundle.manifest">
+        Features: {{ bundle.manifest.feature_names?.length || 0 }}
+        · Categorical: {{ bundle.manifest.categorical_features?.length || 0 }}
+        · Lineage: {{ bundle.manifest.lineage_id || '—' }}
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="scoreResult" style="margin-top: 20px; max-width: 820px;">
+    <h3>Score result</h3>
+    <div style="font-size: 13px;">
+      Scored {{ scoreResult.n_scored }} rows
+      <span *ngIf="scoreResult.scores_truncated"> (preview truncated)</span>
+    </div>
+    <div *ngIf="(scoreResult.scores || scoreResult.scores_preview) as scores" style="margin-top: 8px; font-family: monospace; font-size: 12px; max-height: 180px; overflow: auto; border: 1px solid #eee; padding: 8px;">
+      <div *ngFor="let s of scores.slice(0, 50); let i = index">{{ i }}: {{ s | number:'1.4-4' }}</div>
+      <div *ngIf="scores.length > 50" style="color:#888;">…</div>
+    </div>
+  </div>
+</div>
