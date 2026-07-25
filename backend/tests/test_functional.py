@@ -1361,11 +1361,21 @@ class TestAIAssistantChatAPI:
         assert response.status_code == 400
 
     def test_chat_no_api_key_returns_503(self, api_client, _use_tmp_media, monkeypatch):
-        """POST /api/ai-assistant/chat/ without OPENAI_API_KEY returns 503."""
+        """POST /api/ai-assistant/chat/ with a cloud model and no OPENAI_API_KEY returns 503.
+
+        The global default is now the local gemma4 engine model (which does not
+        need an OpenAI key). Pin an OpenAI model here so the 503 contract is
+        still covered.
+        """
         monkeypatch.delenv('OPENAI_API_KEY', raising=False)
         response = api_client.post(
             '/api/ai-assistant/chat/',
-            data=json.dumps({'message': 'Hello', 'context': {}, 'section': 'general'}),
+            data=json.dumps({
+                'message': 'Hello',
+                'context': {},
+                'section': 'general',
+                'model': 'gpt-5.5',
+            }),
             content_type='application/json',
         )
         assert response.status_code == 503
@@ -1507,9 +1517,12 @@ class TestAIModelListAPI:
 
     def test_models_endpoint_returns_default(self, api_client, _use_tmp_media):
         """GET /api/ai-assistant/models/ returns a default model key."""
+        from ai_assistant.model_registry import resolve_default_model
         response = api_client.get('/api/ai-assistant/models/')
         assert 'default' in response.data
-        assert response.data['default'] == 'gpt-5.5'
+        # Prefer gemma4:26b when the engine advertises it; otherwise cloud GPT.
+        assert response.data['default'] == resolve_default_model()
+        assert response.data['default'] in {m['key'] for m in response.data['models']}
 
     def test_models_have_expected_keys(self, api_client, _use_tmp_media):
         """Each model in the response has key, display_name, and provider."""
@@ -1558,8 +1571,12 @@ class TestAIModelListAPI:
             assert 'thinking_level' in m
 
     def test_chat_with_model_param_missing_key(self, api_client, _use_tmp_media, monkeypatch):
-        """POST /api/ai-assistant/chat/ with unknown model falls back to default (503 without key)."""
+        """Unknown model falls back to the resolved default; cloud-only → 503 without key."""
         monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        # Force a cloud-only registry so unknown-model fallback lands on gpt-5.5
+        # (not the live engine gemma4 default).
+        from ai_assistant import model_registry as mr
+        monkeypatch.setattr(mr, '_registry_snapshot', lambda: dict(mr.MODEL_REGISTRY))
         response = api_client.post(
             '/api/ai-assistant/chat/',
             data=json.dumps({
@@ -1570,7 +1587,6 @@ class TestAIModelListAPI:
             }),
             content_type='application/json',
         )
-        # Falls back to gpt-4.1 which requires OPENAI_API_KEY
         assert response.status_code == 503
 
 

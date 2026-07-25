@@ -81,6 +81,12 @@ The platform calculates row counts and target rates for the full, train, and
 test samples. Large target-rate differences can indicate sampling risk,
 temporal drift, or insufficient event volume.
 
+Preprocessing persists the outer train/test indices as a canonical split
+artifact. Modeling reuses that outer split: validation is carved from the
+outer-train portion for early stopping and hyperparameter search, while the
+outer test remains locked until Evaluation. Numeric imputation and supervised
+encodings are fit on train rows only.
+
 ## Data Quality Calculations
 
 Data Quality Summary calculations help determine whether a feature is stable and
@@ -116,15 +122,19 @@ Fallback assumptions:
 - Ordinal features have a meaningful rank order. DeclarAI expects explicit
   rankings for ordinal categories so the ordering is reviewable.
 - Very low-cardinality categoricals may be one-hot encoded in fallback paths.
-- High-cardinality categorical features may need target encoding, but target
-  encoding should be reviewed for leakage and overfitting risk.
+- High-cardinality categorical features may need target encoding. When modeling
+  supplies train indices, target encoding uses out-of-fold means on train and
+  applies the train mapping to valid/test (with smoothing toward the train
+  prior). Standalone encoding apply without a split still uses in-sample means.
+  Target encoding should still be reviewed for leakage and overfitting risk.
 
 ## Modeling Calculations
 
-Modeling trains a selected boosting algorithm and records performance and
-explainability outputs. Binary targets are handled as classification outcomes.
-The platform uses cross-validation to estimate model performance more robustly
-than a single split.
+Modeling trains XGBoost, LightGBM, or CatBoost through a shared booster adapter.
+Binary targets are handled as classification outcomes.
+Class imbalance is addressed with `scale_pos_weight = neg/pos` on the train fold.
+The platform uses cross-validation on train+valid (excluding the locked outer
+test) to estimate model performance more robustly than a single split.
 
 Common metrics:
 

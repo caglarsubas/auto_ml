@@ -702,8 +702,24 @@ class PreprocessingRunView(APIView):
 
             # ── Split Validation: target distribution per split ──
             split_validation = None
+            train_idx_sv = test_idx_sv = None
             try:
                 train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
+                # Persist canonical outer split for modeling / evaluation
+                try:
+                    from modeling.split_contract import save_split_artifact
+                    save_split_artifact(
+                        int(file_id),
+                        train_idx_sv,
+                        test_idx_sv,
+                        split if isinstance(split, dict) else {'strategy': 'random'},
+                        frame_index=df_processed.index,
+                        source='preprocessing',
+                    )
+                    print(f"[PreprocessingRun] saved split artifact for file_id={file_id} "
+                          f"train={len(train_idx_sv)} test={len(test_idx_sv)}")
+                except Exception as split_save_err:
+                    print(f"[PreprocessingRun] failed to save split artifact: {split_save_err}")
                 target_col = 'Target' if 'Target' in df_processed.columns else None
                 if target_col:
                     y_train = df_processed.loc[train_idx_sv, target_col].dropna()
@@ -1060,6 +1076,10 @@ class PreprocessingRunView(APIView):
                 'processed_file': out_rel,
                 'datq_summary': datq_summary_records,
                 'split_validation': split_validation,
+                'split_artifact': (
+                    f'splits/{file_id}_split.json'
+                    if train_idx_sv is not None and test_idx_sv is not None else None
+                ),
                 'feature_stats_before': feature_stats_before,
                 'feature_stats_after': feature_stats_after,
                 'preprocessing_step_stats': preprocessing_step_stats if preprocessing_step_stats else None,

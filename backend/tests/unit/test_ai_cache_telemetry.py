@@ -1642,10 +1642,12 @@ class TestCrossTraceRefs:
 
         captured = {}
 
-        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+        def fake_dispatch(file_id, action_type, payload, *,
+                          parent_span_id=None, source=None):
             captured['file_id'] = file_id
             captured['action_type'] = action_type
             captured['parent_span_id'] = parent_span_id
+            captured['source'] = source
             return {'status': 'success', 'description': 'ok'}
 
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
@@ -1669,6 +1671,7 @@ class TestCrossTraceRefs:
         assert captured['parent_span_id'] == 'chat-span-abc'
         assert captured['file_id'] == 7
         assert captured['action_type'] == 'update_config'
+        assert captured['source'] == 'panel'
 
     def test_action_execute_view_treats_missing_parent_span_id_as_none(
             self, monkeypatch):
@@ -1679,8 +1682,10 @@ class TestCrossTraceRefs:
 
         captured = {}
 
-        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+        def fake_dispatch(file_id, action_type, payload, *,
+                          parent_span_id=None, source=None):
             captured['parent_span_id'] = parent_span_id
+            captured['source'] = source
             return {'status': 'success'}
 
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
@@ -1699,6 +1704,7 @@ class TestCrossTraceRefs:
         }))
 
         assert captured['parent_span_id'] is None
+        assert captured['source'] == 'panel'
 
     def test_action_execute_view_rejects_non_string_parent_span_id(
             self, monkeypatch):
@@ -1710,7 +1716,8 @@ class TestCrossTraceRefs:
 
         captured = {}
 
-        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+        def fake_dispatch(file_id, action_type, payload, *,
+                          parent_span_id=None, source=None):
             captured['parent_span_id'] = parent_span_id
             return {'status': 'success'}
 
@@ -1744,7 +1751,8 @@ class TestCrossTraceRefs:
 
         captured = {}
 
-        def fake_dispatch(file_id, action_type, payload, *, parent_span_id=None):
+        def fake_dispatch(file_id, action_type, payload, *,
+                          parent_span_id=None, source=None):
             captured['parent_span_id'] = parent_span_id
             return {'status': 'success'}
 
@@ -2682,6 +2690,59 @@ class TestCacheRestEndpointsDoNotEmitSpans:
                 {'Feature_Name': 'A'}]
         finally:
             _get_redis().delete('ai:pipeline:80001:data_dictionary')
+
+# ---------------------------------------------------------------------------
+# Codeline capability footprints (inline cell communication / execution)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCodelineCapabilityFootprints:
+    """``stamp_codeline_capability`` emits producer-owned attrs for the
+    inline Codeline assistant surfaces."""
+
+    def test_communication_kind_stamps_capability_and_position(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+        captured = {}
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: captured.__setitem__(k, v))
+        pc.stamp_codeline_capability(
+            kind='communication',
+            position='after_data_preview',
+            source='codeline',
+            auto_correction_attempt=1,
+        )
+        assert captured['declarai.capability.inline_cell_communication'] is True
+        assert captured['declarai.chat_source'] == 'codeline'
+        assert captured['declarai.codeline.position'] == 'after_data_preview'
+        assert captured['declarai.codeline.auto_correction_attempt'] == 1
+        assert 'declarai.capability.inline_cell_execution' not in captured
+
+    def test_execution_kind_stamps_mode_and_source(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+        captured = {}
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: captured.__setitem__(k, v))
+        pc.stamp_codeline_capability(
+            kind='execution',
+            position='after_sfs',
+            mode='apply',
+            source='codeline',
+        )
+        assert captured['declarai.capability.inline_cell_execution'] is True
+        assert captured['declarai.action.source'] == 'codeline'
+        assert captured['declarai.execute_code.mode'] == 'apply'
+        assert captured['declarai.codeline.position'] == 'after_sfs'
+        assert 'declarai.capability.inline_cell_communication' not in captured
+
+    def test_unknown_kind_is_noop(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+        captured = {}
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda k, v: captured.__setitem__(k, v))
+        pc.stamp_codeline_capability(kind='bogus')
+        assert captured == {}
+
 
 # ---------------------------------------------------------------------------
 # v2.42.0/v2.46.0: prometa-sdk version floor — CI guard

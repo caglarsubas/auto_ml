@@ -18,7 +18,7 @@ from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
     model_route, plan_generate, current_span_id, current_trace_id, set_input_ref,
-    prompt_render,
+    prompt_render, stamp_codeline_capability,
 )
 from .tool_definitions import PIPELINE_TOOLS
 from .tool_executor import execute_tool_call, _load_skill_traced
@@ -27,7 +27,7 @@ from .cache import cache_list_artifacts
 from .intent_classifier import resolve_intent_classification
 from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
-    get_model_config, list_models, DEFAULT_MODEL,
+    get_model_config, list_models, resolve_default_model,
     call_openai, call_engine, MODEL_REGISTRY,
     parse_ollama_tag, engine_status,
 )
@@ -1459,7 +1459,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     ``source`` is ``'codeline'`` when the request comes from an inline Codeline
     cell, or ``'panel'`` / omitted for the right-side AI Assistant.
     """
-    model_key = model or DEFAULT_MODEL
+    model_key = model or resolve_default_model()
     model_cfg = get_model_config(model_key)
     total_usage = {}
     chat_source = (source or 'panel').strip().lower()
@@ -1478,6 +1478,19 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     set_span_attr('declarai.section', section or 'general')
     set_span_attr('declarai.model', model_key)
     set_span_attr('declarai.chat_source', chat_source)
+    if chat_source == 'codeline':
+        ctx = context or {}
+        attempt = ctx.get('auto_correction_attempt')
+        try:
+            attempt_int = int(attempt) if attempt is not None else None
+        except (TypeError, ValueError):
+            attempt_int = None
+        stamp_codeline_capability(
+            kind='communication',
+            position=ctx.get('codeline_position') or None,
+            source=chat_source,
+            auto_correction_attempt=attempt_int,
+        )
 
     intent = resolve_intent_classification(
         user_message,
@@ -2097,6 +2110,14 @@ class AIActionExecuteView(APIView):
             parent_span_id = None
             if isinstance(parent_span_id_raw, str) and 0 < len(parent_span_id_raw) <= 256:
                 parent_span_id = parent_span_id_raw
+            # Origin: inline Codeline cell vs right-side panel (default panel).
+            action_source_raw = request.data.get('source') or 'panel'
+            action_source = (
+                action_source_raw.strip().lower()
+                if isinstance(action_source_raw, str) else 'panel'
+            )
+            if action_source not in ('codeline', 'panel'):
+                action_source = 'panel'
 
             if not file_id:
                 return Response({'status': 'error', 'error': 'file_id is required'},
@@ -2106,7 +2127,8 @@ class AIActionExecuteView(APIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             result = dispatch_action(int(file_id), action_type, payload,
-                                     parent_span_id=parent_span_id)
+                                     parent_span_id=parent_span_id,
+                                     source=action_source)
 
             http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
             return Response(result, status=http_status)
@@ -3662,6 +3684,6 @@ class AIModelListView(APIView):
         models = list_models()
         return Response({
             'models': models,
-            'default': DEFAULT_MODEL,
+            'default': resolve_default_model(),
             'engine': engine_status(),
         })

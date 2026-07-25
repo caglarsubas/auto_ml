@@ -11,6 +11,9 @@ scikit-learn>=1.4
 
 # Modeling dependencies
 xgboost>=2.0,<3.0
+lightgbm>=4.0,<5.0
+catboost>=1.2,<2.0
+optuna>=3.6,<5.0
 shap>=0.42
 matplotlib>=3.7
 mlxtend>=0.23
@@ -18,7 +21,7 @@ statsmodels>=0.14
 
 # AI Assistant
 openai>=1.0
-prometa-sdk>=0.10.1
+prometa-sdk>=0.18.2
 redis>=5.0
 mcp>=1.27,<2
 cryptography>=42

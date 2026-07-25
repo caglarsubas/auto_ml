@@ -65,14 +65,41 @@ class TestModelRegistry:
         assert cfg['model_id'] == 'llama3.2:3b'
         assert cfg['supports_tools'] is True
 
-    def test_get_model_config_unknown_falls_back(self):
-        from ai_assistant.model_registry import get_model_config, DEFAULT_MODEL, MODEL_REGISTRY
-        cfg = get_model_config('nonexistent-model-xyz')
-        assert cfg == MODEL_REGISTRY[DEFAULT_MODEL]
+    def test_get_model_config_unknown_falls_back(self, monkeypatch):
+        from ai_assistant import model_registry as mr
+        # Force a cloud-only snapshot so this assertion is environment-independent.
+        monkeypatch.setattr(mr, '_registry_snapshot', lambda: dict(mr.MODEL_REGISTRY))
+        cfg = mr.get_model_config('nonexistent-model-xyz')
+        assert cfg == mr.MODEL_REGISTRY[mr.CLOUD_FALLBACK_MODEL]
+        assert mr.resolve_default_model() == mr.CLOUD_FALLBACK_MODEL
 
-    def test_default_model_exists_in_registry(self):
-        from ai_assistant.model_registry import DEFAULT_MODEL, MODEL_REGISTRY
-        assert DEFAULT_MODEL in MODEL_REGISTRY
+    def test_preferred_default_is_gemma4_engine_key(self):
+        from ai_assistant.model_registry import (
+            PREFERRED_DEFAULT_MODEL, CLOUD_FALLBACK_MODEL, DEFAULT_MODEL, MODEL_REGISTRY,
+        )
+        assert PREFERRED_DEFAULT_MODEL == 'engine-gemma4-26b'
+        assert DEFAULT_MODEL == PREFERRED_DEFAULT_MODEL
+        assert CLOUD_FALLBACK_MODEL in MODEL_REGISTRY
+
+    def test_resolve_default_prefers_gemma4_when_available(self, monkeypatch):
+        from ai_assistant import model_registry as mr
+        fake = {
+            'engine-gemma4-26b': {
+                'provider': 'engine',
+                'model_id': 'gemma4:26b',
+                'display_name': 'gemma4:26b (Inference Engine)',
+                'max_tokens': 4096,
+                'supports_tools': True,
+                'architecture': 'dense',
+                'reasoning': False,
+                'thinking': False,
+                'thinking_level': None,
+            },
+            **mr.MODEL_REGISTRY,
+        }
+        monkeypatch.setattr(mr, '_registry_snapshot', lambda: fake)
+        assert mr.resolve_default_model() == 'engine-gemma4-26b'
+        assert mr.get_model_config('nonexistent-model-xyz')['model_id'] == 'gemma4:26b'
 
     def test_all_models_have_required_fields(self):
         from ai_assistant.model_registry import MODEL_REGISTRY

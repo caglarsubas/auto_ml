@@ -458,7 +458,8 @@ export class DataService {
   // ===== AI Action Execution (general-purpose) =====
 
   executeAiAction(fileId: number, actionType: string, payload: any,
-                  parentSpanId?: string): Observable<any> {
+                  parentSpanId?: string,
+                  source?: 'codeline' | 'panel'): Observable<any> {
     const body: any = {
       file_id: fileId,
       action_type: actionType,
@@ -468,6 +469,9 @@ export class DataService {
     // backend treats missing/empty as "no link" (legacy semantics).
     if (parentSpanId) {
       body.parent_span_id = parentSpanId;
+    }
+    if (source) {
+      body.source = source;
     }
     return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, body).pipe(
       catchError((err: any) => {
@@ -547,6 +551,56 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error pushing AI cache:', err);
         return throwError(() => err);
+      })
+    );
+  }
+
+  runEvaluation(fileId: number, threshold: number = 0.5, features?: string[]): Observable<any> {
+    const payload: any = { file_id: fileId, threshold };
+    if (features && features.length) payload.features = features;
+    return this.http.post(`${this.apiUrl}evaluation/run/`, payload).pipe(
+      catchError((error: any) => {
+        console.error('Error running evaluation:', error);
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to run evaluation'));
+      })
+    );
+  }
+
+  getEvaluationStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}evaluation/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting evaluation status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get evaluation status'));
+      })
+    );
+  }
+
+  createDeploymentBundle(fileId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId }).pipe(
+      catchError((error: any) => {
+        console.error('Error creating deployment bundle:', error);
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to create deployment bundle'));
+      })
+    );
+  }
+
+  getDeploymentStatus(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}deployment/status/${fileId}/`).pipe(
+      catchError((error: any) => {
+        console.error('Error getting deployment status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get deployment status'));
+      })
+    );
+  }
+
+  scoreDeployment(fileId: number, file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file_id', String(fileId));
+    form.append('file', file);
+    return this.http.post(`${this.apiUrl}deployment/score/`, form).pipe(
+      catchError((error: any) => {
+        console.error('Error scoring deployment batch:', error);
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to score batch'));
       })
     );
   }

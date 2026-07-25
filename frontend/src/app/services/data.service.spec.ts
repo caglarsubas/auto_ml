@@ -384,6 +384,27 @@ describe('DataService', () => {
       req.flush({ status: 'success' });
     });
 
+    it('executeAiAction should include source=codeline when provided', () => {
+      service.executeAiAction(
+        7,
+        'execute_code',
+        { code: "df['x']=1", mode: 'exploratory' },
+        undefined,
+        'codeline',
+      ).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      expect(req.request.body.source).toBe('codeline');
+      expect(req.request.body.action_type).toBe('execute_code');
+      req.flush({ status: 'success' });
+    });
+
+    it('executeAiAction should OMIT source when not provided (legacy panel)', () => {
+      service.executeAiAction(7, 'execute_code', { code: 'x=1' }).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      expect('source' in req.request.body).toBeFalse();
+      req.flush({ status: 'success' });
+    });
+
     it('sendAiChat should POST message with context', () => {
       service.sendAiChat('Hello', { summary: [] }, 'data_quality', []).subscribe(res => {
         expect(res.message).toBeTruthy();

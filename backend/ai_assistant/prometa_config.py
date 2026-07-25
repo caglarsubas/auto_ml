@@ -292,7 +292,7 @@ def prompt_render(*, template_version: str = None,
         from prometa import prompt_render as _real_prompt_render
     except (ImportError, AttributeError):
         # v0.6.x and earlier — symbol absent.  In production we require
-        # prometa-sdk>=0.10.1 (see requirements.txt) so this branch only
+        # prometa-sdk>=0.18.2 (see requirements.txt) so this branch only
         # fires in legacy/test environments.
         yield _NoOpPromptRenderHandle()
         return
@@ -379,7 +379,7 @@ def _set_span_attr_direct(key: str, value) -> None:
 def set_span_attr(key: str, value) -> None:
     """Set an attribute on the current Prometa span.
 
-    SDK 0.10.1 exposes the public ``set_attribute`` helper used for
+    SDK 0.18.2 exposes the public ``set_attribute`` helper used for
     producer-owned metadata such as ``declarai.mcp.*``.  Keep the direct span
     fallback so older local/test SDKs still degrade safely.
     """
@@ -405,6 +405,40 @@ def set_span_attrs(attributes: dict) -> None:
     except Exception:
         for key, value in attributes.items():
             _set_span_attr_direct(key, value)
+
+
+def stamp_codeline_capability(
+    *,
+    kind: str,
+    position: str = None,
+    mode: str = None,
+    source: str = 'codeline',
+    auto_correction_attempt: int = None,
+) -> None:
+    """Stamp Codeline capability footprints on the active Prometa span.
+
+    ``kind`` is ``'communication'`` (inline cell chat) or ``'execution'``
+    (inline cell Run / Apply).  Attributes are OTLP scalars only and are
+    no-ops when no span is active (via ``set_span_attr``).
+    """
+    if kind not in ('communication', 'execution'):
+        return
+    resolved_source = (source or 'codeline').strip().lower() or 'codeline'
+    if kind == 'communication':
+        set_span_attr('declarai.capability.inline_cell_communication', True)
+        set_span_attr('declarai.chat_source', resolved_source)
+    else:
+        set_span_attr('declarai.capability.inline_cell_execution', True)
+        set_span_attr('declarai.action.source', resolved_source)
+        if mode:
+            set_span_attr('declarai.execute_code.mode', str(mode))
+    if position:
+        set_span_attr('declarai.codeline.position', str(position))
+    if auto_correction_attempt is not None:
+        set_span_attr(
+            'declarai.codeline.auto_correction_attempt',
+            int(auto_correction_attempt),
+        )
 
 
 def stamp_mcp_tool_marker(

@@ -531,6 +531,8 @@ describe('ModelingComponent', () => {
 
     it('should populate form fields from the request and call startModeling()', (done) => {
       const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      component.selectedPipeline = 'boosting';
+      component.implementedAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
       sharedService.emitModelingStartRequest({
         algorithm: 'lightgbm',
         encoding_use_native: false,
@@ -563,12 +565,14 @@ describe('ModelingComponent', () => {
 
     it('should strip whitespace from algorithm before patching', (done) => {
       spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      component.selectedPipeline = 'boosting';
+      component.implementedAlgorithms = ['xgboost'];
       sharedService.emitModelingStartRequest({
-        algorithm: 'lightgbm',  // already trimmed by the backend handler
+        algorithm: 'xgboost',  // already trimmed by the backend handler
         encoding_use_native: true,
       });
       setTimeout(() => {
-        expect(component.selectedAlgorithm).toBe('lightgbm');
+        expect(component.selectedAlgorithm).toBe('xgboost');
         done();
       }, 5);
     });

@@ -1,1 +1,102 @@
-<p>evaluation works!</p>
+<div class="evaluation-container" style="padding: 8px 4px 24px;">
+  <h2>Evaluation</h2>
+  <p style="color: #555; max-width: 720px; font-size: 14px;">
+    Scores the locked outer test set that was never used for early stopping or hyperparameter search.
+    Compare validation AUC from modeling against honest test metrics, then review the governance model card.
+  </p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 16px 0;">
+    <mat-form-field appearance="fill" style="width: 160px;">
+      <mat-label>Decision threshold</mat-label>
+      <input matInput type="number" min="0.01" max="0.99" step="0.01" [(ngModel)]="threshold" />
+    </mat-form-field>
+    <button mat-raised-button color="primary"
+            [disabled]="currentFileId == null || isRunning"
+            (click)="runEvaluation()">
+      {{ isRunning ? 'Evaluating…' : 'Run outer-test evaluation' }}
+    </button>
+  </div>
+
+  <div *ngIf="error" style="color: #c62828; margin-bottom: 12px;">{{ error }}</div>
+
+  <div *ngIf="metrics" style="margin-top: 12px;">
+    <h3 style="margin-bottom: 8px;">Outer-test metrics</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; max-width: 900px;">
+      <div *ngFor="let key of ['roc_auc','pr_auc','ks','gini','f1','f2','precision','recall','accuracy','mcc','brier','log_loss']"
+           style="border: 1px solid #e0e0e0; padding: 10px 12px; border-radius: 4px;">
+        <div style="font-size: 11px; color: #777; text-transform: uppercase;">{{ key }}</div>
+        <div style="font-size: 18px; font-weight: 600;">
+          {{ metrics[key] == null ? '—' : (metrics[key] | number:'1.3-3') }}
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="result?.evaluation?.comparison" style="margin-top: 14px; font-size: 13px; color: #444;">
+      Modeling valid AUC:
+      <strong>{{ result.evaluation.comparison.valid_auc | number:'1.3-3' }}</strong>
+      · Modeling test AUC:
+      <strong>{{ result.evaluation.comparison.modeling_test_auc | number:'1.3-3' }}</strong>
+      · Evaluation test AUC:
+      <strong>{{ result.evaluation.comparison.evaluation_test_auc | number:'1.3-3' }}</strong>
+    </div>
+
+    <div *ngIf="metrics.confusion" style="margin-top: 14px; font-size: 13px;">
+      Confusion at threshold {{ metrics.threshold }} —
+      TP {{ metrics.confusion.tp }}, FP {{ metrics.confusion.fp }},
+      TN {{ metrics.confusion.tn }}, FN {{ metrics.confusion.fn }}
+    </div>
+  </div>
+
+  <div *ngIf="thresholdRows.length" style="margin-top: 24px; overflow-x: auto;">
+    <h3>Threshold table</h3>
+    <table style="border-collapse: collapse; font-size: 12px; min-width: 720px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding: 6px; border-bottom: 1px solid #ccc;">thr</th>
+          <th style="text-align:right; padding: 6px; border-bottom: 1px solid #ccc;">precision</th>
+          <th style="text-align:right; padding: 6px; border-bottom: 1px solid #ccc;">recall</th>
+          <th style="text-align:right; padding: 6px; border-bottom: 1px solid #ccc;">f1</th>
+          <th style="text-align:right; padding: 6px; border-bottom: 1px solid #ccc;">f2</th>
+          <th style="text-align:right; padding: 6px; border-bottom: 1px solid #ccc;">mcc</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of thresholdRows">
+          <td style="padding: 4px 6px;">{{ row.threshold | number:'1.2-2' }}</td>
+          <td style="padding: 4px 6px; text-align:right;">{{ row.precision | number:'1.3-3' }}</td>
+          <td style="padding: 4px 6px; text-align:right;">{{ row.recall | number:'1.3-3' }}</td>
+          <td style="padding: 4px 6px; text-align:right;">{{ row.f1 | number:'1.3-3' }}</td>
+          <td style="padding: 4px 6px; text-align:right;">{{ row.f2 | number:'1.3-3' }}</td>
+          <td style="padding: 4px 6px; text-align:right;">{{ row.mcc | number:'1.3-3' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div *ngIf="modelCard" style="margin-top: 28px; max-width: 820px;">
+    <h3>Model card</h3>
+    <div style="font-size: 13px; color: #444; margin-bottom: 8px;">
+      {{ modelCard.title }}
+      <span *ngIf="modelCard.lineage_id"> · lineage {{ modelCard.lineage_id }}</span>
+    </div>
+    <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; background: #fafafa;">
+      <div style="margin-bottom: 8px;">
+        <strong>Split</strong>:
+        {{ modelCard.sections?.split_and_stability?.strategy || '—' }}
+        (source {{ modelCard.sections?.split_and_stability?.source || '—' }})
+        · train/valid/test
+        {{ modelCard.sections?.split_and_stability?.n_train }}/{{ modelCard.sections?.split_and_stability?.n_valid }}/{{ modelCard.sections?.split_and_stability?.n_test }}
+      </div>
+      <div style="margin-bottom: 8px;">
+        <strong>Imbalance weight</strong>:
+        {{ modelCard.sections?.modeling?.scale_pos_weight ?? '—' }}
+      </div>
+      <div>
+        <strong>Human checks remaining</strong>
+        <ul style="margin: 6px 0 0 18px; padding: 0;">
+          <li *ngFor="let item of modelCard.human_checks_remaining">{{ item }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

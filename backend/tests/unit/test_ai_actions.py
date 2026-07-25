@@ -289,6 +289,37 @@ class TestDispatchAction:
         assert result['status'] == 'error'
         assert 'No code' in result['error']
 
+    def test_dispatch_codeline_source_stamps_execution_capability(self, monkeypatch):
+        """Inline Codeline execute_code stamps capability footprints."""
+        from ai_assistant import action_executor as ae
+        from ai_assistant import prometa_config as pc
+
+        captured = {}
+
+        def _capture(key, value):
+            captured[key] = value
+
+        monkeypatch.setattr(pc, 'set_span_attr', _capture)
+        monkeypatch.setattr(ae, 'set_span_attr', _capture)
+        monkeypatch.setattr(ae, 'stamp_codeline_capability', pc.stamp_codeline_capability)
+
+        ae.dispatch_action(
+            1,
+            'execute_code',
+            {
+                'code': '',
+                'mode': 'exploratory',
+                'codeline_position': 'after_data_preview',
+                'auto_correction_attempt': 2,
+            },
+            source='codeline',
+        )
+        assert captured.get('declarai.action.source') == 'codeline'
+        assert captured.get('declarai.capability.inline_cell_execution') is True
+        assert captured.get('declarai.codeline.position') == 'after_data_preview'
+        assert captured.get('declarai.execute_code.mode') == 'exploratory'
+        assert captured.get('declarai.codeline.auto_correction_attempt') == 2
+
     def test_execute_code_strips_import_lines(self):
         """Import lines should be stripped — np/pd are pre-loaded in sandbox."""
         from ai_assistant.action_executor import execute_code

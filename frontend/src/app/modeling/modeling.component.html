@@ -5,9 +5,14 @@
       <mat-form-field appearance="fill" style="width: 100%;">
         <mat-label>Select Algorithm</mat-label>
         <mat-select [(ngModel)]="selectedAlgorithm" (ngModelChange)="onAlgorithmChange($event)">
-          <mat-option *ngFor="let algo of availableAlgorithms" [value]="algo">{{ algo }}</mat-option>
+          <mat-option *ngFor="let algo of availableAlgorithms" [value]="algo" [disabled]="!isAlgorithmImplemented(algo)">
+            {{ getAlgorithmLabel(algo) }}
+          </mat-option>
         </mat-select>
       </mat-form-field>
+      <div *ngIf="selectedPipeline === 'boosting'" style="font-size: 12px; color: #666; margin-top: -4px; margin-bottom: 8px;">
+        XGBoost, LightGBM, and CatBoost train through the same boosting pipeline with native categorical support.
+      </div>
     </div>
 
     <div id="encoding-anchor"></div>

@@ -238,13 +238,13 @@ Automated feature selection using sequential forward and/or backward search:
 
 ### 8. Evaluation
 
-Model performance evaluation (under development):
+Model performance evaluation (outer-test metrics, threshold table, model card):
 - Summary metrics display
 - Comparison across model variants
 
 ### 9. Deployment
 
-Model deployment interface (under development):
+Model deployment interface (score bundle + batch CSV scoring):
 - Export and serve trained models
 
 ---
@@ -253,7 +253,7 @@ Model deployment interface (under development):
 
 The backend's AI Assistant emits structured agent telemetry through
 [`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
-(≥ 0.10.1) to the **Prometa Agentic Lifecycle Intelligence Platform**
+(≥ 0.18.2) to the **Prometa Agentic Lifecycle Intelligence Platform**
 for tracing, evaluation, and lifecycle governance.
 
 **Integration point**:
@@ -392,8 +392,8 @@ auto-ml/
 │   │   └── sfs_utils.py      # Forward/backward SFS with progress tracking
 │   ├── feature_card/         # Per-feature explainability
 │   │   └── views.py          # Feature statistics, distribution, quality summary
-│   ├── evaluation/           # Model evaluation (planned)
-│   ├── deployment/           # Model deployment (planned)
+│   ├── evaluation/           # Outer-test evaluation + model card
+│   ├── deployment/           # Score bundle + batch scoring
 │   ├── tests/                # Test suite (~1009 tests)
 │   │   ├── unit/             # Unit tests split by domain (declaration, encoding,
 │   │   │                     #   modeling, hyperparam, preprocessing, ai_*, ...)
@@ -450,7 +450,7 @@ auto-ml/
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
 | openai | ≥ 1.0 | LLM client for AI Assistant action layer |
-| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.10.1 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
+| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.18.2 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
 | redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend
@@ -563,6 +563,6 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - **Parallel execution** — Multi-core SFS (n_jobs parameter)
 - **Causality features** in the explainability tab
 - **3-layer layout** — Left progress navigation, middle workspace, right assistant chat
-- **LightGBM & CatBoost** — Full algorithm implementations (currently XGBoost only)
+- **Optuna TPE** — Optional hyperparameter search method alongside grid / random / Bayesian
 - **Logistic regression pipeline** — Scorecard-oriented workflow
 - **Anomaly detection pipeline** — Unsupervised modeling support

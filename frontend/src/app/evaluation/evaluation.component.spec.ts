@@ -1,9 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { EvaluationComponent } from './evaluation.component';
+import { FormsModule } from '@angular/forms';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
 
-// NOTE: EvaluationComponent is an intentional stub for a not-yet-built feature.
-// A creation smoke test is the appropriate scope until the feature lands.
+import { EvaluationComponent } from './evaluation.component';
+import { SharedService } from '../services/shared.service';
+import { DataService } from '../services/data.service';
+
 describe('EvaluationComponent', () => {
   let component: EvaluationComponent;
   let fixture: ComponentFixture<EvaluationComponent>;
@@ -11,7 +17,15 @@ describe('EvaluationComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [EvaluationComponent],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+      imports: [
+        FormsModule,
+        HttpClientTestingModule,
+        NoopAnimationsModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatButtonModule,
+      ],
+      providers: [SharedService, DataService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(EvaluationComponent);

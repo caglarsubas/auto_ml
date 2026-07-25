@@ -1,9 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { DeploymentComponent } from './deployment.component';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatButtonModule } from '@angular/material/button';
 
-// NOTE: DeploymentComponent is an intentional stub for a not-yet-built feature.
-// A creation smoke test is the appropriate scope until the feature lands.
+import { DeploymentComponent } from './deployment.component';
+import { SharedService } from '../services/shared.service';
+import { DataService } from '../services/data.service';
+
 describe('DeploymentComponent', () => {
   let component: DeploymentComponent;
   let fixture: ComponentFixture<DeploymentComponent>;
@@ -11,7 +14,12 @@ describe('DeploymentComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [DeploymentComponent],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+      imports: [
+        HttpClientTestingModule,
+        NoopAnimationsModule,
+        MatButtonModule,
+      ],
+      providers: [SharedService, DataService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DeploymentComponent);
