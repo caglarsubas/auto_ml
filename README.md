@@ -573,6 +573,6 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - **Parallel execution** — Multi-core SFS (n_jobs parameter)
 - **Causality features** in the explainability tab
 - **3-layer layout** — Left progress navigation, middle workspace, right assistant chat
-- **Optuna TPE** — Optional hyperparameter search method alongside grid / random / Bayesian
+- ~~**Optuna TPE**~~ — Done (v2.57): Bayesian search uses Optuna TPE; FE label remains Bayesian
 - **Logistic regression pipeline** — Scorecard-oriented workflow
 - **Anomaly detection pipeline** — Unsupervised modeling support

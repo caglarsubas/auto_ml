@@ -226,8 +226,9 @@ platform is proving that all non-top-K candidates are useless.
 Hyperparameter tuning searches model settings after a feature set is chosen.
 Grid search is exhaustive over a configured grid but can be expensive. Random
 search samples configurations and is useful for larger spaces. Bayesian search
-uses prior results to choose promising next configurations. The automatic mode
-uses estimated fit count per worker to choose a practical strategy.
+uses Optuna's Tree-structured Parzen Estimator (TPE) to propose promising next
+configurations from prior trial results. The automatic mode uses estimated fit
+count per worker to choose a practical strategy.
 
 The platform records the requested method, resolved method, number of trials,
 primary metric, and validation-curve outputs so reviewers can understand the

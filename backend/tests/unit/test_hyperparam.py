@@ -310,7 +310,21 @@ class TestHyperparamSearchMethod:
             search_method='bayesian', random_state=0)
         assert res['status'] == 'completed'
         assert res['search_method'] == 'bayesian'
-        assert res['n_trials'] == 10  # SMBO evaluates exactly n_iter configs
+        assert res['search_backend'] == 'optuna_tpe'
+        assert res['n_trials'] == 10  # TPE evaluates exactly n_iter configs
+        assert res.get('optuna_best_params') is not None
+
+    def test_engine_optuna_alias_uses_tpe(self):
+        from modeling.hyperparam_utils import run_hyperparam_search_with_progress
+        Xtr, ytr, Xte, yte = _hp_synthetic()
+        res = run_hyperparam_search_with_progress(
+            Xtr, ytr, Xte, yte, param_space=_hp_space('max_depth'),
+            n_iter=6, cv_folds=2, n_jobs=1, validation_curve_points=3,
+            search_method='optuna', random_state=1)
+        assert res['status'] == 'completed'
+        assert res['search_method'] == 'optuna'
+        assert res['search_backend'] == 'optuna_tpe'
+        assert res['n_trials'] == 6
 
     def test_engine_auto_resolves_to_grid_for_one_small_param(self):
         from modeling.hyperparam_utils import run_hyperparam_search_with_progress
