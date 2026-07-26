@@ -368,3 +368,52 @@ class TestCalculateDescriptiveStats:
         assert stats['#_of_Categories'] == 3
         assert stats['Mode_Value'] == 'A'
         assert stats['Mode_Ratio'] == 50.0
+
+
+@pytest.mark.unit
+class TestDataDictionaryHeuristics:
+    def test_looks_like_data_dictionary_for_feature_catalog(self):
+        from declaration.views import looks_like_data_dictionary
+        df = pd.DataFrame({
+            'Feature_Name': ['AppID', 'Target', 'Var_1', 'Var_2', 'Var_3'],
+            'Feature_Description': ['id', 'flag', 'a', 'b', 'c'],
+        })
+        assert looks_like_data_dictionary(df) is True
+
+    def test_wide_modeling_frame_is_not_dictionary(self):
+        from declaration.views import looks_like_data_dictionary
+        df = pd.DataFrame({
+            'AppID': [1, 2, 3],
+            'Target': [0, 1, 0],
+            'Var_1': [10, 20, 30],
+            'Var_2': [1.1, 2.2, 3.3],
+        })
+        assert looks_like_data_dictionary(df) is False
+
+    def test_two_column_category_target_is_not_dictionary(self):
+        from declaration.views import looks_like_data_dictionary
+        df = pd.DataFrame({
+            'Category': list('ABC') * 10,
+            'Target': [0, 1] * 15,
+        })
+        assert looks_like_data_dictionary(df) is False
+
+    def test_resolve_excel_skips_dictionary_sheet(self, tmp_path):
+        from declaration.views import resolve_excel_sheet
+        path = tmp_path / 'combo.xlsx'
+        with pd.ExcelWriter(path, engine='openpyxl') as writer:
+            pd.DataFrame({
+                'Feature_Name': [f'Var_{i}' for i in range(10)],
+                'Feature_Description': [f'desc {i}' for i in range(10)],
+            }).to_excel(writer, sheet_name='Data_Dictionary', index=False)
+            pd.DataFrame({
+                'AppID': list(range(8)),
+                'Target': [0, 1] * 4,
+                'Var_1': list(range(8)),
+                'Var_2': list(range(8, 16)),
+            }).to_excel(writer, sheet_name='ModelingData', index=False)
+        raw = path.read_bytes()
+        sheet, skipped, note = resolve_excel_sheet(raw, first_sheet_has_not_dataset=False)
+        assert skipped is True
+        assert sheet == 'ModelingData'
+        assert note and 'Data_Dictionary' in note
