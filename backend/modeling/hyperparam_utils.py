@@ -32,12 +32,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, f1_score, fbeta_score,
     precision_score, recall_score, accuracy_score, matthews_corrcoef,
-    log_loss, brier_score_loss,
+    log_loss, brier_score_loss, mean_absolute_error, mean_squared_error, r2_score,
 )
 from scipy.stats import spearmanr
 
@@ -77,8 +77,23 @@ DEFAULT_FIXED_PARAMS: Dict[str, Any] = {
 METRIC_DIRECTION: Dict[str, int] = {
     'roc_auc': 1, 'pr_auc': 1, 'f1': 1, 'f2': 1, 'precision': 1,
     'recall': 1, 'accuracy': 1, 'mcc': 1, 'log_loss': -1, 'brier': -1,
+    'r2': 1, 'rmse': -1, 'mae': -1,
 }
 METRIC_NAMES: List[str] = list(METRIC_DIRECTION.keys())
+CLASSIFICATION_METRICS: List[str] = [
+    'roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall',
+    'accuracy', 'mcc', 'log_loss', 'brier',
+]
+REGRESSION_METRICS: List[str] = ['r2', 'rmse', 'mae']
+
+
+def _normalize_task(task: Optional[str]) -> str:
+    t = (task or 'classification').strip().lower()
+    return 'regression' if t in ('regression', 'regressor', 'reg') else 'classification'
+
+
+def _active_metrics(task: str) -> List[str]:
+    return REGRESSION_METRICS if task == 'regression' else CLASSIFICATION_METRICS
 
 # ---------------------------------------------------------------------------
 # Search-method selection (grid / random / bayesian)
@@ -167,18 +182,28 @@ def _build_xgb_params(
     nthread: int,
     has_cat: bool,
     scale_pos_weight: Optional[float] = None,
+    task: str = 'classification',
 ) -> Tuple[Dict[str, Any], int]:
     """Translate a sampled config into (xgb.train params, num_boost_round)."""
-    params: Dict[str, Any] = {
-        'objective': 'binary:logistic',
-        'eval_metric': 'auc',
-        'seed': 42,
-        'nthread': nthread,
-    }
+    task = _normalize_task(task)
+    if task == 'regression':
+        params: Dict[str, Any] = {
+            'objective': 'reg:squarederror',
+            'eval_metric': 'rmse',
+            'seed': 42,
+            'nthread': nthread,
+        }
+    else:
+        params = {
+            'objective': 'binary:logistic',
+            'eval_metric': 'auc',
+            'seed': 42,
+            'nthread': nthread,
+        }
+        if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
+            params['scale_pos_weight'] = float(scale_pos_weight)
     if has_cat:
         params['enable_categorical'] = True
-    if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
-        params['scale_pos_weight'] = float(scale_pos_weight)
     for key, val in config.items():
         if key == 'n_estimators':
             continue
@@ -217,13 +242,44 @@ def _predict_best(booster: xgb.Booster, dmat: xgb.DMatrix) -> np.ndarray:
     return booster.predict(dmat)
 
 
-def _compute_metrics(y_true: np.ndarray, y_proba: np.ndarray, threshold: float = 0.5) -> Dict[str, float]:
-    """All boosting metrics from probabilities + a decision threshold."""
+def _nan_metric_map() -> Dict[str, float]:
+    return {m: float('nan') for m in METRIC_NAMES}
+
+
+def _compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    y_pred = np.asarray(y_pred, dtype=float).ravel()
+    out = _nan_metric_map()
+    try:
+        out['r2'] = float(r2_score(y_true, y_pred)) if len(y_true) >= 2 else float('nan')
+    except Exception:
+        out['r2'] = float('nan')
+    try:
+        out['rmse'] = float(np.sqrt(mean_squared_error(y_true, y_pred))) if len(y_true) else float('nan')
+    except Exception:
+        out['rmse'] = float('nan')
+    try:
+        out['mae'] = float(mean_absolute_error(y_true, y_pred)) if len(y_true) else float('nan')
+    except Exception:
+        out['mae'] = float('nan')
+    return out
+
+
+def _compute_metrics(
+    y_true: np.ndarray,
+    y_proba: np.ndarray,
+    threshold: float = 0.5,
+    task: str = 'classification',
+) -> Dict[str, float]:
+    """Boosting metrics for classification (proba+threshold) or regression (raw preds)."""
+    if _normalize_task(task) == 'regression':
+        return _compute_regression_metrics(y_true, y_proba)
+
     y_true = np.asarray(y_true).astype(int)
     y_proba = np.asarray(y_proba, dtype=float)
     y_pred = (y_proba >= threshold).astype(int)
     single_class = len(np.unique(y_true)) < 2
-    out: Dict[str, float] = {}
+    out = _nan_metric_map()
     try:
         out['roc_auc'] = float('nan') if single_class else float(roc_auc_score(y_true, y_proba))
     except Exception:
@@ -250,6 +306,12 @@ def _compute_metrics(y_true: np.ndarray, y_proba: np.ndarray, threshold: float =
     except Exception:
         out['brier'] = float('nan')
     return out
+
+
+def _make_cv_splitter(task: str, cv_folds: int):
+    if _normalize_task(task) == 'regression':
+        return KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    return StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
 
 
 def _sample_config(space: Dict[str, Any], fixed: Dict[str, Any], rng: np.random.Generator) -> Dict[str, Any]:
@@ -431,23 +493,27 @@ def _evaluate_config(
     nthread: int, threshold: float,
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
+    task: str = 'classification',
 ) -> Dict[str, Any]:
     """Cross-validate one config and also fit on full train -> valid/train metrics.
 
     ``X_test`` here is the modeling validation holdout (not the locked outer test).
     Returns a trial dict with cv (mean+std per metric), train, test metric maps.
     """
-    params, num_round = _build_xgb_params(config, nthread, has_cat, scale_pos_weight=scale_pos_weight)
+    task = _normalize_task(task)
+    params, num_round = _build_xgb_params(
+        config, nthread, has_cat, scale_pos_weight=scale_pos_weight, task=task,
+    )
     t0 = time.time()
 
-    skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    skf = _make_cv_splitter(task, cv_folds)
     fold_metrics: List[Dict[str, float]] = []
     for tr_idx, va_idx in skf.split(X_train, y_train):
         dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
         dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
         booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
         proba = _predict_best(booster, dva)
-        fold_metrics.append(_compute_metrics(y_train.iloc[va_idx].values, proba, threshold))
+        fold_metrics.append(_compute_metrics(y_train.iloc[va_idx].values, proba, threshold, task=task))
 
     cv: Dict[str, Dict[str, float]] = {}
     for m in METRIC_NAMES:
@@ -462,8 +528,8 @@ def _evaluate_config(
     dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=has_cat)
     dtest = xgb.DMatrix(X_test, label=y_test, enable_categorical=has_cat)
     full = _train_xgb_with_early_stop(params, dtrain, dtest, num_round, early_stopping_rounds)
-    train_metrics = _compute_metrics(y_train.values, _predict_best(full, dtrain), threshold)
-    test_metrics = _compute_metrics(y_test.values, _predict_best(full, dtest), threshold)
+    train_metrics = _compute_metrics(y_train.values, _predict_best(full, dtrain), threshold, task=task)
+    test_metrics = _compute_metrics(y_test.values, _predict_best(full, dtest), threshold, task=task)
 
     return {
         'params': config,
@@ -481,18 +547,26 @@ def _evaluate_cv_only(
     nthread: int, threshold: float, metric: str,
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
+    task: str = 'classification',
 ) -> Tuple[float, float, float, float]:
     """Lightweight CV used for validation curves: returns
     (train_mean, train_std, cv_mean, cv_std) for a single ``metric``."""
-    params, num_round = _build_xgb_params(config, nthread, has_cat, scale_pos_weight=scale_pos_weight)
-    skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    task = _normalize_task(task)
+    params, num_round = _build_xgb_params(
+        config, nthread, has_cat, scale_pos_weight=scale_pos_weight, task=task,
+    )
+    skf = _make_cv_splitter(task, cv_folds)
     tr_scores, cv_scores = [], []
     for tr_idx, va_idx in skf.split(X_train, y_train):
         dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
         dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
         booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
-        tr_scores.append(_compute_metrics(y_train.iloc[tr_idx].values, _predict_best(booster, dtr), threshold)[metric])
-        cv_scores.append(_compute_metrics(y_train.iloc[va_idx].values, _predict_best(booster, dva), threshold)[metric])
+        tr_scores.append(
+            _compute_metrics(y_train.iloc[tr_idx].values, _predict_best(booster, dtr), threshold, task=task)[metric]
+        )
+        cv_scores.append(
+            _compute_metrics(y_train.iloc[va_idx].values, _predict_best(booster, dva), threshold, task=task)[metric]
+        )
     tr_scores = np.array([s for s in tr_scores if np.isfinite(s)], dtype=float)
     cv_scores = np.array([s for s in cv_scores if np.isfinite(s)], dtype=float)
     return (
@@ -633,6 +707,7 @@ def run_hyperparam_search_with_progress(
     stop_flag: Optional[Dict[str, Any]] = None,
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
+    task: str = 'classification',
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -646,9 +721,14 @@ def run_hyperparam_search_with_progress(
 
     Returns a JSON-serializable dict (see module docstring for the shape).
     """
+    task = _normalize_task(task)
     space, space_warnings = validate_param_space(param_space)
     fixed = {**DEFAULT_FIXED_PARAMS, **(fixed_params or {})}
     if primary_metric not in METRIC_DIRECTION:
+        primary_metric = 'r2' if task == 'regression' else 'roc_auc'
+    elif task == 'regression' and primary_metric not in REGRESSION_METRICS:
+        primary_metric = 'r2'
+    elif task != 'regression' and primary_metric in REGRESSION_METRICS:
         primary_metric = 'roc_auc'
 
     # Restrict to the SFS-selected features when supplied.
@@ -662,8 +742,10 @@ def run_hyperparam_search_with_progress(
     enabled_params = [p for p, s in space.items() if s.get('enabled')]
     rng = np.random.default_rng(random_state)
 
-    # Auto scale_pos_weight from train labels when not supplied
-    if scale_pos_weight is None:
+    # Auto scale_pos_weight from train labels when not supplied (classification only)
+    if task == 'regression':
+        scale_pos_weight = None
+    elif scale_pos_weight is None:
         try:
             pos = float((np.asarray(y_train) == 1).sum())
             neg = float((np.asarray(y_train) == 0).sum())
@@ -704,7 +786,9 @@ def run_hyperparam_search_with_progress(
 
     results: Dict[str, Any] = {
         'status': 'running',
+        'task': task,
         'primary_metric': primary_metric,
+        'active_metrics': _active_metrics(task),
         'search_method': method,
         'search_method_requested': requested,
         'recommendation': recommendation,
@@ -775,7 +859,7 @@ def run_hyperparam_search_with_progress(
                 pool.submit(
                     _evaluate_config, X_train, y_train, X_test, y_test,
                     cfg, cv_folds, has_cat, nthread, threshold,
-                    scale_pos_weight, early_stopping_rounds,
+                    scale_pos_weight, early_stopping_rounds, task,
                 ): i
                 for i, cfg in enumerate(cfgs)
             }
@@ -846,7 +930,7 @@ def run_hyperparam_search_with_progress(
                     cfg = _suggest_config(trial)
                     result = _evaluate_config(
                         X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
-                        nthread, threshold, scale_pos_weight, early_stopping_rounds,
+                        nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
                     )
                     trials.append(result)
                     done_units[0] += 1
@@ -976,7 +1060,7 @@ def run_hyperparam_search_with_progress(
                     pool.submit(
                         _evaluate_cv_only, X_train, y_train, cfg, cv_folds,
                         has_cat, nthread, threshold, primary_metric,
-                        scale_pos_weight, early_stopping_rounds,
+                        scale_pos_weight, early_stopping_rounds, task,
                     ): idx
                     for idx, cfg in enumerate(point_configs)
                 }
