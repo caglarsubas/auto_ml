@@ -146,7 +146,10 @@ split is frozen.
 The platform uses cross-validation on train+valid (excluding the locked outer
 test) to estimate model performance more robustly than a single split. When the
 preprocessing split strategy is out-of-time (OOT), CV uses time-ordered folds
-instead of shuffled stratified folds.
+instead of shuffled stratified folds. When an entity/ID column is available
+(typically a Model_Usage=No identifier still present on the frame), CV uses
+group-aware folds so the same entity does not appear in both train and
+validation within a fold.
 Probability calibration (isotonic when validation is large enough, otherwise
 Platt) is fit on validation scores and applied in Evaluation and Deployment.
 Automated leakage heuristics flag high-IV, near-perfect target correlation,
