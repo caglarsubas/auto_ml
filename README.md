@@ -130,6 +130,7 @@ Unified encoding + training in a single step. The algorithm selection auto-deter
 - Prefers the preprocessing split contract (train / valid / locked outer test); falls back to stratified random split when needed
 - Binary classification: auto-detect 0/1 targets; fallback to factorization
 - Multi-class support: up to 50 unique target classes
+- Continuous targets (>50 unique values): boosting regressor with R² / RMSE / MAE on the locked outer test
 - NaN handling: numeric means fitted on **train only**, then applied to valid/test; categorical NaNs handled natively
 - Class imbalance: `scale_pos_weight = neg/pos` on the train fold
 - Probability calibration (Platt or isotonic) fitted on validation scores and applied in Evaluation / Deployment

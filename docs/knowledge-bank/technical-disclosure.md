@@ -9,7 +9,10 @@ behind the pipeline.
 
 ## General Modeling Assumptions
 
-DeclarAI currently focuses on tabular supervised binary classification. In
+DeclarAI focuses on tabular supervised learning. Binary classification is the
+primary product path; continuous targets train a boosting regressor through the
+same adapter interface (XGBoost / LightGBM / CatBoost) with the leakage-safe
+split and train-only impute contract. In
 credit-risk style projects, the target is usually an event indicator such as
 default, fraud, churn, or another adverse outcome. The platform assumes the user
 can identify the target variable and can separate legitimate predictors from
@@ -131,7 +134,9 @@ Fallback assumptions:
 ## Modeling Calculations
 
 Modeling trains XGBoost, LightGBM, or CatBoost through a shared booster adapter.
-Binary targets are handled as classification outcomes.
+Binary / low-cardinality targets are handled as classification outcomes.
+High-cardinality continuous targets (more than 50 unique values) train a
+boosting regressor and report R² / RMSE / MAE on the locked outer test.
 Class imbalance is addressed with `scale_pos_weight = neg/pos` on the train fold.
 Numeric imputation means are fit on the train fold only and applied to valid/test.
 Data Purifier learned decisions (variance/correlation/missingness/sparsity drops,
