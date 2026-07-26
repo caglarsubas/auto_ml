@@ -497,8 +497,13 @@
             <div style="flex: 1;">
               <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">Metric</label>
               <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
-                <option value="roc_auc">ROC-AUC</option>
-                <option value="pr_auc">PR-AUC</option>
+                <ng-container *ngIf="!isRegressionTask">
+                  <option value="roc_auc">ROC-AUC</option>
+                  <option value="pr_auc">PR-AUC</option>
+                </ng-container>
+                <ng-container *ngIf="isRegressionTask">
+                  <option value="r2">R²</option>
+                </ng-container>
               </select>
             </div>
 
@@ -597,7 +602,7 @@
             <div *ngFor="let metric of Object.keys(sfsCurrentMetrics)" 
                  style="background: #fff; border: 1px solid #1976d2; border-radius: 4px; padding: 8px 12px;">
               <div style="font-size: 11px; color: #666; margin-bottom: 2px;">
-                {{ metric === 'roc_auc' ? 'ROC-AUC' : 'PR-AUC' }}
+                {{ sfsMetricLabel(metric) }}
               </div>
               <div style="font-size: 16px; font-weight: 600; color: #1976d2;">
                 {{ sfsCurrentMetrics[metric].toFixed(4) }}
@@ -669,12 +674,12 @@
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Description</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Test') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Test') }}</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
@@ -695,9 +700,9 @@
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'train') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'cv') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'test') | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
                     <button mat-button color="primary" (click)="openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
@@ -732,12 +737,12 @@
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature Dropped</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Description</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Remaining</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Test') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Test') }}</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
@@ -770,9 +775,9 @@
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #1976d2;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'train') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'cv') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'test') | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
                     <button mat-button color="primary" (click)="$event.stopPropagation(); openSfsDetailModal(step)" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
@@ -823,8 +828,13 @@
                   <div style="flex: 1;">
                     <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #555;">Metric</label>
                     <select [(ngModel)]="metricCriteria.metric" (ngModelChange)="onConfigChanged()" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
-                      <option value="roc_auc">ROC-AUC</option>
-                      <option value="pr_auc">PR-AUC</option>
+                      <ng-container *ngIf="!isRegressionTask">
+                        <option value="roc_auc">ROC-AUC</option>
+                        <option value="pr_auc">PR-AUC</option>
+                      </ng-container>
+                      <ng-container *ngIf="isRegressionTask">
+                        <option value="r2">R²</option>
+                      </ng-container>
                     </select>
                   </div>
                   <div style="flex: 1;">
@@ -899,7 +909,7 @@
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
                   <div *ngFor="let metric of Object.keys(sfsCurrentMetrics)"
                        style="background: #fff; border: 1px solid #1976d2; border-radius: 4px; padding: 6px 10px;">
-                    <div style="font-size: 10px; color: #666;">{{ metric === 'roc_auc' ? 'ROC-AUC' : 'PR-AUC' }}</div>
+                    <div style="font-size: 10px; color: #666;">{{ sfsMetricLabel(metric) }}</div>
                     <div style="font-size: 15px; font-weight: 600; color: #1976d2;">{{ sfsCurrentMetrics[metric].toFixed(4) }}</div>
                   </div>
                 </div>
@@ -936,12 +946,12 @@
                 <tr style="background: #e8f5e9; text-align: left;">
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Step</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Feature</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test ROC-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Train PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">CV PR-AUC</th>
-                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">Test PR-AUC</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsPrimaryHeader('Test') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Train') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('CV') }}</th>
+                  <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:right;">{{ sfsSecondaryHeader('Test') }}</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd;">Model PSI</th>
                   <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align:center;">Details</th>
                 </tr>
@@ -957,9 +967,9 @@
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right; font-weight: 500; color: #2e7d32;">{{ step.cv_roc_auc | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_roc_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.train_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.cv_pr_auc | number:'1.4-4' }}</td>
-                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ step.test_pr_auc | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'train') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'cv') | number:'1.4-4' }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:right;">{{ sfsSecondaryValue(step, 'test') | number:'1.4-4' }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; font-size: 11px;">{{ getStabilityDisplay(step) }}</td>
                   <td style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align:center;">
                     <button mat-button color="primary" (click)="openSfsDetailModal(step, 'forward_from_backward')" style="font-size: 11px; padding: 4px 8px; min-width: auto;">
@@ -1037,16 +1047,16 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td style="padding: 8px; border: 1px solid #ddd;">ROC-AUC</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">{{ isRegressionTask ? 'R²' : 'ROC-AUC' }}</td>
                     <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.train_roc_auc | number:'1.4-4' }}</td>
                     <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">{{ selectedSfsStep.cv_roc_auc | number:'1.4-4' }}</td>
                     <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.test_roc_auc | number:'1.4-4' }}</td>
                   </tr>
                   <tr>
-                    <td style="padding: 8px; border: 1px solid #ddd;">PR-AUC</td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.train_pr_auc | number:'1.4-4' }}</td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">{{ selectedSfsStep.cv_pr_auc | number:'1.4-4' }}</td>
-                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ selectedSfsStep.test_pr_auc | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">{{ isRegressionTask ? 'RMSE' : 'PR-AUC' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ sfsSecondaryValue(selectedSfsStep, 'train') | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right; font-weight: 500;">{{ sfsSecondaryValue(selectedSfsStep, 'cv') | number:'1.4-4' }}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd; text-align:right;">{{ sfsSecondaryValue(selectedSfsStep, 'test') | number:'1.4-4' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1466,10 +1476,10 @@
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Action</th>
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Feature</th>
               <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Description</th>
-              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV ROC-AUC</th>
-              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">CV PR-AUC</th>
-              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">ROC-AUC Change %</th>
-              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">PR-AUC Change %</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">{{ sfsPrimaryHeader('CV') }}</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">{{ sfsSecondaryHeader('CV') }}</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">{{ isRegressionTask ? 'R² Change %' : 'ROC-AUC Change %' }}</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">{{ isRegressionTask ? 'RMSE Change %' : 'PR-AUC Change %' }}</th>
             </tr>
           </thead>
           <tbody>
@@ -1497,18 +1507,18 @@
                 {{ getFeatureDescription(step.feature_name) || '—' }}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #1976d2;">
-                {{ step.cv_roc_auc.toFixed(4) }}
+                {{ sfsPrimaryValue(step, 'cv') | number:'1.4-4' }}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #1976d2;">
-                {{ step.cv_pr_auc.toFixed(4) }}
+                {{ sfsSecondaryValue(step, 'cv') | number:'1.4-4' }}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
-                <span *ngIf="step.pct_changes && step.pct_changes.roc_auc !== undefined"
-                      [style.color]="step.pct_changes.roc_auc >= 0 ? '#4caf50' : '#f44336'"
+                <span *ngIf="step.pct_changes && (step.pct_changes.roc_auc !== undefined || step.pct_changes.r2 !== undefined)"
+                      [style.color]="(step.pct_changes.r2 ?? step.pct_changes.roc_auc) >= 0 ? '#4caf50' : '#f44336'"
                       style="font-weight: 600;">
-                  {{ step.pct_changes.roc_auc >= 0 ? '+' : '' }}{{ step.pct_changes.roc_auc.toFixed(2) }}%
+                  {{ (step.pct_changes.r2 ?? step.pct_changes.roc_auc) >= 0 ? '+' : '' }}{{ (step.pct_changes.r2 ?? step.pct_changes.roc_auc).toFixed(2) }}%
                 </span>
-                <span *ngIf="!step.pct_changes || step.pct_changes.roc_auc === undefined" style="color: #999;">
+                <span *ngIf="!step.pct_changes || (step.pct_changes.roc_auc === undefined && step.pct_changes.r2 === undefined)" style="color: #999;">
                   —
                 </span>
               </td>

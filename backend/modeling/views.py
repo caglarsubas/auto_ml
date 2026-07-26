@@ -1166,6 +1166,9 @@ class ModelingStartView(APIView):
                                     'X_train': X_train, 'y_train': y_train,
                                     'X_valid': X_valid, 'y_valid': y_valid,
                                     'X_test': X_test, 'y_test': y_test,
+                                    'X_train_raw': X_train_raw,
+                                    'X_valid_raw': X_valid_raw,
+                                    'X_test_raw': X_test_raw,
                                     'feature_names': list(X_train.columns),
                                     'impute_means': impute_means,
                                     'split_meta': split_meta,
@@ -1729,8 +1732,14 @@ class SFSStartView(APIView):
             y_train = train_data['y_train']
             X_valid = train_data['X_valid']
             y_valid = train_data['y_valid']
-            X_train_raw = train_data['X_train_raw']
-            X_valid_raw = train_data['X_valid_raw']
+            # Older regression pickles may omit raw frames — fall back to imputed matrices.
+            X_train_raw = train_data.get('X_train_raw', X_train)
+            X_valid_raw = train_data.get('X_valid_raw', X_valid)
+            sfs_task = (train_data.get('task') or 'classification')
+            if str(sfs_task).strip().lower() in ('regression', 'regressor', 'reg'):
+                sfs_task = 'regression'
+            else:
+                sfs_task = 'classification'
             
             # Remove features marked as "drop" by user from all feature matrices
             if excluded_features and isinstance(excluded_features, list):
@@ -1739,8 +1748,10 @@ class SFSStartView(APIView):
                     print(f"[SFS] Excluding {len(cols_to_drop)} user-dropped features from SFS: {cols_to_drop}")
                     X_train = X_train.drop(columns=cols_to_drop)
                     X_valid = X_valid.drop(columns=cols_to_drop)
-                    X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
-                    X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
+                    if X_train_raw is not None and hasattr(X_train_raw, 'columns'):
+                        X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
+                    if X_valid_raw is not None and hasattr(X_valid_raw, 'columns'):
+                        X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
             
             # Initialize progress tracking
             import time as _time
@@ -1812,6 +1823,7 @@ class SFSStartView(APIView):
                         'action': item['action'],
                         'feature_name': item['feature_name'],
                         'selected_features': item['selected_features'],
+                        'task': item.get('task', sfs_task),
                         'train_roc_auc': float(item['train_roc_auc']),
                         'train_pr_auc': float(item['train_pr_auc']),
                         'cv_roc_auc': float(item['cv_roc_auc']),
@@ -1825,6 +1837,9 @@ class SFSStartView(APIView):
                         'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
                         'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
                     }
+                    for reg_key in ('train_r2', 'cv_r2', 'test_r2', 'train_rmse', 'cv_rmse', 'test_rmse'):
+                        if item.get(reg_key) is not None:
+                            sanitized_item[reg_key] = float(item[reg_key])
                     sanitized.append(sanitized_item)
                 return sanitized
 
@@ -1856,7 +1871,8 @@ class SFSStartView(APIView):
                         'backward_remaining_features': bwd_remaining if bwd_remaining else existing.get('backward_remaining_features', []),
                         'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
                         'status': 'running',
-                        'error': None
+                        'error': None,
+                        'task': sfs_task,
                     }
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(intermediate, f, indent=2)
@@ -1891,7 +1907,8 @@ class SFSStartView(APIView):
                         n_jobs=n_jobs,
                         top_k=top_k,
                         stop_flag=SFS_PROGRESS[file_id],
-                        resume_state=resume_state
+                        resume_state=resume_state,
+                        task=sfs_task,
                     )
                     
                     # Final save — merge with existing results to preserve previous runs
@@ -1917,7 +1934,8 @@ class SFSStartView(APIView):
                         'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
                         'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
                         'status': results.get('status', 'completed'),
-                        'error': results.get('error', None)
+                        'error': results.get('error', None),
+                        'task': sfs_task,
                     }
 
                     # Save the final fitted model for each completed SFS direction
@@ -1928,11 +1946,18 @@ class SFSStartView(APIView):
                         hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
                         for c in X_train.columns
                     )
-                    _sfs_model_params = {
-                        'objective': 'binary:logistic', 'eval_metric': 'auc',
-                        'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
-                        'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
-                    }
+                    if sfs_task == 'regression':
+                        _sfs_model_params = {
+                            'objective': 'reg:squarederror', 'eval_metric': 'rmse',
+                            'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                            'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                        }
+                    else:
+                        _sfs_model_params = {
+                            'objective': 'binary:logistic', 'eval_metric': 'auc',
+                            'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
+                            'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                        }
                     for direction_key in ('forward', 'backward', 'forward_from_backward'):
                         steps = sfs_data.get(direction_key, [])
                         if steps:

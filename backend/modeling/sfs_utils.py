@@ -11,8 +11,10 @@ import os
 import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.metrics import (
+    roc_auc_score, average_precision_score, r2_score, mean_squared_error,
+)
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 import xgboost as xgb
 import shap
@@ -20,6 +22,82 @@ import shap
 # Suppress NumPy warnings for invalid values during PSI/CSI/SHAP calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
 from typing import Dict, List, Tuple, Any, Optional
+
+
+def _normalize_sfs_task(task: Optional[str]) -> str:
+    t = (task or 'classification').strip().lower()
+    return 'regression' if t in ('regression', 'regressor', 'reg') else 'classification'
+
+
+def _sfs_xgb_params(task: str, nthread: int) -> Dict[str, Any]:
+    base = {
+        'max_depth': 6,
+        'eta': 0.1,
+        'subsample': 0.8,
+        'colsample_bytree': 0.8,
+        'seed': 42,
+        'nthread': nthread,
+    }
+    if task == 'regression':
+        base.update({'objective': 'reg:squarederror', 'eval_metric': 'rmse'})
+    else:
+        base.update({'objective': 'binary:logistic', 'eval_metric': 'auc'})
+    return base
+
+
+def _sfs_cv_splitter(task: str, cv_folds: int):
+    if task == 'regression':
+        return KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    return StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+
+
+def _sfs_score_pair(y_true, y_pred, task: str) -> Tuple[float, float]:
+    """Return (primary, secondary) scores — both higher-is-better for ranking.
+
+    Classification: ROC-AUC, PR-AUC.
+    Regression: R², −RMSE (so max() ranking still works).
+    """
+    if task == 'regression':
+        y_true = np.asarray(y_true, dtype=float)
+        y_pred = np.asarray(y_pred, dtype=float)
+        primary = float(r2_score(y_true, y_pred)) if len(y_true) >= 2 else float('-inf')
+        rmse = float(np.sqrt(mean_squared_error(y_true, y_pred))) if len(y_true) else float('inf')
+        return primary, -rmse
+    return (
+        float(roc_auc_score(y_true, y_pred)),
+        float(average_precision_score(y_true, y_pred)),
+    )
+
+
+def _sfs_metric_fields(y_true, y_pred, task: str, prefix: str) -> Dict[str, float]:
+    """Build train_/test_/cv_ metric fields with classification aliases."""
+    primary, secondary = _sfs_score_pair(y_true, y_pred, task)
+    out = {
+        f'{prefix}roc_auc': primary,
+        f'{prefix}pr_auc': secondary,
+    }
+    if task == 'regression':
+        out[f'{prefix}r2'] = primary
+        out[f'{prefix}rmse'] = -secondary
+    return out
+
+
+def _normalize_sfs_metric_criteria(metric_criteria: List[Dict[str, Any]], task: str) -> List[Dict[str, Any]]:
+    """Map classification metric names to regression equivalents when needed."""
+    if task != 'regression':
+        return metric_criteria or [{'metric': 'roc_auc', 'pct_change': 0.0}]
+    if not metric_criteria:
+        return [{'metric': 'r2', 'pct_change': 0.0}]
+    out = []
+    for mc in metric_criteria:
+        name = (mc.get('metric') or 'r2').strip().lower()
+        if name in ('roc_auc', 'pr_auc', 'auc'):
+            name = 'r2'
+        if name == 'rmse':
+            # Stopping logic assumes higher-is-better; steer users to r2.
+            name = 'r2'
+        out.append({**mc, 'metric': name})
+    return out or [{'metric': 'r2', 'pct_change': 0.0}]
 
 
 def calculate_psi(expected: np.ndarray, actual: np.ndarray, bins: int = 10) -> float:
@@ -542,7 +620,8 @@ def run_sfs_with_progress(
     n_jobs: int = 1,  # Number of parallel workers for candidate evaluation
     top_k: int = 3,  # Number of top candidates to CV-evaluate per step
     stop_flag: Optional[Dict] = None,  # Dict with 'stop_requested' key checked each step
-    resume_state: Optional[Dict] = None  # State to resume from (forward/backward completed steps)
+    resume_state: Optional[Dict] = None,  # State to resume from (forward/backward completed steps)
+    task: str = 'classification',
 ) -> Dict[str, Any]:
     """
     Run SFS with user-specified methods, stopping criteria, and progress tracking.
@@ -553,16 +632,18 @@ def run_sfs_with_progress(
         X_train_raw, X_test_raw: Raw data for stability calculations
         methods: List of methods to run ('forward', 'backward', or both)
         stopping_criteria: Dict with keys:
-            - metrics: List of {metric: 'roc_auc'|'pr_auc', pct_change: float}
+            - metrics: List of {metric: 'roc_auc'|'pr_auc'|'r2', pct_change: float}
             - min_features: Minimum features to keep (for backward)
             - max_features: Maximum features to add (for forward)
         status_callback: Function to call with progress updates
         cv_folds: Number of CV folds
+        task: 'classification' or 'regression'
     
     Returns:
         Dict with forward/backward results and final metrics
     """
-    results = {'forward': [], 'backward': [], 'status': 'running'}
+    task = _normalize_sfs_task(task)
+    results = {'forward': [], 'backward': [], 'status': 'running', 'task': task}
     completed_steps = []  # Track completed steps for real-time viewing
 
     def is_stop_requested():
@@ -577,11 +658,13 @@ def run_sfs_with_progress(
         if valid_features:
             X_train = X_train[valid_features]
             X_test = X_test[valid_features]
-            X_train_raw = X_train_raw[valid_features]
-            X_test_raw = X_test_raw[valid_features]
+            if X_train_raw is not None and hasattr(X_train_raw, 'columns'):
+                X_train_raw = X_train_raw[[c for c in valid_features if c in X_train_raw.columns]]
+            if X_test_raw is not None and hasattr(X_test_raw, 'columns'):
+                X_test_raw = X_test_raw[[c for c in valid_features if c in X_test_raw.columns]]
             print(f"[SFS] Starting with {len(valid_features)} initial features: {valid_features}")
     
-    print(f"[SFS] Parallelism: n_jobs={n_jobs}, available CPUs={os.cpu_count()}")
+    print(f"[SFS] Parallelism: n_jobs={n_jobs}, available CPUs={os.cpu_count()}, task={task}")
     
     def update_status(message: str, progress: float, current_metrics: Dict[str, float] = None, step_result: Dict = None):
         """Update status via callback"""
@@ -600,9 +683,11 @@ def run_sfs_with_progress(
         method_progress_weight = 1.0 / total_methods if total_methods > 0 else 1.0
         
         # Extract stopping criteria - support multiple metrics
-        metric_criteria = stopping_criteria.get('metrics', [{'metric': 'roc_auc', 'pct_change': 0.0}])
+        default_metric = 'r2' if task == 'regression' else 'roc_auc'
+        metric_criteria = stopping_criteria.get('metrics', [{'metric': default_metric, 'pct_change': 0.0}])
         if not metric_criteria:  # Fallback for backward compatibility
-            metric_criteria = [{'metric': 'roc_auc', 'pct_change': 0.0}]
+            metric_criteria = [{'metric': default_metric, 'pct_change': 0.0}]
+        metric_criteria = _normalize_sfs_metric_criteria(metric_criteria, task)
         
         min_features = stopping_criteria.get('min_features', 3)
         max_features = stopping_criteria.get('max_features', min(10, X_train.shape[1]))
@@ -646,25 +731,31 @@ def run_sfs_with_progress(
                 # Run one step of forward selection
                 step_result = _run_forward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k
+                    selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task
                 )
                 
                 if step_result:
-                    # Get current metric values
+                    # Get current metric values (r2 aliases onto cv_roc_auc for regressors)
                     current_metrics = {}
                     for mc in metric_criteria:
                         metric_name = mc['metric']
-                        current_metrics[metric_name] = step_result.get(f'cv_{metric_name}', 0.0)
+                        key = f'cv_{metric_name}'
+                        if key in step_result:
+                            current_metrics[metric_name] = step_result[key]
+                        elif metric_name == 'r2':
+                            current_metrics[metric_name] = step_result.get('cv_roc_auc', 0.0)
+                        else:
+                            current_metrics[metric_name] = 0.0
                     
-                    # Calculate percentage changes for display
+                    # Calculate percentage changes for display (abs denom supports negative R²)
                     pct_changes = {}
                     if step > 1:
                         for mc in metric_criteria:
                             metric_name = mc['metric']
                             current_val = current_metrics[metric_name]
                             prev_val = previous_metrics[metric_name]
-                            if prev_val > 0:
-                                pct_changes[metric_name] = ((current_val - prev_val) / prev_val) * 100
+                            if abs(prev_val) > 1e-12:
+                                pct_changes[metric_name] = ((current_val - prev_val) / abs(prev_val)) * 100
                             else:
                                 pct_changes[metric_name] = 0.0
                     
@@ -679,8 +770,8 @@ def run_sfs_with_progress(
                             if pct_threshold > 0:
                                 current_val = current_metrics[metric_name]
                                 prev_val = previous_metrics[metric_name]
-                                if prev_val > 0:
-                                    signed_change = ((current_val - prev_val) / prev_val) * 100
+                                if abs(prev_val) > 1e-12:
+                                    signed_change = ((current_val - prev_val) / abs(prev_val)) * 100
                                     if not (signed_change > pct_threshold):
                                         stop_reasons.append(f'{metric_name} change ({signed_change:+.2f}%) not > {pct_threshold}%')
                         if stop_reasons:
@@ -707,6 +798,8 @@ def run_sfs_with_progress(
                         'cv_pr_auc': step_result.get('cv_pr_auc', 0.0),
                         'test_roc_auc': step_result.get('test_roc_auc', 0.0),
                         'test_pr_auc': step_result.get('test_pr_auc', 0.0),
+                        'cv_r2': step_result.get('cv_r2'),
+                        'cv_rmse': step_result.get('cv_rmse'),
                         'pct_changes': pct_changes
                     }
                     completed_steps.append(completed_step_info)
@@ -770,25 +863,31 @@ def run_sfs_with_progress(
                 # Run one step of backward elimination
                 step_result = _run_backward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k
+                    current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task
                 )
                 
                 if step_result:
-                    # Get current metric values
+                    # Get current metric values (r2 aliases onto cv_roc_auc for regressors)
                     current_metrics = {}
                     for mc in metric_criteria:
                         metric_name = mc['metric']
-                        current_metrics[metric_name] = step_result.get(f'cv_{metric_name}', 0.0)
+                        key = f'cv_{metric_name}'
+                        if key in step_result:
+                            current_metrics[metric_name] = step_result[key]
+                        elif metric_name == 'r2':
+                            current_metrics[metric_name] = step_result.get('cv_roc_auc', 0.0)
+                        else:
+                            current_metrics[metric_name] = 0.0
                     
-                    # Calculate percentage changes for display
+                    # Calculate percentage changes for display (abs denom supports negative R²)
                     pct_changes = {}
                     if previous_metrics is not None:
                         for mc in metric_criteria:
                             metric_name = mc['metric']
                             current_val = current_metrics[metric_name]
                             prev_val = previous_metrics[metric_name]
-                            if prev_val > 0:
-                                pct_changes[metric_name] = ((current_val - prev_val) / prev_val) * 100
+                            if abs(prev_val) > 1e-12:
+                                pct_changes[metric_name] = ((current_val - prev_val) / abs(prev_val)) * 100
                             else:
                                 pct_changes[metric_name] = 0.0
                     
@@ -803,8 +902,8 @@ def run_sfs_with_progress(
                             if pct_threshold > 0:
                                 current_val = current_metrics[metric_name]
                                 prev_val = previous_metrics[metric_name]
-                                if prev_val > 0:
-                                    signed_change = ((current_val - prev_val) / prev_val) * 100
+                                if abs(prev_val) > 1e-12:
+                                    signed_change = ((current_val - prev_val) / abs(prev_val)) * 100
                                     if abs(signed_change) > pct_threshold:
                                         stop_reasons.append(f'{metric_name} |change| ({abs(signed_change):.2f}%) > {pct_threshold}%')
                         if stop_reasons:
@@ -831,6 +930,8 @@ def run_sfs_with_progress(
                         'cv_pr_auc': step_result.get('cv_pr_auc', 0.0),
                         'test_roc_auc': step_result.get('test_roc_auc', 0.0),
                         'test_pr_auc': step_result.get('test_pr_auc', 0.0),
+                        'cv_r2': step_result.get('cv_r2'),
+                        'cv_rmse': step_result.get('cv_rmse'),
                         'pct_changes': pct_changes
                     }
                     completed_steps.append(completed_step_info)
@@ -871,15 +972,16 @@ def run_sfs_with_progress(
 
 def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw, 
                       current_features: List[str], step: int, cv_folds: int,
-                      n_jobs: int = 1, top_k: int = 3) -> Optional[Dict]:
+                      n_jobs: int = 1, top_k: int = 3, task: str = 'classification') -> Optional[Dict]:
     """Run a single forward selection step with parallel candidate evaluation.
     
     Optimizations applied:
     - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
-    - CV only for the winning candidate (train+test AUC used for ranking)
+    - CV only for the winning candidate (train+test score used for ranking)
     - Early stopping in XGBoost training (early_stopping_rounds=10)
     """
     try:
+        task = _normalize_sfs_task(task)
         _has_cat = any(
             hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
             for c in X_train.columns
@@ -890,16 +992,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             return None
         
         # When parallelizing, restrict XGBoost to 1 thread per worker to avoid oversubscription
-        ranking_params = {
-            'objective': 'binary:logistic',
-            'eval_metric': 'auc',
-            'max_depth': 6,
-            'eta': 0.1,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'seed': 42,
-            'nthread': 1 if n_jobs > 1 else 0
-        }
+        ranking_params = _sfs_xgb_params(task, nthread=1 if n_jobs > 1 else 0)
         
         def evaluate_candidate(feature):
             """Evaluate adding one feature using train+test only (no CV for ranking)."""
@@ -915,13 +1008,9 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             
             y_tr = booster.predict(dtrain)
             y_te = booster.predict(dtest)
-            
-            return feature, {
-                'train_roc_auc': float(roc_auc_score(y_train, y_tr)),
-                'train_pr_auc': float(average_precision_score(y_train, y_tr)),
-                'test_roc_auc': float(roc_auc_score(y_test, y_te)),
-                'test_pr_auc': float(average_precision_score(y_test, y_te)),
-            }
+            fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
+            fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
+            return feature, fields
         
         # --- Phase 1: Rank candidates in parallel (train+test only, no CV) ---
         effective_jobs = min(n_jobs, len(remaining_features))
@@ -938,17 +1027,17 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                 _, metrics = evaluate_candidate(feat)
                 candidate_results[feat] = metrics
         
-        # Pick top-K candidates by test ROC-AUC for full CV evaluation
+        # Pick top-K candidates by primary test score for full CV evaluation
         TOP_K = min(top_k, len(candidate_results))
         sorted_candidates = sorted(candidate_results, key=lambda f: candidate_results[f]['test_roc_auc'], reverse=True)
         top_candidates = sorted_candidates[:TOP_K]
         
-        # --- Phase 2: Run CV for top-K candidates, pick best by CV ROC-AUC ---
+        # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
         winner_params = {**ranking_params, 'nthread': 0}  # Use all cores for final model
-        skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+        skf = _sfs_cv_splitter(task, cv_folds)
         
         best_feature = None
-        best_cv_roc = -1.0
+        best_cv_roc = float('-inf')
         best_cv_result = {}
         
         for candidate_feat in top_candidates:
@@ -971,12 +1060,13 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                     verbose_eval=False
                 )
                 y_cv_pred = cv_booster.predict(dcv_val)
-                cv_roc_scores.append(roc_auc_score(y_cv_val, y_cv_pred))
-                cv_pr_scores.append(average_precision_score(y_cv_val, y_cv_pred))
+                p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
+                cv_roc_scores.append(p)
+                cv_pr_scores.append(s)
             
             cand_cv_roc = float(np.mean(cv_roc_scores))
             cand_cv_pr = float(np.mean(cv_pr_scores))
-            print(f"[SFS-Forward-Step] Top-K CV: {candidate_feat} cv_roc={cand_cv_roc:.4f}")
+            print(f"[SFS-Forward-Step] Top-K CV: {candidate_feat} cv_primary={cand_cv_roc:.4f}")
             
             if cand_cv_roc > best_cv_roc:
                 best_cv_roc = cand_cv_roc
@@ -1002,10 +1092,8 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         
         y_tr_pred = winner_booster.predict(dtrain_w)
         y_te_pred = winner_booster.predict(dtest_w)
-        train_roc_auc = float(roc_auc_score(y_train, y_tr_pred))
-        train_pr_auc = float(average_precision_score(y_train, y_tr_pred))
-        test_roc_auc = float(roc_auc_score(y_test, y_te_pred))
-        test_pr_auc = float(average_precision_score(y_test, y_te_pred))
+        train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
+        test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
         
         # --- Phase 3: Model PSI & SHAP for the winner ---
         try:
@@ -1030,18 +1118,19 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         except Exception:
             feature_importance = {}
         
-        return {
+        result = {
             'step': step,
             'direction': 'forward',
             'action': 'added',
             'feature_name': best_feature,
             'selected_features': new_features,
-            'train_roc_auc': train_roc_auc,
+            'task': task,
+            'train_roc_auc': train_fields['train_roc_auc'],
             'cv_roc_auc': cv_roc_auc,
-            'test_roc_auc': test_roc_auc,
-            'train_pr_auc': train_pr_auc,
+            'test_roc_auc': test_fields['test_roc_auc'],
+            'train_pr_auc': train_fields['train_pr_auc'],
             'cv_pr_auc': cv_pr_auc,
-            'test_pr_auc': test_pr_auc,
+            'test_pr_auc': test_fields['test_pr_auc'],
             'stability_type': stability_type,
             'stability_value': stability_value,
             'shap_importance': shap_importance,
@@ -1049,6 +1138,16 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             'feature_importance': feature_importance,
             'shap_importance_by_feature': shap_importance_by_feature
         }
+        if task == 'regression':
+            result.update({
+                'train_r2': train_fields.get('train_r2'),
+                'test_r2': test_fields.get('test_r2'),
+                'cv_r2': cv_roc_auc,
+                'train_rmse': train_fields.get('train_rmse'),
+                'test_rmse': test_fields.get('test_rmse'),
+                'cv_rmse': -cv_pr_auc if cv_pr_auc is not None else None,
+            })
+        return result
     except Exception as e:
         print(f"[SFS-Forward-Step] Error: {e}")
         import traceback
@@ -1058,15 +1157,16 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
 
 def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                        current_features: List[str], step: int, cv_folds: int,
-                       n_jobs: int = 1, top_k: int = 3) -> Optional[Dict]:
+                       n_jobs: int = 1, top_k: int = 3, task: str = 'classification') -> Optional[Dict]:
     """Run a single backward elimination step with parallel candidate evaluation.
     
     Optimizations applied:
     - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
-    - CV only for the winning candidate (train+test AUC used for ranking)
+    - CV only for the winning candidate (train+test score used for ranking)
     - Early stopping in XGBoost training (early_stopping_rounds=10)
     """
     try:
+        task = _normalize_sfs_task(task)
         _has_cat = any(
             hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
             for c in X_train.columns
@@ -1075,16 +1175,7 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         if len(current_features) <= 1:
             return None
         
-        ranking_params = {
-            'objective': 'binary:logistic',
-            'eval_metric': 'auc',
-            'max_depth': 6,
-            'eta': 0.1,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'seed': 42,
-            'nthread': 1 if n_jobs > 1 else 0
-        }
+        ranking_params = _sfs_xgb_params(task, nthread=1 if n_jobs > 1 else 0)
         
         def evaluate_candidate(feature):
             """Evaluate dropping one feature using train+test only (no CV for ranking)."""
@@ -1100,13 +1191,9 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             
             y_tr = booster.predict(dtrain)
             y_te = booster.predict(dtest)
-            
-            return feature, {
-                'train_roc_auc': float(roc_auc_score(y_train, y_tr)),
-                'train_pr_auc': float(average_precision_score(y_train, y_tr)),
-                'test_roc_auc': float(roc_auc_score(y_test, y_te)),
-                'test_pr_auc': float(average_precision_score(y_test, y_te)),
-            }
+            fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
+            fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
+            return feature, fields
         
         # --- Phase 1: Rank candidates in parallel (train+test only, no CV) ---
         effective_jobs = min(n_jobs, len(current_features))
@@ -1123,17 +1210,17 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
                 _, metrics = evaluate_candidate(feat)
                 candidate_results[feat] = metrics
         
-        # Pick top-K candidates whose removal maintains best test ROC-AUC
+        # Pick top-K candidates whose removal maintains best primary test score
         TOP_K = min(top_k, len(candidate_results))
         sorted_candidates = sorted(candidate_results, key=lambda f: candidate_results[f]['test_roc_auc'], reverse=True)
         top_candidates = sorted_candidates[:TOP_K]
         
-        # --- Phase 2: Run CV for top-K candidates, pick best by CV ROC-AUC ---
+        # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
         winner_params = {**ranking_params, 'nthread': 0}
-        skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+        skf = _sfs_cv_splitter(task, cv_folds)
         
         best_feature_to_drop = None
-        best_cv_roc = -1.0
+        best_cv_roc = float('-inf')
         best_cv_result = {}
         
         for candidate_feat in top_candidates:
@@ -1156,12 +1243,13 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
                     verbose_eval=False
                 )
                 y_cv_pred = cv_booster.predict(dcv_val)
-                cv_roc_scores.append(roc_auc_score(y_cv_val, y_cv_pred))
-                cv_pr_scores.append(average_precision_score(y_cv_val, y_cv_pred))
+                p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
+                cv_roc_scores.append(p)
+                cv_pr_scores.append(s)
             
             cand_cv_roc = float(np.mean(cv_roc_scores))
             cand_cv_pr = float(np.mean(cv_pr_scores))
-            print(f"[SFS-Backward-Step] Top-K CV: drop {candidate_feat} cv_roc={cand_cv_roc:.4f}")
+            print(f"[SFS-Backward-Step] Top-K CV: drop {candidate_feat} cv_primary={cand_cv_roc:.4f}")
             
             if cand_cv_roc > best_cv_roc:
                 best_cv_roc = cand_cv_roc
@@ -1187,10 +1275,8 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         
         y_tr_pred = winner_booster.predict(dtrain_w)
         y_te_pred = winner_booster.predict(dtest_w)
-        train_roc_auc = float(roc_auc_score(y_train, y_tr_pred))
-        train_pr_auc = float(average_precision_score(y_train, y_tr_pred))
-        test_roc_auc = float(roc_auc_score(y_test, y_te_pred))
-        test_pr_auc = float(average_precision_score(y_test, y_te_pred))
+        train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
+        test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
         
         # --- Phase 3: Model PSI & SHAP ---
         try:
@@ -1215,18 +1301,19 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         except Exception:
             feature_importance = {}
         
-        return {
+        result = {
             'step': step,
             'direction': 'backward',
             'action': 'dropped',
             'feature_name': best_feature_to_drop,
             'selected_features': remaining_features,
-            'train_roc_auc': train_roc_auc,
+            'task': task,
+            'train_roc_auc': train_fields['train_roc_auc'],
             'cv_roc_auc': cv_roc_auc,
-            'test_roc_auc': test_roc_auc,
-            'train_pr_auc': train_pr_auc,
+            'test_roc_auc': test_fields['test_roc_auc'],
+            'train_pr_auc': train_fields['train_pr_auc'],
             'cv_pr_auc': cv_pr_auc,
-            'test_pr_auc': test_pr_auc,
+            'test_pr_auc': test_fields['test_pr_auc'],
             'stability_type': stability_type,
             'stability_value': stability_value,
             'shap_importance': shap_importance,
@@ -1234,6 +1321,16 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             'feature_importance': feature_importance,
             'shap_importance_by_feature': shap_importance_by_feature
         }
+        if task == 'regression':
+            result.update({
+                'train_r2': train_fields.get('train_r2'),
+                'test_r2': test_fields.get('test_r2'),
+                'cv_r2': cv_roc_auc,
+                'train_rmse': train_fields.get('train_rmse'),
+                'test_rmse': test_fields.get('test_rmse'),
+                'cv_rmse': -cv_pr_auc if cv_pr_auc is not None else None,
+            })
+        return result
     except Exception as e:
         print(f"[SFS-Backward-Step] Error: {e}")
         import traceback
