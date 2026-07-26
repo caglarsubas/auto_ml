@@ -202,6 +202,9 @@ For a high-quality modeling run:
 6. Review data quality and split validation.
 7. Resolve encoding and ordinal ranking decisions.
 8. Train the model and inspect CV, SHAP, gain, and VIF.
-9. Use SFS to evaluate smaller feature sets.
+9. Use SFS to evaluate smaller feature sets (ROC-AUC / PR-AUC for classifiers; R² for regressors).
 10. Tune hyperparameters on the selected feature set.
-11. Document decisions with notes and export artifacts for review.
+11. Run Evaluation on the locked outer test and review the model card (deploy readiness).
+12. Resolve any blocking items (missing lineage, high leakage) before Deployment.
+13. Create the score bundle only when the model-card gate is ready; batch-score CSVs against the frozen schema.
+14. Document decisions with notes and export artifacts for review.
