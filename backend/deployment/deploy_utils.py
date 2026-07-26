@@ -64,6 +64,32 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     bundled_model = os.path.join(out, model_basename)
     shutil.copy2(model_abs, bundled_model)
 
+    calibrator_rel = model.get('calibrator_path')
+    calibrator_file = None
+    if calibrator_rel:
+        cal_abs = (
+            os.path.join(settings.MEDIA_ROOT, calibrator_rel)
+            if not os.path.isabs(calibrator_rel) else calibrator_rel
+        )
+        if os.path.exists(cal_abs):
+            calibrator_file = os.path.basename(cal_abs)
+            shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
+        else:
+            # Fall back to train_data pointer
+            if os.path.exists(train_pkl):
+                import pickle
+                with open(train_pkl, 'rb') as f:
+                    td = pickle.load(f)
+                calibrator_rel = td.get('calibrator_path') or calibrator_rel
+                if calibrator_rel:
+                    cal_abs = (
+                        os.path.join(settings.MEDIA_ROOT, calibrator_rel)
+                        if not os.path.isabs(calibrator_rel) else calibrator_rel
+                    )
+                    if os.path.exists(cal_abs):
+                        calibrator_file = os.path.basename(cal_abs)
+                        shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
+
     # Categorical level freeze from train raw if possible
     cat_levels: Dict[str, List[str]] = {}
     if os.path.exists(train_pkl):
@@ -88,6 +114,8 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'impute_means': impute_means,
         'scale_pos_weight': model.get('scale_pos_weight') or lineage.get('scale_pos_weight'),
         'enable_categorical': bool(model.get('enable_categorical')),
+        'calibrator_file': calibrator_file,
+        'calibration': model.get('calibration') or {},
         'lineage_id': lineage.get('lineage_id') or model.get('lineage_id'),
         'model_path_source': model_rel,
         'monitoring': {
@@ -178,11 +206,24 @@ def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
         cat_features=list(cat_feats),
     )
     proba = np.asarray(adapter.predict_proba(X), dtype=float).ravel()
+    scores_calibrated = False
+    cal_file = manifest.get('calibrator_file')
+    if cal_file:
+        cal_path = os.path.join(out, cal_file)
+        if os.path.exists(cal_path):
+            try:
+                from modeling.calibration_utils import apply_calibrator, load_calibrator
+                calibrator = load_calibrator(cal_path)
+                proba = apply_calibrator(calibrator, proba)
+                scores_calibrated = True
+            except Exception:
+                scores_calibrated = False
 
     monitoring: Dict[str, Any] = {
         'score_mean': float(np.mean(proba)) if len(proba) else None,
         'score_std': float(np.std(proba)) if len(proba) else None,
         'score_p50': float(np.median(proba)) if len(proba) else None,
+        'scores_calibrated': scores_calibrated,
     }
     # Optional PSI vs train reference snapshot if present in bundle sidecar
     ref_path = os.path.join(out, 'train_reference.parquet')
@@ -202,6 +243,7 @@ def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
         'file_id': file_id,
         'n_scored': int(len(proba)),
         'scores': [float(x) for x in proba],
+        'scores_calibrated': scores_calibrated,
         'feature_count': len(feature_names),
         'algorithm': manifest.get('algorithm'),
         'lineage_id': manifest.get('lineage_id'),

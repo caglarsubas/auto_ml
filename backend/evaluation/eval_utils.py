@@ -222,24 +222,41 @@ def build_model_card(
             'modeling': {
                 'valid_auc': model.get('valid_auc'),
                 'test_auc': model.get('test_auc'),
+                'test_auc_calibrated': model.get('test_auc_calibrated'),
                 'scale_pos_weight': model.get('scale_pos_weight') or (lineage or {}).get('scale_pos_weight'),
                 'best_iteration': model.get('best_iteration'),
                 'impute_fit_on_train_only': model.get('impute_fit_on_train_only', True),
+                'cv_strategy': (model.get('cv') or {}).get('cv_strategy'),
+                'calibration': model.get('calibration') or evaluation.get('calibration'),
             },
+            'leakage_scan': model.get('leakage_scan') or evaluation.get('leakage_scan'),
             'evaluation_outer_test': evaluation.get('metrics'),
             'deployment_readiness': {
                 'traceable': bool(lineage),
                 'outer_test_evaluated': bool(evaluation.get('metrics')),
-                'known_limitations': [
-                    'LightGBM/CatBoost trainers are planned; current booster is XGBoost.',
-                    'Calibration is reported but not fitted as a post-process model yet.',
-                ],
+                'scores_calibrated': bool(evaluation.get('scores_calibrated')),
+                'known_limitations': _deployment_limitations(model, evaluation),
             },
         },
         'human_checks_remaining': [
             'Confirm ID/timestamp/leakage fields are excluded via Model_Usage.',
             'Confirm split strategy matches the deployment scenario (random vs OOT).',
-            'Review SHAP/gain/VIF before accepting the feature set.',
+            'Review automated leakage warnings and SHAP/gain/VIF before accepting the feature set.',
             'Document business threshold / cost trade-off from the threshold table.',
         ],
     }
+
+
+def _deployment_limitations(model: Dict[str, Any], evaluation: Dict[str, Any]) -> list:
+    limits = []
+    cal = model.get('calibration') or evaluation.get('calibration') or {}
+    if not cal.get('fitted') and not evaluation.get('scores_calibrated'):
+        limits.append('Probability calibrator was not fitted (insufficient validation samples or non-binary target).')
+    leak = model.get('leakage_scan') or evaluation.get('leakage_scan') or {}
+    if leak.get('n_high'):
+        limits.append(
+            f"Automated leakage scan flagged {leak.get('n_high')} high-severity feature(s)."
+        )
+    if not limits:
+        limits.append('Review PSI / score drift in deployment monitoring after go-live.')
+    return limits

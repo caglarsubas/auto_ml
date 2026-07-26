@@ -133,8 +133,15 @@ Fallback assumptions:
 Modeling trains XGBoost, LightGBM, or CatBoost through a shared booster adapter.
 Binary targets are handled as classification outcomes.
 Class imbalance is addressed with `scale_pos_weight = neg/pos` on the train fold.
+Numeric imputation means are fit on the train fold only and applied to valid/test.
 The platform uses cross-validation on train+valid (excluding the locked outer
-test) to estimate model performance more robustly than a single split.
+test) to estimate model performance more robustly than a single split. When the
+preprocessing split strategy is out-of-time (OOT), CV uses time-ordered folds
+instead of shuffled stratified folds.
+Probability calibration (isotonic when validation is large enough, otherwise
+Platt) is fit on validation scores and applied in Evaluation and Deployment.
+Automated leakage heuristics flag high-IV, near-perfect target correlation,
+identifier-like names, and near-unique columns as review warnings.
 
 Common metrics:
 

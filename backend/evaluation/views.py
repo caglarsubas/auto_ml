@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from evaluation.eval_utils import build_model_card, evaluate_binary, feature_psi_report
+from modeling.calibration_utils import apply_calibrator, load_calibrator
 from modeling.lineage import load_lineage
 from modeling.booster_adapters import load_adapter_from_path
 
@@ -103,15 +104,54 @@ class EvaluationRunView(APIView):
                 feature_names=list(map(str, X_test.columns)),
                 cat_features=list(model_info.get('categorical_features_used') or []),
             )
-            y_proba = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
+            y_proba_raw = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
+            y_proba = y_proba_raw
+            calibration_meta = (
+                train_data.get('calibration')
+                or model_info.get('calibration')
+                or {}
+            )
+            calibrator_rel = (
+                train_data.get('calibrator_path')
+                or model_info.get('calibrator_path')
+            )
+            if calibrator_rel and calibration_meta.get('fitted'):
+                try:
+                    calibrator = load_calibrator(calibrator_rel, settings.MEDIA_ROOT)
+                    y_proba = apply_calibrator(calibrator, y_proba_raw)
+                    evaluation_calibration = {
+                        **calibration_meta,
+                        'applied': True,
+                        'calibrator_path': calibrator_rel,
+                    }
+                except Exception as cal_err:
+                    evaluation_calibration = {
+                        **calibration_meta,
+                        'applied': False,
+                        'warning': f'Calibrator load failed: {cal_err}',
+                    }
+            else:
+                evaluation_calibration = {
+                    **calibration_meta,
+                    'applied': False,
+                }
 
             evaluation = evaluate_binary(y_test, y_proba, threshold=threshold)
+            evaluation['scores_calibrated'] = bool(evaluation_calibration.get('applied'))
+            evaluation['calibration'] = evaluation_calibration
+            if evaluation_calibration.get('applied'):
+                try:
+                    raw_eval = evaluate_binary(y_test, y_proba_raw, threshold=threshold)
+                    evaluation['metrics_raw'] = raw_eval.get('metrics')
+                except Exception:
+                    pass
             evaluation['split'] = train_data.get('split_meta') or model_info.get('split') or {}
             evaluation['n_test'] = int(len(y_test))
             evaluation['feature_count'] = int(X_test.shape[1])
             evaluation['model_path'] = model_rel
             evaluation['algorithm'] = algo
             evaluation['holdout'] = 'outer_test'
+            evaluation['leakage_scan'] = model_info.get('leakage_scan')
             try:
                 X_train = train_data.get('X_train')
                 if X_train is not None:
@@ -125,6 +165,7 @@ class EvaluationRunView(APIView):
             evaluation['comparison'] = {
                 'valid_auc': model_info.get('valid_auc'),
                 'modeling_test_auc': model_info.get('test_auc'),
+                'modeling_test_auc_calibrated': model_info.get('test_auc_calibrated'),
                 'evaluation_test_auc': evaluation['metrics'].get('roc_auc'),
             }
 

@@ -184,6 +184,23 @@
       <div *ngIf="modelingStatus.model?.model_path">Saved model: {{ modelingStatus.model?.model_path }}</div>
       <div *ngIf="modelingStatus.model?.warning" style="color: #a67c00;">Warning: {{ modelingStatus.model?.warning }}</div>
       <div *ngIf="modelingStatus.model?.error" style="color: #b00020;">Error: {{ modelingStatus.model?.error }}</div>
+      <div *ngIf="modelingStatus.model?.calibration?.fitted" style="margin-top: 6px; font-size: 13px; color: #555;">
+        Calibration: {{ modelingStatus.model.calibration.method }}
+        <span *ngIf="modelingStatus.model.calibration.brier_before != null && modelingStatus.model.calibration.brier_after != null">
+          (Brier {{ modelingStatus.model.calibration.brier_before | number:'1.3-3' }}
+          → {{ modelingStatus.model.calibration.brier_after | number:'1.3-3' }})
+        </span>
+      </div>
+      <div *ngIf="modelingStatus.model?.leakage_scan?.n_warnings"
+           style="margin-top: 8px; padding: 8px 12px; background: #fff8e6; border-left: 3px solid #c9a227; border-radius: 4px; font-size: 13px;">
+        Leakage scan: {{ modelingStatus.model.leakage_scan.summary }}
+        <div *ngIf="modelingStatus.model.leakage_scan.warnings?.length" style="margin-top: 4px; color: #666;">
+          Top flags:
+          <span *ngFor="let w of $any(modelingStatus.model.leakage_scan.warnings) | slice:0:5; let last = last">
+            {{ $any(w).feature }} ({{ $any(w).severity }})<span *ngIf="!last">; </span>
+          </span>
+        </div>
+      </div>
 
       <!-- Categorical Features (auto-detected by modeling backend) -->
       <div *ngIf="modelingStatus.model?.encoding_report?.length > 0" style="margin-top: 12px; padding: 10px 14px; background: #f0f7ff; border-left: 3px solid #1976d2; border-radius: 4px;">

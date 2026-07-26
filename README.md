@@ -122,18 +122,21 @@ Unified encoding + training in a single step. The algorithm selection auto-deter
 
 | Algorithm | Native Categorical | Implementation |
 |-----------|-------------------|----------------|
-| **XGBoost** | `enable_categorical=True` | `xgboost.XGBClassifier` |
-| **LightGBM** | Built-in categorical type | Planned |
-| **CatBoost** | Built-in categorical pools | Planned |
+| **XGBoost** | `enable_categorical=True` | Shared booster adapter |
+| **LightGBM** | Built-in categorical type | Shared booster adapter |
+| **CatBoost** | Built-in categorical pools | Shared booster adapter |
 
 **Training details:**
-- Automatic train/validation split (80/20) with stratification
+- Prefers the preprocessing split contract (train / valid / locked outer test); falls back to stratified random split when needed
 - Binary classification: auto-detect 0/1 targets; fallback to factorization
 - Multi-class support: up to 50 unique target classes
-- NaN handling: numeric columns filled with mean; categorical NaNs handled natively
+- NaN handling: numeric means fitted on **train only**, then applied to valid/test; categorical NaNs handled natively
+- Class imbalance: `scale_pos_weight = neg/pos` on the train fold
+- Probability calibration (Platt or isotonic) fitted on validation scores and applied in Evaluation / Deployment
+- Pre-train leakage heuristics (IV / correlation / name / uniqueness) surface as warnings
 - All-NaN columns dropped automatically
 
-**Cross-validation metrics** (5-fold stratified CV):
+**Cross-validation metrics** (5-fold on train+valid; stratified, or time-series when OOT split):
 
 | Metric | Description |
 |--------|-------------|
