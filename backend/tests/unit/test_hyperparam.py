@@ -72,6 +72,27 @@ class TestHyperparamMetrics:
         assert out['f1'] == 1.0 and out['precision'] == 1.0 and out['recall'] == 1.0
         assert out['accuracy'] == 1.0
 
+    def test_regression_metrics_r2_rmse_mae(self):
+        from modeling.hyperparam_utils import _compute_metrics, REGRESSION_METRICS
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        pred = np.array([1.1, 1.9, 3.2, 3.8])
+        out = _compute_metrics(y, pred, task='regression')
+        assert set(REGRESSION_METRICS).issubset(out.keys())
+        assert out['r2'] > 0.9
+        assert out['rmse'] < 0.3
+        assert np.isnan(out['roc_auc'])
+
+    def test_build_xgb_params_regression_objective(self):
+        from modeling.hyperparam_utils import _build_xgb_params
+        params, n = _build_xgb_params(
+            {'n_estimators': 50, 'max_depth': 3, 'learning_rate': 0.1},
+            nthread=1, has_cat=False, task='regression',
+        )
+        assert params['objective'] == 'reg:squarederror'
+        assert params['eval_metric'] == 'rmse'
+        assert 'scale_pos_weight' not in params
+        assert n == 50
+
     def test_f2_weights_recall_more_than_f1(self):
         from modeling.hyperparam_utils import _compute_metrics
         # One false negative: recall < precision -> F2 < F1 is FALSE; F2 emphasizes recall.

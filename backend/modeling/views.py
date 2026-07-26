@@ -2155,11 +2155,10 @@ class HyperparamStartView(APIView):
             n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
             cv_folds = max(2, min(int(data.get('cv_folds', 5)), 10))
             n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
-            primary_metric = data.get('primary_metric', 'roc_auc')
             threshold = float(data.get('threshold', 0.5))
             curve_points = max(2, min(int(data.get('validation_curve_points', 8)), 25))
             search_method = str(data.get('search_method', 'auto')).strip().lower()
-            if search_method not in ('auto', 'grid', 'random', 'bayesian'):
+            if search_method not in ('auto', 'grid', 'random', 'bayesian', 'optuna'):
                 search_method = 'auto'
             grid_points_per_param = max(2, min(int(data.get('grid_points_per_param', 5)), 12))
             # Per-param checkpoint counts from the UI Walk_Step column (optional).
@@ -2181,8 +2180,19 @@ class HyperparamStartView(APIView):
             y_train = train_data['y_train']
             X_valid = train_data['X_valid']
             y_valid = train_data['y_valid']
+            hp_task = str(train_data.get('task') or data.get('task') or 'classification').strip().lower()
+            if hp_task in ('regression', 'regressor', 'reg'):
+                hp_task = 'regression'
+            else:
+                hp_task = 'classification'
+            primary_metric = data.get(
+                'primary_metric',
+                'r2' if hp_task == 'regression' else 'roc_auc',
+            )
             # Prefer train-fitted imbalance weight; never score the locked outer test here
-            hp_scale_pos_weight = train_data.get('scale_pos_weight')
+            hp_scale_pos_weight = (
+                None if hp_task == 'regression' else train_data.get('scale_pos_weight')
+            )
 
             # Echo the clamped/validated space so the UI can reflect adjustments.
             clean_space, space_warnings = validate_param_space(param_space)
@@ -2239,6 +2249,7 @@ class HyperparamStartView(APIView):
                         stop_flag=HYPERPARAM_PROGRESS[file_id],
                         scale_pos_weight=hp_scale_pos_weight,
                         early_stopping_rounds=50,
+                        task=hp_task,
                     )
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed
