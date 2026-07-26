@@ -74,4 +74,24 @@ export class EvaluationComponent implements OnInit, OnDestroy {
   get thresholdRows(): any[] {
     return this.result?.evaluation?.threshold_table || [];
   }
+
+  get isRegression(): boolean {
+    const task = this.result?.evaluation?.task || this.result?.model_card?.task;
+    return task === 'regression';
+  }
+
+  get taskLabel(): string {
+    if (!this.result?.evaluation) return '';
+    return this.isRegression ? 'regression' : 'classification';
+  }
+
+  get metricKeys(): string[] {
+    if (this.isRegression) {
+      return ['r2', 'rmse', 'mae', 'mean_residual', 'residual_std', 'y_true_mean', 'y_pred_mean'];
+    }
+    return [
+      'roc_auc', 'pr_auc', 'ks', 'gini', 'f1', 'f2', 'precision', 'recall',
+      'accuracy', 'mcc', 'brier', 'log_loss',
+    ];
+  }
 }

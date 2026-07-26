@@ -28,7 +28,8 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     with open(modeling_path, 'r', encoding='utf-8') as f:
         modeling = json.load(f)
     model = modeling.get('model') or {}
-    algo = model.get('algorithm') or (model.get('model_type') or 'xgboost').replace('_classifier', '')
+    algo = model.get('algorithm') or (model.get('model_type') or 'xgboost')
+    algo = str(algo).replace('_classifier', '').replace('_regressor', '')
     model_rel = model.get('model_path') or f'models/{file_id}_xgb_classifier.json'
     model_abs = os.path.join(settings.MEDIA_ROOT, model_rel) if not os.path.isabs(model_rel) else model_rel
     if not os.path.exists(model_abs):

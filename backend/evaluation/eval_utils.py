@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score, average_precision_score, brier_score_loss, confusion_matrix,
-    f1_score, fbeta_score, log_loss, matthews_corrcoef, precision_recall_curve,
-    precision_score, recall_score, roc_auc_score, roc_curve,
+    f1_score, fbeta_score, log_loss, matthews_corrcoef, mean_absolute_error,
+    mean_squared_error, precision_recall_curve, precision_score, r2_score,
+    recall_score, roc_auc_score, roc_curve,
 )
 
 
@@ -136,6 +137,59 @@ def evaluate_binary(
         'curves': curves,
         'threshold_table': threshold_table(y_true, y_proba),
         'calibration': calibration_curve_data(y_true, y_proba),
+        'task': 'classification',
+    }
+
+
+def evaluate_regression(y_true, y_pred) -> Dict[str, Any]:
+    """Outer-test metrics for continuous boosting regressors."""
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    y_pred = np.asarray(y_pred, dtype=float).ravel()
+    mask = np.isfinite(y_true) & np.isfinite(y_pred)
+    y_true, y_pred = y_true[mask], y_pred[mask]
+    residuals = y_true - y_pred if len(y_true) else np.array([])
+
+    metrics: Dict[str, Any] = {
+        'n_samples': int(len(y_true)),
+        'r2': _safe_float(r2_score(y_true, y_pred)) if len(y_true) >= 2 else None,
+        'rmse': _safe_float(np.sqrt(mean_squared_error(y_true, y_pred))) if len(y_true) else None,
+        'mae': _safe_float(mean_absolute_error(y_true, y_pred)) if len(y_true) else None,
+        'mean_residual': _safe_float(residuals.mean()) if len(residuals) else None,
+        'residual_std': _safe_float(residuals.std()) if len(residuals) else None,
+        'y_true_mean': _safe_float(y_true.mean()) if len(y_true) else None,
+        'y_pred_mean': _safe_float(y_pred.mean()) if len(y_pred) else None,
+    }
+
+    # Residual histogram for quick visual diagnostics in the FE / model card
+    residual_hist: Optional[Dict[str, Any]] = None
+    try:
+        if len(residuals) >= 5:
+            counts, edges = np.histogram(residuals, bins=min(20, max(5, len(residuals) // 10)))
+            residual_hist = {
+                'counts': [int(c) for c in counts],
+                'bin_edges': [float(e) for e in edges],
+            }
+    except Exception:
+        residual_hist = None
+
+    # Predicted-vs-actual scatter sample (cap for payload size)
+    scatter = None
+    try:
+        if len(y_true):
+            step = max(1, len(y_true) // 200)
+            scatter = {
+                'y_true': [float(x) for x in y_true[::step]],
+                'y_pred': [float(x) for x in y_pred[::step]],
+            }
+    except Exception:
+        scatter = None
+
+    return {
+        'metrics': metrics,
+        'curves': {'residual_hist': residual_hist, 'pred_vs_actual': scatter},
+        'threshold_table': [],
+        'calibration': None,
+        'task': 'regression',
     }
 
 
@@ -197,9 +251,24 @@ def build_model_card(
     """Map governance checklist sections into a reviewable model card."""
     model = (modeling_status or {}).get('model') or {}
     split = model.get('split') or (lineage or {}).get('split') or {}
+    task = (
+        evaluation.get('task')
+        or model.get('task')
+        or ('regression' if 'regressor' in str(model.get('model_type') or '') else 'classification')
+    )
+    human_checks = [
+        'Confirm ID/timestamp/leakage fields are excluded via Model_Usage.',
+        'Confirm split strategy matches the deployment scenario (random vs OOT).',
+        'Review automated leakage warnings and SHAP/gain/VIF before accepting the feature set.',
+    ]
+    if task == 'regression':
+        human_checks.append('Review residual bias / RMSE against the business tolerance for continuous scores.')
+    else:
+        human_checks.append('Document business threshold / cost trade-off from the threshold table.')
     return {
         'file_id': file_id,
         'title': f'Boosting model card — file {file_id}',
+        'task': task,
         'algorithm': (lineage or {}).get('algorithm') or model.get('model_type') or 'xgboost_classifier',
         'lineage_id': (lineage or {}).get('lineage_id') or model.get('lineage_id'),
         'sections': {
@@ -220,9 +289,14 @@ def build_model_card(
                 'use_native': model.get('enable_categorical'),
             },
             'modeling': {
+                'task': task,
                 'valid_auc': model.get('valid_auc'),
                 'test_auc': model.get('test_auc'),
                 'test_auc_calibrated': model.get('test_auc_calibrated'),
+                'valid_r2': model.get('valid_r2'),
+                'test_r2': model.get('test_r2'),
+                'test_rmse': model.get('test_rmse'),
+                'test_mae': model.get('test_mae'),
                 'scale_pos_weight': model.get('scale_pos_weight') or (lineage or {}).get('scale_pos_weight'),
                 'best_iteration': model.get('best_iteration'),
                 'impute_fit_on_train_only': model.get('impute_fit_on_train_only', True),
@@ -235,23 +309,25 @@ def build_model_card(
                 'traceable': bool(lineage),
                 'outer_test_evaluated': bool(evaluation.get('metrics')),
                 'scores_calibrated': bool(evaluation.get('scores_calibrated')),
-                'known_limitations': _deployment_limitations(model, evaluation),
+                'known_limitations': _deployment_limitations(model, evaluation, task),
             },
         },
-        'human_checks_remaining': [
-            'Confirm ID/timestamp/leakage fields are excluded via Model_Usage.',
-            'Confirm split strategy matches the deployment scenario (random vs OOT).',
-            'Review automated leakage warnings and SHAP/gain/VIF before accepting the feature set.',
-            'Document business threshold / cost trade-off from the threshold table.',
-        ],
+        'human_checks_remaining': human_checks,
     }
 
 
-def _deployment_limitations(model: Dict[str, Any], evaluation: Dict[str, Any]) -> list:
+def _deployment_limitations(
+    model: Dict[str, Any],
+    evaluation: Dict[str, Any],
+    task: str = 'classification',
+) -> list:
     limits = []
-    cal = model.get('calibration') or evaluation.get('calibration') or {}
-    if not cal.get('fitted') and not evaluation.get('scores_calibrated'):
-        limits.append('Probability calibrator was not fitted (insufficient validation samples or non-binary target).')
+    if task != 'regression':
+        cal = model.get('calibration') or evaluation.get('calibration') or {}
+        if not cal.get('fitted') and not evaluation.get('scores_calibrated'):
+            limits.append(
+                'Probability calibrator was not fitted (insufficient validation samples or non-binary target).'
+            )
     leak = model.get('leakage_scan') or evaluation.get('leakage_scan') or {}
     if leak.get('n_high'):
         limits.append(

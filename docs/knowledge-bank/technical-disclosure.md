@@ -137,6 +137,9 @@ Modeling trains XGBoost, LightGBM, or CatBoost through a shared booster adapter.
 Binary / low-cardinality targets are handled as classification outcomes.
 High-cardinality continuous targets (more than 50 unique values) train a
 boosting regressor and report R² / RMSE / MAE on the locked outer test.
+The Evaluation stage branches on task: classifiers keep threshold / KS /
+calibration reporting; regressors report outer-test R² / RMSE / MAE with
+residual diagnostics (no decision threshold).
 Class imbalance is addressed with `scale_pos_weight = neg/pos` on the train fold.
 Numeric imputation means are fit on the train fold only and applied to valid/test.
 Data Purifier learned decisions (variance/correlation/missingness/sparsity drops,
