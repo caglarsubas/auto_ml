@@ -137,7 +137,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     { value: 'auto', label: 'Auto (recommended)' },
     { value: 'grid', label: 'Grid — exhaustive' },
     { value: 'random', label: 'Random' },
-    { value: 'bayesian', label: 'Bayesian (SMBO)' },
+    { value: 'bayesian', label: 'Bayesian (TPE)' },
   ];
   // Thresholds mirror backend recommend_search_method() so the UI preview matches.
   private readonly HP_FITS_GRID_MAX = 100;
@@ -167,9 +167,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     reg_alpha: 'L1 regularisation on leaf weights. Higher values push weights to zero (sparsity), reducing overfitting.',
     reg_lambda: 'L2 regularisation on leaf weights. Higher values shrink weights smoothly, reducing overfitting.',
     // ── search + compute controls ──
-    _search_method: 'How value combinations are explored. Auto picks the method from the search-space size; Grid tries every combination; Random samples n_iter combinations; Bayesian (SMBO) learns from past trials to focus on promising regions.',
+    _search_method: 'How value combinations are explored. Auto picks the method from the search-space size; Grid tries every combination; Random samples n_iter combinations; Bayesian (TPE via Optuna) learns from past trials to focus on promising regions.',
     _grid_points: 'Bulk control: splits every hyperparameter\'s min–max range into this many pieces, setting each row\'s Walk_Step at once (#checkpoints = pieces + 1). Edit a row\'s Walk_Step to override it individually. Higher = finer but exponentially more grid combinations.',
-    _n_iter: 'Number of hyperparameter combinations to evaluate for Random / Bayesian search. Ignored by Grid, which evaluates every combination.',
+    _n_iter: 'Number of hyperparameter combinations to evaluate for Random / Bayesian (TPE) search. Ignored by Grid, which evaluates every combination.',
     _cv_folds: 'Cross-validation folds. Each combination is trained k times on different data splits and averaged for a robust score. Higher = more reliable but slower.',
     _n_jobs: 'Parallel workers (CPU cores) used to evaluate trials. Higher = faster but uses more CPU and memory.',
     _metric: 'The performance metric that is optimised and plotted on the validation curves (e.g. ROC-AUC, F1).',
@@ -3002,7 +3002,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   hpMethodLabel(m: string): string {
-    const map: any = { grid: 'Grid (exhaustive)', random: 'Random', bayesian: 'Bayesian (SMBO)', auto: 'Auto' };
+    const map: any = { grid: 'Grid (exhaustive)', random: 'Random', bayesian: 'Bayesian (TPE)', auto: 'Auto' };
     return map[m] || m;
   }
 

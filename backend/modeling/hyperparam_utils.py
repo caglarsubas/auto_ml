@@ -103,7 +103,7 @@ def _active_metrics(task: str) -> List[str]:
 # model fits per parallel worker (grid_candidates * cv_folds / n_jobs):
 #   * < 100 fits/worker   -> grid     (exhaustive search is cheap)
 #   * <= 500 fits/worker  -> random   (grid too big; sample n_iter configs)
-#   * > 500 fits/worker   -> bayesian (large space; SMBO with RF surrogate)
+#   * > 500 fits/worker   -> bayesian (large space; Optuna TPE)
 SEARCH_METHODS: Tuple[str, ...] = ('grid', 'random', 'bayesian', 'optuna')
 _DEFAULT_GRID_POINTS = 5          # grid resolution per param when method=grid
 _GRID_MAX_CANDIDATES = 2000       # safety cap for an explicit grid run
@@ -411,7 +411,7 @@ def recommend_search_method(
     else:
         method = 'bayesian'
         why = (f"An exhaustive grid would be ~{fits_per_job:.0f} fits/worker "
-               f"(> {_FITS_PER_JOB_RANDOM_MAX}) — Bayesian SMBO spends the budget where it matters.")
+               f"(> {_FITS_PER_JOB_RANDOM_MAX}) — Optuna TPE spends the budget where it matters.")
     return {
         'method': method,
         'grid_candidates': int(candidates),
@@ -477,13 +477,6 @@ def _grid_configs(
             cfg[name] = combo[j]
         configs.append(cfg)
     return configs, False
-
-
-def _predict_with_std(rf: RandomForestRegressor, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Mean + std of the per-tree predictions — the RandomForest surrogate's
-    uncertainty estimate, used as the UCB exploration term in Bayesian SMBO."""
-    preds = np.stack([est.predict(X) for est in rf.estimators_], axis=0)
-    return preds.mean(axis=0), preds.std(axis=0)
 
 
 def _evaluate_config(
@@ -711,13 +704,15 @@ def run_hyperparam_search_with_progress(
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
-    ``search_method`` is one of {'auto', 'grid', 'random', 'bayesian'}.  'auto'
-    applies the fit-count heuristic in ``recommend_search_method`` (grid when an
-    exhaustive search is cheap, random for mid-size spaces, Bayesian SMBO for
-    large spaces).  ``grid_points_per_param`` sets the per-param grid resolution
-    (also used to size the recommendation); ``grid_points_per_param_map`` may
-    override it per param (param name -> checkpoint count) — this is how the UI
-    Walk_Step column drives a different granularity for each hyperparameter.
+    ``search_method`` is one of {'auto', 'grid', 'random', 'bayesian', 'optuna'}.
+    'auto' applies the fit-count heuristic in ``recommend_search_method`` (grid
+    when an exhaustive search is cheap, random for mid-size spaces, Optuna TPE
+    for large spaces).  ``bayesian`` and ``optuna`` both run Optuna TPE (the FE
+    exposes the label as Bayesian).  ``grid_points_per_param`` sets the per-param
+    grid resolution (also used to size the recommendation);
+    ``grid_points_per_param_map`` may override it per param (param name ->
+    checkpoint count) — this is how the UI Walk_Step column drives a different
+    granularity for each hyperparameter.
 
     Returns a JSON-serializable dict (see module docstring for the shape).
     """
@@ -813,8 +808,8 @@ def run_hyperparam_search_with_progress(
         'guidance': [],
     }
 
-    # Build the search configs up-front for grid/random; bayesian proposes
-    # configs iteratively from a surrogate model (see Phase A below).
+    # Build the search configs up-front for grid/random; bayesian/optuna
+    # propose configs iteratively via Optuna TPE (see Phase A below).
     grid_truncated = False
     search_configs: Optional[List[Dict[str, Any]]] = None
     if method == 'grid':
@@ -851,8 +846,7 @@ def run_hyperparam_search_with_progress(
     trials: List[Dict[str, Any]] = []
 
     def evaluate_batch(cfgs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Cross-validate a batch of configs in parallel; updates progress.
-        Reused by grid/random (one batch) and Bayesian SMBO (many batches)."""
+        """Cross-validate a batch of configs in parallel; updates progress."""
         out: List[Dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=max(1, n_jobs)) as pool:
             futures = {
@@ -882,101 +876,88 @@ def run_hyperparam_search_with_progress(
                           'current_best': {'metric': primary_metric, 'cv_mean': cur}})
         return out
 
+    def run_optuna_tpe(label: str) -> bool:
+        """Run Optuna TPE into ``trials``. Returns True on success."""
+        try:
+            import optuna
+            optuna.logging.set_verbosity(optuna.logging.WARNING)
+        except ImportError:
+            results['space_warnings'].append(
+                'Optuna is not installed; falling back to random search.')
+            return False
+
+        emit(f'Starting {label} ({n_iter} trials, Optuna TPE)...')
+        direction = METRIC_DIRECTION.get(primary_metric, 1)
+        study = optuna.create_study(
+            direction='maximize' if direction > 0 else 'minimize',
+            sampler=optuna.samplers.TPESampler(seed=random_state),
+        )
+
+        def _suggest_config(trial: 'optuna.Trial') -> Dict[str, Any]:
+            cfg: Dict[str, Any] = {}
+            for name, spec in space.items():
+                if not spec.get('enabled'):
+                    cfg[name] = fixed.get(name, DEFAULT_FIXED_PARAMS.get(name))
+                    continue
+                t = spec.get('type')
+                if t == 'categorical':
+                    cfg[name] = trial.suggest_categorical(name, list(spec['values']))
+                elif t == 'int':
+                    lo, hi = int(spec['min']), int(spec['max'])
+                    if spec.get('log') and lo >= 1:
+                        cfg[name] = trial.suggest_int(name, lo, hi, log=True)
+                    else:
+                        cfg[name] = trial.suggest_int(name, lo, hi)
+                else:
+                    lo, hi = float(spec['min']), float(spec['max'])
+                    if spec.get('log') and lo > 0:
+                        cfg[name] = trial.suggest_float(name, lo, hi, log=True)
+                    else:
+                        cfg[name] = trial.suggest_float(name, lo, hi)
+            return cfg
+
+        def _objective(trial: 'optuna.Trial') -> float:
+            if is_stop():
+                raise optuna.TrialPruned()
+            cfg = _suggest_config(trial)
+            result = _evaluate_config(
+                X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
+                nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
+            )
+            trials.append(result)
+            done_units[0] += 1
+            mean = result['cv'].get(primary_metric, {}).get('mean')
+            emit(
+                f'{label}: {len(trials)}/{n_iter} trials',
+                {'completed_trials': len(trials),
+                 'current_best': {'metric': primary_metric, 'cv_mean': mean}},
+            )
+            if mean is None or not np.isfinite(mean):
+                return float('-inf') if direction > 0 else float('inf')
+            return float(mean)
+
+        study.optimize(_objective, n_trials=int(n_iter), n_jobs=1, catch=(Exception,))
+        results['search_backend'] = 'optuna_tpe'
+        try:
+            results['optuna_best_value'] = study.best_value if study.trials else None
+            results['optuna_best_params'] = study.best_params if study.trials else None
+        except ValueError:
+            results['optuna_best_value'] = None
+            results['optuna_best_params'] = None
+        return True
+
     try:
         # ---------- Phase A: hyperparameter search ----------
-        if method == 'optuna':
-            emit(f'Starting Optuna TPE search ({n_iter} trials)...')
-            try:
-                import optuna
-                optuna.logging.set_verbosity(optuna.logging.WARNING)
-            except ImportError:
-                results['space_warnings'].append(
-                    'Optuna is not installed; falling back to Bayesian SMBO.')
-                method = 'bayesian'
+        if method in ('bayesian', 'optuna'):
+            label = 'Bayesian (TPE)' if method == 'bayesian' else 'Optuna TPE'
+            if not run_optuna_tpe(label):
+                method = 'random'
                 results['search_method'] = method
-            else:
-                direction = METRIC_DIRECTION.get(primary_metric, 1)
-                study = optuna.create_study(
-                    direction='maximize' if direction > 0 else 'minimize',
-                    sampler=optuna.samplers.TPESampler(seed=random_state),
-                )
-
-                def _suggest_config(trial: 'optuna.Trial') -> Dict[str, Any]:
-                    cfg: Dict[str, Any] = {}
-                    for name, spec in space.items():
-                        if not spec.get('enabled'):
-                            cfg[name] = fixed.get(name, DEFAULT_FIXED_PARAMS.get(name))
-                            continue
-                        t = spec.get('type')
-                        if t == 'categorical':
-                            cfg[name] = trial.suggest_categorical(name, list(spec['values']))
-                        elif t == 'int':
-                            lo, hi = int(spec['min']), int(spec['max'])
-                            if spec.get('log') and lo >= 1:
-                                cfg[name] = trial.suggest_int(name, lo, hi, log=True)
-                            else:
-                                cfg[name] = trial.suggest_int(name, lo, hi)
-                        else:
-                            lo, hi = float(spec['min']), float(spec['max'])
-                            if spec.get('log') and lo > 0:
-                                cfg[name] = trial.suggest_float(name, lo, hi, log=True)
-                            else:
-                                cfg[name] = trial.suggest_float(name, lo, hi)
-                    return cfg
-
-                def _objective(trial: 'optuna.Trial') -> float:
-                    if is_stop():
-                        raise optuna.TrialPruned()
-                    cfg = _suggest_config(trial)
-                    result = _evaluate_config(
-                        X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
-                        nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
-                    )
-                    trials.append(result)
-                    done_units[0] += 1
-                    mean = result['cv'].get(primary_metric, {}).get('mean')
-                    emit(
-                        f'Optuna search: {len(trials)}/{n_iter} trials',
-                        {'completed_trials': len(trials),
-                         'current_best': {'metric': primary_metric, 'cv_mean': mean}},
-                    )
-                    if mean is None or not np.isfinite(mean):
-                        return float('-inf') if direction > 0 else float('inf')
-                    return float(mean)
-
-                study.optimize(_objective, n_trials=int(n_iter), n_jobs=1, catch=(Exception,))
-                results['optuna_best_value'] = study.best_value if study.trials else None
-                results['optuna_best_params'] = study.best_params if study.trials else None
-
-        if method == 'bayesian':
-            emit(f'Starting Bayesian search ({n_iter} trials, SMBO + RF surrogate)...')
-            n_warm = min(n_iter, max(8, 2 * max(1, len(enabled_params))))
-            trials.extend(evaluate_batch([_sample_config(space, fixed, rng) for _ in range(n_warm)]))
-            kappa = 1.0  # UCB exploration weight
-            direction = METRIC_DIRECTION.get(primary_metric, 1)
-            while len(trials) < n_iter and not is_stop():
-                batch = int(min(max(1, n_jobs), n_iter - len(trials)))
-                chosen: List[Dict[str, Any]] = []
-                if enabled_params:
-                    Xp = _param_matrix(trials, enabled_params, space)
-                    yv = np.array([t['cv'][primary_metric]['mean'] for t in trials], dtype=float)
-                    finite = np.isfinite(yv)
-                    uniq = len(np.unique(np.round(yv[finite], 6))) if finite.any() else 0
-                    if int(finite.sum()) >= 5 and uniq > 1:
-                        rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
-                        rf.fit(Xp[finite], yv[finite])
-                        pool_cfgs = [_sample_config(space, fixed, rng) for _ in range(256)]
-                        Xc = _param_matrix([{'params': c} for c in pool_cfgs], enabled_params, space)
-                        mu, sd = _predict_with_std(rf, Xc)
-                        acq = direction * mu + kappa * sd  # UCB toward a better metric
-                        order = np.argsort(-acq)
-                        chosen = [pool_cfgs[int(i)] for i in order[:batch]]
-                if not chosen:
-                    chosen = [_sample_config(space, fixed, rng) for _ in range(batch)]
-                new = evaluate_batch(chosen)
-                if not new:
-                    break  # stop requested or every config in the batch failed
-                trials.extend(new)
+                search_configs = [_sample_config(space, fixed, rng) for _ in range(n_iter)]
+                n_search = int(n_iter)
+                results['n_search_evals'] = n_search
+                emit(f'Starting random search ({n_search} configs)...')
+                trials.extend(evaluate_batch(search_configs))
         elif method in ('grid', 'random'):
             label = 'Grid' if method == 'grid' else 'Random'
             emit(f'Starting {label.lower()} search ({n_search} configs)...')
