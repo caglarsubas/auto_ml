@@ -134,6 +134,10 @@ Modeling trains XGBoost, LightGBM, or CatBoost through a shared booster adapter.
 Binary targets are handled as classification outcomes.
 Class imbalance is addressed with `scale_pos_weight = neg/pos` on the train fold.
 Numeric imputation means are fit on the train fold only and applied to valid/test.
+Data Purifier learned decisions (variance/correlation/missingness/sparsity drops,
+numeric clip bounds, rare-category merges) are fit on the outer-train partition
+only and then applied to the full frame; structural deduplication runs before the
+split is frozen.
 The platform uses cross-validation on train+valid (excluding the locked outer
 test) to estimate model performance more robustly than a single split. When the
 preprocessing split strategy is out-of-time (OOT), CV uses time-ordered folds

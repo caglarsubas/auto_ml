@@ -1037,11 +1037,21 @@ class ModelingStartView(APIView):
                         }
 
                         try:
+                            try:
+                                from preprocessing.purifier_contract import load_purifier_artifact
+                                _pur_art = load_purifier_artifact(int(file_id))
+                            except Exception:
+                                _pur_art = None
                             lineage = build_lineage(
                                 int(file_id),
                                 algorithm=algorithm or 'xgboost',
                                 processed_file=processed_file,
                                 split_meta=model_info.get('split'),
+                                purifier_artifact={
+                                    'path': (_pur_art or {}).get('path'),
+                                    'fit_scope': (_pur_art or {}).get('fit_scope'),
+                                    'n_fit': (_pur_art or {}).get('n_fit'),
+                                } if _pur_art else None,
                                 encoding_plan=encoding_plan if has_encoding_plan else None,
                                 encoding_use_native=use_native,
                                 feature_names=list(X_train.columns),
