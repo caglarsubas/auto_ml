@@ -23,6 +23,12 @@ from .purifier_catalog import (
     pick_most_aggressive,
     selected_entries_of_kind,
 )
+from .purifier_contract import (
+    build_outer_split_indices,
+    remap_indices_to_positions,
+    resolve_fit_index,
+    save_purifier_artifact,
+)
 import pandas as pd
 import numpy as np
 
@@ -608,7 +614,8 @@ class PreprocessingRunView(APIView):
             data_dictionary_payload = data.get('data_dictionary')
             df_processed, dropped_columns, dropped_by_step, preprocessing_step_stats = self._apply_options(
                 df, set(options), preserve=preserve_cols, split=split, data_dictionary=data_dictionary_payload)
-            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape} step_stats={len(preprocessing_step_stats)}")
+            purifier_artifact = getattr(self, '_last_purifier_artifact', None) or {}
+            print(f"[PreprocessingRun] apply_options ok in {time.monotonic()-t_apply_start:.3f}s dropped={len(dropped_columns)} shape={df_processed.shape} step_stats={len(preprocessing_step_stats)} fit_scope={purifier_artifact.get('fit_scope')}")
             
             # Add Model_Usage='No' info to the beginning of the breakdown for transparency
             # Note: These are NOT dropped from dataframe, just excluded from model training
@@ -623,6 +630,37 @@ class PreprocessingRunView(APIView):
             
             # Only actual dropped columns (excluded variables are NOT dropped)
             all_dropped_columns = dropped_columns
+
+            # Build outer split on the processed frame (same labels used during fit),
+            # then remap to positional RangeIndex so CSV (index=False) stays aligned.
+            try:
+                train_idx_sv, test_idx_sv, split_meta_built = build_outer_split_indices(
+                    df_processed, split if isinstance(split, dict) else {'strategy': 'random'},
+                )
+            except Exception as split_build_err:
+                print(f"[PreprocessingRun] split build failed: {split_build_err}")
+                train_idx_sv = test_idx_sv = None
+                split_meta_built = {}
+            if train_idx_sv is not None and test_idx_sv is not None:
+                df_processed, train_idx_sv, test_idx_sv = remap_indices_to_positions(
+                    df_processed, train_idx_sv, test_idx_sv,
+                )
+                train_idx_sv = pd.Index(train_idx_sv)
+                test_idx_sv = pd.Index(test_idx_sv)
+
+            # Persist purifier fit artifact (train-learned decisions)
+            purifier_artifact_path = None
+            try:
+                saved_purifier = save_purifier_artifact(int(file_id), {
+                    **purifier_artifact,
+                    'split_strategy': (split_meta_built or {}).get('strategy')
+                    if isinstance(split, dict) else 'random',
+                    'n_rows_after': int(len(df_processed)),
+                    'n_cols_after': int(df_processed.shape[1]),
+                })
+                purifier_artifact_path = saved_purifier.get('path')
+            except Exception as pur_err:
+                print(f"[PreprocessingRun] failed to save purifier artifact: {pur_err}")
 
             # Save processed file
             out_name = f"processed_{file_id}_{self._safe_timestamp()}.csv"
@@ -701,10 +739,12 @@ class PreprocessingRunView(APIView):
                 return frame.index[m], frame.index[~m]
 
             # ── Split Validation: target distribution per split ──
+            # train_idx_sv / test_idx_sv were built + remapped before CSV save so
+            # they match the RangeIndex of the persisted processed file.
             split_validation = None
-            train_idx_sv = test_idx_sv = None
             try:
-                train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
+                if train_idx_sv is None or test_idx_sv is None:
+                    train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
                 # Persist canonical outer split for modeling / evaluation
                 try:
                     from modeling.split_contract import save_split_artifact
@@ -721,7 +761,7 @@ class PreprocessingRunView(APIView):
                 except Exception as split_save_err:
                     print(f"[PreprocessingRun] failed to save split artifact: {split_save_err}")
                 target_col = 'Target' if 'Target' in df_processed.columns else None
-                if target_col:
+                if target_col and train_idx_sv is not None and test_idx_sv is not None:
                     y_train = df_processed.loc[train_idx_sv, target_col].dropna()
                     y_test = df_processed.loc[test_idx_sv, target_col].dropna()
                     y_full = df_processed[target_col].dropna()
@@ -1080,6 +1120,9 @@ class PreprocessingRunView(APIView):
                     f'splits/{file_id}_split.json'
                     if train_idx_sv is not None and test_idx_sv is not None else None
                 ),
+                'purifier_artifact': purifier_artifact_path,
+                'purifier_fit_scope': purifier_artifact.get('fit_scope'),
+                'purifier_n_fit': purifier_artifact.get('n_fit'),
                 'feature_stats_before': feature_stats_before,
                 'feature_stats_after': feature_stats_after,
                 'preprocessing_step_stats': preprocessing_step_stats if preprocessing_step_stats else None,
@@ -1206,13 +1249,20 @@ class PreprocessingRunView(APIView):
             return pd.read_csv(path)
 
     def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None,
-                       split: dict | None = None, data_dictionary: list | None = None):
+                       split: dict | None = None, data_dictionary: list | None = None,
+                       train_idx=None):
         dropped_cols: list[str] = []
         breakdown: list[dict] = []
         step_stats: list[dict] = []  # per-step before/after stats for value-modifying steps
         work = df.copy()
+        artifact: dict = {
+            'dropped_by_rule': {},
+            'clip_bounds': {},
+            'cat_merge_maps': {},
+            'options': sorted(int(x) for x in options),
+        }
 
-        # 1: Column-wise duplicate drop
+        # 1: Column-wise duplicate drop (structural — full frame)
         if 1 in options:
             _rows_before = len(work)
             before_cols = list(work.columns)
@@ -1235,8 +1285,9 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             # Always record the step outcome (even if no columns removed)
             breakdown.append({'step': 'Column-wise duplicate drop', 'option_ids': [1], 'columns': dc, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['col_dedup'] = list(dc)
 
-        # 2: Row-wise duplicate drop
+        # 2: Row-wise duplicate drop (structural — full frame, before split fit)
         if 2 in options:
             _rows_before = len(work)
             work = work.drop_duplicates()
@@ -1244,23 +1295,31 @@ class PreprocessingRunView(APIView):
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Row-wise duplicate drop', 'option_ids': [2], 'columns': [], 'rows_removed': _rows_removed})
 
-        # 3: Zero-variance drop
+        # Resolve outer-train fit index for all *learned* statistics below.
+        fit_idx, fit_meta = resolve_fit_index(work, split=split, train_idx=train_idx)
+        fit = work.loc[fit_idx]
+        artifact['fit_scope'] = fit_meta.get('fit_scope')
+        artifact['n_fit'] = fit_meta.get('n_fit')
+
+        # 3: Zero-variance drop (fit on train)
         if 3 in options:
             _rows_before = len(work)
-            nunique = work.nunique(dropna=False)
+            nunique = fit.nunique(dropna=False)
             to_drop = nunique[nunique <= 1].index.tolist()
             if preserve:
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
+            fit = work.loc[[i for i in fit_idx if i in work.index]]
             dropped_cols += to_drop
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Zero-variance drop', 'option_ids': [3], 'columns': to_drop, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['zero_var'] = list(to_drop)
 
-        # 4: Perfect-correlation drop
+        # 4: Perfect-correlation drop (fit on train)
         if 4 in options:
             _rows_before = len(work)
-            num = work.select_dtypes(include=[np.number])
+            num = fit.select_dtypes(include=[np.number])
             if not num.empty:
                 corr = num.corr().abs()
                 upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
@@ -1268,12 +1327,14 @@ class PreprocessingRunView(APIView):
                 if preserve:
                     to_drop = [c for c in to_drop if c not in preserve]
                 work = work.drop(columns=to_drop, errors='ignore')
+                fit = work.loc[[i for i in fit_idx if i in work.index]]
                 dropped_cols += to_drop
             else:
                 to_drop = []
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Perfect-correlation drop', 'option_ids': [4], 'columns': to_drop, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['perfect_corr'] = list(to_drop)
 
         # Threshold-based drop kinds (catalog-driven).
         #
@@ -1292,7 +1353,7 @@ class PreprocessingRunView(APIView):
             thr = corr_entry['threshold']
             selected_corr_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_CORR_DROP)]
             _rows_before = len(work)
-            num = work.select_dtypes(include=[np.number])
+            num = fit.select_dtypes(include=[np.number])
             if not num.empty:
                 corr = num.corr().abs()
                 removed = set()
@@ -1307,6 +1368,7 @@ class PreprocessingRunView(APIView):
                 if preserve:
                     removed = {c for c in removed if c not in preserve}
                 work = work.drop(columns=list(removed), errors='ignore')
+                fit = work.loc[[i for i in fit_idx if i in work.index]]
                 dropped_cols += list(removed)
                 cols_removed_list = list(removed)
             else:
@@ -1314,6 +1376,7 @@ class PreprocessingRunView(APIView):
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Correlation drop (threshold)', 'option_ids': selected_corr_ids, 'threshold': thr, 'columns': cols_removed_list, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['corr_drop'] = list(cols_removed_list)
 
         # Missing-drop (catalog IDs 16-21, KIND_MISSING_DROP).
         # Pre-v2.27.0 this branch was wired to IDs 9-13 with thresholds
@@ -1325,15 +1388,17 @@ class PreprocessingRunView(APIView):
             thr = miss_entry['threshold']
             selected_miss_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_MISSING_DROP)]
             _rows_before = len(work)
-            miss_ratio = work.isna().mean()
+            miss_ratio = fit.isna().mean()
             to_drop = miss_ratio[miss_ratio >= thr].index.tolist()
             if preserve:
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
+            fit = work.loc[[i for i in fit_idx if i in work.index]]
             dropped_cols += to_drop
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Missing-drop (threshold)', 'option_ids': selected_miss_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['missing_drop'] = list(to_drop)
 
         # Sparsity (zeros) drop (catalog IDs 10-15, KIND_SPARSITY_DROP).
         # Pre-v2.27.0 this branch was wired to IDs 14-18 with thresholds
@@ -1345,19 +1410,21 @@ class PreprocessingRunView(APIView):
             thr = sparse_entry['threshold']
             selected_sparse_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_SPARSITY_DROP)]
             _rows_before = len(work)
-            num = work.select_dtypes(include=[np.number])
+            num = fit.select_dtypes(include=[np.number])
             if not num.empty:
                 zero_ratio = (num == 0).mean()
                 to_drop = zero_ratio[zero_ratio >= thr].index.tolist()
                 if preserve:
                     to_drop = [c for c in to_drop if c not in preserve]
                 work = work.drop(columns=to_drop)
+                fit = work.loc[[i for i in fit_idx if i in work.index]]
                 dropped_cols += to_drop
             else:
                 to_drop = []
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Sparsity zeros drop (threshold)', 'option_ids': selected_sparse_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['sparsity_drop'] = list(to_drop)
 
         # Combined sparsity + missing drop (catalog IDs 22-27, KIND_COMBINED_DROP).
         # Pre-v2.27.0 this branch was wired to IDs 19-23 with thresholds
@@ -1369,9 +1436,9 @@ class PreprocessingRunView(APIView):
             thr = combo_entry['threshold']
             selected_combo_ids = [e['id'] for e in selected_entries_of_kind(options, KIND_COMBINED_DROP)]
             _rows_before = len(work)
-            num = work.select_dtypes(include=[np.number])
+            num = fit.select_dtypes(include=[np.number])
             zero_ratio = (num == 0).mean() if not num.empty else pd.Series(0, index=[])
-            miss_ratio = work.isna().mean()
+            miss_ratio = fit.isna().mean()
             combo = miss_ratio.copy()
             for c in zero_ratio.index:
                 combo[c] = max(combo.get(c, 0), zero_ratio[c])
@@ -1379,10 +1446,12 @@ class PreprocessingRunView(APIView):
             if preserve:
                 to_drop = [c for c in to_drop if c not in preserve]
             work = work.drop(columns=to_drop)
+            fit = work.loc[[i for i in fit_idx if i in work.index]]
             dropped_cols += to_drop
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
             breakdown.append({'step': 'Combined sparsity+missing drop (threshold)', 'option_ids': selected_combo_ids, 'threshold': thr, 'columns': to_drop, 'rows_removed': _rows_removed})
+            artifact['dropped_by_rule']['combined_drop'] = list(to_drop)
 
         # Outlier-num quantile clipping (catalog IDs 28-30, KIND_OUTLIER_NUM).
         # IDs/ranges always agreed with the frontend; switching to the
@@ -1427,8 +1496,10 @@ class PreprocessingRunView(APIView):
             ]
             protected_cols = [c for c in num_all.columns if c not in safe_cols]
             num = num_all[safe_cols]
+            fit_num = fit.select_dtypes(include=[np.number])
+            fit_num = fit_num[[c for c in safe_cols if c in fit_num.columns]]
 
-            if not num.empty:
+            if not num.empty and not fit_num.empty:
                 # Snapshot BEFORE outlier cleaning (full work DF — the
                 # snapshot describes the whole dataset state, not just
                 # the clip subset).
@@ -1437,11 +1508,18 @@ class PreprocessingRunView(APIView):
                 except Exception:
                     stats_before_oc = None
 
-                lower = num.quantile(lo)
-                upper = num.quantile(hi)
+                # Quantile bounds learned on outer-train only
+                lower = fit_num.quantile(lo)
+                upper = fit_num.quantile(hi)
+                artifact['clip_bounds'] = {
+                    c: {'lo': float(lower[c]), 'hi': float(upper[c])}
+                    for c in lower.index
+                    if pd.notna(lower[c]) and pd.notna(upper[c])
+                }
                 num_clipped = num.clip(lower=lower, upper=upper, axis=1)
                 for c in num_clipped.columns:
                     work[c] = num_clipped[c]
+                fit = work.loc[[i for i in fit_idx if i in work.index]]
 
                 # Snapshot AFTER outlier cleaning
                 try:
@@ -1492,46 +1570,10 @@ class PreprocessingRunView(APIView):
                         lom_lookup[fname] = lom
                         usage_lookup[fname] = usage
 
-            # Build train indices for volume-share computation
-            train_idx = None
-            try:
-                if isinstance(split, dict) and split.get('strategy') == 'oot':
-                    date_col = split.get('date_column')
-                    if date_col and date_col in work.columns:
-                        ser = pd.to_datetime(work[date_col], errors='coerce', dayfirst=True)
-                        pct = split.get('percent')
-                        if pct is not None:
-                            try:
-                                pctf = float(pct)
-                            except Exception:
-                                pctf = None
-                            if pctf is not None and 0 < pctf < 100:
-                                order = ser.sort_values(kind='mergesort').index
-                                k = int(len(order) * (1 - pctf / 100.0))
-                                k = max(0, min(len(order), k))
-                                train_idx = order[:k]
-                        if train_idx is None:
-                            cutoff = split.get('cutoff')
-                            if cutoff:
-                                mask_train = ser <= pd.to_datetime(cutoff, dayfirst=True)
-                                train_idx = work.index[mask_train]
-                if train_idx is None and isinstance(split, dict):
-                    train_ratio = 0.75
-                    pct = split.get('percent')
-                    if pct is not None:
-                        try:
-                            pctf = float(pct)
-                            if 0 < pctf < 100:
-                                train_ratio = 1.0 - pctf / 100.0
-                        except Exception:
-                            pass
-                    rng = np.random.RandomState(42)
-                    m = rng.rand(len(work)) < train_ratio
-                    train_idx = work.index[m]
-            except Exception as e:
-                print(f"[PreprocessingRun] categorical outlier: split failed: {e}")
-            if train_idx is None:
-                train_idx = work.index
+            # Volume-shares learned on the same outer-train fit_idx as other rules
+            cat_fit_idx = fit_idx.intersection(work.index)
+            if len(cat_fit_idx) == 0:
+                cat_fit_idx = work.index
 
             merge_mapping: dict[str, dict[str, str]] = {}
             affected_features: list[str] = []
@@ -1545,7 +1587,7 @@ class PreprocessingRunView(APIView):
                 lom = lom_lookup.get(col, '')
 
                 if lom == 'nominal':
-                    train_series = work.loc[train_idx, col].dropna()
+                    train_series = work.loc[cat_fit_idx, col].dropna()
                     total = len(train_series)
                     if total == 0:
                         continue
@@ -1566,7 +1608,7 @@ class PreprocessingRunView(APIView):
                     except (ValueError, TypeError):
                         continue  # skip non-sortable features
 
-                    train_series = work.loc[train_idx, col].dropna()
+                    train_series = work.loc[cat_fit_idx, col].dropna()
                     total = len(train_series)
                     if total == 0:
                         continue
@@ -1615,6 +1657,7 @@ class PreprocessingRunView(APIView):
                         work[col] = work[col].map(lambda x, cm=cat_map: cm.get(x, x))
 
             if merge_mapping:
+                artifact['cat_merge_maps'] = merge_mapping
                 breakdown.append({
                     'step': 'Categorical outlier cleaning',
                     'option_ids': selected_cat_outlier_ids,
@@ -1641,6 +1684,7 @@ class PreprocessingRunView(APIView):
                     'note': f'No categories below {threshold*100:.2f}% volume-share threshold found'
                 })
 
+        self._last_purifier_artifact = artifact
         return work, list(dict.fromkeys(dropped_cols)), breakdown, step_stats
 
     def _safe_timestamp(self) -> str:

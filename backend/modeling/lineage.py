@@ -23,6 +23,7 @@ def build_lineage(
     processed_file: Optional[str] = None,
     split_meta: Optional[Dict[str, Any]] = None,
     purifier_options: Optional[List[Any]] = None,
+    purifier_artifact: Optional[Dict[str, Any]] = None,
     encoding_plan: Optional[List[Dict[str, Any]]] = None,
     encoding_use_native: bool = True,
     feature_names: Optional[List[str]] = None,
@@ -46,6 +47,7 @@ def build_lineage(
         'processed_file': processed_file,
         'split': split_meta or {},
         'purifier_options': purifier_options,
+        'purifier': purifier_artifact or {},
         'encoding': {
             'use_native': bool(encoding_use_native),
             'plan_hash': enc_hash,
