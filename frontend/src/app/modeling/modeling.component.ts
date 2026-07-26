@@ -112,7 +112,19 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   hpNJobs: number = 3;            // compute power — parallel workers (like SFS)
   hpPrimaryMetric: string = 'roc_auc';
   hpValidationCurvePoints: number = 8;
-  readonly hpMetricOptions: string[] = ['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc'];
+  readonly hpClassMetricOptions: string[] = ['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc'];
+  readonly hpRegMetricOptions: string[] = ['r2', 'rmse', 'mae'];
+  get hpMetricOptions(): string[] {
+    return this.isRegressionTask ? this.hpRegMetricOptions : this.hpClassMetricOptions;
+  }
+
+  /** True when the current modeling run is a continuous-target regressor. */
+  get isRegressionTask(): boolean {
+    const task = String(this.modelingStatus?.model?.task || this.sfsResults?.task || '').toLowerCase();
+    if (task === 'regression' || task === 'regressor' || task === 'reg') return true;
+    const modelType = String(this.modelingStatus?.model?.model_type || '').toLowerCase();
+    return modelType.includes('regressor');
+  }
 
   // Search method: 'auto' applies the fit-count heuristic (grid < 100 fits/worker,
   // random <= 500, else bayesian); the user can force any concrete method.
@@ -578,9 +590,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sfsMethodBackward = req.methods.includes('backward');
       const sc: any = req.stopping_criteria || {};
       if (Array.isArray(sc.metrics) && sc.metrics.length > 0) {
+        const allowed = this.isRegressionTask
+          ? new Set(['r2', 'rmse', 'mae'])
+          : new Set(['roc_auc', 'pr_auc']);
         this.sfsMetrics = sc.metrics
-          .filter((m: any) => m && (m.metric === 'roc_auc' || m.metric === 'pr_auc'))
+          .filter((m: any) => m && allowed.has(m.metric))
           .map((m: any) => ({ metric: m.metric, pct_change: Number(m.pct_change) || 0 }));
+        if (this.sfsMetrics.length === 0) {
+          this.sfsMetrics = [{ metric: this.isRegressionTask ? 'r2' : 'roc_auc', pct_change: 1.0 }];
+        }
       }
       if (typeof sc.min_features === 'number') this.sfsMinFeatures = sc.min_features;
       if (typeof sc.max_features === 'number') this.sfsMaxFeatures = sc.max_features;
@@ -1110,6 +1128,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (resp) => {
         console.log('Modeling started:', resp);
         this.modelingStatus = resp;
+        this.applyTaskMetricDefaults();
         // Debug: Check SHAP data
         console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
         console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
@@ -1169,6 +1188,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       this.dataService.getModelingStatus(this.currentFileId).subscribe({
         next: (status) => {
           this.modelingStatus = status;
+          this.applyTaskMetricDefaults();
           this.applySfSort();
           // Check if SFS is ready
           this.sfsReady = status?.model?.sfs_ready || false;
@@ -1480,6 +1500,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedAlgorithm = state.selectedAlgorithm || null;
     this.encodingPlan = state.encodingPlan || [];
     this.modelingStatus = state.modelingStatus || null;
+    this.applyTaskMetricDefaults();
     this.sfsReady = state.sfsReady || false;
     this.encodingReport = state.encodingReport || [];
     this.catLabelLookup = state.catLabelLookup || {};
@@ -2376,7 +2397,54 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    * Add a new metric to SFS criteria
    */
   addSfsMetric(): void {
-    this.sfsMetrics.push({ metric: 'pr_auc', pct_change: 1.0 });
+    this.sfsMetrics.push({
+      metric: this.isRegressionTask ? 'r2' : 'pr_auc',
+      pct_change: 1.0,
+    });
+  }
+
+  /** Align SFS / HP default metrics to classification vs regression. */
+  private applyTaskMetricDefaults(): void {
+    if (!this.isRegressionTask) return;
+    const classOnly = new Set(['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc']);
+    if (this.sfsMetrics.every(m => classOnly.has(m.metric))) {
+      this.sfsMetrics = [{ metric: 'r2', pct_change: this.sfsMetrics[0]?.pct_change ?? 1.0 }];
+    }
+    if (classOnly.has(this.hpPrimaryMetric)) {
+      this.hpPrimaryMetric = 'r2';
+    }
+  }
+
+  sfsMetricLabel(metric: string): string {
+    const map: Record<string, string> = {
+      roc_auc: 'ROC-AUC', pr_auc: 'PR-AUC', r2: 'R²', rmse: 'RMSE', mae: 'MAE',
+    };
+    return map[metric] || metric;
+  }
+
+  sfsPrimaryHeader(prefix: string): string {
+    return this.isRegressionTask ? `${prefix} R²` : `${prefix} ROC-AUC`;
+  }
+
+  sfsSecondaryHeader(prefix: string): string {
+    return this.isRegressionTask ? `${prefix} RMSE` : `${prefix} PR-AUC`;
+  }
+
+  sfsPrimaryValue(step: any, split: 'train' | 'cv' | 'test'): number | null {
+    if (!step) return null;
+    if (this.isRegressionTask && step[`${split}_r2`] != null) return step[`${split}_r2`];
+    return step[`${split}_roc_auc`] ?? null;
+  }
+
+  sfsSecondaryValue(step: any, split: 'train' | 'cv' | 'test'): number | null {
+    if (!step) return null;
+    if (this.isRegressionTask) {
+      if (step[`${split}_rmse`] != null) return step[`${split}_rmse`];
+      const alias = step[`${split}_pr_auc`];
+      // Regression aliases store −RMSE in *_pr_auc for higher-is-better ranking.
+      return alias != null ? Math.abs(alias) : null;
+    }
+    return step[`${split}_pr_auc`] ?? null;
   }
 
   /**
@@ -3124,6 +3192,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const map: any = {
       roc_auc: 'ROC-AUC', pr_auc: 'PR-AUC', f1: 'F1', f2: 'F2',
       precision: 'Precision', recall: 'Recall', accuracy: 'Accuracy', mcc: 'MCC',
+      r2: 'R²', rmse: 'RMSE', mae: 'MAE',
     };
     return map[m] || m;
   }
