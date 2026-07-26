@@ -137,7 +137,9 @@ Unified encoding + training in a single step. The algorithm selection auto-deter
 - Pre-train leakage heuristics (IV / correlation / name / uniqueness) surface as warnings
 - All-NaN columns dropped automatically
 
-**Cross-validation metrics** (5-fold on train+valid; stratified, or time-series when OOT split):
+**Cross-validation** (on train+valid; locked outer test excluded):
+- Classification: stratified K-fold by default; **time-ordered** folds when the preprocessing split is OOT; **group-aware** folds when an entity/ID column is available
+- Regression: shuffled K-fold with R² / RMSE / MAE
 
 | Metric | Description |
 |--------|-------------|
@@ -147,6 +149,7 @@ Unified encoding + training in a single step. The algorithm selection auto-deter
 | **Precision** | Positive predictive value |
 | **Recall** | Sensitivity / true positive rate |
 | **Log-Loss** | Logarithmic loss (cross-entropy) |
+| **R² / RMSE / MAE** | Regression outer-fold scores (continuous targets) |
 
 **CV visualizations:**
 - ROC curves per fold + mean curve with std band
@@ -228,7 +231,7 @@ Automated feature selection using sequential forward and/or backward search:
 - **Forward selection**: Starts with zero features, adds the best one at each step
 - **Backward selection**: Starts with all features, removes the least useful at each step
 - **Both directions** can run in the same session
-- **Cross-validated scoring** at every step (AUC-ROC, accuracy, F1, etc.)
+- **Cross-validated scoring** at every step (classification: ROC-AUC / PR-AUC; regression: R² / RMSE)
 - **Real-time progress**: Progress bar with percentage, current metrics, completed steps
 - **Step detail modal**: Per-step view showing:
   - Selected features at that step
@@ -242,14 +245,17 @@ Automated feature selection using sequential forward and/or backward search:
 
 ### 8. Evaluation
 
-Model performance evaluation (outer-test metrics, threshold table, model card):
-- Summary metrics display
-- Comparison across model variants
+Locked **outer-test** evaluation (never used for early stopping or HP search):
+- Classification: ROC/PR, KS/Gini, threshold table, calibration curve, PSI vs train
+- Regression: R² / RMSE / MAE plus residual diagnostics
+- **Model card** mapped from the governance checklist, with deploy-readiness blockers / warnings / residual human checks
 
 ### 9. Deployment
 
-Model deployment interface (score bundle + batch CSV scoring):
-- Export and serve trained models
+Score-bundle freeze + batch CSV scoring:
+- Bundle includes booster artifact, feature schema, impute means, categorical levels, calibrator (when fitted), and lineage
+- **Model-card gate**: create-bundle is blocked (HTTP 409) until outer-test evaluation exists, lineage is traceable, and high-severity leakage findings are cleared
+- Residual human checks (metric floors, monitoring plan, stakeholder explanation review) remain documented on the card
 
 ---
 

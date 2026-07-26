@@ -82,9 +82,14 @@ relying on the model, exporting artifacts, or moving toward deployment.
 ## Deployment Readiness
 
 - Data, preprocessing, encoding, feature-selection, and tuning decisions are
-  traceable.
+  traceable. *(enforced: score-bundle freeze requires lineage + outer-test evaluation)*
+- High-severity automated leakage findings are cleared or features excluded.
+  *(enforced: `n_high > 0` blocks score-bundle creation)*
 - Performance and stability metrics are acceptable for the intended use case.
+  *(human residual — no numeric AUC/PSI floors in product defaults)*
 - Feature explanations are understandable to non-developer stakeholders.
+  *(human residual; SHAP/gain artifacts are available for review)*
 - Known limitations, data gaps, and assumptions are documented.
+  *(surfaced on the model card `known_limitations` + residual human checks)*
 - Monitoring requirements are defined for future data drift and performance
-  decay.
+  decay. *(human residual; bundle manifest recommends PSI / score-distribution checks)*

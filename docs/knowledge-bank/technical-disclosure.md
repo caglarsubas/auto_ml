@@ -214,7 +214,9 @@ uses a backward survivor set as the candidate pool for forward selection.
 
 SFS stops according to configured criteria, not necessarily after exhausting all
 possible subsets. Stopping criteria include monitored metrics, percentage-change
-thresholds, minimum features, and maximum features.
+thresholds, minimum features, and maximum features. Classifiers rank candidates
+by ROC-AUC / PR-AUC with stratified folds; regressors rank by R² (with −RMSE as
+the secondary score) using non-stratified K-fold.
 
 Top-K candidate screening is a performance optimization. It does not mean the
 platform is proving that all non-top-K candidates are useless.
@@ -229,7 +231,26 @@ uses estimated fit count per worker to choose a practical strategy.
 
 The platform records the requested method, resolved method, number of trials,
 primary metric, and validation-curve outputs so reviewers can understand the
-search.
+search. Classification searches optimize ranking / classification metrics;
+regression searches optimize R² / RMSE / MAE with non-stratified K-fold CV.
+
+## Evaluation and Deployment Readiness
+
+Evaluation always scores the locked outer test. The model card maps governance
+checklist sections into reviewable fields and states whether each item is
+enforced in code or remains a residual human check.
+
+Score-bundle creation is gated on that card:
+
+- **Blocking (automated):** missing evaluation / outer-test metrics, missing
+  lineage (not traceable), high-severity leakage findings still present.
+- **Warnings / human residual:** uncalibrated scores, metric floors for the
+  intended use case, stakeholder-readable explanations, and post-go-live
+  monitoring (PSI / score drift).
+
+Deployment freezes the booster, feature schema, impute means, categorical
+levels, optional calibrator, and lineage into a score bundle used for batch CSV
+scoring. The gate does not replace human approval for business go-live.
 
 ## Assistant Retrieval and Tool Decisions
 
