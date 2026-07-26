@@ -242,6 +242,153 @@ def feature_psi_report(
     }
 
 
+def assess_deploy_readiness(
+    evaluation: Optional[Dict[str, Any]] = None,
+    lineage: Optional[Dict[str, Any]] = None,
+    modeling_status: Optional[Dict[str, Any]] = None,
+    *,
+    evaluation_present: bool = True,
+) -> Dict[str, Any]:
+    """Decide whether a modeled file may freeze a score bundle.
+
+    Hard blockers (automated):
+      - evaluation artifact / outer-test metrics missing
+      - lineage missing (not traceable)
+      - high-severity leakage flags still present
+
+    Soft items stay as warnings + human_checks_remaining (calibration, metric
+    floors, stakeholder review) — no numeric AUC/PSI cutoffs without product
+    defaults.
+    """
+    evaluation = evaluation or {}
+    lineage = lineage or {}
+    model = (modeling_status or {}).get('model') or {}
+    task = (
+        evaluation.get('task')
+        or model.get('task')
+        or ('regression' if 'regressor' in str(model.get('model_type') or '') else 'classification')
+    )
+    leak = model.get('leakage_scan') or evaluation.get('leakage_scan') or {}
+    n_high = int(leak.get('n_high') or 0)
+    metrics = evaluation.get('metrics') or {}
+    outer_ok = bool(metrics)
+    traceable = bool(lineage and (lineage.get('lineage_id') or lineage.get('split') or lineage.get('features')))
+    calibrated = bool(
+        evaluation.get('scores_calibrated')
+        or (model.get('calibration') or {}).get('fitted')
+        or (evaluation.get('calibration') or {}).get('fitted')
+    )
+
+    blocking: List[Dict[str, str]] = []
+    warnings: List[Dict[str, str]] = []
+
+    if not evaluation_present:
+        blocking.append({
+            'code': 'evaluation_missing',
+            'message': 'Run Evaluation before creating a score bundle.',
+        })
+    elif not outer_ok:
+        blocking.append({
+            'code': 'outer_test_missing',
+            'message': 'Outer-test evaluation metrics are missing from the model card.',
+        })
+    if not traceable:
+        blocking.append({
+            'code': 'lineage_missing',
+            'message': 'Pipeline lineage is missing — data/encoding/split decisions are not traceable.',
+        })
+    if n_high > 0:
+        blocking.append({
+            'code': 'leakage_high',
+            'message': f'Automated leakage scan flagged {n_high} high-severity feature(s). Exclude or justify before deploy.',
+        })
+
+    if task != 'regression' and not calibrated:
+        warnings.append({
+            'code': 'uncalibrated_scores',
+            'message': 'Probability calibrator was not fitted; review score interpretation before go-live.',
+        })
+    if not (model.get('importances') or evaluation.get('feature_psi')):
+        warnings.append({
+            'code': 'explanations_review',
+            'message': 'Confirm feature explanations (SHAP/gain) are understandable to stakeholders.',
+        })
+
+    human_checks = [
+        'Confirm ID/timestamp/leakage fields are excluded via Model_Usage.',
+        'Confirm split strategy matches the deployment scenario (random vs OOT).',
+        'Review automated leakage warnings and SHAP/gain/VIF before accepting the feature set.',
+        'Confirm performance and stability metrics are acceptable for the intended use case.',
+        'Define monitoring for future data drift and performance decay (PSI / score distribution).',
+    ]
+    if task == 'regression':
+        human_checks.append('Review residual bias / RMSE against the business tolerance for continuous scores.')
+    else:
+        human_checks.append('Document business threshold / cost trade-off from the threshold table.')
+
+    checklist_coverage = {
+        'data_declaration': {
+            'status': 'enforced' if (lineage.get('features') or model.get('feature_count') is not None) else 'human',
+            'detail': 'Feature count / exclusions captured in lineage when present.',
+        },
+        'split_and_stability': {
+            'status': 'enforced' if traceable else 'blocking',
+            'detail': 'Split metadata required via lineage for deploy.',
+        },
+        'encoding': {
+            'status': 'enforced' if (lineage.get('encoding') is not None or model.get('enable_categorical') is not None) else 'human',
+            'detail': 'Encoding plan / native categorical flag recorded when available.',
+        },
+        'modeling': {
+            'status': 'enforced' if outer_ok else 'blocking',
+            'detail': 'Outer-test metrics required before score-bundle freeze.',
+        },
+        'leakage_scan': {
+            'status': 'blocking' if n_high > 0 else 'enforced',
+            'detail': 'High-severity leakage findings block deploy; medium/low remain human review.',
+        },
+        'evaluation_outer_test': {
+            'status': 'enforced' if outer_ok else 'blocking',
+            'detail': 'Locked outer-test evaluation must exist.',
+        },
+        'assistant_and_action_review': {
+            'status': 'human',
+            'detail': 'Assistant recommendations require human review before approval.',
+        },
+        'deployment_readiness': {
+            'status': 'enforced' if not blocking else 'blocking',
+            'detail': 'Automated blockers must clear; residual human checks remain documented.',
+        },
+        'monitoring': {
+            'status': 'human',
+            'detail': 'Post-go-live PSI / score drift monitoring is a residual human check.',
+        },
+    }
+
+    ready = len(blocking) == 0
+    summary = (
+        'Deploy-ready: automated blockers cleared; complete residual human checks before go-live.'
+        if ready else
+        'Not deploy-ready: resolve blocking items before creating a score bundle.'
+    )
+    return {
+        'ready': ready,
+        'summary': summary,
+        'task': task,
+        'blocking': blocking,
+        'warnings': warnings,
+        'human_checks_remaining': human_checks,
+        'checklist_coverage': checklist_coverage,
+        'flags': {
+            'traceable': traceable,
+            'outer_test_evaluated': outer_ok,
+            'scores_calibrated': calibrated,
+            'leakage_n_high': n_high,
+            'evaluation_present': evaluation_present,
+        },
+    }
+
+
 def build_model_card(
     file_id: int,
     evaluation: Dict[str, Any],
@@ -251,26 +398,17 @@ def build_model_card(
     """Map governance checklist sections into a reviewable model card."""
     model = (modeling_status or {}).get('model') or {}
     split = model.get('split') or (lineage or {}).get('split') or {}
-    task = (
-        evaluation.get('task')
-        or model.get('task')
-        or ('regression' if 'regressor' in str(model.get('model_type') or '') else 'classification')
+    readiness = assess_deploy_readiness(
+        evaluation, lineage, modeling_status, evaluation_present=True,
     )
-    human_checks = [
-        'Confirm ID/timestamp/leakage fields are excluded via Model_Usage.',
-        'Confirm split strategy matches the deployment scenario (random vs OOT).',
-        'Review automated leakage warnings and SHAP/gain/VIF before accepting the feature set.',
-    ]
-    if task == 'regression':
-        human_checks.append('Review residual bias / RMSE against the business tolerance for continuous scores.')
-    else:
-        human_checks.append('Document business threshold / cost trade-off from the threshold table.')
+    task = readiness['task']
     return {
         'file_id': file_id,
         'title': f'Boosting model card — file {file_id}',
         'task': task,
         'algorithm': (lineage or {}).get('algorithm') or model.get('model_type') or 'xgboost_classifier',
         'lineage_id': (lineage or {}).get('lineage_id') or model.get('lineage_id'),
+        'deploy_ready': readiness['ready'],
         'sections': {
             'data_declaration': {
                 'excluded_variables': (lineage or {}).get('features', {}).get('excluded'),
@@ -306,13 +444,18 @@ def build_model_card(
             'leakage_scan': model.get('leakage_scan') or evaluation.get('leakage_scan'),
             'evaluation_outer_test': evaluation.get('metrics'),
             'deployment_readiness': {
-                'traceable': bool(lineage),
-                'outer_test_evaluated': bool(evaluation.get('metrics')),
-                'scores_calibrated': bool(evaluation.get('scores_calibrated')),
+                'ready': readiness['ready'],
+                'summary': readiness['summary'],
+                'blocking': readiness['blocking'],
+                'warnings': readiness['warnings'],
+                'checklist_coverage': readiness['checklist_coverage'],
+                'traceable': readiness['flags']['traceable'],
+                'outer_test_evaluated': readiness['flags']['outer_test_evaluated'],
+                'scores_calibrated': readiness['flags']['scores_calibrated'],
                 'known_limitations': _deployment_limitations(model, evaluation, task),
             },
         },
-        'human_checks_remaining': human_checks,
+        'human_checks_remaining': readiness['human_checks_remaining'],
     }
 
 

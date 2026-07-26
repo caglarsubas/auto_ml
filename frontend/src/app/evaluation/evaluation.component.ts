@@ -71,6 +71,15 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     return this.result?.model_card || null;
   }
 
+  get deployReadiness(): any {
+    return this.modelCard?.sections?.deployment_readiness || null;
+  }
+
+  get isDeployReady(): boolean {
+    if (this.modelCard?.deploy_ready != null) return !!this.modelCard.deploy_ready;
+    return !!this.deployReadiness?.ready;
+  }
+
   get thresholdRows(): any[] {
     return this.result?.evaluation?.threshold_table || [];
   }

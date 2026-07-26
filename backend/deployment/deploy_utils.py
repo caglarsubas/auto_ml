@@ -13,14 +13,70 @@ import pandas as pd
 from django.conf import settings
 
 from modeling.lineage import load_lineage
+from evaluation.eval_utils import assess_deploy_readiness
+
+
+class DeployNotReadyError(Exception):
+    """Raised when model-card readiness blockers prevent score-bundle freeze."""
+
+    def __init__(self, readiness: Dict[str, Any]):
+        self.readiness = readiness or {}
+        super().__init__(self.readiness.get('summary') or 'Not deploy-ready')
 
 
 def bundle_dir(file_id: int) -> str:
     return os.path.join(settings.MEDIA_ROOT, 'deployment_bundles', str(file_id))
 
 
+def assess_file_deploy_readiness(file_id: int) -> Dict[str, Any]:
+    """Load evaluation / modeling / lineage artifacts and assess deploy readiness."""
+    modeling_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+    modeling: Dict[str, Any] = {}
+    if os.path.exists(modeling_path):
+        with open(modeling_path, 'r', encoding='utf-8') as f:
+            modeling = json.load(f)
+
+    eval_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json')
+    evaluation: Optional[Dict[str, Any]] = None
+    evaluation_present = False
+    if os.path.exists(eval_path):
+        with open(eval_path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+        # EvaluationRunView persists { evaluation, model_card, ... }
+        if isinstance(raw.get('evaluation'), dict):
+            evaluation = raw['evaluation']
+        else:
+            evaluation = raw
+        evaluation_present = True
+
+    card_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
+    if evaluation is None and os.path.exists(card_path):
+        with open(card_path, 'r', encoding='utf-8') as f:
+            card = json.load(f)
+        evaluation = {
+            'task': card.get('task'),
+            'metrics': (card.get('sections') or {}).get('evaluation_outer_test') or {},
+            'leakage_scan': (card.get('sections') or {}).get('leakage_scan'),
+            'scores_calibrated': ((card.get('sections') or {}).get('deployment_readiness') or {}).get('scores_calibrated'),
+            'calibration': ((card.get('sections') or {}).get('modeling') or {}).get('calibration'),
+        }
+        evaluation_present = bool(evaluation.get('metrics'))
+
+    lineage = load_lineage(file_id) or {}
+    return assess_deploy_readiness(
+        evaluation,
+        lineage,
+        modeling,
+        evaluation_present=evaluation_present,
+    )
+
+
 def build_score_bundle(file_id: int) -> Dict[str, Any]:
     """Freeze model + feature schema + lineage into a score bundle."""
+    readiness = assess_file_deploy_readiness(file_id)
+    if not readiness.get('ready'):
+        raise DeployNotReadyError(readiness)
+
     modeling_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
     if not os.path.exists(modeling_path):
         raise FileNotFoundError('Modeling status not found. Run modeling first.')
@@ -119,6 +175,15 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'calibration': model.get('calibration') or {},
         'lineage_id': lineage.get('lineage_id') or model.get('lineage_id'),
         'model_path_source': model_rel,
+        'deploy_ready': True,
+        'model_card_path': (
+            os.path.relpath(
+                os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json'),
+                settings.MEDIA_ROOT,
+            )
+            if os.path.exists(os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json'))
+            else None
+        ),
         'monitoring': {
             'recommended_checks': ['psi_vs_train', 'score_distribution', 'target_rate_if_labeled'],
             'psi_bands': {'stable': '<0.10', 'moderate': '0.10-0.25', 'shift': '>0.25'},
