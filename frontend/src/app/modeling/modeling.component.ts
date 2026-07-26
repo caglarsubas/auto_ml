@@ -397,7 +397,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.sharedService.selectedPipeline$.subscribe((p) => {
       this.selectedPipeline = p;
-      // Provide algorithm options based on pipeline (keep LGBM/CatBoost visible as planned)
+      // Provide algorithm options based on pipeline
       if (p === 'boosting') {
         this.availableAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
         this.implementedAlgorithms = ['xgboost', 'lightgbm', 'catboost'];

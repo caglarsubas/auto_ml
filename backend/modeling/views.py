@@ -11,7 +11,7 @@ import math
 import warnings
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.model_selection import train_test_split, StratifiedKFold, TimeSeriesSplit
 from sklearn.metrics import accuracy_score, r2_score, roc_auc_score, average_precision_score
 from sklearn.linear_model import LinearRegression
 from joblib import dump as joblib_dump
@@ -28,6 +28,8 @@ from modeling.split_contract import (
 )
 from modeling.lineage import build_lineage, save_lineage
 from modeling.booster_adapters import get_adapter, available_boosting_algorithms
+from modeling.calibration_utils import fit_calibrator, save_calibrator, apply_calibrator
+from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 import pickle
 
@@ -383,6 +385,15 @@ class ModelingStartView(APIView):
                                 scale_pos_weight = round(neg / pos, 6)
                                 params['scale_pos_weight'] = scale_pos_weight
 
+                        # Leakage heuristics (warnings only — do not block training)
+                        leakage_report = scan_leakage_risks(
+                            X_train, y_train,
+                            feature_names=list(X_train.columns),
+                            excluded=excluded_cols_for_modeling,
+                        )
+                        if leakage_report.get('n_high'):
+                            print(f"[ModelingStart] Leakage warnings: {leakage_report.get('summary')}")
+
                         # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
                         feature_names = list(map(str, X_train.columns.tolist()))
                         adapter = get_adapter(algorithm)
@@ -393,15 +404,32 @@ class ModelingStartView(APIView):
                         booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
                         enable_cat = bool(adapter.enable_categorical or enable_cat)
 
-                        # Quality metric on validation
+                        # Quality metric on validation + probability calibration (fit on valid only)
+                        calibration_meta = {'fitted': False}
+                        calibrator = None
+                        calibrator_path = None
                         try:
                             y_prob = adapter.predict_proba(X_valid)
                             if num_classes == 2:
                                 valid_auc = float(roc_auc_score(y_valid, y_prob))
+                                calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
+                                if calibrator is not None:
+                                    calibrator_path = save_calibrator(
+                                        int(file_id), calibrator, settings.MEDIA_ROOT,
+                                    )
+                                    y_prob_cal = apply_calibrator(calibrator, y_prob)
+                                    calibration_meta['valid_auc_raw'] = valid_auc
+                                    try:
+                                        calibration_meta['valid_auc_calibrated'] = float(
+                                            roc_auc_score(y_valid, y_prob_cal)
+                                        )
+                                    except Exception:
+                                        pass
                             else:
                                 valid_auc = None
                         except Exception:
                             valid_auc = None
+                            y_prob = None
 
                         feat_names = feature_names
                         gain_importance = adapter.gain_importance()
@@ -772,6 +800,14 @@ class ModelingStartView(APIView):
                         try:
                             from sklearn.metrics import roc_curve, precision_recall_curve
                             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+                            # Prefer time-ordered folds when preprocessing used an OOT split
+                            cv_strategy = 'stratified'
+                            if (split_meta or {}).get('strategy') == 'oot':
+                                try:
+                                    skf = TimeSeriesSplit(n_splits=5)
+                                    cv_strategy = 'time_series'
+                                except Exception:
+                                    cv_strategy = 'stratified'
                             # grids for consistent interpolation across folds
                             roc_fpr_grid = np.linspace(0.0, 1.0, 101)
                             pr_recall_grid = np.linspace(0.0, 1.0, 101)
@@ -783,7 +819,15 @@ class ModelingStartView(APIView):
                             base_pr_list = []
                             X_cv = pd.concat([X_train, X_valid], axis=0)
                             y_cv = pd.concat([y_train, y_valid], axis=0)
-                            for tr_idx, va_idx in skf.split(X_cv.values, y_cv):
+                            if cv_strategy == 'time_series':
+                                # Preserve chronological order from outer-train indices
+                                try:
+                                    order = X_cv.index
+                                    X_cv = X_cv.loc[order]
+                                    y_cv = y_cv.loc[order]
+                                except Exception:
+                                    pass
+                            for tr_idx, va_idx in skf.split(X_cv.values, y_cv if cv_strategy == 'stratified' else None):
                                 X_tr, X_va = X_cv.iloc[tr_idx], X_cv.iloc[va_idx]
                                 y_tr, y_va = y_cv.iloc[tr_idx], y_cv.iloc[va_idx]
                                 fold_adapter = get_adapter(algorithm)
@@ -894,6 +938,7 @@ class ModelingStartView(APIView):
                                     'baseline': float(np.mean(base_pr_list)) if base_pr_list else None,
                                 } if prec_fold_list else None,
                                 'pr_curve_micro': pr_curve_micro,
+                                'cv_strategy': cv_strategy,
                             }
                         except Exception:
                             cv_summary = None
@@ -928,6 +973,8 @@ class ModelingStartView(APIView):
                             'split_meta': split_meta,
                             'scale_pos_weight': scale_pos_weight,
                             'algorithm': algorithm,
+                            'calibrator_path': calibrator_path,
+                            'calibration': calibration_meta,
                         }
                         with open(train_data_path, 'wb') as f:
                             pickle.dump(train_data, f)
@@ -935,10 +982,14 @@ class ModelingStartView(APIView):
 
                         # Locked outer-test AUC (never used for early stopping / HP)
                         test_auc = None
+                        test_auc_calibrated = None
                         try:
                             yhat_test = adapter.predict_proba(X_test)
                             if num_classes == 2:
                                 test_auc = float(roc_auc_score(y_test, yhat_test.ravel()))
+                                if calibrator is not None:
+                                    yhat_cal = apply_calibrator(calibrator, yhat_test)
+                                    test_auc_calibrated = float(roc_auc_score(y_test, yhat_cal))
                             else:
                                 test_auc = float(roc_auc_score(y_test, yhat_test, multi_class='ovr', average='weighted'))
                         except Exception as te:
@@ -956,8 +1007,12 @@ class ModelingStartView(APIView):
                             'algorithm': algorithm,
                             'valid_auc': valid_auc,
                             'test_auc': test_auc,
+                            'test_auc_calibrated': test_auc_calibrated,
                             'best_iteration': int(adapter.best_iteration or 0),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
+                            'calibrator_path': calibrator_path,
+                            'calibration': calibration_meta,
+                            'leakage_scan': leakage_report,
                             'feature_count': int(X_train.shape[1]),
                             'categorical_features_used': cat_cols,
                             'enable_categorical': enable_cat,
@@ -995,7 +1050,10 @@ class ModelingStartView(APIView):
                                 metrics={
                                     'valid_auc': valid_auc,
                                     'test_auc': test_auc,
+                                    'test_auc_calibrated': test_auc_calibrated,
                                     'best_iteration': model_info.get('best_iteration'),
+                                    'calibration': calibration_meta,
+                                    'leakage_n_high': (leakage_report or {}).get('n_high'),
                                 },
                                 model_path=model_info.get('model_path'),
                                 impute_means=impute_means,
