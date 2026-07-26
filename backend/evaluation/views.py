@@ -14,10 +14,31 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from evaluation.eval_utils import build_model_card, evaluate_binary, feature_psi_report
+from evaluation.eval_utils import (
+    build_model_card, evaluate_binary, evaluate_regression, feature_psi_report,
+)
 from modeling.calibration_utils import apply_calibrator, load_calibrator
 from modeling.lineage import load_lineage
 from modeling.booster_adapters import load_adapter_from_path
+
+
+def _resolve_algorithm(model_info: dict, train_data: dict) -> str:
+    raw = (
+        model_info.get('algorithm')
+        or train_data.get('algorithm')
+        or (model_info.get('model_type') or 'xgboost')
+    )
+    algo = str(raw).replace('_classifier', '').replace('_regressor', '')
+    return algo or 'xgboost'
+
+
+def _is_regression_task(model_info: dict, train_data: dict) -> bool:
+    task = (train_data.get('task') or model_info.get('task') or '').strip().lower()
+    if task == 'regression':
+        return True
+    mt = str(model_info.get('model_type') or '')
+    mp = str(model_info.get('model_path') or train_data.get('model_path') or '')
+    return 'regressor' in mt.lower() or 'regressor' in mp.lower()
 
 
 def _load_modeling_status(file_id: int):
@@ -93,58 +114,76 @@ class EvaluationRunView(APIView):
                     except Exception:
                         pass
 
-            algo = (
-                model_info.get('algorithm')
-                or train_data.get('algorithm')
-                or (model_info.get('model_type') or 'xgboost').replace('_classifier', '')
-            )
+            algo = _resolve_algorithm(model_info, train_data)
+            is_regression = _is_regression_task(model_info, train_data)
             adapter = load_adapter_from_path(
                 model_abs,
                 algorithm=algo,
                 feature_names=list(map(str, X_test.columns)),
                 cat_features=list(model_info.get('categorical_features_used') or []),
             )
-            y_proba_raw = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
-            y_proba = y_proba_raw
-            calibration_meta = (
-                train_data.get('calibration')
-                or model_info.get('calibration')
-                or {}
-            )
-            calibrator_rel = (
-                train_data.get('calibrator_path')
-                or model_info.get('calibrator_path')
-            )
-            if calibrator_rel and calibration_meta.get('fitted'):
-                try:
-                    calibrator = load_calibrator(calibrator_rel, settings.MEDIA_ROOT)
-                    y_proba = apply_calibrator(calibrator, y_proba_raw)
-                    evaluation_calibration = {
-                        **calibration_meta,
-                        'applied': True,
-                        'calibrator_path': calibrator_rel,
-                    }
-                except Exception as cal_err:
+
+            if is_regression:
+                y_pred = np.asarray(adapter.predict(X_test), dtype=float).ravel()
+                evaluation = evaluate_regression(y_test, y_pred)
+                evaluation['scores_calibrated'] = False
+                evaluation['calibration'] = {'applied': False, 'fitted': False}
+                evaluation['comparison'] = {
+                    'valid_r2': model_info.get('valid_r2'),
+                    'modeling_test_r2': model_info.get('test_r2'),
+                    'modeling_test_rmse': model_info.get('test_rmse'),
+                    'evaluation_test_r2': evaluation['metrics'].get('r2'),
+                    'evaluation_test_rmse': evaluation['metrics'].get('rmse'),
+                }
+            else:
+                y_proba_raw = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
+                y_proba = y_proba_raw
+                calibration_meta = (
+                    train_data.get('calibration')
+                    or model_info.get('calibration')
+                    or {}
+                )
+                calibrator_rel = (
+                    train_data.get('calibrator_path')
+                    or model_info.get('calibrator_path')
+                )
+                if calibrator_rel and calibration_meta.get('fitted'):
+                    try:
+                        calibrator = load_calibrator(calibrator_rel, settings.MEDIA_ROOT)
+                        y_proba = apply_calibrator(calibrator, y_proba_raw)
+                        evaluation_calibration = {
+                            **calibration_meta,
+                            'applied': True,
+                            'calibrator_path': calibrator_rel,
+                        }
+                    except Exception as cal_err:
+                        evaluation_calibration = {
+                            **calibration_meta,
+                            'applied': False,
+                            'warning': f'Calibrator load failed: {cal_err}',
+                        }
+                else:
                     evaluation_calibration = {
                         **calibration_meta,
                         'applied': False,
-                        'warning': f'Calibrator load failed: {cal_err}',
                     }
-            else:
-                evaluation_calibration = {
-                    **calibration_meta,
-                    'applied': False,
+
+                evaluation = evaluate_binary(y_test, y_proba, threshold=threshold)
+                evaluation['scores_calibrated'] = bool(evaluation_calibration.get('applied'))
+                evaluation['calibration'] = evaluation_calibration
+                if evaluation_calibration.get('applied'):
+                    try:
+                        raw_eval = evaluate_binary(y_test, y_proba_raw, threshold=threshold)
+                        evaluation['metrics_raw'] = raw_eval.get('metrics')
+                    except Exception:
+                        pass
+                evaluation['comparison'] = {
+                    'valid_auc': model_info.get('valid_auc'),
+                    'modeling_test_auc': model_info.get('test_auc'),
+                    'modeling_test_auc_calibrated': model_info.get('test_auc_calibrated'),
+                    'evaluation_test_auc': evaluation['metrics'].get('roc_auc'),
                 }
 
-            evaluation = evaluate_binary(y_test, y_proba, threshold=threshold)
-            evaluation['scores_calibrated'] = bool(evaluation_calibration.get('applied'))
-            evaluation['calibration'] = evaluation_calibration
-            if evaluation_calibration.get('applied'):
-                try:
-                    raw_eval = evaluate_binary(y_test, y_proba_raw, threshold=threshold)
-                    evaluation['metrics_raw'] = raw_eval.get('metrics')
-                except Exception:
-                    pass
             evaluation['split'] = train_data.get('split_meta') or model_info.get('split') or {}
             evaluation['n_test'] = int(len(y_test))
             evaluation['feature_count'] = int(X_test.shape[1])
@@ -160,14 +199,6 @@ class EvaluationRunView(APIView):
                     )
             except Exception as psi_err:
                 evaluation['psi_vs_train'] = {'error': str(psi_err)}
-
-            # Also surface valid metrics from modeling for comparison
-            evaluation['comparison'] = {
-                'valid_auc': model_info.get('valid_auc'),
-                'modeling_test_auc': model_info.get('test_auc'),
-                'modeling_test_auc_calibrated': model_info.get('test_auc_calibrated'),
-                'evaluation_test_auc': evaluation['metrics'].get('roc_auc'),
-            }
 
             lineage = load_lineage(file_id)
             card = build_model_card(file_id, evaluation, lineage=lineage, modeling_status=modeling_status)

@@ -2,11 +2,11 @@
   <h2>Evaluation</h2>
   <p style="color: #555; max-width: 720px; font-size: 14px;">
     Scores the locked outer test set that was never used for early stopping or hyperparameter search.
-    Compare validation AUC from modeling against honest test metrics, then review the governance model card.
+    Compare modeling holdout metrics against honest outer-test metrics, then review the governance model card.
   </p>
 
   <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 16px 0;">
-    <mat-form-field appearance="fill" style="width: 160px;">
+    <mat-form-field *ngIf="!isRegression" appearance="fill" style="width: 160px;">
       <mat-label>Decision threshold</mat-label>
       <input matInput type="number" min="0.01" max="0.99" step="0.01" [(ngModel)]="threshold" />
     </mat-form-field>
@@ -20,9 +20,11 @@
   <div *ngIf="error" style="color: #c62828; margin-bottom: 12px;">{{ error }}</div>
 
   <div *ngIf="metrics" style="margin-top: 12px;">
-    <h3 style="margin-bottom: 8px;">Outer-test metrics</h3>
+    <h3 style="margin-bottom: 8px;">Outer-test metrics
+      <span *ngIf="taskLabel" style="font-size: 13px; font-weight: 400; color: #666;">({{ taskLabel }})</span>
+    </h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; max-width: 900px;">
-      <div *ngFor="let key of ['roc_auc','pr_auc','ks','gini','f1','f2','precision','recall','accuracy','mcc','brier','log_loss']"
+      <div *ngFor="let key of metricKeys"
            style="border: 1px solid #e0e0e0; padding: 10px 12px; border-radius: 4px;">
         <div style="font-size: 11px; color: #777; text-transform: uppercase;">{{ key }}</div>
         <div style="font-size: 18px; font-weight: 600;">
@@ -31,7 +33,7 @@
       </div>
     </div>
 
-    <div *ngIf="result?.evaluation?.comparison" style="margin-top: 14px; font-size: 13px; color: #444;">
+    <div *ngIf="!isRegression && result?.evaluation?.comparison" style="margin-top: 14px; font-size: 13px; color: #444;">
       Modeling valid AUC:
       <strong>{{ result.evaluation.comparison.valid_auc | number:'1.3-3' }}</strong>
       · Modeling test AUC:
@@ -40,14 +42,25 @@
       <strong>{{ result.evaluation.comparison.evaluation_test_auc | number:'1.3-3' }}</strong>
     </div>
 
-    <div *ngIf="metrics.confusion" style="margin-top: 14px; font-size: 13px;">
+    <div *ngIf="isRegression && result?.evaluation?.comparison" style="margin-top: 14px; font-size: 13px; color: #444;">
+      Modeling valid R²:
+      <strong>{{ result.evaluation.comparison.valid_r2 | number:'1.3-3' }}</strong>
+      · Modeling test R²:
+      <strong>{{ result.evaluation.comparison.modeling_test_r2 | number:'1.3-3' }}</strong>
+      · Evaluation test R²:
+      <strong>{{ result.evaluation.comparison.evaluation_test_r2 | number:'1.3-3' }}</strong>
+      · RMSE:
+      <strong>{{ result.evaluation.comparison.evaluation_test_rmse | number:'1.3-3' }}</strong>
+    </div>
+
+    <div *ngIf="!isRegression && metrics.confusion" style="margin-top: 14px; font-size: 13px;">
       Confusion at threshold {{ metrics.threshold }} —
       TP {{ metrics.confusion.tp }}, FP {{ metrics.confusion.fp }},
       TN {{ metrics.confusion.tn }}, FN {{ metrics.confusion.fn }}
     </div>
   </div>
 
-  <div *ngIf="thresholdRows.length" style="margin-top: 24px; overflow-x: auto;">
+  <div *ngIf="!isRegression && thresholdRows.length" style="margin-top: 24px; overflow-x: auto;">
     <h3>Threshold table</h3>
     <table style="border-collapse: collapse; font-size: 12px; min-width: 720px;">
       <thead>
@@ -87,7 +100,7 @@
         · train/valid/test
         {{ modelCard.sections?.split_and_stability?.n_train }}/{{ modelCard.sections?.split_and_stability?.n_valid }}/{{ modelCard.sections?.split_and_stability?.n_test }}
       </div>
-      <div style="margin-bottom: 8px;">
+      <div *ngIf="!isRegression" style="margin-bottom: 8px;">
         <strong>Imbalance weight</strong>:
         {{ modelCard.sections?.modeling?.scale_pos_weight ?? '—' }}
       </div>
