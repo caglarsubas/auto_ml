@@ -21,6 +21,97 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+_DICT_NAME_COLS = {
+    'feature_name', 'variable_name', 'column_name', 'field_name',
+}
+_DICT_DESC_COLS = {
+    'feature_description', 'description', 'variable_description', 'field_description',
+}
+
+
+def looks_like_data_dictionary(df: pd.DataFrame) -> bool:
+    """True when a frame is a feature catalog (name+description), not modeling data.
+
+    Matches Banking Credit Scoring ``Data_Dictionary`` sheets: ~2 columns named
+    Feature_Name / Feature_Description with feature ids as row values.
+    """
+    if df is None or df.empty:
+        return False
+    cols = {str(c).strip().lower().replace(' ', '_') for c in df.columns}
+    has_name = bool(cols & _DICT_NAME_COLS)
+    has_desc = bool(cols & _DICT_DESC_COLS)
+    # Narrow frames with dictionary headers are almost never the modeling table.
+    if has_name and has_desc and len(df.columns) <= 5:
+        return True
+    # Header-less / oddly named fallback: col0 looks like feature ids and col1
+    # looks like multi-word descriptions (not a 2-col Category/Target dataset).
+    if len(df.columns) == 2 and len(df) >= 5:
+        c0 = df.iloc[:, 0].astype(str).str.strip()
+        c1 = df.iloc[:, 1].astype(str).str.strip()
+        sample0 = c0.head(min(20, len(c0)))
+        sample1 = c1.head(min(20, len(c1)))
+        feat_ids = sample0.str.match(
+            r'^(AppID|Application_Datetime|Target|Var_\d+|FE_[A-Za-z0-9_]+)$',
+            case=False,
+        ).mean()
+        desc_like = (sample1.str.contains(r'\s').mean() >= 0.5) or (float(sample1.str.len().mean()) >= 12)
+        if feat_ids >= 0.6 and desc_like:
+            return True
+    return False
+
+
+def resolve_excel_sheet(file_content: bytes, first_sheet_has_not_dataset: bool = False) -> tuple:
+    """Pick the modeling sheet from a workbook.
+
+    Prefer an explicit user skip of sheet 0. Otherwise, if sheet 0 looks like a
+    data dictionary and another wider sheet exists, auto-skip to that sheet.
+    Returns ``(sheet_name_or_index, auto_skipped_dictionary: bool, note: str|None)``.
+    """
+    wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
+    names = list(wb.sheetnames)
+    if not names:
+        return 0, False, None
+
+    if first_sheet_has_not_dataset:
+        sheet = names[1] if len(names) > 1 else names[0]
+        return sheet, False, None
+
+    if len(names) == 1:
+        return names[0], False, None
+
+    # Probe sheet 0 with headers
+    try:
+        first_df = pd.read_excel(io.BytesIO(file_content), sheet_name=names[0], nrows=30, engine='openpyxl')
+    except Exception:
+        return names[0], False, None
+
+    if not looks_like_data_dictionary(first_df):
+        return names[0], False, None
+
+    # Prefer a subsequent sheet that does NOT look like a dictionary and has more columns
+    best = None
+    best_cols = -1
+    for name in names[1:]:
+        try:
+            probe = pd.read_excel(io.BytesIO(file_content), sheet_name=name, nrows=5, engine='openpyxl')
+        except Exception:
+            continue
+        if looks_like_data_dictionary(probe):
+            continue
+        n_cols = len(probe.columns)
+        if n_cols > best_cols:
+            best = name
+            best_cols = n_cols
+
+    if best is None:
+        return names[0], False, None
+
+    note = (
+        f"Sheet '{names[0]}' looks like a data dictionary "
+        f"({len(first_df.columns)} columns). Auto-selected modeling sheet '{best}'."
+    )
+    return best, True, note
+
 
 def detect_has_header(raw_bytes: bytes, sep: str = ',', is_excel: bool = False,
                       sheet_name=0) -> bool:
@@ -108,6 +199,8 @@ class DeclarationViewSet(viewsets.ModelViewSet):
         try:
             dataframes = []
             auto_detected_no_header = False
+            auto_skipped_dictionary = False
+            import_notes = []
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
@@ -117,11 +210,18 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 sep = self.get_separator(column_separator)
 
                 # Auto-detect header if user didn't explicitly check the box
+                sheet = 0
+                excel_note = None
+                if is_excel:
+                    sheet, skipped_dict, excel_note = resolve_excel_sheet(
+                        file_content, first_sheet_has_not_dataset=first_sheet_has_not_dataset,
+                    )
+                    if skipped_dict:
+                        auto_skipped_dictionary = True
+                    if excel_note:
+                        import_notes.append(excel_note)
+
                 if not first_line_is_not_header:
-                    sheet = 0
-                    if is_excel and first_sheet_has_not_dataset:
-                        wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
-                        sheet = wb.sheetnames[1] if len(wb.sheetnames) > 1 else 0
                     has_header = detect_has_header(
                         file_content, sep=sep, is_excel=is_excel, sheet_name=sheet
                     )
@@ -133,17 +233,29 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 if is_csv:
                     df = pd.read_csv(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, sep=sep)
                 elif is_excel:
-                    if first_sheet_has_not_dataset:
-                        wb = load_workbook(filename=io.BytesIO(file_content), read_only=True)
-                        sheet_to_read = wb.sheetnames[1] if len(wb.sheetnames) > 1 else wb.sheetnames[0]
-                        df = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_to_read, header=None if first_line_is_not_header else 0, engine='openpyxl')
-                    else:
-                        df = pd.read_excel(io.BytesIO(file_content), header=None if first_line_is_not_header else 0, engine='openpyxl')
+                    df = pd.read_excel(
+                        io.BytesIO(file_content),
+                        sheet_name=sheet,
+                        header=None if first_line_is_not_header else 0,
+                        engine='openpyxl',
+                    )
                 else:
                     return Response({"error": f"Unsupported file format: {file.name}"}, status=status.HTTP_400_BAD_REQUEST)
 
                 if first_line_is_not_header:
                     df.columns = [f'Col_{i+1}' for i in range(len(df.columns))]
+
+                # Reject standalone dictionary files uploaded as the dataset
+                if looks_like_data_dictionary(df):
+                    return Response({
+                        "error": (
+                            f"'{file.name}' looks like a data dictionary "
+                            f"({len(df.columns)} columns: {', '.join(map(str, df.columns[:4]))}"
+                            f"{'…' if len(df.columns) > 4 else ''}), not modeling data. "
+                            "Import the wide dataset (AppID / Target / Var_* as columns) via "
+                            "IMPORT DATA, and attach the dictionary under Dictionary Declaration."
+                        ),
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
                 dataframes.append(df)
 
@@ -182,6 +294,10 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             response_data = serializer.data
             if auto_detected_no_header:
                 response_data['auto_detected_no_header'] = True
+            if auto_skipped_dictionary:
+                response_data['auto_skipped_dictionary_sheet'] = True
+            if import_notes:
+                response_data['import_notes'] = import_notes
             headers = self.get_success_headers(serializer.data)
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 

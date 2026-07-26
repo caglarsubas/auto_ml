@@ -23,6 +23,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   dataDictionary: any[] = [];
   currentFileId: number | null = null;
   errorMessage: string | null = null;
+  importNotice: string | null = null;
   showUseExistingButton: boolean = false;
   existingFileName: string | null = null;
   showDataDictionaryCollection: boolean = false;
@@ -424,6 +425,12 @@ export class DeclarationComponent implements OnInit, OnDestroy {
             console.log('File uploaded successfully', response);
             this.currentFileId = response.id;
             this.sharedService.setCurrentFileId(this.currentFileId);
+            const notes = Array.isArray(response?.import_notes) ? response.import_notes : [];
+            this.importNotice = notes.length
+              ? notes.join(' ')
+              : (response?.auto_skipped_dictionary_sheet
+                ? 'First sheet looked like a data dictionary; modeling sheet was auto-selected.'
+                : null);
             if (this.currentFileId !== null) {
               this.getPreview(this.currentFileId);
             }
@@ -502,6 +509,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
   onEditDataImport(): void {
     this.editingDataImport = true;
+    this.importNotice = null;
   }
 
   onEditDictionary(): void {
