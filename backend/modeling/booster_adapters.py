@@ -40,6 +40,16 @@ def _codes_frame(X: pd.DataFrame, cat_cols: Sequence[str]) -> pd.DataFrame:
     return out
 
 
+def _is_regression(params: Optional[Dict[str, Any]]) -> bool:
+    if not params:
+        return False
+    task = str(params.get('task') or '').strip().lower()
+    if task in ('regression', 'regressor', 'reg'):
+        return True
+    obj = str(params.get('objective') or '').strip().lower()
+    return obj.startswith('reg:') or obj in ('regression', 'rmse', 'mae', 'huber')
+
+
 class BoosterAdapter(ABC):
     name: str = 'base'
 
@@ -49,6 +59,7 @@ class BoosterAdapter(ABC):
         self.cat_features: List[str] = []
         self.best_iteration: int = 0
         self.enable_categorical: bool = False
+        self.task: str = 'classification'
 
     @abstractmethod
     def train(
@@ -66,6 +77,10 @@ class BoosterAdapter(ABC):
     @abstractmethod
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         raise NotImplementedError
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Raw score prediction (classification probability or regression value)."""
+        return self.predict_proba(X)
 
     @abstractmethod
     def save(self, path: str) -> str:
@@ -86,7 +101,8 @@ class BoosterAdapter(ABC):
         return self.model
 
     def model_filename(self, file_id: int) -> str:
-        return f'{file_id}_{self.name}_classifier.json'
+        kind = 'regressor' if self.task == 'regression' else 'classifier'
+        return f'{file_id}_{self.name}_{kind}.json'
 
 
 class XGBoostAdapter(BoosterAdapter):
@@ -98,7 +114,13 @@ class XGBoostAdapter(BoosterAdapter):
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
-        p = dict(params)
+        self.task = 'regression' if _is_regression(params) else 'classification'
+        p = {k: v for k, v in dict(params).items() if k != 'task'}
+        if self.task == 'regression':
+            p.setdefault('objective', 'reg:squarederror')
+            p.setdefault('eval_metric', 'rmse')
+            p.pop('num_class', None)
+            p.pop('scale_pos_weight', None)
         if self.enable_categorical:
             p['enable_categorical'] = True
         dtrain = xgb.DMatrix(
@@ -149,6 +171,7 @@ class XGBoostAdapter(BoosterAdapter):
         obj.feature_names = list(feature_names or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)
+        obj.task = 'regression' if 'regressor' in os.path.basename(path).lower() else 'classification'
         try:
             obj.best_iteration = int(getattr(obj.model, 'best_iteration', 0) or 0)
         except Exception:
@@ -173,7 +196,8 @@ class XGBoostAdapter(BoosterAdapter):
         return out
 
     def model_filename(self, file_id: int) -> str:
-        return f'{file_id}_xgb_classifier.json'
+        kind = 'regressor' if self.task == 'regression' else 'classifier'
+        return f'{file_id}_xgb_{kind}.json'
 
 
 class LightGBMAdapter(BoosterAdapter):
@@ -185,6 +209,7 @@ class LightGBMAdapter(BoosterAdapter):
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
+        self.task = 'regression' if _is_regression(params) else 'classification'
         Xtr = X_train.copy()
         Xva = X_valid.copy()
         # LightGBM prefers category dtype for native cats
@@ -206,11 +231,14 @@ class LightGBMAdapter(BoosterAdapter):
             'reg_alpha': float(params.get('alpha', params.get('reg_alpha', 0.1))),
             'reg_lambda': float(params.get('lambda', params.get('reg_lambda', 1.5))),
         }
-        if 'num_class' in params:
+        if self.task == 'regression':
+            p['objective'] = 'regression'
+            p['metric'] = 'rmse'
+        elif 'num_class' in params:
             p['objective'] = 'multiclass'
             p['num_class'] = int(params['num_class'])
             p['metric'] = 'multi_logloss'
-        if 'scale_pos_weight' in params:
+        if 'scale_pos_weight' in params and self.task != 'regression':
             p['scale_pos_weight'] = float(params['scale_pos_weight'])
         dtrain = lgb.Dataset(Xtr, label=y_train, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
         dvalid = lgb.Dataset(Xva, label=y_valid, reference=dtrain, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
@@ -246,6 +274,7 @@ class LightGBMAdapter(BoosterAdapter):
         obj.feature_names = list(feature_names or obj.model.feature_name() or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)
+        obj.task = 'regression' if 'regressor' in os.path.basename(path).lower() else 'classification'
         obj.best_iteration = int(getattr(obj.model, 'best_iteration', 0) or 0)
         return obj
 
@@ -259,7 +288,8 @@ class LightGBMAdapter(BoosterAdapter):
             return []
 
     def model_filename(self, file_id: int) -> str:
-        return f'{file_id}_lgbm_classifier.txt'
+        kind = 'regressor' if self.task == 'regression' else 'classifier'
+        return f'{file_id}_lgbm_{kind}.txt'
 
 
 class CatBoostAdapter(BoosterAdapter):
@@ -267,10 +297,11 @@ class CatBoostAdapter(BoosterAdapter):
 
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
-        from catboost import CatBoostClassifier, Pool
+        from catboost import CatBoostClassifier, CatBoostRegressor, Pool
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
+        self.task = 'regression' if _is_regression(params) else 'classification'
         cat_idx = [self.feature_names.index(c) for c in self.cat_features if c in self.feature_names]
         Xtr = X_train.copy()
         Xva = X_valid.copy()
@@ -279,7 +310,6 @@ class CatBoostAdapter(BoosterAdapter):
             Xva[c] = Xva[c].astype(str).fillna('__NULL__')
         train_pool = Pool(Xtr, y_train, cat_features=cat_idx or None, feature_names=self.feature_names)
         valid_pool = Pool(Xva, y_valid, cat_features=cat_idx or None, feature_names=self.feature_names)
-        loss = 'MultiClass' if 'num_class' in params else 'Logloss'
         cb_kwargs: Dict[str, Any] = {
             'iterations': int(num_boost_round),
             'learning_rate': float(params.get('eta', params.get('learning_rate', 0.05))),
@@ -287,14 +317,20 @@ class CatBoostAdapter(BoosterAdapter):
             'l2_leaf_reg': float(params.get('lambda', params.get('reg_lambda', 1.5))),
             'subsample': float(params.get('subsample', 0.8)),
             'random_seed': int(params.get('seed', 42)),
-            'loss_function': loss,
-            'eval_metric': 'AUC' if loss == 'Logloss' else 'MultiClass',
             'verbose': False,
             'allow_writing_files': False,
         }
-        if 'scale_pos_weight' in params and params['scale_pos_weight'] is not None:
-            cb_kwargs['scale_pos_weight'] = float(params['scale_pos_weight'])
-        self.model = CatBoostClassifier(**cb_kwargs)
+        if self.task == 'regression':
+            cb_kwargs['loss_function'] = 'RMSE'
+            cb_kwargs['eval_metric'] = 'RMSE'
+            self.model = CatBoostRegressor(**cb_kwargs)
+        else:
+            loss = 'MultiClass' if 'num_class' in params else 'Logloss'
+            cb_kwargs['loss_function'] = loss
+            cb_kwargs['eval_metric'] = 'AUC' if loss == 'Logloss' else 'MultiClass'
+            if 'scale_pos_weight' in params and params['scale_pos_weight'] is not None:
+                cb_kwargs['scale_pos_weight'] = float(params['scale_pos_weight'])
+            self.model = CatBoostClassifier(**cb_kwargs)
         self.model.fit(
             train_pool, eval_set=valid_pool,
             early_stopping_rounds=early_stopping_rounds or None,
@@ -314,6 +350,8 @@ class CatBoostAdapter(BoosterAdapter):
                 Xc[c] = Xc[c].astype(str).fillna('__NULL__')
         cat_idx = [list(Xc.columns).index(c) for c in self.cat_features if c in Xc.columns]
         pool = Pool(Xc, cat_features=cat_idx or None, feature_names=list(map(str, Xc.columns)))
+        if self.task == 'regression' or not hasattr(self.model, 'predict_proba'):
+            return np.asarray(self.model.predict(pool), dtype=float).ravel()
         proba = self.model.predict_proba(pool)
         proba = np.asarray(proba)
         if proba.ndim == 2 and proba.shape[1] >= 2:
@@ -327,9 +365,11 @@ class CatBoostAdapter(BoosterAdapter):
 
     @classmethod
     def load(cls, path: str, feature_names=None, cat_features=None):
-        from catboost import CatBoostClassifier
+        from catboost import CatBoostClassifier, CatBoostRegressor
         obj = cls()
-        obj.model = CatBoostClassifier()
+        is_reg = 'regressor' in os.path.basename(path).lower()
+        obj.task = 'regression' if is_reg else 'classification'
+        obj.model = CatBoostRegressor() if is_reg else CatBoostClassifier()
         obj.model.load_model(path)
         obj.feature_names = list(feature_names or [])
         obj.cat_features = list(cat_features or [])
@@ -350,7 +390,8 @@ class CatBoostAdapter(BoosterAdapter):
             return []
 
     def model_filename(self, file_id: int) -> str:
-        return f'{file_id}_catboost_classifier.cbm'
+        kind = 'regressor' if self.task == 'regression' else 'classifier'
+        return f'{file_id}_catboost_{kind}.cbm'
 
 
 _ADAPTERS = {

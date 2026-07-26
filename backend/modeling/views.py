@@ -12,9 +12,10 @@ import warnings
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, StratifiedKFold, TimeSeriesSplit
-from sklearn.metrics import accuracy_score, r2_score, roc_auc_score, average_precision_score
-from sklearn.linear_model import LinearRegression
-from joblib import dump as joblib_dump
+from sklearn.metrics import (
+    accuracy_score, mean_absolute_error, mean_squared_error, r2_score,
+    roc_auc_score, average_precision_score,
+)
 import xgboost as xgb
 import shap
 from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_progress
@@ -1077,34 +1078,122 @@ class ModelingStartView(APIView):
                         except Exception as lin_err:
                             print(f"[ModelingStart] lineage save failed: {lin_err}")
                     else:
-                        # Regression fallback as before (boosting path is classification-first)
+                        # Continuous target → boosting regressor (same split/impute contract)
                         y_num = pd.to_numeric(y, errors='coerce')
-                        if y_num.notna().sum() >= 5:
-                            X_reg = X_raw.select_dtypes(include=['number']).copy()
-                            means_reg = fit_numeric_imputer(X_reg)
-                            X_reg = transform_numeric_impute(X_reg, means_reg)
-                            y_num = y_num.fillna(float(y_num.mean()))
-                            X_train, X_test, y_train, y_test = train_test_split(X_reg, y_num, test_size=0.2, random_state=42)
-                            reg = LinearRegression()
-                            reg.fit(X_train, y_train)
-                            y_pred = reg.predict(X_test)
-                            score = float(r2_score(y_test, y_pred))
-                            model_type = 'linear_regression'
+                        valid_y_mask = y_num.notna()
+                        if int(valid_y_mask.sum()) >= 5 and X_raw.shape[1] >= 1:
+                            X_reg = X_raw.loc[valid_y_mask].copy()
+                            y_reg = y_num.loc[valid_y_mask].astype(float)
+                            # Keep native categoricals for boosters
+                            for c in X_reg.columns:
+                                if X_reg[c].dtype == 'object' or pd.api.types.is_string_dtype(X_reg[c]):
+                                    X_reg[c] = X_reg[c].astype('category')
+
+                            if train_idx is None:
+                                train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                                    X_reg, y_reg, file_id=int(file_id),
+                                )
+                            else:
+                                # Align previously resolved indices to regression rows
+                                train_idx = pd.Index([i for i in train_idx if i in X_reg.index])
+                                valid_idx = pd.Index([i for i in valid_idx if i in X_reg.index])
+                                test_idx = pd.Index([i for i in test_idx if i in X_reg.index])
+                                if len(train_idx) < 5:
+                                    train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                                        X_reg, y_reg, file_id=int(file_id),
+                                    )
+
+                            X_train_raw = X_reg.loc[train_idx]
+                            X_valid_raw = X_reg.loc[valid_idx]
+                            X_test_raw = X_reg.loc[test_idx]
+                            impute_means = fit_numeric_imputer(X_train_raw)
+                            X_train = transform_numeric_impute(X_train_raw, impute_means)
+                            X_valid = transform_numeric_impute(X_valid_raw, impute_means)
+                            X_test = transform_numeric_impute(X_test_raw, impute_means)
+                            y_train = y_reg.loc[train_idx]
+                            y_valid = y_reg.loc[valid_idx]
+                            y_test = y_reg.loc[test_idx]
+
+                            params = {
+                                'task': 'regression',
+                                'objective': 'reg:squarederror',
+                                'eval_metric': 'rmse',
+                                'tree_method': 'hist',
+                                'eta': 0.05,
+                                'max_depth': 4,
+                                'min_child_weight': 2,
+                                'lambda': 1.5,
+                                'alpha': 0.1,
+                                'subsample': 0.8,
+                                'colsample_bytree': 0.7,
+                                'seed': 42,
+                            }
+                            adapter = get_adapter(algorithm)
+                            adapter.train(
+                                X_train, y_train, X_valid, y_valid, params,
+                                num_boost_round=500, early_stopping_rounds=50,
+                            )
+                            yhat_valid = adapter.predict(X_valid)
+                            yhat_test = adapter.predict(X_test)
+                            valid_r2 = float(r2_score(y_valid, yhat_valid)) if len(y_valid) else None
+                            test_r2 = float(r2_score(y_test, yhat_test)) if len(y_test) else None
+                            test_rmse = (
+                                float(np.sqrt(mean_squared_error(y_test, yhat_test)))
+                                if len(y_test) else None
+                            )
+                            test_mae = float(mean_absolute_error(y_test, yhat_test)) if len(y_test) else None
+                            gain_importance = adapter.gain_importance()
+
                             models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
                             os.makedirs(models_dir, exist_ok=True)
-                            model_path = os.path.join(models_dir, f'{file_id}_linreg.joblib')
-                            joblib_dump(reg, model_path)
-                        else:
-                            score = None
-                            model_type = 'linear_regression'
-                            model_path = None
+                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                            adapter.save(model_path)
 
-                        model_info = {
-                            'model_type': model_type,
-                            'score': score,
-                            'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT) if model_path else None,
-                            'feature_count': int(X_raw.shape[1])
-                        }
+                            train_data_dir = os.path.join(settings.MEDIA_ROOT, 'train_data')
+                            os.makedirs(train_data_dir, exist_ok=True)
+                            train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
+                            import pickle
+                            with open(train_data_path, 'wb') as f:
+                                pickle.dump({
+                                    'X_train': X_train, 'y_train': y_train,
+                                    'X_valid': X_valid, 'y_valid': y_valid,
+                                    'X_test': X_test, 'y_test': y_test,
+                                    'feature_names': list(X_train.columns),
+                                    'impute_means': impute_means,
+                                    'split_meta': split_meta,
+                                    'algorithm': algorithm,
+                                    'task': 'regression',
+                                }, f)
+
+                            model_info = {
+                                'model_type': f'{algorithm}_regressor',
+                                'algorithm': algorithm,
+                                'task': 'regression',
+                                'score': test_r2,
+                                'valid_r2': valid_r2,
+                                'test_r2': test_r2,
+                                'test_rmse': test_rmse,
+                                'test_mae': test_mae,
+                                'best_iteration': int(adapter.best_iteration or 0),
+                                'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
+                                'feature_count': int(X_train.shape[1]),
+                                'importances': {'gain': gain_importance},
+                                'split': {
+                                    **(split_meta or {}),
+                                    'n_train': int(len(X_train)),
+                                    'n_valid': int(len(X_valid)),
+                                    'n_test': int(len(X_test)),
+                                },
+                                'impute_fit_on_train_only': True,
+                                'sfs_ready': True,
+                            }
+                        else:
+                            model_info = {
+                                'model_type': f'{algorithm}_regressor',
+                                'task': 'regression',
+                                'warning': 'Insufficient numeric target rows to train a regressor',
+                                'feature_count': int(X_raw.shape[1]),
+                            }
                 else:
                     model_info = {'warning': 'Insufficient features or rows to train'}
             else:
