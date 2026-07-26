@@ -11,7 +11,7 @@ import math
 import warnings
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedKFold, TimeSeriesSplit
+from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit
 from sklearn.metrics import (
     accuracy_score, mean_absolute_error, mean_squared_error, r2_score,
     roc_auc_score, average_precision_score,
@@ -30,6 +30,7 @@ from modeling.split_contract import (
 from modeling.lineage import build_lineage, save_lineage
 from modeling.booster_adapters import get_adapter, available_boosting_algorithms
 from modeling.calibration_utils import fit_calibrator, save_calibrator, apply_calibrator
+from modeling.cv_strategy import build_cv_splitter, iter_cv_splits, pick_group_column
 from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 import pickle
@@ -800,15 +801,6 @@ class ModelingStartView(APIView):
                         cv_details = []
                         try:
                             from sklearn.metrics import roc_curve, precision_recall_curve
-                            skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-                            # Prefer time-ordered folds when preprocessing used an OOT split
-                            cv_strategy = 'stratified'
-                            if (split_meta or {}).get('strategy') == 'oot':
-                                try:
-                                    skf = TimeSeriesSplit(n_splits=5)
-                                    cv_strategy = 'time_series'
-                                except Exception:
-                                    cv_strategy = 'stratified'
                             # grids for consistent interpolation across folds
                             roc_fpr_grid = np.linspace(0.0, 1.0, 101)
                             pr_recall_grid = np.linspace(0.0, 1.0, 101)
@@ -820,15 +812,30 @@ class ModelingStartView(APIView):
                             base_pr_list = []
                             X_cv = pd.concat([X_train, X_valid], axis=0)
                             y_cv = pd.concat([y_train, y_valid], axis=0)
+                            # Prefer excluded ID-like columns (still on original df) for group CV
+                            group_col, groups_cv = pick_group_column(
+                                df, X_cv.index, excluded_cols_for_modeling,
+                            )
+                            skf, cv_strategy, cv_hint = build_cv_splitter(
+                                split_meta, y_cv, groups=groups_cv, n_splits=5,
+                            )
                             if cv_strategy == 'time_series':
                                 # Preserve chronological order from outer-train indices
                                 try:
                                     order = X_cv.index
                                     X_cv = X_cv.loc[order]
                                     y_cv = y_cv.loc[order]
+                                    if groups_cv is not None:
+                                        groups_cv = groups_cv.loc[order]
                                 except Exception:
                                     pass
-                            for tr_idx, va_idx in skf.split(X_cv.values, y_cv if cv_strategy == 'stratified' else None):
+                            groups_arr = (
+                                np.asarray(groups_cv) if groups_cv is not None
+                                and cv_hint.get('groups') else None
+                            )
+                            for tr_idx, va_idx in iter_cv_splits(
+                                skf, X_cv.values, y_cv, groups_arr, cv_hint,
+                            ):
                                 X_tr, X_va = X_cv.iloc[tr_idx], X_cv.iloc[va_idx]
                                 y_tr, y_va = y_cv.iloc[tr_idx], y_cv.iloc[va_idx]
                                 fold_adapter = get_adapter(algorithm)
@@ -940,6 +947,7 @@ class ModelingStartView(APIView):
                                 } if prec_fold_list else None,
                                 'pr_curve_micro': pr_curve_micro,
                                 'cv_strategy': cv_strategy,
+                                'group_column': group_col,
                             }
                         except Exception:
                             cv_summary = None
