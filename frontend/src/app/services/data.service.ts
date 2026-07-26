@@ -575,11 +575,21 @@ export class DataService {
     );
   }
 
+  getDeployReadiness(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}deployment/bundle/`, { params: { file_id: String(fileId) } }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting deploy readiness:', error);
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to get deploy readiness'));
+      })
+    );
+  }
+
   createDeploymentBundle(fileId: number): Observable<any> {
     return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId }).pipe(
       catchError((error: any) => {
         console.error('Error creating deployment bundle:', error);
-        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to create deployment bundle'));
+        // Preserve structured 409 readiness payload for the deployment UI.
+        return throwError(() => error);
       })
     );
   }

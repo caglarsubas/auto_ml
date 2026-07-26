@@ -235,6 +235,8 @@ class EvaluationRunView(APIView):
                         'model_card_path': payload['model_card_path'],
                         'metrics': evaluation.get('metrics'),
                         'lineage_id': card.get('lineage_id'),
+                        'deploy_ready': card.get('deploy_ready'),
+                        'deployment_readiness': (card.get('sections') or {}).get('deployment_readiness'),
                     }
                     if lineage:
                         st['lineage'] = {

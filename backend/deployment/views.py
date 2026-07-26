@@ -14,7 +14,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from deployment.deploy_utils import build_score_bundle, score_frame
+from deployment.deploy_utils import (
+    DeployNotReadyError,
+    assess_file_deploy_readiness,
+    build_score_bundle,
+    score_frame,
+)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -23,6 +28,17 @@ class DeploymentBundleView(APIView):
 
     Payload: { file_id: int }
     """
+
+    def get(self, request, *args, **kwargs):
+        """Return deploy-readiness assessment without creating a bundle."""
+        file_id = request.query_params.get('file_id') or (request.data or {}).get('file_id')
+        if file_id is None:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            readiness = assess_file_deploy_readiness(int(file_id))
+            return Response({'file_id': int(file_id), 'readiness': readiness}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, *args, **kwargs):
         file_id = (request.data or {}).get('file_id')
@@ -46,6 +62,7 @@ class DeploymentBundleView(APIView):
                     st['deployment'] = {
                         'bundle_path': payload.get('bundle_path'),
                         'lineage_id': (payload.get('manifest') or {}).get('lineage_id'),
+                        'deploy_ready': True,
                     }
                     step_order = {
                         'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
@@ -59,6 +76,13 @@ class DeploymentBundleView(APIView):
             except Exception as pe:
                 print(f"[Deployment] PipelineRun update skipped: {pe}")
             return Response(payload, status=status.HTTP_200_OK)
+        except DeployNotReadyError as e:
+            return Response({
+                'error': str(e),
+                'deploy_ready': False,
+                'readiness': e.readiness,
+                'blocking': (e.readiness or {}).get('blocking') or [],
+            }, status=status.HTTP_409_CONFLICT)
         except FileNotFoundError as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:

@@ -15,6 +15,8 @@ export class DeploymentComponent implements OnInit, OnDestroy {
   error: string | null = null;
   bundle: any = null;
   scoreResult: any = null;
+  readiness: any = null;
+  blockers: string[] = [];
 
   private subs: Subscription[] = [];
 
@@ -23,11 +25,19 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     private sharedService: SharedService,
   ) {}
 
+  get isDeployReady(): boolean {
+    return !!this.readiness?.ready;
+  }
+
   ngOnInit(): void {
     this.subs.push(
       this.sharedService.currentFileId$.subscribe((id) => {
         this.currentFileId = id;
+        this.readiness = null;
+        this.blockers = [];
+        this.error = null;
         if (id != null) {
+          this.refreshReadiness(id);
           this.dataService.getDeploymentStatus(id).subscribe({
             next: (resp) => {
               if (resp?.status === 'ok' || resp?.bundle_path) {
@@ -45,6 +55,18 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     this.subs.forEach((s) => s.unsubscribe());
   }
 
+  private refreshReadiness(fileId: number): void {
+    this.dataService.getDeployReadiness(fileId).subscribe({
+      next: (resp) => {
+        this.readiness = resp?.readiness || null;
+        this.blockers = (this.readiness?.blocking || []).map((b: any) => b.message || String(b));
+      },
+      error: () => {
+        this.readiness = null;
+      },
+    });
+  }
+
   createBundle(): void {
     if (this.currentFileId == null) {
       this.error = 'Select a declaration / modeled file before deployment.';
@@ -52,13 +74,20 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     }
     this.isBundling = true;
     this.error = null;
+    this.blockers = [];
     this.dataService.createDeploymentBundle(this.currentFileId).subscribe({
       next: (resp) => {
         this.bundle = resp;
+        this.readiness = { ready: true, ...(resp?.manifest || {}) };
         this.isBundling = false;
       },
       error: (err) => {
-        this.error = err?.message || 'Bundle creation failed';
+        const body = err?.error || {};
+        this.readiness = body.readiness || this.readiness;
+        this.blockers = (body.blocking || body.readiness?.blocking || []).map(
+          (b: any) => b.message || String(b),
+        );
+        this.error = body.error || err?.message || 'Bundle creation failed';
         this.isBundling = false;
       },
     });

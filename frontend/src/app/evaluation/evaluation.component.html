@@ -93,6 +93,25 @@
       <span *ngIf="modelCard.lineage_id"> · lineage {{ modelCard.lineage_id }}</span>
     </div>
     <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; background: #fafafa;">
+      <div style="margin-bottom: 10px; font-size: 13px;">
+        <strong>Deploy readiness</strong>:
+        <span [style.color]="isDeployReady ? '#2e7d32' : '#c62828'" style="font-weight: 600; margin-left: 6px;">
+          {{ isDeployReady ? 'Ready for score bundle' : 'Blocked' }}
+        </span>
+        <div *ngIf="deployReadiness?.summary" style="color: #555; margin-top: 4px;">{{ deployReadiness.summary }}</div>
+      </div>
+      <div *ngIf="deployReadiness?.blocking?.length" style="margin-bottom: 10px;">
+        <strong style="color: #c62828;">Blocking</strong>
+        <ul style="margin: 6px 0 0 18px; padding: 0;">
+          <li *ngFor="let b of deployReadiness.blocking">{{ b.message || b }}</li>
+        </ul>
+      </div>
+      <div *ngIf="deployReadiness?.warnings?.length" style="margin-bottom: 10px;">
+        <strong style="color: #ef6c00;">Warnings</strong>
+        <ul style="margin: 6px 0 0 18px; padding: 0;">
+          <li *ngFor="let w of deployReadiness.warnings">{{ w.message || w }}</li>
+        </ul>
+      </div>
       <div style="margin-bottom: 8px;">
         <strong>Split</strong>:
         {{ modelCard.sections?.split_and_stability?.strategy || '—' }}

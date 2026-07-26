@@ -5,9 +5,22 @@
     Batch-score a CSV that matches the frozen schema.
   </p>
 
+  <div *ngIf="currentFileId != null" style="margin: 12px 0; max-width: 720px; font-size: 13px;">
+    <div>
+      <strong>Model-card gate</strong>:
+      <span [style.color]="isDeployReady ? '#2e7d32' : '#c62828'" style="font-weight: 600; margin-left: 6px;">
+        {{ readiness == null ? 'Checking…' : (isDeployReady ? 'Ready' : 'Blocked') }}
+      </span>
+    </div>
+    <div *ngIf="readiness?.summary" style="color: #555; margin-top: 4px;">{{ readiness.summary }}</div>
+    <ul *ngIf="blockers.length" style="margin: 6px 0 0 18px; padding: 0; color: #c62828;">
+      <li *ngFor="let b of blockers">{{ b }}</li>
+    </ul>
+  </div>
+
   <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0;">
     <button mat-raised-button color="primary"
-            [disabled]="currentFileId == null || isBundling"
+            [disabled]="currentFileId == null || isBundling || (readiness != null && !isDeployReady)"
             (click)="createBundle()">
       {{ isBundling ? 'Creating bundle…' : 'Create score bundle' }}
     </button>
