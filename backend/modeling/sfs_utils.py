@@ -16,8 +16,10 @@ from sklearn.metrics import (
     roc_auc_score, average_precision_score, r2_score, mean_squared_error,
 )
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-import xgboost as xgb
+import xgboost as xgb  # legacy run_forward_sfs / run_backward_sfs paths
 import shap
+
+from modeling.booster_adapters import fit_booster
 
 # Suppress NumPy warnings for invalid values during PSI/CSI/SHAP calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -29,9 +31,12 @@ def _normalize_sfs_task(task: Optional[str]) -> str:
     return 'regression' if t in ('regression', 'regressor', 'reg') else 'classification'
 
 
-def _sfs_xgb_params(task: str, nthread: int) -> Dict[str, Any]:
+def _sfs_booster_params(task: str, nthread: int) -> Dict[str, Any]:
+    """Shared SFS knobs (adapter maps aliases per algorithm)."""
     base = {
+        'n_estimators': 100,
         'max_depth': 6,
+        'learning_rate': 0.1,
         'eta': 0.1,
         'subsample': 0.8,
         'colsample_bytree': 0.8,
@@ -39,10 +44,33 @@ def _sfs_xgb_params(task: str, nthread: int) -> Dict[str, Any]:
         'nthread': nthread,
     }
     if task == 'regression':
-        base.update({'objective': 'reg:squarederror', 'eval_metric': 'rmse'})
+        base.update({'objective': 'reg:squarederror', 'eval_metric': 'rmse', 'task': 'regression'})
     else:
-        base.update({'objective': 'binary:logistic', 'eval_metric': 'auc'})
+        base.update({'objective': 'binary:logistic', 'eval_metric': 'auc', 'task': 'classification'})
     return base
+
+
+# Backward-compatible alias
+def _sfs_xgb_params(task: str, nthread: int) -> Dict[str, Any]:
+    return _sfs_booster_params(task, nthread)
+
+
+def _sfs_fit(
+    algorithm: str,
+    X_tr, y_tr, X_va, y_va,
+    params: Dict[str, Any],
+    *,
+    task: str = 'classification',
+    num_boost_round: int = 100,
+    early_stopping_rounds: int = 10,
+):
+    return fit_booster(
+        algorithm, X_tr, y_tr, X_va, y_va, params,
+        task=task,
+        nthread=int(params.get('nthread', 0) or 0),
+        num_boost_round=num_boost_round,
+        early_stopping_rounds=early_stopping_rounds,
+    )
 
 
 def _sfs_cv_splitter(task: str, cv_folds: int):
@@ -622,6 +650,7 @@ def run_sfs_with_progress(
     stop_flag: Optional[Dict] = None,  # Dict with 'stop_requested' key checked each step
     resume_state: Optional[Dict] = None,  # State to resume from (forward/backward completed steps)
     task: str = 'classification',
+    algorithm: str = 'xgboost',
 ) -> Dict[str, Any]:
     """
     Run SFS with user-specified methods, stopping criteria, and progress tracking.
@@ -643,7 +672,8 @@ def run_sfs_with_progress(
         Dict with forward/backward results and final metrics
     """
     task = _normalize_sfs_task(task)
-    results = {'forward': [], 'backward': [], 'status': 'running', 'task': task}
+    algorithm = (algorithm or 'xgboost').strip().lower()
+    results = {'forward': [], 'backward': [], 'status': 'running', 'task': task, 'algorithm': algorithm}
     completed_steps = []  # Track completed steps for real-time viewing
 
     def is_stop_requested():
@@ -731,7 +761,8 @@ def run_sfs_with_progress(
                 # Run one step of forward selection
                 step_result = _run_forward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task
+                    selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
+                    algorithm=algorithm,
                 )
                 
                 if step_result:
@@ -863,7 +894,8 @@ def run_sfs_with_progress(
                 # Run one step of backward elimination
                 step_result = _run_backward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task
+                    current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
+                    algorithm=algorithm,
                 )
                 
                 if step_result:
@@ -972,42 +1004,37 @@ def run_sfs_with_progress(
 
 def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw, 
                       current_features: List[str], step: int, cv_folds: int,
-                      n_jobs: int = 1, top_k: int = 3, task: str = 'classification') -> Optional[Dict]:
+                      n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
+                      algorithm: str = 'xgboost') -> Optional[Dict]:
     """Run a single forward selection step with parallel candidate evaluation.
     
     Optimizations applied:
     - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
     - CV only for the winning candidate (train+test score used for ranking)
-    - Early stopping in XGBoost training (early_stopping_rounds=10)
+    - Early stopping in booster training (early_stopping_rounds=10)
     """
     try:
         task = _normalize_sfs_task(task)
-        _has_cat = any(
-            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
-            for c in X_train.columns
-        )
+        algorithm = (algorithm or 'xgboost').strip().lower()
         
         remaining_features = [f for f in X_train.columns if f not in current_features]
         if not remaining_features:
             return None
         
-        # When parallelizing, restrict XGBoost to 1 thread per worker to avoid oversubscription
-        ranking_params = _sfs_xgb_params(task, nthread=1 if n_jobs > 1 else 0)
+        # When parallelizing, restrict booster to 1 thread per worker to avoid oversubscription
+        ranking_params = _sfs_booster_params(task, nthread=1 if n_jobs > 1 else 0)
         
         def evaluate_candidate(feature):
             """Evaluate adding one feature using train+test only (no CV for ranking)."""
             candidate_features = current_features + [feature]
-            dtrain = xgb.DMatrix(X_train[candidate_features], label=y_train, enable_categorical=_has_cat)
-            dtest = xgb.DMatrix(X_test[candidate_features], label=y_test, enable_categorical=_has_cat)
-            
-            booster = xgb.train(
-                ranking_params, dtrain, num_boost_round=100,
-                evals=[(dtrain, 'train')], early_stopping_rounds=10,
-                verbose_eval=False
+            adapter = _sfs_fit(
+                algorithm,
+                X_train[candidate_features], y_train,
+                X_test[candidate_features], y_test,
+                ranking_params, task=task, num_boost_round=100, early_stopping_rounds=10,
             )
-            
-            y_tr = booster.predict(dtrain)
-            y_te = booster.predict(dtest)
+            y_tr = adapter.predict_proba(X_train[candidate_features])
+            y_te = adapter.predict_proba(X_test[candidate_features])
             fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
             fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
             return feature, fields
@@ -1051,15 +1078,11 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                 X_cv_val = X_train_cand.iloc[val_idx]
                 y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
-                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
-                
-                cv_booster = xgb.train(
-                    winner_params, dcv_train, num_boost_round=100,
-                    evals=[(dcv_train, 'train')], early_stopping_rounds=10,
-                    verbose_eval=False
+                cv_adapter = _sfs_fit(
+                    algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
+                    winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
                 )
-                y_cv_pred = cv_booster.predict(dcv_val)
+                y_cv_pred = cv_adapter.predict_proba(X_cv_val)
                 p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
                 cv_roc_scores.append(p)
                 cv_pr_scores.append(s)
@@ -1081,28 +1104,22 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         X_train_subset = X_train[new_features]
         X_test_subset = X_test[new_features]
         
-        dtrain_w = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
-        dtest_w = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
-        
-        winner_booster = xgb.train(
-            winner_params, dtrain_w, num_boost_round=100,
-            evals=[(dtrain_w, 'train')], early_stopping_rounds=10,
-            verbose_eval=False
+        winner_adapter = _sfs_fit(
+            algorithm, X_train_subset, y_train, X_test_subset, y_test,
+            winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
         )
+        winner_booster = winner_adapter.shap_model()
         
-        y_tr_pred = winner_booster.predict(dtrain_w)
-        y_te_pred = winner_booster.predict(dtest_w)
+        y_tr_pred = winner_adapter.predict_proba(X_train_subset)
+        y_te_pred = winner_adapter.predict_proba(X_test_subset)
         train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
         test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
         
         # --- Phase 3: Model PSI & SHAP for the winner ---
         try:
-            _has_cat_step = any(pd.api.types.is_categorical_dtype(X_train[c]) for c in new_features)
-            dtrain_sel = xgb.DMatrix(X_train[new_features], enable_categorical=_has_cat_step)
-            dtest_sel = xgb.DMatrix(X_test[new_features], enable_categorical=_has_cat_step)
-            train_logodds = winner_booster.predict(dtrain_sel, output_margin=True)
-            test_logodds = winner_booster.predict(dtest_sel, output_margin=True)
-            stability_value = calculate_psi(train_logodds, test_logodds)
+            train_scores = winner_adapter.predict_proba(X_train[new_features])
+            test_scores = winner_adapter.predict_proba(X_test[new_features])
+            stability_value = calculate_psi(train_scores, test_scores)
             stability_type = 'PSI'
         except Exception as e:
             print(f"[SFS-Forward-Step] Model PSI error: {e}")
@@ -1113,8 +1130,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         shap_importance = float(shap_importance_by_feature.get(best_feature, 0.0))
         
         try:
-            gain_importance = winner_booster.get_score(importance_type='gain')
-            feature_importance = {k: float(v) for k, v in gain_importance.items()}
+            feature_importance = {d['feature']: float(d['score']) for d in winner_adapter.gain_importance()}
         except Exception:
             feature_importance = {}
         
@@ -1157,40 +1173,35 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
 
 def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                        current_features: List[str], step: int, cv_folds: int,
-                       n_jobs: int = 1, top_k: int = 3, task: str = 'classification') -> Optional[Dict]:
+                       n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
+                       algorithm: str = 'xgboost') -> Optional[Dict]:
     """Run a single backward elimination step with parallel candidate evaluation.
     
     Optimizations applied:
     - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
     - CV only for the winning candidate (train+test score used for ranking)
-    - Early stopping in XGBoost training (early_stopping_rounds=10)
+    - Early stopping in booster training (early_stopping_rounds=10)
     """
     try:
         task = _normalize_sfs_task(task)
-        _has_cat = any(
-            hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
-            for c in X_train.columns
-        )
+        algorithm = (algorithm or 'xgboost').strip().lower()
         
         if len(current_features) <= 1:
             return None
         
-        ranking_params = _sfs_xgb_params(task, nthread=1 if n_jobs > 1 else 0)
+        ranking_params = _sfs_booster_params(task, nthread=1 if n_jobs > 1 else 0)
         
         def evaluate_candidate(feature):
             """Evaluate dropping one feature using train+test only (no CV for ranking)."""
             candidate_features = [f for f in current_features if f != feature]
-            dtrain = xgb.DMatrix(X_train[candidate_features], label=y_train, enable_categorical=_has_cat)
-            dtest = xgb.DMatrix(X_test[candidate_features], label=y_test, enable_categorical=_has_cat)
-            
-            booster = xgb.train(
-                ranking_params, dtrain, num_boost_round=100,
-                evals=[(dtrain, 'train')], early_stopping_rounds=10,
-                verbose_eval=False
+            adapter = _sfs_fit(
+                algorithm,
+                X_train[candidate_features], y_train,
+                X_test[candidate_features], y_test,
+                ranking_params, task=task, num_boost_round=100, early_stopping_rounds=10,
             )
-            
-            y_tr = booster.predict(dtrain)
-            y_te = booster.predict(dtest)
+            y_tr = adapter.predict_proba(X_train[candidate_features])
+            y_te = adapter.predict_proba(X_test[candidate_features])
             fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
             fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
             return feature, fields
@@ -1234,15 +1245,11 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
                 X_cv_val = X_train_cand.iloc[val_idx]
                 y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
                 
-                dcv_train = xgb.DMatrix(X_cv_train, label=y_cv_train, enable_categorical=_has_cat)
-                dcv_val = xgb.DMatrix(X_cv_val, label=y_cv_val, enable_categorical=_has_cat)
-                
-                cv_booster = xgb.train(
-                    winner_params, dcv_train, num_boost_round=100,
-                    evals=[(dcv_train, 'train')], early_stopping_rounds=10,
-                    verbose_eval=False
+                cv_adapter = _sfs_fit(
+                    algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
+                    winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
                 )
-                y_cv_pred = cv_booster.predict(dcv_val)
+                y_cv_pred = cv_adapter.predict_proba(X_cv_val)
                 p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
                 cv_roc_scores.append(p)
                 cv_pr_scores.append(s)
@@ -1264,28 +1271,22 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         X_train_subset = X_train[remaining_features]
         X_test_subset = X_test[remaining_features]
         
-        dtrain_w = xgb.DMatrix(X_train_subset, label=y_train, enable_categorical=_has_cat)
-        dtest_w = xgb.DMatrix(X_test_subset, label=y_test, enable_categorical=_has_cat)
-        
-        winner_booster = xgb.train(
-            winner_params, dtrain_w, num_boost_round=100,
-            evals=[(dtrain_w, 'train')], early_stopping_rounds=10,
-            verbose_eval=False
+        winner_adapter = _sfs_fit(
+            algorithm, X_train_subset, y_train, X_test_subset, y_test,
+            winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
         )
+        winner_booster = winner_adapter.shap_model()
         
-        y_tr_pred = winner_booster.predict(dtrain_w)
-        y_te_pred = winner_booster.predict(dtest_w)
+        y_tr_pred = winner_adapter.predict_proba(X_train_subset)
+        y_te_pred = winner_adapter.predict_proba(X_test_subset)
         train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
         test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
         
         # --- Phase 3: Model PSI & SHAP ---
         try:
-            _has_cat_step = any(pd.api.types.is_categorical_dtype(X_train[c]) for c in remaining_features)
-            dtrain_sel = xgb.DMatrix(X_train[remaining_features], enable_categorical=_has_cat_step)
-            dtest_sel = xgb.DMatrix(X_test[remaining_features], enable_categorical=_has_cat_step)
-            train_logodds = winner_booster.predict(dtrain_sel, output_margin=True)
-            test_logodds = winner_booster.predict(dtest_sel, output_margin=True)
-            stability_value = calculate_psi(train_logodds, test_logodds)
+            train_scores = winner_adapter.predict_proba(X_train[remaining_features])
+            test_scores = winner_adapter.predict_proba(X_test[remaining_features])
+            stability_value = calculate_psi(train_scores, test_scores)
             stability_type = 'PSI'
         except Exception as e:
             print(f"[SFS-Backward-Step] Model PSI error: {e}")
@@ -1296,8 +1297,7 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         shap_importance = 0.0
         
         try:
-            gain_importance = winner_booster.get_score(importance_type='gain')
-            feature_importance = {k: float(v) for k, v in gain_importance.items()}
+            feature_importance = {d['feature']: float(d['score']) for d in winner_adapter.gain_importance()}
         except Exception:
             feature_importance = {}
         

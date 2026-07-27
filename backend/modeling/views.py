@@ -1740,6 +1740,20 @@ class SFSStartView(APIView):
                 sfs_task = 'regression'
             else:
                 sfs_task = 'classification'
+
+            algo_raw = data.get('algorithm') or train_data.get('algorithm')
+            if not algo_raw:
+                try:
+                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                    if os.path.exists(st_path):
+                        with open(st_path, 'r', encoding='utf-8') as sf:
+                            st = json.load(sf)
+                        algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
+                except Exception:
+                    algo_raw = None
+            sfs_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
+            if algo_err:
+                return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Remove features marked as "drop" by user from all feature matrices
             if excluded_features and isinstance(excluded_features, list):
@@ -1909,6 +1923,7 @@ class SFSStartView(APIView):
                         stop_flag=SFS_PROGRESS[file_id],
                         resume_state=resume_state,
                         task=sfs_task,
+                        algorithm=sfs_algorithm,
                     )
                     
                     # Final save — merge with existing results to preserve previous runs
@@ -2218,6 +2233,20 @@ class HyperparamStartView(APIView):
             hp_scale_pos_weight = (
                 None if hp_task == 'regression' else train_data.get('scale_pos_weight')
             )
+            # Resolve boosting algorithm (request → train_data → modeling status → xgboost)
+            algo_raw = data.get('algorithm') or train_data.get('algorithm')
+            if not algo_raw:
+                try:
+                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                    if os.path.exists(st_path):
+                        with open(st_path, 'r', encoding='utf-8') as sf:
+                            st = json.load(sf)
+                        algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
+                except Exception:
+                    algo_raw = None
+            hp_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
+            if algo_err:
+                return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Echo the clamped/validated space so the UI can reflect adjustments.
             clean_space, space_warnings = validate_param_space(param_space)
@@ -2275,7 +2304,51 @@ class HyperparamStartView(APIView):
                         scale_pos_weight=hp_scale_pos_weight,
                         early_stopping_rounds=50,
                         task=hp_task,
+                        algorithm=hp_algorithm,
                     )
+                    # Refit best config so Evaluation/Deployment score the tuned model
+                    try:
+                        from modeling.booster_adapters import fit_booster
+                        best_point = (results.get('best_points') or {}).get(primary_metric) or {}
+                        best_params = best_point.get('params') or {}
+                        feat_list = results.get('features') or list(X_train.columns)
+                        valid_feats = [c for c in feat_list if c in X_train.columns]
+                        Xtr = X_train[valid_feats] if valid_feats else X_train
+                        Xva = X_valid[valid_feats] if valid_feats else X_valid
+                        if best_params:
+                            adapter = fit_booster(
+                                hp_algorithm, Xtr, y_train, Xva, y_valid, best_params,
+                                task=hp_task, nthread=0,
+                                scale_pos_weight=hp_scale_pos_weight,
+                                early_stopping_rounds=50,
+                            )
+                            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                            os.makedirs(models_dir, exist_ok=True)
+                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                            adapter.save(model_path)
+                            model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
+                            results['refit_model_path'] = model_rel
+                            results['refit_params'] = best_params
+                            # Update modeling status artifact
+                            st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                            if os.path.exists(st_path):
+                                with open(st_path, 'r', encoding='utf-8') as sf:
+                                    st = json.load(sf)
+                                model_info = st.get('model') or {}
+                                model_info['model_path'] = model_rel
+                                model_info['algorithm'] = hp_algorithm
+                                model_info['best_hyperparams'] = best_params
+                                model_info['hyperparam_refit'] = True
+                                model_info['selected_features'] = valid_feats
+                                st['model'] = model_info
+                                st['algorithm'] = hp_algorithm
+                                with open(st_path, 'w', encoding='utf-8') as sf:
+                                    json.dump(st, sf, indent=2)
+                            print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
+                    except Exception as refit_err:
+                        print(f"[Hyperparam] Refit skipped/failed: {refit_err}")
+                        results['refit_error'] = str(refit_err)
+
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed
                     safe = _hp_sanitize_json(results)
@@ -2307,8 +2380,9 @@ class HyperparamStartView(APIView):
             return Response({
                 'status': 'started',
                 'message': f'Hyperparameter tuning started in background '
-                           f'({resolved_method} search, n_jobs={n_jobs})',
+                           f'({resolved_method} search, algo={hp_algorithm}, n_jobs={n_jobs})',
                 'file_id': file_id,
+                'algorithm': hp_algorithm,
                 'param_space': clean_space,
                 'space_warnings': space_warnings,
                 'n_iter': n_iter,

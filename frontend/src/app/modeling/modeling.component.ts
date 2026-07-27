@@ -95,7 +95,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   // backend object shape on start).  Each row: {name,label,type,min,max,log,
   // enabled,walkStep}.  walkStep is the per-param grid step size (granularity);
   // it defaults to (max-min)/hpDefaultPieces and drives the derived #checkpoints
-  // column.  Mirrors backend DEFAULT_PARAM_SPACE (XGBoost boosting knobs).
+  // column.  Mirrors backend DEFAULT_PARAM_SPACE (shared boosting knobs).
   hpParamSpace: any[] = [
     { name: 'n_estimators',     label: 'n_estimators',      type: 'int',   min: 50,   max: 600, log: false, enabled: true,  walkStep: 27.5 },
     { name: 'max_depth',        label: 'max_depth',         type: 'int',   min: 2,    max: 10,  log: false, enabled: true,  walkStep: 0.4 },
@@ -149,7 +149,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly hpHelp: { [key: string]: string } = {
     // ── table columns ──
     _tune: 'Include this hyperparameter in the search. Unchecked params stay fixed at the model default.',
-    _hyperparameter: 'An XGBoost setting that controls how the model learns. Tuning searches for the values that maximise the chosen metric.',
+    _hyperparameter: 'A boosting setting that controls how the model learns. Tuning searches for the values that maximise the chosen metric.',
     _type: 'int = whole numbers only; float = decimal values. Controls how values are sampled across the min–max range.',
     _min: 'Lower bound of the search range for this hyperparameter.',
     _max: 'Upper bound of the search range for this hyperparameter.',
@@ -723,13 +723,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // leave the user's existing form values intact.
       if (typeof req.algorithm === 'string' && req.algorithm.trim()) {
         const requested = req.algorithm.trim();
-        // Keep product flow: AI may request planned boosters, but train XGBoost.
         if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(requested)) {
-          this.selectedAlgorithm = 'xgboost';
-          console.warn(`[Modeling] AI requested ${requested}; using xgboost (planned booster).`);
+          this.selectedAlgorithm = this.implementedAlgorithms[0] || 'xgboost';
+          console.warn(`[Modeling] AI requested ${requested}; using ${this.selectedAlgorithm} (not available).`);
         } else {
           this.selectedAlgorithm = requested;
         }
+        this.applyHpLabelsForAlgorithm();
       }
       if (typeof req.encoding_use_native === 'boolean') {
         this.encodingUseNative = req.encoding_use_native;
@@ -789,14 +789,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAlgorithmChange(algo: string): void {
-    // Keep product surface for planned boosters, but do not silently train XGBoost as them
     if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(algo)) {
-      this.selectedAlgorithm = 'xgboost';
-      console.warn(`[Modeling] ${algo} is planned; training uses XGBoost for now.`);
-      algo = 'xgboost';
+      this.selectedAlgorithm = this.implementedAlgorithms[0] || 'xgboost';
+      console.warn(`[Modeling] ${algo} is not available; using ${this.selectedAlgorithm}.`);
+      algo = this.selectedAlgorithm;
     } else {
       this.selectedAlgorithm = algo;
     }
+    this.applyHpLabelsForAlgorithm();
     // Auto-trigger encoding analysis when algorithm is selected
     if (algo && this.currentFileId != null && this.processedFilePath) {
       this.ensureDictionaryThenAnalyze();
@@ -804,6 +804,36 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // No encoding needed — checkpoint immediately
       this.pushModelingCheckpoint('algorithm_selected');
     }
+  }
+
+  /** Relabel shared HP knobs for the active booster (aliases are mapped server-side). */
+  private applyHpLabelsForAlgorithm(): void {
+    const algo = (this.selectedAlgorithm || 'xgboost').toLowerCase();
+    const labels: { [algo: string]: { [name: string]: string } } = {
+      xgboost: {
+        n_estimators: 'n_estimators', max_depth: 'max_depth', learning_rate: 'learning_rate',
+        min_child_weight: 'min_child_weight', subsample: 'subsample', colsample_bytree: 'colsample_bytree',
+        gamma: 'gamma (min split loss)', reg_alpha: 'reg_alpha (L1)', reg_lambda: 'reg_lambda (L2)',
+      },
+      lightgbm: {
+        n_estimators: 'n_estimators', max_depth: 'max_depth', learning_rate: 'learning_rate',
+        min_child_weight: 'min_child_weight', subsample: 'subsample', colsample_bytree: 'colsample_bytree',
+        gamma: 'min_split_gain (gamma)', reg_alpha: 'reg_alpha (L1)', reg_lambda: 'reg_lambda (L2)',
+      },
+      catboost: {
+        n_estimators: 'iterations', max_depth: 'depth', learning_rate: 'learning_rate',
+        min_child_weight: 'min_data_in_leaf', subsample: 'subsample', colsample_bytree: 'rsm (colsample)',
+        gamma: 'gamma (unused)', reg_alpha: 'reg_alpha (unused)', reg_lambda: 'l2_leaf_reg',
+      },
+    };
+    const map = labels[algo] || labels['xgboost'];
+    for (const row of this.hpParamSpace) {
+      if (map[row.name]) row.label = map[row.name];
+    }
+  }
+
+  continueToEvaluation(): void {
+    this.sharedService.requestNavigateToEvaluation();
   }
 
   private ensureDictionaryThenAnalyze(): void {
@@ -2558,7 +2588,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
-    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK).subscribe({
+    const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
+    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK, algo).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Started:', resp);
         this.sfsMessage = resp.message || 'SFS running...';
@@ -2620,7 +2651,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sfsMessage = 'Resuming SFS...';
 
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
-    this.dataService.resumeSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK).subscribe({
+    const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
+    this.dataService.resumeSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK, algo).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Resume started:', resp);
         this.sfsMessage = resp.message || 'SFS resuming...';
@@ -2667,13 +2699,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     // Call startSfs with initial_features parameter
+    const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
     this.dataService.startSfsWithInitialFeatures(
       this.currentFileId,
       ['forward'],
       stoppingCriteria,
       featuresToUse,
       this.sfsNJobs,
-      this.sfsTopK
+      this.sfsTopK,
+      algo,
     ).subscribe({
       next: (resp: any) => {
         console.log('[SFS-Chain] Forward from backward started:', resp);
@@ -3052,6 +3086,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       searchMethod: this.hpSearchMethod,
       gridPointsPerParam: Math.max(2, Math.round(Number(this.hpDefaultPieces)) + 1),
       gridPointsPerParamMap: this.buildHpPointsMapPayload(),
+      algorithm: this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined,
     }).subscribe({
       next: (resp: any) => {
         console.log('[Hyperparam] Started:', resp);

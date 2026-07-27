@@ -163,7 +163,7 @@ export class DataService {
   }
 
   // Start Sequential Feature Selection (SFS) with user parameters
-  startSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3): Observable<any> {
+  startSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
     const payload: any = {
       file_id: fileId,
       methods: methods,
@@ -174,6 +174,7 @@ export class DataService {
     if (excludedFeatures.length > 0) {
       payload.excluded_features = excludedFeatures;
     }
+    if (algorithm) payload.algorithm = algorithm;
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS:', error);
@@ -183,8 +184,8 @@ export class DataService {
   }
 
   // Start SFS with initial features (for chained backward→forward SFS)
-  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[], nJobs: number = 1, topK: number = 3): Observable<any> {
-    const payload = {
+  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
+    const payload: any = {
       file_id: fileId,
       methods: methods,
       stopping_criteria: stoppingCriteria,
@@ -192,6 +193,7 @@ export class DataService {
       n_jobs: nJobs,
       top_k: topK
     };
+    if (algorithm) payload.algorithm = algorithm;
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS with initial features:', error);
@@ -221,7 +223,7 @@ export class DataService {
   }
 
   // Resume SFS from where it was stopped
-  resumeSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3): Observable<any> {
+  resumeSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
     const payload: any = {
       file_id: fileId,
       methods: methods,
@@ -233,6 +235,7 @@ export class DataService {
     if (excludedFeatures.length > 0) {
       payload.excluded_features = excludedFeatures;
     }
+    if (algorithm) payload.algorithm = algorithm;
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error resuming SFS:', error);
@@ -269,6 +272,7 @@ export class DataService {
     searchMethod?: string;
     gridPointsPerParam?: number;
     gridPointsPerParamMap?: { [param: string]: number };
+    algorithm?: string;
   } = {}): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options.paramSpace) payload.param_space = options.paramSpace;
@@ -283,6 +287,7 @@ export class DataService {
     if (options.searchMethod) payload.search_method = options.searchMethod;
     if (typeof options.gridPointsPerParam === 'number') payload.grid_points_per_param = options.gridPointsPerParam;
     if (options.gridPointsPerParamMap) payload.grid_points_per_param_map = options.gridPointsPerParamMap;
+    if (options.algorithm) payload.algorithm = options.algorithm;
     return this.http.post(`${this.apiUrl}modeling/hyperparam/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting hyperparameter tuning:', error);

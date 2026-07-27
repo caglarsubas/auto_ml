@@ -114,6 +114,37 @@ export class SharedService {
     return this.modelingCheckpointSubject.getValue();
   }
 
+  // Evaluation / Deployment completion flags for Pipeline Flow progress (v2.58+)
+  private evaluationCompletedSubject = new BehaviorSubject<boolean>(false);
+  evaluationCompleted$: Observable<boolean> = this.evaluationCompletedSubject.asObservable();
+
+  private deploymentCompletedSubject = new BehaviorSubject<boolean>(false);
+  deploymentCompleted$: Observable<boolean> = this.deploymentCompletedSubject.asObservable();
+
+  setEvaluationCompleted(value: boolean): void {
+    this.evaluationCompletedSubject.next(!!value);
+  }
+
+  getEvaluationCompleted(): boolean {
+    return this.evaluationCompletedSubject.getValue();
+  }
+
+  setDeploymentCompleted(value: boolean): void {
+    this.deploymentCompletedSubject.next(!!value);
+  }
+
+  getDeploymentCompleted(): boolean {
+    return this.deploymentCompletedSubject.getValue();
+  }
+
+  // Modeling → Evaluation navigation request (Continue CTA)
+  private navigateToEvaluationSubject = new Subject<void>();
+  navigateToEvaluation$: Observable<void> = this.navigateToEvaluationSubject.asObservable();
+
+  requestNavigateToEvaluation(): void {
+    this.navigateToEvaluationSubject.next();
+  }
+
   // Trigger checkpoint save event (modeling child → model-development parent)
   private triggerCheckpointSubject = new Subject<string>();
   triggerCheckpoint$: Observable<string> = this.triggerCheckpointSubject.asObservable();

@@ -116,6 +116,20 @@ class XGBoostAdapter(BoosterAdapter):
         self.enable_categorical = len(self.cat_features) > 0
         self.task = 'regression' if _is_regression(params) else 'classification'
         p = {k: v for k, v in dict(params).items() if k != 'task'}
+        # Normalize sklearn-style aliases to learning-API keys
+        if 'learning_rate' in p and 'eta' not in p:
+            p['eta'] = p.pop('learning_rate')
+        else:
+            p.pop('learning_rate', None)
+        if 'reg_alpha' in p and 'alpha' not in p:
+            p['alpha'] = p.pop('reg_alpha')
+        else:
+            p.pop('reg_alpha', None)
+        if 'reg_lambda' in p and 'lambda' not in p:
+            p['lambda'] = p.pop('reg_lambda')
+        else:
+            p.pop('reg_lambda', None)
+        p.pop('n_estimators', None)
         if self.task == 'regression':
             p.setdefault('objective', 'reg:squarederror')
             p.setdefault('eval_metric', 'rmse')
@@ -230,6 +244,8 @@ class LightGBMAdapter(BoosterAdapter):
             'colsample_bytree': float(params.get('colsample_bytree', 0.7)),
             'reg_alpha': float(params.get('alpha', params.get('reg_alpha', 0.1))),
             'reg_lambda': float(params.get('lambda', params.get('reg_lambda', 1.5))),
+            'min_split_gain': float(params.get('gamma', params.get('min_split_gain', 0.0))),
+            'num_threads': int(params.get('nthread', params.get('num_threads', 0)) or 0),
         }
         if self.task == 'regression':
             p['objective'] = 'regression'
@@ -316,7 +332,10 @@ class CatBoostAdapter(BoosterAdapter):
             'depth': int(params.get('max_depth', 4)),
             'l2_leaf_reg': float(params.get('lambda', params.get('reg_lambda', 1.5))),
             'subsample': float(params.get('subsample', 0.8)),
+            'rsm': float(params.get('colsample_bytree', params.get('rsm', 0.8))),
+            'min_data_in_leaf': int(params.get('min_child_weight', params.get('min_data_in_leaf', 1))),
             'random_seed': int(params.get('seed', 42)),
+            'thread_count': int(params.get('nthread', params.get('thread_count', -1)) or -1),
             'verbose': False,
             'allow_writing_files': False,
         }
@@ -420,6 +439,81 @@ def available_boosting_algorithms() -> Dict[str, bool]:
     except Exception:
         status['xgboost'] = False
     return status
+
+
+def config_to_booster_params(
+    config: Dict[str, Any],
+    *,
+    task: str = 'classification',
+    nthread: int = 0,
+    scale_pos_weight: Optional[float] = None,
+    seed: int = 42,
+) -> Tuple[Dict[str, Any], int]:
+    """Map shared HP/SFS config knobs into adapter ``train`` params + num_boost_round.
+
+    Shared knobs: n_estimators, max_depth, learning_rate, min_child_weight,
+    subsample, colsample_bytree, gamma, reg_alpha, reg_lambda.
+    Adapters accept both sklearn-style and XGBoost learning-API aliases.
+    """
+    task_l = 'regression' if str(task or '').strip().lower() in (
+        'regression', 'regressor', 'reg',
+    ) else 'classification'
+    num_boost_round = int(config.get('n_estimators', 200))
+    params: Dict[str, Any] = {
+        'seed': seed,
+        'task': task_l,
+        'learning_rate': float(config.get('learning_rate', config.get('eta', 0.1))),
+        'eta': float(config.get('learning_rate', config.get('eta', 0.1))),
+        'max_depth': int(config.get('max_depth', 6)),
+        'min_child_weight': float(config.get('min_child_weight', 1)),
+        'subsample': float(config.get('subsample', 0.8)),
+        'colsample_bytree': float(config.get('colsample_bytree', 0.8)),
+        'gamma': float(config.get('gamma', 0.0)),
+        'reg_alpha': float(config.get('reg_alpha', config.get('alpha', 0.0))),
+        'alpha': float(config.get('reg_alpha', config.get('alpha', 0.0))),
+        'reg_lambda': float(config.get('reg_lambda', config.get('lambda', 1.0))),
+        'lambda': float(config.get('reg_lambda', config.get('lambda', 1.0))),
+        'nthread': int(nthread),
+    }
+    if task_l == 'regression':
+        params['objective'] = 'reg:squarederror'
+        params['eval_metric'] = 'rmse'
+    else:
+        params['objective'] = 'binary:logistic'
+        params['eval_metric'] = 'auc'
+        if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
+            params['scale_pos_weight'] = float(scale_pos_weight)
+    return params, num_boost_round
+
+
+def fit_booster(
+    algorithm: Optional[str],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_valid: pd.DataFrame,
+    y_valid: pd.Series,
+    config: Optional[Dict[str, Any]] = None,
+    *,
+    task: str = 'classification',
+    nthread: int = 0,
+    scale_pos_weight: Optional[float] = None,
+    num_boost_round: Optional[int] = None,
+    early_stopping_rounds: int = 50,
+) -> BoosterAdapter:
+    """Train a booster for the given algorithm from a shared config dict."""
+    cfg = dict(config or {})
+    params, n_rounds = config_to_booster_params(
+        cfg, task=task, nthread=nthread, scale_pos_weight=scale_pos_weight,
+    )
+    if num_boost_round is not None:
+        n_rounds = int(num_boost_round)
+    adapter = get_adapter(algorithm)
+    adapter.train(
+        X_train, y_train, X_valid, y_valid, params,
+        num_boost_round=n_rounds,
+        early_stopping_rounds=early_stopping_rounds if early_stopping_rounds else 0,
+    )
+    return adapter
 
 
 def get_adapter(algorithm: Optional[str] = None) -> BoosterAdapter:

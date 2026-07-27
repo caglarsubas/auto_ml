@@ -68,6 +68,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   // New state flags for progressive reveal
   isStarted: boolean = false;
   modelingAvailable: boolean = false;
+  evaluationCompleted: boolean = false;
+  deploymentCompleted: boolean = false;
   preprocessingAvailable: boolean = false;
   // Purifier breakdown: which columns were dropped at which step, and how many rows were removed
   droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number; merge_mapping?: { [feature: string]: { [orig: string]: string } }; note?: string }>= [];
@@ -1053,6 +1055,24 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.subscription.add(
       this.aiAssistant.panelOpen$.subscribe(open => {
         this.showRightPanel = open;
+      })
+    );
+
+    this.subscription.add(
+      this.sharedService.evaluationCompleted$.subscribe((v) => {
+        this.evaluationCompleted = !!v;
+      })
+    );
+    this.subscription.add(
+      this.sharedService.deploymentCompleted$.subscribe((v) => {
+        this.deploymentCompleted = !!v;
+      })
+    );
+    this.subscription.add(
+      this.sharedService.navigateToEvaluation$.subscribe(() => {
+        this.currentStep = 'evaluation';
+        this.navExpandedSteps['evaluation'] = true;
+        this.scrollToSection('evaluation');
       })
     );
 
@@ -2688,8 +2708,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (item === 'preprocessing') return this.preprocessingAvailable;
     if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
     if (item === 'modeling') return this.modelingAvailable;
-    if (item === 'evaluation') return this.modelingAvailable; // can refine later
-    if (item === 'deployment') return this.modelingAvailable; // can refine later
+    if (item === 'evaluation') {
+      const mc = this.sharedService.getModelingCheckpoint();
+      return this.modelingAvailable && !!(mc?.modelingStatus?.model || mc?.hpResults || mc?.substep?.startsWith('hyperparam_'));
+    }
+    if (item === 'deployment') return this.evaluationCompleted;
     return false;
   }
 
@@ -2701,17 +2724,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     event.preventDefault();
     this.currentStep = item;
     // Scroll to anchors for known sections
-    setTimeout(() => {
-      try {
-        if (item === 'data quality') {
-          const el = document.getElementById('data-quality-anchor');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (item === 'modeling') {
-          const el = document.getElementById('modeling-anchor');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      } catch {}
-    }, 0);
+    this.scrollToSection(item);
   }
 
   private computePreprocessingAvailable(): void {
@@ -2762,6 +2775,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         '2b': 'modeling-anchor',
         '2c': 'sfs-anchor',
         '2d': 'hyperparam-anchor',
+        '3a': 'evaluation-anchor',
+        '4a': 'deployment-anchor',
       };
       const anchorId = anchorMap[subStepId];
       if (anchorId) {
@@ -2774,13 +2789,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   private scrollToSection(item: string): void {
     setTimeout(() => {
       try {
-        if (item === 'data quality' || item === 'preprocessing') {
-          const el = document.getElementById('data-quality-anchor');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (item === 'modeling') {
-          const el = document.getElementById('modeling-anchor');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        const idMap: { [k: string]: string } = {
+          'data quality': 'data-quality-anchor',
+          preprocessing: 'data-quality-anchor',
+          modeling: 'modeling-anchor',
+          evaluation: 'evaluation-anchor',
+          deployment: 'deployment-anchor',
+        };
+        const el = document.getElementById(idMap[item] || '');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch {}
     }, 50);
   }
@@ -2837,9 +2854,18 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0 || mc.sfsForwardFromBackwardResults?.length > 0)) return 'in_progress';
         return 'pending';
 
-      // Future steps
-      case '3a': return 'pending';
-      case '4a': return 'pending';
+      case '3a': // Model Evaluation
+        if (this.evaluationCompleted) return 'completed';
+        if (mc && (mc.substep === 'hyperparam_completed' || mc.hpResults || mc.modelingStatus?.model)) {
+          return this.currentStep === 'evaluation' ? 'in_progress' : 'in_progress';
+        }
+        return 'pending';
+      case '4a': // Model Deployment
+        if (this.deploymentCompleted) return 'completed';
+        if (this.evaluationCompleted) {
+          return this.currentStep === 'deployment' ? 'in_progress' : 'in_progress';
+        }
+        return 'pending';
       default: return 'pending';
     }
   }

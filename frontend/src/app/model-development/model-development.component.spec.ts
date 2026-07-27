@@ -92,6 +92,29 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.getSubStepStatus('2d')).toBe('completed');
   });
 
+  it('should mark evaluation/deployment progress from shared completion flags', () => {
+    const sharedService = TestBed.inject(SharedService);
+    sharedService.setModelingCheckpoint({
+      substep: 'hyperparam_completed',
+      modelingStatus: { model: { algorithm: 'xgboost' } },
+      hpResults: { status: 'completed' },
+    });
+    component.modelingAvailable = true;
+    expect(component.getSubStepStatus('3a')).toBe('in_progress');
+    expect(component.stepEnabled('evaluation')).toBeTrue();
+    expect(component.stepEnabled('deployment')).toBeFalse();
+
+    sharedService.setEvaluationCompleted(true);
+    component.evaluationCompleted = true;
+    expect(component.getSubStepStatus('3a')).toBe('completed');
+    expect(component.stepEnabled('deployment')).toBeTrue();
+    expect(component.getSubStepStatus('4a')).toBe('in_progress');
+
+    sharedService.setDeploymentCompleted(true);
+    component.deploymentCompleted = true;
+    expect(component.getSubStepStatus('4a')).toBe('completed');
+  });
+
   // ── dataPurifierStartRequests$ subscription (v2.26.0+) ──────────────
   // AI's `start_data_purifier` action broadcasts here; this component
   // patches selectedOptions + split form fields and calls

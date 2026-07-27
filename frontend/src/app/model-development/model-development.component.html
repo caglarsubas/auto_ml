@@ -761,6 +761,14 @@
   <div id="modeling-anchor"></div>
   <app-modeling *ngIf="modelingAvailable"></app-modeling>
 
+  <div class="model-development-line" *ngIf="modelingAvailable"></div>
+  <div id="evaluation-anchor"></div>
+  <app-evaluation *ngIf="modelingAvailable"></app-evaluation>
+
+  <div class="model-development-line" *ngIf="modelingAvailable"></div>
+  <div id="deployment-anchor"></div>
+  <app-deployment *ngIf="modelingAvailable"></app-deployment>
+
     </div><!-- end .model-development-container -->
   </div><!-- end .panel-middle -->
 

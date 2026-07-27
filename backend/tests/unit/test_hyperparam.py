@@ -414,3 +414,48 @@ class TestHyperparamPointsMap:
         # 'oops' (non-int) dropped, 'unknown_param' (not in space) dropped, 1 clamped up to 2.
         assert res['grid_points_per_param_map'] == {'learning_rate': 2}
         assert res['status'] == 'completed'
+
+
+@pytest.mark.unit
+class TestHyperparamMultiBooster:
+    """Hyperparam engine accepts algorithm= and trains via booster adapters."""
+
+    def test_xgboost_algorithm_echoed(self):
+        from modeling.hyperparam_utils import run_hyperparam_search_with_progress
+        Xtr, ytr, Xte, yte = _hp_synthetic()
+        res = run_hyperparam_search_with_progress(
+            Xtr, ytr, Xte, yte, param_space=_hp_space('max_depth'),
+            n_iter=3, cv_folds=2, n_jobs=1, validation_curve_points=2,
+            search_method='random', random_state=0, algorithm='xgboost',
+        )
+        assert res['status'] == 'completed'
+        assert res.get('algorithm') == 'xgboost'
+        assert res['n_trials'] >= 1
+
+    def test_lightgbm_algorithm_when_installed(self):
+        from modeling.booster_adapters import available_boosting_algorithms
+        if not available_boosting_algorithms().get('lightgbm'):
+            pytest.skip('lightgbm not installed')
+        from modeling.hyperparam_utils import run_hyperparam_search_with_progress
+        Xtr, ytr, Xte, yte = _hp_synthetic()
+        res = run_hyperparam_search_with_progress(
+            Xtr, ytr, Xte, yte, param_space=_hp_space('max_depth'),
+            n_iter=3, cv_folds=2, n_jobs=1, validation_curve_points=2,
+            search_method='random', random_state=1, algorithm='lightgbm',
+        )
+        assert res['status'] == 'completed'
+        assert res.get('algorithm') == 'lightgbm'
+
+    def test_catboost_algorithm_when_installed(self):
+        from modeling.booster_adapters import available_boosting_algorithms
+        if not available_boosting_algorithms().get('catboost'):
+            pytest.skip('catboost not installed')
+        from modeling.hyperparam_utils import run_hyperparam_search_with_progress
+        Xtr, ytr, Xte, yte = _hp_synthetic()
+        res = run_hyperparam_search_with_progress(
+            Xtr, ytr, Xte, yte, param_space=_hp_space('max_depth'),
+            n_iter=3, cv_folds=2, n_jobs=1, validation_curve_points=2,
+            search_method='random', random_state=2, algorithm='catboost',
+        )
+        assert res['status'] == 'completed'
+        assert res.get('algorithm') == 'catboost'
