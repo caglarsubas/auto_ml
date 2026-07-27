@@ -159,10 +159,55 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
                 if c in Xtr.columns and hasattr(Xtr[c], 'cat'):
                     cat_levels[c] = [str(v) for v in Xtr[c].cat.categories.tolist()]
 
-    manifest = {
+    # Pull BU / success criteria / model card / monitoring plan from pipeline + evaluation
+    bu = {}
+    success_criteria = {}
+    monitoring_plan = {
+        'recommended_checks': ['psi_vs_train', 'score_distribution', 'target_rate_if_labeled'],
+        'psi_bands': {'stable': '<0.10', 'moderate': '0.10-0.25', 'shift': '>0.25'},
         'schema_version': 1,
+    }
+    try:
+        from modeling.models import PipelineRun
+        from modeling.crisp_dm import merge_crisp_dm, normalize_business_understanding
+        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+        if run is not None:
+            crisp = merge_crisp_dm((run.state or {}).get('crisp_dm'), {
+                'business_understanding': (run.state or {}).get('business_understanding'),
+            })
+            bu = crisp.get('business_understanding') or {}
+            success_criteria = (bu.get('success_criteria') or {})
+            monitoring_plan['iteration_id'] = crisp.get('iteration_id')
+    except Exception:
+        from modeling.crisp_dm import empty_business_understanding
+        bu = empty_business_understanding()
+
+    card_abs = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
+    model_card = None
+    if os.path.exists(card_abs):
+        try:
+            with open(card_abs, 'r', encoding='utf-8') as f:
+                model_card = json.load(f)
+            shutil.copy2(card_abs, os.path.join(out, 'model_card.json'))
+        except Exception:
+            model_card = None
+
+    with open(os.path.join(out, 'business_understanding.json'), 'w', encoding='utf-8') as f:
+        json.dump(bu, f, indent=2, default=str)
+    with open(os.path.join(out, 'success_criteria.json'), 'w', encoding='utf-8') as f:
+        json.dump(success_criteria, f, indent=2, default=str)
+    with open(os.path.join(out, 'monitoring_plan.json'), 'w', encoding='utf-8') as f:
+        json.dump(monitoring_plan, f, indent=2, default=str)
+
+    freeze_stamp = datetime.now(timezone.utc).isoformat()
+    lineage_hash = (lineage or {}).get('lineage_id') or model.get('lineage_id')
+    manifest = {
+        'schema_version': 2,
+        'scoring_schema_version': 2,
         'file_id': int(file_id),
-        'created_at': datetime.now(timezone.utc).isoformat(),
+        'created_at': freeze_stamp,
+        'immutable_freeze_at': freeze_stamp,
+        'immutable_freeze_hash': lineage_hash,
         'algorithm': algo,
         'model_file': model_basename,
         'feature_names': feature_names,
@@ -173,21 +218,14 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'enable_categorical': bool(model.get('enable_categorical')),
         'calibrator_file': calibrator_file,
         'calibration': model.get('calibration') or {},
-        'lineage_id': lineage.get('lineage_id') or model.get('lineage_id'),
+        'lineage_id': lineage_hash,
         'model_path_source': model_rel,
         'deploy_ready': True,
-        'model_card_path': (
-            os.path.relpath(
-                os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json'),
-                settings.MEDIA_ROOT,
-            )
-            if os.path.exists(os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json'))
-            else None
-        ),
-        'monitoring': {
-            'recommended_checks': ['psi_vs_train', 'score_distribution', 'target_rate_if_labeled'],
-            'psi_bands': {'stable': '<0.10', 'moderate': '0.10-0.25', 'shift': '>0.25'},
-        },
+        'model_card_path': 'model_card.json' if model_card else None,
+        'business_understanding_path': 'business_understanding.json',
+        'success_criteria_path': 'success_criteria.json',
+        'monitoring_plan_path': 'monitoring_plan.json',
+        'monitoring': monitoring_plan,
     }
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as f:
         json.dump(manifest, f, indent=2)
@@ -218,6 +256,31 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'bundle_path': os.path.relpath(out, settings.MEDIA_ROOT),
         'manifest': manifest,
     }
+
+
+def build_deployment_pack_zip(file_id: int) -> tuple:
+    """Zip the frozen score bundle directory for regulatory handoff."""
+    import io
+    import zipfile
+
+    out = bundle_dir(file_id)
+    if not os.path.isdir(out) or not os.path.exists(os.path.join(out, 'manifest.json')):
+        raise FileNotFoundError('Deployment bundle not found. Create the bundle first.')
+    buf = io.BytesIO()
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    name = f'deployment_pack_{file_id}_{stamp}.zip'
+    with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for root, _dirs, files in os.walk(out):
+            for fn in files:
+                abs_path = os.path.join(root, fn)
+                arc = os.path.relpath(abs_path, out)
+                zf.write(abs_path, arcname=arc)
+        zf.writestr(
+            'README.txt',
+            f'DeclarAI deployment pack\nfile_id={file_id}\ngenerated_utc={stamp}\n'
+            'Includes frozen score bundle, BU, success criteria, model card, monitoring plan.\n',
+        )
+    return buf.getvalue(), name
 
 
 def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:

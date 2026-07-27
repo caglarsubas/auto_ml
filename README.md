@@ -568,11 +568,21 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 ## Roadmap
 
 - **Feature sorter** using combined impact and gain metrics as input to SFS
-- **Export results** — CSV/Excel export of SFS results and feature tables
+- ~~**Export results**~~ — Done (v2.59+): SFS CSV export, CRISP/evaluation/deployment packs
 - **Stopping criteria** — %-change of metrics, min/max feature count selection in SFS
 - **Parallel execution** — Multi-core SFS (n_jobs parameter)
-- **Causality features** in the explainability tab
-- **3-layer layout** — Left progress navigation, middle workspace, right assistant chat
+- ~~**Causality features**~~ — In progress (v2.59+): sequential pattern API + enriched DATQ recommendations
+- ~~**3-layer layout**~~ — Done: left CRISP-DM navigation, middle workspace, right assistant chat
 - ~~**Optuna TPE**~~ — Done (v2.57): Bayesian search uses Optuna TPE; FE label remains Bayesian
-- **Logistic regression pipeline** — Scorecard-oriented workflow
-- **Anomaly detection pipeline** — Unsupervised modeling support
+- **Logistic regression pipeline** — Planned for v3.x (scorecard-oriented workflow)
+- **Anomaly detection pipeline** — Planned for v3.x (unsupervised modeling support)
+
+### CRISP-DM cycle (v2.59–v2.65)
+
+- **v2.59** — CRISP-DM nav labels, `PipelineRun` `crisp_dm` state contract, docs alignment
+- **v2.60** — Business Understanding form, success floors, target contract, model-card feed
+- **v2.61** — PSI shift recommendations, CRISP export pack, sequential-pattern MVP, apply-recommendation
+- **v2.62** — SFS details/export/history, champion promote-to-evaluation
+- **v2.63** — Evaluation vs business floors, cost table, governance checks, evaluation pack
+- **v2.64–v2.65** — Deployment pack enrichment, Monitoring step, iteration N+1 clone
+- **v3.x** — Logit / scorecard / anomaly as full CRISP-DM variants (placeholders remain planned)

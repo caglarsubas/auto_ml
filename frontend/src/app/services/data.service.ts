@@ -620,4 +620,110 @@ export class DataService {
     );
   }
 
+  // ===== CRISP-DM cycle APIs =====
+
+  downloadCrispExportPack(fileId: number, pipelineRunId?: number, bu?: any): Observable<Blob> {
+    const payload: any = { file_id: fileId };
+    if (pipelineRunId != null) payload.pipeline_run_id = pipelineRunId;
+    if (bu) payload.business_understanding = bu;
+    return this.http.post(`${this.apiUrl}crisp/export/`, payload, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading CRISP export pack:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  runMonitoring(fileId: number, file: File, scoreCol?: string, targetCol?: string): Observable<any> {
+    const form = new FormData();
+    form.append('file_id', String(fileId));
+    form.append('file', file, file.name);
+    if (scoreCol) form.append('score_col', scoreCol);
+    if (targetCol) form.append('target_col', targetCol);
+    return this.http.post(`${this.apiUrl}crisp/monitoring/`, form).pipe(
+      catchError((err: any) => {
+        console.error('Error running monitoring:', err);
+        return throwError(() => new Error(err?.error?.error || err.message || 'Failed to run monitoring'));
+      })
+    );
+  }
+
+  clonePipelineIteration(pipelineRunId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}crisp/iteration/clone/`, { pipeline_run_id: pipelineRunId }).pipe(
+      catchError((err: any) => {
+        console.error('Error cloning pipeline iteration:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getSequentialPatterns(fileId: number, timeCol?: string): Observable<any> {
+    const params: any = {};
+    if (timeCol) params.time_col = timeCol;
+    return this.http.get(`${this.apiUrl}crisp/sequential/${fileId}/`, { params }).pipe(
+      catchError((err: any) => {
+        console.error('Error fetching sequential patterns:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getDatqEnriched(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}crisp/datq/${fileId}/`).pipe(
+      catchError((err: any) => {
+        console.error('Error fetching enriched DATQ:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  downloadEvalPack(fileId: number): Observable<Blob> {
+    return this.http.post(`${this.apiUrl}evaluation/pack/`, { file_id: fileId }, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading evaluation pack:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  downloadDeploymentPack(fileId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}deployment/pack/`, { file_id: fileId }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading deployment pack:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  promoteChampion(fileId: number, payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/champion/`, { file_id: fileId, ...payload }).pipe(
+      catchError((err: any) => {
+        console.error('Error promoting champion:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  getSfsHistory(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/history/`).pipe(
+      catchError((err: any) => {
+        console.error('Error fetching SFS history:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  saveGovernanceChecks(fileId: number, checks: { [key: string]: boolean }): Observable<any> {
+    return this.http.post(`${this.apiUrl}evaluation/governance/`, { file_id: fileId, checks }).pipe(
+      catchError((err: any) => {
+        console.error('Error saving governance checks:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  applyRecommendationConfirm(fileId: number, payload: any): Observable<any> {
+    return this.executeAiAction(fileId, 'apply_recommendation', payload);
+  }
+
 }

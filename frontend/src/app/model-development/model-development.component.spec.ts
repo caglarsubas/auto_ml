@@ -72,6 +72,39 @@ describe('ModelDevelopmentComponent', () => {
     expect(modelingStep?.subSteps.map((sub) => sub.label)).toContain('Hyperparameter Tuning');
   });
 
+  it('should include CRISP-DM business understanding and monitoring nav steps', () => {
+    const bu = component.navMainSteps.find((step) => step.id === 'business_understanding');
+    expect(bu?.label).toBe('Business Understanding');
+    expect(bu?.subSteps.map((s) => s.id)).toEqual(['0a']);
+
+    const du = component.navMainSteps.find((step) => step.id === 'declaration');
+    expect(du?.label).toBe('Data Understanding');
+
+    const monitoring = component.navMainSteps.find((step) => step.id === 'monitoring');
+    expect(monitoring?.label).toBe('Monitoring');
+    expect(monitoring?.subSteps.map((s) => s.id)).toEqual(['5a']);
+  });
+
+  it('should mark business understanding and monitoring sub-step status', () => {
+    expect(component.getSubStepStatus('0a')).toBe('pending');
+    component.businessUnderstanding.objective = 'Predict default within 12 months';
+    component.onBusinessUnderstandingChanged();
+    expect(component.getSubStepStatus('0a')).toBe('completed');
+
+    component.deploymentCompleted = true;
+    expect(component.stepEnabled('monitoring')).toBeTrue();
+    expect(component.getSubStepStatus('5a')).toBe('in_progress');
+  });
+
+  it('should block modeling when hard_block is set without success floor', () => {
+    component.businessUnderstanding.hard_block_modeling_without_criteria = true;
+    component.businessUnderstanding.success_criteria.floor = null;
+    expect(component.validateModelingCriteriaGate()).toBeFalse();
+
+    component.businessUnderstanding.success_criteria.floor = 0.65;
+    expect(component.validateModelingCriteriaGate()).toBeTrue();
+  });
+
   it('should mark hyperparameter tuning in progress after SFS and completed after results', () => {
     const sharedService = TestBed.inject(SharedService);
 

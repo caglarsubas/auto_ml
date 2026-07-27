@@ -14,6 +14,8 @@ export class EvaluationComponent implements OnInit, OnDestroy {
   isRunning = false;
   error: string | null = null;
   result: any = null;
+  governanceChecked: { [key: string]: boolean } = {};
+  governanceSaving = false;
 
   private subs: Subscription[] = [];
 
@@ -31,6 +33,7 @@ export class EvaluationComponent implements OnInit, OnDestroy {
             next: (resp) => {
               if (resp?.status === 'ok' || resp?.evaluation) {
                 this.result = resp;
+                this.initGovernanceChecks();
                 this.sharedService.setEvaluationCompleted(true);
               }
             },
@@ -38,6 +41,7 @@ export class EvaluationComponent implements OnInit, OnDestroy {
           });
         } else {
           this.result = null;
+          this.governanceChecked = {};
           this.sharedService.setEvaluationCompleted(false);
         }
       }),
@@ -58,6 +62,7 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     this.dataService.runEvaluation(this.currentFileId, this.threshold).subscribe({
       next: (resp) => {
         this.result = resp;
+        this.initGovernanceChecks();
         this.isRunning = false;
         this.sharedService.setEvaluationCompleted(true);
         try { this.sharedService.triggerCheckpoint('evaluation_completed'); } catch {}
@@ -69,12 +74,56 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     });
   }
 
+  downloadEvaluationPack(): void {
+    if (this.currentFileId == null) return;
+    this.dataService.downloadEvalPack(this.currentFileId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `evaluation_pack_${this.currentFileId}.zip`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => console.error('Evaluation pack download failed:', err),
+    });
+  }
+
+  initGovernanceChecks(): void {
+    const remaining = this.modelCard?.human_checks_remaining || [];
+    const saved = this.result?.governance_checks || this.modelCard?.governance_checks || {};
+    const next: { [key: string]: boolean } = {};
+    for (const item of remaining) {
+      next[item] = !!saved[item];
+    }
+    this.governanceChecked = next;
+  }
+
+  toggleGovernanceCheck(item: string, checked: boolean): void {
+    this.governanceChecked[item] = checked;
+    if (this.currentFileId == null) return;
+    this.governanceSaving = true;
+    this.dataService.saveGovernanceChecks(this.currentFileId, this.governanceChecked).subscribe({
+      next: () => {
+        this.governanceSaving = false;
+        try { this.sharedService.triggerCheckpoint('evaluation_governance_updated'); } catch {}
+      },
+      error: () => { this.governanceSaving = false; },
+    });
+  }
+
   get metrics(): any {
     return this.result?.evaluation?.metrics || null;
   }
 
   get modelCard(): any {
     return this.result?.model_card || null;
+  }
+
+  get successCriteriaResult(): any {
+    return this.result?.success_criteria_result
+      ?? this.result?.evaluation?.success_criteria_result
+      ?? null;
   }
 
   get deployReadiness(): any {
@@ -88,6 +137,10 @@ export class EvaluationComponent implements OnInit, OnDestroy {
 
   get thresholdRows(): any[] {
     return this.result?.evaluation?.threshold_table || [];
+  }
+
+  get hasExpectedCost(): boolean {
+    return this.thresholdRows.some((r) => r.expected_cost != null);
   }
 
   get isRegression(): boolean {
@@ -108,5 +161,9 @@ export class EvaluationComponent implements OnInit, OnDestroy {
       'roc_auc', 'pr_auc', 'ks', 'gini', 'f1', 'f2', 'precision', 'recall',
       'accuracy', 'mcc', 'brier', 'log_loss',
     ];
+  }
+
+  get governanceItems(): string[] {
+    return this.modelCard?.human_checks_remaining || [];
   }
 }

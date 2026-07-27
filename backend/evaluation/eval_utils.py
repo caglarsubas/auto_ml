@@ -394,14 +394,33 @@ def build_model_card(
     evaluation: Dict[str, Any],
     lineage: Optional[Dict[str, Any]] = None,
     modeling_status: Optional[Dict[str, Any]] = None,
+    business_understanding: Optional[Dict[str, Any]] = None,
+    governance_checks: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Map governance checklist sections into a reviewable model card."""
+    from modeling.crisp_dm import evaluate_success_floors, normalize_business_understanding
+
     model = (modeling_status or {}).get('model') or {}
     split = model.get('split') or (lineage or {}).get('split') or {}
     readiness = assess_deploy_readiness(
         evaluation, lineage, modeling_status, evaluation_present=True,
     )
     task = readiness['task']
+    bu = normalize_business_understanding(business_understanding)
+    floors = evaluate_success_floors(
+        evaluation.get('metrics') or {},
+        bu.get('success_criteria') or {},
+    )
+    limitations = _deployment_limitations(model, evaluation, task)
+    for note in (bu.get('assumptions'), bu.get('regulatory_notes')):
+        if note and str(note).strip():
+            limitations.append(str(note).strip())
+    if bu.get('forbidden_features'):
+        limitations.append(
+            'Forbidden features from Business Understanding: '
+            + ', '.join(bu['forbidden_features'][:20])
+        )
+    checks = governance_checks if isinstance(governance_checks, dict) else {}
     return {
         'file_id': file_id,
         'title': f'Boosting model card — file {file_id}',
@@ -409,10 +428,15 @@ def build_model_card(
         'algorithm': (lineage or {}).get('algorithm') or model.get('model_type') or 'xgboost_classifier',
         'lineage_id': (lineage or {}).get('lineage_id') or model.get('lineage_id'),
         'deploy_ready': readiness['ready'],
+        'business_understanding': bu,
+        'success_criteria_result': floors,
+        'governance_checks': checks,
         'sections': {
             'data_declaration': {
                 'excluded_variables': (lineage or {}).get('features', {}).get('excluded'),
                 'feature_count': (lineage or {}).get('features', {}).get('count') or model.get('feature_count'),
+                'target_contract': bu.get('target_contract'),
+                'objective': bu.get('objective'),
             },
             'split_and_stability': {
                 'source': split.get('source'),
@@ -443,6 +467,7 @@ def build_model_card(
             },
             'leakage_scan': model.get('leakage_scan') or evaluation.get('leakage_scan'),
             'evaluation_outer_test': evaluation.get('metrics'),
+            'business_success_criteria': floors,
             'deployment_readiness': {
                 'ready': readiness['ready'],
                 'summary': readiness['summary'],
@@ -452,7 +477,7 @@ def build_model_card(
                 'traceable': readiness['flags']['traceable'],
                 'outer_test_evaluated': readiness['flags']['outer_test_evaluated'],
                 'scores_calibrated': readiness['flags']['scores_calibrated'],
-                'known_limitations': _deployment_limitations(model, evaluation, task),
+                'known_limitations': limitations,
             },
         },
         'human_checks_remaining': readiness['human_checks_remaining'],

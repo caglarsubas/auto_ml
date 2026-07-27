@@ -320,6 +320,21 @@
             </button>
           </div>
 
+          <div *ngIf="sequentialCandidates?.length" style="margin-bottom: 16px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fafafa;">
+            <p style="font-size: 13px; margin: 0 0 6px;"><strong>Sequential / near-duplicate flags (MVP)</strong></p>
+            <p style="font-size: 11px; color: #666; margin: 0 0 8px;">Candidates where consecutive rows differ in few features only.</p>
+            <ul style="margin: 0; padding-left: 16px; font-size: 11px;">
+              <li *ngFor="let c of sequentialCandidates | slice:0:8">
+                {{ (c.changed_features || []).join(', ') }} (n_diff={{ c.n_diff }})
+              </li>
+            </ul>
+          </div>
+          <button *ngIf="!sequentialCandidates?.length" mat-stroked-button color="primary"
+                  (click)="loadSequentialPatterns()" [disabled]="sequentialLoading"
+                  style="margin-bottom: 12px; font-size: 11px;">
+            {{ sequentialLoading ? 'Scanning…' : 'Load sequential pattern candidates' }}
+          </button>
+
           <div *ngIf="explainabilityData">
             <p style="font-size: 14px; margin-top: 8px;"><strong>SHAP Beeswarm (Single Feature)</strong></p>
             <p style="font-size: 12px; color:#666; margin-bottom: 8px;">Each point represents a sample. Color indicates feature value (blue=low, red=high). Position on x-axis shows SHAP impact on model output.</p>

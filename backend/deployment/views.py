@@ -14,9 +14,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.http import HttpResponse
+
 from deployment.deploy_utils import (
     DeployNotReadyError,
     assess_file_deploy_readiness,
+    build_deployment_pack_zip,
     build_score_bundle,
     score_frame,
 )
@@ -166,3 +169,39 @@ class DeploymentStatusView(APIView):
             return Response(payload, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'status': 'error', 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DeploymentPackView(APIView):
+    """One-click deployment pack zip for review / regulatory handoff."""
+
+    def post(self, request, *args, **kwargs):
+        file_id = (request.data or {}).get('file_id')
+        if file_id is None:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            file_id = int(file_id)
+            # Ensure bundle exists (create if deploy-ready)
+            try:
+                build_score_bundle(file_id)
+            except DeployNotReadyError as e:
+                return Response({
+                    'error': str(e),
+                    'deploy_ready': False,
+                    'readiness': e.readiness,
+                }, status=status.HTTP_409_CONFLICT)
+            except FileNotFoundError as e:
+                return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+            raw, filename = build_deployment_pack_zip(file_id)
+            out_dir = os.path.join(settings.MEDIA_ROOT, 'exports')
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, filename), 'wb') as f:
+                f.write(raw)
+            resp = HttpResponse(raw, content_type='application/zip')
+            resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return resp
+        except Exception as e:
+            import traceback
+            print("[DeploymentPack] ERROR:\n" + traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

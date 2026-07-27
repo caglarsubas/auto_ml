@@ -657,11 +657,32 @@
                     style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
               📊 View Details
             </button>
+            <button *ngIf="sfsCompletedSteps.length > 0 || sfsForwardResults.length || sfsBackwardResults.length"
+                    (click)="exportSfsCsv()"
+                    style="padding: 10px 20px; background: #455a64; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+              Export SFS CSV
+            </button>
+            <button (click)="loadSfsHistory()"
+                    style="padding: 10px 20px; background: #5c6bc0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+              {{ sfsHistoryLoading ? 'Loading…' : 'SFS run history' }}
+            </button>
             <button (click)="restartSfs()" 
                     style="padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
               🔄 Restart SFS
             </button>
           </div>
+        </div>
+
+        <div *ngIf="sfsRunHistory.length" style="margin-top: 16px; padding: 12px; border: 1px solid #eee; border-radius: 6px;">
+          <h4 style="margin: 0 0 8px 0;">SFS run history</h4>
+          <ul style="margin: 0; padding-left: 18px; font-size: 13px;">
+            <li *ngFor="let run of sfsRunHistory">
+              {{ run.started_at || run.created_at || run.id }} —
+              {{ run.methods?.join?.('+') || run.method || 'SFS' }}
+              <span *ngIf="run.feature_count != null"> · {{ run.feature_count }} features</span>
+              <span *ngIf="run.status"> · {{ run.status }}</span>
+            </li>
+          </ul>
         </div>
 
         <!-- Forward Selection Results -->
@@ -1434,6 +1455,12 @@
                     [style.opacity]="hpEnabledCount() === 0 ? 0.5 : 1">
               {{ hpResults ? '▶ Run Next Search' : '▶ Start Hyperparameter Tuning' }}
             </button>
+            <button *ngIf="canPromoteChampion()"
+                    (click)="acceptChampionAndPromote()"
+                    [disabled]="championPromoting"
+                    style="margin-left: 12px; padding: 10px 22px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
+              {{ championPromoting ? 'Promoting…' : 'Accept as champion & promote to Evaluation' }}
+            </button>
             <span style="margin-left: 10px; font-size: 12px; color: #888;">{{ hpEnabledCount() }} hyperparameter(s) enabled</span>
           </div>
         </div>
@@ -1542,7 +1569,11 @@
       </div>
     </div>
 
-    <div style="margin-top: 20px; text-align: center;">
+    <div style="margin-top: 20px; text-align: center; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <button (click)="exportSfsCsv()" *ngIf="sfsCompletedSteps.length"
+              style="padding: 10px 24px; background: #455a64; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+        Export SFS CSV
+      </button>
       <button (click)="closeSfsProgressModal()" 
               style="padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
         Close

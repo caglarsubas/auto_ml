@@ -2097,6 +2097,83 @@ def update_notes(file_id: int, payload: dict) -> dict:
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+@tool(name="apply-recommendation")
+def apply_recommendation(file_id: int, payload: dict) -> dict:
+    """Apply temporary SFS/VIF Model_Usage mutations after user confirmation.
+
+    Two-phase protocol:
+      - confirm=false (default): sandbox preview of Model_Usage changes only
+      - confirm=true: commit updates for frontend SharedService / dictionary
+
+    payload: {
+      "confirm": bool,
+      "updates": [{"column": "feat", "value": "No"|"Yes", "reason": "..."}],
+      "source": "sfs"|"vif"|"datq"|"assistant",
+      "description": "..."
+    }
+    """
+    _stamp_action_mcp_marker('apply_recommendation')
+    updates = payload.get('updates') or []
+    confirm = bool(payload.get('confirm'))
+    description = payload.get('description') or ''
+    source = str(payload.get('source') or 'assistant')
+    if not updates:
+        return {'status': 'error', 'error': 'No recommendation updates provided'}
+
+    sandbox = []
+    for upd in updates:
+        col = str(upd.get('column') or '').strip()
+        value = str(upd.get('value') or 'No').strip()
+        if value.lower() in ('no', 'n', 'false', '0'):
+            value = 'No'
+        elif value.lower() in ('yes', 'y', 'true', '1'):
+            value = 'Yes'
+        else:
+            value = 'No'
+        if not col:
+            continue
+        sandbox.append({
+            'column': col,
+            'field': 'Model_Usage_YN',
+            'key': 'model_usage',
+            'value': value,
+            'reason': upd.get('reason') or description,
+            'source': source,
+        })
+    if not sandbox:
+        return {'status': 'error', 'error': 'No valid column updates'}
+
+    if not confirm:
+        return {
+            'status': 'success',
+            'action_type': 'apply_recommendation',
+            'phase': 'sandbox',
+            'confirm_required': True,
+            'description': description or 'Preview Model_Usage recommendation (not committed).',
+            'proposed': sandbox,
+            'message': (
+                f'Sandbox: {len(sandbox)} Model_Usage change(s) ready. '
+                'Re-send with confirm=true after user approval.'
+            ),
+        }
+
+    # Commit path: return applied rows for frontend to write into Model_Usage
+    # (same contract as update_config model_usage).
+    return {
+        'status': 'success',
+        'action_type': 'apply_recommendation',
+        'phase': 'committed',
+        'confirm_required': False,
+        'description': description or f'Applied {len(sandbox)} Model_Usage recommendation(s).',
+        'applied': sandbox,
+        'updates': [
+            {'key': 'model_usage', 'column': u['column'], 'value': u['value']}
+            for u in sandbox
+        ],
+        'source': source,
+    }
+
+
 HANDLERS = {
     'execute_code': execute_code,
     'update_metadata': update_metadata,
@@ -2109,6 +2186,7 @@ HANDLERS = {
     'start_modeling': start_modeling,
     'start_hyperparameter': start_hyperparameter,
     'update_notes': update_notes,
+    'apply_recommendation': apply_recommendation,
 }
 
 

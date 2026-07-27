@@ -2001,6 +2001,13 @@ class SFSStartView(APIView):
                     
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(sfs_data, f, indent=2)
+
+                    # Archive completed (non-stopped) runs for CRISP-DM SFS history
+                    if results.get('status') != 'stopped':
+                        try:
+                            _archive_sfs_run(file_id, sfs_data)
+                        except Exception as arch_err:
+                            print(f"[SFS] History archive skipped: {arch_err}")
                     
                     elapsed = round(_time.time() - sfs_start_time, 1)
 
@@ -2818,3 +2825,149 @@ class PipelineReportView(APIView):
             response = DjangoHttpResponse(html, content_type='text/html; charset=utf-8')
             response['Content-Disposition'] = f'attachment; filename="{safe_name}_report.html"'
             return response
+
+
+def _archive_sfs_run(file_id: int, sfs_data: dict) -> str:
+    """Copy current SFS results into modeling/{file_id}_runs/ for history."""
+    from datetime import datetime, timezone
+    runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+    os.makedirs(runs_dir, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    existing = [n for n in os.listdir(runs_dir) if n.startswith('sfs_')]
+    run_k = len(existing) + 1
+    path = os.path.join(runs_dir, f'sfs_run_{run_k}_{stamp}.json')
+    payload = dict(sfs_data or {})
+    payload['archived_at'] = datetime.now(timezone.utc).isoformat()
+    payload['run_index'] = run_k
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2, default=str)
+    return os.path.relpath(path, settings.MEDIA_ROOT)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SFSHistoryView(APIView):
+    """List last N archived SFS runs for compare / export history."""
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+        history = []
+        if os.path.isdir(runs_dir):
+            files = sorted(
+                [f for f in os.listdir(runs_dir) if f.startswith('sfs_') and f.endswith('.json')],
+                reverse=True,
+            )
+            for fn in files[:20]:
+                path = os.path.join(runs_dir, fn)
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    history.append({
+                        'filename': fn,
+                        'path': os.path.relpath(path, settings.MEDIA_ROOT),
+                        'run_index': data.get('run_index'),
+                        'archived_at': data.get('archived_at'),
+                        'n_forward': len(data.get('forward') or []),
+                        'n_backward': len(data.get('backward') or []),
+                        'task': data.get('task'),
+                        'status': data.get('status'),
+                    })
+                except Exception:
+                    continue
+        # Also expose current results pointer
+        current = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+        return Response({
+            'status': 'ok',
+            'file_id': file_id,
+            'history': history,
+            'current_exists': os.path.exists(current),
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ChampionPromoteView(APIView):
+    """Accept feature set + HP config as champion and mark ready for Evaluation."""
+
+    def post(self, request, *args, **kwargs):
+        data = request.data or {}
+        file_id = data.get('file_id')
+        if file_id is None:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            file_id = int(file_id)
+        except Exception:
+            return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        features = data.get('features') or []
+        hyperparam = data.get('hyperparam') or data.get('hp') or {}
+        algorithm = data.get('algorithm')
+        sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+        hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
+
+        if not features and os.path.exists(hp_path):
+            try:
+                with open(hp_path, 'r', encoding='utf-8') as f:
+                    hp = json.load(f)
+                features = hp.get('features') or features
+                if not hyperparam:
+                    hyperparam = hp.get('best_params') or hp
+                algorithm = algorithm or hp.get('algorithm')
+            except Exception:
+                pass
+        if not features and os.path.exists(sfs_path):
+            try:
+                with open(sfs_path, 'r', encoding='utf-8') as f:
+                    sfs = json.load(f)
+                fwd = sfs.get('forward_from_backward') or sfs.get('forward') or []
+                bwd = sfs.get('backward') or []
+                last = (fwd or bwd or [None])[-1]
+                if last:
+                    features = last.get('selected_features') or features
+                # Archive completed SFS into run history on promote
+                _archive_sfs_run(file_id, sfs)
+            except Exception:
+                pass
+
+        if not features:
+            return Response({
+                'error': 'No accepted feature set found. Complete SFS/HP first.',
+            }, status=status.HTTP_409_CONFLICT)
+
+        champion = {
+            'file_id': file_id,
+            'features': list(features),
+            'feature_count': len(features),
+            'hyperparam': hyperparam,
+            'algorithm': algorithm,
+            'promoted_at': __import__('datetime').datetime.now(
+                __import__('datetime').timezone.utc
+            ).isoformat(),
+            'ready_for_evaluation': True,
+        }
+
+        champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+        os.makedirs(champ_dir, exist_ok=True)
+        champ_path = os.path.join(champ_dir, 'champion.json')
+        with open(champ_path, 'w', encoding='utf-8') as f:
+            json.dump(champion, f, indent=2, default=str)
+
+        try:
+            from modeling.crisp_dm import merge_crisp_dm
+            run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+            if run is not None:
+                st = dict(run.state or {})
+                st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
+                    'champion': champion,
+                    'phase_status': {'modeling': 'completed'},
+                })
+                st['champion'] = champion
+                run.state = st
+                run.save(update_fields=['state', 'updated_at'])
+        except Exception as pe:
+            print(f"[Champion] PipelineRun update skipped: {pe}")
+
+        return Response({
+            'status': 'ok',
+            'file_id': file_id,
+            'champion': champion,
+            'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
+        })
