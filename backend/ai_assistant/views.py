@@ -511,7 +511,7 @@ Rules for start_hyperparameter:
   for its validation curve.
 • `enabled_params` (optional): subset of {n_estimators, max_depth, learning_rate,
   min_child_weight, subsample, colsample_bytree, gamma, reg_alpha, reg_lambda}
-  to tune.  Omit to keep the form's default enabled set.  Unknown names are dropped.
+  (boosting knobs).  Omit to keep the form's default enabled set.  Unknown names are dropped.
 • `param_space` (optional): per-param {type,min,max,log,enabled} range overrides,
   e.g. {"max_depth": {"type": "int", "min": 3, "max": 8}}.  Restricted to the
   known param names above; bad entries are reported and skipped.  You do NOT
@@ -827,7 +827,7 @@ Grid/random/Bayesian search + per-param CV curves.
 {"search_method": "auto", "n_iter": 40, "cv_folds": 3, "n_jobs": 3, "primary_metric": "roc_auc", "enabled_params": ["max_depth", "learning_rate"], "description": "Tune depth + learning rate"}
 <<<END_ACTION>>>
 search_method auto|grid|random|bayesian (auto picks by fit count; only force when
-asked).  n_jobs (1–32)=compute power.  enabled_params ⊂ the 9 XGBoost knobs.  Never
+asked).  n_jobs (1–32)=compute power.  enabled_params ⊂ the 9 boosting knobs.  Never
 specify features — tuning uses the SFS-selected set.
 
 ─── update_notes ───  Add/edit/delete commentary at named positions.

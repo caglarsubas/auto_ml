@@ -42,10 +42,14 @@ export class DeploymentComponent implements OnInit, OnDestroy {
             next: (resp) => {
               if (resp?.status === 'ok' || resp?.bundle_path) {
                 this.bundle = resp;
+                this.sharedService.setDeploymentCompleted(true);
               }
             },
             error: () => {},
           });
+        } else {
+          this.bundle = null;
+          this.sharedService.setDeploymentCompleted(false);
         }
       }),
     );
@@ -80,6 +84,8 @@ export class DeploymentComponent implements OnInit, OnDestroy {
         this.bundle = resp;
         this.readiness = { ready: true, ...(resp?.manifest || {}) };
         this.isBundling = false;
+        this.sharedService.setDeploymentCompleted(true);
+        try { this.sharedService.triggerCheckpoint('deployment_completed'); } catch {}
       },
       error: (err) => {
         const body = err?.error || {};

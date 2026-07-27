@@ -6,6 +6,8 @@ import pytest
 
 from modeling.booster_adapters import (
     available_boosting_algorithms,
+    config_to_booster_params,
+    fit_booster,
     get_adapter,
 )
 from modeling.split_contract import normalize_boosting_algorithm
@@ -111,3 +113,47 @@ def test_xgboost_adapter_regression(tmp_path):
     assert 'regressor' in path.name
     adapter.save(str(path))
     assert path.exists()
+
+
+def test_config_to_booster_params_shared_knobs():
+    params, n = config_to_booster_params(
+        {'n_estimators': 80, 'max_depth': 4, 'learning_rate': 0.05},
+        task='classification', nthread=1,
+    )
+    assert n == 80
+    assert params['eta'] == 0.05
+    assert params['max_depth'] == 4
+    assert params['objective'] == 'binary:logistic'
+
+
+def test_fit_booster_xgboost_from_shared_config():
+    Xtr, ytr, Xva, yva = _toy_binary(seed=3)
+    adapter = fit_booster(
+        'xgboost', Xtr, ytr, Xva, yva,
+        {'n_estimators': 30, 'max_depth': 3, 'learning_rate': 0.1},
+        task='classification', early_stopping_rounds=5,
+    )
+    proba = adapter.predict_proba(Xva)
+    assert len(proba) == len(Xva)
+
+
+@pytest.mark.skipif(not available_boosting_algorithms().get('lightgbm'), reason='lightgbm not installed')
+def test_fit_booster_lightgbm_from_shared_config():
+    Xtr, ytr, Xva, yva = _toy_binary(seed=4)
+    adapter = fit_booster(
+        'lightgbm', Xtr, ytr, Xva, yva,
+        {'n_estimators': 30, 'max_depth': 3, 'learning_rate': 0.1},
+        task='classification', early_stopping_rounds=5,
+    )
+    assert len(adapter.predict_proba(Xva)) == len(Xva)
+
+
+@pytest.mark.skipif(not available_boosting_algorithms().get('catboost'), reason='catboost not installed')
+def test_fit_booster_catboost_from_shared_config():
+    Xtr, ytr, Xva, yva = _toy_binary(seed=5)
+    adapter = fit_booster(
+        'catboost', Xtr, ytr, Xva, yva,
+        {'n_estimators': 30, 'max_depth': 3, 'learning_rate': 0.1},
+        task='classification', early_stopping_rounds=5,
+    )
+    assert len(adapter.predict_proba(Xva)) == len(Xva)

@@ -31,10 +31,14 @@ export class EvaluationComponent implements OnInit, OnDestroy {
             next: (resp) => {
               if (resp?.status === 'ok' || resp?.evaluation) {
                 this.result = resp;
+                this.sharedService.setEvaluationCompleted(true);
               }
             },
             error: () => {},
           });
+        } else {
+          this.result = null;
+          this.sharedService.setEvaluationCompleted(false);
         }
       }),
     );
@@ -55,6 +59,8 @@ export class EvaluationComponent implements OnInit, OnDestroy {
       next: (resp) => {
         this.result = resp;
         this.isRunning = false;
+        this.sharedService.setEvaluationCompleted(true);
+        try { this.sharedService.triggerCheckpoint('evaluation_completed'); } catch {}
       },
       error: (err) => {
         this.error = err?.message || 'Evaluation failed';

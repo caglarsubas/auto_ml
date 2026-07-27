@@ -1,5 +1,5 @@
 """
-Hyperparameter tuning utilities for boosting models (XGBoost).
+Hyperparameter tuning utilities for boosting models (XGBoost / LightGBM / CatBoost).
 
 This module implements a *random joint search* over an editable
 hyperparameter space plus per-hyperparameter *validation curves*
@@ -7,8 +7,8 @@ hyperparameter space plus per-hyperparameter *validation curves*
 params at the best configuration — the classic ``validation_curve``
 shape).  It mirrors the architecture of ``sfs_utils.py``:
 
-    * StratifiedKFold cross-validation, XGBoost via the learning API.
-    * ``ThreadPoolExecutor(n_jobs)`` parallelism (XGBoost pinned to a
+    * StratifiedKFold cross-validation via shared booster adapters.
+    * ``ThreadPoolExecutor(n_jobs)`` parallelism (booster pinned to a
       single thread per worker to avoid oversubscription).
     * A ``status_callback`` for progress polling and a ``stop_flag``
       dict checked cooperatively so the run can be stopped gracefully.
@@ -31,7 +31,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import (
@@ -41,7 +40,42 @@ from sklearn.metrics import (
 )
 from scipy.stats import spearmanr
 
+from modeling.booster_adapters import fit_booster, config_to_booster_params
+
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
+
+
+def _build_xgb_params(
+    config: Dict[str, Any],
+    nthread: int,
+    has_cat: bool = False,
+    scale_pos_weight: Optional[float] = None,
+    task: str = 'classification',
+) -> Tuple[Dict[str, Any], int]:
+    """Compatibility wrapper: shared config → XGBoost learning-API params."""
+    params, num_boost_round = config_to_booster_params(
+        config, task=task, nthread=nthread, scale_pos_weight=scale_pos_weight,
+    )
+    # Drop sklearn aliases; keep learning-API keys for legacy tests / callers.
+    out = {
+        'objective': params['objective'],
+        'eval_metric': params['eval_metric'],
+        'seed': params.get('seed', 42),
+        'nthread': nthread,
+        'eta': float(params['eta']),
+        'max_depth': int(params['max_depth']),
+        'min_child_weight': float(params['min_child_weight']),
+        'subsample': float(params['subsample']),
+        'colsample_bytree': float(params['colsample_bytree']),
+        'gamma': float(params.get('gamma', 0.0)),
+        'alpha': float(params['alpha']),
+        'lambda': float(params['lambda']),
+    }
+    if has_cat:
+        out['enable_categorical'] = True
+    if 'scale_pos_weight' in params:
+        out['scale_pos_weight'] = params['scale_pos_weight']
+    return out, num_boost_round
 
 
 # ---------------------------------------------------------------------------
@@ -118,14 +152,6 @@ _PARAM_BOUNDS: Dict[str, Tuple[float, float]] = {
     'gamma': (0.0, 50.0), 'reg_alpha': (0.0, 100.0), 'reg_lambda': (0.0, 100.0),
 }
 
-# XGBoost learning-API param name mapping (sklearn-style -> xgb.train key).
-_XGB_KEY = {
-    'learning_rate': 'eta', 'reg_alpha': 'alpha', 'reg_lambda': 'lambda',
-    'max_depth': 'max_depth', 'min_child_weight': 'min_child_weight',
-    'subsample': 'subsample', 'colsample_bytree': 'colsample_bytree', 'gamma': 'gamma',
-}
-
-
 def validate_param_space(space: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[str]]:
     """Merge a (partial) user-supplied space onto the defaults, clamping each
     field to its safe bounds.  Returns (clean_space, warnings)."""
@@ -175,71 +201,6 @@ def _has_categorical(X: pd.DataFrame) -> bool:
         or X[c].dtype == 'object' or pd.api.types.is_string_dtype(X[c])
         for c in X.columns
     )
-
-
-def _build_xgb_params(
-    config: Dict[str, Any],
-    nthread: int,
-    has_cat: bool,
-    scale_pos_weight: Optional[float] = None,
-    task: str = 'classification',
-) -> Tuple[Dict[str, Any], int]:
-    """Translate a sampled config into (xgb.train params, num_boost_round)."""
-    task = _normalize_task(task)
-    if task == 'regression':
-        params: Dict[str, Any] = {
-            'objective': 'reg:squarederror',
-            'eval_metric': 'rmse',
-            'seed': 42,
-            'nthread': nthread,
-        }
-    else:
-        params = {
-            'objective': 'binary:logistic',
-            'eval_metric': 'auc',
-            'seed': 42,
-            'nthread': nthread,
-        }
-        if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
-            params['scale_pos_weight'] = float(scale_pos_weight)
-    if has_cat:
-        params['enable_categorical'] = True
-    for key, val in config.items():
-        if key == 'n_estimators':
-            continue
-        xgb_key = _XGB_KEY.get(key, key)
-        params[xgb_key] = int(val) if key in ('max_depth', 'min_child_weight') else float(val)
-    num_boost_round = int(config.get('n_estimators', DEFAULT_FIXED_PARAMS['n_estimators']))
-    return params, num_boost_round
-
-
-def _train_xgb_with_early_stop(
-    params: Dict[str, Any],
-    dtrain: xgb.DMatrix,
-    dvalid: Optional[xgb.DMatrix],
-    num_boost_round: int,
-    early_stopping_rounds: int = 50,
-) -> xgb.Booster:
-    """Train with early stopping when a validation matrix is available."""
-    if dvalid is not None and early_stopping_rounds and early_stopping_rounds > 0:
-        return xgb.train(
-            params,
-            dtrain,
-            num_boost_round=num_boost_round,
-            evals=[(dvalid, 'valid')],
-            early_stopping_rounds=early_stopping_rounds,
-            verbose_eval=False,
-        )
-    return xgb.train(params, dtrain, num_boost_round=num_boost_round, verbose_eval=False)
-
-
-def _predict_best(booster: xgb.Booster, dmat: xgb.DMatrix) -> np.ndarray:
-    try:
-        if hasattr(booster, 'best_iteration') and booster.best_iteration is not None and booster.best_iteration >= 0:
-            return booster.predict(dmat, iteration_range=(0, int(booster.best_iteration) + 1))
-    except Exception:
-        pass
-    return booster.predict(dmat)
 
 
 def _nan_metric_map() -> Dict[str, float]:
@@ -487,6 +448,7 @@ def _evaluate_config(
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
     task: str = 'classification',
+    algorithm: str = 'xgboost',
 ) -> Dict[str, Any]:
     """Cross-validate one config and also fit on full train -> valid/train metrics.
 
@@ -494,18 +456,20 @@ def _evaluate_config(
     Returns a trial dict with cv (mean+std per metric), train, test metric maps.
     """
     task = _normalize_task(task)
-    params, num_round = _build_xgb_params(
-        config, nthread, has_cat, scale_pos_weight=scale_pos_weight, task=task,
-    )
     t0 = time.time()
 
     skf = _make_cv_splitter(task, cv_folds)
     fold_metrics: List[Dict[str, float]] = []
     for tr_idx, va_idx in skf.split(X_train, y_train):
-        dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
-        dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
-        booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
-        proba = _predict_best(booster, dva)
+        adapter = fit_booster(
+            algorithm,
+            X_train.iloc[tr_idx], y_train.iloc[tr_idx],
+            X_train.iloc[va_idx], y_train.iloc[va_idx],
+            config, task=task, nthread=nthread,
+            scale_pos_weight=scale_pos_weight,
+            early_stopping_rounds=early_stopping_rounds,
+        )
+        proba = adapter.predict_proba(X_train.iloc[va_idx])
         fold_metrics.append(_compute_metrics(y_train.iloc[va_idx].values, proba, threshold, task=task))
 
     cv: Dict[str, Dict[str, float]] = {}
@@ -518,19 +482,22 @@ def _evaluate_config(
             cv[m] = {'mean': float('nan'), 'std': float('nan')}
 
     # Full-fit on train with early stopping on the modeling validation holdout.
-    dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=has_cat)
-    dtest = xgb.DMatrix(X_test, label=y_test, enable_categorical=has_cat)
-    full = _train_xgb_with_early_stop(params, dtrain, dtest, num_round, early_stopping_rounds)
-    train_metrics = _compute_metrics(y_train.values, _predict_best(full, dtrain), threshold, task=task)
-    test_metrics = _compute_metrics(y_test.values, _predict_best(full, dtest), threshold, task=task)
+    full = fit_booster(
+        algorithm, X_train, y_train, X_test, y_test, config,
+        task=task, nthread=nthread, scale_pos_weight=scale_pos_weight,
+        early_stopping_rounds=early_stopping_rounds,
+    )
+    train_metrics = _compute_metrics(y_train.values, full.predict_proba(X_train), threshold, task=task)
+    test_metrics = _compute_metrics(y_test.values, full.predict_proba(X_test), threshold, task=task)
 
     return {
         'params': config,
         'cv': cv,
         'train': train_metrics,
         'test': test_metrics,
-        'best_iteration': int(getattr(full, 'best_iteration', num_round) or num_round),
+        'best_iteration': int(getattr(full, 'best_iteration', 0) or 0),
         'fit_time': round(time.time() - t0, 3),
+        'algorithm': algorithm,
     }
 
 
@@ -541,24 +508,33 @@ def _evaluate_cv_only(
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
     task: str = 'classification',
+    algorithm: str = 'xgboost',
 ) -> Tuple[float, float, float, float]:
     """Lightweight CV used for validation curves: returns
     (train_mean, train_std, cv_mean, cv_std) for a single ``metric``."""
     task = _normalize_task(task)
-    params, num_round = _build_xgb_params(
-        config, nthread, has_cat, scale_pos_weight=scale_pos_weight, task=task,
-    )
     skf = _make_cv_splitter(task, cv_folds)
     tr_scores, cv_scores = [], []
     for tr_idx, va_idx in skf.split(X_train, y_train):
-        dtr = xgb.DMatrix(X_train.iloc[tr_idx], label=y_train.iloc[tr_idx], enable_categorical=has_cat)
-        dva = xgb.DMatrix(X_train.iloc[va_idx], label=y_train.iloc[va_idx], enable_categorical=has_cat)
-        booster = _train_xgb_with_early_stop(params, dtr, dva, num_round, early_stopping_rounds)
+        adapter = fit_booster(
+            algorithm,
+            X_train.iloc[tr_idx], y_train.iloc[tr_idx],
+            X_train.iloc[va_idx], y_train.iloc[va_idx],
+            config, task=task, nthread=nthread,
+            scale_pos_weight=scale_pos_weight,
+            early_stopping_rounds=early_stopping_rounds,
+        )
         tr_scores.append(
-            _compute_metrics(y_train.iloc[tr_idx].values, _predict_best(booster, dtr), threshold, task=task)[metric]
+            _compute_metrics(
+                y_train.iloc[tr_idx].values, adapter.predict_proba(X_train.iloc[tr_idx]),
+                threshold, task=task,
+            )[metric]
         )
         cv_scores.append(
-            _compute_metrics(y_train.iloc[va_idx].values, _predict_best(booster, dva), threshold, task=task)[metric]
+            _compute_metrics(
+                y_train.iloc[va_idx].values, adapter.predict_proba(X_train.iloc[va_idx]),
+                threshold, task=task,
+            )[metric]
         )
     tr_scores = np.array([s for s in tr_scores if np.isfinite(s)], dtype=float)
     cv_scores = np.array([s for s in cv_scores if np.isfinite(s)], dtype=float)
@@ -701,6 +677,7 @@ def run_hyperparam_search_with_progress(
     scale_pos_weight: Optional[float] = None,
     early_stopping_rounds: int = 50,
     task: str = 'classification',
+    algorithm: str = 'xgboost',
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -717,6 +694,7 @@ def run_hyperparam_search_with_progress(
     Returns a JSON-serializable dict (see module docstring for the shape).
     """
     task = _normalize_task(task)
+    algorithm = (algorithm or 'xgboost').strip().lower()
     space, space_warnings = validate_param_space(param_space)
     fixed = {**DEFAULT_FIXED_PARAMS, **(fixed_params or {})}
     if primary_metric not in METRIC_DIRECTION:
@@ -770,7 +748,7 @@ def run_hyperparam_search_with_progress(
         requested = 'auto'
     method = recommendation['method'] if requested == 'auto' else requested
 
-    print(f"[Hyperparam] method={method} (requested={requested}), n_iter={n_iter}, "
+    print(f"[Hyperparam] method={method} (requested={requested}), algo={algorithm}, n_iter={n_iter}, "
           f"cv_folds={cv_folds}, n_jobs={n_jobs}, enabled={enabled_params}, "
           f"features={X_train.shape[1]}, has_cat={has_cat}, "
           f"grid~{recommendation['grid_candidates']} cand "
@@ -782,6 +760,7 @@ def run_hyperparam_search_with_progress(
     results: Dict[str, Any] = {
         'status': 'running',
         'task': task,
+        'algorithm': algorithm,
         'primary_metric': primary_metric,
         'active_metrics': _active_metrics(task),
         'search_method': method,
@@ -853,7 +832,7 @@ def run_hyperparam_search_with_progress(
                 pool.submit(
                     _evaluate_config, X_train, y_train, X_test, y_test,
                     cfg, cv_folds, has_cat, nthread, threshold,
-                    scale_pos_weight, early_stopping_rounds, task,
+                    scale_pos_weight, early_stopping_rounds, task, algorithm,
                 ): i
                 for i, cfg in enumerate(cfgs)
             }
@@ -923,6 +902,7 @@ def run_hyperparam_search_with_progress(
             result = _evaluate_config(
                 X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
                 nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
+                algorithm,
             )
             trials.append(result)
             done_units[0] += 1
@@ -1041,7 +1021,7 @@ def run_hyperparam_search_with_progress(
                     pool.submit(
                         _evaluate_cv_only, X_train, y_train, cfg, cv_folds,
                         has_cat, nthread, threshold, primary_metric,
-                        scale_pos_weight, early_stopping_rounds, task,
+                        scale_pos_weight, early_stopping_rounds, task, algorithm,
                     ): idx
                     for idx, cfg in enumerate(point_configs)
                 }
