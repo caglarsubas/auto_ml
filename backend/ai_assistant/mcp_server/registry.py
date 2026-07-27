@@ -147,6 +147,14 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         auth.SCOPE_NOTES_WRITE,
         False,
     ),
+    ActionSpec(
+        "apply_recommendation",
+        "Prepare Model_Usage recommendation apply",
+        "Sandbox then commit temporary SFS/VIF Model_Usage recommendations after user confirmation.",
+        "medium",
+        auth.SCOPE_CONFIG_WRITE,
+        False,
+    ),
 )
 
 

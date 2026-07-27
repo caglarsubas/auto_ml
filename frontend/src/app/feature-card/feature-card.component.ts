@@ -142,6 +142,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   explainabilityFetched: boolean = false;  // Track if we've already fetched
   showNullsBeeswarm: boolean = false;  // Control showing null values in SHAP Beeswarm (Single Feature)
   beeswarmMissingRatio: number = 0;  // Missing ratio for current feature in beeswarm plot
+  sequentialCandidates: any[] = [];
+  sequentialLoading = false;
   
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
   currentTabIndex: number = 0;
@@ -150,6 +152,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   dataVersion: 'raw' | 'preprocessed' | 'encoded' = 'raw';
   dataVersionOptions: Array<{ value: 'raw' | 'preprocessed' | 'encoded'; label: string; disabled: boolean }> = [];
   
+  loadSequentialPatterns(): void {
+    const fileId = Number(this.data?.fileId);
+    if (!fileId || Number.isNaN(fileId)) return;
+    this.sequentialLoading = true;
+    this.dataService.getSequentialPatterns(fileId).subscribe({
+      next: (resp) => {
+        this.sequentialCandidates = resp?.candidates || [];
+        this.sequentialLoading = false;
+      },
+      error: () => {
+        this.sequentialCandidates = [];
+        this.sequentialLoading = false;
+      },
+    });
+  }
+
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: FeatureCardDialogData,
     @Inject(PLATFORM_ID) platformId: object,

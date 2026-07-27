@@ -46,6 +46,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   sfsCurrentMetrics: { [key: string]: number } = {};
   sfsCompletedSteps: any[] = [];  // Real-time completed steps during SFS
   showSfsProgressModal: boolean = false;  // Modal for viewing details during SFS
+  sfsRunHistory: any[] = [];
+  sfsHistoryLoading: boolean = false;
+  championPromoting: boolean = false;
   private sfsPolling: Subscription | null = null;
   
   // SFS method selection
@@ -3956,5 +3959,80 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       };
       try { Plotly.react(perfEl, traces, layout, config); } catch { Plotly.newPlot(perfEl, traces, layout, config); }
     }
+  }
+
+  loadSfsHistory(): void {
+    if (!this.currentFileId) return;
+    this.sfsHistoryLoading = true;
+    this.dataService.getSfsHistory(this.currentFileId).subscribe({
+      next: (resp) => {
+        this.sfsRunHistory = resp?.history || resp?.runs || (Array.isArray(resp) ? resp : []);
+        this.sfsHistoryLoading = false;
+      },
+      error: () => { this.sfsHistoryLoading = false; },
+    });
+  }
+
+  exportSfsCsv(): void {
+    const rows = this.sfsCompletedSteps.length ? this.sfsCompletedSteps : [
+      ...this.sfsForwardResults,
+      ...this.sfsBackwardResults,
+      ...this.sfsForwardFromBackwardResults,
+    ];
+    if (!rows.length) return;
+    const headers = ['step', 'direction', 'action', 'feature_name', 'cv_metric', 'pct_change'];
+    const lines = [headers.join(',')];
+    for (const step of rows) {
+      const pct = step.pct_changes?.roc_auc ?? step.pct_changes?.r2 ?? '';
+      const cv = step.cv_roc_auc ?? step.cv_r2 ?? step.cv_metric ?? '';
+      lines.push([
+        step.step ?? '',
+        step.direction ?? '',
+        step.action ?? step.feature_name ? 'added' : '',
+        step.feature_name ?? step.feature ?? '',
+        cv,
+        pct,
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sfs_export_${this.currentFileId || 'run'}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  canPromoteChampion(): boolean {
+    const sfsDone = this.sfsForwardResults.length > 0
+      || this.sfsBackwardResults.length > 0
+      || this.sfsForwardFromBackwardResults.length > 0
+      || ['sfs_completed', 'sfs_forward_completed', 'sfs_backward_completed', 'sfs_forward_from_backward_completed', 'sfs_stopped'].includes(this._currentSubstep);
+    const hpDone = !!this.hpResults || this._currentSubstep === 'hyperparam_completed';
+    return !!this.currentFileId && sfsDone && hpDone && !this.championPromoting;
+  }
+
+  acceptChampionAndPromote(): void {
+    if (!this.canPromoteChampion() || !this.currentFileId) return;
+    this.championPromoting = true;
+    const payload = {
+      features: this.getFinalSelectedFeatures(),
+      hyperparam: this.hpResults?.best_params || this.hpResults?.best_point?.params,
+      search_method: this.hpResults?.search_method,
+      sfs_substep: this._currentSubstep,
+    };
+    this.dataService.promoteChampion(this.currentFileId, payload).subscribe({
+      next: () => {
+        this.championPromoting = false;
+        try { this.sharedService.triggerCheckpoint('champion_promoted'); } catch {}
+        setTimeout(() => {
+          document.getElementById('evaluation-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      },
+      error: (err) => {
+        this.championPromoting = false;
+        alert(err?.error?.error || 'Failed to promote champion');
+      },
+    });
   }
 }

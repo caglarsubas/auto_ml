@@ -15,6 +15,32 @@ interface PurifierOption {
   group?: number;
 }
 
+interface BusinessSuccessCriteria {
+  primary_metric: string;
+  direction: 'maximize' | 'minimize';
+  floor: number | null;
+  cost_matrix: { fn_cost: number; fp_cost: number };
+}
+
+interface BusinessUnderstandingState {
+  objective: string;
+  decision_use_case: string;
+  prediction_horizon: string;
+  population: string;
+  exclusions: string;
+  assumptions: string;
+  regulatory_notes: string;
+  forbidden_features: string[];
+  success_criteria: BusinessSuccessCriteria;
+  target_contract: {
+    event_definition: string;
+    good_bad_window: string;
+    target_column: string;
+  };
+  hard_block_modeling_without_criteria: boolean;
+  completed: boolean;
+}
+
 @Component({
   selector: 'app-model-development',
   templateUrl: './model-development.component.html',
@@ -139,22 +165,43 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   encodedFilePath: string | null = null;
   encodingUseNative: boolean = true;
 
+  // ===== CRISP-DM: Business Understanding & cycle state =====
+  businessUnderstanding: BusinessUnderstandingState = ModelDevelopmentComponent.createDefaultBusinessUnderstanding();
+  forbiddenFeaturesText: string = '';
+  crispDm: any = null;
+  modelingCriteriaWarning: boolean = false;
+  monitoringReport: any = null;
+  monitoringFile: File | null = null;
+  monitoringScoreCol: string = 'score';
+  monitoringTargetCol: string = '';
+  monitoringRunning: boolean = false;
+  monitoringError: string | null = null;
+  iterationCloning: boolean = false;
+
   // ===== Enhanced Navigation: Collapsible Sub-Steps =====
   navExpandedSteps: { [mainStep: string]: boolean } = {
+    business_understanding: true,
     declaration: true,
     modeling: false,
     evaluation: false,
     deployment: false,
+    monitoring: false,
   };
 
   navMainSteps = [
     {
-      id: 'declaration', label: 'Declaration',
+      id: 'business_understanding', label: 'Business Understanding',
+      subSteps: [
+        { id: '0a', label: 'Problem Framing & Success Criteria' },
+      ]
+    },
+    {
+      id: 'declaration', label: 'Data Understanding',
       subSteps: [
         { id: '1a', label: 'Pipeline Type Selection' },
         { id: '1b', label: 'Data Upload' },
         { id: '1c', label: 'Data Dictionary Review' },
-        { id: '1d', label: 'Preprocessing' },
+        { id: '1d', label: 'Preprocessing & Split' },
         { id: '1e', label: 'Data Quality Summary' },
       ]
     },
@@ -179,7 +226,39 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         { id: '4a', label: 'Model Deployment' },
       ]
     },
+    {
+      id: 'monitoring', label: 'Monitoring',
+      subSteps: [
+        { id: '5a', label: 'Drift & Iteration' },
+      ]
+    },
   ];
+
+  private static createDefaultBusinessUnderstanding(): BusinessUnderstandingState {
+    return {
+      objective: '',
+      decision_use_case: '',
+      prediction_horizon: '',
+      population: '',
+      exclusions: '',
+      assumptions: '',
+      regulatory_notes: '',
+      forbidden_features: [],
+      success_criteria: {
+        primary_metric: 'roc_auc',
+        direction: 'maximize',
+        floor: null,
+        cost_matrix: { fn_cost: 1.0, fp_cost: 1.0 },
+      },
+      target_contract: {
+        event_definition: '',
+        good_bad_window: '',
+        target_column: '',
+      },
+      hard_block_modeling_without_criteria: false,
+      completed: false,
+    };
+  }
 
   // ===== 3-Layer Panel Layout =====
   showLeftPanel: boolean = true;
@@ -347,7 +426,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
 
     // Add Model_Usage column after Variable (it won't come from backend)
-    const fixed = [pickVar, 'Model_Usage', 'PSI', 'Datq_Decision', 'Variable_Type', 'CSI'].filter(x => !!x && (x === 'Model_Usage' || has(x as string))) as string[];
+    const fixed = [pickVar, 'Model_Usage', 'PSI', 'Datq_Decision', 'Shift_Recommendation', 'Variable_Type', 'CSI'].filter(x => !!x && (x === 'Model_Usage' || has(x as string))) as string[];
     const excluded = new Set<string>([...fixed, ...paired]);
     const rest = cols.filter(c => !excluded.has(c));
     this.datqColumns = [...fixed, ...paired, ...rest];
@@ -1350,6 +1429,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           // Map declaration substeps to detailed taxonomy
           if (substep === 'decl_data_imported') this.detailedStep = '1b_data_declaration';
           else if (substep === 'decl_dictionary_generated') this.detailedStep = '1c_dictionary_declaration';
+        } else if (substep === 'evaluation_completed' || substep === 'champion_promoted') {
+          step = 'evaluation';
+          this.currentStep = 'evaluation';
+          this.detailedStep = '4a_evaluation';
         } else if (substep.startsWith('sfs_') || substep.startsWith('hyperparam_')) {
           step = 'sfs';
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
@@ -1394,6 +1477,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   // After user reviews the Data Quality summary, proceed to Modeling section
   goToModeling(): void {
+    if (!this.validateModelingCriteriaGate()) return;
     // Push final Model_Usage settings to SharedService for modeling phase
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
@@ -1926,6 +2010,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       target_definition: this.targetDefinition || '',
       current_step: this.currentStep === 'data quality' ? 'data_quality' : this.currentStep,
       detailed_step: this.detailedStep,
+      business_understanding: this.businessUnderstanding,
+      crisp_dm: this.buildCrispDmState(),
       preprocessing: {
         purifier_option_ids: this.selectedOptions.map(o => o.id),
         split_strategy: this.splitStrategy,
@@ -1958,9 +2044,215 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     };
   }
 
+  private buildCrispDmState(): any {
+    const base = this.crispDm || {};
+    return {
+      iteration_id: base.iteration_id ?? 1,
+      phase_status: {
+        business_understanding: 'pending',
+        data_understanding: 'pending',
+        data_preparation: 'pending',
+        modeling: 'pending',
+        evaluation: 'pending',
+        deployment: 'pending',
+        monitoring: 'pending',
+        ...(base.phase_status || {}),
+      },
+      business_understanding: this.businessUnderstanding,
+      governance_checks: base.governance_checks || {},
+      champion: base.champion ?? null,
+      monitoring: this.monitoringReport ?? base.monitoring ?? null,
+      parent_run_id: base.parent_run_id ?? null,
+    };
+  }
+
+  private applyBusinessUnderstanding(raw: any): void {
+    const d = ModelDevelopmentComponent.createDefaultBusinessUnderstanding();
+    if (!raw || typeof raw !== 'object') {
+      this.businessUnderstanding = d;
+      this.forbiddenFeaturesText = '';
+      return;
+    }
+    Object.assign(d, {
+      objective: raw.objective ?? '',
+      decision_use_case: raw.decision_use_case ?? '',
+      prediction_horizon: raw.prediction_horizon ?? '',
+      population: raw.population ?? '',
+      exclusions: raw.exclusions ?? '',
+      assumptions: raw.assumptions ?? '',
+      regulatory_notes: raw.regulatory_notes ?? '',
+      hard_block_modeling_without_criteria: !!raw.hard_block_modeling_without_criteria,
+      completed: !!raw.completed,
+    });
+    if (raw.target_contract && typeof raw.target_contract === 'object') {
+      d.target_contract = { ...d.target_contract, ...raw.target_contract };
+    }
+    if (raw.success_criteria && typeof raw.success_criteria === 'object') {
+      d.success_criteria = {
+        ...d.success_criteria,
+        ...raw.success_criteria,
+        cost_matrix: {
+          ...d.success_criteria.cost_matrix,
+          ...(raw.success_criteria.cost_matrix || {}),
+        },
+      };
+    }
+    if (Array.isArray(raw.forbidden_features)) {
+      d.forbidden_features = raw.forbidden_features.map((x: any) => String(x));
+    }
+    this.businessUnderstanding = d;
+    this.forbiddenFeaturesText = d.forbidden_features.join(', ');
+  }
+
+  onBusinessUnderstandingChanged(): void {
+    this.businessUnderstanding.forbidden_features = (this.forbiddenFeaturesText || '')
+      .split(/[,;\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    this.businessUnderstanding.completed = !!String(this.businessUnderstanding.objective || '').trim();
+    this.onPipelineConfigChanged();
+  }
+
+  syncTargetDefinitionToBu(): void {
+    if (this.targetDefinition) {
+      if (!this.businessUnderstanding.objective) {
+        this.businessUnderstanding.objective = this.targetDefinition;
+      }
+      this.businessUnderstanding.target_contract.event_definition = this.targetDefinition;
+    }
+    this.onBusinessUnderstandingChanged();
+  }
+
+  validateModelingCriteriaGate(): boolean {
+    const floor = this.businessUnderstanding.success_criteria?.floor;
+    const floorEmpty = floor == null || (typeof floor === 'string' && floor === '');
+    if (floorEmpty) {
+      console.warn('[CRISP-DM] Success criteria floor is empty — modeling may proceed without a business floor.');
+      this.modelingCriteriaWarning = true;
+      if (this.businessUnderstanding.hard_block_modeling_without_criteria) {
+        alert('Modeling is blocked until a success criteria floor is set in Business Understanding.');
+        return false;
+      }
+    } else {
+      this.modelingCriteriaWarning = false;
+    }
+    return true;
+  }
+
+  sequentialCandidates: any[] = [];
+  sequentialLoading = false;
+
+  exportCrispPack(): void {
+    if (this.currentFileId == null) return;
+    this.dataService.downloadCrispExportPack(
+      this.currentFileId,
+      this.activePipelineRunId ?? undefined,
+      this.businessUnderstanding,
+    ).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `crisp_export_${this.currentFileId}.zip`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (e) => console.error('[CRISP-DM] Export failed:', e),
+    });
+  }
+
+  enrichDatqRecommendations(): void {
+    if (this.currentFileId == null || !this.datqSummary?.length) return;
+    this.dataService.getDatqEnriched(this.currentFileId).subscribe({
+      next: (resp) => {
+        const rows = resp?.datq_summary;
+        if (Array.isArray(rows) && rows.length) {
+          this.datqSummary = rows;
+          this.datqAllColumns = Object.keys(rows[0] || {});
+          this.reorderDatqColumns();
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  loadSequentialPatterns(): void {
+    if (this.currentFileId == null) return;
+    this.sequentialLoading = true;
+    this.dataService.getSequentialPatterns(this.currentFileId).subscribe({
+      next: (resp) => {
+        this.sequentialCandidates = resp?.candidates || [];
+        this.sequentialLoading = false;
+      },
+      error: () => {
+        this.sequentialCandidates = [];
+        this.sequentialLoading = false;
+      },
+    });
+  }
+
+  onMonitoringFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.monitoringFile = input.files?.[0] ?? null;
+    this.monitoringError = null;
+  }
+
+  runMonitoringBatch(): void {
+    if (this.currentFileId == null || !this.monitoringFile) return;
+    this.monitoringRunning = true;
+    this.monitoringError = null;
+    this.dataService.runMonitoring(
+      this.currentFileId,
+      this.monitoringFile,
+      this.monitoringScoreCol || undefined,
+      this.monitoringTargetCol || undefined,
+    ).subscribe({
+      next: (resp) => {
+        this.monitoringReport = resp?.monitoring ?? resp;
+        this.monitoringRunning = false;
+        this.saveCheckpoint('monitoring', true);
+      },
+      error: (err) => {
+        this.monitoringError = err?.message || 'Monitoring failed';
+        this.monitoringRunning = false;
+      },
+    });
+  }
+
+  startIterationNPlus1(): void {
+    if (!this.activePipelineRunId) {
+      alert('Save or load a pipeline run before starting iteration N+1.');
+      return;
+    }
+    this.iterationCloning = true;
+    this.dataService.clonePipelineIteration(this.activePipelineRunId).subscribe({
+      next: (resp) => {
+        this.iterationCloning = false;
+        if (resp.pipeline_run_id) {
+          this.loadPipelineRun(resp.pipeline_run_id);
+        }
+      },
+      error: (err) => {
+        this.iterationCloning = false;
+        console.error('[CRISP-DM] Iteration clone failed:', err);
+        alert(err?.error?.error || 'Failed to clone iteration');
+      },
+    });
+  }
+
+  isNavStepActive(mainStepId: string): boolean {
+    if (mainStepId === 'business_understanding') return this.currentStep === 'business_understanding';
+    if (mainStepId === 'declaration') {
+      return ['declaration', 'preprocessing', 'data quality'].includes(this.currentStep);
+    }
+    if (mainStepId === 'monitoring') return this.currentStep === 'monitoring';
+    return this.currentStep === mainStepId;
+  }
+
   private static readonly STEP_ORDER: {[k: string]: number} = {
+    'business_understanding': -1,
     'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
-    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6
+    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6, 'monitoring': 7,
   };
 
   saveCheckpoint(step?: string, force: boolean = false): void {
@@ -2056,6 +2348,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         this.selectedPipeline = s.pipeline_type || run.pipeline_type || 'boosting';
         this.targetDefinition = s.target_definition || '';
         this.sharedService.setTargetDefinition(this.targetDefinition);
+
+        if (s.business_understanding) {
+          this.applyBusinessUnderstanding(s.business_understanding);
+        }
+        if (s.crisp_dm) {
+          this.crispDm = s.crisp_dm;
+          if (s.crisp_dm.monitoring) this.monitoringReport = s.crisp_dm.monitoring;
+          if (s.crisp_dm.business_understanding && !s.business_understanding) {
+            this.applyBusinessUnderstanding(s.crisp_dm.business_understanding);
+          }
+        }
 
         // ── 3. Restore flags (local first, then SharedService) ──
         const flags = s.flags || {};
@@ -2190,6 +2493,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this.datqColumns = [...this.datqAllColumns];
           this.reorderDatqColumns();
           this.ensureFilterKeys();
+          this.enrichDatqRecommendations();
           if (this.pinnedColumns.length === 0) {
             if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
             else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
@@ -2277,6 +2581,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   onTargetDefinitionChange(value: string): void {
     this.targetDefinition = value;
     this.sharedService.setTargetDefinition(value);
+    this.businessUnderstanding.target_contract.event_definition = value;
+    if (!this.businessUnderstanding.objective) {
+      this.businessUnderstanding.objective = value;
+    }
+    this.onBusinessUnderstandingChanged();
     this.onPipelineConfigChanged();
   }
 
@@ -2400,6 +2709,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this.datqColumns = [...this.datqAllColumns];
           this.reorderDatqColumns();
           this.ensureFilterKeys();
+          this.enrichDatqRecommendations();
           // Apply persisted pins if any; else default pin Variable once
           if (this.pinnedColumns.length > 0) {
             this.pinnedColumns = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
@@ -2687,7 +2997,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       // fallback to single column if backend didn't flatten
       return cols.has(b) ? [b] : [];
     };
-    const fixed = [varCol, pick('PSI'), pick('Datq_Decision'), pick('Variable_Type'), pick('CSI')].filter(Boolean) as string[];
+    const fixed = [varCol, pick('PSI'), pick('Datq_Decision'), pick('Shift_Recommendation'), pick('Variable_Type'), pick('CSI')].filter(Boolean) as string[];
     const pairs = basePrefs.flatMap(b => pairFor(b));
     // Keep order from all-columns after we compute our intended order
     const desiredOrder = [...fixed, ...pairs];
@@ -2704,6 +3014,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   stepEnabled(item: string): boolean {
+    if (item === 'business_understanding') return true;
     if (item === 'declaration') return true;
     if (item === 'preprocessing') return this.preprocessingAvailable;
     if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
@@ -2713,6 +3024,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       return this.modelingAvailable && !!(mc?.modelingStatus?.model || mc?.hpResults || mc?.substep?.startsWith('hyperparam_'));
     }
     if (item === 'deployment') return this.evaluationCompleted;
+    if (item === 'monitoring') return this.deploymentCompleted;
     return false;
   }
 
@@ -2740,18 +3052,30 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   /** Navigate to a main step (same as onMenuClick but for new nav) */
   navGoToStep(event: Event, mainStepId: string): void {
     event.stopPropagation();
-    // Map nav step id to the existing menu item names
     const menuMap: { [k: string]: string } = {
+      business_understanding: 'business_understanding',
       declaration: 'declaration',
       modeling: 'modeling',
       evaluation: 'evaluation',
       deployment: 'deployment',
+      monitoring: 'monitoring',
     };
     const menuItem = menuMap[mainStepId] || mainStepId;
     if (!this.stepEnabled(menuItem)) return;
     this.currentStep = menuItem;
-    // Auto-expand the clicked step
     this.navExpandedSteps[mainStepId] = true;
+    if (mainStepId === 'business_understanding') {
+      setTimeout(() => {
+        document.getElementById('business-understanding-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+      return;
+    }
+    if (mainStepId === 'monitoring') {
+      setTimeout(() => {
+        document.getElementById('monitoring-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+      return;
+    }
     this.scrollToSection(menuItem);
   }
 
@@ -2759,17 +3083,19 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   navGoToSubStep(event: Event, mainStepId: string, subStepId: string): void {
     event.stopPropagation();
     const menuMap: { [k: string]: string } = {
+      business_understanding: 'business_understanding',
       declaration: 'declaration',
       modeling: 'modeling',
       evaluation: 'evaluation',
       deployment: 'deployment',
+      monitoring: 'monitoring',
     };
     const menuItem = menuMap[mainStepId] || mainStepId;
     if (!this.stepEnabled(menuItem)) return;
     this.currentStep = menuItem;
-    // Scroll to specific sub-step anchor if available
     setTimeout(() => {
       const anchorMap: { [k: string]: string } = {
+        '0a': 'business-understanding-anchor',
         '1e': 'data-quality-anchor',
         '2a': 'encoding-anchor',
         '2b': 'modeling-anchor',
@@ -2777,6 +3103,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         '2d': 'hyperparam-anchor',
         '3a': 'evaluation-anchor',
         '4a': 'deployment-anchor',
+        '5a': 'monitoring-anchor',
       };
       const anchorId = anchorMap[subStepId];
       if (anchorId) {
@@ -2790,11 +3117,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     setTimeout(() => {
       try {
         const idMap: { [k: string]: string } = {
+          'business_understanding': 'business-understanding-anchor',
           'data quality': 'data-quality-anchor',
           preprocessing: 'data-quality-anchor',
           modeling: 'modeling-anchor',
           evaluation: 'evaluation-anchor',
           deployment: 'deployment-anchor',
+          monitoring: 'monitoring-anchor',
         };
         const el = document.getElementById(idMap[item] || '');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2806,6 +3135,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   getSubStepStatus(subStepId: string): 'completed' | 'in_progress' | 'pending' {
     const mc = this.sharedService.getModelingCheckpoint();
     switch (subStepId) {
+      case '0a':
+        if (this.businessUnderstanding.completed) return 'completed';
+        if (String(this.businessUnderstanding.objective || '').trim()) return 'in_progress';
+        return this.currentStep === 'business_understanding' ? 'in_progress' : 'pending';
       // Declaration sub-steps
       case '1a': // Pipeline Type
         if (this.isStarted && this.selectedPipeline) return 'completed';
@@ -2866,6 +3199,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           return this.currentStep === 'deployment' ? 'in_progress' : 'in_progress';
         }
         return 'pending';
+      case '5a': // Monitoring
+        if (this.monitoringReport) return 'completed';
+        if (this.deploymentCompleted) {
+          return this.currentStep === 'monitoring' ? 'in_progress' : 'in_progress';
+        }
+        return 'pending';
       default: return 'pending';
     }
   }
@@ -2903,6 +3242,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   goToModelingFromDQ(): void {
+    if (!this.validateModelingCriteriaGate()) return;
     this.sharedService.setModelUsageSettings(this.variableModelUsage);
     this.modelingAvailable = true;
     this.currentStep = 'modeling';

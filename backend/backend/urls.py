@@ -4,10 +4,14 @@ from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
-from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView
+from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView, ChampionPromoteView, SFSHistoryView
+from modeling.crisp_views import (
+    CrispExportPackView, CrispMonitoringRunView, CrispSequentialPatternsView,
+    CrispIterationCloneView, CrispDatqEnrichView,
+)
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
-from evaluation.views import EvaluationRunView, EvaluationStatusView
-from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView
+from evaluation.views import EvaluationRunView, EvaluationStatusView, EvaluationPackView, GovernanceChecksView
+from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
 from django.conf import settings
@@ -44,9 +48,19 @@ urlpatterns = [
     path('api/modeling/vif-detail/', VifDetailView.as_view(), name='vif-detail'),
     path('api/evaluation/run/', EvaluationRunView.as_view(), name='evaluation-run'),
     path('api/evaluation/status/<int:file_id>/', EvaluationStatusView.as_view(), name='evaluation-status'),
+    path('api/evaluation/pack/', EvaluationPackView.as_view(), name='evaluation-pack'),
+    path('api/evaluation/governance/', GovernanceChecksView.as_view(), name='evaluation-governance'),
     path('api/deployment/bundle/', DeploymentBundleView.as_view(), name='deployment-bundle'),
     path('api/deployment/score/', DeploymentScoreView.as_view(), name='deployment-score'),
     path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
+    path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
+    path('api/crisp/export/', CrispExportPackView.as_view(), name='crisp-export'),
+    path('api/crisp/monitoring/', CrispMonitoringRunView.as_view(), name='crisp-monitoring'),
+    path('api/crisp/iteration/clone/', CrispIterationCloneView.as_view(), name='crisp-iteration-clone'),
+    path('api/crisp/sequential/<int:file_id>/', CrispSequentialPatternsView.as_view(), name='crisp-sequential'),
+    path('api/crisp/datq/<int:file_id>/', CrispDatqEnrichView.as_view(), name='crisp-datq'),
+    path('api/modeling/sfs/<int:file_id>/history/', SFSHistoryView.as_view(), name='sfs-history'),
+    path('api/modeling/champion/', ChampionPromoteView.as_view(), name='champion-promote'),
     path('api/pipeline/', PipelineRunListView.as_view(), name='pipeline-list'),
     path('api/pipeline/create/', PipelineRunCreateView.as_view(), name='pipeline-create'),
     path('api/pipeline/<int:pk>/', PipelineRunDetailView.as_view(), name='pipeline-detail'),

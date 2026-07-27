@@ -31,21 +31,33 @@ DeclarAI supports these primary capabilities:
 
 ## Pipeline Stages
 
-DeclarAI is organized as a progressive workflow. Each stage depends on the
-outputs of earlier stages.
+DeclarAI follows the **CRISP-DM operating model**: each iteration cycles through
+business understanding, data understanding, preparation, modeling, evaluation,
+deployment, and monitoring. The left navigation mirrors these phases; checkpoint
+state preserves Business Understanding fields and `crisp_dm` metadata across saves
+and iteration clones.
 
-1. Data Declaration
-2. Data Purifier
-3. Data Quality Summary
-4. Categorical Feature Encoding
-5. Modeling
-6. Sequential Feature Selection
-7. Hyperparameter Tuning
-8. Evaluation and deployment surfaces, currently evolving
+1. **Business Understanding** — problem framing, target contract, forbidden
+   features, and success criteria (primary metric, direction, floor, cost matrix).
+   Optional hard-block prevents modeling until a floor is set.
+2. **Data Understanding** — pipeline type, upload, dictionary review (formerly
+   “Declaration”).
+3. **Data Purifier** — preprocessing and train/test split.
+4. **Data Quality Summary** — stability, PSI, and model-usage review. Export
+   CRISP pack available from the DQ toolbar.
+5. **Categorical Feature Encoding** — handled automatically for native boosting.
+6. **Modeling** — algorithm training, CV metrics, explainability.
+7. **Sequential Feature Selection** — backward/forward SFS with run history and CSV export.
+8. **Hyperparameter Tuning** — grid/random/Bayesian search; champion promotion to Evaluation.
+9. **Evaluation** — locked outer-test scoring, business floor pass/fail, cost-aware
+   threshold table, governance checkboxes, evaluation pack download, model card.
+10. **Deployment** — gated score bundle and deployment pack when readiness checks pass.
+11. **Monitoring** — offline drift on uploaded scored batches; **Start iteration N+1**
+    clones the pipeline run while preserving Business Understanding.
 
 The user should not treat these stages as isolated screens. For example, model
-performance depends on data declaration, purifier selections, split strategy,
-encoding readiness, and the chosen feature set.
+performance depends on business success criteria, data declaration, purifier
+selections, split strategy, encoding readiness, and the chosen feature set.
 
 ## Data Declaration
 

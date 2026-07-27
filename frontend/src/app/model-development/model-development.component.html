@@ -31,7 +31,7 @@
 
       <div class="nav-steps">
         <div *ngFor="let mainStep of navMainSteps; let i = index" class="nav-main-step"
-             [class.nav-active]="currentStep === mainStep.id"
+             [class.nav-active]="isNavStepActive(mainStep.id)"
              [class.nav-completed]="getMainStepStatus(mainStep.id) === 'completed'"
              [class.nav-in-progress]="getMainStepStatus(mainStep.id) === 'in_progress'"
              [class.nav-disabled]="!stepEnabled(mainStep.id)">
@@ -235,15 +235,111 @@
     </div>
   </div>
 
-  <div class="pipeline-declaration">  
+  <div class="pipeline-declaration">
+    <!-- CRISP-DM: Business Understanding -->
+    <div id="business-understanding-anchor" class="business-understanding-section" style="margin-bottom: 24px; padding: 16px; border: 1px solid #e3f2fd; border-radius: 8px; background: #fafcff;">
+      <p style="font-size: larger; font-weight: bold; margin: 0 0 8px 0;">Business Understanding</p>
+      <p style="font-size: 13px; color: #555; margin: 0 0 16px 0;">Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack and evaluation business floors.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Business objective</span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.objective" (ngModelChange)="businessUnderstanding.objective = $event; onBusinessUnderstandingChanged()" placeholder="What decision does this model support?"></textarea>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Decision use case</span>
+          <input type="text" [ngModel]="businessUnderstanding.decision_use_case" (ngModelChange)="businessUnderstanding.decision_use_case = $event; onBusinessUnderstandingChanged()" placeholder="e.g. origination approval" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Prediction horizon</span>
+          <input type="text" [ngModel]="businessUnderstanding.prediction_horizon" (ngModelChange)="businessUnderstanding.prediction_horizon = $event; onBusinessUnderstandingChanged()" placeholder="e.g. 12 months" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Population</span>
+          <input type="text" [ngModel]="businessUnderstanding.population" (ngModelChange)="businessUnderstanding.population = $event; onBusinessUnderstandingChanged()" placeholder="Who is scored?" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Exclusions</span>
+          <input type="text" [ngModel]="businessUnderstanding.exclusions" (ngModelChange)="businessUnderstanding.exclusions = $event; onBusinessUnderstandingChanged()" placeholder="Segments or cases to exclude" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Target column (contract)</span>
+          <input type="text" [ngModel]="businessUnderstanding.target_contract.target_column" (ngModelChange)="businessUnderstanding.target_contract.target_column = $event; onBusinessUnderstandingChanged()" placeholder="Column name in data dictionary" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+          <span>Good/bad window</span>
+          <input type="text" [ngModel]="businessUnderstanding.target_contract.good_bad_window" (ngModelChange)="businessUnderstanding.target_contract.good_bad_window = $event; onBusinessUnderstandingChanged()" placeholder="e.g. performance window" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
+          <span>Event definition (synced with target definition below when edited)</span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.target_contract.event_definition" (ngModelChange)="businessUnderstanding.target_contract.event_definition = $event; targetDefinition = $event; onBusinessUnderstandingChanged()" placeholder="Formal event definition"></textarea>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
+          <span>Assumptions</span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.assumptions" (ngModelChange)="businessUnderstanding.assumptions = $event; onBusinessUnderstandingChanged()"></textarea>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
+          <span>Regulatory notes</span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.regulatory_notes" (ngModelChange)="businessUnderstanding.regulatory_notes = $event; onBusinessUnderstandingChanged()"></textarea>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
+          <span>Forbidden features (comma-separated)</span>
+          <input type="text" [ngModel]="forbiddenFeaturesText" (ngModelChange)="forbiddenFeaturesText = $event; onBusinessUnderstandingChanged()" placeholder="e.g. post_disbursement_balance, internal_score" />
+        </label>
+      </div>
+
+      <fieldset style="margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px;">
+        <legend style="font-weight: 600; font-size: 13px; padding: 0 6px;">Success criteria</legend>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+            <span>Primary metric</span>
+            <select [ngModel]="businessUnderstanding.success_criteria.primary_metric" (ngModelChange)="businessUnderstanding.success_criteria.primary_metric = $event; onBusinessUnderstandingChanged()">
+              <option value="roc_auc">ROC-AUC</option>
+              <option value="pr_auc">PR-AUC</option>
+              <option value="f1">F1</option>
+              <option value="rmse">RMSE</option>
+              <option value="r2">R²</option>
+            </select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+            <span>Direction</span>
+            <select [ngModel]="businessUnderstanding.success_criteria.direction" (ngModelChange)="businessUnderstanding.success_criteria.direction = $event; onBusinessUnderstandingChanged()">
+              <option value="maximize">Maximize</option>
+              <option value="minimize">Minimize</option>
+            </select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+            <span>Floor (business minimum)</span>
+            <input type="number" step="0.001" [ngModel]="businessUnderstanding.success_criteria.floor" (ngModelChange)="businessUnderstanding.success_criteria.floor = $event === '' ? null : +$event; onBusinessUnderstandingChanged()" placeholder="e.g. 0.65" />
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+            <span>FN cost</span>
+            <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fn_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fn_cost = +$event; onBusinessUnderstandingChanged()" />
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+            <span>FP cost</span>
+            <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fp_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fp_cost = +$event; onBusinessUnderstandingChanged()" />
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 18px;">
+            <input type="checkbox" [ngModel]="businessUnderstanding.hard_block_modeling_without_criteria" (ngModelChange)="businessUnderstanding.hard_block_modeling_without_criteria = $event; onBusinessUnderstandingChanged()" />
+            <span>Block modeling without floor</span>
+          </label>
+        </div>
+      </fieldset>
+
+      <div *ngIf="modelingCriteriaWarning" style="margin-top: 10px; padding: 8px 12px; background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 4px; font-size: 13px; color: #e65100;">
+        Success criteria floor is empty. Modeling can proceed, but evaluation will compare outer-test metrics against business floors.
+      </div>
+    </div>
+
     <div class="pipeline-type-dropdown">
       <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
       <select [ngModel]="selectedPipeline" (ngModelChange)="selectedPipeline = $event; onPipelineChange2($event)">
         <option value="" disabled>Select Pipeline</option>
         <option value="boosting">1- Boosting Pipeline</option>
-        <option value="logit">2- Logit Pipeline</option>
-        <option value="credit-scoring">3- Credit Scoring Pipeline</option>
-        <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
+        <option value="logit" disabled>2- Logit Pipeline (planned)</option>
+        <option value="credit-scoring" disabled>3- Credit Scoring Pipeline (planned)</option>
+        <option value="anomaly-detection" disabled>4- Anomaly Detection Pipeline (planned)</option>
       </select>
     </div>
 
@@ -399,6 +495,28 @@
 
     <!-- Data Quality Step Anchor and Summary Table -->
     <div id="data-quality-anchor"></div>
+    <div *ngIf="datqSummary?.length" style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <button type="button" (click)="enrichDatqRecommendations()" style="padding: 6px 12px; font-size: 12px;">
+        Refresh shift recommendations
+      </button>
+      <button type="button" (click)="loadSequentialPatterns()" [disabled]="sequentialLoading || currentFileId == null"
+              style="padding: 6px 12px; font-size: 12px;">
+        {{ sequentialLoading ? 'Scanning…' : 'Scan sequential / near-duplicate patterns' }}
+      </button>
+      <button type="button" (click)="exportCrispPack()" [disabled]="currentFileId == null"
+              style="padding: 6px 12px; font-size: 12px;">
+        Download CRISP export pack
+      </button>
+    </div>
+    <div *ngIf="sequentialCandidates?.length" style="margin: 8px 0 16px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; max-width: 900px;">
+      <h4 style="margin: 0 0 8px;">Sequential pattern candidates (MVP)</h4>
+      <p style="font-size: 12px; color: #666; margin: 0 0 8px;">Near-duplicate consecutive rows with few differing columns — review for causality / leakage, not a full causal graph.</p>
+      <ul style="margin: 0; padding-left: 18px; font-size: 12px;">
+        <li *ngFor="let c of sequentialCandidates | slice:0:12">
+          rows {{ c.row_a }} → {{ c.row_b }} · Δ{{ c.n_diff }} · {{ (c.changed_features || []).join(', ') }}
+        </li>
+      </ul>
+    </div>
     <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
     <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="purifier-summary" style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fffdf7;">
       <h3 style="margin: 0 0 6px 0;">Data Purifier Summary</h3>
@@ -547,6 +665,9 @@
           <input type="checkbox" [ngModel]="datqWrapCells" (ngModelChange)="datqWrapCells = $event" />
           <span>Wrap cells</span>
         </label>
+        <button mat-stroked-button color="primary" (click)="exportCrispPack()" [disabled]="currentFileId == null" title="Download CRISP-DM audit export pack">
+          Export CRISP pack
+        </button>
         <span style="color:#666;">Total rows: {{ datqTotal }}</span>
         <span style="color:#d32f2f; font-weight: 500;" *ngIf="getExcludedVariables().length > 0">
           Excluded from model: {{ getExcludedVariables().length }}
@@ -768,6 +889,47 @@
   <div class="model-development-line" *ngIf="modelingAvailable"></div>
   <div id="deployment-anchor"></div>
   <app-deployment *ngIf="modelingAvailable"></app-deployment>
+
+  <div class="model-development-line" *ngIf="deploymentCompleted"></div>
+  <div id="monitoring-anchor" *ngIf="deploymentCompleted" style="margin-top: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
+    <h2>Monitoring</h2>
+    <p style="color: #555; font-size: 14px; max-width: 720px;">
+      Upload a scored production or validation batch to compare score and feature drift against the training reference.
+      When drift exceeds tolerance, start iteration N+1 to clone the pipeline run while preserving Business Understanding.
+    </p>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0;">
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+        <span>Scored batch file</span>
+        <input type="file" accept=".csv,.xlsx,.xls" (change)="onMonitoringFileSelected($event)" />
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+        <span>Score column</span>
+        <input type="text" [(ngModel)]="monitoringScoreCol" placeholder="score" style="width: 120px;" />
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
+        <span>Target column (optional)</span>
+        <input type="text" [(ngModel)]="monitoringTargetCol" placeholder="optional" style="width: 140px;" />
+      </label>
+      <button mat-raised-button color="primary"
+              (click)="runMonitoringBatch()"
+              [disabled]="!monitoringFile || monitoringRunning || currentFileId == null">
+        {{ monitoringRunning ? 'Running…' : 'Run offline drift check' }}
+      </button>
+      <button mat-stroked-button color="accent"
+              (click)="startIterationNPlus1()"
+              [disabled]="!activePipelineRunId || iterationCloning">
+        {{ iterationCloning ? 'Cloning…' : 'Start iteration N+1' }}
+      </button>
+    </div>
+
+    <div *ngIf="monitoringError" style="color: #c62828; margin-bottom: 12px;">{{ monitoringError }}</div>
+
+    <div *ngIf="monitoringReport" style="margin-top: 16px; padding: 12px; background: #fafafa; border: 1px solid #eee; border-radius: 6px; font-size: 13px;">
+      <h3 style="margin: 0 0 8px 0;">Monitoring report</h3>
+      <pre style="white-space: pre-wrap; max-height: 360px; overflow: auto; font-size: 12px;">{{ monitoringReport | json }}</pre>
+    </div>
+  </div>
 
     </div><!-- end .model-development-container -->
   </div><!-- end .panel-middle -->

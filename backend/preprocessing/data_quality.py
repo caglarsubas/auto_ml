@@ -450,9 +450,7 @@ class Data_Quality():
 
 
     def ks_stat(self, data_df):
-
-        # ToDo:and Build shift decision rule --> ToDo
-
+        """Optional KS companion metric; shift recommendations live in shift_decision."""
         return None
 
 
@@ -479,6 +477,17 @@ class Data_Quality():
         datq_decision_df.loc[mask_psi_investigate,'Datq_Decision'] = 'Investigate'
         datq_decision_df.loc[mask_psi_stable,'Datq_Decision'] = 'Stable'
         datq_decision_df.loc[mask_psi_null,'Datq_Decision'] = 'Extremely Sparse'
+
+        # CRISP-DM action recommendation: keep / investigate / drop (PSI bands)
+        datq_decision_df['Shift_Recommendation'] = 'investigate'
+        try:
+            datq_decision_df['Shift_Recommendation'] = datq_decision_df['Shift_Recommendation'].astype(object)
+        except Exception:
+            pass
+        datq_decision_df.loc[mask_psi_stable, 'Shift_Recommendation'] = 'keep'
+        datq_decision_df.loc[mask_psi_investigate, 'Shift_Recommendation'] = 'investigate'
+        datq_decision_df.loc[mask_psi_shift, 'Shift_Recommendation'] = 'drop'
+        datq_decision_df.loc[mask_psi_null, 'Shift_Recommendation'] = 'investigate'
 
         # Add variable type info for downstream UI
         def _is_numeric_series(series: pd.Series) -> bool:
@@ -585,6 +594,19 @@ class Data_Quality():
                 datq_decision_df.loc[mask_num & mask_psi_shift,'Datq_Decision'] = 'Shift'
                 datq_decision_df.loc[mask_num & mask_psi_investigate,'Datq_Decision'] = 'Investigate'
                 datq_decision_df.loc[mask_num & mask_psi_stable,'Datq_Decision'] = 'Stable'
+                datq_decision_df.loc[mask_num & mask_psi_shift, 'Shift_Recommendation'] = 'drop'
+                datq_decision_df.loc[mask_num & mask_psi_investigate, 'Shift_Recommendation'] = 'investigate'
+                datq_decision_df.loc[mask_num & mask_psi_stable, 'Shift_Recommendation'] = 'keep'
+            except Exception:
+                pass
+            # Categorical CSI → same keep/investigate/drop bands
+            try:
+                mask_csi_shift = mask_cat & (datq_decision_df['CSI'] > 0.25)
+                mask_csi_invest = mask_cat & (datq_decision_df['CSI'] <= 0.25) & (datq_decision_df['CSI'] > 0.10)
+                mask_csi_stable = mask_cat & (datq_decision_df['CSI'] <= 0.10)
+                datq_decision_df.loc[mask_csi_shift, 'Shift_Recommendation'] = 'drop'
+                datq_decision_df.loc[mask_csi_invest, 'Shift_Recommendation'] = 'investigate'
+                datq_decision_df.loc[mask_csi_stable, 'Shift_Recommendation'] = 'keep'
             except Exception:
                 pass
         except Exception:
