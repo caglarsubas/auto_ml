@@ -567,16 +567,23 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 
 ## Roadmap
 
-- **Feature sorter** using combined impact and gain metrics as input to SFS
+- ~~**Feature sorter**~~ — Done (v3.1): combined SHAP%×Gain% order (+ optional top-K) as SFS candidate pool
 - ~~**Export results**~~ — Done (v2.59+): SFS CSV export, CRISP/evaluation/deployment packs
-- **Stopping criteria** — %-change of metrics, min/max feature count selection in SFS
-- **Parallel execution** — Multi-core SFS (n_jobs parameter)
-- ~~**Causality features**~~ — In progress (v2.59+): sequential pattern API + enriched DATQ recommendations
+- ~~**Stopping criteria**~~ — Done: %-change metrics and min/max feature count in SFS UI + backend
+- ~~**Parallel execution**~~ — Done: SFS `n_jobs` parallel candidate evaluation
+- ~~**Causality features**~~ — Done (v3.1): sequential pattern MVP auto-loads on Feature Card Explainability tab
 - ~~**3-layer layout**~~ — Done: left CRISP-DM navigation, middle workspace, right assistant chat
 - ~~**Optuna TPE**~~ — Done (v2.57): Bayesian search uses Optuna TPE; FE label remains Bayesian
 - ~~**Logistic regression pipeline**~~ — Done (v3.0): train → eval → deploy via sklearn adapter
 - ~~**Credit scorecard**~~ — Done (v3.0): WOE/IV bins + PDO score points
 - ~~**Anomaly detection pipeline**~~ — Done (v3.0 MVP): IsolationForest + outer-test ranking metrics when labels exist
+
+### Later / out of scope for now
+- Online real-time serving / A/B platform
+- Feast / MLflow / W&B as required infrastructure
+- Full causal discovery suite
+- Auto-retrain without human confirmation
+- Deeper monitoring dashboards beyond offline drift MVP
 
 ### CRISP-DM cycle (v2.59–v2.65)
 

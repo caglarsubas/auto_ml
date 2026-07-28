@@ -1773,6 +1773,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
     if (tabIndex === 3) {
       console.log('[Explainability] Tab activated. preModelingMode=', this.preModelingMode, 'fetched=', this.explainabilityFetched, 'loading=', this.explainabilityLoading, 'hasSfsContexts=', this.hasSfsContexts, 'sfsViewMode=', this.sfsViewMode);
+      // Always try sequential-pattern MVP (works with train_data even pre-SHAP)
+      if (!this.sequentialLoading && !(this.sequentialCandidates?.length)) {
+        this.loadSequentialPatterns();
+      }
       if (this.preModelingMode) {
         // No model trained yet — message shown in template
         return;

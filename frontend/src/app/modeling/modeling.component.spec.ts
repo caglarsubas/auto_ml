@@ -371,6 +371,11 @@ describe('ModelingComponent', () => {
   // The dedicated path for the AI to actually kick off SFS.  Verifies
   // the modeling component populates form fields and calls startSfs()
   // — the same code path a manual "Start SFS" button click takes.
+  it('should default SFS feature sorter to combined-score order', () => {
+    expect(component.sfsUseCombinedScoreOrder).toBeTrue();
+    expect(component.sfsCandidateTopK).toBeNull();
+  });
+
   describe('sfsStartRequests$ -> form-fields + startSfs() sync', () => {
     let sharedService: SharedService;
 
