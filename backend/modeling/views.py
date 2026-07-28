@@ -1835,6 +1835,27 @@ class SFSStartView(APIView):
                         X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
                     if X_valid_raw is not None and hasattr(X_valid_raw, 'columns'):
                         X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
+
+            # Feature sorter: reorder / truncate candidate pool by combined_score
+            use_combined_score_order = bool(data.get('use_combined_score_order'))
+            candidate_top_k = data.get('candidate_top_k')
+            try:
+                candidate_top_k = int(candidate_top_k) if candidate_top_k not in (None, '') else None
+            except (TypeError, ValueError):
+                candidate_top_k = None
+            from modeling.feature_sorter import resolve_sorted_initial_features
+            sorted_initial, sorter_meta = resolve_sorted_initial_features(
+                settings.MEDIA_ROOT, int(file_id), list(X_train.columns),
+                use_combined_score_order=use_combined_score_order,
+                candidate_top_k=candidate_top_k,
+                existing_initial=initial_features,
+            )
+            if sorted_initial is not None:
+                initial_features = sorted_initial
+                print(
+                    f"[SFS] Feature sorter applied: order={use_combined_score_order} "
+                    f"top_k={candidate_top_k} n={len(initial_features)} meta={sorter_meta}"
+                )
             
             # Initialize progress tracking
             import time as _time

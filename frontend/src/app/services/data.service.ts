@@ -163,7 +163,20 @@ export class DataService {
   }
 
   // Start Sequential Feature Selection (SFS) with user parameters
-  startSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
+  startSfs(
+    fileId: number,
+    methods: string[],
+    stoppingCriteria: any,
+    excludedFeatures: string[] = [],
+    nJobs: number = 1,
+    topK: number = 3,
+    algorithm?: string,
+    opts?: {
+      initialFeatures?: string[];
+      useCombinedScoreOrder?: boolean;
+      candidateTopK?: number | null;
+    },
+  ): Observable<any> {
     const payload: any = {
       file_id: fileId,
       methods: methods,
@@ -175,6 +188,15 @@ export class DataService {
       payload.excluded_features = excludedFeatures;
     }
     if (algorithm) payload.algorithm = algorithm;
+    if (opts?.initialFeatures?.length) {
+      payload.initial_features = opts.initialFeatures;
+    }
+    if (opts?.useCombinedScoreOrder) {
+      payload.use_combined_score_order = true;
+      if (opts.candidateTopK != null && opts.candidateTopK > 0) {
+        payload.candidate_top_k = opts.candidateTopK;
+      }
+    }
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS:', error);

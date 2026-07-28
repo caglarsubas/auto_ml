@@ -625,6 +625,27 @@
                      title="Number of top candidates (ranked by test AUC) to cross-validate per step. Higher = more accurate but slower." />
             </div>
           </div>
+
+          <!-- Feature sorter: combined SHAP% × Gain% order as SFS candidate pool -->
+          <div style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fff;">
+            <h4 style="margin: 0 0 8px; font-size: 14px;">Feature Sorter (SFS candidate pool)</h4>
+            <p style="font-size: 12px; color: #666; margin: 0 0 10px;">
+              Reorder the SFS feature pool by modeling <strong>combined score</strong>
+              (√(SHAP% × Gain%)) before selection. Per-step winners still use the SFS metric (ROC-AUC / R²).
+            </p>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; margin-bottom: 10px;">
+              <input type="checkbox" [(ngModel)]="sfsUseCombinedScoreOrder" (ngModelChange)="onConfigChanged()" />
+              Use combined-score order
+            </label>
+            <div *ngIf="sfsUseCombinedScoreOrder" style="max-width: 220px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #555;">
+                Candidate top-K filter <span style="color:#999;">(blank = all)</span>
+              </label>
+              <input type="number" [(ngModel)]="sfsCandidateTopK" (ngModelChange)="onConfigChanged()"
+                     min="1" max="200" placeholder="all"
+                     style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;" />
+            </div>
+          </div>
         </div>
 
         <!-- Start Button -->

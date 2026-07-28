@@ -63,6 +63,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   sfsMaxFeatures: number = 15;
   sfsNJobs: number = 3;
   sfsTopK: number = 5;
+  /** Reorder SFS candidate pool by modeling combined_score (SHAP% × Gain%). */
+  sfsUseCombinedScoreOrder: boolean = true;
+  /** Optional truncate after sorter (0 / null = keep all ranked features). */
+  sfsCandidateTopK: number | null = null;
   
   // SFS results
   sfsResults: any | null = null;
@@ -2600,7 +2604,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('[SFS] Excluding features marked as "drop":', excludedFeatures, 'Reasons:', excludedReasonsMap);
     }
     
-    console.log('[SFS] Starting with config:', { methods, stoppingCriteria, excludedFeatures });
+    const sorterOpts = {
+      useCombinedScoreOrder: !!this.sfsUseCombinedScoreOrder,
+      candidateTopK: this.sfsUseCombinedScoreOrder && this.sfsCandidateTopK && this.sfsCandidateTopK > 0
+        ? this.sfsCandidateTopK
+        : null,
+    };
+    console.log('[SFS] Starting with config:', { methods, stoppingCriteria, excludedFeatures, sorterOpts });
     
     this.sfsRunning = true;
     this.sfsStopping = false;
@@ -2613,7 +2623,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
-    this.dataService.startSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK, algo).subscribe({
+    this.dataService.startSfs(
+      this.currentFileId, methods, stoppingCriteria, excludedFeatures,
+      this.sfsNJobs, this.sfsTopK, algo, sorterOpts,
+    ).subscribe({
       next: (resp: any) => {
         console.log('[SFS] Started:', resp);
         this.sfsMessage = resp.message || 'SFS running...';
