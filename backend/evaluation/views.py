@@ -29,7 +29,7 @@ from modeling.crisp_dm import (
     recommend_threshold_by_cost,
 )
 from modeling.lineage import load_lineage
-from modeling.booster_adapters import load_adapter_from_path
+from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
 
 
 def _load_bu_from_request_or_run(data: dict, file_id: int):
@@ -151,6 +151,10 @@ class EvaluationRunView(APIView):
 
             algo = _resolve_algorithm(model_info, train_data)
             is_regression = _is_regression_task(model_info, train_data)
+            is_anomaly = (
+                str(model_info.get('task') or train_data.get('task') or '').lower() == 'anomaly'
+                or 'isolation' in str(algo).lower()
+            )
             adapter = load_adapter_from_path(
                 model_abs,
                 algorithm=algo,
@@ -158,7 +162,29 @@ class EvaluationRunView(APIView):
                 cat_features=list(model_info.get('categorical_features_used') or []),
             )
 
-            if is_regression:
+            if is_anomaly:
+                from modeling.alt_pipelines import evaluate_anomaly_scores
+                y_scores = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
+                anomaly_metrics = evaluate_anomaly_scores(y_test, y_scores)
+                # Reuse binary metrics when labels allow ranking eval
+                if anomaly_metrics.get('roc_auc') is not None:
+                    evaluation = evaluate_binary(y_test, y_scores, threshold=threshold)
+                    base_metrics = evaluation.get('metrics') or {}
+                    evaluation['metrics'] = {**base_metrics, **anomaly_metrics}
+                else:
+                    evaluation = {
+                        'task': 'anomaly',
+                        'metrics': anomaly_metrics,
+                        'threshold_table': [],
+                    }
+                evaluation['scores_calibrated'] = False
+                evaluation['calibration'] = {'applied': False, 'fitted': False, 'skipped': True}
+                evaluation['comparison'] = {
+                    'valid_auc': model_info.get('valid_auc'),
+                    'modeling_test_auc': model_info.get('test_auc'),
+                    'evaluation_anomaly_roc_auc': anomaly_metrics.get('roc_auc'),
+                }
+            elif is_regression:
                 y_pred = np.asarray(adapter.predict(X_test), dtype=float).ravel()
                 evaluation = evaluate_regression(y_test, y_pred)
                 evaluation['scores_calibrated'] = False

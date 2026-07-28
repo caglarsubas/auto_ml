@@ -303,7 +303,7 @@ def assess_deploy_readiness(
             'message': f'Automated leakage scan flagged {n_high} high-severity feature(s). Exclude or justify before deploy.',
         })
 
-    if task != 'regression' and not calibrated:
+    if task not in ('regression', 'anomaly') and not calibrated:
         warnings.append({
             'code': 'uncalibrated_scores',
             'message': 'Probability calibrator was not fitted; review score interpretation before go-live.',

@@ -462,9 +462,70 @@
       </div>
       <app-pipeline-codeline position="after_modeling_results"></app-pipeline-codeline>
 
+      <div *ngIf="modelingStatus?.model && selectedPipeline === 'boosting'" style="margin-top: 12px;">
+        <button type="button" (click)="loadBoosterCompare()" [disabled]="boosterCompareLoading"
+                style="padding: 6px 12px; font-size: 12px;">
+          {{ boosterCompareLoading ? 'Comparing…' : 'Compare saved boosters (outer test)' }}
+        </button>
+        <div *ngIf="boosterCompare?.length" style="margin-top: 8px; overflow-x: auto;">
+          <table style="border-collapse: collapse; font-size: 12px; min-width: 420px;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding: 4px 8px; border-bottom: 1px solid #ccc;">Algorithm</th>
+                <th style="text-align:left; padding: 4px 8px; border-bottom: 1px solid #ccc;">Model file</th>
+                <th style="text-align:right; padding: 4px 8px; border-bottom: 1px solid #ccc;">ROC-AUC</th>
+                <th style="text-align:right; padding: 4px 8px; border-bottom: 1px solid #ccc;">PR-AUC</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of boosterCompare">
+                <td style="padding: 4px 8px;">{{ row.algorithm }}</td>
+                <td style="padding: 4px 8px;">{{ row.model_file }}</td>
+                <td style="padding: 4px 8px; text-align:right;">{{ row.roc_auc == null ? (row.error || '—') : (row.roc_auc | number:'1.3-3') }}</td>
+                <td style="padding: 4px 8px; text-align:right;">{{ row.pr_auc == null ? '—' : (row.pr_auc | number:'1.3-3') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Alternate pipelines (logit / scorecard / anomaly): skip SFS/HP → Evaluation -->
+      <div *ngIf="modelingStatus?.model && selectedPipeline !== 'boosting'"
+           style="margin-top: 20px; padding: 16px; border: 2px solid #2e7d32; border-radius: 8px; background: #f1f8f4;">
+        <h3 style="margin: 0 0 8px; color: #2e7d32;">{{ selectedPipeline === 'credit-scoring' ? 'Scorecard' : (selectedPipeline === 'anomaly-detection' ? 'Anomaly model' : 'Logit model') }} ready</h3>
+        <p style="font-size: 13px; color: #555; margin: 0 0 12px;">
+          Valid AUC: <strong>{{ modelingStatus.model?.valid_auc | number:'1.3-3' }}</strong>
+          · Outer-test AUC: <strong>{{ modelingStatus.model?.test_auc | number:'1.3-3' }}</strong>
+          <span *ngIf="selectedPipeline !== 'boosting'"> · SFS/HP are boosting-path tools — continue to Evaluation.</span>
+        </p>
+        <div *ngIf="modelingStatus.model?.iv_table?.length" style="margin-bottom: 12px; overflow-x: auto;">
+          <h4 style="margin: 0 0 6px; font-size: 13px;">Information Value (train WOE bins)</h4>
+          <table style="border-collapse: collapse; font-size: 12px; min-width: 360px;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding: 4px 8px; border-bottom: 1px solid #ccc;">Feature</th>
+                <th style="text-align:right; padding: 4px 8px; border-bottom: 1px solid #ccc;">IV</th>
+                <th style="text-align:right; padding: 4px 8px; border-bottom: 1px solid #ccc;">Bins</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of $any(modelingStatus.model.iv_table) | slice:0:25">
+                <td style="padding: 4px 8px;">{{ $any(row).feature }}</td>
+                <td style="padding: 4px 8px; text-align:right;">{{ $any(row).iv | number:'1.3-3' }}</td>
+                <td style="padding: 4px 8px; text-align:right;">{{ $any(row).n_bins }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" (click)="continueToEvaluation()"
+                style="padding: 8px 16px; background: #740505; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+          Continue to Evaluation ▶
+        </button>
+      </div>
+
       <div id="sfs-anchor"></div>
       <!-- Sequential Feature Selection (SFS) Configuration Panel -->
-      <div *ngIf="sfsReady && !sfsRunning && (sfsForwardResults.length === 0 && sfsBackwardResults.length === 0)" style="margin-top: 24px; padding: 20px; border: 2px solid #740505; border-radius: 8px; background: #fff9f9;">
+      <div *ngIf="selectedPipeline === 'boosting' && sfsReady && !sfsRunning && (sfsForwardResults.length === 0 && sfsBackwardResults.length === 0)" style="margin-top: 24px; padding: 20px; border: 2px solid #740505; border-radius: 8px; background: #fff9f9;">
         <h3 style="color: #740505; margin-top: 0;">Sequential Feature Selection (SFS)</h3>
         <div style="font-size: 13px; color:#666; margin-bottom:16px;">
           Configure and run systematic feature selection to understand performance impact of adding/removing features.

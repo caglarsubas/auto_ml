@@ -45,9 +45,9 @@ The user selects a modeling pipeline type to frame the entire workflow:
 | Pipeline | Description |
 |----------|-------------|
 | **Boosting Pipeline** | XGBoost / LightGBM / CatBoost with native categorical support |
-| **Logit Pipeline** | Logistic regression (planned) |
-| **Credit Scoring Pipeline** | Scorecard development workflow (planned) |
-| **Anomaly Detection Pipeline** | Unsupervised anomaly detection (planned) |
+| **Logit Pipeline** | sklearn LogisticRegression end-to-end (v3.0) |
+| **Credit Scoring Pipeline** | WOE/IV scorecard + PDO points (v3.0) |
+| **Anomaly Detection Pipeline** | IsolationForest MVP with ranking metrics (v3.0) |
 
 ### 2. Data Import & Declaration
 
@@ -574,8 +574,9 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - ~~**Causality features**~~ — In progress (v2.59+): sequential pattern API + enriched DATQ recommendations
 - ~~**3-layer layout**~~ — Done: left CRISP-DM navigation, middle workspace, right assistant chat
 - ~~**Optuna TPE**~~ — Done (v2.57): Bayesian search uses Optuna TPE; FE label remains Bayesian
-- **Logistic regression pipeline** — Planned for v3.x (scorecard-oriented workflow)
-- **Anomaly detection pipeline** — Planned for v3.x (unsupervised modeling support)
+- ~~**Logistic regression pipeline**~~ — Done (v3.0): train → eval → deploy via sklearn adapter
+- ~~**Credit scorecard**~~ — Done (v3.0): WOE/IV bins + PDO score points
+- ~~**Anomaly detection pipeline**~~ — Done (v3.0 MVP): IsolationForest + outer-test ranking metrics when labels exist
 
 ### CRISP-DM cycle (v2.59–v2.65)
 
@@ -585,4 +586,4 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - **v2.62** — SFS details/export/history, champion promote-to-evaluation
 - **v2.63** — Evaluation vs business floors, cost table, governance checks, evaluation pack
 - **v2.64–v2.65** — Deployment pack enrichment, Monitoring step, iteration N+1 clone
-- **v3.x** — Logit / scorecard / anomaly as full CRISP-DM variants (placeholders remain planned)
+- **v3.0** — Logit / scorecard / anomaly CRISP-DM variants + multi-booster outer-test compare API

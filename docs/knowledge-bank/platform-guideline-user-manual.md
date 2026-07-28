@@ -31,6 +31,13 @@ DeclarAI supports these primary capabilities:
 
 ## Pipeline Stages
 
+### Modeling pipeline variants (v3.0)
+
+- **Boosting** — XGBoost / LightGBM / CatBoost with SFS and hyperparameter tuning.
+- **Logit** — sklearn LogisticRegression; skip SFS/HP and continue to Evaluation.
+- **Credit scoring** — WOE/IV binning + logistic coefficients mapped to PDO score points.
+- **Anomaly detection** — IsolationForest MVP; outer-test ranking metrics when a binary Target exists.
+
 DeclarAI follows the **CRISP-DM operating model**: each iteration cycles through
 business understanding, data understanding, preparation, modeling, evaluation,
 deployment, and monitoring. The left navigation mirrors these phases; checkpoint
