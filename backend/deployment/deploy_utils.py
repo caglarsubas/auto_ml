@@ -285,7 +285,7 @@ def build_deployment_pack_zip(file_id: int) -> tuple:
 
 def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
     """Score a batch DataFrame with the frozen bundle."""
-    from modeling.booster_adapters import load_adapter_from_path
+    from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
     from evaluation.eval_utils import feature_psi_report
 
     out = bundle_dir(file_id)

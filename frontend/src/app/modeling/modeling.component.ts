@@ -418,7 +418,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.implementedAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
       } else if (p === 'logit') {
         this.availableAlgorithms = ['logistic_regression'];
-        this.implementedAlgorithms = [];
+        this.implementedAlgorithms = ['logistic_regression'];
+      } else if (p === 'credit-scoring') {
+        this.availableAlgorithms = ['scorecard'];
+        this.implementedAlgorithms = ['scorecard'];
+      } else if (p === 'anomaly-detection') {
+        this.availableAlgorithms = ['isolation_forest'];
+        this.implementedAlgorithms = ['isolation_forest'];
       } else {
         this.availableAlgorithms = [];
         this.implementedAlgorithms = [];
@@ -785,10 +791,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   isAlgorithmImplemented(algo: string | null): boolean {
     if (!algo) return false;
-    if (this.selectedPipeline === 'boosting') {
-      return this.implementedAlgorithms.includes(algo);
-    }
-    return this.availableAlgorithms.includes(algo);
+    return this.implementedAlgorithms.includes(algo);
   }
 
   onAlgorithmChange(algo: string): void {
@@ -835,8 +838,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  boosterCompare: any[] = [];
+  boosterCompareLoading = false;
+
   continueToEvaluation(): void {
     this.sharedService.requestNavigateToEvaluation();
+  }
+
+  loadBoosterCompare(): void {
+    if (this.currentFileId == null) return;
+    this.boosterCompareLoading = true;
+    this.dataService.compareModels(this.currentFileId).subscribe({
+      next: (resp) => {
+        this.boosterCompare = resp?.comparison || [];
+        this.boosterCompareLoading = false;
+      },
+      error: () => {
+        this.boosterCompare = [];
+        this.boosterCompareLoading = false;
+      },
+    });
   }
 
   private ensureDictionaryThenAnalyze(): void {

@@ -92,16 +92,25 @@ class ModelingStartView(APIView):
         if not processed_file:
             return Response({'error': 'processed_file is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Resolve booster; hard-fail if package missing (no silent XGB fallback)
-        resolved_algorithm, algo_error = normalize_boosting_algorithm(algorithm)
-        if algo_error:
-            avail = available_boosting_algorithms()
-            return Response({
-                'error': algo_error,
-                'supported_algorithms': [k for k, v in avail.items() if v],
-                'all_algorithms': sorted(avail.keys()),
-            }, status=status.HTTP_400_BAD_REQUEST)
-        algorithm = resolved_algorithm
+        # Resolve alternate (logit/scorecard/anomaly) or boosting algorithm
+        from modeling.alt_pipelines import is_alt_algorithm, normalize_alt_algorithm
+        alt_algo, _alt_err = normalize_alt_algorithm(algorithm)
+        is_alt = alt_algo is not None
+        if is_alt:
+            algorithm = alt_algo
+        else:
+            resolved_algorithm, algo_error = normalize_boosting_algorithm(algorithm)
+            if algo_error:
+                avail = available_boosting_algorithms()
+                return Response({
+                    'error': algo_error,
+                    'supported_algorithms': [k for k, v in avail.items() if v],
+                    'all_algorithms': sorted(avail.keys()),
+                    'alternate_algorithms': sorted([
+                        'logistic_regression', 'scorecard', 'isolation_forest',
+                    ]),
+                }, status=status.HTTP_400_BAD_REQUEST)
+            algorithm = resolved_algorithm
 
         # Validate declaration exists
         try:
@@ -396,37 +405,59 @@ class ModelingStartView(APIView):
                         if leakage_report.get('n_high'):
                             print(f"[ModelingStart] Leakage warnings: {leakage_report.get('summary')}")
 
-                        # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
                         feature_names = list(map(str, X_train.columns.tolist()))
-                        adapter = get_adapter(algorithm)
-                        adapter.train(
-                            X_train, y_train, X_valid, y_valid, params,
-                            num_boost_round=500, early_stopping_rounds=50,
-                        )
-                        booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
-                        enable_cat = bool(adapter.enable_categorical or enable_cat)
+                        if is_alt:
+                            from modeling.alt_pipelines import get_alt_adapter
+                            adapter = get_alt_adapter(algorithm)
+                            adapter.train(X_train, y_train, X_valid, y_valid, params={
+                                'C': 1.0, 'max_iter': 500, 'class_weight': 'balanced',
+                                'contamination': 0.05, 'n_estimators': 200,
+                            })
+                            booster = None
+                            enable_cat = bool(adapter.enable_categorical or enable_cat)
+                            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                            os.makedirs(models_dir, exist_ok=True)
+                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                            adapter.save(model_path)
+                        else:
+                            # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
+                            adapter = get_adapter(algorithm)
+                            adapter.train(
+                                X_train, y_train, X_valid, y_valid, params,
+                                num_boost_round=500, early_stopping_rounds=50,
+                            )
+                            booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
+                            enable_cat = bool(adapter.enable_categorical or enable_cat)
 
                         # Quality metric on validation + probability calibration (fit on valid only)
                         calibration_meta = {'fitted': False}
                         calibrator = None
                         calibrator_path = None
+                        skip_calibration = is_alt and algorithm == 'isolation_forest'
                         try:
                             y_prob = adapter.predict_proba(X_valid)
                             if num_classes == 2:
                                 valid_auc = float(roc_auc_score(y_valid, y_prob))
-                                calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
-                                if calibrator is not None:
-                                    calibrator_path = save_calibrator(
-                                        int(file_id), calibrator, settings.MEDIA_ROOT,
-                                    )
-                                    y_prob_cal = apply_calibrator(calibrator, y_prob)
-                                    calibration_meta['valid_auc_raw'] = valid_auc
-                                    try:
-                                        calibration_meta['valid_auc_calibrated'] = float(
-                                            roc_auc_score(y_valid, y_prob_cal)
+                                if not skip_calibration:
+                                    calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
+                                    if calibrator is not None:
+                                        calibrator_path = save_calibrator(
+                                            int(file_id), calibrator, settings.MEDIA_ROOT,
                                         )
-                                    except Exception:
-                                        pass
+                                        y_prob_cal = apply_calibrator(calibrator, y_prob)
+                                        calibration_meta['valid_auc_raw'] = valid_auc
+                                        try:
+                                            calibration_meta['valid_auc_calibrated'] = float(
+                                                roc_auc_score(y_valid, y_prob_cal)
+                                            )
+                                        except Exception:
+                                            pass
+                                else:
+                                    calibration_meta = {
+                                        'fitted': False,
+                                        'skipped': True,
+                                        'reason': 'anomaly scores are not calibrated probabilities',
+                                    }
                             else:
                                 valid_auc = None
                         except Exception:
@@ -436,8 +467,24 @@ class ModelingStartView(APIView):
                         feat_names = feature_names
                         gain_importance = adapter.gain_importance()
 
-                        # SHAP mean |impact| and compact beeswarm payload
+                        # SHAP mean |impact| and compact beeswarm payload (boosters only)
+                        class _SkipShap(Exception):
+                            pass
+
+                        shap_importance = []
+                        selected_features = [
+                            {
+                                'feature': g.get('feature'),
+                                'impact': float(g.get('score') or 0.0),
+                                'signed_impact': float(g.get('score') or 0.0),
+                            }
+                            for g in (gain_importance or [])[:40]
+                        ] if is_alt else []
+                        beeswarm_png = None
+                        shap_beeswarm = None
                         try:
+                            if booster is None:
+                                raise _SkipShap('alternate model — TreeExplainer not applicable')
                             # Suppress SHAP FutureWarning about feature_perturbation
                             import warnings
                             with warnings.catch_warnings():
@@ -787,12 +834,15 @@ class ModelingStartView(APIView):
                                 except Exception:
                                     pass
                                 shap_beeswarm = None
+                        except _SkipShap as e:
+                            print(f"[ModelingStart] SHAP skipped: {e}")
                         except Exception as e:
                             print(f"[ModelingStart] SHAP computation outer exception: {type(e).__name__}: {e}")
                             import traceback
                             traceback.print_exc()
-                            shap_importance = []
-                            selected_features = []
+                            if not is_alt:
+                                shap_importance = []
+                                selected_features = []
                             beeswarm_png = None
                             shap_beeswarm = None
 
@@ -800,6 +850,8 @@ class ModelingStartView(APIView):
                         # Run on train+valid only — outer test stays locked for Evaluation.
                         cv_details = []
                         try:
+                            if is_alt and algorithm == 'isolation_forest':
+                                raise RuntimeError('skip CV curves for isolation_forest')
                             from sklearn.metrics import roc_curve, precision_recall_curve
                             # grids for consistent interpolation across folds
                             roc_fpr_grid = np.linspace(0.0, 1.0, 101)
@@ -838,11 +890,18 @@ class ModelingStartView(APIView):
                             ):
                                 X_tr, X_va = X_cv.iloc[tr_idx], X_cv.iloc[va_idx]
                                 y_tr, y_va = y_cv.iloc[tr_idx], y_cv.iloc[va_idx]
-                                fold_adapter = get_adapter(algorithm)
-                                fold_adapter.train(
-                                    X_tr, y_tr, X_va, y_va, params,
-                                    num_boost_round=500, early_stopping_rounds=50,
-                                )
+                                if is_alt:
+                                    from modeling.alt_pipelines import get_alt_adapter
+                                    fold_adapter = get_alt_adapter(algorithm)
+                                    fold_adapter.train(X_tr, y_tr, X_va, y_va, params={
+                                        'C': 1.0, 'max_iter': 300, 'class_weight': 'balanced',
+                                    })
+                                else:
+                                    fold_adapter = get_adapter(algorithm)
+                                    fold_adapter.train(
+                                        X_tr, y_tr, X_va, y_va, params,
+                                        num_boost_round=500, early_stopping_rounds=50,
+                                    )
                                 p = fold_adapter.predict_proba(X_va)
                                 # AUCs
                                 roc = None
@@ -1012,12 +1071,17 @@ class ModelingStartView(APIView):
                             print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
 
                         model_info = {
-                            'model_type': f'{algorithm}_classifier',
+                            'model_type': (
+                                f'{algorithm}_anomaly' if algorithm == 'isolation_forest'
+                                else f'{algorithm}_classifier'
+                            ),
                             'algorithm': algorithm,
+                            'task': 'anomaly' if algorithm == 'isolation_forest' else 'classification',
+                            'pipeline_family': 'alternate' if is_alt else 'boosting',
                             'valid_auc': valid_auc,
                             'test_auc': test_auc,
                             'test_auc_calibrated': test_auc_calibrated,
-                            'best_iteration': int(adapter.best_iteration or 0),
+                            'best_iteration': int(getattr(adapter, 'best_iteration', 0) or 0),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
                             'calibrator_path': calibrator_path,
                             'calibration': calibration_meta,
@@ -1034,7 +1098,8 @@ class ModelingStartView(APIView):
                             'cv': cv_summary,
                             'beeswarm_png': beeswarm_png,
                             'shap_beeswarm': shap_beeswarm,
-                            'sfs_ready': True,  # Training data saved, ready for SFS
+                            # SFS/HP are boosting-path tools; alt models go straight to Evaluation
+                            'sfs_ready': (not is_alt),
                             'split': {
                                 **(split_meta or {}),
                                 'n_train': int(len(X_train)),
@@ -1044,6 +1109,10 @@ class ModelingStartView(APIView):
                             'scale_pos_weight': scale_pos_weight,
                             'impute_fit_on_train_only': True,
                         }
+                        if is_alt and hasattr(adapter, 'iv_table'):
+                            model_info['iv_table'] = getattr(adapter, 'iv_table', [])
+                            model_info['score_points'] = getattr(adapter, 'score_points', [])
+                            model_info['woe_maps'] = getattr(adapter, 'woe_maps', {})
 
                         try:
                             try:
@@ -2970,4 +3039,100 @@ class ChampionPromoteView(APIView):
             'file_id': file_id,
             'champion': champion,
             'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class BoosterCompareView(APIView):
+    """Compare outer-test metrics across available booster (or alt) model files.
+
+    Uses the locked outer test in train_data.pkl. Scores every matching
+    model artifact under media/models for this file_id.
+    """
+
+    def get(self, request, file_id: int, *args, **kwargs):
+        from sklearn.metrics import roc_auc_score, average_precision_score
+        from modeling.alt_pipelines import load_model_adapter, is_alt_algorithm
+        import pickle
+
+        train_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+        if not os.path.exists(train_path):
+            return Response({'error': 'Training data not found'}, status=status.HTTP_404_NOT_FOUND)
+        with open(train_path, 'rb') as f:
+            td = pickle.load(f)
+        X_test = td.get('X_test')
+        y_test = td.get('y_test')
+        if X_test is None or y_test is None:
+            return Response({'error': 'Outer test missing'}, status=status.HTTP_409_CONFLICT)
+
+        models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+        rows = []
+        if os.path.isdir(models_dir):
+            for fn in sorted(os.listdir(models_dir)):
+                if not fn.startswith(f'{file_id}_'):
+                    continue
+                if not (fn.endswith('.json') or fn.endswith('.joblib') or fn.endswith('.cbm') or fn.endswith('.txt')):
+                    continue
+                if 'sfs_' in fn or 'calibrator' in fn:
+                    continue
+                path = os.path.join(models_dir, fn)
+                algo = 'xgboost'
+                lower = fn.lower()
+                if 'lightgbm' in lower or 'lgbm' in lower:
+                    algo = 'lightgbm'
+                elif 'catboost' in lower:
+                    algo = 'catboost'
+                elif 'logistic' in lower:
+                    algo = 'logistic_regression'
+                elif 'scorecard' in lower:
+                    algo = 'scorecard'
+                elif 'isolation' in lower:
+                    algo = 'isolation_forest'
+                try:
+                    adapter = load_model_adapter(
+                        path, algorithm=algo,
+                        feature_names=list(map(str, X_test.columns)),
+                    )
+                    # Align columns when possible
+                    feats = list(getattr(adapter, 'feature_names', None) or X_test.columns)
+                    cols = [c for c in feats if c in X_test.columns]
+                    Xt = X_test[cols] if cols else X_test
+                    scores = np.asarray(adapter.predict_proba(Xt), dtype=float).ravel()
+                    y = pd.to_numeric(y_test, errors='coerce')
+                    mask = y.notna().to_numpy()
+                    row = {
+                        'algorithm': algo,
+                        'model_file': fn,
+                        'n_test': int(mask.sum()),
+                        'roc_auc': None,
+                        'pr_auc': None,
+                    }
+                    if mask.sum() > 10 and y[mask].nunique() > 1:
+                        yy = y[mask].astype(int).to_numpy()
+                        ss = scores[mask[:len(scores)]] if len(scores) == len(mask) else scores
+                        if len(ss) == len(yy):
+                            row['roc_auc'] = float(roc_auc_score(yy, ss))
+                            try:
+                                row['pr_auc'] = float(average_precision_score(yy, ss))
+                            except Exception:
+                                pass
+                    rows.append(row)
+                except Exception as e:
+                    rows.append({
+                        'algorithm': algo,
+                        'model_file': fn,
+                        'error': str(e),
+                    })
+
+        rows_ok = [r for r in rows if r.get('roc_auc') is not None]
+        rows_ok.sort(key=lambda r: -(r.get('roc_auc') or 0))
+        return Response({
+            'status': 'ok',
+            'file_id': file_id,
+            'n_models': len(rows),
+            'comparison': rows_ok or rows,
+            'message': (
+                'Outer-test comparison across saved model artifacts. '
+                'Train each booster separately on the same split to populate rows.'
+            ),
         })

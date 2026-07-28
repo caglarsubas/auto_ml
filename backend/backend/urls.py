@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
-from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView, ChampionPromoteView, SFSHistoryView
+from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView, ChampionPromoteView, SFSHistoryView, BoosterCompareView
 from modeling.crisp_views import (
     CrispExportPackView, CrispMonitoringRunView, CrispSequentialPatternsView,
     CrispIterationCloneView, CrispDatqEnrichView,
@@ -61,6 +61,7 @@ urlpatterns = [
     path('api/crisp/datq/<int:file_id>/', CrispDatqEnrichView.as_view(), name='crisp-datq'),
     path('api/modeling/sfs/<int:file_id>/history/', SFSHistoryView.as_view(), name='sfs-history'),
     path('api/modeling/champion/', ChampionPromoteView.as_view(), name='champion-promote'),
+    path('api/modeling/compare/<int:file_id>/', BoosterCompareView.as_view(), name='booster-compare'),
     path('api/pipeline/', PipelineRunListView.as_view(), name='pipeline-list'),
     path('api/pipeline/create/', PipelineRunCreateView.as_view(), name='pipeline-create'),
     path('api/pipeline/<int:pk>/', PipelineRunDetailView.as_view(), name='pipeline-detail'),
