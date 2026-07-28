@@ -10,20 +10,24 @@
   padding: 0;
   max-width: 100%;
   margin: 0;
-  min-height: calc(100vh - 72px);
+  min-height: calc(100vh - var(--toolbar-height, 72px));
   animation: fadeIn 0.4s ease-out;
 }
 
 /* Modern Toolbar Styling */
+mat-toolbar.app-toolbar,
 mat-toolbar {
   margin-bottom: 0;
-  padding: 0 var(--space-6);
-  height: 72px !important;
+  padding: 0 var(--space-4);
+  height: var(--toolbar-height, 72px) !important;
   background: linear-gradient(135deg, var(--primary-800) 0%, var(--primary-950) 100%) !important;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
+  gap: var(--space-1);
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 mat-toolbar::after {
@@ -41,41 +45,18 @@ mat-toolbar::after {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 56px;
-  overflow: visible;
-  transition: transform var(--transition-base);
+  height: 48px;
+  flex-shrink: 0;
+  margin-left: var(--space-2);
   background: transparent !important;
-}
-
-.logo-container:hover {
-  transform: scale(1.02);
+  text-decoration: none;
 }
 
 .logo {
-  height: 100%;
+  height: 48px;
   width: auto;
   object-fit: contain;
   background: transparent !important;
-  mix-blend-mode: normal;
-}
-
-.magnifier {
-  position: absolute;
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 0 3px white, 0 4px 20px rgba(0,0,0,0.3);
-  pointer-events: none;
-  z-index: 1000;
-  border: 2px solid rgba(255,255,255,0.8);
-}
-
-.magnified-logo {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: auto;
-  height: 65px;
-  transform-origin: 0 0;
 }
 
 /* Modern Navigation Buttons */
@@ -112,15 +93,28 @@ mat-toolbar::after {
 }
 
 /* Sign Out Button - Distinct Style */
-::ng-deep mat-toolbar .mat-mdc-button:last-child {
+::ng-deep mat-toolbar .sign-out-btn.mat-mdc-button {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   margin-left: var(--space-4);
+  min-height: 44px;
 }
 
-::ng-deep mat-toolbar .mat-mdc-button:last-child:hover {
+::ng-deep mat-toolbar .sign-out-btn.mat-mdc-button:hover {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+@media screen and (max-width: 900px) {
+  ::ng-deep mat-toolbar .mat-mdc-button {
+    margin: 0;
+    padding: var(--space-2) var(--space-3) !important;
+    font-size: var(--text-xs) !important;
+  }
+
+  ::ng-deep mat-toolbar .sign-out-btn.mat-mdc-button {
+    margin-left: var(--space-2);
+  }
 }
 
 /* Dropdown Menu Styling */
