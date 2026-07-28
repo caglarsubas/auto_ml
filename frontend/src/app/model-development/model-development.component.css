@@ -5,7 +5,7 @@
 /* ===== 3-Layer Panel Layout ===== */
 :host {
   display: block;
-  height: calc(100vh - 64px); /* subtract toolbar height */
+  height: calc(100vh - var(--toolbar-height, 72px));
   overflow: hidden;
 }
 
@@ -51,7 +51,7 @@
 
 .toggle-btn.active {
   background: white;
-  color: #740505;
+  color: var(--primary-700);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
@@ -74,7 +74,7 @@
   display: flex;
   flex: 1;
   overflow: hidden;
-  height: calc(100vh - 64px - 42px); /* toolbar + toggle bar */
+  height: calc(100vh - var(--toolbar-height, 72px) - 42px); /* toolbar + toggle bar */
 }
 
 /* Left Panel */
@@ -359,7 +359,7 @@
 
 .resize-handle:hover,
 .resize-handle:active {
-  background: #740505;
+  background: var(--primary-700);
 }
 
 .resize-handle::after {
@@ -726,19 +726,19 @@ h1::before {
 }
 
 .preprocessing-declaration .mat-select-arrow {
-  color: #740505;
+  color: var(--primary-700);
 }
 
 .preprocessing-declaration .mat-form-field-label {
-  color: #740505;
+  color: var(--primary-700);
 }
 
 .preprocessing-declaration .mat-form-field-underline {
-  background-color: #740505;
+  background-color: var(--primary-700);
 }
 
 .preprocessing-declaration .mat-form-field-ripple {
-  background-color: #740505;
+  background-color: var(--primary-700);
 }
 
 .preprocessing-declaration .mat-select-panel {
@@ -749,7 +749,7 @@ h1::before {
 }
 
 .preprocessing-declaration .mat-option.mat-selected:not(.mat-option-disabled) {
-  color: #740505;
+  color: var(--primary-700);
 }
 
 .preprocessing-declaration .mat-option:hover:not(.mat-option-disabled) {
@@ -1244,10 +1244,10 @@ h1::before {
   align-items: center;
   gap: 6px;
   padding: 7px 16px;
-  border: 1px solid #740505;
+  border: 1px solid var(--primary-700);
   border-radius: 20px;
   background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
-  color: #740505;
+  color: var(--primary-700);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1256,7 +1256,7 @@ h1::before {
 }
 
 .ai-support-btn:hover {
-  background: linear-gradient(135deg, #740505 0%, #920707 100%);
+  background: linear-gradient(135deg, var(--primary-700) 0%, #920707 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(116, 5, 5, 0.3);
   transform: translateY(-1px);
@@ -1326,4 +1326,9 @@ h1::before {
 
 .cat-merge-table tr:nth-child(even) td {
   background: #fafafa;
+}
+/* Design-review: restore keyboard focus after outline:none rules */
+*:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }

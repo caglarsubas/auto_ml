@@ -628,10 +628,10 @@
   align-items: center;
   gap: 6px;
   padding: 7px 16px;
-  border: 1px solid #740505;
+  border: 1px solid var(--primary-700);
   border-radius: 20px;
   background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
-  color: #740505;
+  color: var(--primary-700);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -640,7 +640,7 @@
 }
 
 .ai-support-btn:hover {
-  background: linear-gradient(135deg, #740505 0%, #920707 100%);
+  background: linear-gradient(135deg, var(--primary-700) 0%, #920707 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(116, 5, 5, 0.3);
   transform: translateY(-1px);
@@ -664,7 +664,7 @@
   margin-left: 5px;
   border-radius: 50%;
   background: #f0dede;
-  color: #740505;
+  color: var(--primary-700);
   border: 1px solid #e2c4c4;
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
@@ -685,9 +685,9 @@
 }
 
 .hp-info:hover {
-  background: #740505;
+  background: var(--primary-700);
   color: #fff;
-  border-color: #740505;
+  border-color: var(--primary-700);
   transform: scale(1.12);
 }
 
@@ -714,4 +714,10 @@
   white-space: normal !important;
   text-align: left !important;
   padding: 9px 12px !important;
+}
+
+/* Design-review: restore keyboard focus after outline:none rules */
+*:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }

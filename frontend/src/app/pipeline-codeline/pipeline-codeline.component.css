@@ -476,3 +476,9 @@
   border-radius: 4px;
   background: #fff;
 }
+
+/* Design-review: restore keyboard focus after outline:none rules */
+*:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}

@@ -53,7 +53,7 @@ h3 {
 }
 
 .preview-table th, .data-dictionary-table th {
-  background-color: #740505;
+  background-color: var(--primary-700);
   color: white;
   font-weight: bold;
   position: sticky;
@@ -65,7 +65,7 @@ h3 {
   text-align: center;
   font-weight: bold;
   background-color: #f9f9f9;
-  color: #740505;
+  color: var(--primary-700);
 }
 
 .dictionary-actions, .data-import-controls {
@@ -139,7 +139,7 @@ button:not(.next-button):not(.mat-mdc-button):not(.mat-mdc-icon-button):not(.mat
 }
 
 .preview-note {
-  color: #740505;
+  color: var(--primary-700);
   font-style: italic;
   margin-bottom: 15px;
   font-weight: 500;
@@ -165,7 +165,7 @@ input[type="checkbox"] {
   -webkit-appearance: none;
   width: 24px;
   height: 24px;
-  border: 2px solid #740505;
+  border: 2px solid var(--primary-700);
   border-radius: 6px;
   outline: none;
   cursor: pointer;
@@ -175,7 +175,7 @@ input[type="checkbox"] {
 }
 
 input[type="checkbox"]:checked {
-  background-color: #740505;
+  background-color: var(--primary-700);
 }
 
 input[type="checkbox"]:checked::before {
@@ -294,7 +294,7 @@ input[type="file"]:hover::before {
 .next-button {
   padding: 10px 20px;
   font-size: 16px;
-  background-color: #740505 !important;
+  background-color: var(--primary-700) !important;
   color: white;
   border: none;
   border-radius: 5px;
@@ -317,7 +317,7 @@ input[type="file"]:hover::before {
 .next-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background-color: #740505 !important;
+  background-color: var(--primary-700) !important;
 }
 
 /* Responsive adjustments */
@@ -352,7 +352,7 @@ input[type="file"]:hover::before {
   .not-started-message {
     text-align: center;
     font-size: 1.2em;
-    color: #740505;
+    color: var(--primary-700);
     margin-top: 50px;
   }
   
@@ -557,4 +557,9 @@ input[type="file"]:hover::before {
   border-color: var(--primary-500);
   transform: none;
   box-shadow: none;
+}
+/* Design-review: restore keyboard focus after outline:none rules */
+*:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }
