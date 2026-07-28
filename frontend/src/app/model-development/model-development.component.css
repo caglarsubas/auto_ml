@@ -5,7 +5,7 @@
 /* ===== 3-Layer Panel Layout ===== */
 :host {
   display: block;
-  height: calc(100vh - 64px); /* subtract toolbar height */
+  height: calc(100vh - var(--toolbar-height, 72px));
   overflow: hidden;
 }
 
@@ -74,7 +74,7 @@
   display: flex;
   flex: 1;
   overflow: hidden;
-  height: calc(100vh - 64px - 42px); /* toolbar + toggle bar */
+  height: calc(100vh - var(--toolbar-height, 72px) - 42px); /* toolbar + toggle bar */
 }
 
 /* Left Panel */

@@ -91,3 +91,4 @@ Serious, auditable software for regulated model work — every decision is **dec
 | 2026-07-28 | Initial design system created | `/design-consultation` — Industrial/Utilitarian, wine+amber, IBM Plex; memorable thing: declared, not magic |
 | 2026-07-28 | Preview via HTML (AI mockups unavailable) | OpenAI design generate failed (rate limit/socket); HTML preview approved |
 | 2026-07-28 | Outside voices skipped | User chose speed; research + thesis already clear |
+| 2026-07-28 | Applied tokens to live frontend on v3.1.0 | `styles.css` / shell / login / home aligned to this doc |

@@ -3,15 +3,12 @@
    ============================================ */
 
 .login-wrapper {
-  min-height: calc(100vh - 72px);
+  min-height: calc(100vh - var(--toolbar-height, 72px));
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: 
-    radial-gradient(ellipse at top left, var(--primary-100) 0%, transparent 50%),
-    radial-gradient(ellipse at bottom right, var(--accent-100) 0%, transparent 50%),
-    linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
+  background: linear-gradient(160deg, var(--neutral-50) 0%, var(--primary-50) 55%, var(--neutral-100) 100%);
   animation: fadeIn 0.5s ease-out;
 }
 
@@ -33,15 +30,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--primary-500), var(--accent-500), var(--primary-500));
-  background-size: 200% 100%;
-  animation: gradientShift 3s ease infinite;
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+  height: 3px;
+  background: var(--primary-700);
 }
 
 @keyframes slideUp {
@@ -128,7 +118,7 @@
   border: 2px solid var(--neutral-200);
   border-radius: var(--radius-xl);
   outline: none;
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
 .input-wrapper input:hover {
@@ -137,12 +127,17 @@
 
 .input-wrapper input:focus {
   background: white;
-  border-color: var(--accent-500);
-  box-shadow: 0 0 0 4px var(--accent-100);
+  border-color: var(--primary-600);
+  box-shadow: 0 0 0 4px var(--primary-100);
+}
+
+.input-wrapper input:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }
 
 .input-wrapper:focus-within .input-icon {
-  color: var(--accent-500);
+  color: var(--primary-600);
 }
 
 .input-wrapper input::placeholder {
@@ -244,21 +239,6 @@
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-8px); }
   40%, 80% { transform: translateX(8px); }
-}
-
-/* Footer */
-.login-footer {
-  margin-top: var(--space-8);
-  padding-top: var(--space-6);
-  border-top: 1px solid var(--neutral-100);
-  text-align: center;
-}
-
-.login-footer p {
-  font-size: var(--text-sm);
-  color: var(--neutral-400);
-  font-style: italic;
-  margin: 0;
 }
 
 /* Responsive */
