@@ -4,30 +4,33 @@
 
 /* ---------- CSS Variables (Design Tokens) ---------- */
 :root {
-  /* Primary Colors - Modern Deep Burgundy/Wine palette */
-  --primary-50: #fdf2f4;
-  --primary-100: #fce4e8;
-  --primary-200: #fbcdd5;
-  --primary-300: #f7a8b6;
-  --primary-400: #f17a91;
-  --primary-500: #e54d6d;
-  --primary-600: #d12d54;
-  --primary-700: #af2145;
-  --primary-800: #921e3e;
-  --primary-900: #7c1d39;
-  --primary-950: #450a1a;
-  
-  /* Accent Colors - Modern Indigo */
-  --accent-50: #eef2ff;
-  --accent-100: #e0e7ff;
-  --accent-200: #c7d2fe;
-  --accent-300: #a5b4fc;
-  --accent-400: #818cf8;
-  --accent-500: #6366f1;
-  --accent-600: #4f46e5;
-  --accent-700: #4338ca;
-  --accent-800: #3730a3;
-  --accent-900: #312e81;
+  /* Primary Colors - Brand maroon (var(--primary-700)) scale */
+  --primary-50: #fdf5f5;
+  --primary-100: #fce8e8;
+  --primary-200: #f5c4c4;
+  --primary-300: #e89090;
+  --primary-400: #d45a5a;
+  --primary-500: #b91c1c;
+  --primary-600: #9a1010;
+  --primary-700: var(--primary-700);
+  --primary-800: #5c0303;
+  --primary-900: #3a0202;
+  --primary-950: #1a0101;
+
+  /* Accent Colors - Warm amber (complements maroon; not indigo) */
+  --accent-50: #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #d97706;
+  --accent-600: #b45309;
+  --accent-700: #92400e;
+  --accent-800: #78350f;
+  --accent-900: #451a03;
+
+  /* Shell metrics */
+  --toolbar-height: 72px;
   
   /* Neutral Colors */
   --neutral-50: #fafafa;
@@ -56,8 +59,8 @@
   --info-600: #2563eb;
   
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Menlo', Consolas, monospace;
   
   /* Font Sizes */
   --text-xs: 0.75rem;
@@ -126,8 +129,6 @@
 }
 
 /* ---------- Base Styles ---------- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -137,6 +138,21 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {
@@ -172,13 +188,17 @@ p {
 }
 
 a {
-  color: var(--accent-600);
+  color: var(--primary-700);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: var(--accent-700);
+  color: var(--primary-800);
+}
+
+a:visited {
+  color: var(--primary-800);
 }
 
 /* ---------- Modern Tables ---------- */
@@ -240,7 +260,7 @@ textarea {
   border-radius: var(--radius-lg);
   background: white;
   color: var(--neutral-800);
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   outline: none;
 }
 
@@ -251,8 +271,17 @@ textarea:hover {
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
 textarea:focus {
-  border-color: var(--accent-500);
-  box-shadow: 0 0 0 3px var(--accent-100);
+  border-color: var(--primary-600);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }
 
 input::placeholder,
@@ -297,12 +326,12 @@ textarea::placeholder {
 .btn-accent {
   color: white;
   background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
-  box-shadow: 0 2px 4px rgb(99 102 241 / 0.3);
+  box-shadow: 0 2px 4px rgb(217 119 6 / 0.3);
 }
 
 .btn-accent:hover {
   background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%);
-  box-shadow: 0 4px 8px rgb(99 102 241 / 0.4);
+  box-shadow: 0 4px 8px rgb(217 119 6 / 0.4);
   transform: translateY(-1px);
 }
 
