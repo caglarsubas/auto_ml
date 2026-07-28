@@ -1,19 +1,19 @@
 <!-- home.component.html -->
 <div class="home-container">
-    <h1>Welcome to <strong>declar.ai</strong></h1>
-    <p class="tagline">Democratizing the power of ML</p>
+    <h1>declar.ai</h1>
+    <p class="tagline">Model development workspace</p>
     <div class="menu-grid">
-      <div *ngFor="let item of menuItems" class="menu-item">
+      <section *ngFor="let item of menuItems" class="menu-item">
         <div class="icon-container">
-            <img [src]="item.staticIcon" [attr.data-gif]="item.gifIcon" [alt]="item.name + ' icon'" class="menu-icon">
+            <img [src]="item.staticIcon" [attr.data-gif]="item.gifIcon" [alt]="" class="menu-icon" role="presentation">
         </div>
-        <h4>{{ item.name }}</h4>
+        <h2>{{ item.name }}</h2>
         <ul>
           <li *ngFor="let subItem of item.subItems">
             <a *ngIf="subItem === 'Model Development'" routerLink="/model-development" matRipple>{{ subItem }}</a>
-            <ng-container *ngIf="subItem !== 'Model Development'">{{ subItem }}</ng-container>
+            <span *ngIf="subItem !== 'Model Development'" class="menu-item-disabled">{{ subItem }}</span>
           </li>
         </ul>
-      </div>
+      </section>
     </div>
   </div>
