@@ -26,7 +26,7 @@
 .feature-collection-intake {
   margin-bottom: 20px;
   padding: 16px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--neutral-200);
   border-radius: 12px;
   background: #faf7f8;
 }
@@ -74,7 +74,7 @@ h3 {
   max-height: 400px;
   overflow-y: auto;
   overflow-x: auto;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--neutral-200);
   border-radius: 8px;
   box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
 }
@@ -88,13 +88,13 @@ h3 {
 
 .preview-table th, .preview-table td,
 .data-dictionary-table th, .data-dictionary-table td {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--neutral-200);
   padding: 8px;
   text-align: left;
 }
 
 .preview-table th, .data-dictionary-table th {
-  background-color: #740505;
+  background-color: var(--primary-700);
   color: white;
   font-weight: bold;
   position: sticky;
@@ -106,7 +106,7 @@ h3 {
   text-align: center;
   font-weight: bold;
   background-color: #f9f9f9;
-  color: #740505;
+  color: var(--primary-700);
 }
 
 .dictionary-actions, .data-import-controls {
@@ -180,7 +180,7 @@ button:not(.next-button):not(.mat-mdc-button):not(.mat-mdc-icon-button):not(.mat
 }
 
 .preview-note {
-  color: #740505;
+  color: var(--primary-700);
   font-style: italic;
   margin-bottom: 15px;
   font-weight: 500;
@@ -197,7 +197,7 @@ button:not(.next-button):not(.mat-mdc-button):not(.mat-mdc-icon-button):not(.mat
 }
 
 .use-existing-btn {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
+  background: linear-gradient(135deg, var(--success-500), #45a049);
 }
 
 /* Custom checkboxes */
@@ -206,7 +206,7 @@ input[type="checkbox"] {
   -webkit-appearance: none;
   width: 24px;
   height: 24px;
-  border: 2px solid #740505;
+  border: 2px solid var(--primary-700);
   border-radius: 6px;
   outline: none;
   cursor: pointer;
@@ -216,7 +216,7 @@ input[type="checkbox"] {
 }
 
 input[type="checkbox"]:checked {
-  background-color: #740505;
+  background-color: var(--primary-700);
 }
 
 input[type="checkbox"]:checked::before {
@@ -311,7 +311,7 @@ input[type="file"]:hover::before {
   display: block;
   margin-bottom: 6px;
   font-weight: bold;
-  color: #333;
+  color: var(--neutral-800);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -335,7 +335,7 @@ input[type="file"]:hover::before {
 .next-button {
   padding: 10px 20px;
   font-size: 16px;
-  background-color: #740505 !important;
+  background-color: var(--primary-700) !important;
   color: white;
   border: none;
   border-radius: 5px;
@@ -358,7 +358,7 @@ input[type="file"]:hover::before {
 .next-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background-color: #740505 !important;
+  background-color: var(--primary-700) !important;
 }
 
 /* Responsive adjustments */
@@ -393,7 +393,7 @@ input[type="file"]:hover::before {
   .not-started-message {
     text-align: center;
     font-size: 1.2em;
-    color: #740505;
+    color: var(--primary-700);
     margin-top: 50px;
   }
   
@@ -423,8 +423,8 @@ input[type="file"]:hover::before {
 }
 
 .pipeline-note-add:hover {
-  border-color: #1976d2;
-  color: #1976d2;
+  border-color: var(--info-600);
+  color: var(--info-600);
   background: #f5f9ff;
 }
 
@@ -443,8 +443,8 @@ input[type="file"]:hover::before {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 14px;
-  border: 1px solid #e3f2fd;
-  border-left: 3px solid #1976d2;
+  border: 1px solid var(--info-50);
+  border-left: 3px solid var(--info-600);
   border-radius: 6px;
   background: #f5f9ff;
   cursor: default;
@@ -459,7 +459,7 @@ input[type="file"]:hover::before {
 .pipeline-note-content {
   flex: 1;
   font-size: 13px;
-  color: #333;
+  color: var(--neutral-800);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -489,11 +489,11 @@ input[type="file"]:hover::before {
 }
 
 .pipeline-note-btn.edit {
-  color: #1976d2;
+  color: var(--info-600);
 }
 
 .pipeline-note-btn.edit:hover {
-  background: #e3f2fd;
+  background: var(--info-50);
 }
 
 .pipeline-note-btn.delete {
@@ -507,7 +507,7 @@ input[type="file"]:hover::before {
 
 .pipeline-note-btn.done {
   color: #fff;
-  background: #1976d2;
+  background: var(--info-600);
   font-size: 12px;
   padding: 4px 12px;
   font-weight: 500;
@@ -515,7 +515,7 @@ input[type="file"]:hover::before {
 }
 
 .pipeline-note-btn.done:hover {
-  background: #1565c0;
+  background: var(--info-600);
 }
 
 .pipeline-note-editor {
@@ -527,7 +527,7 @@ input[type="file"]:hover::before {
 .pipeline-note-textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #1976d2;
+  border: 1px solid var(--info-600);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
@@ -535,19 +535,21 @@ input[type="file"]:hover::before {
   resize: vertical;
   min-height: 60px;
   background: #fff;
-  color: #333;
+  color: var(--neutral-800);
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.pipeline-note-textarea:focus {
-  border-color: #1565c0;
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+.pipeline-note-textarea:focus,
+.pipeline-note-textarea:focus-visible {
+  border-color: var(--primary-700);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-700) 18%, transparent);
+  outline: none;
 }
 
 .pipeline-note-textarea::placeholder {
-  color: #bbb;
+  color: var(--neutral-400);
   font-style: italic;
 }
 
@@ -557,7 +559,7 @@ input[type="file"]:hover::before {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  background: linear-gradient(135deg, var(--success-50) 0%, #f1f8e9 100%);
   border: 1px solid #a5d6a7;
   border-radius: var(--radius-lg);
   margin-top: var(--space-4);
@@ -567,7 +569,7 @@ input[type="file"]:hover::before {
 .section-locked-label {
   font-size: 13px;
   font-weight: 600;
-  color: #2e7d32;
+  color: var(--success-600);
   display: flex;
   align-items: center;
   gap: 6px;

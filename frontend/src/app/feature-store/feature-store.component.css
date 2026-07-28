@@ -86,7 +86,7 @@
 
 .test-msg {
   margin-top: 8px;
-  color: #1565c0;
+  color: var(--info-600);
 }
 
 .error {

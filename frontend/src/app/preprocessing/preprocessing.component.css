@@ -3,7 +3,7 @@
   }
   
   h2 {
-    color: #740505;
+    color: var(--primary-700);
     margin-bottom: 20px;
   }
   
@@ -12,7 +12,7 @@
   }
   
   .selected-options h3 {
-    color: #740505;
+    color: var(--primary-700);
     font-size: 1.1em;
   }
   

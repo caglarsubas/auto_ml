@@ -55,3 +55,4 @@ htmlcov/
 # User created
 get_github_context.sh
 auto_ml_context.md
+.gstack/

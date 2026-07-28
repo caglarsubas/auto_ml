@@ -77,7 +77,7 @@
       <button *ngIf="showUseExistingButton" class="use-existing-btn" (click)="useExistingFile()">Use Existing File</button>
     </div>
 
-    <div *ngIf="importNotice" class="preview-note" style="color: #1565c0; margin: 8px 0 12px; font-size: 13px;">
+    <div *ngIf="importNotice" class="preview-note" style="color: var(--info-600); margin: 8px 0 12px; font-size: 13px;">
       {{ importNotice }}
     </div>
 

@@ -3422,7 +3422,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   getStrategyColor(strategy: string): string {
     const colors: { [k: string]: string } = {
-      'native_categorical': '#1976d2',
+      'native_categorical': '#2563eb',
       'label_encoding': '#7b1fa2',
       'one_hot_encoding': '#388e3c',
       'ordinal_encoding': '#f57c00',

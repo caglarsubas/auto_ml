@@ -1013,7 +1013,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getStrategyColor(strategy: string): string {
     const colors: { [k: string]: string } = {
-      'native_categorical': '#1976d2',
+      'native_categorical': '#2563eb',
       'label_encoding': '#7b1fa2',
       'one_hot_encoding': '#00796b',
       'ordinal_encoding': '#e65100',
@@ -2198,7 +2198,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Micro-averaged PR (if available), plotted as the main thick line
     if (micro && Array.isArray(micro.recall) && Array.isArray(micro.precision)) {
-      traces.push({ x: micro.recall, y: micro.precision, type: 'scatter', mode: 'lines', line: { color: '#1976d2', width: 4, shape: 'hv' }, name: `Micro-avg PR (AP = ${(micro.ap ?? cv.pr_auc_mean ?? 0).toFixed(3)})`, hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>' } as any);
+      traces.push({ x: micro.recall, y: micro.precision, type: 'scatter', mode: 'lines', line: { color: '#2563eb', width: 4, shape: 'hv' }, name: `Micro-avg PR (AP = ${(micro.ap ?? cv.pr_auc_mean ?? 0).toFixed(3)})`, hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>' } as any);
     }
 
     // Baseline

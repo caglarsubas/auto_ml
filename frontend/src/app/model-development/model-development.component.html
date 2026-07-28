@@ -37,10 +37,14 @@
              [class.nav-disabled]="!stepEnabled(mainStep.id)">
 
           <!-- Main step header (clickable: toggles collapse + navigates) -->
-          <div class="nav-main-header" (click)="toggleNavStep(mainStep.id)">
+          <button type="button" class="nav-main-header"
+                  (click)="toggleNavStep(mainStep.id)"
+                  [attr.aria-expanded]="!!navExpandedSteps[mainStep.id]"
+                  [attr.aria-disabled]="!stepEnabled(mainStep.id) || null"
+                  [disabled]="!stepEnabled(mainStep.id)">
             <div class="nav-main-left">
               <!-- Status icon -->
-              <span class="nav-status-icon"
+              <span class="nav-status-icon" aria-hidden="true"
                     [ngClass]="{
                       'icon-completed': getMainStepStatus(mainStep.id) === 'completed',
                       'icon-in-progress': getMainStepStatus(mainStep.id) === 'in_progress',
@@ -56,9 +60,9 @@
             </div>
             <div class="nav-main-right">
               <span class="nav-pct">{{ getMainStepProgressPct(mainStep.id) }}%</span>
-              <span class="nav-chevron" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]">&#9656;</span>
+              <span class="nav-chevron" aria-hidden="true" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]">&#9656;</span>
             </div>
-          </div>
+          </button>
 
           <!-- Progress bar for main step -->
           <div class="nav-step-bar">
@@ -72,18 +76,18 @@
 
           <!-- Collapsible sub-steps -->
           <div class="nav-sub-steps" *ngIf="navExpandedSteps[mainStep.id]">
-            <div *ngFor="let sub of mainStep.subSteps" class="nav-sub-step"
+            <button type="button" *ngFor="let sub of mainStep.subSteps" class="nav-sub-step"
                  [class.sub-completed]="getSubStepStatus(sub.id) === 'completed'"
                  [class.sub-in-progress]="getSubStepStatus(sub.id) === 'in_progress'"
                  [class.sub-pending]="getSubStepStatus(sub.id) === 'pending'"
                  (click)="navGoToSubStep($event, mainStep.id, sub.id)">
-              <span class="nav-sub-icon">
+              <span class="nav-sub-icon" aria-hidden="true">
                 <span *ngIf="getSubStepStatus(sub.id) === 'completed'">&#10003;</span>
                 <span *ngIf="getSubStepStatus(sub.id) === 'in_progress'" class="icon-pulse">&#8226;</span>
                 <span *ngIf="getSubStepStatus(sub.id) === 'pending'">&#8226;</span>
               </span>
               <span class="nav-sub-label">{{ sub.label }}</span>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -98,13 +102,12 @@
     <div class="model-development-container">
       <!-- Always show the header -->
       <br><br>
-  <div style="display: flex; align-items: center; gap: 16px;">
-    <h1 style="margin: 0;">Model Development</h1>
-    <button (click)="toggleSavedPipelines()"
-            style="padding: 8px 16px; background: #1565c0; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-      <span style="font-size: 16px;">&#128193;</span> Saved Pipelines
+  <div class="md-page-header">
+    <h1 class="md-page-title">Model Development</h1>
+    <button type="button" class="wb-btn-info md-header-btn" (click)="toggleSavedPipelines()">
+      <span aria-hidden="true">&#128193;</span> Saved Pipelines
     </button>
-    <span *ngIf="activePipelineRunId" style="font-size: 13px; color: #555; background: #e3f2fd; padding: 4px 10px; border-radius: 12px;">
+    <span *ngIf="activePipelineRunId" class="md-active-pill">
       Active: <strong>{{ pipelineRunName }}</strong>
     </span>
 
@@ -114,9 +117,9 @@
       <button (click)="toggleAutosave()"
               [title]="autosaveEnabled ? 'Autosave ON — click to disable' : 'Autosave OFF — click to enable'"
               style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s;"
-              [style.background]="autosaveEnabled ? '#e8f5e9' : '#fff3e0'"
-              [style.borderColor]="autosaveEnabled ? '#4caf50' : '#ff9800'"
-              [style.color]="autosaveEnabled ? '#2e7d32' : '#e65100'">
+              [style.background]="autosaveEnabled ? 'var(--success-50)' : 'var(--warning-50)'"
+              [style.borderColor]="autosaveEnabled ? 'var(--success-500)' : 'var(--warning-500)'"
+              [style.color]="autosaveEnabled ? 'var(--success-600)' : 'var(--warning-600)'">
         <span style="font-size: 15px;">{{ autosaveEnabled ? '&#9889;' : '&#9888;' }}</span>
         {{ autosaveEnabled ? 'Autosave' : 'Manual' }}
       </button>
@@ -127,27 +130,27 @@
               [disabled]="!_unsavedChanges"
               title="Save pipeline now"
               style="display: flex; align-items: center; gap: 4px; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;"
-              [style.background]="_unsavedChanges ? '#1565c0' : '#bdbdbd'"
+              [style.background]="_unsavedChanges ? 'var(--info-600)' : '#bdbdbd'"
               [style.color]="'white'">
         <span style="font-size: 15px;">&#128190;</span> Save
       </button>
 
       <!-- Unsaved indicator -->
       <span *ngIf="!autosaveEnabled && _unsavedChanges"
-            style="font-size: 11px; color: #e65100; font-weight: 500; padding: 2px 8px; background: #fff3e0; border-radius: 10px;">
+            style="font-size: 11px; color: var(--warning-600); font-weight: 500; padding: 2px 8px; background: var(--warning-50); border-radius: 10px;">
         Unsaved changes
       </span>
 
       <!-- Report download buttons -->
-      <div style="display: flex; align-items: center; gap: 4px; margin-left: 8px; border-left: 1px solid #e0e0e0; padding-left: 10px;">
+      <div style="display: flex; align-items: center; gap: 4px; margin-left: 8px; border-left: 1px solid var(--neutral-200); padding-left: 10px;">
         <button (click)="downloadReportHtml()"
                 title="Download pipeline report as HTML"
-                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #1565c0; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #e3f2fd; color: #1565c0; transition: all 0.2s;">
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid var(--info-600); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: var(--info-50); color: var(--info-600); transition: all 0.2s;">
           <span style="font-size: 14px;">&#128196;</span> HTML
         </button>
         <button (click)="downloadReportPdf()"
                 title="Open pipeline report for Print / Save as PDF"
-                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #c62828; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #ffebee; color: #c62828; transition: all 0.2s;">
+                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid var(--error-600); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #ffebee; color: var(--error-600); transition: all 0.2s;">
           <span style="font-size: 14px;">&#128438;</span> PDF
         </button>
       </div>
@@ -161,13 +164,13 @@
     <div style="background: white; border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); text-align: center;"
          (click)="$event.stopPropagation()">
       <div style="font-size: 40px; margin-bottom: 12px;">&#9888;&#65039;</div>
-      <h3 style="margin: 0 0 8px 0; color: #333;">Unsaved Changes</h3>
-      <p style="color: #666; font-size: 14px; margin: 0 0 24px 0;">
+      <h3 style="margin: 0 0 8px 0; color: var(--neutral-800);">Unsaved Changes</h3>
+      <p style="color: var(--neutral-600); font-size: 14px; margin: 0 0 24px 0;">
         You have unsaved pipeline changes. Would you like to save before leaving?
       </p>
       <div style="display: flex; gap: 10px; justify-content: center;">
         <button (click)="exitWithSave()"
-                style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                style="padding: 10px 20px; background: var(--success-600); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
           &#128190; Save &amp; Exit
         </button>
         <button (click)="exitWithoutSave()"
@@ -175,7 +178,7 @@
           Exit Without Saving
         </button>
         <button (click)="cancelExit()"
-                style="padding: 10px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                style="padding: 10px 20px; background: var(--neutral-200); color: var(--neutral-800); border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
           Cancel
         </button>
       </div>
@@ -183,49 +186,49 @@
   </div>
 
   <!-- Saved Pipelines Panel -->
-  <div *ngIf="showSavedPipelines" style="margin: 16px 0; padding: 16px; border: 1px solid #1565c0; border-radius: 8px; background: #f5f9ff; max-height: 400px; overflow-y: auto;">
+  <div *ngIf="showSavedPipelines" style="margin: 16px 0; padding: 16px; border: 1px solid var(--info-600); border-radius: 8px; background: #f5f9ff; max-height: 400px; overflow-y: auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-      <h3 style="margin: 0; color: #1565c0;">Saved Pipeline Runs</h3>
-      <button (click)="showSavedPipelines = false" style="background: none; border: none; cursor: pointer; font-size: 18px; color: #999;">&times;</button>
+      <h3 style="margin: 0; color: var(--info-600);">Saved Pipeline Runs</h3>
+      <button (click)="showSavedPipelines = false" style="background: none; border: none; cursor: pointer; font-size: 18px; color: var(--neutral-400);">&times;</button>
     </div>
 
-    <div *ngIf="savedPipelines.length === 0" style="color: #777; font-size: 13px; padding: 12px 0;">
+    <div *ngIf="savedPipelines.length === 0" style="color: var(--neutral-500); font-size: 13px; padding: 12px 0;">
       No saved pipeline runs yet. Start a pipeline and checkpoints will be saved automatically.
     </div>
 
-    <div *ngFor="let run of savedPipelines" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; background: white; border: 1px solid #e0e0e0; border-radius: 6px;">
+    <div *ngFor="let run of savedPipelines" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; background: white; border: 1px solid var(--neutral-200); border-radius: 6px;">
       <!-- Name (editable) -->
       <div style="flex: 1; min-width: 0;">
         <div *ngIf="renamingPipelineId !== run.id" style="font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" [title]="run.name">
           {{ run.name }}
         </div>
         <div *ngIf="renamingPipelineId === run.id" style="display: flex; gap: 4px;">
-          <input [(ngModel)]="renamingPipelineName" style="flex: 1; padding: 4px 8px; border: 1px solid #1565c0; border-radius: 4px; font-size: 13px;" (keyup.enter)="confirmRenamePipeline(run)" />
-          <button (click)="confirmRenamePipeline(run)" style="padding: 4px 8px; background: #1565c0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&#10003;</button>
-          <button (click)="cancelRenamePipeline()" style="padding: 4px 8px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&times;</button>
+          <input [(ngModel)]="renamingPipelineName" style="flex: 1; padding: 4px 8px; border: 1px solid var(--info-600); border-radius: 4px; font-size: 13px;" (keyup.enter)="confirmRenamePipeline(run)" />
+          <button (click)="confirmRenamePipeline(run)" style="padding: 4px 8px; background: var(--info-600); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&#10003;</button>
+          <button (click)="cancelRenamePipeline()" style="padding: 4px 8px; background: var(--neutral-400); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&times;</button>
         </div>
-        <div style="font-size: 11px; color: #888; margin-top: 2px;">
+        <div style="font-size: 11px; color: var(--neutral-500); margin-top: 2px;">
           {{ run.pipeline_type | titlecase }} &middot; {{ run.updated_at | date:'short' }}
         </div>
       </div>
 
       <!-- Step Progress -->
       <div style="width: 180px; flex-shrink: 0;">
-        <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center;">{{ getDetailedStepLabel(run) }}</div>
-        <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
-          <div [style.width.%]="getDetailedStepProgress(run)" style="height: 100%; background: #1565c0; border-radius: 3px; transition: width 0.3s;"></div>
+        <div style="font-size: 11px; color: var(--neutral-600); margin-bottom: 3px; text-align: center;">{{ getDetailedStepLabel(run) }}</div>
+        <div style="height: 6px; background: var(--neutral-200); border-radius: 3px; overflow: hidden;">
+          <div [style.width.%]="getDetailedStepProgress(run)" style="height: 100%; background: var(--info-600); border-radius: 3px; transition: width 0.3s;"></div>
         </div>
       </div>
 
       <!-- Actions -->
       <div style="display: flex; gap: 4px; flex-shrink: 0;">
         <button (click)="loadPipelineRun(run.id)" title="Load & Continue"
-                style="padding: 6px 12px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                style="padding: 6px 12px; background: var(--success-600); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
           Load
         </button>
         <button (click)="startRenamePipeline(run)" title="Rename"
                 style="padding: 6px 8px; background: #f57c00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-          &#9998;
+          &var(--neutral-400)8;
         </button>
         <button (click)="deletePipelineRun(run.id)" title="Delete"
                 style="padding: 6px 8px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
@@ -237,9 +240,9 @@
 
   <div class="pipeline-declaration">
     <!-- CRISP-DM: Business Understanding -->
-    <div id="business-understanding-anchor" class="business-understanding-section" style="margin-bottom: 24px; padding: 16px; border: 1px solid #e3f2fd; border-radius: 8px; background: #fafcff;">
+    <div id="business-understanding-anchor" class="business-understanding-section" style="margin-bottom: 24px; padding: 16px; border: 1px solid var(--info-50); border-radius: 8px; background: #fafcff;">
       <p style="font-size: larger; font-weight: bold; margin: 0 0 8px 0;">Business Understanding</p>
-      <p style="font-size: 13px; color: #555; margin: 0 0 16px 0;">Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack and evaluation business floors.</p>
+      <p style="font-size: 13px; color: var(--neutral-600); margin: 0 0 16px 0;">Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack and evaluation business floors.</p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
         <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
@@ -288,7 +291,7 @@
         </label>
       </div>
 
-      <fieldset style="margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px;">
+      <fieldset style="margin-top: 16px; border: 1px solid var(--neutral-300); border-radius: 6px; padding: 12px;">
         <legend style="font-weight: 600; font-size: 13px; padding: 0 6px;">Success criteria</legend>
         <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
           <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
@@ -327,7 +330,7 @@
         </div>
       </fieldset>
 
-      <div *ngIf="modelingCriteriaWarning" style="margin-top: 10px; padding: 8px 12px; background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 4px; font-size: 13px; color: #e65100;">
+      <div *ngIf="modelingCriteriaWarning" style="margin-top: 10px; padding: 8px 12px; background: var(--warning-50); border: 1px solid #ffe0b2; border-radius: 4px; font-size: 13px; color: var(--warning-600);">
         Success criteria floor is empty. Modeling can proceed, but evaluation will compare outer-test metrics against business floors.
       </div>
     </div>
@@ -390,7 +393,7 @@
 
     <!-- Edit button: after pipeline is started, replaces Start -->
     <button *ngIf="isStarted && !editingTargetDefinition" class="target-definition-edit-btn" (click)="onEditTargetDefinition()">
-      &#9998; Edit Definition
+      &var(--neutral-400)8; Edit Definition
     </button>
   </div>
   <!-- Declaration specific content (always visible at top) -->
@@ -430,7 +433,7 @@
           <span>OOS Percent:</span>
           <input type="number" min="1" max="99" [ngModel]="oosPercent" (ngModelChange)="oosPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
         </label>
-        <small style="color:#666;">Random {{100 - oosPercent}}/{{oosPercent}} train/test split.</small>
+        <small style="color:var(--neutral-600);">Random {{100 - oosPercent}}/{{oosPercent}} train/test split.</small>
       </ng-container>
       <ng-container *ngIf="splitStrategy === 'oot'">
         <label style="display:flex; align-items:center; gap:6px;">
@@ -452,14 +455,14 @@
             <span>OOT Percent:</span>
             <input type="number" min="1" max="99" [ngModel]="ootPercent" (ngModelChange)="ootPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
           </label>
-          <small style="color:#666;">Sorted by time ascending; last {{ootPercent}}% goes to OOT (test).</small>
+          <small style="color:var(--neutral-600);">Sorted by time ascending; last {{ootPercent}}% goes to OOT (test).</small>
         </ng-container>
         <ng-container *ngIf="ootMode === 'cutoff'">
           <label style="display:flex; align-items:center; gap:6px;">
             <span>Cutoff:</span>
             <input type="datetime-local" [ngModel]="splitCutoff" (ngModelChange)="splitCutoff = $event; onPipelineConfigChanged()" />
           </label>
-          <small style="color:#666;">Train ≤ cutoff, Test &gt; cutoff</small>
+          <small style="color:var(--neutral-600);">Train ≤ cutoff, Test &gt; cutoff</small>
         </ng-container>
       </ng-container>
     </div>
@@ -472,7 +475,7 @@
       <div *ngIf="hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_preprocessing_config')">
         <div class="pipeline-note-content">{{ pipelineNotes['after_preprocessing_config'] }}</div>
         <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_preprocessing_config')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_preprocessing_config')" title="Edit">&var(--neutral-400)8;</button>
           <button class="pipeline-note-btn delete" (click)="deleteNote('after_preprocessing_config')" title="Delete">&times;</button>
         </div>
       </div>
@@ -508,9 +511,9 @@
         Download CRISP export pack
       </button>
     </div>
-    <div *ngIf="sequentialCandidates?.length" style="margin: 8px 0 16px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; max-width: 900px;">
+    <div *ngIf="sequentialCandidates?.length" style="margin: 8px 0 16px; padding: 10px; border: 1px solid var(--neutral-200); border-radius: 6px; background: var(--neutral-50); max-width: 900px;">
       <h4 style="margin: 0 0 8px;">Sequential pattern candidates (MVP)</h4>
-      <p style="font-size: 12px; color: #666; margin: 0 0 8px;">Near-duplicate consecutive rows with few differing columns — review for causality / leakage, not a full causal graph.</p>
+      <p style="font-size: 12px; color: var(--neutral-600); margin: 0 0 8px;">Near-duplicate consecutive rows with few differing columns — review for causality / leakage, not a full causal graph.</p>
       <ul style="margin: 0; padding-left: 18px; font-size: 12px;">
         <li *ngFor="let c of sequentialCandidates | slice:0:12">
           rows {{ c.row_a }} → {{ c.row_b }} · Δ{{ c.n_diff }} · {{ (c.changed_features || []).join(', ') }}
@@ -518,7 +521,7 @@
       </ul>
     </div>
     <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
-    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="purifier-summary" style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fffdf7;">
+    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="purifier-summary" style="margin-top: 16px; padding: 12px; border: 1px solid var(--neutral-200); border-radius: 6px; background: #fffdf7;">
       <h3 style="margin: 0 0 6px 0;">Data Purifier Summary</h3>
       <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#444; font-size: 13px; margin-bottom:8px;">
         <span><strong>Rows:</strong> {{ rowCountBefore }} → {{ rowCountAfter }}</span>
@@ -530,13 +533,13 @@
           <strong>{{ s.step }}</strong>
           <span *ngIf="s.threshold != null"> (threshold: {{ s.threshold }})</span>
           <span *ngIf="s.option_ids && s.option_ids.length"> — Options: {{ s.option_ids.join(', ') }}</span>
-          <span style="color:#666; margin-left: 8px;">Rows removed in step: {{ s.rows_removed || 0 }}</span>
+          <span style="color:var(--neutral-600); margin-left: 8px;">Rows removed in step: {{ s.rows_removed || 0 }}</span>
         </div>
-        <div *ngIf="s.columns && s.columns.length; else noCols" style="font-size: 12px; color:#333;">
+        <div *ngIf="s.columns && s.columns.length; else noCols" style="font-size: 12px; color:var(--neutral-800);">
           <details>
             <summary>{{ s.columns.length }} column(s)</summary>
             <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
-              <span *ngFor="let c of s.columns" style="border: 1px solid #eee; padding: 2px 6px; border-radius: 12px; background: #fafafa;">{{ c }}</span>
+              <span *ngFor="let c of s.columns" style="border: 1px solid var(--neutral-200); padding: 2px 6px; border-radius: 12px; background: var(--neutral-50);">{{ c }}</span>
             </div>
           </details>
         </div>
@@ -564,7 +567,7 @@
           </details>
         </div>
         <ng-template #noCols>
-          <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: #777;">No columns dropped in this step</div>
+          <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: var(--neutral-500);">No columns dropped in this step</div>
         </ng-template>
       </div>
       <!-- AI Support trigger for Data Purifier Summary (v2.41.0) -->
@@ -582,7 +585,7 @@
       <div *ngIf="hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_purifier_summary')">
         <div class="pipeline-note-content">{{ pipelineNotes['after_purifier_summary'] }}</div>
         <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_purifier_summary')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_purifier_summary')" title="Edit">&var(--neutral-400)8;</button>
           <button class="pipeline-note-btn delete" (click)="deleteNote('after_purifier_summary')" title="Delete">&times;</button>
         </div>
       </div>
@@ -594,27 +597,27 @@
     <app-pipeline-codeline *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" position="after_purifier_summary"></app-pipeline-codeline>
 
     <!-- Split Validation Chart -->
-    <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafbfc;">
-      <h3 style="margin: 0 0 4px 0; font-size: 15px; color: #333;">Train-Test Split Validation</h3>
-      <p style="margin: 0 0 12px 0; font-size: 12px; color: #777;">Stacked histogram of target label distribution across splits, with target mean overlay. Consistent means across splits indicate a well-balanced split.</p>
+    <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid var(--neutral-200); border-radius: 8px; background: #fafbfc;">
+      <h3 style="margin: 0 0 4px 0; font-size: 15px; color: var(--neutral-800);">Train-Test Split Validation</h3>
+      <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--neutral-500);">Stacked histogram of target label distribution across splits, with target mean overlay. Consistent means across splits indicate a well-balanced split.</p>
       <canvas #splitValidationCanvas style="width: 100%; height: 320px; display: block;"></canvas>
       <!-- Summary table -->
       <div style="margin-top: 12px; overflow-x: auto;">
         <table style="border-collapse: collapse; width: auto; font-size: 12px;">
           <thead>
-            <tr style="background: #f5f5f5;">
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: left;">Split</th>
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Count</th>
-              <th *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target={{ lbl }}</th>
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target Mean</th>
+            <tr style="background: var(--neutral-100);">
+              <th style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: left;">Split</th>
+              <th style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right;">Count</th>
+              <th *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right;">Target={{ lbl }}</th>
+              <th style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right;">Target Mean</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let sp of splitValidation.splits">
-              <td style="padding: 6px 14px; border: 1px solid #eee; font-weight: 600;">{{ sp.name }}</td>
-              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.count | number }}</td>
-              <td *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.label_counts[lbl] | number }}</td>
-              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right; color: #2e7d32; font-weight: 600;">{{ (sp.target_mean * 100).toFixed(2) }}%</td>
+              <td style="padding: 6px 14px; border: 1px solid var(--neutral-200); font-weight: 600;">{{ sp.name }}</td>
+              <td style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right;">{{ sp.count | number }}</td>
+              <td *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right;">{{ sp.label_counts[lbl] | number }}</td>
+              <td style="padding: 6px 14px; border: 1px solid var(--neutral-200); text-align: right; color: var(--success-600); font-weight: 600;">{{ (sp.target_mean * 100).toFixed(2) }}%</td>
             </tr>
           </tbody>
         </table>
@@ -628,7 +631,7 @@
       <div *ngIf="hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_split_validation')">
         <div class="pipeline-note-content">{{ pipelineNotes['after_split_validation'] }}</div>
         <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_split_validation')" title="Edit">&#9998;</button>
+          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_split_validation')" title="Edit">&var(--neutral-400)8;</button>
           <button class="pipeline-note-btn delete" (click)="deleteNote('after_split_validation')" title="Delete">&times;</button>
         </div>
       </div>
@@ -646,7 +649,7 @@
       <div style="display:flex; align-items:center; gap:12px; margin: 8px 0 12px 0; flex-wrap: wrap;">
         <label style="display:flex; align-items:center; gap:6px;">
           <span>Search:</span>
-          <input type="text" [ngModel]="datqGlobalFilter" (ngModelChange)="datqGlobalFilter = $event; onFilterChange()" placeholder="Global filter" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
+          <input type="text" [ngModel]="datqGlobalFilter" (ngModelChange)="datqGlobalFilter = $event; onFilterChange()" placeholder="Global filter" style="padding:6px 8px; border:1px solid var(--neutral-300); border-radius:4px;" />
         </label>
         <label style="display:flex; align-items:center; gap:6px;">
           <span>Page size:</span>
@@ -668,7 +671,7 @@
         <button mat-stroked-button color="primary" (click)="exportCrispPack()" [disabled]="currentFileId == null" title="Download CRISP-DM audit export pack">
           Export CRISP pack
         </button>
-        <span style="color:#666;">Total rows: {{ datqTotal }}</span>
+        <span style="color:var(--neutral-600);">Total rows: {{ datqTotal }}</span>
         <span style="color:#d32f2f; font-weight: 500;" *ngIf="getExcludedVariables().length > 0">
           Excluded from model: {{ getExcludedVariables().length }}
         </span>
@@ -682,14 +685,14 @@
         <button mat-stroked-button color="primary" (click)="exportDatqAsJSON()">Export JSON</button>
       </div>
 
-      <div class="datq-table-container" style="overflow:auto; max-width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; max-height: 500px;">
+      <div class="datq-table-container" style="overflow:auto; max-width: 100%; border: 1px solid var(--neutral-200); border-radius: 4px; max-height: 500px;">
         <table class="datq-table mat-elevation-z1" style="border-collapse: separate; width: 100%; min-width: 1800px; table-layout: auto;">
           <thead>
             <tr class="header-row">
               <th *ngFor="let col of datqDisplayColumns" (click)="onSort(col)" [ngStyle]="getPinnedStyle(col, 'header')"
                   [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
                   [style.position]="'sticky'" [style.top.px]="0" [style.zIndex]="3"
-                  style="text-align: left; padding: 8px; border-bottom: 1px solid #eee; white-space: nowrap; cursor: pointer; background:#fff; overflow:hidden; text-overflow: ellipsis;">
+                  style="text-align: left; padding: 8px; border-bottom: 1px solid var(--neutral-200); white-space: nowrap; cursor: pointer; background:#fff; overflow:hidden; text-overflow: ellipsis;">
                 <span style="display:inline-flex; align-items:center; gap:6px;">
                   <span>{{ col }}</span>
                   <span *ngIf="datqSortColumn === col">{{ datqSortDir === 'asc' ? '▲' : '▼' }}</span>
@@ -705,9 +708,9 @@
               <th *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'filter')"
                   [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
                   [style.position]="'sticky'" [style.top.px]="40" [style.zIndex]="2"
-                  style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; white-space: nowrap; background:#fff; overflow:visible; text-overflow: ellipsis;">
+                  style="text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--neutral-200); white-space: nowrap; background:#fff; overflow:visible; text-overflow: ellipsis;">
                 <div class="filter-input-wrap">
-                  <input type="text" [ngModel]="datqColumnFilters[col]" (ngModelChange)="datqColumnFilters[col] = $event; onFilterChange()" (focus)="openFilterMenu(col)" (click)="$event.stopPropagation()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
+                  <input type="text" [ngModel]="datqColumnFilters[col]" (ngModelChange)="datqColumnFilters[col] = $event; onFilterChange()" (focus)="openFilterMenu(col)" (click)="$event.stopPropagation()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid var(--neutral-300); border-radius:4px;" />
                   <button type="button" class="filter-trigger" title="Unique filter" (click)="openFilterMenu(col); $event.stopPropagation()">▾</button>
                 </div>
                 <div class="filter-menu" *ngIf="datqFilterMenuFor===col" (click)="$event.stopPropagation()">
@@ -716,11 +719,11 @@
                   <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin: 6px 0;">
                     <input type="checkbox" [(ngModel)]="datqShowOnlySelected[col]" /> Show only selected
                   </label>
-                  <div style="font-size: 11px; color:#888; margin: 4px 0;">
+                  <div style="font-size: 11px; color:var(--neutral-500); margin: 4px 0;">
                     Values: {{ uniqueCount(col) }} · Selected: {{ selectedCount(col) }} · Query: '{{ datqFilterMenuSearch }}'
                   </div>
                   <div class="value-list">
-                    <div *ngIf="visibleUniqueValues(col).length === 0" style="color:#777; font-size:12px; padding: 6px;">No values</div>
+                    <div *ngIf="visibleUniqueValues(col).length === 0" style="color:var(--neutral-500); font-size:12px; padding: 6px;">No values</div>
                     <label class="value-item" *ngFor="let item of visibleUniqueValues(col)">
                       <input type="checkbox" [checked]="isValueChecked(col, item.value)" (change)="toggleValue(col, item.value, $any($event.target).checked)" />
                       <span class="val" [title]="item.value">{{ item.value }}</span>
@@ -744,19 +747,19 @@
               <td *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'cell')"
                   [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
                   [style.white-space]="datqWrapCells ? 'normal' : 'nowrap'" [style.word-break]="datqWrapCells ? 'break-word' : 'normal'"
-                  style="padding: 8px; border-bottom: 1px solid #f5f5f5; background:#fff; overflow:hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;">
+                  style="padding: 8px; border-bottom: 1px solid var(--neutral-100); background:#fff; overflow:hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;">
                 <ng-container *ngIf="col === 'Model_Usage'; else notModelUsageColumn">
                   <select [ngModel]="getModelUsage(row)" 
                           (ngModelChange)="setModelUsage(row, $event)"
                           (click)="$event.stopPropagation()"
-                          style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
+                          style="width: 100%; padding: 4px; border: 1px solid var(--neutral-300); border-radius: 4px; background: #fff;">
                     <option value="Yes">Yes</option>
                     <option value="No">No</option>
                   </select>
                 </ng-container>
                 <ng-template #notModelUsageColumn>
                   <ng-container *ngIf="isVariableColumn(col); else normalCell">
-                    <a href="#" (click)="openFeatureCardFromDatq(displayCell(row, col)); $event.preventDefault(); $event.stopPropagation()" style="color:#1976d2; text-decoration: underline;">
+                    <a href="#" (click)="openFeatureCardFromDatq(displayCell(row, col)); $event.preventDefault(); $event.stopPropagation()" class="wb-link">
                       {{ displayCell(row, col) }}
                     </a>
                   </ng-container>
@@ -779,17 +782,17 @@
       </div>
 
       <!-- Detail section -->
-      <div *ngIf="datqSelectedVariable" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa;">
+      <div *ngIf="datqSelectedVariable" style="margin-top: 20px; padding: 16px; border: 1px solid var(--neutral-200); border-radius: 6px; background: var(--neutral-50);">
         <div style="display:flex; align-items:center; gap: 12px;">
           <h4 style="margin:0;">Data Quality Detail: {{ datqSelectedVariable }}</h4>
-          <span *ngIf="datqDetailLoading" style="color:#666;">Loading…</span>
+          <span *ngIf="datqDetailLoading" style="color:var(--neutral-600);">Loading…</span>
           <span style="flex:1 1 auto;"></span>
           <button mat-stroked-button (click)="exportDatqDetailAsCSV()" [disabled]="!datqDetail || !datqDetailColumns.length">Export Detail CSV</button>
           <button mat-stroked-button (click)="exportDatqDetailAsJSON()" [disabled]="!datqDetail">Export Detail JSON</button>
           <button mat-button (click)="closeDatqDetail()">Close</button>
         </div>
         <div *ngIf="datqDetail && !datqDetailLoading" style="margin-top: 10px;">
-          <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#333;">
+          <div style="display:flex; gap: 16px; flex-wrap: wrap; color:var(--neutral-800);">
             <span><strong>Type:</strong> {{ datqDetail.variable_type }}</span>
             <span><strong>PSI:</strong> {{ datqDetail.psi }}</span>
             <span><strong>Train N:</strong> {{ datqDetail.train_count }}</span>
@@ -812,30 +815,30 @@
           <div style="display:flex; align-items:center; gap:12px; margin: 12px 0 8px 0; flex-wrap: wrap;">
             <label style="display:flex; align-items:center; gap:6px;">
               <span>Search:</span>
-              <input type="text" [ngModel]="detailGlobalFilter" (ngModelChange)="detailGlobalFilter = $event; onDetailFilterChange()" placeholder="Filter detail" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
+              <input type="text" [ngModel]="detailGlobalFilter" (ngModelChange)="detailGlobalFilter = $event; onDetailFilterChange()" placeholder="Filter detail" style="padding:6px 8px; border:1px solid var(--neutral-300); border-radius:4px;" />
             </label>
             <span style="flex:1 1 auto;"></span>
             <button mat-stroked-button (click)="clearDetailFilters()">Clear Detail Filters</button>
           </div>
 
-          <div style="overflow:auto; max-height: 360px; border: 1px solid #eee; border-radius: 4px;">
+          <div style="overflow:auto; max-height: 360px; border: 1px solid var(--neutral-200); border-radius: 4px;">
             <table style="border-collapse: collapse; width: 100%; min-width: 520px;">
               <thead>
                 <tr>
-                  <th *ngFor="let c of datqDetailColumns" (click)="onDetailSort(c)" style="text-align:left; padding:8px; border-bottom:1px solid #eee; white-space:nowrap; cursor:pointer;">
+                  <th *ngFor="let c of datqDetailColumns" (click)="onDetailSort(c)" style="text-align:left; padding:8px; border-bottom:1px solid var(--neutral-200); white-space:nowrap; cursor:pointer;">
                     {{ c }}
                     <span *ngIf="detailSortColumn === c">{{ detailSortDir === 'asc' ? '▲' : '▼' }}</span>
                   </th>
                 </tr>
                 <tr>
-                  <th *ngFor="let c of datqDetailColumns" style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee; white-space:nowrap;">
-                    <input type="text" [ngModel]="detailColumnFilters[c]" (ngModelChange)="detailColumnFilters[c] = $event; onDetailFilterChange()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
+                  <th *ngFor="let c of datqDetailColumns" style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--neutral-200); white-space:nowrap;">
+                    <input type="text" [ngModel]="detailColumnFilters[c]" (ngModelChange)="detailColumnFilters[c] = $event; onDetailFilterChange()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid var(--neutral-300); border-radius:4px;" />
                   </th>
                 </tr>
               </thead>
               <tbody>
                 <tr *ngFor="let r of datqDetailSortedRows">
-                  <td *ngFor="let c of datqDetailColumns" style="padding:8px; border-bottom:1px solid #f5f5f5; white-space:nowrap;">{{ r[c] }}</td>
+                  <td *ngFor="let c of datqDetailColumns" style="padding:8px; border-bottom:1px solid var(--neutral-100); white-space:nowrap;">{{ r[c] }}</td>
                 </tr>
               </tbody>
             </table>
@@ -851,7 +854,7 @@
         <div *ngIf="hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_quality')">
           <div class="pipeline-note-content">{{ pipelineNotes['after_data_quality'] }}</div>
           <div class="pipeline-note-actions">
-            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_quality')" title="Edit">&#9998;</button>
+            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_quality')" title="Edit">&var(--neutral-400)8;</button>
             <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_quality')" title="Delete">&times;</button>
           </div>
         </div>
@@ -866,8 +869,8 @@
         <button class="next-button" (click)="goToModelingFromDQ()" [disabled]="!(datqSummary && datqSummary.length)">
           <span class="next-icon">&#9654;</span> MODELING
         </button>
-        <small style="color:#666;" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
-        <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue to modeling. Categorical encoding is handled automatically.</small>
+        <small style="color:var(--neutral-600);" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
+        <small style="color:var(--neutral-600);" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue to modeling. Categorical encoding is handled automatically.</small>
       </div>
     </div>
   </div>
@@ -891,9 +894,9 @@
   <app-deployment *ngIf="modelingAvailable"></app-deployment>
 
   <div class="model-development-line" *ngIf="deploymentCompleted"></div>
-  <div id="monitoring-anchor" *ngIf="deploymentCompleted" style="margin-top: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
+  <div id="monitoring-anchor" *ngIf="deploymentCompleted" style="margin-top: 24px; padding: 16px; border: 1px solid var(--neutral-200); border-radius: 8px;">
     <h2>Monitoring</h2>
-    <p style="color: #555; font-size: 14px; max-width: 720px;">
+    <p style="color: var(--neutral-600); font-size: 14px; max-width: 720px;">
       Upload a scored production or validation batch to compare score and feature drift against the training reference.
       When drift exceeds tolerance, start iteration N+1 to clone the pipeline run while preserving Business Understanding.
     </p>
@@ -923,9 +926,9 @@
       </button>
     </div>
 
-    <div *ngIf="monitoringError" style="color: #c62828; margin-bottom: 12px;">{{ monitoringError }}</div>
+    <div *ngIf="monitoringError" style="color: var(--error-600); margin-bottom: 12px;">{{ monitoringError }}</div>
 
-    <div *ngIf="monitoringReport" style="margin-top: 16px; padding: 12px; background: #fafafa; border: 1px solid #eee; border-radius: 6px; font-size: 13px;">
+    <div *ngIf="monitoringReport" style="margin-top: 16px; padding: 12px; background: var(--neutral-50); border: 1px solid var(--neutral-200); border-radius: 6px; font-size: 13px;">
       <h3 style="margin: 0 0 8px 0;">Monitoring report</h3>
       <pre style="white-space: pre-wrap; max-height: 360px; overflow: auto; font-size: 12px;">{{ monitoringReport | json }}</pre>
     </div>
