@@ -11,7 +11,8 @@
         <ul>
           <li *ngFor="let subItem of item.subItems">
             <a *ngIf="subItem === 'Model Development'" routerLink="/model-development" matRipple>{{ subItem }}</a>
-            <ng-container *ngIf="subItem !== 'Model Development'">{{ subItem }}</ng-container>
+            <a *ngIf="subItem === 'Feature Collection'" routerLink="/feature-store/collections" matRipple>{{ subItem }}</a>
+            <ng-container *ngIf="subItem !== 'Model Development' && subItem !== 'Feature Collection'">{{ subItem }}</ng-container>
           </li>
         </ul>
       </div>

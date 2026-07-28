@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'encoding',
     'evaluation',
     'feature_card',
+    'feature_store',
     'modeling',
     'preprocessing',
     'ai_assistant',

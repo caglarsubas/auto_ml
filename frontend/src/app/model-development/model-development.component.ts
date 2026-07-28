@@ -1130,6 +1130,16 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       }
     } catch {}
 
+    // Prefill Business Understanding from Feature Store Project (if Declaration loaded a collection)
+    this.subscription.add(
+      this.sharedService.pendingBusinessUnderstanding$.subscribe((bu) => {
+        if (!bu) return;
+        this.sharedService.setPendingBusinessUnderstanding(null);
+        this.applyBusinessUnderstanding(bu);
+        this.onBusinessUnderstandingChanged();
+      })
+    );
+
     // Sync AI assistant panel open state from service (e.g. when child components open panel)
     this.subscription.add(
       this.aiAssistant.panelOpen$.subscribe(open => {

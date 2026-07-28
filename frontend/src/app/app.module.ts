@@ -37,6 +37,7 @@ import { LoginComponent } from './login/login.component';
 import { AiChatPanelComponent } from './ai-chat-panel/ai-chat-panel.component';
 import { AiAssistantService } from './services/ai-assistant.service';
 import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline.component';
+import { FeatureStoreComponent } from './feature-store/feature-store.component';
 
 @NgModule({
   declarations: [
@@ -51,7 +52,8 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
     HomeComponent,
     LoginComponent,
     AiChatPanelComponent,
-    PipelineCodelineComponent
+    PipelineCodelineComponent,
+    FeatureStoreComponent
   ],
   imports: [
     BrowserModule,

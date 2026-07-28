@@ -3,6 +3,12 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from declaration.views import DeclarationViewSet
 from feature_card.views import FeatureCardViewSet
+from feature_store.views import (
+    ProjectViewSet,
+    DataConnectionViewSet,
+    FeatureCollectionViewSet,
+    FeatureDefinitionViewSet,
+)
 from preprocessing.views import PreprocessingApplyView, PreprocessingOptionsView, PreprocessingRunView, PreprocessingDatqDetailView, PreprocessingDatqTimeseriesView, PreprocessingDatqSummaryRowView, PreprocessingStatusView
 from modeling.views import ModelingStartView, ModelingStatusView, FeatureExplainabilityView, SFSResultsView, SFSStartView, SFSStatusView, SFSStopView, VifDetailView, PipelineRunListView, PipelineRunCreateView, PipelineRunDetailView, PipelineReportView, HyperparamStartView, HyperparamStatusView, HyperparamStopView, HyperparamResultsView, ChampionPromoteView, SFSHistoryView, BoosterCompareView
 from modeling.crisp_views import (
@@ -20,6 +26,10 @@ from django.conf.urls.static import static
 router = DefaultRouter()
 router.register(r'declaration', DeclarationViewSet)
 router.register(r'feature-card', FeatureCardViewSet, basename='feature-card')
+router.register(r'feature-store/projects', ProjectViewSet, basename='fs-projects')
+router.register(r'feature-store/connections', DataConnectionViewSet, basename='fs-connections')
+router.register(r'feature-store/collections', FeatureCollectionViewSet, basename='fs-collections')
+router.register(r'feature-store/definitions', FeatureDefinitionViewSet, basename='fs-definitions')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

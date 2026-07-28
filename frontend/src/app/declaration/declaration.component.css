@@ -2,6 +2,47 @@
    Declaration Component - Modern Data Import UI
    ============================================ */
 
+.intake-mode-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.intake-mode-btn {
+  border: 1px solid #c9a0ad;
+  background: #fff;
+  color: #8b1e3f;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.intake-mode-btn.active {
+  background: #8b1e3f;
+  color: #fff;
+}
+
+.feature-collection-intake {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: #faf7f8;
+}
+
+.fc-select-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.fc-select-row select {
+  min-width: 280px;
+  flex: 1;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;

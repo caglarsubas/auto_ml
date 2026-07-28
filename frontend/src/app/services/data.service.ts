@@ -757,4 +757,75 @@ export class DataService {
     );
   }
 
+  // ===== Feature Store =====
+
+  listFsProjects(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}feature-store/projects/`);
+  }
+
+  createFsProject(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/projects/`, payload);
+  }
+
+  updateFsProject(id: number, payload: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}feature-store/projects/${id}/`, payload);
+  }
+
+  listFsConnections(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}feature-store/connections/`);
+  }
+
+  createFsConnection(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/connections/`, payload);
+  }
+
+  updateFsConnection(id: number, payload: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}feature-store/connections/${id}/`, payload);
+  }
+
+  testFsConnection(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/connections/${id}/test/`, {});
+  }
+
+  testFsConnectionPayload(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/connections/test/`, payload);
+  }
+
+  listFsCollections(projectId?: number, status?: string): Observable<any[]> {
+    let url = `${this.apiUrl}feature-store/collections/`;
+    const params: string[] = [];
+    if (projectId != null) params.push(`project=${projectId}`);
+    if (status) params.push(`status=${encodeURIComponent(status)}`);
+    if (params.length) url += `?${params.join('&')}`;
+    return this.http.get<any[]>(url);
+  }
+
+  getFsCollection(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}feature-store/collections/${id}/`);
+  }
+
+  createFsCollection(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/collections/`, payload);
+  }
+
+  updateFsCollection(id: number, payload: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}feature-store/collections/${id}/`, payload);
+  }
+
+  previewFsCollection(id: number, body?: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/collections/${id}/preview/`, body || {});
+  }
+
+  materializeFsCollection(id: number, body?: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}feature-store/collections/${id}/materialize/`, body || {});
+  }
+
+  updateFsDefinitions(id: number, definitions: any[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}feature-store/collections/${id}/definitions/`, definitions);
+  }
+
+  getFsCollectionForModeling(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}feature-store/collections/${id}/for-modeling/`);
+  }
+
 }

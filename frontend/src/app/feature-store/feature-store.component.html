@@ -1,0 +1,279 @@
+<div class="fs-container">
+  <h2>Feature Store</h2>
+  <p class="fs-subtitle">
+    Define projects, connect to relational databases or lakehouse paths, and build SQL-driven feature collections for Model Development.
+  </p>
+
+  <mat-tab-group [(selectedIndex)]="selectedTabIndex" animationDuration="0ms">
+    <!-- Projects -->
+    <mat-tab label="Projects">
+      <div class="fs-panel">
+        <div class="fs-grid">
+          <div class="fs-list">
+            <h3>Projects</h3>
+            <button mat-stroked-button type="button" (click)="resetProjectForm()">New project</button>
+            <ul class="fs-item-list">
+              <li *ngFor="let p of projects" (click)="editProject(p)" [class.active]="editingProjectId === p.id">
+                <strong>{{ p.name }}</strong>
+                <span class="muted">{{ p.objective || 'No objective yet' }}</span>
+              </li>
+            </ul>
+          </div>
+          <div class="fs-form">
+            <h3>{{ editingProjectId ? 'Edit project' : 'New project' }}</h3>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Name</mat-label>
+              <input matInput [(ngModel)]="projectForm.name" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Objective / goal</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="projectForm.objective"></textarea>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Decision use case</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="projectForm.decision_use_case"></textarea>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Prediction horizon</mat-label>
+              <input matInput [(ngModel)]="projectForm.prediction_horizon" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Population</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="projectForm.population"></textarea>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Exclusions</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="projectForm.exclusions"></textarea>
+            </mat-form-field>
+            <h4>Target contract</h4>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Event definition</mat-label>
+              <input matInput [(ngModel)]="projectForm.target_contract.event_definition" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Good/bad window</mat-label>
+              <input matInput [(ngModel)]="projectForm.target_contract.good_bad_window" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Target column</mat-label>
+              <input matInput [(ngModel)]="projectForm.target_contract.target_column" />
+            </mat-form-field>
+            <button mat-raised-button color="primary" type="button" (click)="saveProject()">Save project</button>
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Connections -->
+    <mat-tab label="Connections">
+      <div class="fs-panel">
+        <div class="fs-grid">
+          <div class="fs-list">
+            <h3>Data connections</h3>
+            <button mat-stroked-button type="button" (click)="resetConnectionForm()">New connection</button>
+            <ul class="fs-item-list">
+              <li *ngFor="let c of connections" (click)="editConnection(c)" [class.active]="editingConnectionId === c.id">
+                <strong>{{ c.name }}</strong>
+                <span class="muted">{{ c.engine }} · {{ c.is_active ? 'active' : 'inactive' }}</span>
+              </li>
+            </ul>
+          </div>
+          <div class="fs-form">
+            <h3>{{ editingConnectionId ? 'Edit connection' : 'New connection' }}</h3>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Name</mat-label>
+              <input matInput [(ngModel)]="connectionForm.name" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Engine</mat-label>
+              <mat-select [(ngModel)]="connectionForm.engine">
+                <mat-option value="duckdb">DuckDB (Parquet/CSV lakehouse)</mat-option>
+                <mat-option value="postgres">PostgreSQL</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <ng-container *ngIf="connectionForm.engine === 'duckdb'">
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Base path (directory with CSV/Parquet files)</mat-label>
+                <input matInput [(ngModel)]="connectionForm.config.base_path" placeholder="/data/lakehouse" />
+              </mat-form-field>
+            </ng-container>
+
+            <ng-container *ngIf="connectionForm.engine === 'postgres'">
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Host</mat-label>
+                <input matInput [(ngModel)]="connectionForm.config.host" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Port</mat-label>
+                <input matInput type="number" [(ngModel)]="connectionForm.config.port" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Database</mat-label>
+                <input matInput [(ngModel)]="connectionForm.config.database" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>User</mat-label>
+                <input matInput [(ngModel)]="connectionForm.config.user" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Password env var (secret_ref)</mat-label>
+                <input matInput [(ngModel)]="connectionForm.secret_ref" placeholder="PGPASSWORD" />
+              </mat-form-field>
+            </ng-container>
+
+            <div class="fs-actions">
+              <button mat-stroked-button type="button" (click)="testConnection()">Test connection</button>
+              <button mat-raised-button color="primary" type="button" (click)="saveConnection()">Save connection</button>
+            </div>
+            <p class="test-msg" *ngIf="connectionTestMsg">{{ connectionTestMsg }}</p>
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Collections -->
+    <mat-tab label="Feature Collections">
+      <div class="fs-panel">
+        <div class="fs-grid collections-grid">
+          <div class="fs-list">
+            <h3>Collections</h3>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Filter by project</mat-label>
+              <mat-select [(ngModel)]="filterProjectId" (selectionChange)="loadCollections()">
+                <mat-option [value]="null">All projects</mat-option>
+                <mat-option *ngFor="let p of projects" [value]="p.id">{{ p.name }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <button mat-stroked-button type="button" (click)="startNewCollection()">New collection</button>
+            <ul class="fs-item-list">
+              <li *ngFor="let c of collections" (click)="openCollection(c.id)" [class.active]="editingCollectionId === c.id">
+                <strong>{{ c.name }}</strong>
+                <span class="muted">{{ c.project_name }} · {{ c.status }} · {{ c.normalization_level }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="fs-form">
+            <h3>{{ editingCollectionId ? 'Edit collection' : 'New collection' }}</h3>
+
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Project</mat-label>
+              <mat-select [(ngModel)]="collectionForm.project">
+                <mat-option *ngFor="let p of projects" [value]="p.id">{{ p.name }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Connection</mat-label>
+              <mat-select [(ngModel)]="collectionForm.connection">
+                <mat-option *ngFor="let c of connections" [value]="c.id">{{ c.name }} ({{ c.engine }})</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Name</mat-label>
+              <input matInput [(ngModel)]="collectionForm.name" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Description</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="collectionForm.description"></textarea>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Normalization level</mat-label>
+              <mat-select [(ngModel)]="collectionForm.normalization_level">
+                <mat-option *ngFor="let n of normalizationLevels" [value]="n.value">{{ n.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Grain (e.g. application_id)</mat-label>
+              <input matInput [(ngModel)]="collectionForm.grain" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Entity keys (comma-separated)</mat-label>
+              <input matInput [(ngModel)]="collectionForm.entity_keys_text" />
+            </mat-form-field>
+
+            <label class="sql-label">SQL (read-only SELECT / WITH)</label>
+            <textarea class="sql-editor" rows="12" [(ngModel)]="collectionForm.sql_text"
+              placeholder="SELECT a.id, ... FROM read_csv_auto('applications.csv') a JOIN ..."></textarea>
+
+            <div class="fs-actions">
+              <button mat-stroked-button type="button" (click)="saveCollection()" [disabled]="busy">Save</button>
+              <button mat-stroked-button type="button" (click)="runPreview()" [disabled]="busy">Run preview</button>
+              <button mat-raised-button color="primary" type="button" (click)="materialize()" [disabled]="busy">Materialize</button>
+              <button mat-raised-button color="accent" type="button"
+                (click)="openInModelDevelopment()"
+                [disabled]="!selectedCollection || selectedCollection.status !== 'materialized'">
+                Open in Model Development
+              </button>
+            </div>
+
+            <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+            <p class="muted" *ngIf="selectedCollection">
+              Status: {{ selectedCollection.status }}
+              <span *ngIf="selectedCollection.materialized_declaration">
+                · Declaration #{{ selectedCollection.materialized_declaration }}
+              </span>
+              <span *ngIf="selectedCollection.row_count != null"> · {{ selectedCollection.row_count }} rows</span>
+            </p>
+
+            <div *ngIf="preview" class="preview-block">
+              <h4>Preview ({{ preview.row_count }} rows)</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th *ngFor="let col of preview.columns">{{ col }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of preview.rows">
+                      <td *ngFor="let col of preview.columns">{{ row[col] }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div *ngIf="definitions.length" class="defs-block">
+              <h4>Feature definitions</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Column</th>
+                      <th>Description</th>
+                      <th>LoM</th>
+                      <th>Model usage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let d of definitions">
+                      <td>{{ d.column_name }}</td>
+                      <td><input [(ngModel)]="d.description" /></td>
+                      <td>
+                        <select [(ngModel)]="d.level_of_measurement">
+                          <option value="unknown">unknown</option>
+                          <option value="nominal">nominal</option>
+                          <option value="ordinal">ordinal</option>
+                          <option value="interval">interval</option>
+                          <option value="ratio">ratio</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select [(ngModel)]="d.model_usage_yn">
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <button mat-stroked-button type="button" (click)="saveDefinitions()">Save definitions</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

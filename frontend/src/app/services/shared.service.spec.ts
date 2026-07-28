@@ -369,6 +369,16 @@ describe('SharedService', () => {
     });
   });
 
+  describe('pendingBusinessUnderstanding', () => {
+    it('should store and consume pending BU from Feature Store', () => {
+      const bu = { objective: 'Predict default', completed: true };
+      service.setPendingBusinessUnderstanding(bu);
+      expect(service.getPendingBusinessUnderstanding()).toEqual(bu);
+      expect(service.consumePendingBusinessUnderstanding()).toEqual(bu);
+      expect(service.getPendingBusinessUnderstanding()).toBeNull();
+    });
+  });
+
   // ── activeProcess ──────────────────────────────────────────────────────
   describe('activeProcess', () => {
     it('should default to null', () => {

@@ -580,6 +580,26 @@ export class SharedService {
     return this.targetDefinitionSubject.getValue();
   }
 
+  // Pending Business Understanding from Feature Store Project (consumed by Model Development)
+  private pendingBusinessUnderstandingSubject = new BehaviorSubject<any | null>(null);
+  pendingBusinessUnderstanding$: Observable<any | null> = this.pendingBusinessUnderstandingSubject.asObservable();
+
+  setPendingBusinessUnderstanding(bu: any | null): void {
+    this.pendingBusinessUnderstandingSubject.next(bu);
+  }
+
+  getPendingBusinessUnderstanding(): any | null {
+    return this.pendingBusinessUnderstandingSubject.getValue();
+  }
+
+  consumePendingBusinessUnderstanding(): any | null {
+    const value = this.pendingBusinessUnderstandingSubject.getValue();
+    if (value) {
+      this.pendingBusinessUnderstandingSubject.next(null);
+    }
+    return value;
+  }
+
   // Active process tracking for pipeline resume (preprocessing/modeling/sfs)
   private activeProcessSubject = new BehaviorSubject<{ type: string; file_id: number } | null>(null);
   activeProcess$: Observable<{ type: string; file_id: number } | null> = this.activeProcessSubject.asObservable();

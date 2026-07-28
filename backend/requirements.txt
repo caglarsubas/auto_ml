@@ -26,6 +26,11 @@ redis>=5.0
 mcp>=1.27,<2
 cryptography>=42
 
+# Feature Store SQL connectors
+psycopg2-binary>=2.9
+duckdb>=1.0
+sqlalchemy>=2.0
+
 # Testing dependencies
 pytest>=8.0
 pytest-django>=4.8

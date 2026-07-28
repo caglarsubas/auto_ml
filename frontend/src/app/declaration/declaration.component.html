@@ -4,8 +4,41 @@
 
     <h3>Data Declaration</h3>
 
+    <!-- Intake mode: upload vs Feature Store collection -->
+    <div class="intake-mode-bar" *ngIf="!previewData || editingDataImport">
+      <button type="button" class="intake-mode-btn"
+        [class.active]="intakeMode === 'upload'"
+        (click)="intakeMode = 'upload'">Upload file</button>
+      <button type="button" class="intake-mode-btn"
+        [class.active]="intakeMode === 'feature_collection'"
+        (click)="intakeMode = 'feature_collection'; loadMaterializedCollections()">
+        Use Feature Collection
+      </button>
+    </div>
+
+    <div class="feature-collection-intake" *ngIf="(!previewData || editingDataImport) && intakeMode === 'feature_collection'">
+      <p class="preview-note">Select a materialized Feature Store collection (SQL-built) as the modeling dataset.</p>
+      <div class="fc-select-row">
+        <select [(ngModel)]="selectedFeatureCollectionId" class="column-separator-select">
+          <option [ngValue]="null">— Select collection —</option>
+          <option *ngFor="let c of materializedCollections" [ngValue]="c.id">
+            {{ c.project_name }} / {{ c.name }} ({{ c.row_count ?? '?' }} rows)
+          </option>
+        </select>
+        <button class="import-data-btn" type="button"
+          (click)="useFeatureCollection()"
+          [disabled]="featureCollectionLoading || !selectedFeatureCollectionId">
+          {{ featureCollectionLoading ? 'Loading…' : 'USE COLLECTION' }}
+        </button>
+      </div>
+      <p class="preview-note" *ngIf="!materializedCollections.length">
+        No materialized collections yet.
+        <a routerLink="/feature-store/collections">Create one in Feature Store</a>
+      </p>
+    </div>
+
     <!-- Data import controls: shown before upload or when editing -->
-    <div class="data-import-controls" *ngIf="!previewData || editingDataImport">
+    <div class="data-import-controls" *ngIf="(!previewData || editingDataImport) && intakeMode === 'upload'">
       <div class="file-input-group">
         <input type="file" (change)="onFilesSelected($event)" multiple>
       </div>

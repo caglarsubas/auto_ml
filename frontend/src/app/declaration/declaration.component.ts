@@ -7,7 +7,7 @@ import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
 @Component({
@@ -38,6 +38,13 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   preprocessingInitiated: boolean = false;
   private apiBase = environment.apiBaseUrl;
 
+  // Feature Store intake
+  intakeMode: 'upload' | 'feature_collection' = 'upload';
+  materializedCollections: any[] = [];
+  selectedFeatureCollectionId: number | null = null;
+  featureCollectionLoading = false;
+  featureCollectionNotice: string | null = null;
+
   // Pipeline commentary notes (synced via SharedService)
   pipelineNotes: { [position: string]: string } = {};
   editingNotePosition: string | null = null;
@@ -61,6 +68,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private sharedService: SharedService,
     private router: Router,
+    private route: ActivatedRoute,
     private dataService: DataService
   ) {}
 
@@ -73,6 +81,18 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       ]).subscribe(([isStarted, selectedPipeline, preprocessingInitiated]) => {
         this.showContent = isStarted && !!selectedPipeline;
         this.preprocessingInitiated = preprocessingInitiated;
+      })
+    );
+
+    this.loadMaterializedCollections();
+    this.subscription.add(
+      this.route.queryParamMap.subscribe((params) => {
+        const fcId = params.get('featureCollectionId');
+        if (fcId) {
+          this.intakeMode = 'feature_collection';
+          this.selectedFeatureCollectionId = Number(fcId);
+          this.useFeatureCollection();
+        }
       })
     );
 
@@ -406,6 +426,75 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
   onDictionaryFileSelected(event: any): void {
     this.selectedDictionaryFile = event.target.files[0];
+  }
+
+  loadMaterializedCollections(): void {
+    this.dataService.listFsCollections(undefined, 'materialized').subscribe({
+      next: (rows) => {
+        this.materializedCollections = Array.isArray(rows) ? rows : (rows as any)?.results || [];
+      },
+      error: () => {
+        this.materializedCollections = [];
+      },
+    });
+  }
+
+  useFeatureCollection(): void {
+    if (!this.selectedFeatureCollectionId) {
+      this.errorMessage = 'Select a materialized feature collection first.';
+      return;
+    }
+    this.featureCollectionLoading = true;
+    this.errorMessage = null;
+    this.featureCollectionNotice = null;
+    this.dataService.getFsCollectionForModeling(this.selectedFeatureCollectionId).subscribe({
+      next: (payload) => {
+        this.featureCollectionLoading = false;
+        const declarationId = payload?.declaration_id;
+        if (!declarationId) {
+          this.errorMessage = 'Collection has no materialized declaration.';
+          return;
+        }
+        this.currentFileId = declarationId;
+        this.sharedService.setCurrentFileId(declarationId);
+        if (payload.business_understanding) {
+          this.sharedService.setPendingBusinessUnderstanding(payload.business_understanding);
+          const obj = payload.business_understanding.objective || '';
+          const tc = payload.business_understanding.target_contract || {};
+          const targetBits = [
+            tc.event_definition,
+            tc.good_bad_window,
+            tc.target_column ? `column=${tc.target_column}` : '',
+          ].filter(Boolean).join('; ');
+          if (obj || targetBits) {
+            this.sharedService.setTargetDefinition(
+              [obj, targetBits].filter(Boolean).join(' | ')
+            );
+          }
+        }
+        if (Array.isArray(payload.dictionary) && payload.dictionary.length > 0) {
+          this.dataDictionary = payload.dictionary;
+          this.initializeModelUsageFromBackend(payload.dictionary);
+          this.sharedService.setDataDictionaryCache(payload.dictionary);
+        }
+        this.getPreview(declarationId);
+        this.showDataDictionaryCollection = true;
+        this.editingDataImport = false;
+        this.featureCollectionNotice =
+          `Loaded feature collection "${payload.collection_name}" from project "${payload.project_name}".`;
+        this.importNotice = this.featureCollectionNotice;
+        this.sharedService.triggerCheckpoint('decl_data_imported');
+        if (this.dataDictionary.length) {
+          this.sharedService.triggerCheckpoint('decl_dictionary_generated');
+        }
+        this.pushDeclarationAiContext();
+      },
+      error: (err) => {
+        this.featureCollectionLoading = false;
+        this.errorMessage =
+          err?.error?.error || err?.message || 'Failed to load feature collection for modeling.';
+      },
+    });
   }
 
   onUpload(): void {
