@@ -4,7 +4,7 @@
 
 /* ---------- CSS Variables (Design Tokens) ---------- */
 :root {
-  /* Primary Colors - Brand maroon (var(--primary-700)) scale */
+  /* Primary Colors - Brand maroon (#740505) scale */
   --primary-50: #fdf5f5;
   --primary-100: #fce8e8;
   --primary-200: #f5c4c4;
@@ -12,7 +12,7 @@
   --primary-400: #d45a5a;
   --primary-500: #b91c1c;
   --primary-600: #9a1010;
-  --primary-700: var(--primary-700);
+  --primary-700: #740505;
   --primary-800: #5c0303;
   --primary-900: #3a0202;
   --primary-950: #1a0101;
@@ -155,16 +155,26 @@ html {
   }
 }
 
-body {
+body,
+body.mat-typography {
   height: 100%;
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-sans) !important;
   font-size: var(--text-base);
   font-weight: var(--font-normal);
   line-height: var(--leading-normal);
   color: var(--neutral-800);
   background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
   background-attachment: fixed;
+}
+
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-outlined-button,
+.mat-mdc-menu-item,
+.mat-mdc-form-field {
+  font-family: var(--font-sans) !important;
 }
 
 /* ---------- Typography ---------- */
