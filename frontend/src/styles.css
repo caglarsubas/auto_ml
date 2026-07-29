@@ -164,8 +164,7 @@ body.mat-typography {
   font-weight: var(--font-normal);
   line-height: var(--leading-normal);
   color: var(--neutral-800);
-  background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
-  background-attachment: fixed;
+  background: var(--neutral-50);
 }
 
 .mat-mdc-button,
@@ -224,7 +223,7 @@ table {
 }
 
 thead {
-  background: linear-gradient(135deg, var(--neutral-50) 0%, var(--neutral-100) 100%);
+  background: var(--neutral-100);
 }
 
 th {
@@ -299,112 +298,129 @@ textarea::placeholder {
   color: var(--neutral-400);
 }
 
-/* ---------- Modern Buttons ---------- */
+/* ---------- Buttons ---------- */
 .btn {
   font-family: var(--font-sans);
   font-weight: var(--font-medium);
   font-size: var(--text-sm);
   padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-lg);
-  border: none;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  box-shadow: 0 4px 8px rgb(175 33 69 / 0.4);
-  transform: translateY(-1px);
+  min-height: 44px;
+  box-shadow: none;
 }
 
-.btn-primary:active {
-  transform: translateY(0);
+.btn-primary {
+  color: #fff;
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-800);
+  border-color: var(--primary-800);
 }
 
 .btn-secondary {
   color: var(--neutral-700);
   background: white;
-  border: 1.5px solid var(--neutral-300);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--neutral-300);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--neutral-50);
   border-color: var(--neutral-400);
 }
 
 .btn-accent {
   color: white;
-  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
-  box-shadow: 0 2px 4px rgb(217 119 6 / 0.3);
+  background: var(--accent-600);
+  border-color: var(--accent-600);
 }
 
-.btn-accent:hover {
-  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%);
-  box-shadow: 0 4px 8px rgb(217 119 6 / 0.4);
-  transform: translateY(-1px);
+.btn-accent:hover:not(:disabled) {
+  background: var(--accent-700);
+  border-color: var(--accent-700);
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none !important;
 }
 
 /* ---------- Angular Material Button Overrides ---------- */
-/* Raised buttons (primary action) */
 .mat-mdc-raised-button.mat-primary,
-.mat-mdc-raised-button.mat-accent {
+.mat-mdc-unelevated-button.mat-primary {
   font-family: var(--font-sans) !important;
   font-weight: var(--font-semibold) !important;
   font-size: var(--text-sm) !important;
   letter-spacing: 0.02em !important;
-  border-radius: var(--radius-lg) !important;
+  border-radius: var(--radius-sm) !important;
   padding: var(--space-2) var(--space-5) !important;
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%) !important;
+  background: var(--primary-700) !important;
   color: white !important;
-  box-shadow: 0 2px 8px rgb(175 33 69 / 0.3) !important;
-  transition: all var(--transition-fast) !important;
-  text-transform: uppercase !important;
-  min-height: 38px !important;
+  box-shadow: none !important;
+  transition: background-color var(--transition-fast) !important;
+  text-transform: none !important;
+  min-height: 40px !important;
 }
 
 .mat-mdc-raised-button.mat-primary:hover:not(:disabled),
-.mat-mdc-raised-button.mat-accent:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--primary-700) 0%, var(--primary-800) 100%) !important;
-  box-shadow: 0 4px 12px rgb(175 33 69 / 0.4) !important;
-  transform: translateY(-1px);
+.mat-mdc-unelevated-button.mat-primary:hover:not(:disabled) {
+  background: var(--primary-800) !important;
+  box-shadow: none !important;
 }
 
-.mat-mdc-raised-button:disabled {
+.mat-mdc-raised-button.mat-accent,
+.mat-mdc-unelevated-button.mat-accent {
+  font-family: var(--font-sans) !important;
+  font-weight: var(--font-semibold) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--accent-600) !important;
+  color: white !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+}
+
+.mat-mdc-raised-button.mat-accent:hover:not(:disabled),
+.mat-mdc-unelevated-button.mat-accent:hover:not(:disabled) {
+  background: var(--accent-700) !important;
+}
+
+.mat-mdc-raised-button:disabled,
+.mat-mdc-unelevated-button:disabled {
   opacity: 0.5 !important;
   cursor: not-allowed !important;
-  transform: none !important;
 }
 
-/* Stroked buttons (secondary action) */
 .mat-mdc-outlined-button,
 .mdc-button--outlined,
 button[mat-stroked-button] {
   font-family: var(--font-sans) !important;
   font-weight: var(--font-medium) !important;
-  font-size: var(--text-xs) !important;
+  font-size: var(--text-sm) !important;
   letter-spacing: 0.02em !important;
-  border-radius: var(--radius-lg) !important;
-  border: 1.5px solid var(--neutral-300) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--neutral-300) !important;
   color: var(--neutral-700) !important;
   background: white !important;
-  padding: var(--space-1) var(--space-4) !important;
-  transition: all var(--transition-fast) !important;
-  min-height: 34px !important;
-  text-transform: uppercase !important;
+  padding: var(--space-2) var(--space-4) !important;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast) !important;
+  min-height: 40px !important;
+  text-transform: none !important;
 }
 
 .mat-mdc-outlined-button:hover:not(:disabled),
 .mdc-button--outlined:hover:not(:disabled),
 button[mat-stroked-button]:hover:not(:disabled) {
   background: var(--neutral-50) !important;
-  border-color: var(--primary-400) !important;
+  border-color: var(--primary-300) !important;
   color: var(--primary-700) !important;
 }
 
@@ -420,14 +436,13 @@ button[mat-stroked-button][color="warn"] {
   color: var(--error-600, #dc2626) !important;
 }
 
-/* Flat/basic buttons (text buttons) */
 .mat-mdc-button {
   font-family: var(--font-sans) !important;
   font-weight: var(--font-medium) !important;
   font-size: var(--text-sm) !important;
-  border-radius: var(--radius-lg) !important;
-  transition: all var(--transition-fast) !important;
-  text-transform: uppercase !important;
+  border-radius: var(--radius-sm) !important;
+  transition: background-color var(--transition-fast), color var(--transition-fast) !important;
+  text-transform: none !important;
   letter-spacing: 0.02em !important;
 }
 
@@ -439,18 +454,13 @@ button[mat-stroked-button][color="warn"] {
   color: var(--primary-700) !important;
 }
 
-/* ---------- Modern Cards ---------- */
+/* ---------- Cards ---------- */
 .card {
   background: white;
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  border: 1px solid var(--neutral-200);
   overflow: hidden;
-  transition: all var(--transition-base);
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
 }
 
 .card-header {
@@ -514,7 +524,7 @@ button[mat-stroked-button][color="warn"] {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-500) 0%, var(--primary-500) 100%);
+  background: var(--primary-700);
   border-radius: var(--radius-full);
   transition: width var(--transition-slow);
 }
@@ -746,30 +756,25 @@ button[mat-stroked-button][color="warn"] {
 }
 
 /* ---------- Angular Material Overrides ---------- */
-.mat-mdc-raised-button.mat-primary {
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%) !important;
-}
-
-.mat-mdc-raised-button.mat-accent {
-  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%) !important;
-}
-
 .mat-toolbar.mat-primary {
-  background: linear-gradient(135deg, var(--primary-700) 0%, var(--primary-900) 100%) !important;
+  background: var(--primary-700) !important;
+  color: #fff !important;
 }
 
 .mat-mdc-form-field {
-  --mdc-filled-text-field-focus-active-indicator-color: var(--accent-500);
-  --mdc-filled-text-field-focus-label-text-color: var(--accent-600);
+  --mdc-filled-text-field-focus-active-indicator-color: var(--primary-700);
+  --mdc-filled-text-field-focus-label-text-color: var(--primary-700);
+  --mdc-outlined-text-field-focus-outline-color: var(--primary-700);
 }
 
 .mat-mdc-progress-bar {
-  --mdc-linear-progress-active-indicator-color: var(--accent-500);
+  --mdc-linear-progress-active-indicator-color: var(--primary-700);
 }
 
 .mat-mdc-menu-panel {
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-xl) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm) !important;
+  border: 1px solid var(--neutral-200);
 }
 
 /* ---------- Container ---------- */

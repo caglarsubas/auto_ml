@@ -93,3 +93,4 @@ Serious, auditable software for regulated model work — every decision is **dec
 | 2026-07-28 | Outside voices skipped | User chose speed; research + thesis already clear |
 | 2026-07-28 | Applied tokens to live frontend on v3.1.0 | `styles.css` / shell / login / home aligned to this doc |
 | 2026-07-28 | Workbench token pass + `wb-*` helpers | Modeling/model-dev/pipeline/ai-chat hex → tokens; CRISP nav as buttons; drop teal third-brand |
+| 2026-07-29 | Replace azure-blue Material theme with custom wine M3 theme | Shell + menus institutional; unavailable nav items disabled; flat CTAs (no gradient theater) |

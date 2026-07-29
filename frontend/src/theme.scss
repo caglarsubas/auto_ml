@@ -1,0 +1,15 @@
+// declar.ai Material theme — wine primary / amber tertiary / IBM Plex (DESIGN.md)
+@use '@angular/material' as mat;
+@use './m3-theme' as brand;
+
+@include mat.core();
+
+html {
+  @include mat.all-component-themes(brand.$light-theme);
+}
+
+// Pin brand wine for Material system/primary surfaces used by toolbar & CTAs
+html {
+  --mat-toolbar-container-background-color: #740505;
+  --mat-toolbar-container-text-color: #ffffff;
+}
