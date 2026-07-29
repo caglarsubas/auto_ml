@@ -1,58 +1,67 @@
-// home.component.ts
-import { Component, AfterViewInit  } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component } from '@angular/core';
+
+export type HomeLinkStatus = 'live' | 'unavailable';
+
+export interface HomeLink {
+  label: string;
+  route?: string;
+  status: HomeLinkStatus;
+}
+
+export interface HomeSection {
+  name: string;
+  items: HomeLink[];
+}
 
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.css']
 })
-
-export class HomeComponent implements AfterViewInit {
-  menuItems = [
-    { 
-      name: 'Feature Store', 
-      staticIcon: 'assets/feature_store_icon_2.webp',
-      gifIcon: 'assets/feature_store_rightward.gif',
-      subItems: ['Feature Collection', 'Feature Engineering', 'Feature Monitoring'], 
+export class HomeComponent {
+  readonly sections: HomeSection[] = [
+    {
+      name: 'Feature Store',
+      items: [
+        { label: 'Feature Collection', route: '/feature-store/collections', status: 'live' },
+        { label: 'Feature Engineering', status: 'unavailable' },
+        { label: 'Feature Monitoring', status: 'unavailable' },
+      ],
     },
-    { 
-      name: 'Model Store', 
-      staticIcon: 'assets/model_store_4.png',
-      gifIcon: 'assets/model_store_jumps.gif',
-      subItems: ['Model Development', 'Model Re-Fitting', 'Model Monitoring'] },
-    { 
-      name: 'Deployments', 
-      staticIcon: 'assets/deploy_4.png',
-      gifIcon: 'assets/deploy_4_upward.gif',
-      subItems: ['Deployed Artifacts', 'Security Monitoring', 'Performance Monitoring', 'New Deployment'] },
-    { 
-      name: 'Reporting', 
-      staticIcon: 'assets/docs_3.png',
-      gifIcon: 'assets/docs_3_rotation.gif',
-      subItems: ['Model Summary', 'Quality Report', 'Explainability', 'Causality'] },
-    { 
-      name: 'About', 
-      staticIcon: 'assets/about_4.png',
-      gifIcon: 'assets/about_4_zoom.gif',
-      subItems: ['User Guide', 'White Paper', 'Team & Community', 'References'] }
+    {
+      name: 'Model Store',
+      items: [
+        { label: 'Model Development', route: '/model-development', status: 'live' },
+        { label: 'Model Re-Fitting', status: 'unavailable' },
+        { label: 'Model Monitoring', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'Deployments',
+      items: [
+        { label: 'Deployed Artifacts', status: 'unavailable' },
+        { label: 'Security Monitoring', status: 'unavailable' },
+        { label: 'Performance Monitoring', status: 'unavailable' },
+        { label: 'New Deployment', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'Reporting',
+      items: [
+        { label: 'Model Summary', status: 'unavailable' },
+        { label: 'Quality Report', status: 'unavailable' },
+        { label: 'Explainability', status: 'unavailable' },
+        { label: 'Causality', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'About',
+      items: [
+        { label: 'User Guide', status: 'unavailable' },
+        { label: 'White Paper', status: 'unavailable' },
+        { label: 'Team & Community', status: 'unavailable' },
+        { label: 'References', status: 'unavailable' },
+      ],
+    },
   ];
-
-  constructor(private router: Router) {}
-
-  ngAfterViewInit() {
-    const icons = document.querySelectorAll('.menu-icon');
-    icons.forEach((icon) => {
-      if (icon instanceof HTMLImageElement) {
-        const container = icon.closest('.icon-container') as HTMLElement;
-        if (container) {
-          container.style.setProperty('--gif-src', `url('${icon.getAttribute('data-gif')}')`);
-        }
-      }
-    });
-  }
-
-  navigateToModelDevelopment() {
-    this.router.navigate(['/model-development']);
-  }
 }

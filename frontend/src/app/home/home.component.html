@@ -1,20 +1,46 @@
-<!-- home.component.html -->
-<div class="home-container">
-    <h1>declar.ai</h1>
-    <p class="tagline">Model development workspace</p>
-    <div class="menu-grid">
-      <section *ngFor="let item of menuItems" class="menu-item">
-        <div class="icon-container">
-            <img [src]="item.staticIcon" [attr.data-gif]="item.gifIcon" [alt]="" class="menu-icon" role="presentation">
-        </div>
-        <h2>{{ item.name }}</h2>
-        <ul>
-          <li *ngFor="let subItem of item.subItems">
-            <a *ngIf="subItem === 'Model Development'" routerLink="/model-development" matRipple>{{ subItem }}</a>
-            <a *ngIf="subItem === 'Feature Collection'" routerLink="/feature-store/collections" matRipple>{{ subItem }}</a>
-            <span *ngIf="subItem !== 'Model Development' && subItem !== 'Feature Collection'" class="menu-item-disabled">{{ subItem }}</span>
+<div class="home">
+  <header class="home-hero">
+    <h1 class="home-brand">declar.ai</h1>
+    <p class="home-thesis">Declared tabular model work for regulated teams.</p>
+    <div class="home-actions">
+      <a
+        routerLink="/model-development"
+        class="home-cta-primary"
+        data-testid="home-primary-cta">
+        Model Development
+      </a>
+      <a
+        routerLink="/feature-store/collections"
+        class="home-cta-secondary"
+        data-testid="home-secondary-cta">
+        Feature Collection
+      </a>
+    </div>
+  </header>
+
+  <section class="home-directory" aria-label="Workspace directory">
+    <h2 class="home-directory-title">Directory</h2>
+    <div class="home-directory-grid">
+      <div *ngFor="let section of sections" class="home-section">
+        <h3 class="home-section-name">{{ section.name }}</h3>
+        <ul class="home-section-list">
+          <li *ngFor="let item of section.items" class="home-row">
+            <a
+              *ngIf="item.status === 'live' && item.route"
+              [routerLink]="item.route"
+              class="home-link">
+              {{ item.label }}
+            </a>
+            <span
+              *ngIf="item.status === 'unavailable'"
+              class="home-unavailable"
+              aria-disabled="true">
+              <span class="home-unavailable-label">{{ item.label }}</span>
+              <span class="home-unavailable-badge">Unavailable</span>
+            </span>
           </li>
         </ul>
-      </section>
+      </div>
     </div>
-  </div>
+  </section>
+</div>
