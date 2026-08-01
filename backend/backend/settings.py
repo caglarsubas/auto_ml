@@ -173,3 +173,14 @@ CSRF_TRUSTED_ORIGINS = ['http://localhost:4200', 'http://localhost:4300']
 
 # OpenAI API key for AI Assistant (set via environment variable)
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+# Knowledge-bank vector RAG (OpenAI embeddings + local Chroma)
+OPENAI_EMBEDDING_MODEL = os.environ.get(
+    'OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'
+)
+CHROMA_PERSIST_DIR = os.environ.get(
+    'CHROMA_PERSIST_DIR',
+    str(BASE_DIR / '.chroma' / 'knowledge-bank'),
+)
+# hybrid | vector | lexical — hybrid merges Chroma cosine with lexical ranks
+RAG_MODE = os.environ.get('RAG_MODE', 'hybrid').strip().lower() or 'hybrid'

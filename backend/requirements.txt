@@ -25,6 +25,7 @@ prometa-sdk>=0.18.2
 redis>=5.0
 mcp>=1.27,<2
 cryptography>=42
+chromadb>=0.5,<1.1
 
 # Testing dependencies
 pytest>=8.0
