@@ -5,13 +5,27 @@
 A structured assistant response section that the chat panel turns into an
 Apply button. Action blocks can update metadata, update configuration, execute
 code, start pipeline runs, apply encoding, start modeling, start SFS, start
-hyperparameter tuning, or update notes.
+hyperparameter tuning, apply recommendations, update purifier selections, or
+update notes.
 
 ## AI Assistant
 
 The embedded DeclarAI copilot. It can explain concepts, retrieve platform
 documentation, inspect current pipeline artifacts through tools, and prepare
-actions for the user to apply.
+actions for the user to apply. Knowledge-bank facts should be cited with
+`[KBn]` markers when used in the reply.
+
+## Knowledge Bank
+
+Versioned Markdown documentation under `docs/knowledge-bank/` that the assistant
+retrieves when intent includes `R`. Retrieved snippets appear as `[KBn]` in the
+prompt and as a Sources list under the chat message.
+
+## RAG
+
+Retrieval-Augmented Generation for the assistant: hybrid (vector + lexical) or
+lexical-only search over the knowledge bank, using OpenAI embeddings and a local
+Chroma index when `OPENAI_API_KEY` is configured.
 
 ## AUC
 

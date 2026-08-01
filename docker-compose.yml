@@ -28,9 +28,12 @@ services:
       - LLM_ENGINE_API_KEY=${LLM_ENGINE_API_KEY:?set LLM_ENGINE_API_KEY from the private engine secret handoff}
     depends_on:
       - redis
-    # Mount project root for live-reload development (Django autoreload)
+    # Mount project root for live-reload development (Django autoreload).
+    # Named chroma-data volume overlays backend/.chroma so the vector index
+    # survives container recreation even though the bind-mount covers /app.
     volumes:
       - .:/app
+      - chroma-data:/app/backend/.chroma
   redis:
     image: redis:7-alpine
     ports:
@@ -51,3 +54,4 @@ services:
       - /app/node_modules
 volumes:
   redis-data:
+  chroma-data:

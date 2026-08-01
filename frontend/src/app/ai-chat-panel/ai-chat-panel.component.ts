@@ -157,12 +157,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         // AND Prometa SDK is active server-side).  Stored on the message
         // so applyAction can forward it as parent_span_id when the user
         // clicks Apply, enabling cross-trace linking in Prometa.
+        const ragSources = Array.isArray(resp.rag_sources)
+          ? resp.rag_sources.map((s: any) => ({
+              source: String(s?.source || ''),
+              title: String(s?.title || ''),
+              heading: String(s?.heading || ''),
+              chunk_id: String(s?.chunk_id || ''),
+            })).filter((s: { source: string }) => !!s.source)
+          : undefined;
         this.aiService.updateLastMessage(
           resp.message || fallbackMsg,
           actions,
           resp.chat_span_id,
           resp.chat_trace_id,
           resp.chat_session_id,
+          ragSources,
         );
         this.isLoading = false;
       },

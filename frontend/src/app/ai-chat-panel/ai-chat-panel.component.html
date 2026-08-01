@@ -77,6 +77,23 @@
         <div class="chat-message-content" *ngIf="!msg.loading && !msg.autoCorrection">
           <div [innerHTML]="formatMessage(msg.content)"></div>
         </div>
+        <!-- Knowledge-bank sources (RAG) — evidence margin under the reply -->
+        <div
+          class="chat-rag-sources"
+          *ngIf="msg.role === 'assistant' && !msg.loading && msg.ragSources?.length"
+          aria-label="Knowledge bank sources"
+        >
+          <div class="chat-rag-sources-label">Sources</div>
+          <ul class="chat-rag-sources-list">
+            <li *ngFor="let src of msg.ragSources; let si = index">
+              <span class="chat-rag-kb">[KB{{ si + 1 }}]</span>
+              <span class="chat-rag-title">{{ src.title }}</span>
+              <span class="chat-rag-sep" *ngIf="src.heading">/</span>
+              <span class="chat-rag-heading" *ngIf="src.heading">{{ src.heading }}</span>
+              <span class="chat-rag-file">({{ src.source }})</span>
+            </li>
+          </ul>
+        </div>
         <div class="chat-message-content loading" *ngIf="msg.loading">
           <div class="typing-indicator">
             <span></span><span></span><span></span>

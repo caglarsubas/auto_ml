@@ -26,6 +26,14 @@ Knowledge-bank retrieval is used for stable documentation questions:
 - "What assumptions does the purifier make?"
 - "How should I use the assistant?"
 - "Give me the glossary for SHAP, VIF, PR-AUC, and PSI."
+- "Give me the model governance review checklist."
+
+Retrieval uses hybrid ranking (vector + lexical) when `OPENAI_API_KEY` is
+configured, otherwise lexical-only. Retrieved snippets are labeled `[KB1]`,
+`[KB2]`, … in the system prompt. When the assistant relies on those facts, it
+should cite the matching `[KBn]` marker in the reply. The chat UI also lists
+the retrieved sources under the assistant message. The assistant must not invent
+source labels that were not retrieved.
 
 Knowledge-bank retrieval should not replace live pipeline tools when the user is
 asking about current data, current settings, current metrics, or a current run.
@@ -61,10 +69,14 @@ Supported action types:
 - `set_ordinal_ranking`: rank ordinal category values and mark the feature as
   ordinal.
 - `start_data_purifier`: run preprocessing.
+- `update_purifier_selection`: change which purifier steps/options are selected
+  before or after a purifier run (without inventing unsupported transformers).
 - `apply_encoding`: apply the encoding plan.
 - `start_modeling`: train the selected model.
 - `start_sfs`: start Sequential Feature Selection.
 - `start_hyperparameter`: start hyperparameter tuning.
+- `apply_recommendation`: apply a platform recommendation card the user has
+  already been shown (for example a suggested feature drop or encoding choice).
 - `update_notes`: add, edit, or delete pipeline notes.
 
 ## One-Action Rule
