@@ -2330,6 +2330,214 @@ class TestPrometaAMLHelpers:
             "cache_get must call ch.miss() on miss / redis-down / exception paths"
         )
 
+    # ── retrieval_query (v3.3.0 / RAG B1) ──────────────────────────────
+
+    def test_retrieval_query_yields_real_handle_when_sdk_available(self):
+        """Happy path: retrieval_query is reachable; handle accepts .results()."""
+        from ai_assistant.prometa_config import retrieval_query
+        with retrieval_query(
+            'hybrid',
+            query_text='What does PSI mean?',
+            top_k=4,
+        ) as r:
+            assert r is not None
+            r.results(
+                result_ids=['chunk-a', 'chunk-b'],
+                scores=[0.91, 0.42],
+                permissions_enforced=False,
+            )
+
+    def test_retrieval_query_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+        """SDK without retrieval_query symbol → wrapper yields _NoOpAMLHandle."""
+        from ai_assistant import prometa_config as pc
+        import prometa
+        monkeypatch.delattr(prometa, 'retrieval_query', raising=False)
+
+        with pc.retrieval_query(
+            'keyword',
+            query_text='psi',
+            top_k=2,
+        ) as r:
+            assert isinstance(r, pc._NoOpAMLHandle)
+            r.results(result_ids=['x'], scores=[1.0])
+            r.future_method_that_doesnt_exist_yet()
+
+    def test_retrieval_query_propagates_invalid_system_error(self):
+        """SDK enforces system ∈ {vector, graph, keyword, hybrid}."""
+        from ai_assistant.prometa_config import retrieval_query
+        with pytest.raises(ValueError, match='system must be one of'):
+            with retrieval_query(
+                'lexical',  # DeclarAI mode name — not a valid SDK system
+                query_text='psi',
+                top_k=2,
+            ):
+                pass  # pragma: no cover — must raise on enter
+
+    def test_retrieval_query_propagates_body_exceptions(self):
+        """Body exceptions propagate; only ImportError is caught by wrapper."""
+        from ai_assistant.prometa_config import retrieval_query
+
+        class _ChromaDown(Exception):
+            pass
+
+        with pytest.raises(_ChromaDown):
+            with retrieval_query(
+                'vector',
+                query_text='psi',
+                top_k=2,
+            ) as r:
+                r.results(result_ids=[])
+                raise _ChromaDown('chroma query failed')
+
+    def test_record_retrieval_raw_stamps_when_raw_channel_enabled(self, monkeypatch):
+        """After-fetch raw stamp lands on the active span when raw channel is on."""
+        from ai_assistant import prometa_config as pc
+
+        stamped: dict = {}
+
+        class _RawChannel:
+            @staticmethod
+            def is_enabled():
+                return True
+
+        monkeypatch.setattr(pc, 'set_span_attr', lambda k, v: stamped.__setitem__(k, v))
+        import prometa
+        monkeypatch.setattr(prometa, '_raw_channel', _RawChannel, raising=False)
+
+        pc.record_retrieval_raw('KB snippet text')
+        assert stamped.get('prometa.raw.retrieved_content') == 'KB snippet text'
+
+    def test_record_retrieval_raw_noops_when_raw_channel_disabled(self, monkeypatch):
+        from ai_assistant import prometa_config as pc
+
+        stamped: dict = {}
+
+        class _RawChannel:
+            @staticmethod
+            def is_enabled():
+                return False
+
+        monkeypatch.setattr(pc, 'set_span_attr', lambda k, v: stamped.__setitem__(k, v))
+        import prometa
+        monkeypatch.setattr(prometa, '_raw_channel', _RawChannel, raising=False)
+
+        pc.record_retrieval_raw('should not stamp')
+        assert 'prometa.raw.retrieved_content' not in stamped
+
+    def test_lexical_retrieval_wraps_in_retrieval_query(self, monkeypatch):
+        """Functional: lexical RAG emits retrieval_query(system='keyword') + results."""
+        from ai_assistant import knowledge_bank as kb
+
+        calls: list = []
+
+        class _RecordingHandle:
+            def results(self, **kwargs):
+                calls.append(('results', kwargs))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
+            calls.append(('enter', system, query_text, top_k, raw_retrieved))
+            try:
+                yield _RecordingHandle()
+            finally:
+                calls.append(('exit', system))
+
+        monkeypatch.setattr(kb, 'retrieval_query', _recording_retrieval_query)
+        monkeypatch.setattr(kb, 'record_retrieval_raw', lambda ctx: calls.append(('raw', bool(ctx))))
+
+        out = kb.retrieve_knowledge_context_lexical('What does PSI mean?')
+        assert out['results']
+        assert calls[0][0] == 'enter'
+        assert calls[0][1] == 'keyword'
+        results_calls = [c for c in calls if c[0] == 'results']
+        assert len(results_calls) == 1
+        assert results_calls[0][1]['result_ids']
+        assert results_calls[0][1]['permissions_enforced'] is False
+        assert any(c[0] == 'raw' and c[1] for c in calls)
+        assert calls[-1] == ('exit', 'keyword')
+
+    def test_hybrid_retrieval_wraps_in_retrieval_query(self, monkeypatch):
+        """Functional: hybrid path emits retrieval_query(system='hybrid') + results."""
+        from ai_assistant.knowledge_bank import (
+            load_knowledge_chunks,
+            retrieve_knowledge_context_lexical,
+        )
+        from ai_assistant.rag import retriever as retriever_mod
+
+        chunks = load_knowledge_chunks()
+        glossary = next(
+            c for c in chunks if c.source == 'terminology-glossary.md'
+            and 'psi' in (c.heading + c.content).lower()
+        )
+
+        calls: list = []
+
+        class _RecordingHandle:
+            def results(self, **kwargs):
+                calls.append(('results', kwargs))
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _recording_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
+            calls.append(('enter', system, query_text, top_k))
+            try:
+                yield _RecordingHandle()
+            finally:
+                calls.append(('exit', system))
+
+        monkeypatch.setattr(retriever_mod, 'retrieval_query', _recording_retrieval_query)
+        monkeypatch.setattr(
+            retriever_mod, 'record_retrieval_raw',
+            lambda ctx: calls.append(('raw', bool(ctx))),
+        )
+        monkeypatch.setattr(retriever_mod, 'embeddings_available', lambda: True)
+        monkeypatch.setattr(
+            retriever_mod, 'ensure_index',
+            lambda **kwargs: {'rebuilt': False, 'fingerprint': 'x', 'chunk_count': 1},
+        )
+        monkeypatch.setattr(retriever_mod, 'embed_query', lambda query: [0.1, 0.2])
+        monkeypatch.setattr(
+            retriever_mod, 'search_index',
+            lambda query_embedding, n_results=8, persist_dir=None: [{
+                'chunk_id': glossary.chunk_id,
+                'source': glossary.source,
+                'title': glossary.title,
+                'heading': glossary.heading,
+                'content': glossary.content,
+                'score': 0.92,
+            }],
+        )
+
+        out = retriever_mod.retrieve_vector_context(
+            'What does PSI mean?',
+            mode='hybrid',
+            lexical_fallback=retrieve_knowledge_context_lexical,
+        )
+        assert out['results']
+        assert calls[0] == ('enter', 'hybrid', 'What does PSI mean?', 4)
+        results_calls = [c for c in calls if c[0] == 'results']
+        assert len(results_calls) == 1
+        assert results_calls[0][1]['result_ids'][0] == glossary.chunk_id
+        assert any(c[0] == 'raw' and c[1] for c in calls)
+
+    def test_rag_sources_use_retrieval_query_wrapper(self):
+        """Structural guard: both RAG entrypoints wrap in retrieval_query."""
+        import inspect
+        from ai_assistant import knowledge_bank as kb
+        from ai_assistant.rag import retriever as retriever_mod
+
+        lexical_src = inspect.getsource(kb.retrieve_knowledge_context_lexical)
+        assert "with retrieval_query(" in lexical_src
+        assert "'keyword'" in lexical_src or '"keyword"' in lexical_src
+        assert 'r.results(' in lexical_src
+
+        vector_src = inspect.getsource(retriever_mod.retrieve_vector_context)
+        assert "with retrieval_query(" in vector_src
+        assert 'r.results(' in vector_src
+
     # ── plan_generate (v2.33.0 / Phase 3c) ─────────────────────────────
 
     def test_plan_generate_yields_real_handle_when_sdk_available(self):

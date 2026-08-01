@@ -739,6 +739,84 @@ def cache_lookup(kind: str, *, key: str):
 
 
 @contextmanager
+def retrieval_query(
+    system: str,
+    *,
+    query_text: str,
+    top_k: int,
+    raw_retrieved: str = None,
+):
+    """Wrap a RAG / keyword fetch in a Prometa ``retrieval.query`` AML
+    span (catalog B1).  Forwards to the SDK helper when available;
+    yields a ``_NoOpAMLHandle`` otherwise.
+
+    ``system`` MUST be one of ``{vector, graph, keyword, hybrid}`` — the
+    SDK enforces this with a ValueError that we deliberately let
+    propagate (programmer error, not a runtime failure).
+
+    Usage::
+
+        with retrieval_query(
+            "hybrid",
+            query_text=query,
+            top_k=4,
+        ) as r:
+            payload = _retrieve(query)
+            r.results(
+                result_ids=[item["chunk_id"] for item in payload["results"]],
+                scores=[item["score"] for item in payload["results"]],
+                permissions_enforced=False,
+            )
+            # Raw content is usually unknown at enter-time; stamp it on
+            # the active retrieval span after materializing results:
+            record_retrieval_raw(payload["context"])
+
+    DeclarAI mapping: ``retrieve_knowledge_context`` (vector/hybrid) and
+    ``retrieve_knowledge_context_lexical`` (keyword fallback) are the
+    two call sites.  Lexical mode maps to ``system='keyword'``.
+
+    ``raw_retrieved`` may be passed at enter when already known; the SDK
+    only stamps it when the raw channel is enabled.  Prefer
+    :func:`record_retrieval_raw` after fetch when the concatenated
+    snippets are produced inside the ``with`` block.
+
+    Body exceptions propagate normally — only ImportError is caught.
+    """
+    try:
+        from prometa import retrieval_query as _sdk_retrieval_query
+    except ImportError:
+        yield _NoOpAMLHandle()
+        return
+    with _sdk_retrieval_query(
+        system,
+        query_text=query_text,
+        top_k=top_k,
+        raw_retrieved=raw_retrieved,
+    ) as handle:
+        yield handle
+
+
+def record_retrieval_raw(raw_retrieved: str) -> None:
+    """Stamp ``prometa.raw.retrieved_content`` on the active span.
+
+    The SDK's ``retrieval_query(..., raw_retrieved=...)`` only accepts
+    content at context-manager enter, but RAG materializes snippets
+    inside the block.  Call this after building ``context`` while still
+    inside ``with retrieval_query(...)`` so A3 indirect-injection scans
+    see the retrieved text.  No-ops when raw channel is off / SDK absent.
+    """
+    if not raw_retrieved:
+        return
+    try:
+        from prometa import _raw_channel as prometa_raw_channel
+        if not prometa_raw_channel.is_enabled():
+            return
+    except Exception:
+        return
+    set_span_attr("prometa.raw.retrieved_content", raw_retrieved)
+
+
+@contextmanager
 def model_route(chosen: str, *, candidates_considered, routing_reason: str):
     """Wrap a model-routing decision in a Prometa ``model.route`` AML
     span (catalog F1).  Forwards to the v0.4.0+ SDK helper when

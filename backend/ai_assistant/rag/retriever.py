@@ -14,7 +14,11 @@ from ai_assistant.knowledge_bank import (
     _tokenize,
     load_knowledge_chunks,
 )
-from ai_assistant.prometa_config import set_span_attr
+from ai_assistant.prometa_config import (
+    record_retrieval_raw,
+    retrieval_query,
+    set_span_attr,
+)
 from ai_assistant.rag.embeddings import embed_query, embeddings_available
 from ai_assistant.rag.indexer import ensure_index, search_index
 
@@ -131,9 +135,6 @@ def retrieve_vector_context(
     if resolved_mode not in {"hybrid", "vector", "lexical"}:
         resolved_mode = "hybrid"
 
-    set_span_attr("declarai.rag.backend", "chroma")
-    set_span_attr("declarai.rag.mode", resolved_mode)
-
     if resolved_mode == "lexical":
         if lexical_fallback is not None:
             return lexical_fallback(
@@ -153,51 +154,68 @@ def retrieve_vector_context(
             )
         return {"query": query or "", "results": [], "context": ""}
 
+    # SDK system enum is {vector, graph, keyword, hybrid}; map our modes 1:1
+    # for vector/hybrid (lexical is handled above as system='keyword').
     try:
-        ensure_index()
-        query_embedding = embed_query(query or "")
-        vector_results = search_index(
-            query_embedding,
-            n_results=max(VECTOR_CANDIDATES, max_chunks),
-        )
-        vector_ranked = [
-            (item["chunk_id"], float(item.get("score") or 0.0))
-            for item in vector_results
-        ]
-        vector_hits = {item["chunk_id"]: item for item in vector_results}
+        with retrieval_query(
+            resolved_mode,
+            query_text=query or "",
+            top_k=max_chunks,
+        ) as r:
+            set_span_attr("declarai.rag.backend", "chroma")
+            set_span_attr("declarai.rag.mode", resolved_mode)
+            ensure_index()
+            query_embedding = embed_query(query or "")
+            vector_results = search_index(
+                query_embedding,
+                n_results=max(VECTOR_CANDIDATES, max_chunks),
+            )
+            vector_ranked = [
+                (item["chunk_id"], float(item.get("score") or 0.0))
+                for item in vector_results
+            ]
+            vector_hits = {item["chunk_id"]: item for item in vector_results}
 
-        if resolved_mode == "hybrid":
-            lexical_ranked = _lexical_ranked(query)
-            merged = _rrf_merge([vector_ranked, lexical_ranked])
-        else:
-            merged = vector_ranked
+            if resolved_mode == "hybrid":
+                lexical_ranked = _lexical_ranked(query)
+                merged = _rrf_merge([vector_ranked, lexical_ranked])
+            else:
+                merged = vector_ranked
 
-        results = _materialize_results(
-            merged,
-            chunks_by_id=_chunk_lookup(),
-            vector_hits=vector_hits,
-            max_chunks=max_chunks,
-            max_context_chars=max_context_chars,
-        )
-        context = _format_context(results)
-        set_span_attr("declarai.rag.called", True)
-        set_span_attr("declarai.rag.query_chars", len(query or ""))
-        set_span_attr("declarai.rag.result_count", len(results))
-        set_span_attr("declarai.rag.context_chars", len(context))
-        set_span_attr(
-            "declarai.rag.sources",
-            ",".join(dict.fromkeys(item["source"] for item in results)),
-        )
-        set_span_attr(
-            "declarai.rag.chunk_ids",
-            ",".join(item["chunk_id"] for item in results),
-        )
-        return {
-            "query": query or "",
-            "results": results,
-            "context": context,
-        }
+            results = _materialize_results(
+                merged,
+                chunks_by_id=_chunk_lookup(),
+                vector_hits=vector_hits,
+                max_chunks=max_chunks,
+                max_context_chars=max_context_chars,
+            )
+            context = _format_context(results)
+            r.results(
+                result_ids=[item["chunk_id"] for item in results],
+                scores=[float(item["score"]) for item in results],
+                permissions_enforced=False,
+            )
+            record_retrieval_raw(context)
+            set_span_attr("declarai.rag.called", True)
+            set_span_attr("declarai.rag.query_chars", len(query or ""))
+            set_span_attr("declarai.rag.result_count", len(results))
+            set_span_attr("declarai.rag.context_chars", len(context))
+            set_span_attr(
+                "declarai.rag.sources",
+                ",".join(dict.fromkeys(item["source"] for item in results)),
+            )
+            set_span_attr(
+                "declarai.rag.chunk_ids",
+                ",".join(item["chunk_id"] for item in results),
+            )
+            return {
+                "query": query or "",
+                "results": results,
+                "context": context,
+            }
     except Exception as exc:
+        # Exit the retrieval.query span before lexical fallback so the
+        # keyword span is a sibling (not nested under a failed hybrid).
         set_span_attr("declarai.rag.fallback", "error")
         set_span_attr("declarai.rag.fallback_error", type(exc).__name__)
         if lexical_fallback is not None:
