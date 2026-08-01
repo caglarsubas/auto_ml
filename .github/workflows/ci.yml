@@ -227,7 +227,13 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: frontend
-        run: npm run test:e2e
+        run: |
+          if [ -z "$E2E_USER" ] || [ -z "$E2E_PASSWORD" ]; then
+            echo "E2E credentials unavailable; running API-contract specs only."
+            npm run test:e2e -- e2e/*-api.spec.ts
+          else
+            npm run test:e2e
+          fi
 
       - name: Upload Playwright report
         if: always()
