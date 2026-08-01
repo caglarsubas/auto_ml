@@ -1,58 +1,120 @@
-// home.component.ts
-import { Component, AfterViewInit  } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component } from '@angular/core';
+
+export type HomeLinkStatus = 'live' | 'unavailable';
+export type HomeIcon =
+  | 'layers'
+  | 'model'
+  | 'deploy'
+  | 'report'
+  | 'about'
+  | 'arrow'
+  | 'declare'
+  | 'seal'
+  | 'route'
+  | 'roadmap';
+
+export interface HomeLink {
+  label: string;
+  route?: string;
+  status: HomeLinkStatus;
+}
+
+export interface HomeSection {
+  name: string;
+  index: string;
+  icon: HomeIcon;
+  items: HomeLink[];
+}
+
+export interface EvidenceNote {
+  label: string;
+  body: string;
+  tone: 'declared' | 'live' | 'muted';
+  icon: HomeIcon;
+}
 
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
-  styleUrls: ['./home.component.css']
+  styleUrls: ['./home.component.css'],
 })
+export class HomeComponent {
+  readonly thesis = 'Declared tabular model work for regulated teams.';
 
-export class HomeComponent implements AfterViewInit {
-  menuItems = [
-    { 
-      name: 'Feature Store', 
-      staticIcon: 'assets/feature_store_icon_2.webp',
-      gifIcon: 'assets/feature_store_rightward.gif',
-      subItems: ['Feature Collection', 'Feature Engineering', 'Feature Monitoring'], 
+  readonly evidenceNotes: EvidenceNote[] = [
+    {
+      label: 'Declared',
+      body: 'Every modeling choice is explicit — not magic.',
+      tone: 'declared',
+      icon: 'seal',
     },
-    { 
-      name: 'Model Store', 
-      staticIcon: 'assets/model_store_4.png',
-      gifIcon: 'assets/model_store_jumps.gif',
-      subItems: ['Model Development', 'Model Re-Fitting', 'Model Monitoring'] },
-    { 
-      name: 'Deployments', 
-      staticIcon: 'assets/deploy_4.png',
-      gifIcon: 'assets/deploy_4_upward.gif',
-      subItems: ['Deployed Artifacts', 'Security Monitoring', 'Performance Monitoring', 'New Deployment'] },
-    { 
-      name: 'Reporting', 
-      staticIcon: 'assets/docs_3.png',
-      gifIcon: 'assets/docs_3_rotation.gif',
-      subItems: ['Model Summary', 'Quality Report', 'Explainability', 'Causality'] },
-    { 
-      name: 'About', 
-      staticIcon: 'assets/about_4.png',
-      gifIcon: 'assets/about_4_zoom.gif',
-      subItems: ['User Guide', 'White Paper', 'Team & Community', 'References'] }
+    {
+      label: 'Live routes',
+      body: 'Model Development',
+      tone: 'live',
+      icon: 'route',
+    },
+    {
+      label: 'Roadmap',
+      body: 'Remaining directory entries stay unavailable until shipped.',
+      tone: 'muted',
+      icon: 'roadmap',
+    },
   ];
 
-  constructor(private router: Router) {}
-
-  ngAfterViewInit() {
-    const icons = document.querySelectorAll('.menu-icon');
-    icons.forEach((icon) => {
-      if (icon instanceof HTMLImageElement) {
-        const container = icon.closest('.icon-container') as HTMLElement;
-        if (container) {
-          container.style.setProperty('--gif-src', `url('${icon.getAttribute('data-gif')}')`);
-        }
-      }
-    });
-  }
-
-  navigateToModelDevelopment() {
-    this.router.navigate(['/model-development']);
-  }
+  readonly sections: HomeSection[] = [
+    {
+      name: 'Feature Store',
+      index: '01',
+      icon: 'layers',
+      items: [
+        { label: 'Feature Collection', status: 'unavailable' },
+        { label: 'Feature Engineering', status: 'unavailable' },
+        { label: 'Feature Monitoring', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'Model Store',
+      index: '02',
+      icon: 'model',
+      items: [
+        { label: 'Model Development', route: '/model-development', status: 'live' },
+        { label: 'Model Re-Fitting', status: 'unavailable' },
+        { label: 'Model Monitoring', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'Deployments',
+      index: '03',
+      icon: 'deploy',
+      items: [
+        { label: 'Deployed Artifacts', status: 'unavailable' },
+        { label: 'Security Monitoring', status: 'unavailable' },
+        { label: 'Performance Monitoring', status: 'unavailable' },
+        { label: 'New Deployment', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'Reporting',
+      index: '04',
+      icon: 'report',
+      items: [
+        { label: 'Model Summary', status: 'unavailable' },
+        { label: 'Quality Report', status: 'unavailable' },
+        { label: 'Explainability', status: 'unavailable' },
+        { label: 'Causality', status: 'unavailable' },
+      ],
+    },
+    {
+      name: 'About',
+      index: '05',
+      icon: 'about',
+      items: [
+        { label: 'User Guide', status: 'unavailable' },
+        { label: 'White Paper', status: 'unavailable' },
+        { label: 'Team & Community', status: 'unavailable' },
+        { label: 'References', status: 'unavailable' },
+      ],
+    },
+  ];
 }
