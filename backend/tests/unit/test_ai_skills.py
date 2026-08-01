@@ -260,10 +260,11 @@ class TestSkillAutoRouting:
 class TestKnowledgeBankRetrieval:
     """Knowledge-bank retrieval returns cited snippets from versioned docs."""
 
-    def test_retrieves_glossary_context_for_metric_question(self):
-        from ai_assistant.knowledge_bank import retrieve_knowledge_context
+    def test_retrieves_glossary_context_for_metric_question(self, monkeypatch):
+        monkeypatch.setenv('RAG_MODE', 'lexical')
+        from ai_assistant.knowledge_bank import retrieve_knowledge_context_lexical
 
-        out = retrieve_knowledge_context('What does PSI mean?')
+        out = retrieve_knowledge_context_lexical('What does PSI mean?')
 
         assert out['results']
         assert '[KB1]' in out['context']
@@ -272,20 +273,153 @@ class TestKnowledgeBankRetrieval:
         assert any(r['source'] == 'terminology-glossary.md'
                    for r in out['results'])
 
-    def test_retrieves_assistant_guide_for_usage_question(self):
-        from ai_assistant.knowledge_bank import retrieve_knowledge_context
+    def test_retrieves_assistant_guide_for_usage_question(self, monkeypatch):
+        monkeypatch.setenv('RAG_MODE', 'lexical')
+        from ai_assistant.knowledge_bank import retrieve_knowledge_context_lexical
 
-        out = retrieve_knowledge_context('How should I use the assistant actions?')
+        out = retrieve_knowledge_context_lexical(
+            'How should I use the assistant actions?'
+        )
 
         assert out['results']
         sources = {r['source'] for r in out['results']}
         assert 'assistant-usage-and-action-guide.md' in sources
+
+    def test_falls_back_to_lexical_without_api_key(self, monkeypatch):
+        from django.conf import settings
+
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        monkeypatch.setattr(settings, 'OPENAI_API_KEY', '')
+        monkeypatch.setattr(settings, 'RAG_MODE', 'hybrid')
+
+        from ai_assistant.knowledge_bank import retrieve_knowledge_context
+
+        out = retrieve_knowledge_context('What does PSI mean?')
+        assert out['results']
+        assert any(r['source'] == 'terminology-glossary.md'
+                   for r in out['results'])
+
+    def test_hybrid_retrieval_uses_vector_hits(self, monkeypatch):
+        from ai_assistant.knowledge_bank import (
+            load_knowledge_chunks,
+            retrieve_knowledge_context_lexical,
+        )
+
+        chunks = load_knowledge_chunks()
+        glossary = next(
+            c for c in chunks if c.source == 'terminology-glossary.md'
+            and 'psi' in (c.heading + c.content).lower()
+        )
+
+        monkeypatch.setattr(
+            'ai_assistant.rag.retriever.embeddings_available', lambda: True
+        )
+        monkeypatch.setattr(
+            'ai_assistant.rag.retriever.ensure_index',
+            lambda **kwargs: {'rebuilt': False, 'fingerprint': 'x', 'chunk_count': 1},
+        )
+        monkeypatch.setattr(
+            'ai_assistant.rag.retriever.embed_query',
+            lambda query: [0.1, 0.2, 0.3],
+        )
+        monkeypatch.setattr(
+            'ai_assistant.rag.retriever.search_index',
+            lambda query_embedding, n_results=8, persist_dir=None: [{
+                'chunk_id': glossary.chunk_id,
+                'source': glossary.source,
+                'title': glossary.title,
+                'heading': glossary.heading,
+                'content': glossary.content,
+                'score': 0.92,
+            }],
+        )
+        from django.conf import settings
+        monkeypatch.setattr(settings, 'RAG_MODE', 'hybrid', raising=False)
+        monkeypatch.setattr(settings, 'OPENAI_API_KEY', 'sk-test', raising=False)
+
+        from ai_assistant.rag.retriever import retrieve_vector_context
+
+        out = retrieve_vector_context(
+            'What does PSI mean?',
+            lexical_fallback=retrieve_knowledge_context_lexical,
+        )
+        assert out['results']
+        assert out['results'][0]['chunk_id'] == glossary.chunk_id
+        assert '[KB1]' in out['context']
+        assert 'Population Stability Index' in out['context']
+
+
+@pytest.mark.unit
+class TestKnowledgeBankIndexer:
+    """Fingerprint-driven Chroma index rebuild."""
+
+    def test_corpus_fingerprint_changes_with_content(self, tmp_path):
+        from ai_assistant.rag.indexer import corpus_fingerprint
+
+        docs = tmp_path / 'kb'
+        docs.mkdir()
+        (docs / 'a.md').write_text('# A\n\nhello\n', encoding='utf-8')
+        first = corpus_fingerprint(docs)
+        (docs / 'a.md').write_text('# A\n\nhello world\n', encoding='utf-8')
+        second = corpus_fingerprint(docs)
+        assert first != second
+
+    def test_ensure_index_rebuilds_when_fingerprint_stale(self, tmp_path, monkeypatch):
+        docs = tmp_path / 'kb'
+        docs.mkdir()
+        (docs / 'glossary.md').write_text(
+            '# Glossary\n\n## PSI\n\nPopulation Stability Index.\n',
+            encoding='utf-8',
+        )
+        persist = tmp_path / 'chroma'
+
+        def fake_embed(texts, **kwargs):
+            # Deterministic low-dim vectors for Chroma upsert/query.
+            vectors = []
+            for idx, text in enumerate(texts):
+                vectors.append([float(idx + 1), float(len(text) % 7), 0.5])
+            return vectors
+
+        monkeypatch.setattr(
+            'ai_assistant.rag.indexer.embed_texts', fake_embed
+        )
+        monkeypatch.setattr(
+            'ai_assistant.rag.embeddings.embeddings_available',
+            lambda: True,
+        )
+
+        from ai_assistant.rag.indexer import ensure_index
+        from ai_assistant.rag.chroma_store import get_collection, stored_fingerprint
+
+        first = ensure_index(persist_dir=persist, knowledge_dir=docs)
+        assert first['rebuilt'] is True
+        assert first['chunk_count'] >= 1
+
+        second = ensure_index(persist_dir=persist, knowledge_dir=docs)
+        assert second['rebuilt'] is False
+
+        (docs / 'glossary.md').write_text(
+            '# Glossary\n\n## PSI\n\nPopulation Stability Index updated.\n',
+            encoding='utf-8',
+        )
+        third = ensure_index(persist_dir=persist, knowledge_dir=docs)
+        assert third['rebuilt'] is True
+        collection = get_collection(persist, reset=False)
+        assert stored_fingerprint(collection) == third['fingerprint']
+
 
 @pytest.mark.unit
 class TestKnowledgeBankRagWorkflow:
     """When intent includes R, _chat_workflow retrieves and injects docs."""
 
     def test_rag_intent_injects_knowledge_bank_context(self, monkeypatch):
+        from django.conf import settings
+
+        # Force lexical fallback so the workflow test never calls OpenAI embeddings.
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        monkeypatch.setattr(settings, 'OPENAI_API_KEY', '')
+        monkeypatch.setattr(settings, 'RAG_MODE', 'hybrid')
+
         out = _run_chat_workflow(
             monkeypatch, provider='openai',
             user_message='What does PSI mean in the DeclarAI platform?',

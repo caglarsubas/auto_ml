@@ -1,8 +1,8 @@
-"""Deterministic retrieval over DeclarAI's versioned knowledge bank.
+"""Retrieval over DeclarAI's versioned knowledge bank.
 
-The knowledge bank is intentionally small, curated Markdown.  A lexical scorer
-is enough here and keeps chat independent from embedding services, vector
-stores, migrations, or background indexing jobs.
+Chunks curated Markdown under ``docs/knowledge-bank/``.  Primary retrieval is
+OpenAI embeddings + local Chroma (hybrid with lexical re-rank).  Lexical-only
+scoring remains available as a fallback when embeddings are unavailable.
 """
 from __future__ import annotations
 
@@ -174,12 +174,13 @@ def _format_context(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-@prometa_tool(name="knowledge-bank-rag")
-def retrieve_knowledge_context(query: str,
-                               *,
-                               max_chunks: int = DEFAULT_MAX_CHUNKS,
-                               max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS) -> dict:
-    """Retrieve knowledge-bank snippets for a user query."""
+def retrieve_knowledge_context_lexical(
+    query: str,
+    *,
+    max_chunks: int = DEFAULT_MAX_CHUNKS,
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+) -> dict:
+    """Lexical (keyword) retrieval — used for RAG_MODE=lexical and fallbacks."""
     query_terms = _tokenize(query or "")
     chunks = load_knowledge_chunks()
     ranked = []
@@ -212,6 +213,8 @@ def retrieve_knowledge_context(query: str,
 
     context = _format_context(results)
     set_span_attr("declarai.rag.called", True)
+    set_span_attr("declarai.rag.backend", "lexical")
+    set_span_attr("declarai.rag.mode", "lexical")
     set_span_attr("declarai.rag.query_chars", len(query or ""))
     set_span_attr("declarai.rag.result_count", len(results))
     set_span_attr("declarai.rag.context_chars", len(context))
@@ -229,3 +232,20 @@ def retrieve_knowledge_context(query: str,
         "results": results,
         "context": context,
     }
+
+
+@prometa_tool(name="knowledge-bank-rag")
+def retrieve_knowledge_context(query: str,
+                               *,
+                               max_chunks: int = DEFAULT_MAX_CHUNKS,
+                               max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS) -> dict:
+    """Retrieve knowledge-bank snippets for a user query (vector/hybrid + fallback)."""
+    # Lazy import avoids a circular dependency with ai_assistant.rag.indexer.
+    from ai_assistant.rag.retriever import retrieve_vector_context
+
+    return retrieve_vector_context(
+        query,
+        max_chunks=max_chunks,
+        max_context_chars=max_context_chars,
+        lexical_fallback=retrieve_knowledge_context_lexical,
+    )

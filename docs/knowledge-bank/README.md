@@ -25,8 +25,13 @@ describe DeclarAI's actual behavior, not generic AutoML behavior. When a
 workflow, calculation, threshold, or action path changes, update the relevant
 knowledge-bank document in the same pull request as the product change.
 
-The assistant retrieval layer chunks Markdown sections, ranks them with a
-deterministic lexical scorer, and injects compact cited snippets into the chat
-prompt only when the classifier includes `R`. This keeps ordinary status or
-execution turns focused on live pipeline artifacts while still giving
+The assistant retrieval layer chunks Markdown sections by heading, embeds them
+with OpenAI (`text-embedding-3-small` by default), stores vectors in a local
+Chroma index (`backend/.chroma/knowledge-bank`), and retrieves with hybrid
+ranking (Chroma cosine + lexical Reciprocal Rank Fusion). Compact cited
+snippets are injected into the chat prompt only when the classifier includes
+`R`. When embeddings are unavailable, retrieval falls back to the lexical
+scorer. Rebuild the index with `python manage.py index_knowledge_bank` (or let
+chat lazily refresh when the content fingerprint changes). This keeps ordinary
+status or execution turns focused on live pipeline artifacts while still giving
 documentation-grade answers for manual, glossary, and disclosure questions.

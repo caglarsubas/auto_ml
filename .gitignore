@@ -37,6 +37,9 @@ datasets/
 # Media / data files (generated at runtime)
 backend/media/
 
+# Local Chroma vector index for knowledge-bank RAG
+backend/.chroma/
+
 # Test reports
 test-reports/
 
