@@ -12,7 +12,12 @@ from functools import lru_cache
 from pathlib import Path
 import re
 
-from .prometa_config import set_span_attr, tool as prometa_tool
+from .prometa_config import (
+    record_retrieval_raw,
+    retrieval_query,
+    set_span_attr,
+    tool as prometa_tool,
+)
 
 
 KNOWLEDGE_BANK_DIR = (
@@ -181,57 +186,68 @@ def retrieve_knowledge_context_lexical(
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
 ) -> dict:
     """Lexical (keyword) retrieval — used for RAG_MODE=lexical and fallbacks."""
-    query_terms = _tokenize(query or "")
-    chunks = load_knowledge_chunks()
-    ranked = []
+    with retrieval_query(
+        "keyword",
+        query_text=query or "",
+        top_k=max_chunks,
+    ) as r:
+        query_terms = _tokenize(query or "")
+        chunks = load_knowledge_chunks()
+        ranked = []
 
-    for chunk in chunks:
-        score = _score_chunk(chunk, query_terms)
-        if score > 0:
-            ranked.append((score, chunk))
+        for chunk in chunks:
+            score = _score_chunk(chunk, query_terms)
+            if score > 0:
+                ranked.append((score, chunk))
 
-    ranked.sort(key=lambda item: (-item[0], item[1].source, item[1].heading))
+        ranked.sort(key=lambda item: (-item[0], item[1].source, item[1].heading))
 
-    results: list[dict] = []
-    used_chars = 0
-    for score, chunk in ranked[:max(max_chunks * 3, max_chunks)]:
-        snippet = _clip_snippet(chunk.content)
-        next_chars = len(snippet)
-        if results and used_chars + next_chars > max_context_chars:
-            break
-        results.append({
-            "chunk_id": chunk.chunk_id,
-            "source": chunk.source,
-            "title": chunk.title,
-            "heading": chunk.heading,
-            "score": round(score, 3),
-            "snippet": snippet,
-        })
-        used_chars += next_chars
-        if len(results) >= max_chunks:
-            break
+        results: list[dict] = []
+        used_chars = 0
+        for score, chunk in ranked[:max(max_chunks * 3, max_chunks)]:
+            snippet = _clip_snippet(chunk.content)
+            next_chars = len(snippet)
+            if results and used_chars + next_chars > max_context_chars:
+                break
+            results.append({
+                "chunk_id": chunk.chunk_id,
+                "source": chunk.source,
+                "title": chunk.title,
+                "heading": chunk.heading,
+                "score": round(score, 3),
+                "snippet": snippet,
+            })
+            used_chars += next_chars
+            if len(results) >= max_chunks:
+                break
 
-    context = _format_context(results)
-    set_span_attr("declarai.rag.called", True)
-    set_span_attr("declarai.rag.backend", "lexical")
-    set_span_attr("declarai.rag.mode", "lexical")
-    set_span_attr("declarai.rag.query_chars", len(query or ""))
-    set_span_attr("declarai.rag.result_count", len(results))
-    set_span_attr("declarai.rag.context_chars", len(context))
-    set_span_attr(
-        "declarai.rag.sources",
-        ",".join(dict.fromkeys(item["source"] for item in results)),
-    )
-    set_span_attr(
-        "declarai.rag.chunk_ids",
-        ",".join(item["chunk_id"] for item in results),
-    )
+        context = _format_context(results)
+        r.results(
+            result_ids=[item["chunk_id"] for item in results],
+            scores=[float(item["score"]) for item in results],
+            permissions_enforced=False,
+        )
+        record_retrieval_raw(context)
+        set_span_attr("declarai.rag.called", True)
+        set_span_attr("declarai.rag.backend", "lexical")
+        set_span_attr("declarai.rag.mode", "lexical")
+        set_span_attr("declarai.rag.query_chars", len(query or ""))
+        set_span_attr("declarai.rag.result_count", len(results))
+        set_span_attr("declarai.rag.context_chars", len(context))
+        set_span_attr(
+            "declarai.rag.sources",
+            ",".join(dict.fromkeys(item["source"] for item in results)),
+        )
+        set_span_attr(
+            "declarai.rag.chunk_ids",
+            ",".join(item["chunk_id"] for item in results),
+        )
 
-    return {
-        "query": query or "",
-        "results": results,
-        "context": context,
-    }
+        return {
+            "query": query or "",
+            "results": results,
+            "context": context,
+        }
 
 
 @prometa_tool(name="knowledge-bank-rag")
