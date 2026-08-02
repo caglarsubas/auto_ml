@@ -184,3 +184,10 @@ CHROMA_PERSIST_DIR = os.environ.get(
 )
 # hybrid | vector | lexical — hybrid merges Chroma cosine with lexical ranks
 RAG_MODE = os.environ.get('RAG_MODE', 'hybrid').strip().lower() or 'hybrid'
+# Redis TTL for per-text embedding vectors (default 7 days)
+try:
+    EMBEDDING_CACHE_TTL = int(
+        os.environ.get('EMBEDDING_CACHE_TTL', str(60 * 60 * 24 * 7))
+    )
+except (TypeError, ValueError):
+    EMBEDDING_CACHE_TTL = 60 * 60 * 24 * 7

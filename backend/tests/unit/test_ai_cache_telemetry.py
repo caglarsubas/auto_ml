@@ -2971,29 +2971,51 @@ class TestProMetaSdkVersionLock:
     was bumped).  This test reads the requirement from requirements.txt and
     asserts the installed prometa.__version__ satisfies it."""
 
-    def _read_min_version(self) -> str:
-        """Return the minimum version required in requirements.txt.
+    # Interim archive pin for SDK #80 (embeddings.create) until PyPI catch-up.
+    # The commit's package metadata still reports 0.20.1.
+    _ARCHIVE_PIN_SHA = "1de62878d9f4bceef47e3fce5cd7d442b8d11f91"
+    _ARCHIVE_PIN_FLOOR = "0.20.1"
 
-        Supports `prometa-sdk>=X.Y.Z` and treats `==X.Y.Z` as an equivalent
-        floor for older lock-file shapes.
-        """
-        import re
+    def _read_requirement_line(self) -> str:
         from tests.unit._shared import backend_root
-        backend_dir = backend_root()
-        req = (backend_dir / 'requirements.txt').read_text()
+        req = (backend_root() / 'requirements.txt').read_text()
         for line in req.splitlines():
             line = line.strip()
             if line.startswith('prometa-sdk'):
-                m = re.match(r'^prometa-sdk(?:==|>=)([0-9]+\.[0-9]+\.[0-9]+)\s*$', line)
-                assert m, (
-                    f"prometa-sdk must declare an explicit minimum version "
-                    f"(form: prometa-sdk>=X.Y.Z); found: {line!r}"
-                )
-                return m.group(1)
+                return line
         raise AssertionError(
             "prometa-sdk entry not found in requirements.txt — "
             "the version-floor test cannot run without a requirement."
         )
+
+    def _read_min_version(self) -> str:
+        """Return the minimum version required in requirements.txt.
+
+        Supports:
+          - ``prometa-sdk>=X.Y.Z`` / ``==X.Y.Z``
+          - interim GitHub archive pin for SDK #80 embeddings
+            ``prometa-sdk @ https://github.com/.../archive/<sha>.tar.gz``
+        """
+        import re
+        line = self._read_requirement_line()
+        m = re.match(r'^prometa-sdk(?:==|>=)([0-9]+\.[0-9]+\.[0-9]+)\s*$', line)
+        if m:
+            return m.group(1)
+        archive_m = re.match(
+            r'^prometa-sdk\s+@\s+https://github\.com/prometa-ai/'
+            r'orchestra-python-sdk/archive/([0-9a-f]{7,40})\.tar\.gz\s*$',
+            line,
+        )
+        assert archive_m, (
+            f"prometa-sdk must declare an explicit minimum version "
+            f"(form: prometa-sdk>=X.Y.Z) or the interim archive pin for "
+            f"embeddings instrumentation; found: {line!r}"
+        )
+        assert archive_m.group(1).startswith(self._ARCHIVE_PIN_SHA[:7]), (
+            f"Unexpected prometa-sdk archive pin SHA {archive_m.group(1)!r}; "
+            f"expected {self._ARCHIVE_PIN_SHA!r} (SDK #80 embeddings)."
+        )
+        return self._ARCHIVE_PIN_FLOOR
 
     @staticmethod
     def _version_tuple(value: str) -> tuple[int, int, int]:
@@ -3014,6 +3036,15 @@ class TestProMetaSdkVersionLock:
             f"is precisely what hid the v2.41.x AML A4 truncation bug "
             f"from us for ~24h."
         )
+        # Archive pin exists specifically for embeddings auto-instrumentation.
+        req_line = self._read_requirement_line()
+        if 'orchestra-python-sdk/archive/' in req_line:
+            from prometa.integrations import openai as prometa_openai
+            assert hasattr(prometa_openai, '_embeddings_request_attrs'), (
+                "archive-pinned prometa-sdk must expose embeddings "
+                "instrumentation (_embeddings_request_attrs). Rebuild the "
+                "backend image or run `pip install -r requirements.txt`."
+            )
 
     def test_prompt_render_helper_is_importable_on_pinned_version(self):
         """The v2.42.0 fix depends on the prompt_render helper that

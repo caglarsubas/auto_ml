@@ -1164,6 +1164,46 @@ describe('AiChatPanelComponent', () => {
       const last = aiService.getMessages().slice(-1)[0];
       expect(last.content).toBe(realMessage);
     });
+
+    it('should persist rag_sources onto the assistant message when present', () => {
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'PSI measures population stability [KB1].',
+        actions: [],
+        rag_sources: [{
+          source: 'terminology-glossary.md',
+          title: 'Terminology Glossary',
+          heading: 'PSI',
+          chunk_id: 'glossary-psi',
+        }],
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+      sharedService.setCurrentFileId(1);
+      aiService.addMessage({ role: 'user', content: 'What is PSI?', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('What is PSI?');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.ragSources?.length).toBe(1);
+      expect(last.ragSources?.[0].source).toBe('terminology-glossary.md');
+      expect(last.ragSources?.[0].chunk_id).toBe('glossary-psi');
+    });
+
+    it('should omit ragSources when the backend does not return rag_sources', () => {
+      spyOn(dataService, 'sendAiChat').and.returnValue(of({
+        message: 'No retrieval this turn.',
+        actions: [],
+      }));
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
+      sharedService.setCurrentFileId(1);
+      aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
+      aiService.addMessage({ role: 'assistant', content: '', timestamp: new Date() });
+
+      component.sendMessage('hi');
+
+      const last = aiService.getMessages().slice(-1)[0];
+      expect(last.ragSources).toBeUndefined();
+    });
   });
 
   // ── v2.38.0: cross-trace linking (chat_span_id ↔ parent_span_id) ─────

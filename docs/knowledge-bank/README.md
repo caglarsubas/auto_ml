@@ -30,8 +30,26 @@ with OpenAI (`text-embedding-3-small` by default), stores vectors in a local
 Chroma index (`backend/.chroma/knowledge-bank`), and retrieves with hybrid
 ranking (Chroma cosine + lexical Reciprocal Rank Fusion). Compact cited
 snippets are injected into the chat prompt only when the classifier includes
-`R`. When embeddings are unavailable, retrieval falls back to the lexical
-scorer. Rebuild the index with `python manage.py index_knowledge_bank` (or let
-chat lazily refresh when the content fingerprint changes). This keeps ordinary
-status or execution turns focused on live pipeline artifacts while still giving
-documentation-grade answers for manual, glossary, and disclosure questions.
+`R`. Snippets are labeled `[KB1]…[KBn]`; the model is instructed to cite those
+markers when using knowledge-bank facts, and the API returns `rag_sources` for
+the chat UI source list. When embeddings are unavailable, retrieval falls back
+to the lexical scorer.
+
+### Index lifecycle
+
+- Rebuild manually: `python manage.py index_knowledge_bank`
+- Chat lazily refreshes the index when the content fingerprint changes
+- Docker backend entrypoint runs `index_knowledge_bank` on boot when
+  `OPENAI_API_KEY` is set (failure is non-fatal; lexical fallback remains)
+- Compose mounts a named volume `chroma-data` at `/app/backend/.chroma` so the
+  vector store survives container recreation
+
+### Embedding cache
+
+Per-text embedding vectors are cached in Redis under
+`ai:embedding:{model}:{sha256}` (TTL `EMBEDDING_CACHE_TTL`, default 7 days)
+and emit Prometa `cache_lookup(kind="embedding")` hit/miss spans.
+
+This keeps ordinary status or execution turns focused on live pipeline
+artifacts while still giving documentation-grade answers for manual, glossary,
+and disclosure questions.

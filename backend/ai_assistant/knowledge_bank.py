@@ -167,6 +167,9 @@ def _format_context(results: list[dict]) -> str:
     lines = [
         "Knowledge bank context retrieved for this turn.",
         "Use these snippets for stable platform guidance, terminology, and technical disclosure.",
+        "When you rely on a knowledge-bank fact in your reply, cite the matching "
+        "[KBn] marker inline (for example: PSI measures population stability [KB1]).",
+        "Do not invent source labels or cite documents that are not listed below.",
         "For current pipeline values, still use live pipeline tools rather than these docs.",
     ]
     for idx, item in enumerate(results, start=1):

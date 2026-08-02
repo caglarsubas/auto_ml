@@ -184,6 +184,12 @@ actions. It should be treated as an analyst copilot: it can help reason and
 prepare changes, but the user remains responsible for accepting applied actions
 and validating business assumptions.
 
+For stable documentation questions (definitions, stage purpose, governance
+checklists), the assistant retrieves the versioned knowledge bank (hybrid RAG
+when embeddings are configured). Answers that rely on those snippets should
+cite `[KBn]` markers; the chat panel also lists retrieved Sources under the
+message. Live metrics and current settings still come from pipeline tools.
+
 Use the assistant for:
 
 - Explaining a pipeline stage or metric.
@@ -191,8 +197,9 @@ Use the assistant for:
 - Reviewing selected features, SHAP, VIF, SFS, or data quality.
 - Asking which purifier or encoding settings are appropriate.
 - Preparing one-click actions such as updating model usage, setting ordinal
-  rankings, starting preprocessing, applying encoding, starting modeling,
-  starting SFS, or starting hyperparameter tuning.
+  rankings, starting preprocessing, updating purifier selections, applying
+  encoding, starting modeling, starting SFS, starting hyperparameter tuning,
+  or applying a shown recommendation.
 
 ## Settings and Configuration Summary
 

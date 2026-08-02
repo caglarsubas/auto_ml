@@ -307,6 +307,66 @@
   border-top-left-radius: 4px;
 }
 
+/* Knowledge-bank evidence margin (RAG sources) */
+.chat-rag-sources {
+  margin-top: 8px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--neutral-100, #f4f4f5);
+}
+
+.chat-rag-sources-label {
+  font-family: var(--font-sans, 'Instrument Sans', 'Segoe UI', sans-serif);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--signal-700, #0F766E);
+  margin-bottom: 4px;
+}
+
+.chat-rag-sources-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-rag-sources-list li {
+  font-family: var(--font-sans, 'Instrument Sans', 'Segoe UI', sans-serif);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--neutral-800, #27272a);
+}
+
+.chat-rag-kb {
+  font-family: var(--font-mono, 'IBM Plex Mono', Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--signal-700, #0F766E);
+  margin-right: 4px;
+}
+
+.chat-rag-title {
+  font-weight: 500;
+}
+
+.chat-rag-sep {
+  margin: 0 4px;
+  color: #a1a1aa;
+}
+
+.chat-rag-heading {
+  color: #52525b;
+}
+
+.chat-rag-file {
+  margin-left: 4px;
+  color: #71717a;
+  font-family: var(--font-mono, 'IBM Plex Mono', Menlo, Consolas, monospace);
+  font-size: 0.6875rem;
+}
+
 .chat-message-section {
   font-size: 10px;
   color: #aaa;

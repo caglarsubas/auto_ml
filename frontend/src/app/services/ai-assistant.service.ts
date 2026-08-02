@@ -43,6 +43,14 @@ export const AI_SUPPORT_INTENTS_BY_SECTION: { [section: string]: AiIntentLabel[]
   hyperparameter_results: ['C'],
 };
 
+/** Knowledge-bank snippet metadata returned with RAG-backed assistant turns. */
+export interface RagSource {
+  source: string;
+  title: string;
+  heading: string;
+  chunk_id: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -66,6 +74,8 @@ export interface ChatMessage {
   chatSpanId?: string;
   chatTraceId?: string;
   chatSessionId?: string;
+  /** v3.4.0+: knowledge-bank sources when intent included retrieval (R). */
+  ragSources?: RagSource[];
   feedback?: AiFeedbackState;
 }
 
@@ -108,7 +118,8 @@ export class AiAssistantService {
   }
 
   updateLastMessage(content: string, actions?: AiAction[], chatSpanId?: string,
-                    chatTraceId?: string, chatSessionId?: string): void {
+                    chatTraceId?: string, chatSessionId?: string,
+                    ragSources?: RagSource[]): void {
     const messages = [...this.messagesSubject.getValue()];
     if (messages.length > 0) {
       messages[messages.length - 1] = {
@@ -124,6 +135,7 @@ export class AiAssistantService {
         ...(chatSpanId ? { chatSpanId } : {}),
         ...(chatTraceId ? { chatTraceId } : {}),
         ...(chatSessionId ? { chatSessionId } : {}),
+        ...(ragSources && ragSources.length > 0 ? { ragSources } : {}),
       };
       this.messagesSubject.next(messages);
     }

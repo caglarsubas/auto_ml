@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy project
 COPY . .
 
+RUN chmod +x docker/backend-entrypoint.sh
+
 EXPOSE 8001
 
-CMD ["sh", "-c", "python backend/manage.py migrate && python backend/manage.py runserver 0.0.0.0:8001"]
+CMD ["sh", "docker/backend-entrypoint.sh"]
