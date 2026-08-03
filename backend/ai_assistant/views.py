@@ -274,7 +274,11 @@ Supported keys:
   `excluded_features` to SFS but the column STAYS in the dataset and downstream
   modeling artifacts (selected_features, shap_details, encoding_plan) remain valid.
   Example: {"key": "feature_usage", "column": "Var_3", "value": "drop", "reason": "VIF=9.39"}
-• preprocessing_options, split_strategy, split_date_column, split_cutoff, algorithm
+• preprocessing_options (alias: purifier_options) — list of integer Data-Purifier
+  option IDs (1–34). Prefer the dedicated `update_purifier_selection` action for
+  checkbox-only edits; if you do use update_config, the key MUST be
+  `preprocessing_options` (or its alias `purifier_options`).
+• split_strategy, split_date_column, split_cutoff, algorithm
 
 ─── ACTION TYPE 4: set_ordinal_ranking ───
 Record the rank order of distinct category values for one or more features.

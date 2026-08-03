@@ -678,7 +678,11 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           if (upd.reason) entry.reason = String(upd.reason);
           featureUsageBatch.push(entry);
         }
-      } else if (upd.key === 'preprocessing_options') {
+      } else if (upd.key === 'preprocessing_options' || upd.key === 'purifier_options') {
+        // `purifier_options` is an alias — models often reuse the
+        // update_purifier_selection field name inside update_config.
+        // Without accepting both, the chat shows "Applied" while the
+        // Data-Purifier Selected Options list stays unchanged.
         if (Array.isArray(upd.value)) {
           const purifierOptions = upd.value
             .map((id: any) => Number(id))

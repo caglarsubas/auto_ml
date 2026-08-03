@@ -634,6 +634,29 @@ describe('AiChatPanelComponent', () => {
         errors: [],
       });
     });
+
+    it('should mirror purifier_options alias into the purifier selector', (done) => {
+      // Regression for Aggressive Cleaning apply: the model used
+      // update_config with key=`purifier_options` (not the documented
+      // preprocessing_options).  Chat showed "Applied / 1 setting(s)
+      // changed" while Selected Options still listed IDs 7 and 23.
+      sharedService.purifierSelectionUpdates$.subscribe(received => {
+        expect(received).toEqual({
+          form: 'wholesale',
+          purifier_options: [1, 2, 3, 4, 8, 12, 28, 32],
+          add: [],
+          remove: [],
+        });
+        done();
+      });
+      (component as any)._handleActionResult('update_config', {
+        applied: [
+          { key: 'purifier_options', value: [1, 2, 3, 4, 8, 12, 28, 32] },
+        ],
+        errors: [],
+        description: 'Switch to Aggressive Cleaning',
+      });
+    });
   });
 
   // ── start_sfs response handling (v2.25.0+) ────────────────────────────
