@@ -743,6 +743,61 @@ class TestDispatchAction:
         assert 'feature_usage' in keys
         assert 'model_usage' in keys
 
+    # ── update_config purifier_options alias ───────────────────────────
+    # Regression for "Applied but Selected Options unchanged": models
+    # emit key=`purifier_options` (from update_purifier_selection) inside
+    # update_config.updates[].  The handler must normalize to
+    # preprocessing_options so the frontend checkbox path fires.
+
+    def test_update_config_purifier_options_alias_normalizes_key(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {
+                    'key': 'purifier_options',
+                    'value': [1, 2, 3, 4, 8, 12, 28, 32],
+                },
+            ],
+            'description': (
+                'Switch to Aggressive Cleaning: lower correlation to 0.80 '
+                'and sparsity to 0.90 • purifier_options = [1,2,3,4,8,12,28,32]'
+            ),
+        })
+        assert result['status'] == 'success'
+        assert len(result['applied']) == 1
+        entry = result['applied'][0]
+        assert entry['key'] == 'preprocessing_options'
+        assert entry['value'] == [1, 2, 3, 4, 8, 12, 28, 32]
+
+    def test_update_config_preprocessing_options_canonical_key(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'preprocessing_options', 'value': [1, 2, 7, 23]},
+            ],
+        })
+        assert result['status'] == 'success'
+        entry = result['applied'][0]
+        assert entry['key'] == 'preprocessing_options'
+        assert entry['value'] == [1, 2, 7, 23]
+
+    def test_update_config_purifier_options_drops_invalid_ids(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'purifier_options', 'value': [1, 1, 99, -3, 'foo', 8, 0, 34]},
+            ],
+        })
+        assert result['status'] == 'success'
+        assert result['applied'][0]['value'] == [1, 8, 34]
+
+    def test_update_config_purifier_options_rejects_non_list(self):
+        result = self._dispatch(1, 'update_config', {
+            'updates': [
+                {'key': 'purifier_options', 'value': 'all'},
+            ],
+        })
+        assert result['status'] == 'error'
+        assert len(result['errors']) == 1
+        assert 'list' in result['errors'][0]['error']
+
     # ── v2.25.0+: start_sfs action ──────────────────────────────────────
     # The dedicated path for the AI to actually KICK OFF SFS.  Before
     # v2.25.0 the AI could only TALK about doing it.  These tests pin

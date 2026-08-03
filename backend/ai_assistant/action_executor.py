@@ -735,7 +735,35 @@ def update_config(file_id: int, payload: dict) -> dict:
             if reason:
                 entry['reason'] = str(reason)
             applied.append(entry)
-        elif key in ('preprocessing_options', 'split_strategy', 'split_date_column',
+        elif key in ('preprocessing_options', 'purifier_options'):
+            # `purifier_options` is the field name used by
+            # update_purifier_selection / start_data_purifier.  Models
+            # routinely emit it under update_config instead of the
+            # documented `preprocessing_options` key; without this
+            # alias the backend returns success ("1 setting(s) changed")
+            # while the Data-Purifier checkboxes stay put.  Normalize
+            # to preprocessing_options so the frontend apply path has
+            # a single key to listen for.
+            val = upd.get('value')
+            if not isinstance(val, list):
+                errors.append({
+                    'key': key,
+                    'error': 'preprocessing_options/purifier_options value must be a list of integer IDs',
+                })
+                continue
+            coerced: list = []
+            seen: set = set()
+            for v in val:
+                try:
+                    iv = int(v)
+                except (TypeError, ValueError):
+                    continue
+                if not (1 <= iv <= 34) or iv in seen:
+                    continue
+                seen.add(iv)
+                coerced.append(iv)
+            applied.append({'key': 'preprocessing_options', 'value': coerced})
+        elif key in ('split_strategy', 'split_date_column',
                      'split_cutoff', 'encoding_strategy', 'algorithm'):
             applied.append({'key': key, 'value': upd.get('value')})
         else:
