@@ -21,11 +21,11 @@ statsmodels>=0.14
 
 # AI Assistant
 openai>=1.0
-# Interim pin: embeddings.create auto-instrumentation (SDK #80) is on main
-# but not yet cut as a PyPI release beyond 0.20.1. Use a commit archive URL
-# (not git+) so slim Docker images without git can still pip-install.
-# Switch back to a version lower-bound once that lands on PyPI.
-prometa-sdk @ https://github.com/prometa-ai/orchestra-python-sdk/archive/1de62878d9f4bceef47e3fce5cd7d442b8d11f91.tar.gz
+# Interim pin: retrieval.namespace (SDK #82) + embeddings.create (SDK #80)
+# are on main but not yet cut as a PyPI release beyond 0.20.1. Use a commit
+# archive URL (not git+) so slim Docker images without git can still
+# pip-install. Switch back to a version lower-bound once that lands on PyPI.
+prometa-sdk @ https://github.com/prometa-ai/orchestra-python-sdk/archive/b81a789efa8df21449bb37972aa8f3e716f3120d.tar.gz
 redis>=5.0
 mcp>=1.27,<2
 cryptography>=42

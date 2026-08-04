@@ -114,11 +114,15 @@ class TestRagIntentTelemetryContract:
 
         # Avoid nested Prometa retrieval CM noise; keep lexical retrieve real.
         @contextmanager
-        def fake_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
+        def fake_retrieval_query(
+            system, *, query_text, top_k, namespace=None, raw_retrieved=None,
+        ):
             class _H:
                 def results(self, **kwargs):
                     attrs["retrieval.system"] = system
                     attrs["retrieval.result_ids"] = list(kwargs.get("result_ids") or [])
+                    if namespace:
+                        attrs["retrieval.namespace"] = namespace
             yield _H()
 
         monkeypatch.setattr(kb, "retrieval_query", fake_retrieval_query)

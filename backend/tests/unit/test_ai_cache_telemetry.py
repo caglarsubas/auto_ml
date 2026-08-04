@@ -2429,6 +2429,7 @@ class TestPrometaAMLHelpers:
         from ai_assistant import knowledge_bank as kb
 
         calls: list = []
+        expected_ns = kb.retrieval_namespace()
 
         class _RecordingHandle:
             def results(self, **kwargs):
@@ -2437,8 +2438,10 @@ class TestPrometaAMLHelpers:
         from contextlib import contextmanager
 
         @contextmanager
-        def _recording_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
-            calls.append(('enter', system, query_text, top_k, raw_retrieved))
+        def _recording_retrieval_query(
+            system, *, query_text, top_k, namespace=None, raw_retrieved=None,
+        ):
+            calls.append(('enter', system, query_text, top_k, namespace, raw_retrieved))
             try:
                 yield _RecordingHandle()
             finally:
@@ -2451,6 +2454,7 @@ class TestPrometaAMLHelpers:
         assert out['results']
         assert calls[0][0] == 'enter'
         assert calls[0][1] == 'keyword'
+        assert calls[0][4] == expected_ns
         results_calls = [c for c in calls if c[0] == 'results']
         assert len(results_calls) == 1
         assert results_calls[0][1]['result_ids']
@@ -2463,6 +2467,7 @@ class TestPrometaAMLHelpers:
         from ai_assistant.knowledge_bank import (
             load_knowledge_chunks,
             retrieve_knowledge_context_lexical,
+            retrieval_namespace,
         )
         from ai_assistant.rag import retriever as retriever_mod
 
@@ -2473,6 +2478,7 @@ class TestPrometaAMLHelpers:
         )
 
         calls: list = []
+        expected_ns = retrieval_namespace()
 
         class _RecordingHandle:
             def results(self, **kwargs):
@@ -2481,8 +2487,10 @@ class TestPrometaAMLHelpers:
         from contextlib import contextmanager
 
         @contextmanager
-        def _recording_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
-            calls.append(('enter', system, query_text, top_k))
+        def _recording_retrieval_query(
+            system, *, query_text, top_k, namespace=None, raw_retrieved=None,
+        ):
+            calls.append(('enter', system, query_text, top_k, namespace))
             try:
                 yield _RecordingHandle()
             finally:
@@ -2517,11 +2525,32 @@ class TestPrometaAMLHelpers:
             lexical_fallback=retrieve_knowledge_context_lexical,
         )
         assert out['results']
-        assert calls[0] == ('enter', 'hybrid', 'What does PSI mean?', 4)
+        assert calls[0] == (
+            'enter', 'hybrid', 'What does PSI mean?', 4, expected_ns,
+        )
         results_calls = [c for c in calls if c[0] == 'results']
         assert len(results_calls) == 1
         assert results_calls[0][1]['result_ids'][0] == glossary.chunk_id
         assert any(c[0] == 'raw' and c[1] for c in calls)
+
+    def test_retrieval_namespace_prefers_chroma_collection(self):
+        """Default namespace is the stable Chroma collection id."""
+        from ai_assistant.knowledge_bank import retrieval_namespace
+        from ai_assistant.rag.chroma_store import COLLECTION_NAME
+
+        assert retrieval_namespace() == COLLECTION_NAME
+
+    def test_retrieval_namespace_override_is_configurable(self, monkeypatch):
+        """RETRIEVAL_NAMESPACE setting/env selects among collections."""
+        from ai_assistant import knowledge_bank as kb
+
+        monkeypatch.setenv('RETRIEVAL_NAMESPACE', 'custom-corpus')
+        try:
+            from django.conf import settings
+            monkeypatch.setattr(settings, 'RETRIEVAL_NAMESPACE', 'custom-corpus', raising=False)
+        except Exception:
+            pass
+        assert kb.retrieval_namespace() == 'custom-corpus'
 
     def test_rag_sources_use_retrieval_query_wrapper(self):
         """Structural guard: both RAG entrypoints wrap in retrieval_query."""
@@ -2532,10 +2561,12 @@ class TestPrometaAMLHelpers:
         lexical_src = inspect.getsource(kb.retrieve_knowledge_context_lexical)
         assert "with retrieval_query(" in lexical_src
         assert "'keyword'" in lexical_src or '"keyword"' in lexical_src
+        assert 'namespace=' in lexical_src
         assert 'r.results(' in lexical_src
 
         vector_src = inspect.getsource(retriever_mod.retrieve_vector_context)
         assert "with retrieval_query(" in vector_src
+        assert 'namespace=' in vector_src
         assert 'r.results(' in vector_src
 
     # ── plan_generate (v2.33.0 / Phase 3c) ─────────────────────────────
@@ -2971,9 +3002,9 @@ class TestProMetaSdkVersionLock:
     was bumped).  This test reads the requirement from requirements.txt and
     asserts the installed prometa.__version__ satisfies it."""
 
-    # Interim archive pin for SDK #80 (embeddings.create) until PyPI catch-up.
+    # Interim archive pin for SDK #82 (retrieval.namespace) until PyPI catch-up.
     # The commit's package metadata still reports 0.20.1.
-    _ARCHIVE_PIN_SHA = "1de62878d9f4bceef47e3fce5cd7d442b8d11f91"
+    _ARCHIVE_PIN_SHA = "b81a789efa8df21449bb37972aa8f3e716f3120d"
     _ARCHIVE_PIN_FLOOR = "0.20.1"
 
     def _read_requirement_line(self) -> str:
@@ -2993,7 +3024,7 @@ class TestProMetaSdkVersionLock:
 
         Supports:
           - ``prometa-sdk>=X.Y.Z`` / ``==X.Y.Z``
-          - interim GitHub archive pin for SDK #80 embeddings
+          - interim GitHub archive pin for SDK #82 retrieval.namespace
             ``prometa-sdk @ https://github.com/.../archive/<sha>.tar.gz``
         """
         import re
@@ -3009,11 +3040,11 @@ class TestProMetaSdkVersionLock:
         assert archive_m, (
             f"prometa-sdk must declare an explicit minimum version "
             f"(form: prometa-sdk>=X.Y.Z) or the interim archive pin for "
-            f"embeddings instrumentation; found: {line!r}"
+            f"retrieval.namespace; found: {line!r}"
         )
         assert archive_m.group(1).startswith(self._ARCHIVE_PIN_SHA[:7]), (
             f"Unexpected prometa-sdk archive pin SHA {archive_m.group(1)!r}; "
-            f"expected {self._ARCHIVE_PIN_SHA!r} (SDK #80 embeddings)."
+            f"expected {self._ARCHIVE_PIN_SHA!r} (SDK #82 retrieval.namespace)."
         )
         return self._ARCHIVE_PIN_FLOOR
 
@@ -3036,10 +3067,17 @@ class TestProMetaSdkVersionLock:
             f"is precisely what hid the v2.41.x AML A4 truncation bug "
             f"from us for ~24h."
         )
-        # Archive pin exists specifically for embeddings auto-instrumentation.
+        # Archive pin exists for retrieval.namespace (+ embeddings instrumentation).
         req_line = self._read_requirement_line()
         if 'orchestra-python-sdk/archive/' in req_line:
+            import inspect
+            from prometa import retrieval_query as _sdk_retrieval_query
             from prometa.integrations import openai as prometa_openai
+            assert 'namespace' in inspect.signature(_sdk_retrieval_query).parameters, (
+                "archive-pinned prometa-sdk must support retrieval_query("
+                "namespace=...). Rebuild the backend image or run "
+                "`pip install -r requirements.txt`."
+            )
             assert hasattr(prometa_openai, '_embeddings_request_attrs'), (
                 "archive-pinned prometa-sdk must expose embeddings "
                 "instrumentation (_embeddings_request_attrs). Rebuild the "

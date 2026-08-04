@@ -10,6 +10,7 @@ from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import os
 import re
 
 from .prometa_config import (
@@ -27,6 +28,32 @@ KNOWLEDGE_BANK_DIR = (
 MAX_SNIPPET_CHARS = 1400
 DEFAULT_MAX_CHUNKS = 4
 DEFAULT_MAX_CONTEXT_CHARS = 5200
+# Logical corpus fallback when no Chroma collection / settings override exists.
+DEFAULT_RETRIEVAL_NAMESPACE = "knowledge-bank"
+
+
+def retrieval_namespace() -> str:
+    """Stable corpus/collection id for Prometa ``retrieval.namespace``.
+
+    Prefer an explicit ``RETRIEVAL_NAMESPACE`` setting/env override, then the
+    Chroma collection name used by vector/hybrid search, then the generic
+    knowledge-bank corpus label. Lexical and hybrid paths share this value
+    because they search the same curated corpus.
+    """
+    try:
+        from django.conf import settings
+        override = getattr(settings, "RETRIEVAL_NAMESPACE", "") or ""
+    except Exception:
+        override = os.environ.get("RETRIEVAL_NAMESPACE", "")
+    if str(override).strip():
+        return str(override).strip()
+    try:
+        from ai_assistant.rag.chroma_store import COLLECTION_NAME
+        if COLLECTION_NAME:
+            return COLLECTION_NAME
+    except Exception:
+        pass
+    return DEFAULT_RETRIEVAL_NAMESPACE
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_+-]*")
 _HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
@@ -193,6 +220,7 @@ def retrieve_knowledge_context_lexical(
         "keyword",
         query_text=query or "",
         top_k=max_chunks,
+        namespace=retrieval_namespace(),
     ) as r:
         query_terms = _tokenize(query or "")
         chunks = load_knowledge_chunks()
