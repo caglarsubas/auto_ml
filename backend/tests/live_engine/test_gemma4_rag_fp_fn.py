@@ -90,7 +90,9 @@ def _patch_workflow_noise(monkeypatch) -> None:
     monkeypatch.setattr(views, "set_customer_id", lambda *a, **k: None)
 
     @contextmanager
-    def recording_retrieval_query(system, *, query_text, top_k, raw_retrieved=None):
+    def recording_retrieval_query(
+        system, *, query_text, top_k, namespace=None, raw_retrieved=None,
+    ):
         class _Handle:
             def results(self, **kwargs):
                 return None

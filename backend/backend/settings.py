@@ -184,6 +184,9 @@ CHROMA_PERSIST_DIR = os.environ.get(
 )
 # hybrid | vector | lexical — hybrid merges Chroma cosine with lexical ranks
 RAG_MODE = os.environ.get('RAG_MODE', 'hybrid').strip().lower() or 'hybrid'
+# Optional override for Prometa retrieval.namespace (corpus/collection id).
+# Empty → use the Chroma collection name (declarai-knowledge-bank).
+RETRIEVAL_NAMESPACE = os.environ.get('RETRIEVAL_NAMESPACE', '').strip()
 # Redis TTL for per-text embedding vectors (default 7 days)
 try:
     EMBEDDING_CACHE_TTL = int(

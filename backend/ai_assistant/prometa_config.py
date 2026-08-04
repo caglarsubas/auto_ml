@@ -744,6 +744,7 @@ def retrieval_query(
     *,
     query_text: str,
     top_k: int,
+    namespace: str = None,
     raw_retrieved: str = None,
 ):
     """Wrap a RAG / keyword fetch in a Prometa ``retrieval.query`` AML
@@ -754,12 +755,18 @@ def retrieval_query(
     SDK enforces this with a ValueError that we deliberately let
     propagate (programmer error, not a runtime failure).
 
+    ``namespace`` is the searched corpus / collection identifier stamped
+    as ``retrieval.namespace``.  Prefer the Chroma collection name when
+    the vector path selects one; use the same value for lexical retrieval
+    over the same corpus.
+
     Usage::
 
         with retrieval_query(
             "hybrid",
             query_text=query,
             top_k=4,
+            namespace="declarai-knowledge-bank",
         ) as r:
             payload = _retrieve(query)
             r.results(
@@ -791,6 +798,7 @@ def retrieval_query(
         system,
         query_text=query_text,
         top_k=top_k,
+        namespace=namespace,
         raw_retrieved=raw_retrieved,
     ) as handle:
         yield handle

@@ -13,6 +13,7 @@ from ai_assistant.knowledge_bank import (
     _score_chunk,
     _tokenize,
     load_knowledge_chunks,
+    retrieval_namespace,
 )
 from ai_assistant.prometa_config import (
     record_retrieval_raw,
@@ -161,6 +162,7 @@ def retrieve_vector_context(
             resolved_mode,
             query_text=query or "",
             top_k=max_chunks,
+            namespace=retrieval_namespace(),
         ) as r:
             set_span_attr("declarai.rag.backend", "chroma")
             set_span_attr("declarai.rag.mode", resolved_mode)
