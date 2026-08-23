@@ -922,7 +922,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (this._resizing === 'left') {
       this.leftPanelWidth = Math.max(160, Math.min(400, this._resizeStartWidth + dx));
     } else if (this._resizing === 'right') {
-      this.rightPanelWidth = Math.max(280, Math.min(600, this._resizeStartWidth - dx));
+      this.rightPanelWidth = Math.max(280, Math.min(1200, this._resizeStartWidth - dx));
     }
   };
 
