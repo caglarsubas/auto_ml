@@ -882,13 +882,15 @@
   <div id="modeling-anchor"></div>
   <app-modeling *ngIf="modelingAvailable"></app-modeling>
 
-  <div class="model-development-line" *ngIf="modelingAvailable"></div>
+  <!-- Evaluation appears only after every Modeling sub-step is complete -->
+  <div class="model-development-line" *ngIf="modelingCompleted"></div>
   <div id="evaluation-anchor"></div>
-  <app-evaluation *ngIf="modelingAvailable"></app-evaluation>
+  <app-evaluation *ngIf="modelingCompleted"></app-evaluation>
 
-  <div class="model-development-line" *ngIf="modelingAvailable"></div>
+  <!-- Deployment appears only after the outer-test evaluation has run -->
+  <div class="model-development-line" *ngIf="evaluationCompleted"></div>
   <div id="deployment-anchor"></div>
-  <app-deployment *ngIf="modelingAvailable"></app-deployment>
+  <app-deployment *ngIf="evaluationCompleted"></app-deployment>
 
   <div class="model-development-line" *ngIf="deploymentCompleted"></div>
   <div id="monitoring-anchor" *ngIf="deploymentCompleted" style="margin-top: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">

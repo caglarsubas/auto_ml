@@ -3013,16 +3013,18 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.ensureFilterKeys();
   }
 
+  /** True once every Modeling sub-step (2a-2d) is complete — the gate for Evaluation. */
+  get modelingCompleted(): boolean {
+    return this.modelingAvailable && this.getMainStepStatus('modeling') === 'completed';
+  }
+
   stepEnabled(item: string): boolean {
     if (item === 'business_understanding') return true;
     if (item === 'declaration') return true;
     if (item === 'preprocessing') return this.preprocessingAvailable;
     if (item === 'data quality') return !!(this.datqSummary && this.datqSummary.length);
     if (item === 'modeling') return this.modelingAvailable;
-    if (item === 'evaluation') {
-      const mc = this.sharedService.getModelingCheckpoint();
-      return this.modelingAvailable && !!(mc?.modelingStatus?.model || mc?.hpResults || mc?.substep?.startsWith('hyperparam_'));
-    }
+    if (item === 'evaluation') return this.modelingCompleted;
     if (item === 'deployment') return this.evaluationCompleted;
     if (item === 'monitoring') return this.deploymentCompleted;
     return false;
