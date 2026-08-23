@@ -66,8 +66,12 @@
     </div>
 
     <div *ngIf="cell.mode === 'code'" class="pipeline-codeline-code-pane">
+      <label class="pipeline-codeline-field-label" [attr.for]="'codeline-code-' + position">
+        Python — runs against df
+      </label>
       <textarea
         class="pipeline-codeline-textarea code"
+        [id]="'codeline-code-' + position"
         [ngModel]="cell.code"
         (ngModelChange)="onCodeChanged($event)"
         placeholder="Write pandas/numpy code using df, pd, np (and plt for charts). Imports are injected."
@@ -92,8 +96,12 @@
     </div>
 
     <div *ngIf="cell.mode === 'intent'" class="pipeline-codeline-intent-pane">
+      <label class="pipeline-codeline-field-label" [attr.for]="'codeline-intent-' + position">
+        What should the assistant do?
+      </label>
       <textarea
         class="pipeline-codeline-textarea intent"
+        [id]="'codeline-intent-' + position"
         [ngModel]="cell.intent"
         (ngModelChange)="onIntentChanged($event)"
         placeholder="Describe what you want: create features, plot a distribution, summarize a column…"
@@ -119,9 +127,12 @@
              cell.lastRun.status === 'success' ? 'Success' : 'Error' }}
           <ng-container *ngIf="cell.lastRun.runKind"> · {{ cell.lastRun.runKind }}</ng-container>
         </span>
+        <span class="output-iteration" *ngIf="iterationCount > 1">
+          Iteration {{ iterationCount }}
+        </span>
       </div>
 
-      <div *ngIf="cell.lastRun.error" class="output-error">{{ cell.lastRun.error }}</div>
+      <div *ngIf="cell.lastRun.error" class="output-error" role="alert">{{ cell.lastRun.error }}</div>
 
       <div *ngIf="cell.lastRun.assistantText" class="output-assistant">
         <div class="output-label">Assistant</div>
@@ -170,6 +181,70 @@
              [src]="src"
              alt="Codeline chart"
              class="output-chart" />
+      </div>
+
+      <!-- Conversation thread — every ask, feedback, and answer for this cell -->
+      <div *ngIf="turns.length" class="codeline-thread">
+        <div class="codeline-thread-header">
+          <span class="output-label">Thread · {{ turns.length }} messages</span>
+          <div class="codeline-thread-actions">
+            <button type="button"
+                    class="codeline-thread-btn"
+                    [attr.aria-expanded]="showThread"
+                    (click)="showThread = !showThread">
+              {{ showThread ? 'Hide' : 'Show' }}
+            </button>
+            <button type="button"
+                    class="codeline-thread-btn danger"
+                    [disabled]="isBusy"
+                    title="Forget this cell's conversation and start over"
+                    (click)="clearThread()">Clear</button>
+          </div>
+        </div>
+        <ol class="codeline-thread-list" *ngIf="showThread">
+          <li *ngFor="let turn of turns"
+              class="codeline-turn"
+              [class.assistant]="turn.role === 'assistant'"
+              [class.auto]="turn.kind === 'auto_fix'">
+            <div class="codeline-turn-head">
+              <span class="codeline-turn-role">{{ turnRoleLabel(turn) }}</span>
+              <button type="button"
+                      *ngIf="turn.code"
+                      class="codeline-thread-btn"
+                      [disabled]="isBusy"
+                      title="Put this version back in the Code tab"
+                      (click)="restoreTurnCode(turn)">Use this code</button>
+            </div>
+            <pre class="codeline-turn-text">{{ turn.content }}</pre>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Feedback composer — the next iteration on this cell's answer -->
+      <div *ngIf="canRefine" class="codeline-refine">
+        <label class="pipeline-codeline-field-label" [attr.for]="'codeline-refine-' + position">
+          Feedback to the assistant
+        </label>
+        <textarea
+          class="pipeline-codeline-textarea refine"
+          [id]="'codeline-refine-' + position"
+          [ngModel]="refineText"
+          (ngModelChange)="onRefineChanged($event)"
+          (keydown.control.enter)="sendRefinement()"
+          (keydown.meta.enter)="sendRefinement()"
+          placeholder="What should change? e.g. use monthly buckets, plot train and test separately, drop the empty months"
+          rows="2"></textarea>
+        <div class="codeline-refine-bar">
+          <button type="button"
+                  class="run-btn refine"
+                  [disabled]="isBusy || !refineText.trim()"
+                  (click)="sendRefinement()">
+            {{ isBusy ? 'Working…' : 'Send feedback' }}
+          </button>
+          <span class="codeline-refine-hint">
+            Keeps this cell's thread — the assistant revises the pinned code and last run instead of starting over. Ctrl+Enter sends.
+          </span>
+        </div>
       </div>
     </div>
   </div>

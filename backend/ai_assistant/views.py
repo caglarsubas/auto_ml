@@ -1447,6 +1447,43 @@ _CODELINE_SOURCE_BIAS = (
     'Do not ask the user to switch to the right-side chat panel.'
 )
 
+# v3.5.0 — Codeline refinement turns.  A Codeline conversation is iterative:
+# the user asks once, then keeps pushing the SAME artifact forward ("use
+# monthly buckets", "split train vs test", "that chart is unreadable").  The
+# generic ``_TURN_FOCUS_PROMPT`` is the wrong anchor for those turns — it
+# tells the model the next message is a NEW self-contained question and that
+# it must NOT reuse the previous turn's topic or format, which is exactly
+# what a refinement must do.  Codeline follow-ups get this anchor instead:
+# treat the transcript as the current draft, change only what the feedback
+# asks for, and return the complete replacement code.
+_CODELINE_REFINE_FOCUS_PROMPT = (
+    'The user\'s NEXT message is FEEDBACK on the code and answer you already '
+    'produced in THIS Codeline cell — it is a revision request, not a new '
+    'topic.  Treat the conversation above as the current draft.  Keep every '
+    'part the user did not object to, change ONLY what the feedback asks for, '
+    'and build on the prior turns instead of starting over.  Return the '
+    'COMPLETE revised code as exactly one <<<ACTION:execute_code>>> block — '
+    'never a diff, never a fragment, never a "rest unchanged" placeholder — '
+    'and state in one or two sentences what you changed and why.  If the '
+    'feedback reports a runtime error or an empty/unreadable result, fix the '
+    'cause rather than restating the previous code.'
+)
+
+# Codeline turn kinds forwarded by the frontend in ``context`` so the
+# workflow can tell a first ask from an iteration on the same cell.
+_CODELINE_TURN_KINDS = ('intent', 'refine', 'auto_fix')
+
+
+def _resolve_codeline_turn_kind(context: dict) -> str:
+    """Normalize ``context['codeline_turn_kind']`` to a known turn kind.
+
+    Defaults to ``'intent'`` (first ask) for anything unrecognised so an
+    older frontend build keeps the pre-v3.5.0 single-shot behaviour.
+    """
+    raw = (context or {}).get('codeline_turn_kind')
+    kind = str(raw or '').strip().lower()
+    return kind if kind in _CODELINE_TURN_KINDS else 'intent'
+
 
 @workflow(name="declarai-chat")
 def _chat_workflow(user_message: str, context: dict, section: str, history: list,
@@ -1469,6 +1506,9 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     chat_source = (source or 'panel').strip().lower()
     if chat_source not in ('codeline', 'panel'):
         chat_source = 'panel'
+    codeline_turn_kind = (
+        _resolve_codeline_turn_kind(context) if chat_source == 'codeline' else 'intent'
+    )
 
     def _classify_intent_with_llm(messages: list):
         result = _call_llm(messages, model_key, tools=None)
@@ -1489,11 +1529,18 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             attempt_int = int(attempt) if attempt is not None else None
         except (TypeError, ValueError):
             attempt_int = None
+        iteration = ctx.get('codeline_iteration')
+        try:
+            iteration_int = int(iteration) if iteration is not None else None
+        except (TypeError, ValueError):
+            iteration_int = None
         stamp_codeline_capability(
             kind='communication',
             position=ctx.get('codeline_position') or None,
             source=chat_source,
             auto_correction_attempt=attempt_int,
+            turn_kind=codeline_turn_kind,
+            iteration=iteration_int,
         )
 
     intent = resolve_intent_classification(
@@ -1632,10 +1679,28 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     # first turn — there's no previous topic to drift toward.  ``has_history``
     # is stamped so a recurrence of the topic-drift screenshot is filterable
     # in the trace (inspect prometa.raw.rendered_prompt + the completion).
+    #
+    # v3.5.0: Codeline follow-ups (Refine / auto-fix) invert that rule — the
+    # next message IS about the previous turn's artifact — so they get
+    # ``_CODELINE_REFINE_FOCUS_PROMPT`` instead.  Anchoring them with the
+    # generic prompt made every iteration restart from scratch and drop the
+    # parts the user had already accepted (the single-shot behaviour this
+    # release fixes).
     set_span_attr('declarai.chat.has_history', bool(history))
+    is_codeline_followup = (
+        chat_source == 'codeline' and codeline_turn_kind in ('refine', 'auto_fix')
+    )
     if history:
-        messages.append({'role': 'system', 'content': _TURN_FOCUS_PROMPT})
+        turn_anchor = (
+            _CODELINE_REFINE_FOCUS_PROMPT if is_codeline_followup
+            else _TURN_FOCUS_PROMPT
+        )
+        messages.append({'role': 'system', 'content': turn_anchor})
         set_span_attr('declarai.chat.turn_focus_injected', True)
+        set_span_attr('declarai.chat.turn_focus_variant',
+                      'codeline_refine' if is_codeline_followup else 'new_question')
+    if chat_source == 'codeline':
+        set_span_attr('declarai.codeline.turn_kind', codeline_turn_kind)
 
     # Add current user message
     messages.append({'role': 'user', 'content': user_message})

@@ -320,6 +320,38 @@ class TestDispatchAction:
         assert captured.get('declarai.execute_code.mode') == 'exploratory'
         assert captured.get('declarai.codeline.auto_correction_attempt') == 2
 
+    def test_codeline_communication_stamps_turn_kind_and_iteration(self, monkeypatch):
+        """v3.5.0: a Codeline chat turn carries which round of the cell's
+        conversation it is, so a trace shows how many feedback iterations an
+        answer took to converge."""
+        from ai_assistant import prometa_config as pc
+
+        captured = {}
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda key, value: captured.__setitem__(key, value))
+
+        pc.stamp_codeline_capability(
+            kind='communication',
+            position='after_data_preview',
+            turn_kind='refine',
+            iteration=3,
+        )
+        assert captured.get('declarai.capability.inline_cell_communication') is True
+        assert captured.get('declarai.codeline.turn_kind') == 'refine'
+        assert captured.get('declarai.codeline.iteration') == 3
+
+    def test_codeline_turn_kind_and_iteration_are_optional(self, monkeypatch):
+        """Omitting them must not stamp empty values — the pre-v3.5.0 shape."""
+        from ai_assistant import prometa_config as pc
+
+        captured = {}
+        monkeypatch.setattr(pc, 'set_span_attr',
+                            lambda key, value: captured.__setitem__(key, value))
+
+        pc.stamp_codeline_capability(kind='communication', position='p')
+        assert 'declarai.codeline.turn_kind' not in captured
+        assert 'declarai.codeline.iteration' not in captured
+
     def test_execute_code_strips_import_lines(self):
         """Import lines should be stripped — np/pd are pre-loaded in sandbox."""
         from ai_assistant.action_executor import execute_code
