@@ -571,4 +571,59 @@ describe('ModelDevelopmentComponent', () => {
       expect(btn).withContext('Purifier AI Support button must NOT render with no dropped steps').toBeNull();
     });
   });
+
+  // ── v3.5.0: Codeline threads must not bloat the AI cache ─────────────
+  describe('AI cache — codeline projection', () => {
+    let sharedService: SharedService;
+    let dataService: DataService;
+
+    beforeEach(() => {
+      sharedService = TestBed.inject(SharedService);
+      dataService = TestBed.inject(DataService);
+      fixture.detectChanges();
+    });
+
+    it('pushes the projection only — no run output, no feedback thread', () => {
+      // A Codeline carries its thread and its last run (stdout, preview rows,
+      // base64 charts).  ``get_pipeline_codelines`` reads none of that, so
+      // only the projection is cached; the checkpoint keeps the full cell.
+      const pushSpy = spyOn(dataService, 'pushAiCache')
+        .and.returnValue(of({ status: 'success' }));
+      component.currentFileId = 481;
+      sharedService.setPipelineCodelines({
+        after_data_preview: {
+          id: 'c1',
+          position: 'after_data_preview',
+          mode: 'code',
+          code: 'print(df.shape)',
+          intent: 'show the shape',
+          lastRun: {
+            status: 'success',
+            runKind: 'exploratory',
+            stdout: 'x'.repeat(4000),
+            images: ['data:image/png;base64,AAAA'],
+          },
+          turns: [
+            { role: 'user', kind: 'intent', content: 'show the shape', at: 'now' },
+            { role: 'assistant', kind: 'intent', content: 'ok', code: 'print(df.shape)', at: 'now' },
+            { role: 'user', kind: 'refine', content: 'add dtypes too', at: 'now' },
+            { role: 'assistant', kind: 'refine', content: 'added', code: 'print(df.dtypes)', at: 'now' },
+          ],
+          updatedAt: 'now',
+        },
+      });
+
+      component.pushAiContext();
+
+      expect(pushSpy).toHaveBeenCalled();
+      const artifacts = pushSpy.calls.mostRecent().args[1];
+      expect(artifacts['pipeline_codelines']['after_data_preview']).toEqual({
+        position: 'after_data_preview',
+        mode: 'code',
+        code: 'print(df.shape)',
+        intent: 'show the shape',
+        iterations: 2,
+      });
+    });
+  });
 });

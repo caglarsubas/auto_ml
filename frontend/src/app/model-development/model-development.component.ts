@@ -1043,14 +1043,42 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       artifacts['pipeline_notes'] = notes;
     }
     // Pipeline codelines (compact summaries for assistant context)
-    const codelines = this.sharedService.getPipelineCodelines();
-    if (codelines && Object.keys(codelines).length > 0) {
+    const codelines = this.compactCodelinesForCache();
+    if (Object.keys(codelines).length > 0) {
       artifacts['pipeline_codelines'] = codelines;
     }
     // Fire and forget — cache push is best-effort
     this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
       error: (err: any) => console.warn('[AI Cache] push failed:', err),
     });
+  }
+
+  /**
+   * Project each Codeline down to what ``get_pipeline_codelines`` actually
+   * reads (position, mode, code, intent) plus its iteration count.
+   *
+   * The full cell carries run output — stdout, preview rows, base64 chart
+   * images — and, since v3.5.0, the cell's feedback thread.  None of it is
+   * read on the tool side, and all of it would sit in Redis and inflate the
+   * cache payload.  The checkpoint (``buildCheckpointState``) still stores
+   * the complete cell, so nothing is lost for restore.
+   */
+  private compactCodelinesForCache(): { [position: string]: any } {
+    const codelines = this.sharedService.getPipelineCodelines() || {};
+    const compact: { [position: string]: any } = {};
+    Object.keys(codelines).forEach((position) => {
+      const cell = codelines[position];
+      if (!cell) return;
+      const turns = Array.isArray(cell.turns) ? cell.turns : [];
+      compact[position] = {
+        position,
+        mode: cell.mode || 'code',
+        code: cell.code || '',
+        intent: cell.intent || '',
+        iterations: turns.filter((t: any) => t?.role === 'user').length,
+      };
+    });
+    return compact;
   }
 
   requestAiSupport(context: any, section: string, prompt: string): void {

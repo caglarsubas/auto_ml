@@ -194,6 +194,116 @@ class TestChatWorkflowTurnFocusAnchor:
         assert 'current' in lowered
 
 @pytest.mark.unit
+class TestCodelineRefineFocusAnchor:
+    """v3.5.0: a Codeline is an iterative cell — the user asks once, then keeps
+    pushing the SAME artifact forward.  The generic turn anchor is wrong for
+    those follow-ups (it forbids reusing the previous turn's topic and format),
+    so Codeline ``refine`` / ``auto_fix`` turns get the refinement anchor
+    instead.  A Codeline's FIRST ask, and every right-side panel turn, keep the
+    generic anchor."""
+
+    _FEEDBACK = 'use monthly buckets and plot train and test separately'
+    _HISTORY = [
+        {'role': 'user', 'content': 'draw the target ratio over time'},
+        {'role': 'assistant', 'content': 'Here is the weekly bad rate.\n\n```python\nprint(df.head())\n```'},
+    ]
+
+    def _run(self, monkeypatch, *, turn_kind, source='codeline', history=None):
+        return _run_chat_workflow(
+            monkeypatch, provider='engine',
+            user_message=self._FEEDBACK,
+            history=self._HISTORY if history is None else history,
+            context={'codeline_position': 'after_data_preview',
+                     'codeline_turn_kind': turn_kind},
+            source=source,
+            call_llm=lambda idx, messages, tools: _text_response('done'),
+        )
+
+    def test_refine_turn_replaces_generic_anchor(self, monkeypatch):
+        from ai_assistant.views import (
+            _CODELINE_REFINE_FOCUS_PROMPT, _TURN_FOCUS_PROMPT,
+        )
+        out = self._run(monkeypatch, turn_kind='refine')
+        msgs = out['llm_calls'][0]['messages']
+        contents = [m.get('content') or '' for m in msgs]
+        assert _CODELINE_REFINE_FOCUS_PROMPT in contents
+        assert _TURN_FOCUS_PROMPT not in contents
+        # It must sit immediately before the current user message.
+        user_idx = max(i for i, m in enumerate(msgs)
+                       if m.get('role') == 'user' and m.get('content') == self._FEEDBACK)
+        assert msgs[user_idx - 1].get('role') == 'system'
+        assert msgs[user_idx - 1].get('content') == _CODELINE_REFINE_FOCUS_PROMPT
+
+    def test_auto_fix_turn_uses_refine_anchor(self, monkeypatch):
+        from ai_assistant.views import (
+            _CODELINE_REFINE_FOCUS_PROMPT, _TURN_FOCUS_PROMPT,
+        )
+        out = self._run(monkeypatch, turn_kind='auto_fix')
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _CODELINE_REFINE_FOCUS_PROMPT in contents
+        assert _TURN_FOCUS_PROMPT not in contents
+
+    def test_first_codeline_ask_keeps_generic_anchor(self, monkeypatch):
+        """A re-ask with a rewritten intent IS a new question — the generic
+        anti-drift anchor still applies to it."""
+        from ai_assistant.views import (
+            _CODELINE_REFINE_FOCUS_PROMPT, _TURN_FOCUS_PROMPT,
+        )
+        out = self._run(monkeypatch, turn_kind='intent')
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _TURN_FOCUS_PROMPT in contents
+        assert _CODELINE_REFINE_FOCUS_PROMPT not in contents
+
+    def test_panel_source_ignores_codeline_turn_kind(self, monkeypatch):
+        """``codeline_turn_kind`` only means something for Codeline requests —
+        the right-side panel must never pick up the refinement anchor."""
+        from ai_assistant.views import (
+            _CODELINE_REFINE_FOCUS_PROMPT, _TURN_FOCUS_PROMPT,
+        )
+        out = self._run(monkeypatch, turn_kind='refine', source='panel')
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _TURN_FOCUS_PROMPT in contents
+        assert _CODELINE_REFINE_FOCUS_PROMPT not in contents
+
+    def test_no_anchor_at_all_without_history(self, monkeypatch):
+        from ai_assistant.views import (
+            _CODELINE_REFINE_FOCUS_PROMPT, _TURN_FOCUS_PROMPT,
+        )
+        out = self._run(monkeypatch, turn_kind='refine', history=[])
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert _TURN_FOCUS_PROMPT not in contents
+        assert _CODELINE_REFINE_FOCUS_PROMPT not in contents
+
+    def test_history_is_replayed_to_the_model(self, monkeypatch):
+        """The point of the feature: prior turns reach the model, so the
+        revision builds on the draft instead of restarting."""
+        out = self._run(monkeypatch, turn_kind='refine')
+        contents = [m.get('content') or '' for m in out['llm_calls'][0]['messages']]
+        assert 'draw the target ratio over time' in contents
+        assert any('Here is the weekly bad rate.' in c for c in contents)
+
+    def test_refine_anchor_demands_complete_revised_code(self):
+        from ai_assistant.views import _CODELINE_REFINE_FOCUS_PROMPT
+        lowered = _CODELINE_REFINE_FOCUS_PROMPT.lower()
+        # Must keep accepted work rather than regenerate from scratch...
+        assert 'feedback' in lowered
+        assert 'execute_code' in lowered
+        # ...and must never invite a partial answer.
+        assert 'complete' in lowered
+        assert 'never a diff' in lowered
+
+    def test_turn_kind_normalization(self):
+        from ai_assistant.views import _resolve_codeline_turn_kind
+        assert _resolve_codeline_turn_kind({'codeline_turn_kind': 'REFINE'}) == 'refine'
+        assert _resolve_codeline_turn_kind({'codeline_turn_kind': ' auto_fix '}) == 'auto_fix'
+        # Unknown / missing / malformed → treated as a first ask, which is the
+        # pre-v3.5.0 behaviour an older frontend build would get.
+        assert _resolve_codeline_turn_kind({'codeline_turn_kind': 'nonsense'}) == 'intent'
+        assert _resolve_codeline_turn_kind({}) == 'intent'
+        assert _resolve_codeline_turn_kind(None) == 'intent'
+
+
+@pytest.mark.unit
 class TestFinalizePromptIsTopicNeutral:
     """v2.44.2: the finalization prompt must NOT seed the feature-engineering
     topic.  Its feature-table guidance is CONDITIONAL on the user asking for

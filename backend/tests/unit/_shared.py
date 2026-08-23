@@ -97,7 +97,8 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
                        user_message='please derive new features from the existing ones',
                        file_id=1, reasoning=False, history=None,
                        span_id=None, trace_id=None,
-                       intent_labels_for_turn=None):
+                       intent_labels_for_turn=None,
+                       context=None, source=None):
     """Execute the real _chat_workflow body with its external collaborators
     mocked.  ``call_llm(idx, messages, tools)`` scripts each LLM round.
 
@@ -168,8 +169,8 @@ def _run_chat_workflow(monkeypatch, *, provider, call_llm,
 
     fn = views._chat_workflow.__wrapped__ \
         if hasattr(views._chat_workflow, '__wrapped__') else views._chat_workflow
-    result = fn(user_message, {}, 'general', history or [],
-                file_id=file_id, model='engine-x')
+    result = fn(user_message, context or {}, 'general', history or [],
+                file_id=file_id, model='engine-x', source=source)
     return {'result': result, 'llm_calls': llm_calls, 'skill_calls': skill_calls}
 
 # ---------------------------------------------------------------------------

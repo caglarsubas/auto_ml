@@ -414,12 +414,20 @@ def stamp_codeline_capability(
     mode: str = None,
     source: str = 'codeline',
     auto_correction_attempt: int = None,
+    turn_kind: str = None,
+    iteration: int = None,
 ) -> None:
     """Stamp Codeline capability footprints on the active Prometa span.
 
     ``kind`` is ``'communication'`` (inline cell chat) or ``'execution'``
     (inline cell Run / Apply).  Attributes are OTLP scalars only and are
     no-ops when no span is active (via ``set_span_attr``).
+
+    ``turn_kind`` (v3.5.0) separates a Codeline's first ask (``'intent'``)
+    from an iteration on the same cell — user feedback (``'refine'``) or an
+    automatic error correction (``'auto_fix'``).  ``iteration`` is the
+    1-based index of this turn within the cell's thread, so a trace shows
+    how many rounds a Codeline answer took to converge.
     """
     if kind not in ('communication', 'execution'):
         return
@@ -439,6 +447,10 @@ def stamp_codeline_capability(
             'declarai.codeline.auto_correction_attempt',
             int(auto_correction_attempt),
         )
+    if turn_kind:
+        set_span_attr('declarai.codeline.turn_kind', str(turn_kind))
+    if iteration is not None:
+        set_span_attr('declarai.codeline.iteration', int(iteration))
 
 
 def stamp_mcp_tool_marker(

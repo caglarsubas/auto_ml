@@ -310,6 +310,13 @@ without Prometa wired up.
   41-feature agent-maturity scoring.
 - Assistant-answer feedback helpers (`record_user_feedback`,
   `set_user_feedback`) for thumbs, ratings, and redacted user comments.
+  Codeline refinements are mirrored through the same path
+  (`source: declarai-codeline-refine`), so a user's correction is
+  recorded as feedback against the turn it corrects.
+
+Codeline chat turns additionally carry `declarai.codeline.turn_kind`
+(`intent` / `refine` / `auto_fix`) and `declarai.codeline.iteration`, so a
+trace shows how many feedback rounds an inline answer took to converge.
 
 See the [SDK README](https://github.com/prometa-ai/orchestra-python-sdk)
 for the complete API surface and the platform's
@@ -556,6 +563,7 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| *(untagged)* | 2026-08-23 | Codeline feedback loop — each inline cell keeps its own thread, so the assistant revises its answer over successive rounds instead of re-answering from scratch; Codeline UI moved onto the `DESIGN.md` token system (`--success-700` / `--error-700` text steps added for AA contrast) |
 | *(untagged, PR #82)* | 2026-08-04 | Stable `retrieval.namespace` (Chroma collection id) on `retrieval.query` spans — Prometa no longer reports *Unspecified* |
 | **v3.4.1** | 2026-08-02–03 | gemma4:26b RAG intent FP/FN suite with CI-safe telemetry contracts and opt-in `live_engine` tests; Data Purifier `purifier_options` alias fix |
 | **v3.4.0** | 2026-08-02 | Knowledge-bank RAG hardening — Redis vector cache, Chroma persist/index on boot, `[KBn]` source citations in chat, offline eval coverage |
