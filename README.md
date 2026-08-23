@@ -556,12 +556,22 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| *(untagged, PR #82)* | 2026-08-04 | Stable `retrieval.namespace` (Chroma collection id) on `retrieval.query` spans — Prometa no longer reports *Unspecified* |
+| **v3.4.1** | 2026-08-02–03 | gemma4:26b RAG intent FP/FN suite with CI-safe telemetry contracts and opt-in `live_engine` tests; Data Purifier `purifier_options` alias fix |
+| **v3.4.0** | 2026-08-02 | Knowledge-bank RAG hardening — Redis vector cache, Chroma persist/index on boot, `[KBn]` source citations in chat, offline eval coverage |
+| **v3.3.0** | 2026-08-01–02 | Prometa `retrieval.query` AML around knowledge-bank RAG (result ids, scores, raw content for citation grounding); Precision Editorial homepage with monoline icons |
+| **v3.2.0** | 2026-08-01 | Precision Editorial brand guidelines in `DESIGN.md`, made the required reference for all UI work |
+| *(untagged, PR #74–75)* | 2026-08-01 | Hybrid vector RAG for the AI assistant (OpenAI embeddings + persistent Chroma, lexical ranking retained, offline fallback); credentialed E2E journeys gated in CI |
+| **v3.1.0** | 2026-07-28 | SFS feature sorter by combined SHAP×gain score, sequential-pattern (causality) MVP |
+| **v3.0.0** | 2026-07-28 | CRISP-DM logit / scorecard / anomaly pipelines, multi-booster outer-test compare API |
 | **v2.8.0** | 2026-03-22 | VIF multicollinearity metric, ECDF-rank percentile scoring, Combined feature ranking (geometric mean), sortable Selected Features table, comprehensive README |
 | **v2.7.0** | 2026-03-19 | Merged encoding into modeling step, native categorical SHAP fix, encoding plan UI in modeling component |
 | **v2.6.1** | 2026-03-17 | Feature Card importance tab — highlight selected feature, auto-load on click |
 | **v2.6.0** | 2026-03-15 | Gain column in feature table, SFS progression charts, fullscreen modal |
 | **v2.5.0** | 2025-10-27 | Sequential Feature Selection (SFS) v1 |
 | **v2.4.x** | 2025-10-15–19 | SHAP beeswarm plot, impact sign direction, Feature Card explainability tab, UI style fixes |
+
+> v2.9–v2.58 are not itemised here; the CRISP-DM stretch (v2.59–v3.0) is summarised under [Roadmap](#roadmap), and `git log --no-merges` carries the rest.
 
 ---
 
@@ -577,6 +587,19 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - ~~**Logistic regression pipeline**~~ — Done (v3.0): train → eval → deploy via sklearn adapter
 - ~~**Credit scorecard**~~ — Done (v3.0): WOE/IV bins + PDO score points
 - ~~**Anomaly detection pipeline**~~ — Done (v3.0 MVP): IsolationForest + outer-test ranking metrics when labels exist
+- ~~**Vector RAG for the assistant**~~ — Done (2026-08-01, PR #74): OpenAI embeddings + persistent Chroma, lexical ranking retained, offline fallback
+- ~~**Brand/design system**~~ — Done (v3.2): Precision Editorial guidelines in `DESIGN.md`, required reference for UI work
+- ~~**Retrieval telemetry**~~ — Done (v3.3 + PR #82): `retrieval.query` AML spans with result ids, scores, content, and a stable knowledge-bank namespace
+- ~~**RAG hardening**~~ — Done (v3.4): Redis vector cache, Chroma persist/index on boot, `[KBn]` citations in chat
+- ~~**RAG regression coverage**~~ — Done (v3.4.1): gemma4:26b should-RAG / should-not-RAG golden suite with telemetry contracts
+
+### Open / candidate next
+
+Sourced from the `!CFH!` and future-improvements blocks in `ToDoS.txt` — not yet scheduled:
+
+- **SFS over correlated clusters** — let the assistant temporarily adjust the pipeline to run SFS across a high-VIF cluster instead of pre-dropping its members, on explicit user confirmation
+- **Custom scoring functions via UI** — user-supplied scorer for SFS / hyperparameter search
+- **Before/after feature comparison** — side-by-side view of the model with and without a candidate feature
 
 ### Later / out of scope for now
 - Online real-time serving / A/B platform
@@ -585,7 +608,7 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - Auto-retrain without human confirmation
 - Deeper monitoring dashboards beyond offline drift MVP
 
-### CRISP-DM cycle (v2.59–v2.65)
+### CRISP-DM cycle (v2.59–v3.0)
 
 - **v2.59** — CRISP-DM nav labels, `PipelineRun` `crisp_dm` state contract, docs alignment
 - **v2.60** — Business Understanding form, success floors, target contract, model-card feed
