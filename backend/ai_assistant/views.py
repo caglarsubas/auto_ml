@@ -4,10 +4,14 @@ and returns advisory, insight-rich responses.
 """
 import json
 import os
+import queue
 import re as _re
+import threading
 import traceback
 from typing import Optional
 
+from django.db import connections as db_connections
+from django.http import StreamingHttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -25,6 +29,52 @@ from .tool_executor import execute_tool_call, _load_skill_traced
 from .skill_registry import get_skill
 from .cache import cache_list_artifacts
 from .intent_classifier import resolve_intent_classification
+from . import progress
+
+# ---------------------------------------------------------------------------
+# Progress-channel copy (see ai_assistant/progress.py)
+# ---------------------------------------------------------------------------
+# Short, user-facing names for the pipeline tools the model can call.  The raw
+# function names (``get_vif_decomposition``) are precise but read like plumbing;
+# the panel shows these instead.  Falls back to a de-snake-cased tool name for
+# anything not listed, so a newly added tool degrades to "Get foo bar" rather
+# than breaking the step row.
+_TOOL_STEP_LABELS = {
+    'invoke_skill': 'Loading playbook',
+    'get_skill_file': 'Reading playbook file',
+    'get_split_validation': 'Checking train/test split',
+    'get_dq_summary': 'Reading data-quality summary',
+    'get_feature_stats': 'Reading feature statistics',
+    'get_vif_decomposition': 'Reading VIF decomposition',
+    'get_encoding_plan': 'Reading encoding plan',
+    'get_selected_features': 'Reading selected features',
+    'get_shap_details': 'Reading SHAP explainability',
+    'get_sfs_results': 'Reading feature-selection results',
+    'get_cv_results': 'Reading cross-validation results',
+    'get_pipeline_notes': 'Reading pipeline notes',
+    'get_pipeline_codelines': 'Reading pipeline codelines',
+    'get_pipeline_config': 'Reading pipeline configuration',
+    'get_purifier_options': 'Reading purifier options',
+    'get_data_dictionary': 'Reading data dictionary',
+}
+
+# Intent labels (A-E, R) in the classifier's vocabulary -> short plain-English
+# summaries for the "Reading your question" step detail.
+_INTENT_STEP_WORDS = {
+    'A': 'concept',
+    'B': 'pipeline',
+    'C': 'current results',
+    'D': 'configuration',
+    'E': 'flow action',
+    'R': 'documentation',
+}
+
+
+def _tool_step_label(tool_name: str) -> str:
+    """User-facing label for a tool call in the progress channel."""
+    if tool_name in _TOOL_STEP_LABELS:
+        return _TOOL_STEP_LABELS[tool_name]
+    return (tool_name or 'tool').replace('_', ' ').strip().capitalize()
 from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
     get_model_config, list_models, resolve_default_model,
@@ -1543,14 +1593,19 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             iteration=iteration_int,
         )
 
-    intent = resolve_intent_classification(
-        user_message,
-        section=section or '',
-        context=context or {},
-        preclassified_labels=intent_labels,
-        preclassified_source=intent_source,
-        llm_classifier=_classify_intent_with_llm,
-    )
+    with progress.step('intent', 'Reading your question') as _step:
+        intent = resolve_intent_classification(
+            user_message,
+            section=section or '',
+            context=context or {},
+            preclassified_labels=intent_labels,
+            preclassified_source=intent_source,
+            llm_classifier=_classify_intent_with_llm,
+        )
+        _words = [_INTENT_STEP_WORDS[l] for l in (intent.get('labels') or [])
+                  if l in _INTENT_STEP_WORDS]
+        if _words:
+            _step.detail = 'about ' + ', '.join(_words)
 
     # ── Workflow-level tracing attributes ──
     _stamp_intent_attrs(intent)
@@ -1590,20 +1645,25 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             use_tools = True
 
     if use_tools:
-        slim = _build_slim_context(file_id, section)
-        compact_retry_context = slim
-        messages.append({
-            'role': 'system',
-            'content': f'Pipeline context summary (use tools for details):\n\n{slim}',
-        })
+        with progress.step('context', 'Gathering pipeline context') as _step:
+            slim = _build_slim_context(file_id, section)
+            compact_retry_context = slim
+            messages.append({
+                'role': 'system',
+                'content': f'Pipeline context summary (use tools for details):\n\n{slim}',
+            })
+            _step.detail = (f'{len(available)} cached artifact'
+                            f'{"" if len(available) == 1 else "s"}')
     elif context:
-        context_str = _format_context(context, section)
-        compact_retry_context = context_str
-        messages.append({
-            'role': 'system',
-            'content': f'The user is currently viewing the following pipeline output '
-                       f'(section: {section}):\n\n{context_str}',
-        })
+        with progress.step('context', 'Gathering pipeline context') as _step:
+            context_str = _format_context(context, section)
+            compact_retry_context = context_str
+            messages.append({
+                'role': 'system',
+                'content': f'The user is currently viewing the following pipeline output '
+                           f'(section: {section}):\n\n{context_str}',
+            })
+            _step.detail = f'{section or "general"} section'
 
     # ── Knowledge-bank RAG ───────────────────────────────────────────
     # The deterministic intent classifier owns the decision to retrieve
@@ -1613,14 +1673,18 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     rag_result = None
     has_knowledge_bank_context = False
     if 'R' in (intent.get('labels') or []):
-        rag_result = retrieve_knowledge_context(user_message)
-        knowledge_context = (rag_result or {}).get('context') or ''
-        if knowledge_context:
-            messages.append({
-                'role': 'system',
-                'content': knowledge_context,
-            })
-            has_knowledge_bank_context = True
+        with progress.step('retrieval', 'Searching the knowledge bank') as _step:
+            rag_result = retrieve_knowledge_context(user_message)
+            knowledge_context = (rag_result or {}).get('context') or ''
+            if knowledge_context:
+                messages.append({
+                    'role': 'system',
+                    'content': knowledge_context,
+                })
+                has_knowledge_bank_context = True
+            _hits = len((rag_result or {}).get('results') or [])
+            _step.detail = (f'{_hits} source{"" if _hits == 1 else "s"}' if _hits
+                            else 'no matching sources')
         set_span_attr('declarai.rag.in_prompt', has_knowledge_bank_context)
     else:
         set_span_attr('declarai.rag.called', False)
@@ -1662,7 +1726,8 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         # keep it.  The engine-side defect (500 instead of a graceful
         # context_length_exceeded 400) is filed separately as engine feedback.
         if (model_cfg or {}).get('provider', '') != 'engine':
-            skill_body = _load_skill_traced(auto_skill)
+            with progress.step('skill', 'Loading domain playbook', auto_skill):
+                skill_body = _load_skill_traced(auto_skill)
             messages.append({
                 'role': 'system',
                 'content': (f"The user's question matched the '{auto_skill}' skill — "
@@ -1753,7 +1818,15 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
     tools = PIPELINE_TOOLS if (use_tools and model_cfg.get('supports_tools')) else None
     msg_obj = {}
 
+    model_label = model_cfg.get('display_name') or model_cfg.get('model_id') or model_key
     for _round in range(_MAX_TOOL_ROUNDS + 1):
+        # One step row per LLM round.  Round 0 is the initial "read the
+        # question and decide" call; later rounds are the model re-reading
+        # the tool results it asked for.  The engine gives us no visibility
+        # INSIDE this call (queue wait, prompt eval, generation) — that gap
+        # is tracked in docs/engine-feedback/turn-progress-telemetry.md.
+        progress.emit(f'llm:{_round}', 'Thinking' if _round == 0 else 'Reviewing results',
+                      'running', model_label)
         try:
             result = _call_llm(messages, model_key, tools=tools)
         except Exception as exc:
@@ -1770,10 +1843,15 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             # yet) keep propagating so genuine failures still surface.
             if _is_engine_server_error(exc) and any(
                     m.get('role') == 'tool' for m in messages):
+                progress.emit(f'llm:{_round}', 'Thinking', 'error',
+                              'context window exceeded — answering from results so far')
                 set_span_attr('declarai.chat.engine_overflow', True)
                 set_span_attr('declarai.chat.engine_overflow_round', _round)
                 set_span_attr('declarai.chat.engine_overflow_error', str(exc)[:200])
                 break
+            progress.emit(f'llm:{_round}',
+                          'Thinking' if _round == 0 else 'Reviewing results',
+                          'error', str(exc)[:160])
             raise
         _merge_usage(total_usage, result.get('usage', {}))
         result = _normalize_llm_response_schema(result, model_cfg, tools)
@@ -1784,18 +1862,31 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
         # If no tool calls, we're done
         if finish_reason != 'tool_calls' and not msg_obj.get('tool_calls'):
+            progress.emit(f'llm:{_round}',
+                          'Thought it through' if _round == 0 else 'Reviewed the results',
+                          'done', model_label)
             break
 
         # Resolve tool calls
         tool_calls = msg_obj.get('tool_calls', [])
         if not tool_calls:
+            progress.emit(f'llm:{_round}',
+                          'Thought it through' if _round == 0 else 'Reviewed the results',
+                          'done', model_label)
             break
+
+        progress.emit(
+            f'llm:{_round}',
+            'Decided what to look up' if _round == 0 else 'Reviewed the results',
+            'done',
+            f'{len(tool_calls)} lookup{"" if len(tool_calls) == 1 else "s"}',
+        )
 
         # Append the assistant message with tool_calls to the conversation
         messages.append(msg_obj)
 
         # Execute each tool call and append results
-        for tc in tool_calls:
+        for _tc_index, tc in enumerate(tool_calls):
             fn = tc.get('function', {})
             tool_name = fn.get('name', '')
             try:
@@ -1803,7 +1894,10 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             except json.JSONDecodeError:
                 tool_args = {}
 
-            tool_result = execute_tool_call(file_id, tool_name, tool_args)
+            with progress.step(f'tool:{_round}:{_tc_index}:{tool_name}',
+                               _tool_step_label(tool_name)) as _step:
+                tool_result = execute_tool_call(file_id, tool_name, tool_args)
+                _step.detail = f'{len(tool_result or "")} chars'
             messages.append({
                 'role': 'tool',
                 'tool_call_id': tc.get('id', ''),
@@ -1880,6 +1974,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         preserved_actions = (
             _ACTION_BLOCK_RE.findall(assistant_message) if code_only else []
         )
+        progress.emit('synthesis', 'Writing the answer', 'running', model_label)
         try:
             if partial_success:
                 retry_messages = _build_partial_reply_retry_messages(
@@ -1922,11 +2017,13 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
             if code_only and not new_message.strip():
                 new_message = assistant_message
             assistant_message = new_message
+            progress.emit('synthesis', 'Wrote the answer', 'done', model_label)
             set_span_attr(
                 'declarai.chat.synthesis_chars',
                 len(assistant_message),
             )
         except Exception as exc:  # pragma: no cover - network path
+            progress.emit('synthesis', 'Writing the answer', 'error', str(exc)[:160])
             set_span_attr('declarai.chat.synthesis_error', str(exc)[:200])
             # Preserve a functional code-only reply on failure; only the
             # genuinely empty / CoT-leak paths fall through to the fallback.
@@ -1947,6 +2044,11 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
 
     # Parse action blocks from the AI response
     actions, clean_message = _extract_actions(assistant_message)
+    if actions:
+        progress.emit(
+            'actions', 'Prepared actions', 'done',
+            f'{len(actions)} action{"" if len(actions) == 1 else "s"} to review',
+        )
 
     # v2.33.0 (Phase 3c): emit a Prometa AML ``plan.generate`` span (C2)
     # whenever the LLM's response yields ≥1 action block.  Pure
@@ -2050,6 +2152,86 @@ def _merge_usage(total: dict, new: dict):
             total[key] = total.get(key, 0) + new[key]
 
 
+# Emitted every _STREAM_HEARTBEAT_SECONDS while the workflow is inside a long
+# blocking call (typically the LLM round) so intermediaries don't drop an idle
+# connection and the client can tell "still working" from "hung".
+_STREAM_HEARTBEAT_SECONDS = 10.0
+
+
+def _stream_chat_turn(workflow_kwargs: dict):
+    """Run ``_chat_workflow`` on a worker thread, yielding NDJSON as it narrates.
+
+    Why a thread: ``_chat_workflow`` is a 500-line straight-line function with a
+    Prometa ``@workflow`` decorator around it.  Turning it into a generator so a
+    ``StreamingHttpResponse`` could pull from it would mean restructuring every
+    phase and re-deriving the span lifetimes.  Running it unchanged on a worker
+    thread and draining a ``queue.Queue`` from the response generator keeps the
+    workflow — and its tracing — byte-identical to the non-streaming path.
+
+    The worker opens its own root Prometa span (``@workflow`` starts the trace
+    itself, so there is no parent context to propagate) and its own Django DB
+    connection, which it closes on the way out.
+
+    Wire format is newline-delimited JSON, one object per line:
+
+        {"type": "step",   "id": ..., "label": ..., "state": ..., ...}
+        {"type": "ping"}
+        {"type": "result", "data": { ...the exact non-streaming payload... }}
+        {"type": "error",  "error": "...", "status": 500}
+
+    The terminal line is always exactly one ``result`` or one ``error``, so a
+    client that only cares about the answer can ignore everything else.
+    """
+    events: "queue.Queue" = queue.Queue()
+    done = object()
+    outcome: dict = {}
+
+    def _run():
+        sink = progress.ProgressSink(events.put_nowait)
+        try:
+            with progress.bind_sink(sink):
+                outcome['data'] = _chat_workflow(**workflow_kwargs)
+        except EnvironmentError as exc:
+            outcome['error'] = str(exc)
+            outcome['status'] = status.HTTP_503_SERVICE_UNAVAILABLE
+        except Exception as exc:
+            traceback.print_exc()
+            outcome['error'] = f'AI Assistant error: {exc}'
+            outcome['status'] = status.HTTP_500_INTERNAL_SERVER_ERROR
+        finally:
+            try:
+                prometa_flush()
+            except Exception:
+                pass
+            # This thread owns its own DB connections; Django won't reap them.
+            db_connections.close_all()
+            events.put_nowait(done)
+
+    worker = threading.Thread(target=_run, name='declarai-chat-turn', daemon=True)
+    worker.start()
+
+    while True:
+        try:
+            item = events.get(timeout=_STREAM_HEARTBEAT_SECONDS)
+        except queue.Empty:
+            yield json.dumps({'type': 'ping'}) + '\n'
+            continue
+        if item is done:
+            break
+        yield json.dumps(item) + '\n'
+
+    worker.join(timeout=5)
+
+    if 'error' in outcome:
+        yield json.dumps({
+            'type': 'error',
+            'error': outcome['error'],
+            'status': outcome.get('status', status.HTTP_500_INTERNAL_SERVER_ERROR),
+        }) + '\n'
+    else:
+        yield json.dumps({'type': 'result', 'data': outcome.get('data', {})}) + '\n'
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class AIAssistantView(APIView):
     """
@@ -2058,8 +2240,15 @@ class AIAssistantView(APIView):
         "message": "user question",
         "context": { ... pipeline section data ... },
         "section": "data_quality|encoding|cv|shap|selected_features|sfs",
-        "history": [ {"role": "user"|"assistant", "content": "..."}, ... ]
+        "history": [ {"role": "user"|"assistant", "content": "..."}, ... ],
+        "stream": true   # optional — NDJSON progress channel, see below
     }
+
+    With ``stream`` omitted or false the response is the plain JSON payload it
+    has always been.  With ``stream: true`` the same payload arrives as the
+    final line of an ``application/x-ndjson`` stream, preceded by one line per
+    workflow phase so the chat panel can show what the assistant is doing
+    instead of an opaque typing indicator.
     """
 
     def post(self, request, *args, **kwargs):
@@ -2083,12 +2272,35 @@ class AIAssistantView(APIView):
             # Origin of the request: inline Codeline cell vs right-side panel
             chat_source = data.get('source') or 'panel'
 
-            response_data = _chat_workflow(user_message, context, section, history,
-                                           file_id=int(file_id) if file_id else None,
-                                           model=model,
-                                           intent_labels=intent_labels,
-                                           intent_source=intent_source,
-                                           source=chat_source)
+            workflow_kwargs = dict(
+                user_message=user_message,
+                context=context,
+                section=section,
+                history=history,
+                file_id=int(file_id) if file_id else None,
+                model=model,
+                intent_labels=intent_labels,
+                intent_source=intent_source,
+                source=chat_source,
+            )
+
+            if data.get('stream'):
+                # The worker thread owns the turn from here: it runs the
+                # workflow, flushes Prometa, and closes its DB connections.
+                # Nothing below this branch (including the `finally` flush)
+                # applies to the streaming path.
+                response = StreamingHttpResponse(
+                    _stream_chat_turn(workflow_kwargs),
+                    content_type='application/x-ndjson',
+                )
+                # Defeat proxy buffering — without this an nginx in front of
+                # the backend would hold every step line until the turn ends,
+                # which is exactly the behaviour this endpoint exists to fix.
+                response['Cache-Control'] = 'no-cache, no-transform'
+                response['X-Accel-Buffering'] = 'no'
+                return response
+
+            response_data = _chat_workflow(**workflow_kwargs)
             return Response(response_data, status=status.HTTP_200_OK)
 
         except EnvironmentError as e:

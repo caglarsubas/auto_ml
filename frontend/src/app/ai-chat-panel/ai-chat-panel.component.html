@@ -94,7 +94,51 @@
             </li>
           </ul>
         </div>
-        <div class="chat-message-content loading" *ngIf="msg.loading">
+        <!-- Turn progress — what the assistant is doing right now.
+             While the turn runs this is the live step list; once it finishes
+             it collapses to a one-line summary the user can expand. -->
+        <div
+          class="chat-steps"
+          *ngIf="msg.role === 'assistant' && msg.steps?.length"
+          [class.complete]="msg.stepsComplete"
+        >
+          <button
+            type="button"
+            class="chat-steps-summary"
+            *ngIf="msg.stepsComplete"
+            (click)="toggleStepsExpand(mi)"
+            [attr.aria-expanded]="isStepsExpanded(mi)"
+          >
+            <span class="chat-steps-summary-caret">{{ isStepsExpanded(mi) ? '&#9662;' : '&#9656;' }}</span>
+            <span class="chat-steps-summary-text">{{ stepsSummary(msg) }}</span>
+          </button>
+
+          <ol
+            class="chat-steps-list"
+            *ngIf="!msg.stepsComplete || isStepsExpanded(mi)"
+            aria-label="Assistant progress"
+            [attr.aria-live]="msg.stepsComplete ? null : 'polite'"
+          >
+            <li
+              *ngFor="let step of msg.steps; trackBy: trackStep"
+              class="chat-step"
+              [ngClass]="'state-' + step.state"
+            >
+              <span class="chat-step-marker" aria-hidden="true"></span>
+              <span class="chat-step-text">
+                <span class="chat-step-label">{{ step.label }}</span>
+                <span class="chat-step-detail" *ngIf="step.detail">{{ step.detail }}</span>
+              </span>
+              <span class="chat-step-time" *ngIf="step.state !== 'running' && step.durationMs != null">
+                {{ formatDuration(step.durationMs) }}
+              </span>
+            </li>
+          </ol>
+        </div>
+
+        <!-- Bare typing dots only until the first progress row lands; after
+             that the running step row is the liveness signal. -->
+        <div class="chat-message-content loading" *ngIf="msg.loading && !msg.steps?.length">
           <div class="typing-indicator">
             <span></span><span></span><span></span>
           </div>

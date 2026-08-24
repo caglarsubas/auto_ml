@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, HostListener, NgZone } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { AiAssistantService, AiAction, AiFeedbackState, AiIntentLabel, ChatMessage } from '../services/ai-assistant.service';
+import { AiAssistantService, AiAction, AiFeedbackState, AiIntentLabel, AssistantStep, ChatMessage } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
@@ -49,10 +49,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     'The assistant did not return an answer this time. ' +
     'Please try rephrasing your question or check the backend logs.';
 
+  /** Message indices whose finished step trail the user has expanded. */
+  private expandedSteps = new Set<number>();
+
   constructor(
     public aiService: AiAssistantService,
     private dataService: DataService,
-    private sharedService: SharedService
+    private sharedService: SharedService,
+    private zone: NgZone
   ) {}
 
   ngOnInit(): void {
@@ -142,7 +146,9 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       fileId ?? undefined,
       this.selectedModel,
       intentLabels,
-      intentSource
+      intentSource,
+      undefined,
+      { onStep: step => this.onProgressStep(step) }
     ).subscribe({
       next: (resp: any) => {
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
@@ -173,14 +179,66 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           resp.chat_session_id,
           ragSources,
         );
+        this.aiService.finalizeProgressSteps();
         this.isLoading = false;
       },
       error: (err: any) => {
         const errorMsg = err?.error?.error || err?.message || 'Failed to get AI response. Please check your API key.';
         this.aiService.updateLastMessage(`Error: ${errorMsg}`);
+        this.aiService.finalizeProgressSteps();
         this.isLoading = false;
       }
     });
+  }
+
+  /**
+   * Fold one backend progress event into the in-flight assistant message.
+   *
+   * The NDJSON reader resolves its promises outside Angular's zone on some
+   * browsers, so re-enter explicitly rather than relying on zone.js patching
+   * the streams API — a missed tick here would freeze the step list mid-turn.
+   */
+  private onProgressStep(step: AssistantStep): void {
+    this.zone.run(() => {
+      this.aiService.applyProgressStep(step);
+      this.shouldScrollToBottom = true;
+    });
+  }
+
+  isStepsExpanded(index: number): boolean {
+    return this.expandedSteps.has(index);
+  }
+
+  toggleStepsExpand(index: number): void {
+    if (this.expandedSteps.has(index)) {
+      this.expandedSteps.delete(index);
+    } else {
+      this.expandedSteps.add(index);
+    }
+  }
+
+  /** "6 steps · 4.2s" — the collapsed summary of a finished turn. */
+  stepsSummary(msg: ChatMessage): string {
+    const steps = msg.steps || [];
+    const count = steps.length;
+    const last = steps[count - 1];
+    const total = last ? last.elapsedMs + (last.durationMs || 0) : 0;
+    const noun = count === 1 ? 'step' : 'steps';
+    return `${count} ${noun} · ${this.formatDuration(total)}`;
+  }
+
+  /** Compact duration for the step rows: 840ms, 4.2s, 1m 05s. */
+  formatDuration(ms: number): string {
+    if (!ms || ms < 0) return '0ms';
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.round((ms % 60000) / 1000);
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+  }
+
+  trackStep(_index: number, step: AssistantStep): string {
+    return step.id;
   }
 
   /** Toggle edit mode for an action block */
@@ -849,9 +907,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       this.currentSection || 'general',
       history,
       this.sharedService.getCurrentFileId() ?? undefined,
-      this.selectedModel
+      this.selectedModel,
+      undefined,
+      undefined,
+      undefined,
+      { onStep: step => this.onProgressStep(step) }
     ).subscribe({
       next: (resp: any) => {
+        this.aiService.finalizeProgressSteps();
         const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
           type: a.type,
           payload: a.payload,
@@ -900,6 +963,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       error: (err: any) => {
         const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
         this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
+        this.aiService.finalizeProgressSteps();
         this.isLoading = false;
       }
     });

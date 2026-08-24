@@ -1759,4 +1759,125 @@ describe('AiChatPanelComponent', () => {
       expect(lastMsg.content).toContain('_form defaults_');
     });
   });
+
+  // ── Turn progress trail ──────────────────────────────────────────────
+  // The panel used to show one typing indicator for a whole 5-60s turn.  It
+  // now renders a row per backend workflow phase while the turn runs, then
+  // collapses that trail into an expandable one-liner.
+  describe('progress steps', () => {
+    const step = (id: string, state: 'running' | 'done' | 'error',
+                  elapsedMs: number, detail?: string) =>
+      ({ id, label: id, state, elapsedMs, detail } as any);
+
+    it('should ask the data service for a progress channel when sending', () => {
+      const sendSpy = spyOn(dataService, 'sendAiChat').and.returnValue(of({ message: 'ok' }));
+      component.userInput = 'why is AUC low?';
+      component.sendMessage();
+      const opts = sendSpy.calls.mostRecent().args[9] as any;
+      expect(opts?.onStep).toEqual(jasmine.any(Function));
+    });
+
+    it('should attach streamed steps to the in-flight assistant message', () => {
+      spyOn(dataService, 'sendAiChat').and.callFake((...args: any[]) => {
+        const opts = args[9];
+        opts.onStep(step('intent', 'running', 5));
+        opts.onStep(step('intent', 'done', 42, 'about current results'));
+        opts.onStep(step('llm:0', 'running', 45));
+        return of({ message: 'the answer' });
+      });
+
+      component.userInput = 'why is AUC low?';
+      component.sendMessage();
+
+      const msg = aiService.getMessages().slice(-1)[0];
+      expect(msg.content).toBe('the answer');
+      expect(msg.steps!.map(s => s.id)).toEqual(['intent', 'llm:0']);
+      expect(msg.stepsComplete).toBeTrue();
+    });
+
+    it('should keep the trail when the turn fails', () => {
+      spyOn(dataService, 'sendAiChat').and.callFake((...args: any[]) => {
+        args[9].onStep(step('intent', 'done', 40));
+        return throwError(() => ({ error: { error: 'engine unreachable' } }));
+      });
+
+      component.userInput = 'why is AUC low?';
+      component.sendMessage();
+
+      const msg = aiService.getMessages().slice(-1)[0];
+      expect(msg.content).toContain('engine unreachable');
+      expect(msg.steps!.length).toBe(1);
+      expect(msg.stepsComplete).toBeTrue();
+      expect(component.isLoading).toBeFalse();
+    });
+
+    it('should render one row per step while the turn runs', () => {
+      spyOn(dataService, 'sendAiChat').and.callFake((...args: any[]) => {
+        args[9].onStep(step('intent', 'done', 40));
+        args[9].onStep(step('llm:0', 'running', 45));
+        return of({ message: 'done' });
+      });
+      fixture.detectChanges();
+      component.userInput = 'q';
+      component.sendMessage();
+      // Finished turns collapse; expand to assert on the rendered rows.
+      component.toggleStepsExpand(1);
+      fixture.detectChanges();
+
+      const rows = fixture.nativeElement.querySelectorAll('.chat-step');
+      expect(rows.length).toBe(2);
+    });
+
+    it('should collapse a finished trail behind a summary line', () => {
+      spyOn(dataService, 'sendAiChat').and.callFake((...args: any[]) => {
+        args[9].onStep(step('intent', 'done', 40));
+        return of({ message: 'done' });
+      });
+      fixture.detectChanges();
+      component.userInput = 'q';
+      component.sendMessage();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('.chat-step').length).toBe(0);
+      expect(fixture.nativeElement.querySelector('.chat-steps-summary')).toBeTruthy();
+    });
+
+    it('should toggle the trail open and closed', () => {
+      expect(component.isStepsExpanded(0)).toBeFalse();
+      component.toggleStepsExpand(0);
+      expect(component.isStepsExpanded(0)).toBeTrue();
+      component.toggleStepsExpand(0);
+      expect(component.isStepsExpanded(0)).toBeFalse();
+    });
+
+    it('should summarise a finished trail as count plus total time', () => {
+      const msg: any = {
+        role: 'assistant', content: 'x', timestamp: new Date(),
+        steps: [
+          { id: 'intent', label: 'i', state: 'done', elapsedMs: 0, durationMs: 40 },
+          { id: 'llm:0', label: 'l', state: 'done', elapsedMs: 40, durationMs: 4200 },
+        ],
+      };
+      expect(component.stepsSummary(msg)).toBe('2 steps · 4.2s');
+    });
+
+    it('should use the singular for a one-step turn', () => {
+      const msg: any = {
+        role: 'assistant', content: 'x', timestamp: new Date(),
+        steps: [{ id: 'intent', label: 'i', state: 'done', elapsedMs: 0, durationMs: 120 }],
+      };
+      expect(component.stepsSummary(msg)).toBe('1 step · 120ms');
+    });
+
+    it('should format durations across the ms / s / m boundaries', () => {
+      expect(component.formatDuration(0)).toBe('0ms');
+      expect(component.formatDuration(840)).toBe('840ms');
+      expect(component.formatDuration(4200)).toBe('4.2s');
+      expect(component.formatDuration(65000)).toBe('1m 05s');
+    });
+
+    it('should track rows by step id so they update in place', () => {
+      expect(component.trackStep(0, step('llm:0', 'running', 5))).toBe('llm:0');
+    });
+  });
 });

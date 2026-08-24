@@ -288,4 +288,92 @@ describe('AiAssistantService', () => {
       expect(pending!.intentSource).toBe('custom_button');
     });
   });
+
+  // ── Turn progress trail ──────────────────────────────────────────────
+  describe('progress steps', () => {
+    const step = (id: string, state: 'running' | 'done' | 'error',
+                  elapsedMs: number, detail?: string) =>
+      ({ id, label: id, state, elapsedMs, detail } as any);
+
+    beforeEach(() => {
+      service.addMessage({ role: 'user', content: 'q', timestamp: new Date() });
+      service.addMessage({ role: 'assistant', content: '', timestamp: new Date(), loading: true });
+    });
+
+    it('should append a step row on the first event for an id', () => {
+      service.applyProgressStep(step('intent', 'running', 5));
+      const msg = service.getMessages().slice(-1)[0];
+      expect(msg.steps!.length).toBe(1);
+      expect(msg.steps![0].state).toBe('running');
+    });
+
+    it('should update a row in place rather than duplicating it', () => {
+      service.applyProgressStep(step('intent', 'running', 5));
+      service.applyProgressStep(step('intent', 'done', 45, 'about concept'));
+      const steps = service.getMessages().slice(-1)[0].steps!;
+      expect(steps.length).toBe(1);
+      expect(steps[0].state).toBe('done');
+      expect(steps[0].detail).toBe('about concept');
+    });
+
+    it('should derive each row duration from its own start time', () => {
+      service.applyProgressStep(step('intent', 'running', 100));
+      service.applyProgressStep(step('intent', 'done', 350));
+      const steps = service.getMessages().slice(-1)[0].steps!;
+      expect(steps[0].elapsedMs).toBe(100);   // start is preserved
+      expect(steps[0].durationMs).toBe(250);
+    });
+
+    it('should keep distinct ids as distinct rows in arrival order', () => {
+      service.applyProgressStep(step('intent', 'done', 40));
+      service.applyProgressStep(step('llm:0', 'running', 45));
+      service.applyProgressStep(step('tool:0:0:get_dq_summary', 'running', 900));
+      const ids = service.getMessages().slice(-1)[0].steps!.map(s => s.id);
+      expect(ids).toEqual(['intent', 'llm:0', 'tool:0:0:get_dq_summary']);
+    });
+
+    it('should ignore events when the last message is not the assistant', () => {
+      service.clearMessages();
+      service.addMessage({ role: 'user', content: 'q', timestamp: new Date() });
+      service.applyProgressStep(step('intent', 'running', 5));
+      expect(service.getMessages().slice(-1)[0].steps).toBeUndefined();
+    });
+
+    it('should ignore events when there are no messages at all', () => {
+      service.clearMessages();
+      expect(() => service.applyProgressStep(step('intent', 'running', 5))).not.toThrow();
+    });
+
+    it('finalize should settle a row left running by a failed turn', () => {
+      service.applyProgressStep(step('intent', 'done', 40));
+      service.applyProgressStep(step('llm:0', 'running', 45));
+      service.finalizeProgressSteps();
+      const msg = service.getMessages().slice(-1)[0];
+      expect(msg.steps!.map(s => s.state)).toEqual(['done', 'done']);
+      expect(msg.stepsComplete).toBeTrue();
+    });
+
+    it('finalize should preserve an error row as an error', () => {
+      service.applyProgressStep(step('tool:0:0:get_dq_summary', 'error', 90, 'redis down'));
+      service.finalizeProgressSteps();
+      const steps = service.getMessages().slice(-1)[0].steps!;
+      expect(steps[0].state).toBe('error');
+    });
+
+    it('finalize should be a no-op on a message that never streamed', () => {
+      service.finalizeProgressSteps();
+      const msg = service.getMessages().slice(-1)[0];
+      expect(msg.stepsComplete).toBeUndefined();
+    });
+
+    it('should survive updateLastMessage — the trail outlives the answer', () => {
+      service.applyProgressStep(step('intent', 'done', 40));
+      service.updateLastMessage('the answer');
+      service.finalizeProgressSteps();
+      const msg = service.getMessages().slice(-1)[0];
+      expect(msg.content).toBe('the answer');
+      expect(msg.loading).toBeFalse();
+      expect(msg.steps!.length).toBe(1);
+    });
+  });
 });

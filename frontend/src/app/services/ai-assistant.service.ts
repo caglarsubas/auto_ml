@@ -43,6 +43,29 @@ export const AI_SUPPORT_INTENTS_BY_SECTION: { [section: string]: AiIntentLabel[]
   hyperparameter_results: ['C'],
 };
 
+/**
+ * One phase of an in-flight assistant turn, as narrated by the backend's
+ * NDJSON progress channel (``ai_assistant/progress.py``).
+ *
+ * A turn is a single HTTP request that internally runs intent classification,
+ * context assembly, knowledge-bank retrieval, one or more LLM rounds, tool
+ * calls, and a synthesis pass.  The panel used to show one typing indicator
+ * for the whole thing; these rows show what it is actually doing.
+ *
+ * ``id`` is the identity we de-duplicate on — a ``running`` event creates the
+ * row and a later ``done``/``error`` with the same id updates it in place.
+ */
+export interface AssistantStep {
+  id: string;
+  label: string;
+  state: 'running' | 'done' | 'error';
+  detail?: string;
+  /** ms since the turn started, stamped server-side when the event was emitted. */
+  elapsedMs: number;
+  /** ms this step itself took — set when the closing event arrives. */
+  durationMs?: number;
+}
+
 /** Knowledge-bank snippet metadata returned with RAG-backed assistant turns. */
 export interface RagSource {
   source: string;
@@ -77,6 +100,15 @@ export interface ChatMessage {
   /** v3.4.0+: knowledge-bank sources when intent included retrieval (R). */
   ragSources?: RagSource[];
   feedback?: AiFeedbackState;
+  /**
+   * Live progress rows for this turn.  Populated while `loading` is true and
+   * kept afterwards so the finished message can show a collapsed
+   * "N steps · 12.4s" trail the user can expand.  Absent on messages from
+   * before this feature and on turns that used the non-streaming transport.
+   */
+  steps?: AssistantStep[];
+  /** True once the turn finished, so the template can collapse the trail. */
+  stepsComplete?: boolean;
 }
 
 @Injectable({
@@ -139,6 +171,57 @@ export class AiAssistantService {
       };
       this.messagesSubject.next(messages);
     }
+  }
+
+  /**
+   * Fold one progress event into the last message's step trail.
+   *
+   * Events arrive as a stream of `running` / `done` / `error` rows keyed by
+   * `id`.  A `running` row for an unseen id is appended; any later event for
+   * the same id updates that row in place (and stamps how long it took) so
+   * the list stays one-row-per-phase instead of growing two rows per phase.
+   */
+  applyProgressStep(step: AssistantStep): void {
+    const messages = [...this.messagesSubject.getValue()];
+    const last = messages.length - 1;
+    if (last < 0 || messages[last].role !== 'assistant') return;
+
+    const steps = [...(messages[last].steps || [])];
+    const existing = steps.findIndex(s => s.id === step.id);
+    if (existing >= 0) {
+      steps[existing] = {
+        ...steps[existing],
+        ...step,
+        durationMs: Math.max(0, step.elapsedMs - steps[existing].elapsedMs),
+        // Keep the original start time so the duration stays meaningful.
+        elapsedMs: steps[existing].elapsedMs,
+      };
+    } else {
+      steps.push(step);
+    }
+
+    messages[last] = { ...messages[last], steps };
+    this.messagesSubject.next(messages);
+  }
+
+  /**
+   * Close out the step trail when a turn ends.  Any row still `running`
+   * (e.g. the turn errored mid-phase) is marked done so nothing spins
+   * forever, and the trail is flagged complete so the template collapses it.
+   */
+  finalizeProgressSteps(): void {
+    const messages = [...this.messagesSubject.getValue()];
+    const last = messages.length - 1;
+    if (last < 0 || messages[last].role !== 'assistant') return;
+    if (!messages[last].steps?.length) return;
+
+    messages[last] = {
+      ...messages[last],
+      steps: messages[last].steps!.map(s =>
+        s.state === 'running' ? { ...s, state: 'done' as const } : s),
+      stepsComplete: true,
+    };
+    this.messagesSubject.next(messages);
   }
 
   updateMessageFeedback(messageIndex: number, patch: Partial<AiFeedbackState>): void {
