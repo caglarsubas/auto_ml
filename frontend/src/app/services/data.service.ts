@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, tap, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { AssistantStep } from './ai-assistant.service';
 
 @Injectable({
   providedIn: 'root'
@@ -510,12 +511,26 @@ export class DataService {
 
   // ===== AI Assistant =====
 
+  /**
+   * Send one assistant turn.
+   *
+   * Without `opts.onStep` this is the plain JSON POST it has always been.
+   *
+   * With `opts.onStep` the request opts into the backend's NDJSON progress
+   * channel (`stream: true`): the same final payload still arrives through
+   * `next()` exactly once, but each workflow phase is handed to `onStep`
+   * first so the caller can show what the assistant is doing.  Keeping the
+   * emission contract identical is deliberate — every existing caller and
+   * test keeps working, and a turn that streams is indistinguishable from
+   * one that doesn't as far as the result is concerned.
+   */
   sendAiChat(message: string, context: any, section: string,
              history: Array<{role: string; content: string}>,
              fileId?: number, model?: string,
              intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'R'>,
              intentSource?: string,
-             source?: 'codeline' | 'panel'): Observable<any> {
+             source?: 'codeline' | 'panel',
+             opts?: { onStep?: (step: AssistantStep) => void }): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {
       body.file_id = fileId;
@@ -532,12 +547,126 @@ export class DataService {
     if (source) {
       body.source = source;
     }
+    if (opts?.onStep) {
+      return this.streamAiChat(body, opts.onStep);
+    }
     return this.http.post(`${this.apiUrl}ai-assistant/chat/`, body).pipe(
       catchError((err: any) => {
         console.error('Error in AI assistant chat:', err);
         return throwError(() => err);
       })
     );
+  }
+
+  /**
+   * NDJSON transport for `sendAiChat`.
+   *
+   * Uses `fetch` rather than HttpClient because Angular's XHR backend only
+   * surfaces a response body once it is complete — which would defeat the
+   * whole point of a progress channel.  Each line is one JSON object:
+   * `step` rows go to `onStep`, `ping` rows are keep-alives we drop, and the
+   * stream always ends with exactly one `result` or one `error`.
+   *
+   * Unsubscribing aborts the request, so closing the panel or navigating away
+   * mid-turn doesn't leave a socket open.
+   */
+  private streamAiChat(body: any, onStep: (step: AssistantStep) => void): Observable<any> {
+    return new Observable<any>(subscriber => {
+      const controller = new AbortController();
+      let settled = false;
+
+      const toStep = (line: any): AssistantStep => ({
+        id: String(line.id ?? ''),
+        label: String(line.label ?? ''),
+        state: line.state === 'error' ? 'error' : line.state === 'done' ? 'done' : 'running',
+        detail: line.detail ? String(line.detail) : undefined,
+        elapsedMs: Number(line.elapsed_ms ?? 0),
+      });
+
+      const handle = (line: any): void => {
+        if (!line || typeof line !== 'object') return;
+        if (line.type === 'step') {
+          onStep(toStep(line));
+        } else if (line.type === 'result') {
+          settled = true;
+          subscriber.next(line.data ?? {});
+          subscriber.complete();
+        } else if (line.type === 'error') {
+          settled = true;
+          subscriber.error({
+            status: line.status ?? 500,
+            error: { error: line.error },
+            message: line.error,
+          });
+        }
+        // `ping` is a keep-alive with no payload — nothing to do.
+      };
+
+      fetch(`${this.apiUrl}ai-assistant/chat/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, stream: true }),
+        signal: controller.signal,
+      }).then(async response => {
+        if (!response.ok || !response.body) {
+          // A non-200 means the turn never started (validation, 503, proxy
+          // error) — the body is the ordinary DRF error payload, not NDJSON.
+          let payload: any = null;
+          try {
+            payload = await response.json();
+          } catch {
+            payload = null;
+          }
+          throw {
+            status: response.status,
+            error: payload,
+            message: payload?.error || `Request failed (${response.status})`,
+          };
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          // Keep the trailing fragment — a chunk can split a line in half.
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              handle(JSON.parse(line));
+            } catch {
+              console.warn('Skipping malformed progress line:', line);
+            }
+          }
+        }
+        if (buffer.trim()) {
+          try {
+            handle(JSON.parse(buffer));
+          } catch {
+            console.warn('Skipping malformed trailing progress line:', buffer);
+          }
+        }
+        if (!settled) {
+          // Connection closed before a terminal line — treat as a failure
+          // rather than silently completing with no answer.
+          throw {
+            status: 0,
+            message: 'The assistant connection closed before the answer arrived.',
+          };
+        }
+      }).catch(err => {
+        if (settled || controller.signal.aborted) return;
+        console.error('Error in AI assistant chat:', err);
+        subscriber.error(err);
+      });
+
+      return () => controller.abort();
+    });
   }
 
   submitAiFeedback(payload: {

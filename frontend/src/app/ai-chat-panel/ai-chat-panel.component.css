@@ -379,6 +379,130 @@
 }
 
 /* Typing indicator */
+/* ── Turn progress trail ─────────────────────────────────────────────────
+   What the assistant is doing, one row per workflow phase.  Reads as an
+   evidence-margin note rather than a progress bar: hairline rule, mono for
+   the numeric column, teal only on the row that is actually running. */
+.chat-steps {
+  margin: 2px 0 8px;
+  padding-left: 2px;
+}
+
+.chat-steps-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  cursor: pointer;
+  font-family: var(--font-sans, 'Instrument Sans', 'Segoe UI', sans-serif);
+  font-size: 0.75rem;
+  color: var(--neutral-500, #71717a);
+}
+
+.chat-steps-summary:hover {
+  color: var(--neutral-800, #27272a);
+}
+
+.chat-steps-summary:focus-visible {
+  outline: 2px solid var(--primary-700, #740505);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.chat-steps-summary-caret {
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.chat-steps-summary-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 1px solid var(--neutral-100, #f4f4f5);
+}
+
+/* Grid, not flex: the panel is narrow, so the label + detail must wrap as one
+   flowing text block while the marker and the duration stay pinned to the
+   edges.  A flex row wrapped the label alone and left the detail stranded. */
+.chat-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0 6px;
+  padding-left: 10px;
+  font-family: var(--font-sans, 'Instrument Sans', 'Segoe UI', sans-serif);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--neutral-500, #71717a);
+}
+
+.chat-step-marker {
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: #d4d4d8;
+}
+
+.chat-step-text {
+  min-width: 0;
+}
+
+.chat-step.state-running .chat-step-marker {
+  background: var(--signal-700, #0F766E);
+  animation: chat-step-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-step.state-running .chat-step-label {
+  color: var(--neutral-800, #27272a);
+  font-weight: 500;
+}
+
+.chat-step.state-error .chat-step-marker {
+  background: var(--error-600, #dc2626);
+}
+
+.chat-step.state-error .chat-step-label {
+  color: var(--error-600, #dc2626);
+}
+
+.chat-step-detail {
+  color: #a1a1aa;
+}
+
+.chat-step-detail::before {
+  content: '\00a0\2014\00a0';
+}
+
+.chat-step-time {
+  font-family: var(--font-mono, 'IBM Plex Mono', Menlo, Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
+  line-height: 1.7;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+@keyframes chat-step-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-step.state-running .chat-step-marker {
+    animation: none;
+  }
+}
+
 .typing-indicator {
   display: flex;
   gap: 4px;

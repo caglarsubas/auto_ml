@@ -24,6 +24,181 @@ describe('DataService', () => {
     expect(service).toBeTruthy();
   });
 
+  // ── sendAiChat streaming transport ──────────────────────────────────
+  // With `opts.onStep` the request opts into the backend's NDJSON progress
+  // channel.  HttpClient can't surface a partial body, so this path uses
+  // `fetch` — which means these tests stub `fetch` rather than httpMock.
+  describe('sendAiChat with a progress channel', () => {
+    /** Build a fetch Response whose body streams `chunks` in order. */
+    const streamingResponse = (chunks: string[], ok = true, status = 200): any => ({
+      ok,
+      status,
+      body: {
+        getReader: () => {
+          let i = 0;
+          return {
+            read: () => Promise.resolve(
+              i < chunks.length
+                ? { value: new TextEncoder().encode(chunks[i++]), done: false }
+                : { value: undefined, done: true }),
+          };
+        },
+      },
+    });
+
+    it('should report each step and emit only the final result', async () => {
+      const steps: any[] = [];
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading your question","state":"running","elapsed_ms":5}\n',
+        '{"type":"step","id":"intent","label":"Reading your question","state":"done","elapsed_ms":40}\n',
+        '{"type":"result","data":{"message":"here you go"}}\n',
+      ])) as any);
+
+      const result = await new Promise<any>((resolve, reject) => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
+          .subscribe({ next: resolve, error: reject });
+      });
+
+      expect(steps.length).toBe(2);
+      expect(steps[0].id).toBe('intent');
+      expect(steps[0].state).toBe('running');
+      expect(steps[1].state).toBe('done');
+      expect(steps[1].elapsedMs).toBe(40);
+      expect(result).toEqual({ message: 'here you go' });
+    });
+
+    it('should send stream:true so the backend opens the channel', async () => {
+      const fetchSpy = spyOn(window, 'fetch').and.returnValue(
+        Promise.resolve(streamingResponse(['{"type":"result","data":{}}\n'])) as any);
+
+      await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], 7, 'gpt-5.5',
+                           undefined, undefined, undefined, { onStep: () => {} })
+          .subscribe({ next: resolve });
+      });
+
+      const body = JSON.parse((fetchSpy.calls.mostRecent().args[1] as any).body);
+      expect(body.stream).toBeTrue();
+      expect(body.file_id).toBe(7);
+      expect(body.model).toBe('gpt-5.5');
+    });
+
+    it('should reassemble a JSON line split across chunks', async () => {
+      const steps: any[] = [];
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"llm:0","label":"Thin',
+        'king","state":"running","elapsed_ms":9}\n{"type":"result","data":{"message":"ok"}}\n',
+      ])) as any);
+
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
+          .subscribe({ next: resolve });
+      });
+
+      expect(steps.length).toBe(1);
+      expect(steps[0].label).toBe('Thinking');
+      expect(result.message).toBe('ok');
+    });
+
+    it('should surface a terminal error line as an observable error', async () => {
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading","state":"done","elapsed_ms":3}\n',
+        '{"type":"error","error":"engine unreachable","status":503}\n',
+      ])) as any);
+
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
+          .subscribe({ next: () => resolve('unexpected next'), error: resolve });
+      });
+
+      expect(err.status).toBe(503);
+      expect(err.error.error).toBe('engine unreachable');
+    });
+
+    it('should error when the stream ends without a terminal line', async () => {
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading","state":"running","elapsed_ms":1}\n',
+      ])) as any);
+
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
+          .subscribe({ next: () => resolve('unexpected next'), error: resolve });
+      });
+
+      expect(err.message).toContain('closed before the answer arrived');
+    });
+
+    it('should ignore keep-alive pings', async () => {
+      const steps: any[] = [];
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"ping"}\n',
+        '{"type":"ping"}\n',
+        '{"type":"result","data":{"message":"finally"}}\n',
+      ])) as any);
+
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
+          .subscribe({ next: resolve });
+      });
+
+      expect(steps).toEqual([]);
+      expect(result.message).toBe('finally');
+    });
+
+    it('should skip a malformed line rather than abandoning the turn', async () => {
+      const steps: any[] = [];
+      spyOn(console, 'warn');
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        'not json at all\n',
+        '{"type":"result","data":{"message":"survived"}}\n',
+      ])) as any);
+
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
+          .subscribe({ next: resolve });
+      });
+
+      expect(result.message).toBe('survived');
+    });
+
+    it('should surface a non-200 as an error without reading a body stream', async () => {
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve({
+        ok: false,
+        status: 400,
+        body: null,
+        json: () => Promise.resolve({ error: 'Message is required' }),
+      }) as any);
+
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
+          .subscribe({ next: () => resolve('unexpected next'), error: resolve });
+      });
+
+      expect(err.status).toBe(400);
+      expect(err.message).toBe('Message is required');
+    });
+
+    it('should still use the plain JSON POST when no onStep is given', () => {
+      const fetchSpy = spyOn(window, 'fetch');
+      service.sendAiChat('hi', {}, 'general', []).subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
+      expect(req.request.body.stream).toBeUndefined();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      req.flush({ message: 'ok' });
+    });
+  });
+
   // ── uploadFile ──────────────────────────────────────────────────────
   describe('uploadFile', () => {
     it('should POST FormData to declaration/', () => {
