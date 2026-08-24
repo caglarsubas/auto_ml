@@ -1,13 +1,86 @@
 # Feature request: per-request progress telemetry so clients can show what the model is doing
 
-**Status:** Open — feature request, no bug. Nothing is broken; the information exists inside the engine and never reaches the caller.
+**Status:** RESOLVED for the asks that survived review (2026-08-24). Item 1 shipped in engine PR #107 and is consumed by DeclarAI; item 4 confirmed and pinned by engine tests. **Item 2 is withdrawn by us** — it was self-inconsistent with our own item 5. Item 3 is reshaped around a constraint we had wrong. Item 5 stands as a contract request.
 **Audience:** `llm-inference-engine` team
 **From:** DeclarAI (POC customer)
 **Date filed:** 2026-08-24
 **Engine commit read at filing:** `318468f` on `main`
-**Severity:** P2 — no correctness impact. It blocks a UX capability (honest progress reporting) that we can currently only deliver for the half of a turn we own.
+**Engine commit at resolution:** `9921332` (#107) — see the re-read note below
+**Severity:** P2 — no correctness impact. It blocked a UX capability (honest progress reporting) that we could only deliver for the half of a turn we own.
 
 ---
+
+## Resolution (2026-08-24)
+
+The engine team answered all five items. Summary first, detail per item below.
+
+| # | Ask | Outcome |
+|---|---|---|
+| 1 | Per-request scheduler telemetry on the wire | **Shipped** (#107) — and better than asked on streams |
+| 2 | Pre-first-token status events | **Withdrawn by us** — costs a response-lifecycle inversion that breaks item 5 |
+| 3 | Distinguish queued from model-not-resident | **Reshaped** — needs a resident-models pre-check; our premise was wrong |
+| 4 | Confirm reasoning deltas are streamable and labelled | **Confirmed**, with two caveats worth knowing |
+| 5 | Keep the queue-rejection shape | Stands |
+
+### A correction to this document's own premise
+
+This doc was written against `318468f`. Two things it asserts were already stale or wrong by the time it was read:
+
+- **`f798691` (#104) made `ollama_http` the primary backend, not the fallback.** That lands directly on item 3 — see below. We reviewed one commit behind that change and reasoned about a backend that was no longer the one in the path.
+- The headers we asked for in item 1 then shipped in `9921332` (#107), which is *after* the commit this doc cites throughout. Anyone reading the "Where it lives today" table below should read it as **the state at `318468f`**, not current.
+
+### 1. Shipped — and it does more than we asked on streams
+
+Engine PR #107 puts the lease on the wire:
+
+```
+x-engine-queue-wait-ms: 4120
+x-engine-queue-depth: 3
+x-engine-tenant-queue-depth: 1
+x-engine-resource: ollama_http:nemotron-3-nano:30b
+```
+
+We asked for this mainly as a retrospective signal. On `stream: true` it is better than that: admission completes before the response is constructed, so the headers flush **when the stream opens** — a streaming caller reads its queue wait *ahead of the first content delta*, which is the live signal item 2 was trying to buy.
+
+Four contract rules came with it. They are not decoration; each one is a way to render a misleading number:
+
+1. **They describe the admission that STARTED the response** — the first lease. Fallback and schema-repair retries are admitted again and that wait is *not* counted.
+2. **Both depths count the request itself.** A lone caller sees `1`, not `0`. "Requests ahead of you" is `depth - 1`.
+3. **A depth of `0` means the scheduler is disabled**, which is not the same as "nobody ahead of you".
+4. **Absent, never zeroed.** A request that never reached the scheduler has no headers at all, so "did not queue" stays distinguishable from "queued for 0 ms".
+
+**DeclarAI consumption (`auto_ml` v3.6.0).** `call_engine` captures the headers through an **httpx transport event hook** rather than the OpenAI SDK's `with_raw_response`. That is deliberate: we route engine traffic through the plain SDK method *specifically* so prometa-sdk's openai auto-instrumentation wraps it, and switching call paths to read a telemetry header would risk the `gen_ai.*` spans that are the entire reason for the indirection. All four rules are encoded in `parse_admission_headers` / `_admission_detail` and pinned by `tests/unit/test_ai_engine_admission.py`.
+
+We call the engine in **blocking** mode, so for us the headers arrive with the completed response. That still converts the single most-unexplained stretch of a turn into an attributed one — the panel now reads `Thought it through — nemotron-3-nano:30b · queued 9.2s, 2 ahead` instead of a flat `Thinking`. Getting the *live* version means switching `call_engine` to streaming, which is ours to do, not yours.
+
+### 2. Withdrawn — our ask contradicted our own item 5
+
+The engine team's objection is correct and we should have caught it before filing.
+
+Emitting `queued` / `admitted` status events **before** admission requires committing to a `200` and opening the response body before the scheduler has decided. But the scheduler is exactly what produces `TenantQueueFullError` → `429` and `TenantQueueTimeoutError` → `503` — the responses item 5 of this very document asks them to treat as a stable contract. Once the stream is open you cannot answer `503` any more; the rejection would have to be demoted into an in-band error frame, changing the status code a client sees for a queue rejection.
+
+So items 2 and 5 could not both be satisfied. Between "narrate the queue wait live" and "a queue rejection is still an HTTP 503 with `Retry-After`", the status code is worth more: it is what every client — including SDK retry logic that never parses our SSE — keys off. **We withdraw item 2.** Item 1's stream-open headers already deliver most of what we wanted, without the inversion.
+
+### 3. Reshaped — our premise was wrong
+
+We asked for a `loading_model` phase assuming the engine knows when weights are resident. Since `f798691` made `ollama_http` the primary backend, that is not true in the path that matters: **`OllamaHttpAdapter.load()` never touches weights.** It validates the descriptor, binds the endpoint and model id, and constructs an `httpx.AsyncClient` — nothing more. Ollama loads weights lazily on the first `/api/chat`, so the adapter reporting `is_loaded` says only "we know where to send this", not "the model is in memory".
+
+A truthful `loading_model` signal therefore needs a **resident-models pre-check** (ollama's `/api/ps` or equivalent) rather than a flag the adapter already has. That is a real feature with a real cost, not the small annotation we implied. We are not pressing for it: with item 1 shipped, a long wait with no queue depth behind it is already a strong hint of a cold load, and that is enough for our UI. Recording it here so the next person does not re-file it as "just expose the flag you have".
+
+### 4. Confirmed — with two caveats we are acting on
+
+Reasoning **does** stream incrementally as labelled `delta.reasoning_content` frames, not batched to the end, and engine tests now pin both that and the channel separation (no `<think>` markup on either side). Two caveats came with the confirmation:
+
+- **The split is the engine's own parse, not a backend field.** Nothing in `StreamChunk` carries a reasoning channel; the engine infers it from a pre-opened `<think>` keyed off the model id via `_REASONING_MARKERS`. A reasoning model whose name misses those markers, or a backend that starts stripping thinking into a field of its own, silently delivers chain-of-thought as answer text. This is why our client-side `_looks_like_cot_leak` backstop in `ai_assistant/views.py` **stays** — it is the defence for exactly this failure mode, and we had been treating it as legacy scar tissue. It is not.
+- **There is no reasoning token count.** Reasoning arrives as text deltas only and `usage` does not break it out, so a live "Thinking — N tokens" row would have to approximate client-side from frame content. Not worth a request; noting it so we do not design a UI around a number that does not exist.
+
+### 5. Stands
+
+No change requested beyond what this document already asks: treat the `429` / `503` queue-rejection payloads as a public contract. Item 2's withdrawal makes this strictly easier to honour.
+
+---
+
+## Original request (as filed, against `318468f`)
 
 ## What we are trying to do
 

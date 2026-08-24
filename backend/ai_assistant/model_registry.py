@@ -581,6 +581,78 @@ def _recover_reasoning_content(response: dict) -> dict:
     return response
 
 
+# ---------------------------------------------------------------------------
+# Engine admission telemetry (llm-inference-engine PR #107)
+# ---------------------------------------------------------------------------
+# The engine stamps the scheduler lease that ADMITTED this request onto the
+# response headers.  Before this existed, the entire span between "request
+# sent" and "first byte back" was one opaque block to us, so the chat panel
+# labelled it "Thinking" — a guess that reads as wrong precisely when the
+# request was actually queued.
+#
+# Four contract rules from the engine team, each of which the parser below
+# encodes.  Getting any of them wrong produces exactly the class of misleading
+# progress this channel exists to remove:
+#
+#   1. They describe the admission that STARTED the response — the first
+#      lease.  A request that falls back to another model, or retries a schema
+#      repair, is admitted again and that later wait is NOT counted here.
+#   2. Both depths count the request itself, so an admitted request under a
+#      live scheduler always reports at least 1.  "Requests ahead of you" is
+#      therefore ``depth - 1``, never ``depth``.
+#   3. A depth of 0 means the scheduler is DISABLED and nothing queued at all
+#      — semantically different from 1 ("admitted, nobody else waiting").
+#   4. Absent, never zeroed, when a request never reached the scheduler.
+#      "Did not queue" must stay distinguishable from "queued for 0 ms", so a
+#      missing header yields a missing key rather than a 0.
+#
+# Note on which path we're on: we call the engine in BLOCKING mode, so these
+# headers arrive with the completed response — they let us attribute time
+# retrospectively ("9s of that 12s was queue, not thinking"), not narrate the
+# wait live.  Live queue display would require switching call_engine to
+# streaming, where the engine flushes these at stream open ahead of the first
+# delta.  That is a separate, much larger change.
+QUEUE_WAIT_MS_HEADER = 'x-engine-queue-wait-ms'
+QUEUE_DEPTH_HEADER = 'x-engine-queue-depth'
+TENANT_QUEUE_DEPTH_HEADER = 'x-engine-tenant-queue-depth'
+RESOURCE_HEADER = 'x-engine-resource'
+
+
+def parse_admission_headers(headers) -> dict:
+    """Read the engine's admission headers into a plain dict.
+
+    Returns ``{}`` when the request never reached the scheduler (rule 4).
+    Malformed values are dropped rather than coerced — a telemetry field must
+    never be able to break a completion the user already waited for.
+    """
+    if not headers:
+        return {}
+
+    def _int(name):
+        raw = headers.get(name)
+        if raw is None:
+            return None
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+
+    admission = {}
+    wait_ms = _int(QUEUE_WAIT_MS_HEADER)
+    if wait_ms is not None:
+        admission['queue_wait_ms'] = wait_ms
+    depth = _int(QUEUE_DEPTH_HEADER)
+    if depth is not None:
+        admission['queue_depth'] = depth
+    tenant_depth = _int(TENANT_QUEUE_DEPTH_HEADER)
+    if tenant_depth is not None:
+        admission['tenant_queue_depth'] = tenant_depth
+    resource = headers.get(RESOURCE_HEADER)
+    if resource:
+        admission['resource'] = str(resource)
+    return admission
+
+
 def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     """Call the local llm-inference-engine via its OpenAI-compatible API.
 
@@ -616,6 +688,7 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     ``max_tokens`` before closing ``</think>``.  Filed as engine feedback
     in ``docs/engine-feedback/nemotron-cot-leak-blocking-normalizer.md``.
     """
+    import httpx
     from openai import OpenAI
 
     base_url = os.environ.get('LLM_ENGINE_BASE_URL', 'http://llm-engine:8080/v1')
@@ -623,7 +696,32 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     # rejects an empty api_key, so we pass a placeholder when none is set.
     api_key = os.environ.get('LLM_ENGINE_API_KEY', 'sk-engine-local')
 
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=300.0)
+    # ── Admission headers via an httpx event hook ───────────────────────
+    # The parsed OpenAI response object carries no headers, and the SDK only
+    # exposes them through ``with_raw_response`` — a different call path.  We
+    # route engine traffic through the plain SDK method *specifically* so
+    # prometa-sdk's openai auto-instrumentation wraps it (see module docstring),
+    # so changing the call path to read a telemetry header would risk the
+    # gen_ai.* spans that are the whole reason this indirection exists.
+    #
+    # A transport-level event hook sidesteps that entirely: the SDK call site
+    # is untouched, and the hook sees the response headers before the body is
+    # read.  The client is per-call, so the captured admission belongs to this
+    # request and no locking is needed.
+    admission: dict = {}
+
+    def _capture_admission(response) -> None:
+        try:
+            admission.update(parse_admission_headers(response.headers))
+        except Exception:  # pragma: no cover - telemetry must never fail a call
+            pass
+
+    http_client = httpx.Client(
+        timeout=300.0,
+        event_hooks={'response': [_capture_admission]},
+    )
+    client = OpenAI(api_key=api_key, base_url=base_url, timeout=300.0,
+                    http_client=http_client)
 
     kwargs = {
         'model': model_cfg['model_id'],
@@ -641,10 +739,21 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
             'chat_template_kwargs': {'enable_thinking': True},
         }
 
-    response = client.chat.completions.create(**kwargs)
+    try:
+        response = client.chat.completions.create(**kwargs)
+    finally:
+        # The SDK does not own a client we passed in, so we close it.
+        http_client.close()
     # v2.43.2: the engine's aggressive blocking-path policy can route a real
     # answer into ``reasoning_content`` when the model emits no ``<think>``
     # markers.  We read only ``message.content`` downstream, so promote any
     # such answer back into ``content`` before returning — see
     # ``_recover_reasoning_content`` for the full rationale.
-    return _recover_reasoning_content(response.model_dump())
+    result = _recover_reasoning_content(response.model_dump())
+    if admission:
+        # Namespaced like ``declarai_reasoning_truncated`` on the choice: a
+        # local annotation on an otherwise OpenAI-shaped payload.  Absent when
+        # the request never queued, so downstream can tell "did not queue"
+        # from "queued for 0 ms".
+        result['declarai_admission'] = admission
+    return result
