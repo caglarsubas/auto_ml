@@ -75,6 +75,60 @@ def _tool_step_label(tool_name: str) -> str:
     if tool_name in _TOOL_STEP_LABELS:
         return _TOOL_STEP_LABELS[tool_name]
     return (tool_name or 'tool').replace('_', ' ').strip().capitalize()
+
+
+# Queue waits below this are indistinguishable from scheduling noise and would
+# add a row of detail that tells the user nothing.  A wait we DO report is
+# always real; a wait we suppress is never reported as zero (see rule 4 in
+# model_registry.parse_admission_headers).
+_ADMISSION_REPORT_THRESHOLD_MS = 50
+
+
+def _format_wait(ms: int) -> str:
+    """Compact wait for a step detail: 820ms, 4.1s, 1m 05s."""
+    if ms < 1000:
+        return f'{ms}ms'
+    if ms < 60000:
+        return f'{ms / 1000:.1f}s'
+    minutes, seconds = divmod(round(ms / 1000), 60)
+    return f'{minutes}m {seconds:02d}s'
+
+
+def _admission_detail(admission: dict) -> Optional[str]:
+    """Render the engine's admission telemetry as a step detail, or None.
+
+    Turns the single most-unexplained stretch of a turn into an attributed one:
+    "9s of that 12s was queue, not thinking".  Encodes the engine's contract
+    rules — a depth counts the request itself, so "ahead" is ``depth - 1``, and
+    a depth of 0 means the scheduler was disabled rather than "nobody ahead".
+    See ``model_registry.parse_admission_headers`` for the full rule list.
+    """
+    if not admission:
+        return None
+    wait_ms = admission.get('queue_wait_ms')
+    # parse_admission_headers already guarantees ints, but this helper is the
+    # last thing between a telemetry field and a rendered answer: a bad value
+    # must degrade to "say nothing", never raise.
+    if not isinstance(wait_ms, int) or isinstance(wait_ms, bool) or wait_ms < 0:
+        return None
+
+    depth = admission.get('queue_depth')
+    # depth 0 == scheduler disabled; depth 1 == admitted with nobody waiting.
+    ahead = (depth - 1) if isinstance(depth, int) and depth > 1 else 0
+
+    if wait_ms < _ADMISSION_REPORT_THRESHOLD_MS and ahead == 0:
+        return None
+
+    detail = f'queued {_format_wait(wait_ms)}'
+    if ahead:
+        detail += f', {ahead} ahead'
+    return detail
+
+
+def _compose_step_detail(*parts) -> Optional[str]:
+    """Join the non-empty detail fragments of a step row."""
+    kept = [p for p in parts if p]
+    return ' · '.join(kept) if kept else None
 from .knowledge_bank import retrieve_knowledge_context
 from .model_registry import (
     get_model_config, list_models, resolve_default_model,
@@ -1854,6 +1908,13 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
                           'error', str(exc)[:160])
             raise
         _merge_usage(total_usage, result.get('usage', {}))
+        # v3.6.0: the engine reports the scheduler admission that started this
+        # response (llm-inference-engine PR #107).  Absent for cloud models and
+        # for engine requests that never reached the scheduler.
+        admission_detail = _admission_detail(result.get('declarai_admission') or {})
+        if admission_detail:
+            set_span_attr(f'declarai.chat.round_{_round}.queue_wait_ms',
+                          (result.get('declarai_admission') or {}).get('queue_wait_ms'))
         result = _normalize_llm_response_schema(result, model_cfg, tools)
 
         choice = result['choices'][0]
@@ -1864,7 +1925,7 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         if finish_reason != 'tool_calls' and not msg_obj.get('tool_calls'):
             progress.emit(f'llm:{_round}',
                           'Thought it through' if _round == 0 else 'Reviewed the results',
-                          'done', model_label)
+                          'done', _compose_step_detail(model_label, admission_detail))
             break
 
         # Resolve tool calls
@@ -1872,14 +1933,17 @@ def _chat_workflow(user_message: str, context: dict, section: str, history: list
         if not tool_calls:
             progress.emit(f'llm:{_round}',
                           'Thought it through' if _round == 0 else 'Reviewed the results',
-                          'done', model_label)
+                          'done', _compose_step_detail(model_label, admission_detail))
             break
 
         progress.emit(
             f'llm:{_round}',
             'Decided what to look up' if _round == 0 else 'Reviewed the results',
             'done',
-            f'{len(tool_calls)} lookup{"" if len(tool_calls) == 1 else "s"}',
+            _compose_step_detail(
+                f'{len(tool_calls)} lookup{"" if len(tool_calls) == 1 else "s"}',
+                admission_detail,
+            ),
         )
 
         # Append the assistant message with tool_calls to the conversation
