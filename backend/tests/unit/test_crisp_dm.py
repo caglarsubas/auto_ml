@@ -24,6 +24,17 @@ from modeling.crisp_dm import (
 )
 
 
+def test_normalize_business_understanding_problem_type():
+    bu = normalize_business_understanding({
+        'objective': 'Estimate loss given default',
+        'problem_type': 'Regression',
+    })
+    assert bu['problem_type'] == 'regression'
+    # Unknown / absent values fall back to undeclared rather than guessing.
+    assert normalize_business_understanding({'problem_type': 'clustering'})['problem_type'] == ''
+    assert 'decision_use_case' not in empty_business_understanding()
+
+
 def test_normalize_business_understanding_floors():
     bu = normalize_business_understanding({
         'objective': 'Predict default',

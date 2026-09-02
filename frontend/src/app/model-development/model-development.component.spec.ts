@@ -96,6 +96,75 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.getSubStepStatus('5a')).toBe('in_progress');
   });
 
+  it('should keep optional business understanding fields behind the Details toggle', () => {
+    expect(component.showBusinessDetails).toBeFalse();
+    component.toggleBusinessDetails();
+    expect(component.showBusinessDetails).toBeTrue();
+  });
+
+  it('should treat the event/target definition as the single prediction contract', () => {
+    const sharedService = TestBed.inject(SharedService);
+    component.onEventDefinitionChanged('Bad = 90+ DPD within 12 months');
+
+    expect(component.businessUnderstanding.target_contract.event_definition)
+      .toBe('Bad = 90+ DPD within 12 months');
+    expect(component.targetDefinition).toBe('Bad = 90+ DPD within 12 months');
+    expect(sharedService.getTargetDefinition()).toBe('Bad = 90+ DPD within 12 months');
+  });
+
+  it('should derive classification from objective wording and keep all pipelines', () => {
+    component.businessUnderstanding.objective = 'Decide whether to approve a loan application';
+    component.onBusinessUnderstandingChanged();
+
+    expect(component.detectedProblemType).toBe('classification');
+    expect(component.availablePipelineOptions.map((p) => p.value))
+      .toEqual(['boosting', 'logit', 'credit-scoring', 'anomaly-detection']);
+  });
+
+  it('should derive regression from an explicit primary metric and filter the catalogue', () => {
+    component.businessUnderstanding.success_criteria.primary_metric = 'rmse';
+    component.onBusinessUnderstandingChanged();
+
+    expect(component.detectedProblemType).toBe('regression');
+    expect(component.businessUnderstanding.problem_type).toBe('regression');
+    expect(component.availablePipelineOptions.map((p) => p.value)).toEqual(['boosting']);
+  });
+
+  it('should flag a conflict when the wording and the primary metric disagree', () => {
+    component.businessUnderstanding.objective = 'Estimate the loss given default amount';
+    component.businessUnderstanding.success_criteria.primary_metric = 'roc_auc';
+    component.onBusinessUnderstandingChanged();
+
+    expect(component.detectedProblemType).toBe('regression');
+    expect(component.problemTypeMetricConflict).toBeTrue();
+  });
+
+  it('should drop a selected pipeline the declared problem type cannot train', () => {
+    component.isStarted = false;
+    component.selectedPipeline = 'logit';
+    component.businessUnderstanding.success_criteria.primary_metric = 'r2';
+    component.onBusinessUnderstandingChanged();
+
+    expect(component.selectedPipeline).toBe('');
+    expect(component.pipelineResetNotice).toContain('regression');
+  });
+
+  it('should send business understanding to the AI assistant as project metadata', () => {
+    component.businessUnderstanding.objective = 'Approve or decline personal loan applications';
+    component.businessUnderstanding.population = 'New-to-bank applicants';
+    component.businessUnderstanding.regulatory_notes = 'Adverse-action reasons required';
+    component.forbiddenFeaturesText = 'post_disbursement_balance, internal_score';
+    component.onEventDefinitionChanged('Bad = 90+ DPD within 12 months');
+
+    const bu = component.getPipelineConfig().business_understanding;
+    expect(bu.objective).toBe('Approve or decline personal loan applications');
+    expect(bu.population).toBe('New-to-bank applicants');
+    expect(bu.regulatory_notes).toBe('Adverse-action reasons required');
+    expect(bu.forbidden_features).toEqual(['post_disbursement_balance', 'internal_score']);
+    expect(bu.target_contract.event_definition).toBe('Bad = 90+ DPD within 12 months');
+    expect(bu.problem_type).toBe('classification');
+  });
+
   it('should block modeling when hard_block is set without success floor', () => {
     component.businessUnderstanding.hard_block_modeling_without_criteria = true;
     component.businessUnderstanding.success_criteria.floor = null;

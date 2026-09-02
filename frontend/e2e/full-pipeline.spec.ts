@@ -27,12 +27,12 @@ test.describe('Full Pipeline Journey (Happy Path)', () => {
     await expect(page).toHaveURL(/\/model-development/);
     await expect(page.locator('h1', { hasText: 'Model Development' })).toBeVisible();
 
-    // ── 3. Select Pipeline Type ──
-    await page.selectOption('.pipeline-type-dropdown select', 'boosting');
-    await expect(page.locator('.target-definition-section')).toBeVisible();
-
-    // ── 4. Enter Target Definition ──
+    // ── 3. Enter the Event/Target Definition (Business Understanding) ──
+    await expect(page.locator('.bu-section')).toBeVisible();
     await page.fill('#targetDefinition', 'Predict whether a loan applicant will default (Good_Bad_Flag)');
+
+    // ── 4. Select Pipeline Type ──
+    await page.selectOption('.pipeline-type-dropdown select', 'boosting');
 
     // ── 5. Start Pipeline ──
     await page.click('button.start-button');

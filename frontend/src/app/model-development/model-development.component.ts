@@ -22,9 +22,16 @@ interface BusinessSuccessCriteria {
   cost_matrix: { fn_cost: number; fp_cost: number };
 }
 
+type ProblemType = 'classification' | 'regression';
+
+interface PipelineCatalogueEntry {
+  value: string;
+  label: string;
+  tasks: ProblemType[];
+}
+
 interface BusinessUnderstandingState {
   objective: string;
-  decision_use_case: string;
   prediction_horizon: string;
   population: string;
   exclusions: string;
@@ -38,6 +45,8 @@ interface BusinessUnderstandingState {
     target_column: string;
   };
   hard_block_modeling_without_criteria: boolean;
+  /** Derived from the success metric + objective wording; drives the pipeline catalogue. */
+  problem_type: ProblemType | '';
   completed: boolean;
 }
 
@@ -53,8 +62,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   currentRoute: string = '';
   menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
   selectedPipeline: string = '';
+  /** Mirror of `businessUnderstanding.target_contract.event_definition` shared app-wide. */
   targetDefinition: string = '';
-  editingTargetDefinition: boolean = false;
   currentStep: string = 'declaration';
   showDeclaration: boolean = false;
   showSteps: { [key: string]: boolean } = {
@@ -168,6 +177,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   // ===== CRISP-DM: Business Understanding & cycle state =====
   businessUnderstanding: BusinessUnderstandingState = ModelDevelopmentComponent.createDefaultBusinessUnderstanding();
   forbiddenFeaturesText: string = '';
+  /** Optional Business Understanding fields (assumptions / regulatory / forbidden) live behind this toggle. */
+  showBusinessDetails: boolean = false;
+  /** Problem type inferred from the Business Understanding form; null while there is no signal yet. */
+  detectedProblemType: ProblemType | null = null;
+  /** Human-readable reason for `detectedProblemType`, shown next to the badge. */
+  problemTypeReason: string = '';
+  /** True when the objective wording and the chosen primary metric disagree on the task. */
+  problemTypeMetricConflict: boolean = false;
+  /** Set when a previously selected pipeline was dropped because it does not fit the problem type. */
+  pipelineResetNotice: string = '';
+  private _buAiPushTimer: any = null;
   crispDm: any = null;
   modelingCriteriaWarning: boolean = false;
   monitoringReport: any = null;
@@ -234,10 +254,58 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     },
   ];
 
+  /**
+   * Pipeline catalogue with the problem types each pipeline can actually train.
+   *
+   * `boosting` maps to the XGBoost/LightGBM/CatBoost adapters, which carry a
+   * regression task mode (`booster_adapters._is_regression`).  `logit`,
+   * `credit-scoring` and `anomaly-detection` map to `alt_pipelines`, where every
+   * estimator is hard-wired to `task = 'classification'` — so they are hidden
+   * once the declared problem is a regression.
+   */
+  readonly pipelineCatalogue: PipelineCatalogueEntry[] = [
+    { value: 'boosting', label: '1- Boosting Pipeline', tasks: ['classification', 'regression'] },
+    { value: 'logit', label: '2- Logit Pipeline', tasks: ['classification'] },
+    { value: 'credit-scoring', label: '3- Credit Scoring Pipeline', tasks: ['classification'] },
+    { value: 'anomaly-detection', label: '4- Anomaly Detection Pipeline', tasks: ['classification'] },
+  ];
+
+  private static readonly DEFAULT_PRIMARY_METRIC = 'roc_auc';
+
+  private static readonly METRIC_TASK: { [metric: string]: ProblemType } = {
+    roc_auc: 'classification',
+    pr_auc: 'classification',
+    f1: 'classification',
+    rmse: 'regression',
+    r2: 'regression',
+  };
+
+  private static readonly METRIC_LABEL: { [metric: string]: string } = {
+    roc_auc: 'ROC-AUC',
+    pr_auc: 'PR-AUC',
+    f1: 'F1',
+    rmse: 'RMSE',
+    r2: 'R\u00b2',
+  };
+
+  private static readonly CLASSIFICATION_KEYWORDS = [
+    'whether', 'classify', 'classification', 'binary', 'flag', 'label',
+    'probability', 'propensity', 'likelihood', 'risk of', 'default', 'delinquen',
+    'charge-off', 'charge off', 'dpd', 'good/bad', 'good bad', 'bad rate',
+    'churn', 'fraud', 'approve', 'decline', 'accept', 'reject', 'anomaly',
+    'yes/no', 'will not', 'event occurs',
+  ];
+
+  private static readonly REGRESSION_KEYWORDS = [
+    'how much', 'how many', 'amount', 'monetary value', 'loss given default',
+    'lgd', 'exposure at default', 'ead', 'severity', 'revenue', 'sales volume',
+    'price', 'forecast', 'continuous', 'regression', 'lifetime value',
+    'time to', 'number of', 'count of', 'expected loss',
+  ];
+
   private static createDefaultBusinessUnderstanding(): BusinessUnderstandingState {
     return {
       objective: '',
-      decision_use_case: '',
       prediction_horizon: '',
       population: '',
       exclusions: '',
@@ -256,6 +324,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         target_column: '',
       },
       hard_block_modeling_without_criteria: false,
+      problem_type: '',
       completed: false,
     };
   }
@@ -938,6 +1007,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     return {
       pipeline_type: this.selectedPipeline || 'boosting',
       target_definition: this.targetDefinition || '',
+      // Project metadata the assistant must carry into every recommendation.
+      // Keys mirror `crisp_dm.normalize_business_understanding` server-side.
+      business_understanding: this.buildBusinessUnderstandingForAi(),
+      problem_type: this.detectedProblemType || '',
       current_step: this.currentStep,
       detailed_step: this.detailedStep,
       preprocessing_initiated: this.preprocessingInitiated,
@@ -976,6 +1049,42 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       feature_stats_after: this.featureStatsAfter,
       preprocessing_step_stats: this.preprocessingStepStats,
       pipeline_notes: this.pipelineNotes || {},
+    };
+  }
+
+  /**
+   * Business Understanding as the AI Assistant sees it — the project's standing
+   * metadata (objective, population, prediction contract, success floors,
+   * constraints).  Emitted inside `pipeline_config` so it reaches both the
+   * cumulative chat context and the Redis artifact the LLM tools read.
+   */
+  buildBusinessUnderstandingForAi(): any {
+    const bu = this.businessUnderstanding;
+    return {
+      objective: bu.objective || '',
+      problem_type: bu.problem_type || '',
+      prediction_horizon: bu.prediction_horizon || '',
+      population: bu.population || '',
+      exclusions: bu.exclusions || '',
+      target_contract: {
+        target_column: bu.target_contract?.target_column || '',
+        event_definition: bu.target_contract?.event_definition || '',
+        good_bad_window: bu.target_contract?.good_bad_window || '',
+      },
+      success_criteria: {
+        primary_metric: bu.success_criteria?.primary_metric || '',
+        direction: bu.success_criteria?.direction || 'maximize',
+        floor: bu.success_criteria?.floor ?? null,
+        cost_matrix: {
+          fn_cost: bu.success_criteria?.cost_matrix?.fn_cost ?? 1,
+          fp_cost: bu.success_criteria?.cost_matrix?.fp_cost ?? 1,
+        },
+      },
+      assumptions: bu.assumptions || '',
+      regulatory_notes: bu.regulatory_notes || '',
+      forbidden_features: bu.forbidden_features || [],
+      hard_block_modeling_without_criteria: !!bu.hard_block_modeling_without_criteria,
+      completed: !!bu.completed,
     };
   }
 
@@ -1921,6 +2030,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   ngOnDestroy() {
     this.subscription.unsubscribe();
+    if (this._buAiPushTimer) clearTimeout(this._buAiPushTimer);
   }
 
   // ===== Pipeline Persistence Methods =====
@@ -2103,7 +2213,6 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
     Object.assign(d, {
       objective: raw.objective ?? '',
-      decision_use_case: raw.decision_use_case ?? '',
       prediction_horizon: raw.prediction_horizon ?? '',
       population: raw.population ?? '',
       exclusions: raw.exclusions ?? '',
@@ -2128,8 +2237,25 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (Array.isArray(raw.forbidden_features)) {
       d.forbidden_features = raw.forbidden_features.map((x: any) => String(x));
     }
+    if (raw.problem_type === 'classification' || raw.problem_type === 'regression') {
+      d.problem_type = raw.problem_type;
+    }
     this.businessUnderstanding = d;
     this.forbiddenFeaturesText = d.forbidden_features.join(', ');
+    // Runs saved before the target-definition section was folded into Business
+    // Understanding stored the text only in `target_definition`; adopt it so the
+    // single Event/Target Definition field is never blank on restore.
+    if (!d.target_contract.event_definition && this.targetDefinition) {
+      d.target_contract.event_definition = this.targetDefinition;
+    } else if (d.target_contract.event_definition) {
+      this.targetDefinition = d.target_contract.event_definition;
+      this.sharedService.setTargetDefinition(this.targetDefinition);
+    }
+    this.showBusinessDetails = this.showBusinessDetails
+      || !!(d.assumptions || d.regulatory_notes || d.forbidden_features.length);
+    // Restore keeps whatever pipeline the saved run used: `isStarted` is applied
+    // after this call, so pruning here would silently clear a historical choice.
+    this.refreshProblemType(false);
   }
 
   onBusinessUnderstandingChanged(): void {
@@ -2138,17 +2264,110 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       .map(s => s.trim())
       .filter(Boolean);
     this.businessUnderstanding.completed = !!String(this.businessUnderstanding.objective || '').trim();
+    this.refreshProblemType();
+    // Business Understanding is filled before Start, when there is no pipeline
+    // run yet — so `onPipelineConfigChanged` (checkpoint autosave) cannot be the
+    // only path.  Push the AI context directly so the assistant holds the
+    // declarations from the first keystroke.
+    if (this._buAiPushTimer) clearTimeout(this._buAiPushTimer);
+    this._buAiPushTimer = setTimeout(() => this.pushAiContext(), 800);
     this.onPipelineConfigChanged();
   }
 
-  syncTargetDefinitionToBu(): void {
-    if (this.targetDefinition) {
-      if (!this.businessUnderstanding.objective) {
-        this.businessUnderstanding.objective = this.targetDefinition;
-      }
-      this.businessUnderstanding.target_contract.event_definition = this.targetDefinition;
-    }
+  toggleBusinessDetails(): void {
+    this.showBusinessDetails = !this.showBusinessDetails;
+  }
+
+  /**
+   * Event/Target Definition is the single prediction contract: it feeds the
+   * Business Understanding target contract, the shared `targetDefinition` other
+   * components read, and the AI Assistant context.  The standalone "Define the
+   * Target Variable" box that used to duplicate it was removed.
+   */
+  onEventDefinitionChanged(value: string): void {
+    this.businessUnderstanding.target_contract.event_definition = value;
+    this.targetDefinition = value;
+    this.sharedService.setTargetDefinition(value);
     this.onBusinessUnderstandingChanged();
+  }
+
+  /**
+   * Pipelines whose estimators can train the declared problem type.  An already
+   * selected pipeline is always kept in the list — a restored run must not
+   * collapse to a blank `<select>` because its saved choice no longer fits.
+   */
+  get availablePipelineOptions(): PipelineCatalogueEntry[] {
+    if (!this.detectedProblemType) return this.pipelineCatalogue;
+    const task = this.detectedProblemType;
+    return this.pipelineCatalogue.filter(p => p.tasks.includes(task) || p.value === this.selectedPipeline);
+  }
+
+  problemTypeLabel(): string {
+    if (this.detectedProblemType === 'classification') return 'Classification';
+    if (this.detectedProblemType === 'regression') return 'Regression';
+    return '';
+  }
+
+  /**
+   * Infer classification vs regression from the Business Understanding form.
+   *
+   * A primary metric other than the `roc_auc` default is an explicit
+   * declaration of the task and wins outright.  While the metric is still at
+   * its default we fall back to keyword evidence in the objective, the
+   * Event/Target Definition and the good/bad window.  No signal at all leaves
+   * the type undetermined, and the full pipeline catalogue stays visible.
+   */
+  private refreshProblemType(prune: boolean = true): void {
+    const bu = this.businessUnderstanding;
+    const metric = String(bu.success_criteria?.primary_metric || '').toLowerCase();
+    const metricTask = ModelDevelopmentComponent.METRIC_TASK[metric] || null;
+    const metricIsExplicit = !!metricTask && metric !== ModelDevelopmentComponent.DEFAULT_PRIMARY_METRIC;
+
+    const text = [
+      bu.objective,
+      bu.target_contract?.event_definition,
+      bu.target_contract?.good_bad_window,
+    ].map(v => String(v || '')).join(' ').toLowerCase();
+    const hits = (words: string[]) => words.filter(w => text.includes(w)).length;
+    const classificationHits = hits(ModelDevelopmentComponent.CLASSIFICATION_KEYWORDS);
+    const regressionHits = hits(ModelDevelopmentComponent.REGRESSION_KEYWORDS);
+    const textTask: ProblemType | null =
+      classificationHits > regressionHits ? 'classification'
+      : regressionHits > classificationHits ? 'regression'
+      : null;
+
+    let detected: ProblemType | null = null;
+    let reason = '';
+    let conflict = false;
+    if (metricIsExplicit) {
+      detected = metricTask;
+      reason = `primary metric ${ModelDevelopmentComponent.METRIC_LABEL[metric] || metric}`;
+      conflict = !!textTask && textTask !== detected;
+    } else if (textTask) {
+      detected = textTask;
+      reason = 'objective and Event/Target Definition wording';
+      conflict = !!metricTask && textTask !== metricTask;
+    }
+
+    this.detectedProblemType = detected;
+    this.problemTypeReason = reason;
+    this.problemTypeMetricConflict = conflict;
+    bu.problem_type = detected || '';
+    if (prune) this.pruneIncompatiblePipeline();
+  }
+
+  /** Drop a selected pipeline the declared problem type cannot train (pre-Start only). */
+  private pruneIncompatiblePipeline(): void {
+    if (!this.selectedPipeline || !this.detectedProblemType || this.isStarted) return;
+    const entry = this.pipelineCatalogue.find(p => p.value === this.selectedPipeline);
+    if (entry && !entry.tasks.includes(this.detectedProblemType)) {
+      this.pipelineResetNotice =
+        `${entry.label.replace(/^\d+-\s*/, '')} does not support ${this.problemTypeLabel().toLowerCase()} — pick a pipeline again.`;
+      this.selectedPipeline = '';
+      this.sharedService.setSelectedPipeline('');
+    } else {
+      this.pipelineResetNotice = '';
+    }
   }
 
   validateModelingCriteriaGate(): boolean {
@@ -2602,19 +2821,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   onPipelineChange2(value: string) {
     this.selectedPipeline = value;
+    this.pipelineResetNotice = '';
     console.log('Selected pipeline:', this.selectedPipeline);
     this.sharedService.setSelectedPipeline(this.selectedPipeline);
-  }
-
-  onTargetDefinitionChange(value: string): void {
-    this.targetDefinition = value;
-    this.sharedService.setTargetDefinition(value);
-    this.businessUnderstanding.target_contract.event_definition = value;
-    if (!this.businessUnderstanding.objective) {
-      this.businessUnderstanding.objective = value;
-    }
-    this.onBusinessUnderstandingChanged();
-    this.onPipelineConfigChanged();
   }
 
   onStartClick() {
@@ -2636,22 +2845,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
       this.detailedStep = '1a_pipeline_declaration';
-      this.editingTargetDefinition = false;
       // Start pipeline
       this.sharedService.setStarted(true);
       // Initial creation checkpoint: always force through
       this.saveCheckpoint('declaration', true);
     }
-  }
-
-  onEditTargetDefinition(): void {
-    this.editingTargetDefinition = true;
-  }
-
-  onSaveTargetDefinition(): void {
-    this.editingTargetDefinition = false;
-    this.sharedService.setTargetDefinition(this.targetDefinition);
-    this.onPipelineConfigChanged();
   }
 
   onSelectionChange(event: MatSelectChange): void {

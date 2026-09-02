@@ -8,7 +8,7 @@ gets injected back into the LLM conversation as a tool response.
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from .prometa_config import (
     tool as prometa_tool,
@@ -733,6 +733,66 @@ def _handle_get_pipeline_codelines(file_id: int, args: dict) -> str:
     return '\n'.join(lines) if len(lines) > 1 else "No pipeline codelines have been saved."
 
 
+_BU_LABELS = (
+    ('objective', 'Business objective'),
+    ('problem_type', 'Problem type'),
+    ('prediction_horizon', 'Prediction horizon'),
+    ('population', 'Population scored'),
+    ('exclusions', 'Exclusions'),
+    ('assumptions', 'Assumptions'),
+    ('regulatory_notes', 'Regulatory notes'),
+)
+
+
+def format_business_understanding(bu: Optional[dict], *, indent: str = '  ') -> List[str]:
+    """Render the Business Understanding declaration as context lines.
+
+    This is the project's standing metadata — the user declares it once in the
+    Business Understanding form and every later recommendation (feature drops,
+    thresholds, metric reads, deployment advice) has to respect it.  Shared by
+    the slim context, the rich context formatter and ``get_pipeline_config`` so
+    the assistant sees identical wording no matter which path filled its
+    context window.
+    """
+    if not isinstance(bu, dict):
+        return []
+    lines: List[str] = []
+    for key, label in _BU_LABELS:
+        value = str(bu.get(key) or '').strip()
+        if value:
+            lines.append(f"{indent}{label}: {value}")
+
+    tc = bu.get('target_contract') if isinstance(bu.get('target_contract'), dict) else {}
+    for key, label in (('target_column', 'Target column'),
+                       ('event_definition', 'Event/Target definition'),
+                       ('good_bad_window', 'Good/bad window')):
+        value = str(tc.get(key) or '').strip()
+        if value:
+            lines.append(f"{indent}{label}: {value}")
+
+    sc = bu.get('success_criteria') if isinstance(bu.get('success_criteria'), dict) else {}
+    if sc:
+        metric = str(sc.get('primary_metric') or '?')
+        direction = str(sc.get('direction') or 'maximize')
+        floor = sc.get('floor')
+        floor_txt = 'not set' if floor in (None, '') else str(floor)
+        lines.append(f"{indent}Success criteria: {metric} ({direction}), business floor {floor_txt}")
+        cm = sc.get('cost_matrix') if isinstance(sc.get('cost_matrix'), dict) else {}
+        if cm:
+            lines.append(f"{indent}Error costs: FN={cm.get('fn_cost', '?')}, FP={cm.get('fp_cost', '?')}")
+
+    forbidden = bu.get('forbidden_features')
+    if isinstance(forbidden, list) and forbidden:
+        lines.append(f"{indent}FORBIDDEN features (never recommend these): {', '.join(str(f) for f in forbidden)}")
+
+    if bu.get('hard_block_modeling_without_criteria'):
+        lines.append(f"{indent}Modeling is hard-blocked until a success floor is set.")
+
+    if lines:
+        lines.insert(0, "Business Understanding (project metadata — binding on every recommendation):")
+    return lines
+
+
 def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
     # NOTE: the dict keys below MUST match what the frontend writes in
     # ``model-development.component.ts::getPipelineConfig`` (the cache
@@ -755,6 +815,10 @@ def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
         f"  Rows: {data.get('rows_before', '?')} → {data.get('rows_after', '?')}",
         f"  Rows removed: {data.get('rows_removed', '?')}",
     ]
+    bu_lines = format_business_understanding(data.get('business_understanding'))
+    if bu_lines:
+        lines.append('')
+        lines.extend(bu_lines)
     purifier = data.get('selected_purifier_steps', [])
     if purifier:
         lines.append(f"  Selected purifier steps ({len(purifier)}):")
