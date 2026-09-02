@@ -2319,6 +2319,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
    */
   private refreshProblemType(prune: boolean = true): void {
     const bu = this.businessUnderstanding;
+    const previousType = this.detectedProblemType;
     const metric = String(bu.success_criteria?.primary_metric || '').toLowerCase();
     const metricTask = ModelDevelopmentComponent.METRIC_TASK[metric] || null;
     const metricIsExplicit = !!metricTask && metric !== ModelDevelopmentComponent.DEFAULT_PRIMARY_METRIC;
@@ -2353,6 +2354,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.problemTypeReason = reason;
     this.problemTypeMetricConflict = conflict;
     bu.problem_type = detected || '';
+    // The reset notice names the problem type that rejected the pipeline
+    // ("Logit does not support regression").  Once the type moves on, that
+    // sentence is no longer true — and with the selection already cleared,
+    // `pruneIncompatiblePipeline` returns early and would never clear it.
+    if (detected !== previousType) this.pipelineResetNotice = '';
     if (prune) this.pruneIncompatiblePipeline();
   }
 
