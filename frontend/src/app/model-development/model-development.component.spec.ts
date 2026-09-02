@@ -149,6 +149,21 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.pipelineResetNotice).toContain('regression');
   });
 
+  it('should clear the pipeline-reset notice once the problem type moves on', () => {
+    component.isStarted = false;
+    component.selectedPipeline = 'logit';
+    component.businessUnderstanding.success_criteria.primary_metric = 'r2';
+    component.onBusinessUnderstandingChanged();
+    expect(component.pipelineResetNotice).toContain('regression');
+
+    // Back to a classification metric: "Logit does not support regression" is
+    // no longer true, and with the selection already cleared nothing else
+    // would have removed it.
+    component.businessUnderstanding.success_criteria.primary_metric = 'roc_auc';
+    component.onBusinessUnderstandingChanged();
+    expect(component.pipelineResetNotice).toBe('');
+  });
+
   it('should send business understanding to the AI assistant as project metadata', () => {
     component.businessUnderstanding.objective = 'Approve or decline personal loan applications';
     component.businessUnderstanding.population = 'New-to-bank applicants';
