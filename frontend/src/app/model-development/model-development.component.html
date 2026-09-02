@@ -237,98 +237,217 @@
 
   <div class="pipeline-declaration">
     <!-- CRISP-DM: Business Understanding -->
-    <div id="business-understanding-anchor" class="business-understanding-section" style="margin-bottom: 24px; padding: 16px; border: 1px solid #e3f2fd; border-radius: 8px; background: #fafcff;">
-      <p style="font-size: larger; font-weight: bold; margin: 0 0 8px 0;">Business Understanding</p>
-      <p style="font-size: 13px; color: #555; margin: 0 0 16px 0;">Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack and evaluation business floors.</p>
+    <div id="business-understanding-anchor" class="bu-section">
+      <p class="bu-title">Business Understanding</p>
+      <p class="bu-subtitle">
+        Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack,
+        the evaluation business floors, and the AI Assistant&rsquo;s project memory.
+      </p>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Business objective</span>
+      <div class="bu-grid">
+        <label class="bu-field">
+          <span class="bu-label">
+            Business objective
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Business objective: the decision this model supports, in one sentence."
+                  data-tip="The decision this model supports, in one sentence. Write it as an action the business takes — e.g. &quot;Approve or decline unsecured personal loan applications at origination.&quot; Every AI Assistant recommendation is anchored to this.">i</span>
+          </span>
           <textarea rows="2" [ngModel]="businessUnderstanding.objective" (ngModelChange)="businessUnderstanding.objective = $event; onBusinessUnderstandingChanged()" placeholder="What decision does this model support?"></textarea>
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Decision use case</span>
-          <input type="text" [ngModel]="businessUnderstanding.decision_use_case" (ngModelChange)="businessUnderstanding.decision_use_case = $event; onBusinessUnderstandingChanged()" placeholder="e.g. origination approval" />
-        </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Prediction horizon</span>
+        <label class="bu-field">
+          <span class="bu-label">
+            Prediction horizon
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Prediction horizon: how far ahead the prediction looks."
+                  data-tip="How far ahead the prediction looks. Use a concrete window — e.g. &quot;12 months from disbursement&quot;. It must match the performance window used to build the target.">i</span>
+          </span>
           <input type="text" [ngModel]="businessUnderstanding.prediction_horizon" (ngModelChange)="businessUnderstanding.prediction_horizon = $event; onBusinessUnderstandingChanged()" placeholder="e.g. 12 months" />
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Population</span>
+        <label class="bu-field">
+          <span class="bu-label">
+            Population
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Population: who gets scored."
+                  data-tip="Who gets scored. State segment, product and channel — e.g. &quot;New-to-bank applicants for unsecured personal loans.&quot; The scoring population at deployment must match this.">i</span>
+          </span>
           <input type="text" [ngModel]="businessUnderstanding.population" (ngModelChange)="businessUnderstanding.population = $event; onBusinessUnderstandingChanged()" placeholder="Who is scored?" />
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Exclusions</span>
+        <label class="bu-field">
+          <span class="bu-label">
+            Exclusions
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Exclusions: cases deliberately kept out of the modelling sample."
+                  data-tip="Cases deliberately kept out of the modelling sample — e.g. &quot;staff accounts, applications withdrawn before decision, restructured loans.&quot; Each exclusion must be reproducible at scoring time.">i</span>
+          </span>
           <input type="text" [ngModel]="businessUnderstanding.exclusions" (ngModelChange)="businessUnderstanding.exclusions = $event; onBusinessUnderstandingChanged()" placeholder="Segments or cases to exclude" />
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Target column (contract)</span>
+        <label class="bu-field">
+          <span class="bu-label">
+            Target column (contract)
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Target column: exact column name in the data dictionary that holds the target."
+                  data-tip="Exact column name in the data dictionary that holds the target — e.g. Good_Bad_Flag. It must match the uploaded data letter-for-letter, or the split contract check will fail.">i</span>
+          </span>
           <input type="text" [ngModel]="businessUnderstanding.target_contract.target_column" (ngModelChange)="businessUnderstanding.target_contract.target_column = $event; onBusinessUnderstandingChanged()" placeholder="Column name in data dictionary" />
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-          <span>Good/bad window</span>
+        <label class="bu-field">
+          <span class="bu-label">
+            Good/bad window
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Good/bad window: observation and performance windows that define the target."
+                  data-tip="Observation + performance windows that turn raw behaviour into the target — e.g. &quot;observation 2022-01..2022-12, performance 12 months, 90+ DPD = Bad.&quot; Leave empty for a continuous (regression) target.">i</span>
+          </span>
           <input type="text" [ngModel]="businessUnderstanding.target_contract.good_bad_window" (ngModelChange)="businessUnderstanding.target_contract.good_bad_window = $event; onBusinessUnderstandingChanged()" placeholder="e.g. performance window" />
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
-          <span>Event definition (synced with target definition below when edited)</span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.target_contract.event_definition" (ngModelChange)="businessUnderstanding.target_contract.event_definition = $event; targetDefinition = $event; onBusinessUnderstandingChanged()" placeholder="Formal event definition"></textarea>
+        <label class="bu-field bu-field-wide">
+          <span class="bu-label">
+            Event/Target Definition
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Event/Target Definition: the formal, testable definition of what the model predicts."
+                  data-tip="The formal, testable definition of what the model predicts, including the unit of measurement. Classification — &quot;Bad = 90+ days past due within 12 months of disbursement.&quot; Regression — &quot;Loss given default as a share of exposure at default (0–1).&quot; This is the prediction contract the AI Assistant and every downstream step work from.">i</span>
+          </span>
+          <textarea rows="3" id="targetDefinition"
+                    [ngModel]="businessUnderstanding.target_contract.event_definition"
+                    (ngModelChange)="onEventDefinitionChanged($event)"
+                    placeholder="e.g. Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."></textarea>
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
-          <span>Assumptions</span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.assumptions" (ngModelChange)="businessUnderstanding.assumptions = $event; onBusinessUnderstandingChanged()"></textarea>
+      </div>
+
+      <button type="button" class="bu-details-toggle"
+              (click)="toggleBusinessDetails()"
+              [attr.aria-expanded]="showBusinessDetails"
+              aria-controls="bu-details-panel">
+        <span class="bu-details-caret" [class.bu-details-caret-open]="showBusinessDetails" aria-hidden="true">&#9656;</span>
+        Details
+        <span class="bu-details-hint">optional &mdash; assumptions, regulatory notes, forbidden features</span>
+      </button>
+
+      <div id="bu-details-panel" class="bu-grid bu-details" *ngIf="showBusinessDetails">
+        <label class="bu-field bu-field-wide">
+          <span class="bu-label">
+            Assumptions
+            <span class="bu-optional-tag">optional</span>
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Assumptions: what you are taking as given."
+                  data-tip="Anything you take as given — data availability, stable macro conditions, no policy change during the performance window. Validators read this first when the model underperforms.">i</span>
+          </span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.assumptions" (ngModelChange)="businessUnderstanding.assumptions = $event; onBusinessUnderstandingChanged()" placeholder="e.g. Application data is complete at decision time; no policy change during the performance window."></textarea>
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
-          <span>Regulatory notes</span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.regulatory_notes" (ngModelChange)="businessUnderstanding.regulatory_notes = $event; onBusinessUnderstandingChanged()"></textarea>
+        <label class="bu-field bu-field-wide">
+          <span class="bu-label">
+            Regulatory notes
+            <span class="bu-optional-tag">optional</span>
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Regulatory notes: rules that constrain the model."
+                  data-tip="Rules that constrain the model — protected attributes, explainability obligations, model-risk tier, retention rules. Naming them here keeps the AI Assistant from suggesting anything that breaches them.">i</span>
+          </span>
+          <textarea rows="2" [ngModel]="businessUnderstanding.regulatory_notes" (ngModelChange)="businessUnderstanding.regulatory_notes = $event; onBusinessUnderstandingChanged()" placeholder="e.g. Adverse-action reasons required; no use of protected attributes or their proxies."></textarea>
         </label>
-        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; grid-column: 1 / -1;">
-          <span>Forbidden features (comma-separated)</span>
+        <label class="bu-field bu-field-wide">
+          <span class="bu-label">
+            Forbidden features (comma-separated)
+            <span class="bu-optional-tag">optional</span>
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Forbidden features: columns that must never enter the model."
+                  data-tip="Columns that must never enter the model — post-outcome fields, leakage, proxies for protected attributes. Comma-separated; the AI Assistant treats them as off-limits in every feature recommendation.">i</span>
+          </span>
           <input type="text" [ngModel]="forbiddenFeaturesText" (ngModelChange)="forbiddenFeaturesText = $event; onBusinessUnderstandingChanged()" placeholder="e.g. post_disbursement_balance, internal_score" />
         </label>
       </div>
 
-      <fieldset style="margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px;">
-        <legend style="font-weight: 600; font-size: 13px; padding: 0 6px;">Success criteria</legend>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
-          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-            <span>Primary metric</span>
+      <fieldset class="bu-criteria">
+        <legend>
+          Success criteria
+          <span class="bu-info" tabindex="0" role="note"
+                aria-label="Success criteria: the metric, floor and costs evaluation is judged against."
+                data-tip="The single metric that decides whether the model is good enough, the business minimum it must clear, and the relative cost of the two error types. The primary metric also declares the problem type.">i</span>
+        </legend>
+        <div class="bu-criteria-row">
+          <label class="bu-field">
+            <span class="bu-label">
+              Primary metric
+              <span class="bu-info" tabindex="0" role="note"
+                    aria-label="Primary metric: the metric that decides whether the model is good enough."
+                    data-tip="The metric the model is judged on. ROC-AUC / PR-AUC / F1 declare a classification problem; RMSE / R² declare a regression problem — the Pipeline Declarations list below follows this choice.">i</span>
+            </span>
             <select [ngModel]="businessUnderstanding.success_criteria.primary_metric" (ngModelChange)="businessUnderstanding.success_criteria.primary_metric = $event; onBusinessUnderstandingChanged()">
               <option value="roc_auc">ROC-AUC</option>
               <option value="pr_auc">PR-AUC</option>
               <option value="f1">F1</option>
               <option value="rmse">RMSE</option>
-              <option value="r2">R²</option>
+              <option value="r2">R&#178;</option>
             </select>
           </label>
-          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-            <span>Direction</span>
+          <label class="bu-field">
+            <span class="bu-label">
+              Direction
+              <span class="bu-info" tabindex="0" role="note"
+                    aria-label="Direction: whether the primary metric is maximised or minimised."
+                    data-tip="Whether the primary metric should be maximised (ROC-AUC, PR-AUC, F1, R²) or minimised (RMSE).">i</span>
+            </span>
             <select [ngModel]="businessUnderstanding.success_criteria.direction" (ngModelChange)="businessUnderstanding.success_criteria.direction = $event; onBusinessUnderstandingChanged()">
               <option value="maximize">Maximize</option>
               <option value="minimize">Minimize</option>
             </select>
           </label>
-          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-            <span>Floor (business minimum)</span>
+          <label class="bu-field">
+            <span class="bu-label">
+              Floor (business minimum)
+              <span class="bu-info" tabindex="0" role="note"
+                    aria-label="Floor: the business minimum for the primary metric."
+                    data-tip="The business minimum for the primary metric. Evaluation compares the outer-test score against it. Leave empty to proceed without a floor — evaluation will still run, but nothing gates on it.">i</span>
+            </span>
             <input type="number" step="0.001" [ngModel]="businessUnderstanding.success_criteria.floor" (ngModelChange)="businessUnderstanding.success_criteria.floor = $event === '' ? null : +$event; onBusinessUnderstandingChanged()" placeholder="e.g. 0.65" />
           </label>
-          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-            <span>FN cost</span>
+          <label class="bu-field">
+            <span class="bu-label">
+              FN cost
+              <span class="bu-info" tabindex="0" role="note"
+                    aria-label="FN cost: business cost of a missed event."
+                    data-tip="Relative business cost of a missed event (false negative) — e.g. a defaulter approved. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation.">i</span>
+            </span>
             <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fn_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fn_cost = +$event; onBusinessUnderstandingChanged()" />
           </label>
-          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-            <span>FP cost</span>
+          <label class="bu-field">
+            <span class="bu-label">
+              FP cost
+              <span class="bu-info" tabindex="0" role="note"
+                    aria-label="FP cost: business cost of a false alarm."
+                    data-tip="Relative business cost of a false alarm (false positive) — e.g. a good applicant declined. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation.">i</span>
+            </span>
             <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fp_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fp_cost = +$event; onBusinessUnderstandingChanged()" />
           </label>
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 18px;">
+          <label class="bu-checkbox">
             <input type="checkbox" [ngModel]="businessUnderstanding.hard_block_modeling_without_criteria" (ngModelChange)="businessUnderstanding.hard_block_modeling_without_criteria = $event; onBusinessUnderstandingChanged()" />
             <span>Block modeling without floor</span>
+            <span class="bu-info" tabindex="0" role="note"
+                  aria-label="Block modeling without floor: hard gate on the success floor."
+                  data-tip="Hard gate: modeling cannot start until a floor is set. Leave off to allow modeling with only a warning.">i</span>
           </label>
         </div>
       </fieldset>
 
-      <div *ngIf="modelingCriteriaWarning" style="margin-top: 10px; padding: 8px 12px; background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 4px; font-size: 13px; color: #e65100;">
+      <div class="bu-problem-type" *ngIf="detectedProblemType">
+        <span class="bu-problem-type-badge">{{ problemTypeLabel() }}</span>
+        <span>Problem type derived from {{ problemTypeReason }}. Pipeline Declarations lists only pipelines that can train it.</span>
+      </div>
+      <div class="bu-conflict" *ngIf="problemTypeMetricConflict" role="alert">
+        The objective wording and the selected primary metric disagree on the problem type. Set the primary metric that
+        matches the target you described &mdash; ROC-AUC / PR-AUC / F1 for classification, RMSE / R&#178; for regression.
+      </div>
+
+      <div *ngIf="modelingCriteriaWarning" class="bu-warning" role="alert">
         Success criteria floor is empty. Modeling can proceed, but evaluation will compare outer-test metrics against business floors.
+      </div>
+
+      <div class="bu-ai-note">
+        <span class="ai-info-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/>
+            <path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/>
+          </svg>
+        </span>
+        Everything declared here is kept as project metadata in the AI Assistant&rsquo;s memory and applied to every recommendation it makes.
       </div>
     </div>
 
@@ -336,62 +455,17 @@
       <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
       <select [ngModel]="selectedPipeline" (ngModelChange)="selectedPipeline = $event; onPipelineChange2($event)">
         <option value="" disabled>Select Pipeline</option>
-        <option value="boosting">1- Boosting Pipeline</option>
-        <option value="logit">2- Logit Pipeline</option>
-        <option value="credit-scoring">3- Credit Scoring Pipeline</option>
-        <option value="anomaly-detection">4- Anomaly Detection Pipeline</option>
+        <option *ngFor="let option of availablePipelineOptions" [value]="option.value">{{ option.label }}</option>
       </select>
-    </div>
-
-    <!-- Target Definition: business meaning of the target variable -->
-    <div class="target-definition-section" *ngIf="selectedPipeline">
-      <label class="target-definition-label" for="targetDefinition">
-        Define the Target Variable
-        <span class="target-definition-hint">Describe the business meaning and prediction goal (e.g., "Predict whether a loan applicant will default within 12 months")</span>
-      </label>
-
-      <!-- Editable mode: before Start or when Edit is clicked -->
-      <textarea
-        *ngIf="!isStarted || editingTargetDefinition"
-        id="targetDefinition"
-        class="target-definition-input"
-        [ngModel]="targetDefinition"
-        (ngModelChange)="onTargetDefinitionChange($event)"
-        placeholder="e.g., Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."
-        rows="3"
-      ></textarea>
-
-      <!-- Read-only mode: after Start, when not editing -->
-      <div *ngIf="isStarted && !editingTargetDefinition" class="target-definition-readonly">
-        {{ targetDefinition || '(No definition provided)' }}
-      </div>
-
-      <!-- Save button when editing after start -->
-      <button *ngIf="isStarted && editingTargetDefinition"
-              class="target-definition-save-btn"
-              (click)="onSaveTargetDefinition()">
-        Save
-      </button>
-
-      <!-- AI info banner: shown after pipeline started -->
-      <div *ngIf="isStarted && !editingTargetDefinition && targetDefinition" class="target-definition-ai-info">
-        <span class="ai-info-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/>
-            <path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/>
-          </svg>
-        </span>
-        This definition is shared with the AI Assistant to provide project-specific suggestions and guidance.
-      </div>
+      <p class="pipeline-filter-note" *ngIf="detectedProblemType">
+        Filtered to {{ problemTypeLabel().toLowerCase() }} pipelines.
+      </p>
+      <p class="pipeline-reset-notice" *ngIf="pipelineResetNotice" role="alert">{{ pipelineResetNotice }}</p>
     </div>
 
     <!-- Start button: only before pipeline is started -->
     <button *ngIf="!isStarted" class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
 
-    <!-- Edit button: after pipeline is started, replaces Start -->
-    <button *ngIf="isStarted && !editingTargetDefinition" class="target-definition-edit-btn" (click)="onEditTargetDefinition()">
-      &#9998; Edit Definition
-    </button>
   </div>
   <!-- Declaration specific content (always visible at top) -->
   <app-declaration></app-declaration>

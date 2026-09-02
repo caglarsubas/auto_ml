@@ -38,10 +38,22 @@ test.describe('Pipeline Setup Journey', () => {
     await expect(startBtn).toBeEnabled();
   });
 
-  test('should show target definition input after selecting pipeline', async ({ page }) => {
-    await page.selectOption('.pipeline-type-dropdown select', 'boosting');
-    await expect(page.locator('.target-definition-section')).toBeVisible();
+  test('should show the Event/Target Definition field in Business Understanding', async ({ page }) => {
+    await expect(page.locator('.bu-section')).toBeVisible();
     await expect(page.locator('#targetDefinition')).toBeVisible();
+  });
+
+  test('should reveal optional fields behind the Details toggle', async ({ page }) => {
+    await expect(page.locator('#bu-details-panel')).toHaveCount(0);
+    await page.click('.bu-details-toggle');
+    await expect(page.locator('#bu-details-panel')).toBeVisible();
+  });
+
+  test('should restrict Pipeline Declarations to regression pipelines when RMSE is chosen', async ({ page }) => {
+    await page.selectOption('.bu-criteria select', 'rmse');
+    const options = page.locator('.pipeline-type-dropdown select option:not([disabled])');
+    await expect(options).toHaveCount(1);
+    await expect(options.first()).toHaveText('1- Boosting Pipeline');
   });
 
   test('should start pipeline and show declaration section', async ({ page }) => {
@@ -56,12 +68,6 @@ test.describe('Pipeline Setup Journey', () => {
     await expect(page.locator('text=Data Declaration')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('should show Edit Definition button after starting pipeline', async ({ page }) => {
-    await page.selectOption('.pipeline-type-dropdown select', 'logit');
-    await page.click('button.start-button');
-
-    await expect(page.locator('button', { hasText: 'Edit Definition' })).toBeVisible({ timeout: 10_000 });
-  });
 
   test('Saved Pipelines button should be visible', async ({ page }) => {
     await expect(page.locator('button', { hasText: 'Saved Pipelines' })).toBeVisible();

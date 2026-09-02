@@ -158,6 +158,20 @@ The user is a data scientist or risk analyst building a supervised binary classi
   back to it. Frame recommendations in terms of the business objective the user described.
   For example, if the target is "predict loan default within 12 months", discuss feature
   relevance, threshold choices, and stability in terms of default prediction impact.
+• BUSINESS UNDERSTANDING is the project's standing metadata — the user declares it once
+  (objective, problem type, prediction horizon, population, exclusions, target contract,
+  success criteria and error costs, assumptions, regulatory notes, forbidden features) and it
+  stays true for the whole project. Treat it as BINDING on every decision you make or advise:
+  – Never recommend a feature listed under FORBIDDEN features, and never propose one that
+    breaches the regulatory notes. If the user asks for one anyway, say why it is excluded.
+  – Judge every metric against the declared success floor and direction, not a generic
+    rule-of-thumb, and pick thresholds using the declared FN/FP cost ratio.
+  – Keep algorithm and pipeline advice inside the declared problem type (classification vs
+    regression) and prediction horizon.
+  – Read population + exclusions as the scoring population; flag anything that would make the
+    training sample diverge from it.
+  – When a recommendation conflicts with any declaration, name the conflict explicitly instead
+    of silently overriding it.
 • Keep answers relevant to the user's CURRENT pipeline step and ongoing flow.
   Example: if user is at Data Quality, mention what to watch for before Encoding; if at
   Modeling, reference what the next SFS step could reveal.
@@ -813,6 +827,11 @@ points and short paragraphs over essays.  Use Unicode for math (→ ⇒ ≤ ≥
 ≠ ≈ ± × ÷ · α β σ π Δ Σ Ω); do NOT emit LaTeX like $\\rightarrow$ or
 \\alpha — the chat renderer has no MathJax and will show the source.
 
+BUSINESS UNDERSTANDING in the context is binding project metadata: never
+suggest a forbidden feature or one breaching the regulatory notes, judge
+metrics against the declared floor and FN/FP costs, and stay inside the
+declared problem type.
+
 ═══ PIPELINE STAGES ═══
 1. Data Declaration  2. Data Purifier (preprocessing)  3. Data Quality Summary
 4. Categorical Feature Encoding  5. Modeling (CV, SHAP, importance)
@@ -823,8 +842,7 @@ The slim context above contains feature NAMES and pipeline STATUS, NOT the
 actual analysis numbers (SFS step trajectory, SHAP values, CV metrics, PSI
 values, encoding plan rows, etc.).  If a user asks about specific results,
 you MUST call the matching tool FIRST and ground your answer in the
-returned data.  Skipping the tool means hallucinating numbers — the user
-will catch it.
+returned data.
 
 User asks about ... → CALL THIS TOOL FIRST:
 • SFS / sequential feature selection / forward / backward / step trajectory
@@ -857,8 +875,7 @@ User asks about ... → CALL THIS TOOL FIRST:
 • VIF decomposition / which features cause Var_X's high VIF / feature pairs
   → get_vif_decomposition
 
-WHEN IN DOUBT, CALL THE TOOL.  A tool call followed by analysis is ALWAYS
-better than analysis without data.  ONLY skip the tool when the user is
+WHEN IN DOUBT, CALL THE TOOL.  ONLY skip the tool when the user is
 asking a generic conceptual question with no pipeline-specific reference
 (e.g. "what does PSI mean in general?", "explain ROC-AUC vs PR-AUC").
 
@@ -954,12 +971,10 @@ see the result.
 
 RULE 2 — Honesty about state.  NEVER claim "SFS started", "Modeling started",
 "Encoding applied" without emitting the matching action in the same reply.
-A claim without an action block is a contradiction the user will catch.
 
 RULE 3 — Pre-condition gating.  Verify the pre-conditions in each action's
 description above via tool calls before firing.  If something's missing,
-state it and propose the upstream action instead — don't fire blindly and
-let the engine error.
+state it and propose the upstream action instead.
 """
 
 
@@ -1122,6 +1137,7 @@ def _build_slim_context(file_id: int, section: str) -> str:
     """
     # Local import to avoid circular dependency at module load time.
     from .tool_executor import (
+        format_business_understanding,
         read_pipeline_config,
         read_data_dictionary,
         read_selected_features,
@@ -1154,6 +1170,10 @@ def _build_slim_context(file_id: int, section: str) -> str:
         parts.append(f"Rows: {config.get('row_count_before', '?')} → {config.get('row_count_after', '?')} "
                       f"(removed: {config.get('rows_removed', 0)})")
         parts.append(f"Split: {config.get('split_strategy', '?')}")
+        # Business Understanding is standing project metadata, not step output —
+        # it belongs in every context window, including the slim one that the
+        # small engine models get.
+        parts.extend(format_business_understanding(config.get('business_understanding')))
 
     # Data dictionary — embed feature descriptions inline so every model
     # (native tool-callers AND text-mode models that may skip tool calls)
@@ -3850,6 +3870,16 @@ def _format_context(context: dict, section: str) -> str:
             parts.append(f"  The user defined the prediction target as:")
             parts.append(f"  \"{target_def}\"")
             parts.append(f"  → Use this business context to ground ALL your analysis and recommendations.")
+
+        # ── Business Understanding (project metadata declared once, binding always) ──
+        from .tool_executor import format_business_understanding
+        bu_lines = format_business_understanding(pipeline_cfg.get('business_understanding'))
+        if bu_lines:
+            parts.append(f"\n═══ BUSINESS UNDERSTANDING (Project Metadata) ═══")
+            parts.extend(bu_lines)
+            parts.append("  → These declarations are binding: respect the population, exclusions, "
+                         "forbidden features, regulatory notes and success floor in EVERY "
+                         "recommendation, and say so when a suggestion conflicts with them.")
 
         steps = pipeline_cfg.get('selected_purifier_steps', [])
         if steps:

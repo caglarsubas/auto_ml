@@ -24,7 +24,7 @@ DEFAULT_SUCCESS_CRITERIA: Dict[str, Any] = {
 def empty_business_understanding() -> Dict[str, Any]:
     return {
         'objective': '',
-        'decision_use_case': '',
+        'problem_type': '',
         'prediction_horizon': '',
         'population': '',
         'exclusions': '',
@@ -46,10 +46,13 @@ def normalize_business_understanding(raw: Optional[Dict[str, Any]]) -> Dict[str,
     base = empty_business_understanding()
     if not isinstance(raw, dict):
         return base
-    for k in ('objective', 'decision_use_case', 'prediction_horizon', 'population',
+    for k in ('objective', 'prediction_horizon', 'population',
               'exclusions', 'assumptions', 'regulatory_notes'):
         if raw.get(k) is not None:
             base[k] = str(raw.get(k) or '')
+    problem_type = str(raw.get('problem_type') or '').strip().lower()
+    if problem_type in ('classification', 'regression'):
+        base['problem_type'] = problem_type
     tc = raw.get('target_contract') if isinstance(raw.get('target_contract'), dict) else {}
     for k in ('event_definition', 'good_bad_window', 'target_column'):
         if tc.get(k) is not None:

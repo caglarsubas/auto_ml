@@ -793,3 +793,83 @@ class TestPromptRenderWorkflowWiring:
         assert 'slim_context' not in components
         assert 'conversation_history' not in components
         assert not any(c.startswith('skill:') for c in components)
+
+
+# ---------------------------------------------------------------------------
+# Business Understanding is the project's standing metadata: it must reach the
+# assistant on every context path, and both system prompts must declare it
+# binding on the assistant's decisions.
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestBusinessUnderstandingContext:
+
+    BU = {
+        'objective': 'Approve or decline unsecured personal loan applications',
+        'problem_type': 'classification',
+        'prediction_horizon': '12 months from disbursement',
+        'population': 'New-to-bank applicants',
+        'exclusions': 'Staff accounts',
+        'assumptions': 'No policy change during the performance window',
+        'regulatory_notes': 'Adverse-action reasons required',
+        'forbidden_features': ['post_disbursement_balance', 'internal_score'],
+        'target_contract': {
+            'target_column': 'Good_Bad_Flag',
+            'event_definition': 'Bad = 90+ DPD within 12 months',
+            'good_bad_window': 'observation 2022, performance 12 months',
+        },
+        'success_criteria': {
+            'primary_metric': 'roc_auc',
+            'direction': 'maximize',
+            'floor': 0.72,
+            'cost_matrix': {'fn_cost': 5, 'fp_cost': 1},
+        },
+        'hard_block_modeling_without_criteria': True,
+    }
+
+    def test_formatter_renders_every_declared_field(self):
+        from ai_assistant.tool_executor import format_business_understanding
+
+        text = '\n'.join(format_business_understanding(self.BU))
+        for expected in (
+            'Business Understanding (project metadata',
+            'Approve or decline unsecured personal loan applications',
+            'Problem type: classification',
+            '12 months from disbursement',
+            'New-to-bank applicants',
+            'Staff accounts',
+            'No policy change during the performance window',
+            'Adverse-action reasons required',
+            'Target column: Good_Bad_Flag',
+            'Bad = 90+ DPD within 12 months',
+            'observation 2022, performance 12 months',
+            'roc_auc (maximize), business floor 0.72',
+            'FN=5, FP=1',
+            'post_disbursement_balance, internal_score',
+            'hard-blocked',
+        ):
+            assert expected in text, expected
+
+    def test_formatter_is_empty_without_declarations(self):
+        from ai_assistant.tool_executor import format_business_understanding
+
+        assert format_business_understanding(None) == []
+        assert format_business_understanding({}) == []
+
+    def test_get_pipeline_config_surfaces_business_understanding(self, monkeypatch):
+        from ai_assistant import tool_executor
+
+        monkeypatch.setattr(
+            tool_executor, 'read_pipeline_config',
+            lambda file_id: {'pipeline_type': 'boosting', 'business_understanding': self.BU},
+        )
+        out = tool_executor._handle_get_pipeline_config(1, {})
+        assert 'Business Understanding (project metadata' in out
+        assert 'post_disbursement_balance' in out
+
+    def test_both_system_prompts_bind_the_assistant_to_the_declarations(self):
+        from ai_assistant.views import SYSTEM_PROMPT, _LITE_SYSTEM_PROMPT
+
+        for prompt in (SYSTEM_PROMPT, _LITE_SYSTEM_PROMPT):
+            assert 'BUSINESS UNDERSTANDING' in prompt
+            assert 'forbidden' in prompt.lower()
+            assert 'binding' in prompt.lower()
