@@ -21,11 +21,11 @@ statsmodels>=0.14
 
 # AI Assistant
 openai>=1.0
-# Interim pin: retrieval.namespace (SDK #82) + embeddings.create (SDK #80)
-# are on main but not yet cut as a PyPI release beyond 0.20.1. Use a commit
-# archive URL (not git+) so slim Docker images without git can still
-# pip-install. Switch back to a version lower-bound once that lands on PyPI.
-prometa-sdk @ https://github.com/prometa-ai/orchestra-python-sdk/archive/b81a789efa8df21449bb37972aa8f3e716f3120d.tar.gz
+# retrieval.namespace (SDK #82) + embeddings.create (SDK #80) shipped in
+# 0.20.2 on PyPI, so the interim commit-archive pin is retired as its comment
+# always intended. That URL is now unfetchable anyway — the source repo 404s,
+# which broke `pip install -r` (and therefore all of CI) on every branch.
+prometa-sdk>=0.20.2
 redis>=5.0
 mcp>=1.27,<2
 cryptography>=42
