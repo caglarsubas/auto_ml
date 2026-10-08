@@ -14,8 +14,8 @@ from rest_framework.test import APIClient
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
+def api_client(authenticated_api_client):
+    return authenticated_api_client
 
 
 # ---------------------------------------------------------------------------
@@ -246,11 +246,11 @@ class TestSfsIntermediateSaveKeyError:
 @pytest.mark.django_db
 class TestPipelineStepRegressionViaAPI:
 
-    def test_step_regression_blocked(self):
+    def test_step_regression_blocked(self, api_client):
         """PUT should not allow moving from 'sfs' back to 'modeling'."""
         from modeling.models import PipelineRun
         from rest_framework.test import APIClient
-        client = APIClient()
+        client = api_client
 
         run = PipelineRun.objects.create(name='Regress', current_step='sfs')
         resp = client.put(
@@ -261,11 +261,11 @@ class TestPipelineStepRegressionViaAPI:
         assert resp.status_code == 200
         assert resp.data['current_step'] == 'sfs'
 
-    def test_step_forward_allowed(self):
+    def test_step_forward_allowed(self, api_client):
         """PUT should allow moving from 'modeling' to 'sfs'."""
         from modeling.models import PipelineRun
         from rest_framework.test import APIClient
-        client = APIClient()
+        client = api_client
 
         run = PipelineRun.objects.create(name='Forward', current_step='modeling')
         resp = client.put(
@@ -607,9 +607,9 @@ class TestStackedPlotLowCardinalityNumeric:
 @pytest.mark.django_db
 class TestDatqSummaryRowEndpoint:
 
-    def test_returns_row_for_existing_feature(self, _use_tmp_media, media_root):
+    def test_returns_row_for_existing_feature(self, api_client, _use_tmp_media, media_root):
         """GET /api/preprocessing/datq_summary_row/<id>/?column=X returns the correct row."""
-        client = APIClient()
+        client = api_client
 
         datq_dir = os.path.join(str(media_root), 'data_quality')
         os.makedirs(datq_dir, exist_ok=True)
@@ -627,9 +627,9 @@ class TestDatqSummaryRowEndpoint:
         assert resp.data['row']['Variable'] == 'Var_2'
         assert resp.data['row']['PSI'] == 0.12
 
-    def test_returns_null_for_missing_feature(self, _use_tmp_media, media_root):
+    def test_returns_null_for_missing_feature(self, api_client, _use_tmp_media, media_root):
         """GET with a column not in the summary returns row=null."""
-        client = APIClient()
+        client = api_client
 
         datq_dir = os.path.join(str(media_root), 'data_quality')
         os.makedirs(datq_dir, exist_ok=True)
@@ -641,24 +641,24 @@ class TestDatqSummaryRowEndpoint:
         assert resp.status_code == 200
         assert resp.data['row'] is None
 
-    def test_returns_null_for_missing_file(self, _use_tmp_media, media_root):
+    def test_returns_null_for_missing_file(self, api_client, _use_tmp_media, media_root):
         """GET when no datq_summary JSON exists returns row=null."""
-        client = APIClient()
+        client = api_client
 
         resp = client.get('/api/preprocessing/datq_summary_row/99999/', {'column': 'Var_1'})
         assert resp.status_code == 200
         assert resp.data['row'] is None
 
-    def test_missing_column_param_returns_400(self, _use_tmp_media):
+    def test_missing_column_param_returns_400(self, api_client, _use_tmp_media):
         """GET without column query param returns 400."""
-        client = APIClient()
+        client = api_client
 
         resp = client.get('/api/preprocessing/datq_summary_row/1/')
         assert resp.status_code == 400
 
-    def test_lookup_with_variable_key_variants(self, _use_tmp_media, media_root):
+    def test_lookup_with_variable_key_variants(self, api_client, _use_tmp_media, media_root):
         """The endpoint must find rows keyed as 'Variable', 'variable', or 'index'."""
-        client = APIClient()
+        client = api_client
 
         datq_dir = os.path.join(str(media_root), 'data_quality')
         os.makedirs(datq_dir, exist_ok=True)

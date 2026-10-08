@@ -1,4 +1,13 @@
-import { Component, OnInit, HostListener, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  HostListener,
+  ViewChild,
+  ElementRef,
+  AfterViewChecked,
+  OnDestroy,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
@@ -22,7 +31,7 @@ interface BusinessSuccessCriteria {
   cost_matrix: { fn_cost: number; fp_cost: number };
 }
 
-type ProblemType = 'classification' | 'regression';
+type ProblemType = 'classification' | 'regression' | 'anomaly';
 
 interface PipelineCatalogueEntry {
   value: string;
@@ -38,14 +47,17 @@ interface BusinessUnderstandingState {
   assumptions: string;
   regulatory_notes: string;
   forbidden_features: string[];
+  feature_availability: { default: string; overrides: { [feature: string]: string } };
   success_criteria: BusinessSuccessCriteria;
   target_contract: {
     event_definition: string;
     good_bad_window: string;
     target_column: string;
+    positive_class: string | number | null;
+    label_maturity: string;
   };
   hard_block_modeling_without_criteria: boolean;
-  /** Derived from the success metric + objective wording; drives the pipeline catalogue. */
+  /** Accepted human declaration; inferred task suggestions cannot overwrite it. */
   problem_type: ProblemType | '';
   completed: boolean;
 }
@@ -53,14 +65,22 @@ interface BusinessUnderstandingState {
 @Component({
   selector: 'app-model-development',
   templateUrl: './model-development.component.html',
-  styleUrls: ['./model-development.component.css']
+  styleUrls: ['./model-development.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
-
 export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDestroy {
   @ViewChild('splitValidationCanvas') splitValidationCanvas!: ElementRef<HTMLCanvasElement>;
   private _splitChartDrawn = false;
   currentRoute: string = '';
-  menuItems = ['declaration', 'preprocessing', 'data quality', 'modeling', 'evaluation', 'deployment'];
+  menuItems = [
+    'declaration',
+    'preprocessing',
+    'data quality',
+    'modeling',
+    'evaluation',
+    'deployment',
+  ];
   selectedPipeline: string = '';
   /** Mirror of `businessUnderstanding.target_contract.event_definition` shared app-wide. */
   targetDefinition: string = '';
@@ -71,7 +91,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     preprocessing: false,
     modeling: false,
     evaluation: false,
-    deployment: false
+    deployment: false,
   };
   private subscription: Subscription = new Subscription();
   currentFileId: number | null = null;
@@ -107,7 +127,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   deploymentCompleted: boolean = false;
   preprocessingAvailable: boolean = false;
   // Purifier breakdown: which columns were dropped at which step, and how many rows were removed
-  droppedColumnsByStep: Array<{ step: string; option_ids?: number[]; threshold?: number; columns: string[]; rows_removed?: number; merge_mapping?: { [feature: string]: { [orig: string]: string } }; note?: string }>= [];
+  droppedColumnsByStep: Array<{
+    step: string;
+    option_ids?: number[];
+    threshold?: number;
+    columns: string[];
+    rows_removed?: number;
+    merge_mapping?: { [feature: string]: { [orig: string]: string } };
+    note?: string;
+  }> = [];
   // Total rows removed across all preprocessing steps
   rowsRemovedTotal: number = 0;
   // Row counts before/after preprocessing run (for summary display)
@@ -132,7 +160,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   dateColumns: string[] = [];
   // Cache full data dictionary (to provide Feature_Description to Feature Card)
   dataDictionaryCache: any[] = [];
-  currentSplit: { strategy?: string; date_column?: string; cutoff?: string; percent?: number } | null = null;
+  currentSplit: {
+    strategy?: string;
+    date_column?: string;
+    cutoff?: string;
+    percent?: number;
+  } | null = null;
   // Split validation: target distribution per split (Full, Train, Test)
   splitValidation: any = null;
 
@@ -149,7 +182,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   // Unique-values dropdown filter state
   datqFilterMenuFor: string | null = null; // which column menu is open
   datqFilterMenuSearch: string = '';
-  datqUniqueValuesCache: { [col: string]: Array<{ value: string, count: number }> } = {};
+  datqUniqueValuesCache: { [col: string]: Array<{ value: string; count: number }> } = {};
   datqSelectedValues: { [col: string]: Set<string> } = {};
   datqShowOnlySelected: { [col: string]: boolean } = {};
   datqSortColumn: string | null = null;
@@ -175,7 +208,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   encodingUseNative: boolean = true;
 
   // ===== CRISP-DM: Business Understanding & cycle state =====
-  businessUnderstanding: BusinessUnderstandingState = ModelDevelopmentComponent.createDefaultBusinessUnderstanding();
+  businessUnderstanding: BusinessUnderstandingState =
+    ModelDevelopmentComponent.createDefaultBusinessUnderstanding();
   forbiddenFeaturesText: string = '';
   /** Optional Business Understanding fields (assumptions / regulatory / forbidden) live behind this toggle. */
   showBusinessDetails: boolean = false;
@@ -210,47 +244,45 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   navMainSteps = [
     {
-      id: 'business_understanding', label: 'Business Understanding',
-      subSteps: [
-        { id: '0a', label: 'Problem Framing & Success Criteria' },
-      ]
+      id: 'business_understanding',
+      label: 'Business Understanding',
+      subSteps: [{ id: '0a', label: 'Problem Framing & Success Criteria' }],
     },
     {
-      id: 'declaration', label: 'Data Understanding',
+      id: 'declaration',
+      label: 'Data Understanding',
       subSteps: [
         { id: '1a', label: 'Pipeline Type Selection' },
         { id: '1b', label: 'Data Upload' },
         { id: '1c', label: 'Data Dictionary Review' },
         { id: '1d', label: 'Preprocessing & Split' },
         { id: '1e', label: 'Data Quality Summary' },
-      ]
+      ],
     },
     {
-      id: 'modeling', label: 'Modeling',
+      id: 'modeling',
+      label: 'Modeling',
       subSteps: [
         { id: '2a', label: 'Categorical Encoding' },
         { id: '2b', label: 'Model Training & CV' },
         { id: '2c', label: 'Feature Selection (SFS)' },
         { id: '2d', label: 'Hyperparameter Tuning' },
-      ]
+      ],
     },
     {
-      id: 'evaluation', label: 'Evaluation',
-      subSteps: [
-        { id: '3a', label: 'Model Evaluation' },
-      ]
+      id: 'evaluation',
+      label: 'Evaluation',
+      subSteps: [{ id: '3a', label: 'Model Evaluation' }],
     },
     {
-      id: 'deployment', label: 'Deployment',
-      subSteps: [
-        { id: '4a', label: 'Model Deployment' },
-      ]
+      id: 'deployment',
+      label: 'Deployment',
+      subSteps: [{ id: '4a', label: 'Model Deployment' }],
     },
     {
-      id: 'monitoring', label: 'Monitoring',
-      subSteps: [
-        { id: '5a', label: 'Drift & Iteration' },
-      ]
+      id: 'monitoring',
+      label: 'Monitoring',
+      subSteps: [{ id: '5a', label: 'Drift & Iteration' }],
     },
   ];
 
@@ -259,15 +291,18 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
    *
    * `boosting` maps to the XGBoost/LightGBM/CatBoost adapters, which carry a
    * regression task mode (`booster_adapters._is_regression`).  `logit`,
-   * `credit-scoring` and `anomaly-detection` map to `alt_pipelines`, where every
-   * estimator is hard-wired to `task = 'classification'` — so they are hidden
-   * once the declared problem is a regression.
+   * `credit-scoring` support classification only. `anomaly-detection` produces
+   * a separate anomaly ranking, whose scores are not class probabilities.
    */
   readonly pipelineCatalogue: PipelineCatalogueEntry[] = [
     { value: 'boosting', label: '1- Boosting Pipeline', tasks: ['classification', 'regression'] },
     { value: 'logit', label: '2- Logit Pipeline', tasks: ['classification'] },
     { value: 'credit-scoring', label: '3- Credit Scoring Pipeline', tasks: ['classification'] },
-    { value: 'anomaly-detection', label: '4- Anomaly Detection Pipeline', tasks: ['classification'] },
+    {
+      value: 'anomaly-detection',
+      label: '4- Anomaly Detection Pipeline',
+      tasks: ['anomaly'],
+    },
   ];
 
   private static readonly DEFAULT_PRIMARY_METRIC = 'roc_auc';
@@ -289,18 +324,57 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   };
 
   private static readonly CLASSIFICATION_KEYWORDS = [
-    'whether', 'classify', 'classification', 'binary', 'flag', 'label',
-    'probability', 'propensity', 'likelihood', 'risk of', 'default', 'delinquen',
-    'charge-off', 'charge off', 'dpd', 'good/bad', 'good bad', 'bad rate',
-    'churn', 'fraud', 'approve', 'decline', 'accept', 'reject', 'anomaly',
-    'yes/no', 'will not', 'event occurs',
+    'whether',
+    'classify',
+    'classification',
+    'binary',
+    'flag',
+    'label',
+    'probability',
+    'propensity',
+    'likelihood',
+    'risk of',
+    'default',
+    'delinquen',
+    'charge-off',
+    'charge off',
+    'dpd',
+    'good/bad',
+    'good bad',
+    'bad rate',
+    'churn',
+    'fraud',
+    'approve',
+    'decline',
+    'accept',
+    'reject',
+    'anomaly',
+    'yes/no',
+    'will not',
+    'event occurs',
   ];
 
   private static readonly REGRESSION_KEYWORDS = [
-    'how much', 'how many', 'amount', 'monetary value', 'loss given default',
-    'lgd', 'exposure at default', 'ead', 'severity', 'revenue', 'sales volume',
-    'price', 'forecast', 'continuous', 'regression', 'lifetime value',
-    'time to', 'number of', 'count of', 'expected loss',
+    'how much',
+    'how many',
+    'amount',
+    'monetary value',
+    'loss given default',
+    'lgd',
+    'exposure at default',
+    'ead',
+    'severity',
+    'revenue',
+    'sales volume',
+    'price',
+    'forecast',
+    'continuous',
+    'regression',
+    'lifetime value',
+    'time to',
+    'number of',
+    'count of',
+    'expected loss',
   ];
 
   private static createDefaultBusinessUnderstanding(): BusinessUnderstandingState {
@@ -312,6 +386,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       assumptions: '',
       regulatory_notes: '',
       forbidden_features: [],
+      feature_availability: { default: '', overrides: {} },
       success_criteria: {
         primary_metric: 'roc_auc',
         direction: 'maximize',
@@ -322,6 +397,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         event_definition: '',
         good_bad_window: '',
         target_column: '',
+        positive_class: null,
+        label_maturity: '',
       },
       hard_block_modeling_without_criteria: false,
       problem_type: '',
@@ -339,8 +416,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   private _resizeStartWidth: number = 0;
 
   get datqDisplayColumns(): string[] {
-    const pins = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
-    const rest = this.datqColumns.filter(c => !pins.includes(c));
+    const pins = this.pinnedColumns.filter((c) => this.datqColumns.includes(c));
+    const rest = this.datqColumns.filter((c) => !pins.includes(c));
     return [...pins, ...rest];
   }
 
@@ -352,7 +429,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.ensureFilterKeys();
       // Debug: log context and attempt building unique values
       try {
-        console.log('[UI] openFilterMenu', col, 'rows=', this.datqSummary ? this.datqSummary.length : 0);
+        console.log(
+          '[UI] openFilterMenu',
+          col,
+          'rows=',
+          this.datqSummary ? this.datqSummary.length : 0,
+        );
       } catch {}
       this.buildUniqueValues(col);
     } catch {}
@@ -367,15 +449,32 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   onDocumentClick(ev: MouseEvent): void {
     // Close the menu if clicking outside any filter menu element
     let hasMenu = false;
-    const path = (ev as any).composedPath ? (ev as any).composedPath() as HTMLElement[] : null;
+    const path = (ev as any).composedPath ? ((ev as any).composedPath() as HTMLElement[]) : null;
     if (path && Array.isArray(path)) {
-      hasMenu = path.some((el: any) => el && el.classList && (el.classList.contains('filter-menu') || el.classList.contains('filter-trigger') || el.classList.contains('filter-input-wrap')));
+      hasMenu = path.some(
+        (el: any) =>
+          el &&
+          el.classList &&
+          (el.classList.contains('filter-menu') ||
+            el.classList.contains('filter-trigger') ||
+            el.classList.contains('filter-input-wrap')),
+      );
     } else {
       // Fallback for browsers without composedPath (e.g., Safari)
       let node = ev.target as HTMLElement | null;
-      const isInside = (el: HTMLElement | null): boolean => !!el && !!(el.classList && (el.classList.contains('filter-menu') || el.classList.contains('filter-trigger') || el.classList.contains('filter-input-wrap')));
+      const isInside = (el: HTMLElement | null): boolean =>
+        !!el &&
+        !!(
+          el.classList &&
+          (el.classList.contains('filter-menu') ||
+            el.classList.contains('filter-trigger') ||
+            el.classList.contains('filter-input-wrap'))
+        );
       while (node) {
-        if (isInside(node)) { hasMenu = true; break; }
+        if (isInside(node)) {
+          hasMenu = true;
+          break;
+        }
         node = node.parentElement;
       }
     }
@@ -386,7 +485,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     try {
       if (!this.datqSummary || !this.datqSummary.length) {
         this.datqUniqueValuesCache[col] = [];
-        try { console.warn('[UI] buildUniqueValues skipped; no datqSummary yet for', col); } catch {}
+        try {
+          console.warn('[UI] buildUniqueValues skipped; no datqSummary yet for', col);
+        } catch {}
         return;
       }
       const counts = new Map<string, number>();
@@ -398,25 +499,34 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       arr.sort((a, b) => b.count - a.count || String(a.value).localeCompare(String(b.value)));
       this.datqUniqueValuesCache[col] = arr;
       try {
-        console.log('[UI] buildUniqueValues ok', col, 'uniqueCount=', arr.length, 'sample=', arr.slice(0, 5));
+        console.log(
+          '[UI] buildUniqueValues ok',
+          col,
+          'uniqueCount=',
+          arr.length,
+          'sample=',
+          arr.slice(0, 5),
+        );
       } catch {}
     } catch {
       this.datqUniqueValuesCache[col] = [];
     }
   }
 
-  visibleUniqueValues(col: string): Array<{ value: string, count: number }> {
+  visibleUniqueValues(col: string): Array<{ value: string; count: number }> {
     // Fallback: if cache empty, try to build once on demand
     if (!this.datqUniqueValuesCache[col] || this.datqUniqueValuesCache[col].length === 0) {
-      try { this.buildUniqueValues(col); } catch {}
+      try {
+        this.buildUniqueValues(col);
+      } catch {}
     }
     const all = this.datqUniqueValuesCache[col] || [];
     const q = (this.datqFilterMenuSearch || '').toLowerCase();
     const onlySel = !!this.datqShowOnlySelected[col];
-    const filteredByQuery = q ? all.filter(x => String(x.value).toLowerCase().includes(q)) : all;
+    const filteredByQuery = q ? all.filter((x) => String(x.value).toLowerCase().includes(q)) : all;
     if (!onlySel) return filteredByQuery;
     const set = this.datqSelectedValues[col] || new Set<string>();
-    return filteredByQuery.filter(x => set.has(String(x.value)));
+    return filteredByQuery.filter((x) => set.has(String(x.value)));
   }
 
   isValueChecked(col: string, value: string): boolean {
@@ -427,13 +537,14 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   toggleValue(col: string, value: string, checked: boolean): void {
     this.ensureFilterKeys();
     const set = this.datqSelectedValues[col] || new Set<string>();
-    if (checked) set.add(value); else set.delete(value);
+    if (checked) set.add(value);
+    else set.delete(value);
     this.datqSelectedValues[col] = set;
   }
 
   selectAllValues(col: string): void {
     const arr = this.datqUniqueValuesCache[col] || [];
-    const set = new Set<string>(arr.map(x => String(x.value)));
+    const set = new Set<string>(arr.map((x) => String(x.value)));
     this.datqSelectedValues[col] = set;
   }
 
@@ -464,7 +575,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!col) return 220;
     const c = String(col);
     if (c === 'Variable' || c === 'variable' || c === 'index') return 320;
-    if (c === 'Model_Usage') return 140;  // Model_Usage column
+    if (c === 'Model_Usage') return 140; // Model_Usage column
     if (c === 'Datq_Decision') return 200;
     if (c === 'Variable_Type') return 160;
     if (c === 'PSI' || c === 'CSI') return 140;
@@ -477,7 +588,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!this.datqColumns || this.datqColumns.length === 0) return;
     const cols = [...this.datqColumns];
     const has = (k: string) => cols.includes(k);
-    const pickVar = has('Variable') ? 'Variable' : (has('variable') ? 'variable' : (has('index') ? 'index' : null));
+    const pickVar = has('Variable')
+      ? 'Variable'
+      : has('variable')
+        ? 'variable'
+        : has('index')
+          ? 'index'
+          : null;
 
     // Pair Train/Test columns by base name
     const trainTestBases = new Set<string>();
@@ -486,7 +603,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       if (m) trainTestBases.add(m[1]);
     }
     const paired: string[] = [];
-    const basesSorted = Array.from(trainTestBases).sort((a,b) => a.localeCompare(b));
+    const basesSorted = Array.from(trainTestBases).sort((a, b) => a.localeCompare(b));
     for (const b of basesSorted) {
       const t1 = `${b}_Train`;
       const t2 = `${b}_Test`;
@@ -495,14 +612,26 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
 
     // Add Model_Usage column after Variable (it won't come from backend)
-    const fixed = [pickVar, 'Model_Usage', 'PSI', 'Datq_Decision', 'Shift_Recommendation', 'Variable_Type', 'CSI'].filter(x => !!x && (x === 'Model_Usage' || has(x as string))) as string[];
+    const fixed = [
+      pickVar,
+      'Model_Usage',
+      'PSI',
+      'Datq_Decision',
+      'Shift_Recommendation',
+      'Variable_Type',
+      'CSI',
+    ].filter((x) => !!x && (x === 'Model_Usage' || has(x as string))) as string[];
     const excluded = new Set<string>([...fixed, ...paired]);
-    const rest = cols.filter(c => !excluded.has(c));
+    const rest = cols.filter((c) => !excluded.has(c));
     this.datqColumns = [...fixed, ...paired, ...rest];
   }
 
   togglePinVariable(): void {
-    const variableCol = this.datqColumns.includes('Variable') ? 'Variable' : (this.datqColumns.includes('variable') ? 'variable' : null);
+    const variableCol = this.datqColumns.includes('Variable')
+      ? 'Variable'
+      : this.datqColumns.includes('variable')
+        ? 'variable'
+        : null;
     if (!variableCol) return;
     this.togglePin(variableCol);
   }
@@ -578,7 +707,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   toggleAutosave(): void {
     this.autosaveEnabled = !this.autosaveEnabled;
     this.sharedService.setAutosaveEnabled(this.autosaveEnabled);
-    try { localStorage.setItem(this._autosaveKey, String(this.autosaveEnabled)); } catch {}
+    try {
+      localStorage.setItem(this._autosaveKey, String(this.autosaveEnabled));
+    } catch {}
     console.log('[Pipeline] Autosave:', this.autosaveEnabled ? 'ON' : 'OFF');
     // If just turned on and there are unsaved changes, save immediately
     if (this.autosaveEnabled && this._unsavedChanges) {
@@ -616,7 +747,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       error: (err: any) => {
         console.error('[Pipeline] Report download failed:', err);
         alert('Failed to download report.');
-      }
+      },
     });
   }
 
@@ -702,7 +833,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   // Get list of variables marked as 'No' (excluded from model)
   getExcludedVariables(): string[] {
-    return Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
+    return Object.keys(this.variableModelUsage).filter((v) => this.variableModelUsage[v] === 'No');
   }
 
   // Initialize Model_Usage from Data Dictionary settings (passed via SharedService)
@@ -711,17 +842,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     // This ensures that any changes made in Data Dictionary are reflected in Data Quality
     // Users can still override values in Data Quality after this initialization
     console.log('[Data Quality] Syncing Model_Usage from Data Dictionary:', settings);
-    
+
     // Overwrite ALL values from Data Dictionary
-    Object.keys(settings).forEach(variable => {
+    Object.keys(settings).forEach((variable) => {
       this.variableModelUsage[variable] = settings[variable];
     });
-    
+
     // Save the synced state
     this.saveModelUsage();
   }
 
-  getPinnedStyle(col: string, type: 'header' | 'filter' | 'cell' = 'cell'): {[k: string]: any} {
+  getPinnedStyle(col: string, type: 'header' | 'filter' | 'cell' = 'cell'): { [k: string]: any } {
     const idx = this.pinnedColumns.indexOf(col);
     const isVar = this.isVariableColumn(col);
     if (idx === -1 && !isVar) return {};
@@ -740,7 +871,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         left += this.getColWidth(c);
       }
     }
-    const z = type === 'header' ? 6 : (type === 'filter' ? 5 : 4);
+    const z = type === 'header' ? 6 : type === 'filter' ? 5 : 4;
     const w = this.getColWidth(col);
     return {
       position: 'sticky',
@@ -748,14 +879,18 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       zIndex: z,
       background: '#fff',
       minWidth: w + 'px',
-      maxWidth: w + 'px'
+      maxWidth: w + 'px',
     };
   }
 
   isVariableColumn(col: string): boolean {
-    const varCol = this.datqColumns?.includes('Variable') ? 'Variable'
-      : (this.datqColumns?.includes('variable') ? 'variable'
-        : (this.datqColumns?.includes('index') ? 'index' : null));
+    const varCol = this.datqColumns?.includes('Variable')
+      ? 'Variable'
+      : this.datqColumns?.includes('variable')
+        ? 'variable'
+        : this.datqColumns?.includes('index')
+          ? 'index'
+          : null;
     return !!varCol && col === varCol;
   }
 
@@ -766,11 +901,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       if (!fileId) {
         console.warn('openFeatureCardFromDatq: missing currentFileId');
       }
-      const openWithFeatures = (features: Array<{ Feature_Name: string; Feature_Description: string }>) => {
-        const row = (this.datqSummary || []).find(r => String(r['Variable'] || r['variable'] || r['index']) === String(variableName));
+      const openWithFeatures = (
+        features: Array<{ Feature_Name: string; Feature_Description: string }>,
+      ) => {
+        const row = (this.datqSummary || []).find(
+          (r) => String(r['Variable'] || r['variable'] || r['index']) === String(variableName),
+        );
         const qualitySummary = row ? { ...row } : null;
         const processedFile = this.processedFilePath || null;
-        const dateColumn = this.splitDateColumn || (this.dateColumns && this.dateColumns.length ? this.dateColumns[0] : null);
+        const dateColumn =
+          this.splitDateColumn ||
+          (this.dateColumns && this.dateColumns.length ? this.dateColumns[0] : null);
         this.dialog.open(FeatureCardComponent, {
           width: '900px',
           data: {
@@ -781,29 +922,31 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
             encodedFile: this.encodedFilePath || undefined,
             dateColumn: dateColumn || undefined,
             qualitySummary: qualitySummary || undefined,
-          }
+          },
         });
       };
 
       const buildFromCache = (): Array<{ Feature_Name: string; Feature_Description: string }> => {
         if (this.dataDictionaryCache && this.dataDictionaryCache.length) {
           return this.dataDictionaryCache
-            .map(item => ({
+            .map((item) => ({
               Feature_Name: String(item?.Feature_Name || ''),
-              Feature_Description: String(item?.Feature_Description || 'No description available')
+              Feature_Description: String(item?.Feature_Description || 'No description available'),
             }))
-            .filter(x => !!x.Feature_Name);
+            .filter((x) => !!x.Feature_Name);
         }
         // Fallback to names only from datqSummary
         return (this.datqSummary || [])
-          .map(r => {
+          .map((r) => {
             const name = r['Variable'] ?? r['variable'] ?? r['index'];
             return { Feature_Name: String(name), Feature_Description: 'No description available' };
           })
-          .filter(x => !!x.Feature_Name);
+          .filter((x) => !!x.Feature_Name);
       };
 
-      const cacheHasDescriptions = Array.isArray(this.dataDictionaryCache) && this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+      const cacheHasDescriptions =
+        Array.isArray(this.dataDictionaryCache) &&
+        this.dataDictionaryCache.some((x) => !!x?.Feature_Description);
       if (!cacheHasDescriptions && fileId) {
         // Refresh dictionary to get latest descriptions before opening
         this.dataService.getDataDictionary(fileId).subscribe({
@@ -814,7 +957,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           },
           error: () => {
             openWithFeatures(buildFromCache());
-          }
+          },
         });
       } else {
         openWithFeatures(buildFromCache());
@@ -834,23 +977,32 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     return Array.isArray(arr) ? arr.length : 0;
   }
 
-  get datqTotal(): number { return this.datqFilteredRows ? this.datqFilteredRows.length : 0; }
-  get datqTotalPages(): number { return this.datqPageSize > 0 ? Math.max(1, Math.ceil(this.datqTotal / this.datqPageSize)) : 1; }
+  get datqTotal(): number {
+    return this.datqFilteredRows ? this.datqFilteredRows.length : 0;
+  }
+  get datqTotalPages(): number {
+    return this.datqPageSize > 0 ? Math.max(1, Math.ceil(this.datqTotal / this.datqPageSize)) : 1;
+  }
   get datqFilteredRows(): any[] {
     if (!this.datqSummary) return [];
     const gf = (this.datqGlobalFilter || '').toLowerCase();
     const colFilters = this.datqColumnFilters || {};
     const selectedSets = this.datqSelectedValues || {};
-    return this.datqSummary.filter(row => {
+    return this.datqSummary.filter((row) => {
       // Global filter: any cell contains string
-      const passGlobal = !gf || this.datqColumns.some(c => (row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf)));
+      const passGlobal =
+        !gf ||
+        this.datqColumns.some(
+          (c) =>
+            row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf),
+        );
       if (!passGlobal) return false;
       // Column filters: each specified column must match
       for (const c of this.datqColumns) {
         const cf = (colFilters[c] || '').toLowerCase();
         if (!cf) continue;
         const cell = row[c];
-        const text = (cell === null || cell === undefined) ? '' : String(cell).toLowerCase();
+        const text = cell === null || cell === undefined ? '' : String(cell).toLowerCase();
         if (!text.includes(cf)) return false;
       }
       // Unique-values selections: if any selected for a column, the display value must be in the set
@@ -870,7 +1022,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!this.datqSortColumn) return rows;
     const col = this.datqSortColumn;
     const dir = this.datqSortDir === 'asc' ? 1 : -1;
-    const isNumeric = rows.every(r => r[col] === null || r[col] === undefined || (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))));
+    const isNumeric = rows.every(
+      (r) =>
+        r[col] === null ||
+        r[col] === undefined ||
+        (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))),
+    );
     rows.sort((a, b) => {
       const va = a[col];
       const vb = b[col];
@@ -945,9 +1102,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   ];
 
   private defaultOptionIds: number[] = [1, 2, 3, 4, 7, 23, 28, 32];
-  selectedOptions: PurifierOption[] = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
+  selectedOptions: PurifierOption[] = this.purifierOptions.filter((o) =>
+    this.defaultOptionIds.includes(o.id),
+  );
 
-  constructor(private router: Router, private sharedService: SharedService, private dataService: DataService, private dialog: MatDialog, public aiAssistant: AiAssistantService) {}
+  constructor(
+    private router: Router,
+    private sharedService: SharedService,
+    private dataService: DataService,
+    private dialog: MatDialog,
+    public aiAssistant: AiAssistantService,
+  ) {}
 
   // ===== 3-Layer Panel Toggle & Resize =====
   toggleLeftPanel(): void {
@@ -1010,16 +1175,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       // Project metadata the assistant must carry into every recommendation.
       // Keys mirror `crisp_dm.normalize_business_understanding` server-side.
       business_understanding: this.buildBusinessUnderstandingForAi(),
-      problem_type: this.detectedProblemType || '',
+      problem_type: this.businessUnderstanding.problem_type || '',
+      suggested_problem_type: this.detectedProblemType || '',
       current_step: this.currentStep,
       detailed_step: this.detailedStep,
       preprocessing_initiated: this.preprocessingInitiated,
       modeling_available: this.modelingAvailable,
-      selected_purifier_steps: this.selectedOptions.map(o => o.name),
+      selected_purifier_steps: this.selectedOptions.map((o) => o.name),
       split_strategy: this.splitStrategy,
-      split_details: this.splitStrategy === 'oot'
-        ? { mode: this.ootMode, oot_percent: this.ootPercent, date_column: this.splitDateColumn, cutoff: this.splitCutoff }
-        : { oos_percent: this.oosPercent },
+      split_details:
+        this.splitStrategy === 'oot'
+          ? {
+              mode: this.ootMode,
+              oot_percent: this.ootPercent,
+              date_column: this.splitDateColumn,
+              cutoff: this.splitCutoff,
+            }
+          : { oos_percent: this.oosPercent },
       rows_before: this.rowCountBefore,
       rows_after: this.rowCountAfter,
       rows_removed: this.rowsRemovedTotal,
@@ -1070,6 +1242,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         target_column: bu.target_contract?.target_column || '',
         event_definition: bu.target_contract?.event_definition || '',
         good_bad_window: bu.target_contract?.good_bad_window || '',
+        positive_class: bu.target_contract?.positive_class ?? null,
+        label_maturity: bu.target_contract?.label_maturity || '',
       },
       success_criteria: {
         primary_metric: bu.success_criteria?.primary_metric || '',
@@ -1083,6 +1257,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       assumptions: bu.assumptions || '',
       regulatory_notes: bu.regulatory_notes || '',
       forbidden_features: bu.forbidden_features || [],
+      feature_availability: bu.feature_availability,
       hard_block_modeling_without_criteria: !!bu.hard_block_modeling_without_criteria,
       completed: !!bu.completed,
     };
@@ -1115,7 +1290,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const existingCtx = this.sharedService.getAiCumulativeContext() || {};
     const myCtx = this.buildFullAiContext();
     // model-development owns pipeline_config and data quality; modeling owns cv, shap, sfs, etc.
-    const merged = { ...existingCtx, ...myCtx, pipeline_config: { ...(existingCtx.pipeline_config || {}), ...myCtx.pipeline_config } };
+    const merged = {
+      ...existingCtx,
+      ...myCtx,
+      pipeline_config: { ...(existingCtx.pipeline_config || {}), ...myCtx.pipeline_config },
+    };
     this.sharedService.setAiCumulativeContext(merged);
     // Also push to Redis cache for on-demand tool calling
     this.pushToAiCache();
@@ -1197,8 +1376,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.aiAssistant.requestSupport(enriched, section, prompt);
     };
     // Ensure data dictionary cache has descriptions before sending to AI
-    const hasDescriptions = Array.isArray(this.dataDictionaryCache) &&
-      this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+    const hasDescriptions =
+      Array.isArray(this.dataDictionaryCache) &&
+      this.dataDictionaryCache.some((x) => !!x?.Feature_Description);
     if (!hasDescriptions && this.currentFileId != null) {
       this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
         next: (list: any[]) => {
@@ -1221,12 +1401,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         rows_after: this.rowCountAfter,
         rows_removed: this.rowsRemovedTotal,
         total_columns_dropped: this.droppedTotalCount(),
-        dropped_by_step: this.droppedColumnsByStep
+        dropped_by_step: this.droppedColumnsByStep,
       },
       model_usage: this.variableModelUsage,
-      split_validation: this.splitValidation
+      split_validation: this.splitValidation,
     };
-    const prompt = 'Analyze this Data Quality Summary. Compare before vs after preprocessing treatment effects (rows removed, columns dropped per step). Highlight concerns about PSI stability, missing values, distribution shifts, and features to watch for the next encoding/modeling steps.';
+    const prompt =
+      'Analyze this Data Quality Summary. Compare before vs after preprocessing treatment effects (rows removed, columns dropped per step). Highlight concerns about PSI stability, missing values, distribution shifts, and features to watch for the next encoding/modeling steps.';
     this.requestAiSupport(context, 'data_quality', prompt);
   }
 
@@ -1243,10 +1424,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         rows_after: this.rowCountAfter,
         rows_removed: this.rowsRemovedTotal,
         total_columns_dropped: this.droppedTotalCount(),
-        dropped_by_step: this.droppedColumnsByStep
-      }
+        dropped_by_step: this.droppedColumnsByStep,
+      },
     };
-    const prompt = 'Analyze the Data Purifier Summary. Review which preprocessing steps ran, how many rows were removed in each step, and which columns were dropped (sparsity, missingness, collinearity, outliers, dedup). Flag any step that removed an unexpectedly large fraction of rows or columns. Suggest whether specific purifier_options should be tightened, relaxed, added, or removed before encoding — and call out features that may have been dropped that the user might want to keep.';
+    const prompt =
+      'Analyze the Data Purifier Summary. Review which preprocessing steps ran, how many rows were removed in each step, and which columns were dropped (sparsity, missingness, collinearity, outliers, dedup). Flag any step that removed an unexpectedly large fraction of rows or columns. Suggest whether specific purifier_options should be tightened, relaxed, added, or removed before encoding — and call out features that may have been dropped that the user might want to keep.';
     this.requestAiSupport(context, 'data_purifier', prompt);
   }
 
@@ -1269,27 +1451,27 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
     // Sync AI assistant panel open state from service (e.g. when child components open panel)
     this.subscription.add(
-      this.aiAssistant.panelOpen$.subscribe(open => {
+      this.aiAssistant.panelOpen$.subscribe((open) => {
         this.showRightPanel = open;
-      })
+      }),
     );
 
     this.subscription.add(
       this.sharedService.evaluationCompleted$.subscribe((v) => {
         this.evaluationCompleted = !!v;
-      })
+      }),
     );
     this.subscription.add(
       this.sharedService.deploymentCompleted$.subscribe((v) => {
         this.deploymentCompleted = !!v;
-      })
+      }),
     );
     this.subscription.add(
       this.sharedService.navigateToEvaluation$.subscribe(() => {
         this.currentStep = 'evaluation';
         this.navExpandedSteps['evaluation'] = true;
         this.scrollToSection('evaluation');
-      })
+      }),
     );
 
     // v2.26.0+: subscribe to AI assistant Data-Purifier-start requests.
@@ -1307,14 +1489,18 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         // payload uses integer IDs that match purifierOptions[].id.
         if (Array.isArray(req.purifier_options) && req.purifier_options.length > 0) {
           const idSet = new Set<number>(req.purifier_options.map((id: number) => Number(id)));
-          this.selectedOptions = this.purifierOptions.filter(o => idSet.has(o.id));
+          this.selectedOptions = this.purifierOptions.filter((o) => idSet.has(o.id));
         }
         // Patch split form fields if the AI provided them.
         if (req.split && typeof req.split === 'object') {
           if (req.split.strategy === 'random' || req.split.strategy === 'oot') {
             this.splitStrategy = req.split.strategy;
           }
-          if (typeof req.split.percent === 'number' && req.split.percent > 0 && req.split.percent < 100) {
+          if (
+            typeof req.split.percent === 'number' &&
+            req.split.percent > 0 &&
+            req.split.percent < 100
+          ) {
             // Random uses oosPercent; OOT-percent mode uses ootPercent.
             // We patch both to the same value so the active mode picks it up.
             this.oosPercent = req.split.percent;
@@ -1338,7 +1524,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         // the same setTimeout(0) pattern used elsewhere for AI-driven
         // pipeline-step kickoffs).
         setTimeout(() => this.proceedFromPreprocessing(), 0);
-      })
+      }),
     );
 
     // v2.28.0+: subscribe to AI assistant Purifier-selection updates.
@@ -1369,19 +1555,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           // Wholesale-replace: empty array means "clear everything".
           // Non-empty: filter the catalog down to the requested IDs.
           if (!Array.isArray(req.purifier_options)) return;
-          const idSet = new Set<number>(
-            req.purifier_options.map((id: number) => Number(id)),
-          );
-          this.selectedOptions = this.purifierOptions.filter(o => idSet.has(o.id));
+          const idSet = new Set<number>(req.purifier_options.map((id: number) => Number(id)));
+          this.selectedOptions = this.purifierOptions.filter((o) => idSet.has(o.id));
         } else if (req.form === 'diff') {
           // Diff: apply add then remove against the current selection.
           // Sequence (add → remove) matters when an ID appears in both,
           // but the backend already rejects that case so by the time
           // we get here add and remove are disjoint.
-          const current = new Set<number>(this.selectedOptions.map(o => o.id));
+          const current = new Set<number>(this.selectedOptions.map((o) => o.id));
           (req.add || []).forEach((id: number) => current.add(Number(id)));
           (req.remove || []).forEach((id: number) => current.delete(Number(id)));
-          this.selectedOptions = this.purifierOptions.filter(o => current.has(o.id));
+          this.selectedOptions = this.purifierOptions.filter((o) => current.has(o.id));
         } else {
           // 'noop' (or anything else) — nothing to patch.
           return;
@@ -1390,7 +1574,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         // Mirror the new selection into the SharedService cache so
         // any other component reading current state (e.g. autosave
         // serializer, save-progress dialog) sees the AI's change.
-        const newIds = this.selectedOptions.map(o => o.id);
+        const newIds = this.selectedOptions.map((o) => o.id);
         this.sharedService.setSelectedPurifierOptions(newIds);
 
         // Re-push to AI Redis so the AI's next turn sees the updated
@@ -1409,13 +1593,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
             pipeline_config: this.getPipelineConfig(),
           };
           this.dataService.pushAiCache(this.currentFileId, artifacts).subscribe({
-            next: () => { /* silent success */ },
+            next: () => {
+              /* silent success */
+            },
             error: (err: any) => console.warn('AI cache re-push failed (non-fatal):', err),
           });
         }
         // NO proceedFromPreprocessing() call — that is the whole
         // distinction between this stream and dataPurifierStartRequests$.
-      })
+      }),
     );
 
     // v2.26.0+: subscribe to AI assistant Apply-Encoding requests.
@@ -1433,7 +1619,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this.encodingUseNative = req.use_native;
         }
         setTimeout(() => this.applyEncoding(), 0);
-      })
+      }),
     );
 
     // Baseline reset to prevent stale state causing steps to appear out of order
@@ -1465,18 +1651,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
                 this.sharedService.setDataDictionaryCache(rows);
                 // Push data dictionary to Redis cache for AI tool calls
                 if (rows.length > 0 && this.currentFileId != null) {
-                  this.dataService.pushAiCache(this.currentFileId, { data_dictionary: rows }).subscribe({
-                    error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
-                  });
+                  this.dataService
+                    .pushAiCache(this.currentFileId, { data_dictionary: rows })
+                    .subscribe({
+                      error: (err: any) =>
+                        console.warn('[AI Cache] data dictionary push failed:', err),
+                    });
                 }
                 const dtCols = rows
-                  .filter(item => {
+                  .filter((item) => {
                     const lom = String(item?.Level_of_Measurement || '').toLowerCase();
                     const dtype = String(item?.Data_Type || '').toLowerCase();
                     const name = String(item?.Feature_Name || '');
-                    return lom === 'datetime' || dtype.includes('date') || /date|time|dt/i.test(name);
+                    return (
+                      lom === 'datetime' || dtype.includes('date') || /date|time|dt/i.test(name)
+                    );
                   })
-                  .map(item => String(item.Feature_Name));
+                  .map((item) => String(item.Feature_Name));
                 this.dateColumns = Array.from(new Set(dtCols));
               },
               error: () => {
@@ -1485,17 +1676,27 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
                   next: (resp: any) => {
                     try {
                       const types = resp?.data_types || {};
-                      const cols = Object.keys(types).filter(k => String(types[k]).toLowerCase().includes('date') || /date|time|dt/i.test(k));
+                      const cols = Object.keys(types).filter(
+                        (k) =>
+                          String(types[k]).toLowerCase().includes('date') ||
+                          /date|time|dt/i.test(k),
+                      );
                       this.dateColumns = cols;
-                    } catch { this.dateColumns = []; }
+                    } catch {
+                      this.dateColumns = [];
+                    }
                   },
-                  error: () => { this.dateColumns = []; }
+                  error: () => {
+                    this.dateColumns = [];
+                  },
                 });
-              }
+              },
             });
-          } catch { this.dateColumns = []; }
+          } catch {
+            this.dateColumns = [];
+          }
         }
-      })
+      }),
     );
 
     // Track pipeline start
@@ -1507,7 +1708,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         }
         this.isStarted = started;
         this.computePreprocessingAvailable();
-      })
+      }),
     );
 
     // Do not auto-enable modeling on preprocessing result; user will click "Proceed to Modeling"
@@ -1517,7 +1718,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         if (this.currentStep !== 'modeling' && this.currentStep !== 'sfs') {
           this.modelingAvailable = false;
         }
-      })
+      }),
     );
 
     // Track when user explicitly moves from Declaration to Preprocessing
@@ -1536,24 +1737,26 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           // Auto-save checkpoint: preprocessing
           this.saveCheckpoint('preprocessing');
         }
-      })
+      }),
     );
 
     // Track processed file path for detail API
     this.subscription.add(
       this.sharedService.processedFilePath$.subscribe((p: string | null) => {
         this.processedFilePath = p;
-      })
+      }),
     );
 
     // Track Model_Usage settings from Data Dictionary to initialize Data Quality table
     this.subscription.add(
-      this.sharedService.modelUsageSettings$.subscribe((settings: { [variable: string]: string } | null) => {
-        if (settings) {
-          // Initialize Data Quality Model_Usage with values from Data Dictionary
-          this.initializeFromDataDictionary(settings);
-        }
-      })
+      this.sharedService.modelUsageSettings$.subscribe(
+        (settings: { [variable: string]: string } | null) => {
+          if (settings) {
+            // Initialize Data Quality Model_Usage with values from Data Dictionary
+            this.initializeFromDataDictionary(settings);
+          }
+        },
+      ),
     );
 
     // Subscribe to checkpoint triggers from child components (declaration + modeling)
@@ -1565,7 +1768,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           step = 'declaration';
           // Map declaration substeps to detailed taxonomy
           if (substep === 'decl_data_imported') this.detailedStep = '1b_data_declaration';
-          else if (substep === 'decl_dictionary_generated') this.detailedStep = '1c_dictionary_declaration';
+          else if (substep === 'decl_dictionary_generated')
+            this.detailedStep = '1c_dictionary_declaration';
         } else if (substep === 'evaluation_completed' || substep === 'champion_promoted') {
           step = 'evaluation';
           this.currentStep = 'evaluation';
@@ -1578,14 +1782,14 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
         }
         this.saveCheckpoint(step);
-      })
+      }),
     );
 
     // Sync pipeline notes from SharedService (modeling child may update notes)
     this.subscription.add(
       this.sharedService.pipelineNotes$.subscribe((notes: { [position: string]: string }) => {
         this.pipelineNotes = notes;
-      })
+      }),
     );
 
     // Belt-and-suspenders: also subscribe to modelingCheckpoint$ BehaviorSubject
@@ -1597,13 +1801,16 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         const substep = state.substep;
         // Only save if substep actually changed (avoid duplicate saves)
         if (substep !== this._lastModelingSubstep) {
-          console.log(`[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`);
+          console.log(
+            `[Pipeline] modelingCheckpoint$ auto-save: ${this._lastModelingSubstep} -> ${substep}`,
+          );
           this._lastModelingSubstep = substep;
-          const step = (substep.startsWith('sfs_') || substep.startsWith('hyperparam_')) ? 'sfs' : 'modeling';
+          const step =
+            substep.startsWith('sfs_') || substep.startsWith('hyperparam_') ? 'sfs' : 'modeling';
           this.detailedStep = this.mapModelingSubstepToDetailed(substep);
           this.saveCheckpoint(step);
         }
-      })
+      }),
     );
 
     // Load persisted preferences (page size, pinned columns, sort) and widths
@@ -1695,14 +1902,19 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const gf = (this.detailGlobalFilter || '').toLowerCase();
     const colFilters = this.detailColumnFilters || {};
     const cols = this.datqDetailColumns || [];
-    return rows.filter(row => {
-      const passGlobal = !gf || cols.some(c => (row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf)));
+    return rows.filter((row) => {
+      const passGlobal =
+        !gf ||
+        cols.some(
+          (c) =>
+            row[c] !== null && row[c] !== undefined && String(row[c]).toLowerCase().includes(gf),
+        );
       if (!passGlobal) return false;
       for (const c of cols) {
         const cf = (colFilters[c] || '').toLowerCase();
         if (!cf) continue;
         const cell = row[c];
-        const text = (cell === null || cell === undefined) ? '' : String(cell).toLowerCase();
+        const text = cell === null || cell === undefined ? '' : String(cell).toLowerCase();
         if (!text.includes(cf)) return false;
       }
       return true;
@@ -1714,7 +1926,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!this.detailSortColumn) return rows;
     const col = this.detailSortColumn;
     const dir = this.detailSortDir === 'asc' ? 1 : -1;
-    const isNumeric = rows.every(r => r[col] === null || r[col] === undefined || (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))));
+    const isNumeric = rows.every(
+      (r) =>
+        r[col] === null ||
+        r[col] === undefined ||
+        (!isNaN(parseFloat(r[col])) && isFinite(Number(r[col]))),
+    );
     rows.sort((a, b) => {
       const va = a[col];
       const vb = b[col];
@@ -1772,13 +1989,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   onPinnedColumnsChange(cols: string[]): void {
-    this.pinnedColumns = (cols || []).filter(c => this.datqColumns.includes(c));
+    this.pinnedColumns = (cols || []).filter((c) => this.datqColumns.includes(c));
     this.saveDatqPrefs();
   }
 
   togglePin(col: string): void {
     if (this.pinnedColumns.includes(col)) {
-      this.pinnedColumns = this.pinnedColumns.filter(c => c !== col);
+      this.pinnedColumns = this.pinnedColumns.filter((c) => c !== col);
     } else {
       this.pinnedColumns = [...this.pinnedColumns, col];
     }
@@ -1820,25 +2037,32 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.datqDetailLoading = true;
       this.datqDetail = null;
       this.datqDetailColumns = [];
-      this.dataService.getDatqDetail(
-        this.currentFileId,
-        this.processedFilePath,
-        this.datqSelectedVariable,
-        this.currentSplit || { strategy: this.splitStrategy, date_column: this.splitDateColumn || undefined, cutoff: this.splitCutoff || undefined, percent: this.ootMode === 'percent' ? this.ootPercent : undefined }
-      ).subscribe({
-        next: (resp: any) => {
-          this.datqDetail = resp || null;
-          const rows = Array.isArray(resp?.psi_table) ? resp.psi_table : [];
-          this.datqDetailColumns = rows.length ? Object.keys(rows[0]) : [];
-          this.ensureDetailFilterKeys();
-        },
-        error: (err: any) => {
-          console.error('Failed to get datq detail:', err);
-        },
-        complete: () => {
-          this.datqDetailLoading = false;
-        }
-      });
+      this.dataService
+        .getDatqDetail(
+          this.currentFileId,
+          this.processedFilePath,
+          this.datqSelectedVariable,
+          this.currentSplit || {
+            strategy: this.splitStrategy,
+            date_column: this.splitDateColumn || undefined,
+            cutoff: this.splitCutoff || undefined,
+            percent: this.ootMode === 'percent' ? this.ootPercent : undefined,
+          },
+        )
+        .subscribe({
+          next: (resp: any) => {
+            this.datqDetail = resp || null;
+            const rows = Array.isArray(resp?.psi_table) ? resp.psi_table : [];
+            this.datqDetailColumns = rows.length ? Object.keys(rows[0]) : [];
+            this.ensureDetailFilterKeys();
+          },
+          error: (err: any) => {
+            console.error('Failed to get datq detail:', err);
+          },
+          complete: () => {
+            this.datqDetailLoading = false;
+          },
+        });
     } catch (e) {
       console.warn('onDatqRowClick failed:', e);
     }
@@ -1855,16 +2079,20 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     const header = cols.join(',');
-    const body = rows.map(r => cols.map(c => escape(r[c])).join(','));
+    const body = rows.map((r) => cols.map((c) => escape(r[c])).join(','));
     const csv = [header, ...body].join('\n');
-    const name = this.datqSelectedVariable ? `datq_detail_${this.datqSelectedVariable}.csv` : 'datq_detail.csv';
+    const name = this.datqSelectedVariable
+      ? `datq_detail_${this.datqSelectedVariable}.csv`
+      : 'datq_detail.csv';
     this.downloadBlob(csv, name, 'text/csv;charset=utf-8');
   }
 
   exportDatqDetailAsJSON(): void {
     if (!this.datqDetail) return;
     const json = JSON.stringify(this.datqDetailSortedRows, null, 2);
-    const name = this.datqSelectedVariable ? `datq_detail_${this.datqSelectedVariable}.json` : 'datq_detail.json';
+    const name = this.datqSelectedVariable
+      ? `datq_detail_${this.datqSelectedVariable}.json`
+      : 'datq_detail.json';
     this.downloadBlob(json, name, 'application/json;charset=utf-8');
   }
 
@@ -1877,7 +2105,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   exportDatqAsCSV(): void {
     if (!this.datqSummary || this.datqSummary.length === 0) return;
-    const cols = this.datqDisplayColumns.length ? this.datqDisplayColumns : (this.datqColumns.length ? this.datqColumns : Object.keys(this.datqSummary[0]));
+    const cols = this.datqDisplayColumns.length
+      ? this.datqDisplayColumns
+      : this.datqColumns.length
+        ? this.datqColumns
+        : Object.keys(this.datqSummary[0]);
     const rowsSource = this.datqSortedRows; // export filtered + sorted, unpaged
     const escape = (v: any) => {
       if (v === null || v === undefined) return '';
@@ -1885,7 +2117,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     const header = cols.join(',');
-    const rows = rowsSource.map(r => cols.map(c => escape(r[c])).join(','));
+    const rows = rowsSource.map((r) => cols.map((c) => escape(r[c])).join(','));
     const csv = [header, ...rows].join('\n');
     this.downloadBlob(csv, 'data_quality_summary.csv', 'text/csv;charset=utf-8');
   }
@@ -1917,7 +2149,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const n = Number(v);
     if (!isFinite(n) || isNaN(n)) return 0;
     const p = n * 100;
-    return p < 0 ? 0 : (p > 100 ? 100 : p);
+    return p < 0 ? 0 : p > 100 ? 100 : p;
   }
 
   private loadDatqPrefs(): void {
@@ -1927,7 +2159,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       const prefs = JSON.parse(raw);
       if (typeof prefs?.pageSize === 'number') this.datqPageSize = prefs.pageSize;
       if (Array.isArray(prefs?.pinned)) this.pinnedColumns = prefs.pinned;
-      if (typeof prefs?.sortColumn === 'string' || prefs?.sortColumn === null) this.datqSortColumn = prefs.sortColumn;
+      if (typeof prefs?.sortColumn === 'string' || prefs?.sortColumn === null)
+        this.datqSortColumn = prefs.sortColumn;
       if (prefs?.sortDir === 'asc' || prefs?.sortDir === 'desc') this.datqSortDir = prefs.sortDir;
     } catch {}
   }
@@ -1993,10 +2226,19 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const isTrainTest = (suffix: string) => colName.endsWith(`_${suffix}`);
     const base = colName.replace(/_(Train|Test)$/i, '');
     const numericOnlyBases = new Set([
-      'Mean_Change','Median_Change','STD_Change','Min_Change',
-      'Quantile_1_Change','Quantile_5_Change','Q1_Change','Q3_Change',
-      'Quantile_95_Change','Quantile_99_Change','Max_Change',
-      'Skewness_Change','Kurtosis_Change'
+      'Mean_Change',
+      'Median_Change',
+      'STD_Change',
+      'Min_Change',
+      'Quantile_1_Change',
+      'Quantile_5_Change',
+      'Q1_Change',
+      'Q3_Change',
+      'Quantile_95_Change',
+      'Quantile_99_Change',
+      'Max_Change',
+      'Skewness_Change',
+      'Kurtosis_Change',
     ]);
     const categoricalOnlyBases = new Set(['Mode_Change']);
 
@@ -2037,8 +2279,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   loadSavedPipelines(): void {
     this.dataService.listPipelineRuns().subscribe({
-      next: (runs: any[]) => { this.savedPipelines = runs || []; },
-      error: () => { this.savedPipelines = []; }
+      next: (runs: any[]) => {
+        this.savedPipelines = runs || [];
+      },
+      error: () => {
+        this.savedPipelines = [];
+      },
     });
   }
 
@@ -2049,12 +2295,19 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   // ── Granular step taxonomy ──
   private static readonly DETAILED_STEPS: string[] = [
-    '1a_pipeline_declaration', '1b_data_declaration', '1c_dictionary_declaration',
-    '2a_purifier_declaration', '2b_data_quality_summary',
-    '3a_encoding', '3b_modeling', '3c_sfs', '3ci_sfs_backward', '3d_hyperparameter_tuning'
+    '1a_pipeline_declaration',
+    '1b_data_declaration',
+    '1c_dictionary_declaration',
+    '2a_purifier_declaration',
+    '2b_data_quality_summary',
+    '3a_encoding',
+    '3b_modeling',
+    '3c_sfs',
+    '3ci_sfs_backward',
+    '3d_hyperparameter_tuning',
   ];
 
-  private static readonly DETAILED_LABELS: {[k: string]: string} = {
+  private static readonly DETAILED_LABELS: { [k: string]: string } = {
     '1a_pipeline_declaration': 'Pipeline Declaration',
     '1b_data_declaration': 'Data Declaration',
     '1c_dictionary_declaration': 'Dictionary Declaration',
@@ -2064,7 +2317,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     '3b_modeling': 'Modeling',
     '3c_sfs': 'SFS',
     '3ci_sfs_backward': 'SFS Backward',
-    '3d_hyperparameter_tuning': 'Hyperparameter Tuning'
+    '3d_hyperparameter_tuning': 'Hyperparameter Tuning',
   };
 
   /** Map a modeling child-component substep to the detailed taxonomy */
@@ -2100,7 +2353,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   getStepIndex(step: string): number {
-    const steps = ['declaration', 'preprocessing', 'data_quality', 'modeling', 'sfs', 'evaluation', 'deployment'];
+    const steps = [
+      'declaration',
+      'preprocessing',
+      'data_quality',
+      'modeling',
+      'sfs',
+      'evaluation',
+      'deployment',
+    ];
     const idx = steps.indexOf(step);
     return idx >= 0 ? idx : 0;
   }
@@ -2109,7 +2370,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const ds = run.detailed_step || run.state?.detailed_step;
     if (ds) {
       const idx = ModelDevelopmentComponent.DETAILED_STEPS.indexOf(ds);
-      if (idx >= 0) return Math.round(((idx + 1) / ModelDevelopmentComponent.DETAILED_STEPS.length) * 100);
+      if (idx >= 0)
+        return Math.round(((idx + 1) / ModelDevelopmentComponent.DETAILED_STEPS.length) * 100);
     }
     // Fallback to coarse step
     return Math.round(((this.getStepIndex(run.current_step) + 1) / 7) * 100);
@@ -2129,14 +2391,14 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   getStepLabel(step: string): string {
-    const labels: {[k: string]: string} = {
-      'declaration': 'Declaration',
-      'preprocessing': 'Preprocessing',
-      'data_quality': 'Data Quality',
-      'modeling': 'Modeling',
-      'sfs': 'SFS',
-      'evaluation': 'Evaluation',
-      'deployment': 'Deployment'
+    const labels: { [k: string]: string } = {
+      declaration: 'Declaration',
+      preprocessing: 'Preprocessing',
+      data_quality: 'Data Quality',
+      modeling: 'Modeling',
+      sfs: 'SFS',
+      evaluation: 'Evaluation',
+      deployment: 'Deployment',
     };
     return labels[step] || step;
   }
@@ -2151,7 +2413,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       business_understanding: this.businessUnderstanding,
       crisp_dm: this.buildCrispDmState(),
       preprocessing: {
-        purifier_option_ids: this.selectedOptions.map(o => o.id),
+        purifier_option_ids: this.selectedOptions.map((o) => o.id),
         split_strategy: this.splitStrategy,
         split_date_column: this.splitDateColumn,
         split_cutoff: this.splitCutoff,
@@ -2213,6 +2475,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
     Object.assign(d, {
       objective: raw.objective ?? '',
+      problem_type:
+        raw.problem_type === 'classification' || raw.problem_type === 'regression' || raw.problem_type === 'anomaly'
+          ? raw.problem_type
+          : '',
       prediction_horizon: raw.prediction_horizon ?? '',
       population: raw.population ?? '',
       exclusions: raw.exclusions ?? '',
@@ -2220,6 +2486,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       regulatory_notes: raw.regulatory_notes ?? '',
       hard_block_modeling_without_criteria: !!raw.hard_block_modeling_without_criteria,
       completed: !!raw.completed,
+      feature_availability: raw.feature_availability || { default: '', overrides: {} },
     });
     if (raw.target_contract && typeof raw.target_contract === 'object') {
       d.target_contract = { ...d.target_contract, ...raw.target_contract };
@@ -2237,7 +2504,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (Array.isArray(raw.forbidden_features)) {
       d.forbidden_features = raw.forbidden_features.map((x: any) => String(x));
     }
-    if (raw.problem_type === 'classification' || raw.problem_type === 'regression') {
+    if (raw.problem_type === 'classification' || raw.problem_type === 'regression' || raw.problem_type === 'anomaly') {
       d.problem_type = raw.problem_type;
     }
     this.businessUnderstanding = d;
@@ -2251,8 +2518,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.targetDefinition = d.target_contract.event_definition;
       this.sharedService.setTargetDefinition(this.targetDefinition);
     }
-    this.showBusinessDetails = this.showBusinessDetails
-      || !!(d.assumptions || d.regulatory_notes || d.forbidden_features.length);
+    this.showBusinessDetails =
+      this.showBusinessDetails ||
+      !!(d.assumptions || d.regulatory_notes || d.forbidden_features.length);
     // Restore keeps whatever pipeline the saved run used: `isStarted` is applied
     // after this call, so pruning here would silently clear a historical choice.
     this.refreshProblemType(false);
@@ -2261,10 +2529,14 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   onBusinessUnderstandingChanged(): void {
     this.businessUnderstanding.forbidden_features = (this.forbiddenFeaturesText || '')
       .split(/[,;\n]+/)
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean);
-    this.businessUnderstanding.completed = !!String(this.businessUnderstanding.objective || '').trim();
     this.refreshProblemType();
+    const bu = this.businessUnderstanding;
+    this.businessUnderstanding.completed = !!bu.problem_type && !this.problemTypeMetricConflict
+      && [bu.objective, bu.population, bu.prediction_horizon, bu.target_contract.target_column,
+          bu.target_contract.event_definition, bu.target_contract.label_maturity].every(value => !!String(value || '').trim())
+      && bu.feature_availability.default === 'available_at_prediction';
     // Business Understanding is filled before Start, when there is no pipeline
     // run yet — so `onPipelineConfigChanged` (checkpoint autosave) cannot be the
     // only path.  Push the AI context directly so the assistant holds the
@@ -2299,12 +2571,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   get availablePipelineOptions(): PipelineCatalogueEntry[] {
     if (!this.detectedProblemType) return this.pipelineCatalogue;
     const task = this.detectedProblemType;
-    return this.pipelineCatalogue.filter(p => p.tasks.includes(task) || p.value === this.selectedPipeline);
+    return this.pipelineCatalogue.filter(
+      (p) => p.tasks.includes(task) || p.value === this.selectedPipeline,
+    );
   }
 
   problemTypeLabel(): string {
     if (this.detectedProblemType === 'classification') return 'Classification';
     if (this.detectedProblemType === 'regression') return 'Regression';
+    if (this.detectedProblemType === 'anomaly') return 'Anomaly analysis';
     return '';
   }
 
@@ -2322,20 +2597,26 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const previousType = this.detectedProblemType;
     const metric = String(bu.success_criteria?.primary_metric || '').toLowerCase();
     const metricTask = ModelDevelopmentComponent.METRIC_TASK[metric] || null;
-    const metricIsExplicit = !!metricTask && metric !== ModelDevelopmentComponent.DEFAULT_PRIMARY_METRIC;
+    const metricIsExplicit =
+      !!metricTask && metric !== ModelDevelopmentComponent.DEFAULT_PRIMARY_METRIC;
 
     const text = [
       bu.objective,
       bu.target_contract?.event_definition,
       bu.target_contract?.good_bad_window,
-    ].map(v => String(v || '')).join(' ').toLowerCase();
-    const hits = (words: string[]) => words.filter(w => text.includes(w)).length;
+    ]
+      .map((v) => String(v || ''))
+      .join(' ')
+      .toLowerCase();
+    const hits = (words: string[]) => words.filter((w) => text.includes(w)).length;
     const classificationHits = hits(ModelDevelopmentComponent.CLASSIFICATION_KEYWORDS);
     const regressionHits = hits(ModelDevelopmentComponent.REGRESSION_KEYWORDS);
     const textTask: ProblemType | null =
-      classificationHits > regressionHits ? 'classification'
-      : regressionHits > classificationHits ? 'regression'
-      : null;
+      classificationHits > regressionHits
+        ? 'classification'
+        : regressionHits > classificationHits
+          ? 'regression'
+          : null;
 
     let detected: ProblemType | null = null;
     let reason = '';
@@ -2350,25 +2631,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       conflict = !!metricTask && textTask !== metricTask;
     }
 
-    this.detectedProblemType = detected;
-    this.problemTypeReason = reason;
-    this.problemTypeMetricConflict = conflict;
-    bu.problem_type = detected || '';
-    // The reset notice names the problem type that rejected the pipeline
-    // ("Logit does not support regression").  Once the type moves on, that
-    // sentence is no longer true — and with the selection already cleared,
-    // `pruneIncompatiblePipeline` returns early and would never clear it.
-    if (detected !== previousType) this.pipelineResetNotice = '';
+    const declared = bu.problem_type || null;
+    this.detectedProblemType = declared || detected;
+    this.problemTypeReason = declared ? 'declared task' : reason;
+    this.problemTypeMetricConflict = declared === 'anomaly'
+      ? !['roc_auc', 'pr_auc', 'auc', 'average_precision'].includes(metric)
+      : conflict || !!(declared && metricTask && declared !== metricTask);
+    // Clear the prior task's rejection once the accepted/suggested task changes.
+    if (this.detectedProblemType !== previousType) this.pipelineResetNotice = '';
     if (prune) this.pruneIncompatiblePipeline();
   }
 
   /** Drop a selected pipeline the declared problem type cannot train (pre-Start only). */
   private pruneIncompatiblePipeline(): void {
     if (!this.selectedPipeline || !this.detectedProblemType || this.isStarted) return;
-    const entry = this.pipelineCatalogue.find(p => p.value === this.selectedPipeline);
+    const entry = this.pipelineCatalogue.find((p) => p.value === this.selectedPipeline);
     if (entry && !entry.tasks.includes(this.detectedProblemType)) {
-      this.pipelineResetNotice =
-        `${entry.label.replace(/^\d+-\s*/, '')} does not support ${this.problemTypeLabel().toLowerCase()} — pick a pipeline again.`;
+      this.pipelineResetNotice = `${entry.label.replace(/^\d+-\s*/, '')} does not support ${this.problemTypeLabel().toLowerCase()} — pick a pipeline again.`;
       this.selectedPipeline = '';
       this.sharedService.setSelectedPipeline('');
     } else {
@@ -2380,10 +2659,14 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const floor = this.businessUnderstanding.success_criteria?.floor;
     const floorEmpty = floor == null || (typeof floor === 'string' && floor === '');
     if (floorEmpty) {
-      console.warn('[CRISP-DM] Success criteria floor is empty — modeling may proceed without a business floor.');
+      console.warn(
+        '[CRISP-DM] Success criteria floor is empty — modeling may proceed without a business floor.',
+      );
       this.modelingCriteriaWarning = true;
       if (this.businessUnderstanding.hard_block_modeling_without_criteria) {
-        alert('Modeling is blocked until a success criteria floor is set in Business Understanding.');
+        alert(
+          'Modeling is blocked until a success criteria floor is set in Business Understanding.',
+        );
         return false;
       }
     } else {
@@ -2397,21 +2680,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   exportCrispPack(): void {
     if (this.currentFileId == null) return;
-    this.dataService.downloadCrispExportPack(
-      this.currentFileId,
-      this.activePipelineRunId ?? undefined,
-      this.businessUnderstanding,
-    ).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `crisp_export_${this.currentFileId}.zip`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: (e) => console.error('[CRISP-DM] Export failed:', e),
-    });
+    this.dataService
+      .downloadCrispExportPack(
+        this.currentFileId,
+        this.activePipelineRunId ?? undefined,
+        this.businessUnderstanding,
+      )
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `crisp_export_${this.currentFileId}.zip`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        },
+        error: (e) => console.error('[CRISP-DM] Export failed:', e),
+      });
   }
 
   enrichDatqRecommendations(): void {
@@ -2454,22 +2739,24 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (this.currentFileId == null || !this.monitoringFile) return;
     this.monitoringRunning = true;
     this.monitoringError = null;
-    this.dataService.runMonitoring(
-      this.currentFileId,
-      this.monitoringFile,
-      this.monitoringScoreCol || undefined,
-      this.monitoringTargetCol || undefined,
-    ).subscribe({
-      next: (resp) => {
-        this.monitoringReport = resp?.monitoring ?? resp;
-        this.monitoringRunning = false;
-        this.saveCheckpoint('monitoring', true);
-      },
-      error: (err) => {
-        this.monitoringError = err?.message || 'Monitoring failed';
-        this.monitoringRunning = false;
-      },
-    });
+    this.dataService
+      .runMonitoring(
+        this.currentFileId,
+        this.monitoringFile,
+        this.monitoringScoreCol || undefined,
+        this.monitoringTargetCol || undefined,
+      )
+      .subscribe({
+        next: (resp) => {
+          this.monitoringReport = resp?.monitoring ?? resp;
+          this.monitoringRunning = false;
+          this.saveCheckpoint('monitoring', true);
+        },
+        error: (err) => {
+          this.monitoringError = err?.message || 'Monitoring failed';
+          this.monitoringRunning = false;
+        },
+      });
   }
 
   startIterationNPlus1(): void {
@@ -2494,7 +2781,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   isNavStepActive(mainStepId: string): boolean {
-    if (mainStepId === 'business_understanding') return this.currentStep === 'business_understanding';
+    if (mainStepId === 'business_understanding')
+      return this.currentStep === 'business_understanding';
     if (mainStepId === 'declaration') {
       return ['declaration', 'preprocessing', 'data quality'].includes(this.currentStep);
     }
@@ -2502,10 +2790,16 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     return this.currentStep === mainStepId;
   }
 
-  private static readonly STEP_ORDER: {[k: string]: number} = {
-    'business_understanding': -1,
-    'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
-    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6, 'monitoring': 7,
+  private static readonly STEP_ORDER: { [k: string]: number } = {
+    business_understanding: -1,
+    declaration: 0,
+    preprocessing: 1,
+    data_quality: 2,
+    modeling: 3,
+    sfs: 4,
+    evaluation: 5,
+    deployment: 6,
+    monitoring: 7,
   };
 
   saveCheckpoint(step?: string, force: boolean = false): void {
@@ -2515,67 +2809,89 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     // When autosave is OFF and this is NOT a forced save (manual/initial), just mark dirty
     if (!this.autosaveEnabled && !force) {
       this._unsavedChanges = true;
-      console.log(`[Pipeline] saveCheckpoint SKIPPED (autosave OFF): step=${step}, componentStep=${this.currentStep}`);
+      console.log(
+        `[Pipeline] saveCheckpoint SKIPPED (autosave OFF): step=${step}, componentStep=${this.currentStep}`,
+      );
       return;
     }
 
     const state = this.buildCheckpointState();
     const currentStep = step || state.current_step;
-    console.log(`[Pipeline] saveCheckpoint called: step=${step}, currentStep=${currentStep}, componentStep=${this.currentStep}, highWater=${this._highWaterStep}, id=${this.activePipelineRunId}, creating=${this._checkpointCreating}`);
+    console.log(
+      `[Pipeline] saveCheckpoint called: step=${step}, currentStep=${currentStep}, componentStep=${this.currentStep}, highWater=${this._highWaterStep}, id=${this.activePipelineRunId}, creating=${this._checkpointCreating}`,
+    );
 
     // Frontend step regression guard: never send a PUT that would regress the step
     const newOrder = ModelDevelopmentComponent.STEP_ORDER[currentStep] ?? 0;
     const hwOrder = ModelDevelopmentComponent.STEP_ORDER[this._highWaterStep] ?? 0;
     if (newOrder < hwOrder) {
-      console.warn(`[Pipeline] BLOCKED frontend regression: ${this._highWaterStep}(${hwOrder}) -> ${currentStep}(${newOrder})`, new Error().stack);
+      console.warn(
+        `[Pipeline] BLOCKED frontend regression: ${this._highWaterStep}(${hwOrder}) -> ${currentStep}(${newOrder})`,
+        new Error().stack,
+      );
       return;
     }
     this._highWaterStep = currentStep;
 
     if (this.activePipelineRunId) {
       // Already have an ID — safe to update directly
-      this.dataService.updatePipelineRun(this.activePipelineRunId, {
-        current_step: currentStep,
-        state: state,
-        file_id: this.currentFileId,
-      }).subscribe({
-        next: () => { this._unsavedChanges = false; console.log('[Pipeline] Checkpoint saved:', currentStep); },
-        error: (e: any) => console.error('[Pipeline] Checkpoint save failed:', e)
-      });
+      this.dataService
+        .updatePipelineRun(this.activePipelineRunId, {
+          current_step: currentStep,
+          state: state,
+          file_id: this.currentFileId,
+        })
+        .subscribe({
+          next: () => {
+            this._unsavedChanges = false;
+            console.log('[Pipeline] Checkpoint saved:', currentStep);
+          },
+          error: (e: any) => console.error('[Pipeline] Checkpoint save failed:', e),
+        });
     } else if (this._checkpointCreating) {
       // A create is already in flight — just flag that we need a flush
       this._pendingCheckpoint = true;
-      console.log('[Pipeline] Queued checkpoint (create in flight), componentStep:', this.currentStep);
+      console.log(
+        '[Pipeline] Queued checkpoint (create in flight), componentStep:',
+        this.currentStep,
+      );
     } else {
       // No ID yet, no create in flight — fire the create
       this._checkpointCreating = true;
-      const name = this.pipelineRunName || `${this.selectedPipeline || 'pipeline'}-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}`;
-      this.dataService.createPipelineRun({
-        name: name,
-        pipeline_type: this.selectedPipeline || 'boosting',
-        file_id: this.currentFileId,
-        current_step: currentStep,
-        state: state,
-      }).subscribe({
-        next: (resp: any) => {
-          this.activePipelineRunId = resp.id;
-          this.pipelineRunName = resp.name;
-          this._checkpointCreating = false;
-          this._unsavedChanges = false;
-          console.log('[Pipeline] Created & saved checkpoint:', resp.name, currentStep);
-          // Flush: re-save with CURRENT state (not stale queued step)
-          if (this._pendingCheckpoint) {
+      const name =
+        this.pipelineRunName ||
+        `${this.selectedPipeline || 'pipeline'}-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}`;
+      this.dataService
+        .createPipelineRun({
+          name: name,
+          pipeline_type: this.selectedPipeline || 'boosting',
+          file_id: this.currentFileId,
+          current_step: currentStep,
+          state: state,
+        })
+        .subscribe({
+          next: (resp: any) => {
+            this.activePipelineRunId = resp.id;
+            this.pipelineRunName = resp.name;
+            this._checkpointCreating = false;
+            this._unsavedChanges = false;
+            console.log('[Pipeline] Created & saved checkpoint:', resp.name, currentStep);
+            // Flush: re-save with CURRENT state (not stale queued step)
+            if (this._pendingCheckpoint) {
+              this._pendingCheckpoint = false;
+              console.log(
+                '[Pipeline] Flushing with current state, componentStep:',
+                this.currentStep,
+              );
+              this.saveCheckpoint(undefined, true);
+            }
+          },
+          error: (e: any) => {
+            this._checkpointCreating = false;
             this._pendingCheckpoint = false;
-            console.log('[Pipeline] Flushing with current state, componentStep:', this.currentStep);
-            this.saveCheckpoint(undefined, true);
-          }
-        },
-        error: (e: any) => {
-          this._checkpointCreating = false;
-          this._pendingCheckpoint = false;
-          console.error('[Pipeline] Create failed:', e);
-        }
-      });
+            console.error('[Pipeline] Create failed:', e);
+          },
+        });
     }
   }
 
@@ -2586,7 +2902,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
         // ── 1. Set step & high-water FIRST (before any SharedService calls) ──
         //    This prevents subscription guards from mis-firing during restore.
-        const step = run.current_step === 'data_quality' ? 'data quality' : (run.current_step === 'sfs' ? 'modeling' : run.current_step);
+        const step =
+          run.current_step === 'data_quality'
+            ? 'data quality'
+            : run.current_step === 'sfs'
+              ? 'modeling'
+              : run.current_step;
         this.currentStep = step;
         const restoredStepKey = step === 'data quality' ? 'data_quality' : step;
         this._highWaterStep = restoredStepKey;
@@ -2623,7 +2944,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         // ── 4. Restore preprocessing state ──
         const pp = s.preprocessing || {};
         if (pp.purifier_option_ids && pp.purifier_option_ids.length) {
-          this.selectedOptions = this.purifierOptions.filter(o => pp.purifier_option_ids.includes(o.id));
+          this.selectedOptions = this.purifierOptions.filter((o) =>
+            pp.purifier_option_ids.includes(o.id),
+          );
         }
         this.splitStrategy = pp.split_strategy || 'random';
         this.splitDateColumn = pp.split_date_column || null;
@@ -2696,7 +3019,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         console.log('[Pipeline] Loaded run:', run.name, 'at step:', step);
 
         // ── 9. Check for active process that needs resume ──
-        if (s.active_process && s.active_process.type === 'preprocessing' && s.active_process.file_id) {
+        if (
+          s.active_process &&
+          s.active_process.type === 'preprocessing' &&
+          s.active_process.file_id
+        ) {
           this.resumePreprocessing(s.active_process.file_id);
         }
 
@@ -2712,7 +3039,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           } catch {}
         }, 200);
       },
-      error: (e: any) => console.error('[Pipeline] Load failed:', e)
+      error: (e: any) => console.error('[Pipeline] Load failed:', e),
     });
   }
 
@@ -2730,7 +3057,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this.sharedService.setPreprocessingRunResult(result);
           this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
           this.processedFilePath = result?.processed_file ?? null;
-          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step) ? result.dropped_columns_by_step : [];
+          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step)
+            ? result.dropped_columns_by_step
+            : [];
           this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
           this.rowCountBefore = Number(result?.row_count_before ?? 0);
           this.rowCountAfter = Number(result?.row_count_after ?? 0);
@@ -2742,7 +3071,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this._splitChartDrawn = false;
           // Restore Data Quality summary
           this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
-          this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+          this.datqAllColumns =
+            this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
           this.datqColumns = [...this.datqAllColumns];
           this.reorderDatqColumns();
           this.ensureFilterKeys();
@@ -2782,7 +3112,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         this.isProcessing = false;
         console.warn('[Pipeline] Resume: could not check preprocessing status:', err);
         this.sharedService.setActiveProcess(null);
-      }
+      },
     });
   }
 
@@ -2790,10 +3120,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!confirm('Delete this pipeline run?')) return;
     this.dataService.deletePipelineRun(id).subscribe({
       next: () => {
-        this.savedPipelines = this.savedPipelines.filter(r => r.id !== id);
+        this.savedPipelines = this.savedPipelines.filter((r) => r.id !== id);
         if (this.activePipelineRunId === id) this.activePipelineRunId = null;
       },
-      error: (e: any) => console.error('[Pipeline] Delete failed:', e)
+      error: (e: any) => console.error('[Pipeline] Delete failed:', e),
     });
   }
 
@@ -2804,20 +3134,22 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   confirmRenamePipeline(run: any): void {
     if (!this.renamingPipelineName.trim()) return;
-    this.dataService.updatePipelineRun(run.id, { name: this.renamingPipelineName.trim() }).subscribe({
-      next: () => {
-        run.name = this.renamingPipelineName.trim();
-        if (this.activePipelineRunId === run.id) this.pipelineRunName = run.name;
-        this.renamingPipelineId = null;
-      },
-      error: (e: any) => console.error('[Pipeline] Rename failed:', e)
-    });
+    this.dataService
+      .updatePipelineRun(run.id, { name: this.renamingPipelineName.trim() })
+      .subscribe({
+        next: () => {
+          run.name = this.renamingPipelineName.trim();
+          if (this.activePipelineRunId === run.id) this.pipelineRunName = run.name;
+          this.renamingPipelineId = null;
+        },
+        error: (e: any) => console.error('[Pipeline] Rename failed:', e),
+      });
   }
 
   cancelRenamePipeline(): void {
     this.renamingPipelineId = null;
   }
-  
+
   onPipelineChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     this.selectedPipeline = select.value;
@@ -2846,7 +3178,9 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       this.sharedService.setPreprocessingRunResult(null);
       this.sharedService.setProcessedFilePath(null);
       this.sharedService.setActiveProcess(null); // clear any stale active process
-      this.selectedOptions = this.purifierOptions.filter(o => this.defaultOptionIds.includes(o.id));
+      this.selectedOptions = this.purifierOptions.filter((o) =>
+        this.defaultOptionIds.includes(o.id),
+      );
       this.modelingAvailable = false;
       this.preprocessingAvailable = false;
       this.currentStep = 'declaration';
@@ -2859,23 +3193,27 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   onSelectionChange(event: MatSelectChange): void {
-    const selectedGroups = new Set(this.selectedOptions.map(option => option.group).filter(group => group !== undefined));
-    
-    this.selectedOptions = this.selectedOptions.filter(option => 
-      !option.group || selectedGroups.has(option.group)
+    const selectedGroups = new Set(
+      this.selectedOptions.map((option) => option.group).filter((group) => group !== undefined),
+    );
+
+    this.selectedOptions = this.selectedOptions.filter(
+      (option) => !option.group || selectedGroups.has(option.group),
     );
   }
 
   isOptionDisabled(option: PurifierOption): boolean {
     if (!option.group) return false;
 
-    const selectedGroups = new Set(this.selectedOptions.map(opt => opt.group).filter(group => group !== undefined));
+    const selectedGroups = new Set(
+      this.selectedOptions.map((opt) => opt.group).filter((group) => group !== undefined),
+    );
     return selectedGroups.has(option.group) && !this.selectedOptions.includes(option);
   }
 
   // Save selected purifier options and move to Modeling step
   proceedFromPreprocessing(): void {
-    const optionIds = this.selectedOptions.map(o => o.id);
+    const optionIds = this.selectedOptions.map((o) => o.id);
     this.sharedService.setSelectedPurifierOptions(optionIds);
     if (this.currentFileId == null) {
       console.error('No file ID found. Please upload/select a data file first.');
@@ -2906,7 +3244,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     // Get list of variables to exclude (Model_Usage='No')
     const excludedVariables = this.getExcludedVariables();
     if (excludedVariables.length > 0) {
-      console.log(`[Preprocessing] Excluding ${excludedVariables.length} variables with Model_Usage='No':`, excludedVariables);
+      console.log(
+        `[Preprocessing] Excluding ${excludedVariables.length} variables with Model_Usage='No':`,
+        excludedVariables,
+      );
     }
 
     this.isProcessing = true;
@@ -2914,15 +3255,28 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
     this.detailedStep = '2a_purifier_declaration';
     this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
-    this.dataService.runPreprocessing(this.currentFileId, optionIds, split, excludedVariables, this.dataDictionaryCache)
-      .pipe(finalize(() => { this.isProcessing = false; }))
+    this.dataService
+      .runPreprocessing(
+        this.currentFileId,
+        optionIds,
+        split,
+        excludedVariables,
+        this.dataDictionaryCache,
+      )
+      .pipe(
+        finalize(() => {
+          this.isProcessing = false;
+        }),
+      )
       .subscribe(
         (result: any) => {
           console.log('[Preprocessing] run result:', result);
           this.sharedService.setPreprocessingRunResult(result);
           this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
           // Capture breakdown of dropped columns per purifier step (if provided)
-          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step) ? result.dropped_columns_by_step : [];
+          this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step)
+            ? result.dropped_columns_by_step
+            : [];
           // Capture total rows removed if provided
           this.rowsRemovedTotal = Number(result?.rows_removed_total ?? 0);
           // Capture row counts before/after
@@ -2937,14 +3291,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           this._splitChartDrawn = false;
           // Capture Data Quality summary
           this.datqSummary = Array.isArray(result?.datq_summary) ? result.datq_summary : null;
-          this.datqAllColumns = this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
+          this.datqAllColumns =
+            this.datqSummary && this.datqSummary.length > 0 ? Object.keys(this.datqSummary[0]) : [];
           this.datqColumns = [...this.datqAllColumns];
           this.reorderDatqColumns();
           this.ensureFilterKeys();
           this.enrichDatqRecommendations();
           // Apply persisted pins if any; else default pin Variable once
           if (this.pinnedColumns.length > 0) {
-            this.pinnedColumns = this.pinnedColumns.filter(c => this.datqColumns.includes(c));
+            this.pinnedColumns = this.pinnedColumns.filter((c) => this.datqColumns.includes(c));
           } else {
             if (this.datqColumns.includes('Variable')) this.pinnedColumns = ['Variable'];
             else if (this.datqColumns.includes('variable')) this.pinnedColumns = ['variable'];
@@ -2975,7 +3330,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         (err: any) => {
           console.error('Failed to run preprocessing:', err);
           this.sharedService.setActiveProcess(null); // clear on error too
-        }
+        },
       );
   }
 
@@ -2998,14 +3353,28 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     if (!splits.length || !labels.length) return;
 
     // Layout constants
-    const marginTop = 40, marginBottom = 70, marginLeft = 70, marginRight = 120;
+    const marginTop = 40,
+      marginBottom = 70,
+      marginLeft = 70,
+      marginRight = 120;
     const chartW = cssW - marginLeft - marginRight;
     const chartH = cssH - marginTop - marginBottom;
 
     // Color palette for target labels
-    const labelColors: string[] = ['#90a4ae', '#e57373', '#81c784', '#ffb74d', '#ba68c8', '#4dd0e1', '#f06292', '#a1887f'];
+    const labelColors: string[] = [
+      '#90a4ae',
+      '#e57373',
+      '#81c784',
+      '#ffb74d',
+      '#ba68c8',
+      '#4dd0e1',
+      '#f06292',
+      '#a1887f',
+    ];
     const labelColorMap: { [label: string]: string } = {};
-    labels.forEach((l, i) => { labelColorMap[l] = labelColors[i % labelColors.length]; });
+    labels.forEach((l, i) => {
+      labelColorMap[l] = labelColors[i % labelColors.length];
+    });
 
     // Max count for Y axis
     const maxCount = Math.max(...splits.map((s: any) => s.count || 0), 1);
@@ -3028,8 +3397,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'right';
     for (let i = 0; i <= nTicks; i++) {
-      const v = Math.round(maxCount * i / nTicks);
-      const y = marginTop + chartH - (chartH * i / nTicks);
+      const v = Math.round((maxCount * i) / nTicks);
+      const y = marginTop + chartH - (chartH * i) / nTicks;
       ctx.beginPath();
       ctx.moveTo(marginLeft, y);
       ctx.lineTo(marginLeft + chartW, y);
@@ -3079,7 +3448,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       // Count subtitle
       ctx.fillStyle = '#888';
       ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(`n=${(split.count || 0).toLocaleString()}`, x + barWidth / 2, marginTop + chartH + 33);
+      ctx.fillText(
+        `n=${(split.count || 0).toLocaleString()}`,
+        x + barWidth / 2,
+        marginTop + chartH + 33,
+      );
     });
 
     // ── Target Mean line (secondary Y axis) ──
@@ -3087,10 +3460,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     const meanMin = Math.min(...means);
     const meanMax = Math.max(...means);
     // Expand range slightly for visual clarity
-    const meanRange = (meanMax - meanMin) || 0.01;
+    const meanRange = meanMax - meanMin || 0.01;
     const meanLow = Math.max(0, meanMin - meanRange * 0.5);
     const meanHigh = Math.min(1, meanMax + meanRange * 0.5);
-    const meanScale = (v: number) => marginTop + chartH - ((v - meanLow) / (meanHigh - meanLow)) * chartH;
+    const meanScale = (v: number) =>
+      marginTop + chartH - ((v - meanLow) / (meanHigh - meanLow)) * chartH;
 
     // Draw line
     ctx.strokeStyle = '#2e7d32';
@@ -3131,7 +3505,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     ctx.fillStyle = '#2e7d32';
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     for (let i = 0; i <= 4; i++) {
-      const v = meanLow + (meanHigh - meanLow) * i / 4;
+      const v = meanLow + ((meanHigh - meanLow) * i) / 4;
       const y = meanScale(v);
       ctx.fillText((v * 100).toFixed(1) + '%', marginLeft + chartW + 8, y + 4);
     }
@@ -3184,8 +3558,13 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   // Helpers for UI
   droppedTotalCount(): number {
     try {
-      return (this.droppedColumnsByStep || []).reduce((acc, s) => acc + (Array.isArray(s.columns) ? s.columns.length : 0), 0);
-    } catch { return 0; }
+      return (this.droppedColumnsByStep || []).reduce(
+        (acc, s) => acc + (Array.isArray(s.columns) ? s.columns.length : 0),
+        0,
+      );
+    } catch {
+      return 0;
+    }
   }
 
   objectKeys(obj: any): string[] {
@@ -3195,7 +3574,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   trackByStepIndex(_idx: number, item: any): string {
     const s = item?.step || 'step';
     const ids = Array.isArray(item?.option_ids) ? item.option_ids.join(',') : '';
-    const thr = (item?.threshold != null) ? String(item.threshold) : '';
+    const thr = item?.threshold != null ? String(item.threshold) : '';
     return `${s}|${ids}|${thr}`;
   }
 
@@ -3210,12 +3589,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
     // Build a curated core set
     const cols = new Set(this.datqAllColumns);
-    const pick = (k: string) => cols.has(k) ? k : null;
+    const pick = (k: string) => (cols.has(k) ? k : null);
     const varCol = pick('Variable') || pick('variable') || pick('index');
     const basePrefs = [
       '%_Missing_Change',
-      'Mean_Change', 'Median_Change', 'STD_Change',
-      'Min_Change', 'Max_Change'
+      'Mean_Change',
+      'Median_Change',
+      'STD_Change',
+      'Min_Change',
+      'Max_Change',
     ];
     const pairFor = (b: string) => {
       const t1 = `${b}_Train`;
@@ -3229,8 +3611,15 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       // fallback to single column if backend didn't flatten
       return cols.has(b) ? [b] : [];
     };
-    const fixed = [varCol, pick('PSI'), pick('Datq_Decision'), pick('Shift_Recommendation'), pick('Variable_Type'), pick('CSI')].filter(Boolean) as string[];
-    const pairs = basePrefs.flatMap(b => pairFor(b));
+    const fixed = [
+      varCol,
+      pick('PSI'),
+      pick('Datq_Decision'),
+      pick('Shift_Recommendation'),
+      pick('Variable_Type'),
+      pick('CSI'),
+    ].filter(Boolean) as string[];
+    const pairs = basePrefs.flatMap((b) => pairFor(b));
     // Keep order from all-columns after we compute our intended order
     const desiredOrder = [...fixed, ...pairs];
     const seen = new Set<string>();
@@ -3274,7 +3663,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   private computePreprocessingAvailable(): void {
-    this.preprocessingAvailable = this.isStarted && this.preprocessingInitiated && (this.currentFileId !== null);
+    this.preprocessingAvailable =
+      this.isStarted && this.preprocessingInitiated && this.currentFileId !== null;
   }
 
   // ===== Enhanced Navigation Methods =====
@@ -3300,13 +3690,17 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.navExpandedSteps[mainStepId] = true;
     if (mainStepId === 'business_understanding') {
       setTimeout(() => {
-        document.getElementById('business-understanding-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document
+          .getElementById('business-understanding-anchor')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 50);
       return;
     }
     if (mainStepId === 'monitoring') {
       setTimeout(() => {
-        document.getElementById('monitoring-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document
+          .getElementById('monitoring-anchor')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 50);
       return;
     }
@@ -3351,7 +3745,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     setTimeout(() => {
       try {
         const idMap: { [k: string]: string } = {
-          'business_understanding': 'business-understanding-anchor',
+          business_understanding: 'business-understanding-anchor',
           'data quality': 'data-quality-anchor',
           preprocessing: 'data-quality-anchor',
           modeling: 'modeling-anchor',
@@ -3376,20 +3770,34 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
       // Declaration sub-steps
       case '1a': // Pipeline Type
         if (this.isStarted && this.selectedPipeline) return 'completed';
-        if (!this.selectedPipeline) return this.currentStep === 'declaration' ? 'in_progress' : 'pending';
+        if (!this.selectedPipeline)
+          return this.currentStep === 'declaration' ? 'in_progress' : 'pending';
         return 'pending';
       case '1b': // Data Upload
         if (this.currentFileId != null) return 'completed';
-        if (this.isStarted && this.selectedPipeline && this.currentFileId == null) return 'in_progress';
+        if (this.isStarted && this.selectedPipeline && this.currentFileId == null)
+          return 'in_progress';
         return 'pending';
       case '1c': // Data Dictionary Review
         if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0) return 'completed';
-        if (this.currentFileId != null && !(this.dataDictionaryCache && this.dataDictionaryCache.length > 0)) return 'in_progress';
+        if (
+          this.currentFileId != null &&
+          !(this.dataDictionaryCache && this.dataDictionaryCache.length > 0)
+        )
+          return 'in_progress';
         return 'pending';
       case '1d': // Preprocessing
         if (this.preprocessingInitiated && this.rowCountAfter > 0) return 'completed';
-        if (this.dataDictionaryCache && this.dataDictionaryCache.length > 0 && !(this.preprocessingInitiated && this.rowCountAfter > 0)) {
-          return this.isProcessing ? 'in_progress' : (this.preprocessingAvailable ? 'in_progress' : 'pending');
+        if (
+          this.dataDictionaryCache &&
+          this.dataDictionaryCache.length > 0 &&
+          !(this.preprocessingInitiated && this.rowCountAfter > 0)
+        ) {
+          return this.isProcessing
+            ? 'in_progress'
+            : this.preprocessingAvailable
+              ? 'in_progress'
+              : 'pending';
         }
         return 'pending';
       case '1e': // Data Quality Summary
@@ -3400,30 +3808,69 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
       // Modeling sub-steps
       case '2a': // Categorical Encoding
-        if (mc && mc.substep && ['encoding_completed', 'modeling_started', 'modeling_completed',
-            'sfs_running', 'sfs_stopped', 'sfs_backward_completed', 'sfs_forward_completed',
-            'sfs_completed', 'sfs_forward_from_backward_completed', 'hyperparam_running',
-            'hyperparam_stopped', 'hyperparam_completed'].includes(mc.substep)) return 'completed';
+        if (
+          mc &&
+          mc.substep &&
+          [
+            'encoding_completed',
+            'modeling_started',
+            'modeling_completed',
+            'sfs_running',
+            'sfs_stopped',
+            'sfs_backward_completed',
+            'sfs_forward_completed',
+            'sfs_completed',
+            'sfs_forward_from_backward_completed',
+            'hyperparam_running',
+            'hyperparam_stopped',
+            'hyperparam_completed',
+          ].includes(mc.substep)
+        )
+          return 'completed';
         if (mc && mc.substep === 'algorithm_selected') return 'in_progress';
         if (this.modelingAvailable && !mc?.substep) return 'in_progress';
         return 'pending';
       case '2b': // Model Training & CV
-        if (mc && (mc.modelingStatus?.model || mc.substep?.startsWith('hyperparam_'))) return 'completed';
-        if (mc && (mc.substep === 'modeling_started' || mc.substep === 'encoding_completed')) return 'in_progress';
+        if (mc && (mc.modelingStatus?.model || mc.substep?.startsWith('hyperparam_')))
+          return 'completed';
+        if (mc && (mc.substep === 'modeling_started' || mc.substep === 'encoding_completed'))
+          return 'in_progress';
         return 'pending';
       case '2c': // SFS
-        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0 || mc.sfsForwardFromBackwardResults?.length > 0 || mc.substep?.startsWith('hyperparam_'))) return 'completed';
-        if (mc && mc.modelingStatus?.model && !(mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)) return 'in_progress';
+        if (
+          mc &&
+          (mc.sfsBackwardResults?.length > 0 ||
+            mc.sfsForwardResults?.length > 0 ||
+            mc.sfsForwardFromBackwardResults?.length > 0 ||
+            mc.substep?.startsWith('hyperparam_'))
+        )
+          return 'completed';
+        if (
+          mc &&
+          mc.modelingStatus?.model &&
+          !(mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0)
+        )
+          return 'in_progress';
         return 'pending';
       case '2d': // Hyperparameter Tuning
         if (mc && (mc.substep === 'hyperparam_completed' || mc.hpResults)) return 'completed';
-        if (mc && (mc.substep === 'hyperparam_running' || mc.substep === 'hyperparam_stopped')) return 'in_progress';
-        if (mc && (mc.sfsBackwardResults?.length > 0 || mc.sfsForwardResults?.length > 0 || mc.sfsForwardFromBackwardResults?.length > 0)) return 'in_progress';
+        if (mc && (mc.substep === 'hyperparam_running' || mc.substep === 'hyperparam_stopped'))
+          return 'in_progress';
+        if (
+          mc &&
+          (mc.sfsBackwardResults?.length > 0 ||
+            mc.sfsForwardResults?.length > 0 ||
+            mc.sfsForwardFromBackwardResults?.length > 0)
+        )
+          return 'in_progress';
         return 'pending';
 
       case '3a': // Model Evaluation
         if (this.evaluationCompleted) return 'completed';
-        if (mc && (mc.substep === 'hyperparam_completed' || mc.hpResults || mc.modelingStatus?.model)) {
+        if (
+          mc &&
+          (mc.substep === 'hyperparam_completed' || mc.hpResults || mc.modelingStatus?.model)
+        ) {
           return this.currentStep === 'evaluation' ? 'in_progress' : 'in_progress';
         }
         return 'pending';
@@ -3439,32 +3886,35 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           return this.currentStep === 'monitoring' ? 'in_progress' : 'in_progress';
         }
         return 'pending';
-      default: return 'pending';
+      default:
+        return 'pending';
     }
   }
 
   /** Get main step status based on sub-steps */
   getMainStepStatus(mainStepId: string): 'completed' | 'in_progress' | 'pending' {
-    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    const step = this.navMainSteps.find((s) => s.id === mainStepId);
     if (!step) return 'pending';
-    const statuses = step.subSteps.map(s => this.getSubStepStatus(s.id));
-    if (statuses.every(s => s === 'completed')) return 'completed';
-    if (statuses.some(s => s === 'in_progress' || s === 'completed')) return 'in_progress';
+    const statuses = step.subSteps.map((s) => this.getSubStepStatus(s.id));
+    if (statuses.every((s) => s === 'completed')) return 'completed';
+    if (statuses.some((s) => s === 'in_progress' || s === 'completed')) return 'in_progress';
     return 'pending';
   }
 
   /** Get main step progress percentage (0–100) */
   getMainStepProgressPct(mainStepId: string): number {
-    const step = this.navMainSteps.find(s => s.id === mainStepId);
+    const step = this.navMainSteps.find((s) => s.id === mainStepId);
     if (!step) return 0;
-    const completed = step.subSteps.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    const completed = step.subSteps.filter(
+      (s) => this.getSubStepStatus(s.id) === 'completed',
+    ).length;
     return Math.round((completed / step.subSteps.length) * 100);
   }
 
   /** Overall pipeline progress percentage */
   getOverallProgress(): number {
-    const allSubs = this.navMainSteps.flatMap(m => m.subSteps);
-    const completed = allSubs.filter(s => this.getSubStepStatus(s.id) === 'completed').length;
+    const allSubs = this.navMainSteps.flatMap((m) => m.subSteps);
+    const completed = allSubs.filter((s) => this.getSubStepStatus(s.id) === 'completed').length;
     return Math.round((completed / allSubs.length) * 100);
   }
 
@@ -3496,18 +3946,23 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.encodingAnalyzing = true;
     this.encodingError = null;
     const excluded = this.getExcludedVariables();
-    this.dataService.analyzeEncoding(
-      this.currentFileId, this.processedFilePath, this.dataDictionaryCache, excluded
-    ).subscribe({
-      next: (resp: any) => {
-        this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
-        this.encodingAnalyzing = false;
-      },
-      error: (err: any) => {
-        this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
-        this.encodingAnalyzing = false;
-      }
-    });
+    this.dataService
+      .analyzeEncoding(
+        this.currentFileId,
+        this.processedFilePath,
+        this.dataDictionaryCache,
+        excluded,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
+          this.encodingAnalyzing = false;
+        },
+        error: (err: any) => {
+          this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
+          this.encodingAnalyzing = false;
+        },
+      });
   }
 
   updateEncodingLom(entry: any, newLom: string): void {
@@ -3565,24 +4020,29 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         e.ranking = [...(e.unique_values || [])];
       }
     }
-    this.dataService.applyEncoding(
-      this.currentFileId, this.processedFilePath, this.encodingPlan, this.encodingUseNative
-    ).subscribe({
-      next: (resp: any) => {
-        this.encodingReport = Array.isArray(resp.report) ? resp.report : [];
-        this.encodingSummary = resp.summary || null;
-        this.encodedFilePath = resp.encoded_file || null;
-        this.encodingApplied = true;
-        this.encodingApplying = false;
-        // Share encoded file path and encoding report for modeling
-        this.sharedService.setEncodedFilePath(this.encodedFilePath);
-        this.sharedService.setEncodingReport(this.encodingReport);
-      },
-      error: (err: any) => {
-        this.encodingError = 'Failed to apply encoding: ' + (err?.message || err);
-        this.encodingApplying = false;
-      }
-    });
+    this.dataService
+      .applyEncoding(
+        this.currentFileId,
+        this.processedFilePath,
+        this.encodingPlan,
+        this.encodingUseNative,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          this.encodingReport = Array.isArray(resp.report) ? resp.report : [];
+          this.encodingSummary = resp.summary || null;
+          this.encodedFilePath = resp.encoded_file || null;
+          this.encodingApplied = true;
+          this.encodingApplying = false;
+          // Share encoded file path and encoding report for modeling
+          this.sharedService.setEncodedFilePath(this.encodedFilePath);
+          this.sharedService.setEncodingReport(this.encodingReport);
+        },
+        error: (err: any) => {
+          this.encodingError = 'Failed to apply encoding: ' + (err?.message || err);
+          this.encodingApplying = false;
+        },
+      });
   }
 
   goToModelingFromEncoding(): void {
@@ -3635,22 +4095,22 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   getStrategyLabel(strategy: string): string {
     const labels: { [k: string]: string } = {
-      'native_categorical': 'XGBoost Native Categorical',
-      'label_encoding': 'Label Encoding',
-      'one_hot_encoding': 'One-Hot Encoding',
-      'ordinal_encoding': 'Ordinal Encoding',
-      'target_encoding': 'Target Encoding',
+      native_categorical: 'XGBoost Native Categorical',
+      label_encoding: 'Label Encoding',
+      one_hot_encoding: 'One-Hot Encoding',
+      ordinal_encoding: 'Ordinal Encoding',
+      target_encoding: 'Target Encoding',
     };
     return labels[strategy] || strategy;
   }
 
   getStrategyColor(strategy: string): string {
     const colors: { [k: string]: string } = {
-      'native_categorical': '#1976d2',
-      'label_encoding': '#7b1fa2',
-      'one_hot_encoding': '#388e3c',
-      'ordinal_encoding': '#f57c00',
-      'target_encoding': '#c62828',
+      native_categorical: '#1976d2',
+      label_encoding: '#7b1fa2',
+      one_hot_encoding: '#388e3c',
+      ordinal_encoding: '#f57c00',
+      target_encoding: '#c62828',
     };
     return colors[strategy] || '#555';
   }

@@ -1,251 +1,369 @@
 <div class="pipeline-codeline-slot">
   <!-- Empty state -->
-  <div *ngIf="!expanded && !hasContent" class="pipeline-codeline-add" (click)="addCodeline()">
-    <span class="pipeline-codeline-add-icon">+</span>
-    <span class="pipeline-codeline-add-label">Add Codeline</span>
-  </div>
+  @if (!expanded && !hasContent) {
+    <div class="pipeline-codeline-add" (click)="addCodeline()">
+      <span class="pipeline-codeline-add-icon">+</span>
+      <span class="pipeline-codeline-add-label">Add Codeline</span>
+    </div>
+  }
 
   <!-- Collapsed summary -->
-  <div *ngIf="!expanded && hasContent" class="pipeline-codeline-summary" (dblclick)="expanded = true">
-    <div class="pipeline-codeline-summary-main">
-      <span class="pipeline-codeline-badge">{{ cell?.mode === 'intent' ? 'Intent' : 'Code' }}</span>
-      <span class="pipeline-codeline-summary-text">
-        {{ (cell?.mode === 'intent' ? cell?.intent : cell?.code) || 'Empty Codeline' }}
-      </span>
+  @if (!expanded && hasContent) {
+    <div class="pipeline-codeline-summary" (dblclick)="expanded = true">
+      <div class="pipeline-codeline-summary-main">
+        <span class="pipeline-codeline-badge">{{
+          cell?.mode === 'intent' ? 'Intent' : 'Code'
+        }}</span>
+        <span class="pipeline-codeline-summary-text">
+          {{ (cell?.mode === 'intent' ? cell?.intent : cell?.code) || 'Empty Codeline' }}
+        </span>
+      </div>
+      <div class="pipeline-codeline-actions">
+        <button
+          type="button"
+          class="pipeline-codeline-btn edit"
+          (click)="expanded = true"
+          title="Edit"
+        >
+          &#9998;
+        </button>
+        <button
+          type="button"
+          class="pipeline-codeline-btn delete"
+          (click)="deleteCodeline()"
+          title="Delete"
+        >
+          &times;
+        </button>
+      </div>
     </div>
-    <div class="pipeline-codeline-actions">
-      <button type="button" class="pipeline-codeline-btn edit" (click)="expanded = true" title="Edit">&#9998;</button>
-      <button type="button" class="pipeline-codeline-btn delete" (click)="deleteCodeline()" title="Delete">&times;</button>
-    </div>
-  </div>
+  }
 
   <!-- Expanded editor -->
-  <div *ngIf="expanded && cell" class="pipeline-codeline-editor">
-    <div class="pipeline-codeline-toolbar">
-      <div class="pipeline-codeline-mode-toggle">
-        <button type="button"
-                class="mode-btn"
-                [class.active]="cell.mode === 'code'"
-                (click)="setMode('code')">Code</button>
-        <button type="button"
-                class="mode-btn"
-                [class.active]="cell.mode === 'intent'"
-                (click)="setMode('intent')">Intent</button>
-      </div>
-      <div class="pipeline-codeline-toolbar-right">
-        <div class="codeline-model-selector-wrapper" #modelSelectorWrapper>
-          <button type="button"
-                  class="codeline-model-selector-btn"
-                  (click)="toggleModelSelector()"
-                  title="Select model for Ask Assistant">
-            <span class="codeline-model-selector-label">{{ getSelectedModelName() }}</span>
-            <span class="codeline-model-selector-caret">&#9660;</span>
+  @if (expanded && cell) {
+    <div class="pipeline-codeline-editor">
+      <div class="pipeline-codeline-toolbar">
+        <div class="pipeline-codeline-mode-toggle">
+          <button
+            type="button"
+            class="mode-btn"
+            [class.active]="cell.mode === 'code'"
+            (click)="setMode('code')"
+          >
+            Code
           </button>
-          <div class="codeline-model-selector-dropdown" *ngIf="showModelSelector">
-            <div class="codeline-model-selector-status" *ngIf="engineStatus && !engineStatus.available">
-              <span class="codeline-model-selector-status-text">Local engine unavailable — cloud models only.</span>
-              <button type="button" class="codeline-model-selector-status-retry" (click)="loadModels()">Retry</button>
-            </div>
+          <button
+            type="button"
+            class="mode-btn"
+            [class.active]="cell.mode === 'intent'"
+            (click)="setMode('intent')"
+          >
+            Intent
+          </button>
+        </div>
+        <div class="pipeline-codeline-toolbar-right">
+          <div class="codeline-model-selector-wrapper" #modelSelectorWrapper>
             <button
               type="button"
-              *ngFor="let m of availableModels"
-              class="codeline-model-option"
-              [class.active]="m.key === (cell.model || defaultModelKey)"
-              (click)="selectModel(m.key)"
+              class="codeline-model-selector-btn"
+              (click)="toggleModelSelector()"
+              title="Select model for Ask Assistant"
             >
-              <span class="codeline-model-option-name">{{ m.display_name }}</span>
-              <span class="codeline-model-option-ram" *ngIf="m.ram_gb">{{ m.ram_gb }} GB</span>
-              <span class="codeline-model-option-provider">{{ m.provider }}</span>
-              <span class="codeline-model-option-check" *ngIf="m.key === (cell.model || defaultModelKey)">&#10003;</span>
+              <span class="codeline-model-selector-label">{{ getSelectedModelName() }}</span>
+              <span class="codeline-model-selector-caret">&#9660;</span>
+            </button>
+            @if (showModelSelector) {
+              <div class="codeline-model-selector-dropdown">
+                @if (engineStatus && !engineStatus.available) {
+                  <div class="codeline-model-selector-status">
+                    <span class="codeline-model-selector-status-text"
+                      >Local engine unavailable — cloud models only.</span
+                    >
+                    <button
+                      type="button"
+                      class="codeline-model-selector-status-retry"
+                      (click)="loadModels()"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                }
+                @for (m of availableModels; track m) {
+                  <button
+                    type="button"
+                    class="codeline-model-option"
+                    [class.active]="m.key === (cell.model || defaultModelKey)"
+                    (click)="selectModel(m.key)"
+                  >
+                    <span class="codeline-model-option-name">{{ m.display_name }}</span>
+                    @if (m.ram_gb) {
+                      <span class="codeline-model-option-ram">{{ m.ram_gb }} GB</span>
+                    }
+                    <span class="codeline-model-option-provider">{{ m.provider }}</span>
+                    @if (m.key === (cell.model || defaultModelKey)) {
+                      <span class="codeline-model-option-check">&#10003;</span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+          <button type="button" class="pipeline-codeline-btn done" (click)="collapse()">
+            Done
+          </button>
+          <button
+            type="button"
+            class="pipeline-codeline-btn delete"
+            (click)="deleteCodeline()"
+            title="Delete"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+      @if (cell.mode === 'code') {
+        <div class="pipeline-codeline-code-pane">
+          <label class="pipeline-codeline-field-label" [attr.for]="'codeline-code-' + position">
+            Python — runs against df
+          </label>
+          <textarea
+            class="pipeline-codeline-textarea code"
+            [id]="'codeline-code-' + position"
+            [ngModel]="cell.code"
+            (ngModelChange)="onCodeChanged($event)"
+            placeholder="Write pandas/numpy code using df, pd, np (and plt for charts). Imports are injected."
+            rows="6"
+            spellcheck="false"
+          ></textarea>
+          <div class="pipeline-codeline-run-bar">
+            <button
+              type="button"
+              class="run-btn exploratory"
+              [disabled]="isBusy"
+              (click)="runExploratory()"
+              title="Run without changing the dataset"
+            >
+              {{ isBusy && cell.lastRun?.runKind === 'exploratory' ? 'Running…' : 'Run' }}
+            </button>
+            <button
+              type="button"
+              class="run-btn apply"
+              [disabled]="isBusy"
+              (click)="applyToDataset()"
+              title="Execute and save changes to the dataset"
+            >
+              {{ isBusy && cell.lastRun?.runKind === 'apply' ? 'Applying…' : 'Apply to dataset' }}
             </button>
           </div>
         </div>
-        <button type="button" class="pipeline-codeline-btn done" (click)="collapse()">Done</button>
-        <button type="button" class="pipeline-codeline-btn delete" (click)="deleteCodeline()" title="Delete">&times;</button>
-      </div>
-    </div>
-
-    <div *ngIf="cell.mode === 'code'" class="pipeline-codeline-code-pane">
-      <label class="pipeline-codeline-field-label" [attr.for]="'codeline-code-' + position">
-        Python — runs against df
-      </label>
-      <textarea
-        class="pipeline-codeline-textarea code"
-        [id]="'codeline-code-' + position"
-        [ngModel]="cell.code"
-        (ngModelChange)="onCodeChanged($event)"
-        placeholder="Write pandas/numpy code using df, pd, np (and plt for charts). Imports are injected."
-        rows="6"
-        spellcheck="false"></textarea>
-      <div class="pipeline-codeline-run-bar">
-        <button type="button"
-                class="run-btn exploratory"
-                [disabled]="isBusy"
-                (click)="runExploratory()"
-                title="Run without changing the dataset">
-          {{ isBusy && cell.lastRun?.runKind === 'exploratory' ? 'Running…' : 'Run' }}
-        </button>
-        <button type="button"
-                class="run-btn apply"
-                [disabled]="isBusy"
-                (click)="applyToDataset()"
-                title="Execute and save changes to the dataset">
-          {{ isBusy && cell.lastRun?.runKind === 'apply' ? 'Applying…' : 'Apply to dataset' }}
-        </button>
-      </div>
-    </div>
-
-    <div *ngIf="cell.mode === 'intent'" class="pipeline-codeline-intent-pane">
-      <label class="pipeline-codeline-field-label" [attr.for]="'codeline-intent-' + position">
-        What should the assistant do?
-      </label>
-      <textarea
-        class="pipeline-codeline-textarea intent"
-        [id]="'codeline-intent-' + position"
-        [ngModel]="cell.intent"
-        (ngModelChange)="onIntentChanged($event)"
-        placeholder="Describe what you want: create features, plot a distribution, summarize a column…"
-        rows="4"></textarea>
-      <div class="pipeline-codeline-run-bar">
-        <button type="button"
-                class="run-btn assistant"
-                [disabled]="isBusy"
-                (click)="askAssistant()">
-          {{ isBusy && cell.lastRun?.runKind === 'assistant' ? 'Asking…' : 'Ask Assistant' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Output pane -->
-    <div *ngIf="cell.lastRun && cell.lastRun.status !== 'idle'" class="pipeline-codeline-output">
-      <div class="output-header">
-        <span class="output-status"
+      }
+      @if (cell.mode === 'intent') {
+        <div class="pipeline-codeline-intent-pane">
+          <label class="pipeline-codeline-field-label" [attr.for]="'codeline-intent-' + position">
+            What should the assistant do?
+          </label>
+          <textarea
+            class="pipeline-codeline-textarea intent"
+            [id]="'codeline-intent-' + position"
+            [ngModel]="cell.intent"
+            (ngModelChange)="onIntentChanged($event)"
+            placeholder="Describe what you want: create features, plot a distribution, summarize a column…"
+            rows="4"
+          ></textarea>
+          <div class="pipeline-codeline-run-bar">
+            <button
+              type="button"
+              class="run-btn assistant"
+              [disabled]="isBusy"
+              (click)="askAssistant()"
+            >
+              {{ isBusy && cell.lastRun?.runKind === 'assistant' ? 'Asking…' : 'Ask Assistant' }}
+            </button>
+          </div>
+        </div>
+      }
+      <!-- Output pane -->
+      @if (cell.lastRun && cell.lastRun.status !== 'idle') {
+        <div class="pipeline-codeline-output">
+          <div class="output-header">
+            <span
+              class="output-status"
               [class.ok]="cell.lastRun.status === 'success'"
               [class.err]="cell.lastRun.status === 'error'"
-              [class.busy]="cell.lastRun.status === 'running'">
-          {{ cell.lastRun.status === 'running' ? 'Running' :
-             cell.lastRun.status === 'success' ? 'Success' : 'Error' }}
-          <ng-container *ngIf="cell.lastRun.runKind"> · {{ cell.lastRun.runKind }}</ng-container>
-        </span>
-        <span class="output-iteration" *ngIf="iterationCount > 1">
-          Iteration {{ iterationCount }}
-        </span>
-      </div>
-
-      <div *ngIf="cell.lastRun.error" class="output-error" role="alert">{{ cell.lastRun.error }}</div>
-
-      <div *ngIf="cell.lastRun.assistantText" class="output-assistant">
-        <div class="output-label">Assistant</div>
-        <pre class="output-pre">{{ cell.lastRun.assistantText }}</pre>
-      </div>
-
-      <div *ngIf="cell.lastRun.stdout" class="output-stdout">
-        <div class="output-label">Stdout</div>
-        <pre class="output-pre">{{ cell.lastRun.stdout }}</pre>
-      </div>
-
-      <div *ngIf="cell.lastRun.changes" class="output-changes">
-        <div class="output-label">Dataset changes</div>
-        <div class="changes-line">
-          Rows: {{ cell.lastRun.changes.rows_before }} → {{ cell.lastRun.changes.rows_after }}
-        </div>
-        <div *ngIf="cell.lastRun.changes.columns_added?.length" class="changes-line">
-          Added: {{ cell.lastRun.changes.columns_added.join(', ') }}
-        </div>
-        <div *ngIf="cell.lastRun.changes.columns_removed?.length" class="changes-line">
-          Removed: {{ cell.lastRun.changes.columns_removed.join(', ') }}
-        </div>
-      </div>
-
-      <div *ngIf="previewRows.length" class="output-preview">
-        <div class="output-label">Preview</div>
-        <div class="preview-scroll">
-          <table class="preview-table">
-            <thead>
-              <tr>
-                <th *ngFor="let col of previewColumns">{{ col }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of previewRows">
-                <td *ngFor="let col of previewColumns">{{ cellValue(row, col) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div *ngIf="cell.lastRun.images?.length" class="output-images">
-        <div class="output-label">Charts</div>
-        <img *ngFor="let src of cell.lastRun.images"
-             [src]="src"
-             alt="Codeline chart"
-             class="output-chart" />
-      </div>
-
-      <!-- Conversation thread — every ask, feedback, and answer for this cell -->
-      <div *ngIf="turns.length" class="codeline-thread">
-        <div class="codeline-thread-header">
-          <span class="output-label">Thread · {{ turns.length }} messages</span>
-          <div class="codeline-thread-actions">
-            <button type="button"
+              [class.busy]="cell.lastRun.status === 'running'"
+            >
+              {{
+                cell.lastRun.status === 'running'
+                  ? 'Running'
+                  : cell.lastRun.status === 'success'
+                    ? 'Success'
+                    : 'Error'
+              }}
+              @if (cell.lastRun.runKind) {
+                · {{ cell.lastRun.runKind }}
+              }
+            </span>
+            @if (iterationCount > 1) {
+              <span class="output-iteration"> Iteration {{ iterationCount }} </span>
+            }
+          </div>
+          @if (cell.lastRun.error) {
+            <div class="output-error" role="alert">{{ cell.lastRun.error }}</div>
+          }
+          @if (cell.lastRun.assistantText) {
+            <div class="output-assistant">
+              <div class="output-label">Assistant</div>
+              <pre class="output-pre">{{ cell.lastRun.assistantText }}</pre>
+            </div>
+          }
+          @if (cell.lastRun.stdout) {
+            <div class="output-stdout">
+              <div class="output-label">Stdout</div>
+              <pre class="output-pre">{{ cell.lastRun.stdout }}</pre>
+            </div>
+          }
+          @if (cell.lastRun.changes) {
+            <div class="output-changes">
+              <div class="output-label">Dataset changes</div>
+              <div class="changes-line">
+                Rows: {{ cell.lastRun.changes.rows_before }} → {{ cell.lastRun.changes.rows_after }}
+              </div>
+              @if (cell.lastRun.changes.columns_added?.length) {
+                <div class="changes-line">
+                  Added: {{ cell.lastRun.changes.columns_added.join(', ') }}
+                </div>
+              }
+              @if (cell.lastRun.changes.columns_removed?.length) {
+                <div class="changes-line">
+                  Removed: {{ cell.lastRun.changes.columns_removed.join(', ') }}
+                </div>
+              }
+            </div>
+          }
+          @if (previewRows.length) {
+            <div class="output-preview">
+              <div class="output-label">Preview</div>
+              <div class="preview-scroll">
+                <table class="preview-table">
+                  <thead>
+                    <tr>
+                      @for (col of previewColumns; track col) {
+                        <th>{{ col }}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of previewRows; track row) {
+                      <tr>
+                        @for (col of previewColumns; track col) {
+                          <td>{{ cellValue(row, col) }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          }
+          @if (cell.lastRun.images?.length) {
+            <div class="output-images">
+              <div class="output-label">Charts</div>
+              @for (src of cell.lastRun.images; track src) {
+                <img [src]="src" alt="Codeline chart" class="output-chart" />
+              }
+            </div>
+          }
+          <!-- Conversation thread — every ask, feedback, and answer for this cell -->
+          @if (turns.length) {
+            <div class="codeline-thread">
+              <div class="codeline-thread-header">
+                <span class="output-label">Thread · {{ turns.length }} messages</span>
+                <div class="codeline-thread-actions">
+                  <button
+                    type="button"
                     class="codeline-thread-btn"
                     [attr.aria-expanded]="showThread"
-                    (click)="showThread = !showThread">
-              {{ showThread ? 'Hide' : 'Show' }}
-            </button>
-            <button type="button"
+                    (click)="showThread = !showThread"
+                  >
+                    {{ showThread ? 'Hide' : 'Show' }}
+                  </button>
+                  <button
+                    type="button"
                     class="codeline-thread-btn danger"
                     [disabled]="isBusy"
                     title="Forget this cell's conversation and start over"
-                    (click)="clearThread()">Clear</button>
-          </div>
-        </div>
-        <ol class="codeline-thread-list" *ngIf="showThread">
-          <li *ngFor="let turn of turns"
-              class="codeline-turn"
-              [class.assistant]="turn.role === 'assistant'"
-              [class.auto]="turn.kind === 'auto_fix'">
-            <div class="codeline-turn-head">
-              <span class="codeline-turn-role">{{ turnRoleLabel(turn) }}</span>
-              <button type="button"
-                      *ngIf="turn.code"
-                      class="codeline-thread-btn"
-                      [disabled]="isBusy"
-                      title="Put this version back in the Code tab"
-                      (click)="restoreTurnCode(turn)">Use this code</button>
+                    (click)="clearThread()"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              @if (showThread) {
+                <ol class="codeline-thread-list">
+                  @for (turn of turns; track turn) {
+                    <li
+                      class="codeline-turn"
+                      [class.assistant]="turn.role === 'assistant'"
+                      [class.auto]="turn.kind === 'auto_fix'"
+                    >
+                      <div class="codeline-turn-head">
+                        <span class="codeline-turn-role">{{ turnRoleLabel(turn) }}</span>
+                        @if (turn.code) {
+                          <button
+                            type="button"
+                            class="codeline-thread-btn"
+                            [disabled]="isBusy"
+                            title="Put this version back in the Code tab"
+                            (click)="restoreTurnCode(turn)"
+                          >
+                            Use this code
+                          </button>
+                        }
+                      </div>
+                      <pre class="codeline-turn-text">{{ turn.content }}</pre>
+                    </li>
+                  }
+                </ol>
+              }
             </div>
-            <pre class="codeline-turn-text">{{ turn.content }}</pre>
-          </li>
-        </ol>
-      </div>
-
-      <!-- Feedback composer — the next iteration on this cell's answer -->
-      <div *ngIf="canRefine" class="codeline-refine">
-        <label class="pipeline-codeline-field-label" [attr.for]="'codeline-refine-' + position">
-          Feedback to the assistant
-        </label>
-        <textarea
-          class="pipeline-codeline-textarea refine"
-          [id]="'codeline-refine-' + position"
-          [ngModel]="refineText"
-          (ngModelChange)="onRefineChanged($event)"
-          (keydown.control.enter)="sendRefinement()"
-          (keydown.meta.enter)="sendRefinement()"
-          placeholder="What should change? e.g. use monthly buckets, plot train and test separately, drop the empty months"
-          rows="2"></textarea>
-        <div class="codeline-refine-bar">
-          <button type="button"
+          }
+          <!-- Feedback composer — the next iteration on this cell's answer -->
+          @if (canRefine) {
+            <div class="codeline-refine">
+              <label
+                class="pipeline-codeline-field-label"
+                [attr.for]="'codeline-refine-' + position"
+              >
+                Feedback to the assistant
+              </label>
+              <textarea
+                class="pipeline-codeline-textarea refine"
+                [id]="'codeline-refine-' + position"
+                [ngModel]="refineText"
+                (ngModelChange)="onRefineChanged($event)"
+                (keydown.control.enter)="sendRefinement()"
+                (keydown.meta.enter)="sendRefinement()"
+                placeholder="What should change? e.g. use monthly buckets, plot train and test separately, drop the empty months"
+                rows="2"
+              ></textarea>
+              <div class="codeline-refine-bar">
+                <button
+                  type="button"
                   class="run-btn refine"
                   [disabled]="isBusy || !refineText.trim()"
-                  (click)="sendRefinement()">
-            {{ isBusy ? 'Working…' : 'Send feedback' }}
-          </button>
-          <span class="codeline-refine-hint">
-            Keeps this cell's thread — the assistant revises the pinned code and last run instead of starting over. Ctrl+Enter sends.
-          </span>
+                  (click)="sendRefinement()"
+                >
+                  {{ isBusy ? 'Working…' : 'Send feedback' }}
+                </button>
+                <span class="codeline-refine-hint">
+                  Keeps this cell's thread — the assistant revises the pinned code and last run
+                  instead of starting over. Ctrl+Enter sends.
+                </span>
+              </div>
+            </div>
+          }
         </div>
-      </div>
+      }
     </div>
-  </div>
+  }
 </div>

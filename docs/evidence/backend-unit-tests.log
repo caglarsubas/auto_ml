@@ -1,0 +1,52 @@
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+.........................                                                [100%]
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:47
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:47: PendingDeprecationWarning: The set_bad function will be deprecated in a future version. Use cmap.with_extremes(bad=...) or Colormap(bad=...) instead.
+    red_blue.set_bad(gray_rgb.tolist(), 1.0)
+
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:48
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:48: PendingDeprecationWarning: The set_over function will be deprecated in a future version. Use cmap.with_extremes(over=...) or Colormap(over=...) instead.
+    red_blue.set_over(gray_rgb.tolist(), 1.0)
+
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:49
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:49: PendingDeprecationWarning: The set_under function will be deprecated in a future version. Use cmap.with_extremes(under=...) or Colormap(under=...) instead.
+    red_blue.set_under(gray_rgb.tolist(), 1.0)  # "under" is incorrectly used instead of "bad" in the scatter plot
+
+tests/unit/test_ai_skills.py: 3 warnings
+tests/unit/test_ai_actions.py: 7 warnings
+tests/unit/test_ai_cache_telemetry.py: 28 warnings
+  /app/backend/ai_assistant/cache.py:126: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    r.setex(_key(file_id, artifact), ttl, payload)
+
+tests/unit/test_ai_cache_telemetry.py: 11 warnings
+  /app/backend/ai_assistant/cache.py:234: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    pipe.setex(_key(file_id, artifact), ttl, payload)
+
+tests/unit/test_data_quality.py: 10 warnings
+  /usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4608: RuntimeWarning: invalid value encountered in subtract
+    diff_b_a = b - a
+
+tests/unit/test_data_quality.py: 10 warnings
+  /usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4609: RuntimeWarning: invalid value encountered in multiply
+    lerp_interpolation = add(a, diff_b_a * t, out=... if out is None else out)
+
+tests/unit/test_hyperparam.py::TestHyperparamMetrics::test_single_class_roc_auc_is_nan
+  /usr/local/lib/python3.12/site-packages/sklearn/metrics/_classification.py:614: UserWarning: A single label was found in 'y_true' and 'y_pred'. For the confusion matrix to have the correct shape, use the 'labels' parameter to pass all known labels.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1033 passed, 73 warnings in 138.55s (0:02:18)

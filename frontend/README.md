@@ -1,6 +1,7 @@
 # DeclarAI Frontend
 
-Angular 18 single-page application for the DeclarAI AutoML platform. Generated
+Angular 22 single-page application for the DeclarAI AutoML platform. Use Node 24
+and `npm ci` to install the locked dependencies. Generated
 with the [Angular CLI](https://github.com/angular/angular-cli) and served on
 port `4300` in the docker-compose stack.
 
@@ -12,11 +13,26 @@ npm start        # ng serve (http://localhost:4200 locally, 4300 in Docker)
 
 The app reloads automatically on source changes.
 
+Sign-in uses Django sessions and CSRF protection. Create an account through the
+backend administration command; browser-local credentials no longer grant
+access. Configure the API's `DECLARAI_ALLOWED_ORIGINS` for the frontend origin.
+The default frontend build uses client rendering so protected routes recheck
+the browser session. Retained SSR sources are not part of the supported build.
+
 ## Build
 
 ```bash
 npm run build    # artifacts in dist/frontend
+npm run serve:preview # local preview of the production configuration
 ```
+
+The Compose frontend remains a development server. Built assets, TLS and an
+offline installation/recovery profile are still required by D07 before private
+release. See [foundation implementation](../docs/FOUNDATION_IMPLEMENTATION.md)
+for the current qualification boundary.
+
+Typography and Material Icons are bundled under `src/assets/fonts/` with their
+licenses and source hashes. Frontend production builds require no font CDN.
 
 ## Testing
 

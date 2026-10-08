@@ -27,8 +27,8 @@ The name *DeclarAI* reflects this philosophy: models are built through a series 
 
 | Layer | Technology | Port |
 |-------|------------|------|
-| **Frontend** | Angular 18 · Angular Material · Plotly.js | `4300` |
-| **Backend** | Django 5.1 · Django REST Framework · Python 3.12 | `8001` |
+| **Frontend** | Angular 22 · Angular Material · Plotly.js | `4300` |
+| **Backend** | Django 5.2 LTS · Django REST Framework · Python 3.12 | `8001` |
 | **Infrastructure** | Docker Compose (2 services, hot-reload dev volumes) | — |
 | **Database** | SQLite (development) | — |
 
@@ -369,6 +369,18 @@ match the engine-side key file.
 docker compose up --build -d
 ```
 
+Sign-in now requires a Django account. On a new local installation, create the
+initial administrator interactively:
+
+```bash
+docker compose exec backend python backend/manage.py createsuperuser
+```
+
+The entrypoint applies migrations, including the additive holdout-access
+receipt table. Existing files and pipeline records remain in place. See the
+[foundation implementation record](docs/FOUNDATION_IMPLEMENTATION.md) for
+contract changes, legacy qualification and current release limitations.
+
 | Service | URL |
 |---------|-----|
 | **Frontend** | http://localhost:4300 |
@@ -438,7 +450,7 @@ auto-ml/
 │       └── login/              # Authentication UI
 ├── docker/
 │   ├── backend.Dockerfile      # Python 3.12, system deps, pip install
-│   └── frontend.Dockerfile     # Node 20, Angular CLI, ng serve
+│   └── frontend.Dockerfile     # Node 24, Angular CLI, ng serve
 ├── docker-compose.yml          # Service definitions, port mapping, volume mounts
 ├── run_tests.sh                # Unified test runner with grouped reporting
 └── ToDoS.txt                   # Development roadmap and pending items
@@ -452,8 +464,8 @@ auto-ml/
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Django | ≥ 5.1 | Web framework & ORM |
-| Django REST Framework | ≥ 3.15 | REST API layer |
+| Django | ≥ 5.2.18, < 5.3 | Web framework & ORM (LTS) |
+| Django REST Framework | ≥ 3.16, < 3.17 | REST API layer |
 | pandas | ≥ 2.2 | DataFrame manipulation, data quality |
 | numpy | ≥ 1.26 | Numerical computation |
 | scipy | ≥ 1.11 | Statistical functions (PSI, JSD, distributions) |
@@ -474,8 +486,8 @@ auto-ml/
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Angular | 18.2 | Single-page application framework |
-| Angular Material | 18.2 | UI component library (dropdowns, dialogs, progress bars) |
+| Angular | 22.2 | Single-page application framework |
+| Angular Material | 22.2 | UI component library (dropdowns, dialogs, progress bars) |
 | Plotly.js | ≥ 2.35 | Interactive charts (beeswarm, ROC, PR, SFS progression) |
 | mathjs | ≥ 13.1 | Numeric utilities |
 | RxJS | ~7.8 | Reactive state management, observables, polling |
@@ -585,11 +597,17 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 
 ## Roadmap
 
+The adopted development sequence is the [DeclarAI product development roadmap](docs/PRODUCT_DEVELOPMENT_ROADMAP.md), backed by the authoritative [D01–D17 ledger](docs/product-roadmap.json). It covers scientific correctness, private deployment with sandboxed expert Python, independent review, credit workflows, and outcome monitoring. Regenerate/check it with `python3 scripts/render_product_roadmap.py [--check]`.
+
+The entries below preserve the earlier capability history. The ledger defines current priorities, dependencies, acceptance gates, and evidence status.
+
+The [foundation implementation record](docs/FOUNDATION_IMPLEMENTATION.md) describes the current code, verification, migration steps and outstanding release gates. No roadmap milestone is qualified as released yet.
+
 - ~~**Feature sorter**~~ — Done (v3.1): combined SHAP%×Gain% order (+ optional top-K) as SFS candidate pool
 - ~~**Export results**~~ — Done (v2.59+): SFS CSV export, CRISP/evaluation/deployment packs
 - ~~**Stopping criteria**~~ — Done: %-change metrics and min/max feature count in SFS UI + backend
 - ~~**Parallel execution**~~ — Done: SFS `n_jobs` parallel candidate evaluation
-- ~~**Causality features**~~ — Done (v3.1): sequential pattern MVP auto-loads on Feature Card Explainability tab
+- ~~**Sequential patterns**~~ — Existing MVP (v3.1): associational pattern detection auto-loads on Feature Card Explainability tab; it does not establish causality
 - ~~**3-layer layout**~~ — Done: left CRISP-DM navigation, middle workspace, right assistant chat
 - ~~**Optuna TPE**~~ — Done (v2.57): Bayesian search uses Optuna TPE; FE label remains Bayesian
 - ~~**Logistic regression pipeline**~~ — Done (v3.0): train → eval → deploy via sklearn adapter
@@ -601,11 +619,11 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 - ~~**RAG hardening**~~ — Done (v3.4): Redis vector cache, Chroma persist/index on boot, `[KBn]` citations in chat
 - ~~**RAG regression coverage**~~ — Done (v3.4.1): gemma4:26b should-RAG / should-not-RAG golden suite with telemetry contracts
 
-### Open / candidate next
+### Earlier candidates now mapped to the adopted roadmap
 
-Sourced from the `!CFH!` and future-improvements blocks in `ToDoS.txt` — not yet scheduled:
+Sourced from the `!CFH!` and future-improvements blocks in `ToDoS.txt`: correlated-cluster SFS and before/after comparison map to D10; custom scoring maps to D11 with D08 isolation prerequisites.
 
-- **SFS over correlated clusters** — let the assistant temporarily adjust the pipeline to run SFS across a high-VIF cluster instead of pre-dropping its members, on explicit user confirmation
+- **SFS over correlated clusters** — compare correlated alternatives and grouped ablations through immutable experiment branches, with paired folds and recorded budgets
 - **Custom scoring functions via UI** — user-supplied scorer for SFS / hyperparameter search
 - **Before/after feature comparison** — side-by-side view of the model with and without a candidate feature
 

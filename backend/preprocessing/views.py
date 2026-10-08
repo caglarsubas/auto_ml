@@ -606,8 +606,10 @@ class PreprocessingRunView(APIView):
             if 'Target' in df.columns:
                 preserve_cols.add('Target')
             try:
-                if isinstance(split, dict) and split.get('strategy') == 'oot' and split.get('date_column'):
-                    preserve_cols.add(str(split.get('date_column')))
+                if isinstance(split, dict):
+                    for key in ('date_column', 'group_column', 'label_end_column'):
+                        if split.get(key):
+                            preserve_cols.add(str(split[key]))
             except Exception:
                 pass
             # Extract data_dictionary from request payload (for categorical outlier cleaning LoM lookup)
@@ -680,63 +682,9 @@ class PreprocessingRunView(APIView):
                 feature_stats_after = None
                 print(f"[PreprocessingRun] feature_stats_after failed: {e}")
 
-            # Build split indices helper
             def _build_split_indices(frame: pd.DataFrame):
-                try:
-                    if isinstance(split, dict) and split.get('strategy') == 'oot':
-                        date_col = split.get('date_column')
-                        # Determine a series to base the split: prefer processed frame; else fall back to original df aligned to frame index
-                        ser = None
-                        if date_col and date_col in frame.columns:
-                            ser = pd.to_datetime(frame[date_col], errors='coerce', dayfirst=True)
-                        elif date_col and 'df' in locals() and isinstance(df, pd.DataFrame) and date_col in df.columns:
-                            base = pd.to_datetime(df[date_col], errors='coerce', dayfirst=True)
-                            try:
-                                ser = base.loc[frame.index]
-                            except Exception:
-                                # last resort: reindex with intersection
-                                inter = frame.index.intersection(base.index)
-                                ser = base.loc[inter]
-                                frame = frame.loc[inter]
-                        if ser is None or ser.shape[0] == 0:
-                            print("[PreprocessingRun] OOT split: date_column missing/unaligned; falling back to random")
-                        else:
-                            pct = split.get('percent')
-                            if pct is not None:
-                                try:
-                                    pctf = float(pct)
-                                except Exception:
-                                    pctf = None
-                                if pctf is not None and 0 < pctf < 100:
-                                    order = ser.sort_values(kind='mergesort').index  # stable sort
-                                    k = int(len(order) * (1 - pctf / 100.0))
-                                    k = max(0, min(len(order), k))
-                                    train_idx = order[:k]
-                                    test_idx = order[k:]
-                                    print(f"[PreprocessingRun] OOT percent split using {date_col} percent={pctf}% -> train={len(train_idx)} test={len(test_idx)}")
-                                    return train_idx, test_idx
-                            cutoff = split.get('cutoff')
-                            if cutoff:
-                                mask_train = ser <= pd.to_datetime(cutoff, dayfirst=True)
-                                train_idx = ser.index[mask_train]
-                                test_idx = ser.index[~mask_train]
-                                print(f"[PreprocessingRun] OOT cutoff split using {date_col} cutoff={cutoff} train={len(train_idx)} test={len(test_idx)}")
-                                return train_idx, test_idx
-                except Exception as e:
-                    print(f"[PreprocessingRun] OOT split failed: {e}, falling back to random")
-                # random split — use percent from split config if available
-                train_ratio = 0.75  # default 75/25
-                if isinstance(split, dict) and split.get('percent') is not None:
-                    try:
-                        pctf = float(split['percent'])
-                        if 0 < pctf < 100:
-                            train_ratio = 1.0 - pctf / 100.0
-                    except Exception:
-                        pass
-                rng = np.random.RandomState(42)
-                m = rng.rand(len(frame)) < train_ratio
-                print(f"[PreprocessingRun] Random split train_ratio={train_ratio:.2f} -> train={m.sum()} test={(~m).sum()}")
-                return frame.index[m], frame.index[~m]
+                train, test, _meta = build_outer_split_indices(frame, split=split)
+                return train, test
 
             # ── Split Validation: target distribution per split ──
             # train_idx_sv / test_idx_sv were built + remapped before CSV save so

@@ -97,15 +97,20 @@ class _PlattWrapper:
 
 def apply_calibrator(calibrator: Any, y_proba) -> np.ndarray:
     if calibrator is None:
-        return np.asarray(y_proba, dtype=float).ravel()
+        raise ValueError('A required calibrator cannot be empty.')
     proba = np.asarray(y_proba, dtype=float).ravel()
+    if not np.isfinite(proba).all():
+        raise ValueError('Calibration inputs must be finite.')
     if hasattr(calibrator, 'transform'):
         out = calibrator.transform(proba)
     elif hasattr(calibrator, 'predict'):
         out = calibrator.predict(proba)
     else:
-        return proba
-    return np.clip(np.asarray(out, dtype=float).ravel(), 0.0, 1.0)
+        raise ValueError('Calibrator does not implement transform or predict.')
+    out = np.asarray(out, dtype=float).ravel()
+    if len(out) != len(proba) or not np.isfinite(out).all():
+        raise ValueError('Calibration outputs must be finite and preserve row alignment.')
+    return np.clip(out, 0.0, 1.0)
 
 
 def save_calibrator(file_id: int, calibrator: Any, media_root: str) -> Optional[str]:

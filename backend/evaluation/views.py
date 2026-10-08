@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from evaluation.eval_utils import (
-    build_model_card, evaluate_binary, evaluate_regression, feature_psi_report,
+    build_model_card, evaluate_binary, evaluate_multiclass, evaluate_regression, feature_psi_report, select_development_threshold, threshold_table,
 )
 from modeling.calibration_utils import apply_calibrator, load_calibrator
 from modeling.crisp_dm import (
@@ -28,6 +28,9 @@ from modeling.crisp_dm import (
     normalize_business_understanding,
     recommend_threshold_by_cost,
 )
+from modeling.execution_artifacts import load_execution, execution_root
+from modeling.models import HoldoutAccess
+from modeling.execution_artifacts import publish_assessment, replace_projection
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
 
@@ -103,40 +106,72 @@ class EvaluationRunView(APIView):
         except Exception:
             return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
 
-        threshold = float(data.get('threshold', 0.5))
+        try:
+            threshold = float(data.get('threshold', 0.5))
+            if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response({'error': 'threshold must be finite and between zero and one.'}, status=status.HTTP_400_BAD_REQUEST)
         features = data.get('features')
         bu, gov = _load_bu_from_request_or_run(data, file_id)
 
-        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-        if not os.path.exists(train_data_path):
-            return Response({
-                'error': 'Training data not found. Run modeling first.',
-            }, status=status.HTTP_404_NOT_FOUND)
-
         modeling_status = _load_modeling_status(file_id) or {}
+        execution_id = data.get('execution_id') or modeling_status.get('execution_id')
+        execution_manifest = None
+        if execution_id:
+            try:
+                frozen_status, execution_manifest = load_execution(execution_id, file_id)
+                if not data.get('execution_id') and (modeling_status.get('model') or {}).get('model_path') != (frozen_status.get('model') or {}).get('model_path'):
+                    return Response({'error': 'This candidate has changed since its execution snapshot. Create a new version before final assessment, or select an exact execution_id.'}, status=status.HTTP_409_CONFLICT)
+                modeling_status = frozen_status
+            except (ValueError, OSError, KeyError) as error:
+                return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
         model_info = modeling_status.get('model') or {}
+        train_data_path = os.path.join(settings.MEDIA_ROOT, model_info.get('train_data_path') or f'train_data/{file_id}_train_data.pkl')
+        if not os.path.exists(train_data_path):
+            return Response({'error': 'Training data not found. Run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+        contract = model_info.get('prediction_contract') or {}
+        if contract:
+            bu = normalize_business_understanding({
+                'problem_type': contract['task'], 'target_contract': contract['target_contract'],
+                'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
+                'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features'],
+            })
         model_rel = model_info.get('model_path') or f'models/{file_id}_xgb_classifier.json'
         model_abs = os.path.join(settings.MEDIA_ROOT, model_rel) if not os.path.isabs(model_rel) else model_rel
         if not os.path.exists(model_abs):
             return Response({'error': f'Model artifact not found: {model_rel}'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
+            dataset_files = (execution_manifest or {}).get('files') or {}
+            dataset_digest = next((value['sha256'] for name, value in dataset_files.items() if name.startswith('dataset.')), '')
+            receipt = HoldoutAccess.objects.create(
+                execution_id=execution_id, file_id=file_id, dataset_sha256=dataset_digest,
+                parameters={'threshold': data.get('threshold'), 'features': features, 'contract_sha256': contract.get('sha256')},
+                actor=request.user if request.user.is_authenticated else None,
+            )
             with open(train_data_path, 'rb') as f:
                 train_data = pickle.load(f)
-            X_test = train_data.get('X_test')
-            y_test = train_data.get('y_test')
+            final_data = train_data
+            if train_data.get('holdout_path'):
+                with open(os.path.join(settings.MEDIA_ROOT, train_data['holdout_path']), 'rb') as stream:
+                    final_data = pickle.load(stream)
+            X_test = final_data.get('X_test')
+            y_test = final_data.get('y_test')
             if X_test is None or y_test is None or len(X_test) == 0:
                 return Response({
                     'error': 'Locked outer test set missing from train_data. Re-run modeling.',
                 }, status=status.HTTP_409_CONFLICT)
 
+            if execution_id and train_data.get('feature_names'):
+                X_test = X_test.loc[:, train_data['feature_names']]
             if features:
                 valid = [c for c in features if c in X_test.columns]
                 if valid:
                     X_test = X_test[valid]
 
             # Prefer hyperparam-selected features when present and no override
-            if not features:
+            if not features and not execution_id:
                 hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
                 if os.path.exists(hp_path):
                     try:
@@ -166,17 +201,11 @@ class EvaluationRunView(APIView):
                 from modeling.alt_pipelines import evaluate_anomaly_scores
                 y_scores = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
                 anomaly_metrics = evaluate_anomaly_scores(y_test, y_scores)
-                # Reuse binary metrics when labels allow ranking eval
-                if anomaly_metrics.get('roc_auc') is not None:
-                    evaluation = evaluate_binary(y_test, y_scores, threshold=threshold)
-                    base_metrics = evaluation.get('metrics') or {}
-                    evaluation['metrics'] = {**base_metrics, **anomaly_metrics}
-                else:
-                    evaluation = {
-                        'task': 'anomaly',
-                        'metrics': anomaly_metrics,
-                        'threshold_table': [],
-                    }
+                evaluation = {
+                    'task': 'anomaly', 'metrics': anomaly_metrics, 'threshold_table': [],
+                    'score_semantics': 'anomaly ranking; not a probability',
+                    'metric_limitation': 'Probability calibration, Brier and log loss do not apply to these ranking scores. Decision-policy analysis requires separately reviewed thresholds.',
+                }
                 evaluation['scores_calibrated'] = False
                 evaluation['calibration'] = {'applied': False, 'fitted': False, 'skipped': True}
                 evaluation['comparison'] = {
@@ -196,6 +225,10 @@ class EvaluationRunView(APIView):
                     'evaluation_test_r2': evaluation['metrics'].get('r2'),
                     'evaluation_test_rmse': evaluation['metrics'].get('rmse'),
                 }
+            elif len(contract.get('class_mapping') or []) > 2 or (not contract and len(np.unique(y_test)) > 2):
+                evaluation = evaluate_multiclass(y_test, adapter.predict_proba(X_test))
+                evaluation['scores_calibrated'] = False
+                evaluation['calibration'] = {'fitted': False, 'applied': False, 'reason': 'Multiclass calibration is not supported.'}
             else:
                 y_proba_raw = np.asarray(adapter.predict_proba(X_test), dtype=float).ravel()
                 y_proba = y_proba_raw
@@ -218,18 +251,31 @@ class EvaluationRunView(APIView):
                             'calibrator_path': calibrator_rel,
                         }
                     except Exception as cal_err:
-                        evaluation_calibration = {
-                            **calibration_meta,
-                            'applied': False,
-                            'warning': f'Calibrator load failed: {cal_err}',
-                        }
+                        raise ValueError('Required calibrator could not be applied; uncalibrated evaluation is blocked.') from cal_err
                 else:
+                    if calibration_meta.get('fitted'):
+                        raise ValueError('Model declares fitted calibration but has no calibrator artifact.')
                     evaluation_calibration = {
                         **calibration_meta,
                         'applied': False,
                     }
 
+                cm = (bu.get('success_criteria') or {}).get('cost_matrix') or {}
+                X_valid, y_valid = train_data.get('X_valid'), train_data.get('y_valid')
+                recommendation, development_rows = None, []
+                if X_valid is not None and y_valid is not None and len(y_valid):
+                    p_valid = adapter.predict_proba(X_valid[list(X_test.columns)])
+                    if evaluation_calibration.get('applied'):
+                        p_valid = apply_calibrator(calibrator, p_valid)
+                    recommendation, development_rows = select_development_threshold(
+                        y_valid, p_valid, cm.get('fn_cost', 1), cm.get('fp_cost', 1),
+                    )
+                if 'threshold' not in data and recommendation is not None:
+                    threshold = float(recommendation['threshold'])
                 evaluation = evaluate_binary(y_test, y_proba, threshold=threshold)
+                evaluation['threshold_selection_partition'] = 'user_declared' if 'threshold' in data else ('development_validation' if recommendation else 'fixed_default')
+                evaluation['development_threshold_table'] = development_rows
+                evaluation['recommended_threshold'] = recommendation
                 evaluation['scores_calibrated'] = bool(evaluation_calibration.get('applied'))
                 evaluation['calibration'] = evaluation_calibration
                 if evaluation_calibration.get('applied'):
@@ -244,32 +290,17 @@ class EvaluationRunView(APIView):
                     'modeling_test_auc_calibrated': model_info.get('test_auc_calibrated'),
                     'evaluation_test_auc': evaluation['metrics'].get('roc_auc'),
                 }
-                # Business-cost table from BU cost matrix
-                cm = (bu.get('success_criteria') or {}).get('cost_matrix') or {}
-                thr_rows = evaluation.get('threshold_table') or []
-                # Attach confusion counts for cost when available via recompute
-                enriched_thr = []
-                for row in thr_rows:
-                    r = dict(row)
-                    try:
-                        thr = float(r.get('threshold'))
-                        y_hat = (y_proba >= thr).astype(int)
-                        from sklearn.metrics import confusion_matrix
-                        tn, fp, fn, tp = confusion_matrix(
-                            np.asarray(y_test).astype(int), y_hat, labels=[0, 1],
-                        ).ravel()
-                        r['tn'], r['fp'], r['fn'], r['tp'] = int(tn), int(fp), int(fn), int(tp)
-                    except Exception:
-                        pass
-                    enriched_thr.append(r)
-                cost_rows = expected_cost_table(
-                    enriched_thr,
-                    fn_cost=float(cm.get('fn_cost', 1.0)),
-                    fp_cost=float(cm.get('fp_cost', 1.0)),
+                # Final assessment reports the frozen operating point only.
+                evaluation['threshold_table'] = expected_cost_table(
+                    threshold_table(np.asarray(y_test).astype(int), y_proba, thresholds=[threshold]),
+                    fn_cost=float(cm.get('fn_cost', 1)), fp_cost=float(cm.get('fp_cost', 1)),
                 )
-                evaluation['threshold_table'] = cost_rows
-                evaluation['recommended_threshold'] = recommend_threshold_by_cost(cost_rows)
 
+            evaluation['execution_id'] = execution_id
+            evaluation['prediction_contract'] = contract
+            evaluation['holdout_access_id'] = str(receipt.pk)
+            evaluation['evidence_status'] = 'exploratory'
+            evaluation['evidence_limitation'] = 'Final outcomes inspected; upstream fold-local preprocessing and independent review are not yet qualified for confirmatory claims.'
             evaluation['split'] = train_data.get('split_meta') or model_info.get('split') or {}
             evaluation['n_test'] = int(len(y_test))
             evaluation['feature_count'] = int(X_test.shape[1])
@@ -286,7 +317,11 @@ class EvaluationRunView(APIView):
             except Exception as psi_err:
                 evaluation['psi_vs_train'] = {'error': str(psi_err)}
 
-            lineage = load_lineage(file_id)
+            if execution_id and model_info.get('lineage_path'):
+                with open(os.path.join(settings.MEDIA_ROOT, model_info['lineage_path']), encoding='utf-8') as stream:
+                    lineage = json.load(stream)
+            else:
+                lineage = load_lineage(file_id)
             card = build_model_card(
                 file_id, evaluation,
                 lineage=lineage,
@@ -308,10 +343,15 @@ class EvaluationRunView(APIView):
                 'evaluation_path': os.path.relpath(eval_path, settings.MEDIA_ROOT),
                 'model_card_path': os.path.relpath(card_path, settings.MEDIA_ROOT),
             }
-            with open(eval_path, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, indent=2, default=str)
-            with open(card_path, 'w', encoding='utf-8') as f:
-                json.dump(card, f, indent=2, default=str)
+            if execution_id:
+                assessment_dir = publish_assessment(execution_id, receipt.pk, payload, card)
+                replace_projection(assessment_dir / 'evaluation.json', eval_path)
+                replace_projection(assessment_dir / 'model_card.json', card_path)
+            else:
+                with open(eval_path, 'w', encoding='utf-8') as f:
+                    json.dump(payload, f, indent=2, default=str)
+                with open(card_path, 'w', encoding='utf-8') as f:
+                    json.dump(card, f, indent=2, default=str)
 
             # Attach lineage pointer onto PipelineRun state when possible
             try:

@@ -4,6 +4,7 @@ import { Observable, throwError } from 'rxjs';
 import { catchError, tap, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { AssistantStep } from './ai-assistant.service';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,7 +12,7 @@ import { AssistantStep } from './ai-assistant.service';
 export class DataService {
   private apiUrl = environment.apiBaseUrl;
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private auth: AuthService) { }
 
   uploadFile(file: File): Observable<any> {
     const formData = new FormData();
@@ -139,16 +140,18 @@ export class DataService {
 
   // Start modeling with the processed file path and optional algorithm
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[], encodingPlan?: any[], encodingUseNative?: boolean): Observable<any> {
+  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[], encodingPlan?: any[], encodingUseNative?: boolean, businessUnderstanding?: any, pipelineRunId?: number): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };
     if (algorithm) payload.algorithm = algorithm;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     if (encodingPlan && encodingPlan.length > 0) payload.encoding_plan = encodingPlan;
     if (encodingUseNative !== undefined) payload.encoding_use_native = encodingUseNative;
+    if (businessUnderstanding) payload.business_understanding = businessUnderstanding;
+    if (pipelineRunId !== undefined) payload.pipeline_run_id = pipelineRunId;
     return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting modeling:', error);
-        return throwError(() => new Error(error.message || 'Failed to start modeling'));
+        return throwError(() => new Error(error.error?.model?.error || error.error?.error || error.message || 'Failed to start modeling'));
       })
     );
   }
@@ -604,7 +607,8 @@ export class DataService {
 
       fetch(`${this.apiUrl}ai-assistant/chat/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.auth.csrfToken },
         body: JSON.stringify({ ...body, stream: true }),
         signal: controller.signal,
       }).then(async response => {

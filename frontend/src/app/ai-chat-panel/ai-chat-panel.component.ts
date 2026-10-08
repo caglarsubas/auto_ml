@@ -1,13 +1,32 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, HostListener, NgZone } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  ViewChild,
+  ElementRef,
+  AfterViewChecked,
+  HostListener,
+  NgZone,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { Subscription } from 'rxjs';
-import { AiAssistantService, AiAction, AiFeedbackState, AiIntentLabel, AssistantStep, ChatMessage } from '../services/ai-assistant.service';
+import {
+  AiAssistantService,
+  AiAction,
+  AiFeedbackState,
+  AiIntentLabel,
+  AssistantStep,
+  ChatMessage,
+} from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
 @Component({
   selector: 'app-ai-chat-panel',
   templateUrl: './ai-chat-panel.component.html',
-  styleUrls: ['./ai-chat-panel.component.css']
+  styleUrls: ['./ai-chat-panel.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('chatContainer') chatContainer!: ElementRef;
@@ -25,14 +44,21 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private feedbackSequence = 0;
 
   // Model selector
-  availableModels: Array<{key: string; display_name: string; provider: string; ram_gb?: number; tool_calling_mode?: string}> = [];
+  availableModels: Array<{
+    key: string;
+    display_name: string;
+    provider: string;
+    ram_gb?: number;
+    tool_calling_mode?: string;
+  }> = [];
   selectedModel: string = 'engine-gemma4-26b';
   showModelSelector: boolean = false;
   // Engine-discovery health from the backend (see ai_assistant.model_registry
   // engine_status()).  When `available` is false the local inference engine is
   // unreachable and the list is cloud-only — surfaced in the dropdown so the
   // degradation is visible instead of silent.
-  engineStatus: {available: boolean; model_count?: number; last_error?: string | null} | null = null;
+  engineStatus: { available: boolean; model_count?: number; last_error?: string | null } | null =
+    null;
 
   // ── v2.27.2 — defensive empty-response copy ─────────────────────────
   // The backend now always returns a meaningful `message` even when the
@@ -56,7 +82,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     public aiService: AiAssistantService,
     private dataService: DataService,
     private sharedService: SharedService,
-    private zone: NgZone
+    private zone: NgZone,
   ) {}
 
   ngOnInit(): void {
@@ -64,14 +90,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     this.loadModels(true);
 
     this.subscriptions.add(
-      this.aiService.messages$.subscribe(msgs => {
+      this.aiService.messages$.subscribe((msgs) => {
         this.messages = msgs;
         this.shouldScrollToBottom = true;
-      })
+      }),
     );
 
     this.subscriptions.add(
-      this.aiService.pendingContext$.subscribe(pending => {
+      this.aiService.pendingContext$.subscribe((pending) => {
         if (pending) {
           const ctx = this.aiService.consumePendingContext();
           if (ctx) {
@@ -80,7 +106,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
             this.sendMessage(ctx.prompt, ctx.intentLabels, ctx.intentSource);
           }
         }
-      })
+      }),
     );
   }
 
@@ -138,57 +164,65 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     }
 
     const fileId = this.sharedService.getCurrentFileId();
-    this.dataService.sendAiChat(
-      text,
-      ctx,
-      this.currentSection || 'general',
-      history,
-      fileId ?? undefined,
-      this.selectedModel,
-      intentLabels,
-      intentSource,
-      undefined,
-      { onStep: step => this.onProgressStep(step) }
-    ).subscribe({
-      next: (resp: any) => {
-        const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
-          type: a.type,
-          payload: a.payload,
-          applied: false,
-        }));
-        const fallbackMsg = actions.length > 0
-          ? 'I\'ve prepared the following operation for you. Review the details below and click **Apply** to execute.'
-          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
-        // v2.38.0: capture chat_span_id (only present when actions exist
-        // AND Prometa SDK is active server-side).  Stored on the message
-        // so applyAction can forward it as parent_span_id when the user
-        // clicks Apply, enabling cross-trace linking in Prometa.
-        const ragSources = Array.isArray(resp.rag_sources)
-          ? resp.rag_sources.map((s: any) => ({
-              source: String(s?.source || ''),
-              title: String(s?.title || ''),
-              heading: String(s?.heading || ''),
-              chunk_id: String(s?.chunk_id || ''),
-            })).filter((s: { source: string }) => !!s.source)
-          : undefined;
-        this.aiService.updateLastMessage(
-          resp.message || fallbackMsg,
-          actions,
-          resp.chat_span_id,
-          resp.chat_trace_id,
-          resp.chat_session_id,
-          ragSources,
-        );
-        this.aiService.finalizeProgressSteps();
-        this.isLoading = false;
-      },
-      error: (err: any) => {
-        const errorMsg = err?.error?.error || err?.message || 'Failed to get AI response. Please check your API key.';
-        this.aiService.updateLastMessage(`Error: ${errorMsg}`);
-        this.aiService.finalizeProgressSteps();
-        this.isLoading = false;
-      }
-    });
+    this.dataService
+      .sendAiChat(
+        text,
+        ctx,
+        this.currentSection || 'general',
+        history,
+        fileId ?? undefined,
+        this.selectedModel,
+        intentLabels,
+        intentSource,
+        undefined,
+        { onStep: (step) => this.onProgressStep(step) },
+      )
+      .subscribe({
+        next: (resp: any) => {
+          const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
+            type: a.type,
+            payload: a.payload,
+            applied: false,
+          }));
+          const fallbackMsg =
+            actions.length > 0
+              ? "I've prepared the following operation for you. Review the details below and click **Apply** to execute."
+              : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
+          // v2.38.0: capture chat_span_id (only present when actions exist
+          // AND Prometa SDK is active server-side).  Stored on the message
+          // so applyAction can forward it as parent_span_id when the user
+          // clicks Apply, enabling cross-trace linking in Prometa.
+          const ragSources = Array.isArray(resp.rag_sources)
+            ? resp.rag_sources
+                .map((s: any) => ({
+                  source: String(s?.source || ''),
+                  title: String(s?.title || ''),
+                  heading: String(s?.heading || ''),
+                  chunk_id: String(s?.chunk_id || ''),
+                }))
+                .filter((s: { source: string }) => !!s.source)
+            : undefined;
+          this.aiService.updateLastMessage(
+            resp.message || fallbackMsg,
+            actions,
+            resp.chat_span_id,
+            resp.chat_trace_id,
+            resp.chat_session_id,
+            ragSources,
+          );
+          this.aiService.finalizeProgressSteps();
+          this.isLoading = false;
+        },
+        error: (err: any) => {
+          const errorMsg =
+            err?.error?.error ||
+            err?.message ||
+            'Failed to get AI response. Please check your API key.';
+          this.aiService.updateLastMessage(`Error: ${errorMsg}`);
+          this.aiService.finalizeProgressSteps();
+          this.isLoading = false;
+        },
+      });
   }
 
   /**
@@ -282,12 +316,9 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   isSpecializedAction(actionType: string): boolean {
-    return [
-      'execute_code',
-      'update_metadata',
-      'update_config',
-      'update_notes',
-    ].includes(actionType);
+    return ['execute_code', 'update_metadata', 'update_config', 'update_notes'].includes(
+      actionType,
+    );
   }
 
   getActionTitle(actionType: string): string {
@@ -302,7 +333,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     return actionType
       .split('_')
       .filter(Boolean)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ');
   }
 
@@ -356,7 +387,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           messageIndex,
           actionIndex,
         );
-      }
+      },
     });
   }
 
@@ -382,14 +413,15 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // Refresh declaration data
       this.sharedService.triggerDataRefresh();
       this.sharedService.triggerCheckpoint('ai_action_execute_code');
-
     } else if (actionType === 'update_metadata') {
       const applied = resp.applied || [];
       const errors = resp.errors || [];
       let msg = `✅ **Metadata updated.** ${applied.length} field(s) changed.`;
       if (desc) msg += ` ${desc}`;
       if (applied.length) {
-        msg += '\n\n' + applied.map((a: any) => `- **${a.column}**.${a.field} = \`${a.value}\``).join('\n');
+        msg +=
+          '\n\n' +
+          applied.map((a: any) => `- **${a.column}**.${a.field} = \`${a.value}\``).join('\n');
       }
       if (errors.length) {
         msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column}: ${e.error}`).join(', ');
@@ -412,7 +444,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         this.sharedService.emitMetadataUpdates(applied);
       }
       this.sharedService.triggerCheckpoint('ai_action_update_metadata');
-
     } else if (actionType === 'set_ordinal_ranking') {
       const applied = resp.applied || [];
       const errors = resp.errors || [];
@@ -427,10 +458,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       let msg = `✅ **Ordinal ranking set.** ${applied.length} feature(s) ranked.`;
       if (desc) msg += ` ${desc}`;
       if (applied.length) {
-        msg += '\n\n' + applied.map((a: any) => {
-          const rank = Array.isArray(a.ranking) ? a.ranking.join(' → ') : '';
-          return `- **${a.column}**: \`${rank}\``;
-        }).join('\n');
+        msg +=
+          '\n\n' +
+          applied
+            .map((a: any) => {
+              const rank = Array.isArray(a.ranking) ? a.ranking.join(' → ') : '';
+              return `- **${a.column}**: \`${rank}\``;
+            })
+            .join('\n');
       }
       if (errors.length) {
         msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || ''}: ${e.error}`).join(', ');
@@ -474,17 +509,20 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         this.sharedService.emitMetadataUpdates(impliedMetadata);
       }
       this.sharedService.triggerCheckpoint('ai_action_set_ordinal_ranking');
-
     } else if (actionType === 'update_config') {
       const applied = resp.applied || [];
       const errors = resp.errors || [];
       let msg = `✅ **Configuration updated.** ${applied.length} setting(s) changed.`;
       if (desc) msg += ` ${desc}`;
       if (applied.length) {
-        msg += '\n\n' + applied.map((a: any) => {
-          if (a.column) return `- **${a.key}**: ${a.column} = \`${a.value}\``;
-          return `- **${a.key}** = \`${JSON.stringify(a.value)}\``;
-        }).join('\n');
+        msg +=
+          '\n\n' +
+          applied
+            .map((a: any) => {
+              if (a.column) return `- **${a.key}**: ${a.column} = \`${a.value}\``;
+              return `- **${a.key}** = \`${JSON.stringify(a.value)}\``;
+            })
+            .join('\n');
       }
       if (errors.length) {
         msg += '\n\n⚠️ ' + errors.map((e: any) => `${e.column || e.key}: ${e.error}`).join(', ');
@@ -494,7 +532,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // Apply config changes to frontend state
       this._applyConfigChanges(applied);
       this.sharedService.triggerCheckpoint('ai_action_update_config');
-
     } else if (actionType === 'start_sfs') {
       // v2.25.0+: dedicated path for the AI to actually kick off SFS.
       // The backend action handler returns the validated config object;
@@ -511,12 +548,14 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           ? sc.metrics.map((m: any) => `${m.metric}≤${m.pct_change}%`).join(', ')
           : '?';
         const excl = Array.isArray(applied.excluded_features) ? applied.excluded_features : [];
-        msg += '\n\n' + [
-          `- **Methods**: \`${methods}\``,
-          `- **Stopping criteria**: ${metrics}, min=${sc.min_features ?? '?'}, max=${sc.max_features ?? '?'}`,
-          `- **Excluded features**: ${excl.length ? excl.map((c: string) => `\`${c}\``).join(', ') : '_none_'}`,
-          `- **Parallelism**: n_jobs=${applied.n_jobs ?? '?'}, top_k=${applied.top_k ?? '?'}`,
-        ].join('\n');
+        msg +=
+          '\n\n' +
+          [
+            `- **Methods**: \`${methods}\``,
+            `- **Stopping criteria**: ${metrics}, min=${sc.min_features ?? '?'}, max=${sc.max_features ?? '?'}`,
+            `- **Excluded features**: ${excl.length ? excl.map((c: string) => `\`${c}\``).join(', ') : '_none_'}`,
+            `- **Parallelism**: n_jobs=${applied.n_jobs ?? '?'}, top_k=${applied.top_k ?? '?'}`,
+          ].join('\n');
       }
       this.actionSuccess = 'SFS started.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
@@ -524,7 +563,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         this.sharedService.emitSfsStartRequest(applied);
       }
       this.sharedService.triggerCheckpoint('ai_action_start_sfs');
-
     } else if (actionType === 'start_data_purifier') {
       // v2.26.0+: dedicated path for the AI to fire the
       // "Run Preprocessing" button.  Validated config from the
@@ -538,14 +576,16 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         const opts = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
         const split = applied.split || null;
         const splitDesc = split
-          ? (split.strategy === 'oot'
-              ? `OOT on \`${split.date_column}\`${split.cutoff ? ` cutoff=${split.cutoff}` : ` (${split.percent ?? '?'}%)`}`
-              : `random ${split.percent ?? '?'}%`)
+          ? split.strategy === 'oot'
+            ? `OOT on \`${split.date_column}\`${split.cutoff ? ` cutoff=${split.cutoff}` : ` (${split.percent ?? '?'}%)`}`
+            : `random ${split.percent ?? '?'}%`
           : '_form defaults_';
-        msg += '\n\n' + [
-          `- **Purifier options**: ${opts.length ? opts.map((o: number) => `\`${o}\``).join(', ') : '_form defaults_'}`,
-          `- **Split**: ${splitDesc}`,
-        ].join('\n');
+        msg +=
+          '\n\n' +
+          [
+            `- **Purifier options**: ${opts.length ? opts.map((o: number) => `\`${o}\``).join(', ') : '_form defaults_'}`,
+            `- **Split**: ${splitDesc}`,
+          ].join('\n');
       }
       this.actionSuccess = 'Data purifier started.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
@@ -556,7 +596,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         });
       }
       this.sharedService.triggerCheckpoint('ai_action_start_data_purifier');
-
     } else if (actionType === 'update_purifier_selection') {
       // v2.28.0+: the "preview" sibling of start_data_purifier.
       // Edits the Data-Purifier checkbox UI WITHOUT firing the run.
@@ -574,23 +613,27 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // the broadcast so the form doesn't flash.
       const applied = resp.applied || {};
       const form = applied.form || 'noop';
-      const opts: number[] = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
+      const opts: number[] = Array.isArray(applied.purifier_options)
+        ? applied.purifier_options
+        : [];
       const adds: number[] = Array.isArray(applied.add) ? applied.add : [];
       const rems: number[] = Array.isArray(applied.remove) ? applied.remove : [];
 
       let msg = `✏️ **Purifier selection updated.**`;
       if (desc) msg += ` ${desc}`;
       if (form === 'wholesale') {
-        msg += '\n\n- **New selection**: ' + (opts.length
-          ? opts.map((o: number) => `\`${o}\``).join(', ')
-          : '_(cleared)_');
+        msg +=
+          '\n\n- **New selection**: ' +
+          (opts.length ? opts.map((o: number) => `\`${o}\``).join(', ') : '_(cleared)_');
       } else if (form === 'diff') {
         if (adds.length) msg += '\n- **Added**: ' + adds.map((o: number) => `\`${o}\``).join(', ');
-        if (rems.length) msg += '\n- **Removed**: ' + rems.map((o: number) => `\`${o}\``).join(', ');
+        if (rems.length)
+          msg += '\n- **Removed**: ' + rems.map((o: number) => `\`${o}\``).join(', ');
       } else {
         msg += '\n\n_(no change applied — empty payload or self-cancelling diff)_';
       }
-      msg += '\n\n👉 _Review the Data-Purifier checkboxes, then click_ **Run Preprocessing** _when ready (or ask me to run it)._';
+      msg +=
+        '\n\n👉 _Review the Data-Purifier checkboxes, then click_ **Run Preprocessing** _when ready (or ask me to run it)._';
 
       this.actionSuccess = 'Purifier selection updated.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
@@ -608,7 +651,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         });
       }
       this.sharedService.triggerCheckpoint('ai_action_update_purifier_selection');
-
     } else if (actionType === 'apply_encoding') {
       // v2.26.0+: dedicated path for the AI to fire the
       // "Apply Encoding" button.  The component's current
@@ -616,9 +658,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // update_metadata + set_ordinal_ranking actions) is what
       // gets applied — this action just toggles the use_native flag.
       const applied = resp.applied || null;
-      const useNative = applied && typeof applied.use_native === 'boolean'
-        ? applied.use_native
-        : true;
+      const useNative =
+        applied && typeof applied.use_native === 'boolean' ? applied.use_native : true;
       let msg = `✅ **Apply encoding started.**`;
       if (desc) msg += ` ${desc}`;
       msg += `\n\n- **use_native**: \`${useNative}\``;
@@ -626,7 +667,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       this.sharedService.emitEncodingApplyRequest({ use_native: useNative });
       this.sharedService.triggerCheckpoint('ai_action_apply_encoding');
-
     } else if (actionType === 'start_modeling') {
       // v2.26.0+: the headline action — closes the user's exact
       // blocker from v2.25.0 ("I cannot 'start' the modeling engine
@@ -635,18 +675,22 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // selectedAlgorithm + encodingUseNative, then calls the
       // existing startModeling() method.
       const applied = resp.applied || null;
-      const algorithm = applied && typeof applied.algorithm === 'string' && applied.algorithm.trim()
-        ? applied.algorithm.trim()
-        : null;
-      const useNative = applied && typeof applied.encoding_use_native === 'boolean'
-        ? applied.encoding_use_native
-        : true;
+      const algorithm =
+        applied && typeof applied.algorithm === 'string' && applied.algorithm.trim()
+          ? applied.algorithm.trim()
+          : null;
+      const useNative =
+        applied && typeof applied.encoding_use_native === 'boolean'
+          ? applied.encoding_use_native
+          : true;
       let msg = `✅ **Modeling started.**`;
       if (desc) msg += ` ${desc}`;
-      msg += '\n\n' + [
-        `- **Algorithm**: ${algorithm ? `\`${algorithm}\`` : '_form value_'}`,
-        `- **encoding_use_native**: \`${useNative}\``,
-      ].join('\n');
+      msg +=
+        '\n\n' +
+        [
+          `- **Algorithm**: ${algorithm ? `\`${algorithm}\`` : '_form value_'}`,
+          `- **encoding_use_native**: \`${useNative}\``,
+        ].join('\n');
       this.actionSuccess = 'Modeling started.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       this.sharedService.emitModelingStartRequest({
@@ -654,7 +698,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         encoding_use_native: useNative,
       });
       this.sharedService.triggerCheckpoint('ai_action_start_modeling');
-
     } else if (actionType === 'start_hyperparameter') {
       // Phase 3: dedicated path for the AI to fire the "Start
       // Hyperparameter Tuning" button (the pipeline step after SFS).
@@ -666,19 +709,22 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       let msg = `✅ **Hyperparameter tuning started.**`;
       if (desc) msg += ` ${desc}`;
       if (applied && typeof applied === 'object') {
-        const enabled = Array.isArray(applied.enabled_params) && applied.enabled_params.length
-          ? applied.enabled_params.map((p: string) => `\`${p}\``).join(', ')
-          : '_form defaults_';
+        const enabled =
+          Array.isArray(applied.enabled_params) && applied.enabled_params.length
+            ? applied.enabled_params.map((p: string) => `\`${p}\``).join(', ')
+            : '_form defaults_';
         const method = applied.search_method || 'auto';
-        msg += '\n\n' + [
-          `- **Search method**: \`${method}\`${method === 'auto' ? ' _(picks grid/random/bayesian by fit count)_' : ''}`,
-          `- **Trials (n_iter)**: ${applied.n_iter ?? '?'}`,
-          `- **CV folds**: ${applied.cv_folds ?? '?'}`,
-          `- **Compute power (n_jobs)**: ${applied.n_jobs ?? '?'}`,
-          `- **Curve metric**: \`${applied.primary_metric ?? 'roc_auc'}\``,
-          `- **Curve points**: ${applied.validation_curve_points ?? '?'}`,
-          `- **Tuned params**: ${enabled}`,
-        ].join('\n');
+        msg +=
+          '\n\n' +
+          [
+            `- **Search method**: \`${method}\`${method === 'auto' ? ' _(picks grid/random/bayesian by fit count)_' : ''}`,
+            `- **Trials (n_iter)**: ${applied.n_iter ?? '?'}`,
+            `- **CV folds**: ${applied.cv_folds ?? '?'}`,
+            `- **Compute power (n_jobs)**: ${applied.n_jobs ?? '?'}`,
+            `- **Curve metric**: \`${applied.primary_metric ?? 'roc_auc'}\``,
+            `- **Curve points**: ${applied.validation_curve_points ?? '?'}`,
+            `- **Tuned params**: ${enabled}`,
+          ].join('\n');
       }
       this.actionSuccess = 'Hyperparameter tuning started.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
@@ -686,7 +732,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         this.sharedService.emitHyperparamStartRequest(applied);
       }
       this.sharedService.triggerCheckpoint('ai_action_start_hyperparameter');
-
     } else if (actionType === 'update_notes') {
       const noteAction = resp.note_action || 'add';
       const position = resp.position || '';
@@ -702,7 +747,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         this.sharedService.updatePipelineNote(position, content);
       }
       this.sharedService.triggerCheckpoint('ai_action_update_notes');
-
     } else {
       this.actionSuccess = resp.description || 'Action completed.';
       this.aiService.addMessage({
@@ -721,7 +765,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     // dropdown re-renders.  model_usage continues to use the existing
     // BehaviorSubject pattern because it has a different downstream
     // consumer (Data Quality / preprocessing).
-    const featureUsageBatch: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }> = [];
+    const featureUsageBatch: Array<{ column: string; value: 'keep' | 'drop'; reason?: string }> =
+      [];
     for (const upd of applied) {
       if (upd.key === 'model_usage' && upd.column) {
         const current = this.sharedService.getModelUsageSettings() || {};
@@ -806,7 +851,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
     const fileId = this.sharedService.getCurrentFileId();
     if (fileId !== null && fileId !== undefined) {
       this.dataService.pushAiCache(fileId as number, { data_dictionary: patched }).subscribe({
-        error: (err: any) => console.warn('[AI Cache] post-update_metadata dictionary push failed:', err),
+        error: (err: any) =>
+          console.warn('[AI Cache] post-update_metadata dictionary push failed:', err),
       });
     }
   }
@@ -863,9 +909,10 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
     // Extract the first line of the error for the collapsed summary
     const firstErrorLine = errorText.split('\n')[0].trim();
-    const summary = actionType === 'execute_code'
-      ? `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}...`
-      : `Action failed: ${firstErrorLine} — requesting AI correction...`;
+    const summary =
+      actionType === 'execute_code'
+        ? `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}...`
+        : `Action failed: ${firstErrorLine} — requesting AI correction...`;
 
     // Add the error as a user-role message, marked as auto-correction (collapsed by default)
     this.aiService.addMessage({
@@ -901,80 +948,89 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       ctx.pipeline_config.pipeline_type = this.sharedService.getSelectedPipeline() || '';
     }
 
-    this.dataService.sendAiChat(
-      correctionPrompt,
-      ctx,
-      this.currentSection || 'general',
-      history,
-      this.sharedService.getCurrentFileId() ?? undefined,
-      this.selectedModel,
-      undefined,
-      undefined,
-      undefined,
-      { onStep: step => this.onProgressStep(step) }
-    ).subscribe({
-      next: (resp: any) => {
-        this.aiService.finalizeProgressSteps();
-        const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
-          type: a.type,
-          payload: a.payload,
-          applied: false,
-        }));
-        const shouldAutoApply = this._shouldAutoApplyCorrection(actionType, actions, attempt);
-        if (shouldAutoApply) {
-          const message = resp.message || 'I prepared a corrected operation.';
+    this.dataService
+      .sendAiChat(
+        correctionPrompt,
+        ctx,
+        this.currentSection || 'general',
+        history,
+        this.sharedService.getCurrentFileId() ?? undefined,
+        this.selectedModel,
+        undefined,
+        undefined,
+        undefined,
+        { onStep: (step) => this.onProgressStep(step) },
+      )
+      .subscribe({
+        next: (resp: any) => {
+          this.aiService.finalizeProgressSteps();
+          const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
+            type: a.type,
+            payload: a.payload,
+            applied: false,
+          }));
+          const shouldAutoApply = this._shouldAutoApplyCorrection(actionType, actions, attempt);
+          if (shouldAutoApply) {
+            const message = resp.message || 'I prepared a corrected operation.';
+            this.aiService.updateLastMessage(
+              `${message}\n\nApplying the corrected operation now...`,
+              [],
+              resp.chat_span_id,
+              resp.chat_trace_id,
+              resp.chat_session_id,
+            );
+            this.isLoading = false;
+            this.actionError = null;
+            this._executeAutoCorrectedAction(
+              actions[0].type,
+              actions[0].payload,
+              attempt,
+              resp.chat_span_id || parentSpanId,
+              acceptedMessageIndex,
+              acceptedActionIndex,
+            );
+            return;
+          }
+          const correctionFallback =
+            actions.length > 0
+              ? "I've prepared a corrected operation. Review the details below and click **Apply** to execute."
+              : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
+          // v2.38.0: same chat_span_id capture as the main send flow.
+          // Self-correction turns produce a NEW chat span, so the corrected
+          // action card (now appended to this new assistant message) gets
+          // linked to that new span — not the original failing turn.
           this.aiService.updateLastMessage(
-            `${message}\n\nApplying the corrected operation now...`,
-            [],
+            resp.message || correctionFallback,
+            actions,
             resp.chat_span_id,
             resp.chat_trace_id,
             resp.chat_session_id,
           );
           this.isLoading = false;
+          // Clear the error since the AI has provided a correction
           this.actionError = null;
-          this._executeAutoCorrectedAction(
-            actions[0].type,
-            actions[0].payload,
-            attempt,
-            resp.chat_span_id || parentSpanId,
-            acceptedMessageIndex,
-            acceptedActionIndex,
-          );
-          return;
-        }
-        const correctionFallback = actions.length > 0
-          ? 'I\'ve prepared a corrected operation. Review the details below and click **Apply** to execute.'
-          : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
-        // v2.38.0: same chat_span_id capture as the main send flow.
-        // Self-correction turns produce a NEW chat span, so the corrected
-        // action card (now appended to this new assistant message) gets
-        // linked to that new span — not the original failing turn.
-        this.aiService.updateLastMessage(
-          resp.message || correctionFallback,
-          actions,
-          resp.chat_span_id,
-          resp.chat_trace_id,
-          resp.chat_session_id,
-        );
-        this.isLoading = false;
-        // Clear the error since the AI has provided a correction
-        this.actionError = null;
-      },
-      error: (err: any) => {
-        const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
-        this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
-        this.aiService.finalizeProgressSteps();
-        this.isLoading = false;
-      }
-    });
+        },
+        error: (err: any) => {
+          const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
+          this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
+          this.aiService.finalizeProgressSteps();
+          this.isLoading = false;
+        },
+      });
   }
 
-  private _shouldAutoApplyCorrection(actionType: string, actions: AiAction[], attempt: number): boolean {
-    return actionType === 'execute_code'
-      && attempt <= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS
-      && actions.length === 1
-      && actions[0].type === 'execute_code'
-      && !!actions[0].payload;
+  private _shouldAutoApplyCorrection(
+    actionType: string,
+    actions: AiAction[],
+    attempt: number,
+  ): boolean {
+    return (
+      actionType === 'execute_code' &&
+      attempt <= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS &&
+      actions.length === 1 &&
+      actions[0].type === 'execute_code' &&
+      !!actions[0].payload
+    );
   }
 
   private _executeAutoCorrectedAction(
@@ -1030,7 +1086,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           acceptedMessageIndex,
           acceptedActionIndex,
         );
-      }
+      },
     });
   }
 
@@ -1068,12 +1124,16 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         // cloud default when we have nothing at all to show (first load).
         if (!this.availableModels.length) {
           this.availableModels = [
-            {key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine'},
-            {key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai'},
+            {
+              key: 'engine-gemma4-26b',
+              display_name: 'gemma4:26b (Inference Engine)',
+              provider: 'engine',
+            },
+            { key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai' },
           ];
           this.selectedModel = 'engine-gemma4-26b';
         }
-      }
+      },
     });
   }
 
@@ -1103,7 +1163,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   getSelectedModelName(): string {
-    const model = this.availableModels.find(m => m.key === this.selectedModel);
+    const model = this.availableModels.find((m) => m.key === this.selectedModel);
     return model ? model.display_name : this.selectedModel;
   }
 
@@ -1123,7 +1183,11 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
     while (i < lines.length) {
       // Detect markdown table: line contains | and next line is separator (|---|)
-      if (this._isTableRow(lines[i]) && i + 1 < lines.length && this._isTableSeparator(lines[i + 1])) {
+      if (
+        this._isTableRow(lines[i]) &&
+        i + 1 < lines.length &&
+        this._isTableSeparator(lines[i + 1])
+      ) {
         const tableLines: string[] = [lines[i]];
         i++; // skip header
         i++; // skip separator
@@ -1172,16 +1236,25 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   private _renderTable(rows: string[]): string {
     if (rows.length === 0) return '';
     const parseRow = (line: string): string[] =>
-      line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((c) => c.trim());
 
     let html = '<table class="chat-table"><thead><tr>';
     const headerCells = parseRow(rows[0]);
-    headerCells.forEach(c => { html += `<th>${this._formatInline(c)}</th>`; });
+    headerCells.forEach((c) => {
+      html += `<th>${this._formatInline(c)}</th>`;
+    });
     html += '</tr></thead><tbody>';
     for (let r = 1; r < rows.length; r++) {
       const cells = parseRow(rows[r]);
       html += '<tr>';
-      cells.forEach(c => { html += `<td>${this._formatInline(c)}</td>`; });
+      cells.forEach((c) => {
+        html += `<td>${this._formatInline(c)}</td>`;
+      });
       html += '</tr>';
     }
     html += '</tbody></table>';
@@ -1190,8 +1263,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   private _formatInline(text: string): string {
     if (!text) return '';
-    let s = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     // v2.41.1 — strip LaTeX BEFORE markdown so `$\rightarrow$` becomes
     // `→` instead of being passed through as raw text the user sees.
     // The system prompts also instruct the LLM to use Unicode directly,
@@ -1394,16 +1466,13 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   canSubmitFeedback(msg: ChatMessage): boolean {
     const feedback = msg.feedback || {};
-    return !!(
-      feedback.liked !== undefined ||
-      feedback.rating ||
-      (feedback.comment || '').trim()
-    );
+    return !!(feedback.liked !== undefined || feedback.rating || (feedback.comment || '').trim());
   }
 
   submitFeedback(messageIndex: number): void {
     const msg = this.aiService.getMessages()[messageIndex];
-    if (!msg || msg.role !== 'assistant' || msg.feedback?.submitted || msg.feedback?.submitting) return;
+    if (!msg || msg.role !== 'assistant' || msg.feedback?.submitted || msg.feedback?.submitting)
+      return;
 
     const feedback: AiFeedbackState = msg.feedback || {};
     const comment = (feedback.comment || '').trim();
@@ -1450,7 +1519,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       error: (err: any) => {
         const msgText = err?.error?.errors
           ? Object.values(err.error.errors).join(' ')
-          : (err?.error?.error || err?.message || 'Feedback could not be submitted.');
+          : err?.error?.error || err?.message || 'Feedback could not be submitted.';
         this.aiService.updateMessageFeedback(messageIndex, {
           submitting: false,
           error: msgText,

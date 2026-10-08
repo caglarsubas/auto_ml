@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 from django.conf import settings
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 
 SPLIT_DIRNAME = 'splits'
@@ -91,29 +91,19 @@ def load_split_artifact(file_id: int) -> Optional[Dict[str, Any]]:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return None
+            raise ValueError('Split artifact must be a JSON object.')
         return data
-    except Exception:
-        return None
+    except (OSError, ValueError) as error:
+        raise ValueError('Stored split artifact is unreadable; repair it before execution.') from error
 
 
 def _align_indices(df: pd.DataFrame, idx_list: Sequence) -> pd.Index:
-    """Return the subset of idx_list that exists in df.index (order preserved)."""
+    """Resolve exact row labels; never substitute positions or a partial subset."""
     if not idx_list:
         return pd.Index([])
-    # Prefer label-based membership (works for RangeIndex and custom labels)
-    present = [i for i in idx_list if i in df.index]
-    if present:
-        return pd.Index(present)
-    # Fallback: treat as positional if labels failed (e.g. reindex after reset)
-    try:
-        pos = [int(i) for i in idx_list if isinstance(i, (int, np.integer)) or str(i).isdigit()]
-        pos = [p for p in pos if 0 <= p < len(df)]
-        if pos:
-            return df.index[pos]
-    except Exception:
-        pass
-    return pd.Index([])
+    if len(set(idx_list)) != len(idx_list) or any(i not in df.index for i in idx_list):
+        raise ValueError('Stored split rows do not align exactly with this dataset. Recreate the split.')
+    return pd.Index(idx_list)
 
 
 def resolve_modeling_splits(
@@ -123,6 +113,7 @@ def resolve_modeling_splits(
     *,
     valid_size: float = 0.2,
     random_state: int = 42,
+    task: str = 'classification',
 ) -> Tuple[pd.Index, pd.Index, pd.Index, Dict[str, Any]]:
     """Return (train_idx, valid_idx, test_idx, meta).
 
@@ -140,67 +131,91 @@ def resolve_modeling_splits(
     outer_train = pd.Index([])
     outer_test = pd.Index([])
 
+    if not df.index.is_unique or len(df) < 8 or not 0 < valid_size < 1:
+        raise ValueError('Validation requires unique row IDs, at least eight rows and a valid validation fraction.')
+    if not y.index.equals(df.index) or y.isna().any():
+        raise ValueError('Labels must align exactly with the split frame and contain no missing outcomes.')
     if artifact:
         outer_train = _align_indices(df, artifact.get('train_idx') or [])
         outer_test = _align_indices(df, artifact.get('test_idx') or [])
         meta['strategy'] = artifact.get('strategy', 'random')
         meta['split_config'] = artifact.get('split_config')
-        if len(outer_train) >= 5 and len(outer_test) >= 1:
+        if len(outer_train) >= 5 and len(outer_test) >= 1 and outer_train.intersection(outer_test).empty:
             meta['source'] = 'preprocessing'
             meta['used_preprocessing_split'] = True
         else:
-            meta['warnings'].append(
-                'Preprocessing split artifact present but indices could not be aligned; '
-                'falling back to stratified split.'
-            )
-            outer_train = pd.Index([])
-            outer_test = pd.Index([])
+            raise ValueError('Stored outer split is undersized or overlapping. Execution cannot fall back to shuffled validation.')
 
     if len(outer_train) < 5:
-        # Full-frame stratified: 64/16/20 ≈ train/valid/test (test=20%, then valid=20% of remainder)
-        try:
-            idx_all = df.index
-            y_aligned = y.loc[idx_all]
-            tr_va_idx, test_idx, y_tr_va, _y_te = train_test_split(
-                idx_all, y_aligned, test_size=0.2, random_state=random_state, stratify=y_aligned,
-            )
-            train_idx, valid_idx, _, _ = train_test_split(
-                tr_va_idx, y_tr_va, test_size=valid_size, random_state=random_state, stratify=y_tr_va,
-            )
-            meta['source'] = 'fallback_stratified'
-            meta['used_preprocessing_split'] = False
-            return pd.Index(train_idx), pd.Index(valid_idx), pd.Index(test_idx), meta
-        except Exception as e:
-            meta['warnings'].append(f'Stratified fallback failed ({e}); using random proportions.')
-            rng = np.random.RandomState(random_state)
-            mask = rng.rand(len(df))
-            test_mask = mask >= 0.8
-            valid_mask = (mask >= 0.64) & (mask < 0.8)
-            train_mask = mask < 0.64
-            return (
-                df.index[train_mask],
-                df.index[valid_mask],
-                df.index[test_mask],
-                meta,
-            )
+        outer_train, outer_test = _random_partition(df.index, y, 0.2, random_state, task, meta)
+        meta['source'] = 'generated_random'
 
     # Carve validation from outer train
-    y_outer = y.loc[outer_train]
-    try:
-        if y_outer.nunique(dropna=True) >= 2 and len(outer_train) >= 5:
-            train_idx, valid_idx = train_test_split(
-                outer_train, test_size=valid_size, random_state=random_state, stratify=y_outer,
-            )
+    config = meta.get('split_config') or {}
+    group_column = config.get('group_column')
+    groups = None
+    if group_column:
+        if group_column not in df or df[group_column].isna().any():
+            raise ValueError('Declared group_column is absent or contains missing identifiers.')
+        groups = df[group_column]
+        if set(groups.loc[outer_train]).intersection(groups.loc[outer_test]):
+            raise ValueError('Entities overlap the declared outer partitions. Recreate a group-disjoint split.')
+    if meta['strategy'] == 'oot':
+        date_column = config.get('date_column')
+        if date_column:
+            if date_column not in df:
+                raise ValueError('Declared date_column is absent from the split frame.')
+            dates = pd.to_datetime(df[date_column], errors='coerce', utc=True)
+            if dates.isna().any():
+                raise ValueError('Temporal validation requires a valid date for every row.')
+            outer_train = dates.loc[outer_train].sort_values(kind='mergesort').index
+            if dates.loc[outer_train].max() >= dates.loc[outer_test].min():
+                raise ValueError('Temporal outer partitions overlap or share a boundary timestamp.')
+            cut = max(1, int(len(outer_train) * (1 - valid_size)))
+            boundary = dates.loc[outer_train[cut]]
+            train_idx = outer_train[dates.loc[outer_train] < boundary]
+            valid_idx = outer_train[dates.loc[outer_train] >= boundary]
+            end_column = config.get('label_end_column')
+            if end_column:
+                if end_column not in df:
+                    raise ValueError('Declared label_end_column is absent.')
+                ends = pd.to_datetime(df[end_column], errors='coerce', utc=True)
+                if ends.isna().any() or (ends < dates).any():
+                    raise ValueError('Label windows require valid ends at or after prediction time.')
+                train_idx = train_idx[ends.loc[train_idx] < boundary]
+                valid_idx = valid_idx[ends.loc[valid_idx] < dates.loc[outer_test].min()]
         else:
-            train_idx, valid_idx = train_test_split(
-                outer_train, test_size=valid_size, random_state=random_state,
-            )
-    except Exception:
-        train_idx, valid_idx = train_test_split(
-            outer_train, test_size=valid_size, random_state=random_state,
-        )
-
+            # Historical artifacts preserve ordered membership, but cannot prove
+            # that this order corresponds to dates; never shuffle it.
+            cut = max(1, int(len(outer_train) * (1 - valid_size)))
+            train_idx, valid_idx = outer_train[:cut], outer_train[cut:]
+            meta['warnings'].append('Legacy ordered split lacks date evidence; chronology is unverified.')
+        if groups is not None:
+            train_idx = train_idx[~groups.loc[train_idx].isin(groups.loc[valid_idx])]
+    elif meta['strategy'] in ('random', 'group'):
+        if groups is not None:
+            a, b = next(GroupShuffleSplit(n_splits=1, test_size=valid_size, random_state=random_state).split(np.zeros(len(outer_train)), groups=groups.loc[outer_train]))
+            train_idx, valid_idx = outer_train[a], outer_train[b]
+        else:
+            train_idx, valid_idx = _random_partition(outer_train, y.loc[outer_train], valid_size, random_state, task, meta)
+    else:
+        raise ValueError(f'Unsupported validation strategy: {meta["strategy"]}')
+    if len(train_idx) < 2 or len(valid_idx) < 1:
+        raise ValueError('Declared validation constraints leave insufficient fit/validation rows.')
+    meta['membership'] = {'train': _to_index_list(train_idx), 'valid': _to_index_list(valid_idx), 'test': _to_index_list(outer_test)}
+    meta['task'] = task
     return pd.Index(train_idx), pd.Index(valid_idx), pd.Index(outer_test), meta
+
+
+def _random_partition(index, labels, fraction, seed, task, meta):
+    stratify = labels if task in ('classification', 'anomaly') else None
+    try:
+        return train_test_split(index, test_size=fraction, random_state=seed, stratify=stratify)
+    except ValueError as error:
+        if stratify is None:
+            raise
+        meta['warnings'].append(f'Random split is unstratified because class counts do not permit stratification: {error}')
+        return train_test_split(index, test_size=fraction, random_state=seed)
 
 
 def fit_numeric_imputer(X_train: pd.DataFrame) -> Dict[str, float]:

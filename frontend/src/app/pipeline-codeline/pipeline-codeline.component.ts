@@ -1,4 +1,13 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  Input,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
@@ -64,6 +73,8 @@ type AiModelOption = {
   selector: 'app-pipeline-codeline',
   templateUrl: './pipeline-codeline.component.html',
   styleUrls: ['./pipeline-codeline.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class PipelineCodelineComponent implements OnInit, OnDestroy {
   private static readonly MAX_AUTO_CORRECTION_ATTEMPTS = 3;
@@ -96,7 +107,8 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
   availableModels: AiModelOption[] = [];
   defaultModelKey = 'engine-gemma4-26b';
   showModelSelector = false;
-  engineStatus: { available: boolean; model_count?: number; last_error?: string | null } | null = null;
+  engineStatus: { available: boolean; model_count?: number; last_error?: string | null } | null =
+    null;
 
   constructor(
     private sharedService: SharedService,
@@ -144,7 +156,10 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
   }
 
   get hasContent(): boolean {
-    return !!(this.cell && (this.cell.code?.trim() || this.cell.intent?.trim() || this.cell.lastRun));
+    return !!(
+      this.cell &&
+      (this.cell.code?.trim() || this.cell.intent?.trim() || this.cell.lastRun)
+    );
   }
 
   get turns(): PipelineCodelineTurn[] {
@@ -240,7 +255,11 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       error: () => {
         if (!this.availableModels.length) {
           this.availableModels = [
-            { key: 'engine-gemma4-26b', display_name: 'gemma4:26b (Inference Engine)', provider: 'engine' },
+            {
+              key: 'engine-gemma4-26b',
+              display_name: 'gemma4:26b (Inference Engine)',
+              provider: 'engine',
+            },
             { key: 'gpt-5.5', display_name: 'GPT-5.5 (OpenAI)', provider: 'openai' },
           ];
           this.defaultModelKey = 'engine-gemma4-26b';
@@ -439,7 +458,8 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       status: 'success',
       runKind: 'assistant',
       assistantText:
-        parsed.text || (parsed.code ? 'Assistant suggested code for this Codeline.' : 'No response.'),
+        parsed.text ||
+        (parsed.code ? 'Assistant suggested code for this Codeline.' : 'No response.'),
       generatedCode: parsed.code || undefined,
       error: undefined,
     });
@@ -508,10 +528,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
           PipelineCodelineComponent.MAX_HISTORY_TURN_CHARS,
         );
         if (turn.role === 'assistant' && i === lastAssistant && turn.code) {
-          const code = this.truncate(
-            turn.code,
-            PipelineCodelineComponent.MAX_HISTORY_CODE_CHARS,
-          );
+          const code = this.truncate(turn.code, PipelineCodelineComponent.MAX_HISTORY_CODE_CHARS);
           content = `${content}\n\n\`\`\`python\n${code}\n\`\`\``.trim();
         }
         return { role: turn.role as string, content: content.trim() };
@@ -520,9 +537,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
   }
 
   private buildRefinePrompt(feedback: string): string {
-    const parts: string[] = [
-      'Feedback on the Codeline answer you just gave:\n\n' + feedback,
-    ];
+    const parts: string[] = ['Feedback on the Codeline answer you just gave:\n\n' + feedback];
     const code = (this.cell?.code || '').trim();
     if (code) {
       parts.push(
@@ -678,13 +693,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
     }
 
     this.dataService
-      .executeAiAction(
-        this.fileId,
-        'execute_code',
-        payload,
-        undefined,
-        'codeline',
-      )
+      .executeAiAction(this.fileId, 'execute_code', payload, undefined, 'codeline')
       .subscribe({
         next: (resp: any) => {
           if (resp?.status === 'error') {
@@ -709,7 +718,8 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
           }
         },
         error: (err: any) => {
-          const errMsg = err?.error?.error || err?.error?.message || err?.message || 'Execution failed.';
+          const errMsg =
+            err?.error?.error || err?.error?.message || err?.message || 'Execution failed.';
           const traceback = err?.error?.traceback || '';
           const fullError = traceback ? `${errMsg}\n${traceback}` : errMsg;
           this.handleExecutionFailure(mode, code, fullError, attempt, err?.error);
@@ -796,8 +806,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
       status: 'running',
       runKind: 'assistant',
       error: errorText,
-      assistantText:
-        `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${max}...`,
+      assistantText: `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${max}...`,
     });
     this.persist(true);
 
@@ -823,8 +832,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
               runKind: mode,
               error: errorText,
               assistantText:
-                assistantText ||
-                'Auto-fix failed: assistant did not return corrected code.',
+                assistantText || 'Auto-fix failed: assistant did not return corrected code.',
             });
             this.persist(true);
             return;
@@ -859,8 +867,7 @@ export class PipelineCodelineComponent implements OnInit, OnDestroy {
             status: 'error',
             runKind: mode,
             error: errorText,
-            assistantText:
-              err?.error?.error || err?.message || 'Failed to get AI correction.',
+            assistantText: err?.error?.error || err?.message || 'Failed to get AI correction.',
           });
           this.persist(true);
         },

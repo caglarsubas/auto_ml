@@ -64,13 +64,13 @@ describe('HomeComponent', () => {
   it('primary CTA should link to model development', () => {
     const cta = fixture.debugElement.query(By.css('[data-testid="home-primary-cta"]'));
     expect(cta).toBeTruthy();
-    expect(cta.attributes['ng-reflect-router-link']).toBe('/model-development');
+    expect(cta.nativeElement.getAttribute('href')).toBe('/model-development');
   });
 
   it('secondary CTA should link to declaration', () => {
     const cta = fixture.debugElement.query(By.css('[data-testid="home-secondary-cta"]'));
     expect(cta).toBeTruthy();
-    expect(cta.attributes['ng-reflect-router-link']).toBe('/model-development/declaration');
+    expect(cta.nativeElement.getAttribute('href')).toBe('/model-development/declaration');
   });
 
   it('should render evidence margin notes', () => {
@@ -94,4 +94,3 @@ describe('HomeComponent', () => {
     });
   });
 });
-

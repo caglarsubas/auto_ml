@@ -22,6 +22,11 @@ module.exports = tseslint.config(
         'warn',
         { type: 'element', prefix: 'app', style: 'kebab-case' },
       ],
+      // Angular 22 adds architectural preferences; keep them advisory during
+      // this compatibility migration of the existing NgModule components.
+      '@angular-eslint/prefer-standalone': 'warn',
+      '@angular-eslint/prefer-inject': 'warn',
+      '@angular-eslint/prefer-on-push-component-change-detection': 'warn',
       // Adoption baseline on a legacy codebase: keep the linter green while
       // still surfacing issues. Tighten these to 'error' as the code is cleaned.
       '@typescript-eslint/no-explicit-any': 'off',

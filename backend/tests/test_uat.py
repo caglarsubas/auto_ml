@@ -14,8 +14,8 @@ from rest_framework.test import APIClient
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
+def api_client(authenticated_api_client):
+    return authenticated_api_client
 
 
 # ---------------------------------------------------------------------------

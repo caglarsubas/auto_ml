@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 export type HomeLinkStatus = 'live' | 'unavailable';
 export type HomeIcon =
@@ -37,6 +37,8 @@ export interface EvidenceNote {
   selector: 'app-home',
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class HomeComponent {
   readonly thesis = 'Declared tabular model work for regulated teams.';
@@ -102,7 +104,7 @@ export class HomeComponent {
         { label: 'Model Summary', status: 'unavailable' },
         { label: 'Quality Report', status: 'unavailable' },
         { label: 'Explainability', status: 'unavailable' },
-        { label: 'Causality', status: 'unavailable' },
+        { label: 'Sequential patterns', status: 'unavailable' },
       ],
     },
     {

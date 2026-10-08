@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.model_selection import KFold, StratifiedKFold
+from modeling.development_validation import iter_validation_folds
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, r2_score, mean_squared_error,
 )
@@ -651,6 +652,7 @@ def run_sfs_with_progress(
     resume_state: Optional[Dict] = None,  # State to resume from (forward/backward completed steps)
     task: str = 'classification',
     algorithm: str = 'xgboost',
+    validation_context=None,
 ) -> Dict[str, Any]:
     """
     Run SFS with user-specified methods, stopping criteria, and progress tracking.
@@ -762,7 +764,7 @@ def run_sfs_with_progress(
                 step_result = _run_forward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                     selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
-                    algorithm=algorithm,
+                    algorithm=algorithm, validation_context=validation_context,
                 )
                 
                 if step_result:
@@ -895,7 +897,7 @@ def run_sfs_with_progress(
                 step_result = _run_backward_step(
                     X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                     current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
-                    algorithm=algorithm,
+                    algorithm=algorithm, validation_context=validation_context,
                 )
                 
                 if step_result:
@@ -1005,7 +1007,7 @@ def run_sfs_with_progress(
 def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw, 
                       current_features: List[str], step: int, cv_folds: int,
                       n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
-                      algorithm: str = 'xgboost') -> Optional[Dict]:
+                      algorithm: str = 'xgboost', validation_context=None) -> Optional[Dict]:
     """Run a single forward selection step with parallel candidate evaluation.
     
     Optimizations applied:
@@ -1061,7 +1063,6 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
         
         # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
         winner_params = {**ranking_params, 'nthread': 0}  # Use all cores for final model
-        skf = _sfs_cv_splitter(task, cv_folds)
         
         best_feature = None
         best_cv_roc = float('-inf')
@@ -1073,10 +1074,9 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             
             cv_roc_scores = []
             cv_pr_scores = []
-            for train_idx, val_idx in skf.split(X_train_cand, y_train):
-                X_cv_train = X_train_cand.iloc[train_idx]
-                X_cv_val = X_train_cand.iloc[val_idx]
-                y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
+            provenance = []
+            for X_cv_train, y_cv_train, X_cv_val, y_cv_val, receipt in iter_validation_folds(validation_context, X_train_cand, y_train, cv_folds, task):
+                provenance.append(receipt)
                 
                 cv_adapter = _sfs_fit(
                     algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
@@ -1094,7 +1094,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             if cand_cv_roc > best_cv_roc:
                 best_cv_roc = cand_cv_roc
                 best_feature = candidate_feat
-                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr}
+                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr, 'validation_provenance': provenance}
         
         cv_roc_auc = best_cv_result['cv_roc_auc']
         cv_pr_auc = best_cv_result['cv_pr_auc']
@@ -1143,6 +1143,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
             'task': task,
             'train_roc_auc': train_fields['train_roc_auc'],
             'cv_roc_auc': cv_roc_auc,
+            'validation_provenance': best_cv_result['validation_provenance'],
             'test_roc_auc': test_fields['test_roc_auc'],
             'train_pr_auc': train_fields['train_pr_auc'],
             'cv_pr_auc': cv_pr_auc,
@@ -1174,7 +1175,7 @@ def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
 def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
                        current_features: List[str], step: int, cv_folds: int,
                        n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
-                       algorithm: str = 'xgboost') -> Optional[Dict]:
+                       algorithm: str = 'xgboost', validation_context=None) -> Optional[Dict]:
     """Run a single backward elimination step with parallel candidate evaluation.
     
     Optimizations applied:
@@ -1228,7 +1229,6 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
         
         # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
         winner_params = {**ranking_params, 'nthread': 0}
-        skf = _sfs_cv_splitter(task, cv_folds)
         
         best_feature_to_drop = None
         best_cv_roc = float('-inf')
@@ -1240,10 +1240,9 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             
             cv_roc_scores = []
             cv_pr_scores = []
-            for train_idx, val_idx in skf.split(X_train_cand, y_train):
-                X_cv_train = X_train_cand.iloc[train_idx]
-                X_cv_val = X_train_cand.iloc[val_idx]
-                y_cv_train, y_cv_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
+            provenance = []
+            for X_cv_train, y_cv_train, X_cv_val, y_cv_val, receipt in iter_validation_folds(validation_context, X_train_cand, y_train, cv_folds, task):
+                provenance.append(receipt)
                 
                 cv_adapter = _sfs_fit(
                     algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
@@ -1261,7 +1260,7 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             if cand_cv_roc > best_cv_roc:
                 best_cv_roc = cand_cv_roc
                 best_feature_to_drop = candidate_feat
-                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr}
+                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr, 'validation_provenance': provenance}
         
         cv_roc_auc = best_cv_result['cv_roc_auc']
         cv_pr_auc = best_cv_result['cv_pr_auc']
@@ -1310,6 +1309,7 @@ def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw
             'task': task,
             'train_roc_auc': train_fields['train_roc_auc'],
             'cv_roc_auc': cv_roc_auc,
+            'validation_provenance': best_cv_result['validation_provenance'],
             'test_roc_auc': test_fields['test_roc_auc'],
             'train_pr_auc': train_fields['train_pr_auc'],
             'cv_pr_auc': cv_pr_auc,

@@ -54,6 +54,39 @@ def test_xgboost_adapter_trains_and_predicts(tmp_path):
     assert isinstance(gains, list)
 
 
+@pytest.mark.parametrize('algorithm', ['xgboost', 'lightgbm', 'catboost'])
+def test_multiclass_adapter_preserves_rows_classes_and_saved_predictions(tmp_path, algorithm):
+    if not available_boosting_algorithms().get(algorithm):
+        pytest.skip(f'{algorithm} not installed')
+    X = pd.DataFrame({'x': np.tile(np.arange(4), 40).astype(float)})
+    y = pd.Series(np.tile(np.arange(4), 40))
+    adapter = get_adapter(algorithm).train(X[:120], y[:120], X[120:], y[120:],
+        {'objective': 'multi:softprob', 'eval_metric': 'mlogloss', 'num_class': 4,
+         'nthread': 1, 'max_depth': 3, 'eta': .1}, num_boost_round=15, early_stopping_rounds=5)
+    probabilities = adapter.predict_proba(X[120:])
+    assert probabilities.shape == (40, 4)
+    assert np.allclose(probabilities.sum(axis=1), 1, atol=1e-6)
+    path = str(tmp_path / adapter.model_filename(1))
+    adapter.save(path)
+    loaded = type(adapter).load(path, feature_names=['x'])
+    assert np.allclose(loaded.predict_proba(X[120:]), probabilities, atol=1e-9)
+
+
+def test_xgboost_iteration_zero_survives_model_replay(tmp_path):
+    Xtr, ytr, Xva, yva = _toy_binary()
+    adapter = get_adapter('xgboost').train(Xtr, ytr, Xva, yva,
+        {'objective': 'binary:logistic', 'eval_metric': 'logloss', 'eta': .1, 'nthread': 1},
+        num_boost_round=10, early_stopping_rounds=5)
+    adapter.best_iteration = 0
+    adapter.model.set_attr(best_iteration='0')
+    expected = adapter.predict_proba(Xva)
+    path = str(tmp_path / adapter.model_filename(1))
+    adapter.save(path)
+    loaded = type(adapter).load(path, feature_names=adapter.feature_names, cat_features=adapter.cat_features)
+    assert loaded.best_iteration == 0
+    assert np.allclose(loaded.predict_proba(Xva), expected, atol=1e-9)
+
+
 @pytest.mark.skipif(not available_boosting_algorithms().get('lightgbm'), reason='lightgbm not installed')
 def test_lightgbm_adapter_trains(tmp_path):
     Xtr, ytr, Xva, yva = _toy_binary(seed=1)

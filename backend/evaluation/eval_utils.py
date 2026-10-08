@@ -34,6 +34,46 @@ def compute_ks_gini(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[Optional[f
         return None, None
 
 
+def evaluate_multiclass(y_true, probabilities):
+    y = np.asarray(y_true, dtype=int)
+    p = np.asarray(probabilities, dtype=float)
+    if p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
+        raise ValueError('Multiclass evaluation requires one finite probability per declared class and row.')
+    if (p < 0).any() or not np.allclose(p.sum(axis=1), 1, atol=1e-5):
+        raise ValueError('Multiclass probabilities must be nonnegative and sum to one.')
+    # Native float32 probabilities may sum to 1 within their precision but
+    # trigger float64 log-loss warnings after conversion. Normalize only after
+    # enforcing the declared tolerance; never accept arbitrary score vectors.
+    p = p / p.sum(axis=1, keepdims=True)
+    classes = np.arange(p.shape[1])
+    pred = p.argmax(axis=1)
+    auc = None
+    if set(np.unique(y)) == set(classes):
+        auc = _safe_float(roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
+    return {
+        'task': 'classification', 'class_count': p.shape[1],
+        'metrics': {'accuracy': _safe_float(accuracy_score(y, pred)),
+                    'log_loss': _safe_float(log_loss(y, p, labels=classes)),
+                    'f1_weighted': _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
+                    'f1': _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
+                    'roc_auc': auc, 'n_samples': len(y)},
+        'confusion_matrix': confusion_matrix(y, pred, labels=classes).tolist(),
+        'threshold_table': [],
+        'metric_semantics': {'roc_auc': 'weighted one-vs-rest', 'f1': 'weighted across declared classes'},
+        'limitations': ['Weighted multiclass AUC is unavailable when the assessment partition lacks a declared class.'] if auc is None else [],
+    }
+
+
+def select_development_threshold(y_valid, probabilities, fn_cost=1.0, fp_cost=1.0):
+    """Select on development outcomes only; the caller supplies no final outcomes."""
+    from modeling.crisp_dm import expected_cost_table, recommend_threshold_by_cost
+    if any(not np.isfinite(float(cost)) or float(cost) < 0 for cost in (fn_cost, fp_cost)):
+        raise ValueError('Outcome costs must be finite and nonnegative.')
+    rows = threshold_table(np.asarray(y_valid, dtype=int), np.asarray(probabilities, dtype=float).ravel())
+    costs = expected_cost_table(rows, fn_cost=float(fn_cost), fp_cost=float(fp_cost))
+    return recommend_threshold_by_cost(costs), costs
+
+
 def threshold_table(
     y_true: np.ndarray,
     y_proba: np.ndarray,

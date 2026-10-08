@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 from django.conf import settings
+from sklearn.model_selection import GroupShuffleSplit
 
 
 PURIFIER_DIRNAME = 'purifier'
@@ -34,33 +35,42 @@ def build_outer_split_indices(
         'strategy': (split or {}).get('strategy', 'random') if isinstance(split, dict) else 'random',
         'fallback': False,
     }
-    try:
-        if isinstance(split, dict) and split.get('strategy') == 'oot':
-            date_col = split.get('date_column')
-            ser = None
-            if date_col and date_col in frame.columns:
-                ser = pd.to_datetime(frame[date_col], errors='coerce', dayfirst=True)
-            if ser is not None and ser.shape[0] > 0:
-                pct = split.get('percent')
-                if pct is not None:
-                    try:
-                        pctf = float(pct)
-                    except Exception:
-                        pctf = None
-                    if pctf is not None and 0 < pctf < 100:
-                        order = ser.sort_values(kind='mergesort').index
-                        k = int(len(order) * (1 - pctf / 100.0))
-                        k = max(0, min(len(order), k))
-                        meta['strategy'] = 'oot'
-                        return order[:k], order[k:], meta
-                cutoff = split.get('cutoff')
-                if cutoff:
-                    mask_train = ser <= pd.to_datetime(cutoff, dayfirst=True)
-                    meta['strategy'] = 'oot'
-                    return ser.index[mask_train], ser.index[~mask_train], meta
-            meta['fallback'] = True
-    except Exception:
-        meta['fallback'] = True
+    strategy = (split or {}).get('strategy', 'random')
+    if strategy == 'oot':
+        date_col = split.get('date_column')
+        if not date_col or date_col not in frame:
+            raise ValueError('Out-of-time validation requires an existing date_column; random fallback is prohibited.')
+        dates = pd.to_datetime(frame[date_col], errors='coerce', dayfirst=True, utc=True)
+        if dates.isna().any():
+            raise ValueError('Out-of-time validation requires a valid timestamp for every eligible row.')
+        if split.get('percent') is not None:
+            percent = float(split['percent'])
+            if not 0 < percent < 100:
+                raise ValueError('Out-of-time holdout percentage must be between zero and 100.')
+            ordered = dates.sort_values(kind='mergesort').index
+            position = int(len(ordered) * (1 - percent / 100))
+            if not 0 < position < len(ordered):
+                raise ValueError('Out-of-time split leaves an empty partition.')
+            boundary = dates.loc[ordered[position]]
+            train, test = dates.index[dates < boundary], dates.index[dates >= boundary]
+        elif split.get('cutoff'):
+            cutoff = pd.to_datetime(split['cutoff'], dayfirst=True, utc=True)
+            train, test = dates.index[dates <= cutoff], dates.index[dates > cutoff]
+        else:
+            raise ValueError('Declare an out-of-time cutoff or holdout percentage.')
+        if not len(train) or not len(test):
+            raise ValueError('Out-of-time split leaves an empty partition.')
+        return train, test, meta
+    if strategy == 'group' or (split or {}).get('group_column'):
+        column = (split or {}).get('group_column')
+        if not column or column not in frame or frame[column].isna().any():
+            raise ValueError('Group validation requires a complete group_column.')
+        fraction = float((split or {}).get('percent', 25)) / 100
+        a, b = next(GroupShuffleSplit(n_splits=1, test_size=fraction, random_state=42).split(frame, groups=frame[column]))
+        meta['strategy'] = 'group'
+        return frame.index[a], frame.index[b], meta
+    if strategy != 'random':
+        raise ValueError(f'Unsupported outer validation strategy: {strategy}')
 
     train_ratio = 0.75
     if isinstance(split, dict) and split.get('percent') is not None:
@@ -92,13 +102,17 @@ def resolve_fit_index(
     meta: Dict[str, Any] = {'fit_scope': 'full_frame', 'n_fit': int(len(frame))}
     if train_idx is not None:
         idx = pd.Index([i for i in train_idx if i in frame.index])
-        if len(idx) >= 5:
+        if len(idx) != len(train_idx) or len(idx) < 2:
+            raise ValueError('Explicit purifier fit rows are missing or insufficient; full-frame fitting is prohibited.')
+        if len(idx) >= 2:
             meta['fit_scope'] = 'outer_train'
             meta['n_fit'] = int(len(idx))
             return idx, meta
     if isinstance(split, dict) and split:
         tr, _te, split_meta = build_outer_split_indices(frame, split)
-        if len(tr) >= 5:
+        if len(tr) < 2:
+            raise ValueError('Declared purifier split leaves insufficient fit rows.')
+        if len(tr) >= 2:
             meta['fit_scope'] = 'outer_train'
             meta['n_fit'] = int(len(tr))
             meta['split_strategy'] = split_meta.get('strategy')

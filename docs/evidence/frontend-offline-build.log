@@ -1,0 +1,67 @@
+
+> frontend@0.0.0 build
+> ng build
+
+❯ Building...
+✔ Building...
+Initial chunk files   | Names         | Raw size | Estimated transfer size
+scripts-3XYIUW3D.js   | scripts       |  4.70 MB |                 1.07 MB
+main-D3UB5N7T.js      | main          |  2.21 MB |               469.80 kB
+polyfills-5CFQRCPP.js | polyfills     | 34.59 kB |                11.33 kB
+styles-7YI2FMEJ.css   | styles        | 19.04 kB |                 3.66 kB
+chunk-OSQMNGTH.js     | -             |  1.31 kB |               574 bytes
+
+                      | Initial total |  6.97 MB |                 1.55 MB
+
+Lazy chunk files      | Names         | Raw size | Estimated transfer size
+chunk-6QULG7PF.js     | plotly-min    |  4.70 MB |                 1.07 MB
+
+Application bundle generation complete. [7.294 seconds] - 2026-10-07T15:33:08.466Z
+
+▲ [WARNING] bundle initial exceeded maximum budget. Budget 6.00 MB was not met by 968.28 kB with a total of 6.97 MB.
+
+
+▲ [WARNING] src/app/ai-chat-panel/ai-chat-panel.component.css exceeded maximum budget. Budget 16.00 kB was not met by 390 bytes with a total of 16.39 kB.
+
+
+▲ [WARNING] src/app/model-development/model-development.component.css exceeded maximum budget. Budget 16.00 kB was not met by 7.48 kB with a total of 23.48 kB.
+
+
+▲ [WARNING] Module 'plotly.js-dist-min' used by 'src/app/feature-card/feature-card.component.ts' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'typed-function' used by 'node_modules/mathjs/lib/esm/core/create.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'javascript-natural-sort' used by 'node_modules/mathjs/lib/esm/function/relational/compareNatural.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'tiny-emitter' used by 'node_modules/mathjs/lib/esm/utils/emitter.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'escape-latex' used by 'node_modules/mathjs/lib/esm/utils/latex.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'seedrandom' used by 'node_modules/mathjs/lib/esm/function/probability/util/seededRNG.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+Output location: /app/dist/frontend
+

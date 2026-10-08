@@ -596,12 +596,12 @@ button[mat-stroked-button][color="warn"] {
 }
 
 .mat-mdc-form-field {
-  --mdc-filled-text-field-focus-active-indicator-color: var(--accent-500);
-  --mdc-filled-text-field-focus-label-text-color: var(--accent-600);
+  --mat-form-field-filled-focus-active-indicator-color: var(--accent-500);
+  --mat-form-field-filled-focus-label-text-color: var(--accent-600);
 }
 
 .mat-mdc-progress-bar {
-  --mdc-linear-progress-active-indicator-color: var(--accent-500);
+  --mat-progress-bar-active-indicator-color: var(--accent-500);
 }
 
 .mat-mdc-menu-panel {

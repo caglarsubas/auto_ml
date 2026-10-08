@@ -1,0 +1,214 @@
+
+> frontend@0.0.0 lint
+> eslint .
+
+
+/private/tmp/declarai-pr-source-f845f584/frontend/coverage/frontend/block-navigation.js
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+/private/tmp/declarai-pr-source-f845f584/frontend/coverage/frontend/prettify.js
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+/private/tmp/declarai-pr-source-f845f584/frontend/coverage/frontend/sorter.js
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/ai-chat-panel/ai-chat-panel.component.html
+  239:56  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/ai-chat-panel/ai-chat-panel.component.ts
+    28:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+    29:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+    82:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+    83:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+    84:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+    85:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   890:9   warning  This assigned value is not used in subsequent statements                                                                                                                no-useless-assignment
+  1545:14  warning  'e' is defined but never used                                                                                                                                           @typescript-eslint/no-unused-vars
+  1545:17  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/app.component.ts
+  11:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+  12:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+  28:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  29:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  30:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/declaration/declaration.component.ts
+    8:25  warning  'Observable' is defined but never used                                                                                                                                  @typescript-eslint/no-unused-vars
+    9:10  warning  'map' is defined but never used                                                                                                                                         @typescript-eslint/no-unused-vars
+   17:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+   18:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+   61:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   62:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   63:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   64:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   65:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  645:13  warning  Empty block statement                                                                                                                                                   no-empty
+  656:13  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/deployment/deployment.component.html
+   8:8   warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  16:14  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  36:19  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  36:59  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/deployment/deployment.component.ts
+  10:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+  11:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+  26:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  27:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  92:17  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/evaluation/evaluation.component.html
+  19:19  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  26:19  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  82:18  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/evaluation/evaluation.component.ts
+   10:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+   11:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+   25:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   26:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   72:17  warning  Empty block statement                                                                                                                                                   no-empty
+  115:17  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/feature-card/feature-card.component.ts
+    15:10  warning  'MatTabsModule' is defined but never used                                                                                                                               @typescript-eslint/no-unused-vars
+    16:10  warning  'MatSelectModule' is defined but never used                                                                                                                             @typescript-eslint/no-unused-vars
+    70:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+    71:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+   196:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   197:26  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   198:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   199:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   992:21  warning  Empty block statement                                                                                                                                                   no-empty
+  1174:15  warning  Empty block statement                                                                                                                                                   no-empty
+  1184:15  warning  Empty block statement                                                                                                                                                   no-empty
+  1215:17  warning  Empty block statement                                                                                                                                                   no-empty
+  1261:13  warning  Empty block statement                                                                                                                                                   no-empty
+  1302:13  warning  Empty block statement                                                                                                                                                   no-empty
+  1340:13  warning  Empty block statement                                                                                                                                                   no-empty
+  1846:60  warning  '_' is defined but never used                                                                                                                                           @typescript-eslint/no-unused-vars
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/guards/session.guard.ts
+  8:15  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  8:42  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/home/home.component.ts
+  40:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                             @angular-eslint/prefer-on-push-component-change-detection
+  41:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone  @angular-eslint/prefer-standalone
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/login/login.component.ts
+  18:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+  19:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+  29:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  30:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  31:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/model-development/model-development.component.html
+  1335:50  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1343:29  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1407:26  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1757:31  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  2423:67  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/model-development/model-development.component.ts
+    12:10  warning  'switchMap' is defined but never used                                                                                                                                   @typescript-eslint/no-unused-vars
+    69:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+    70:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+   438:15  warning  Empty block statement                                                                                                                                                   no-empty
+   440:13  warning  Empty block statement                                                                                                                                                   no-empty
+   490:17  warning  Empty block statement                                                                                                                                                   no-empty
+   510:15  warning  Empty block statement                                                                                                                                                   no-empty
+   521:15  warning  Empty block statement                                                                                                                                                   no-empty
+   712:13  warning  Empty block statement                                                                                                                                                   no-empty
+   814:13  warning  Empty block statement                                                                                                                                                   no-empty
+   825:13  warning  Empty block statement                                                                                                                                                   no-empty
+  1110:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  1111:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  1112:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  1113:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  1114:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  1201:19  warning  '_' is defined but never used                                                                                                                                           @typescript-eslint/no-unused-vars
+  1450:13  warning  Empty block statement                                                                                                                                                   no-empty
+  1717:61  warning  '_result' is defined but never used                                                                                                                                     @typescript-eslint/no-unused-vars
+  2165:13  warning  Empty block statement                                                                                                                                                   no-empty
+  2177:13  warning  Empty block statement                                                                                                                                                   no-empty
+  2183:13  warning  Empty block statement                                                                                                                                                   no-empty
+  2192:13  warning  Empty block statement                                                                                                                                                   no-empty
+  2214:34  warning  'up' is defined but never used                                                                                                                                          @typescript-eslint/no-unused-vars
+  2226:11  warning  'isTrainTest' is assigned a value but never used                                                                                                                        @typescript-eslint/no-unused-vars
+  3039:19  warning  Empty block statement                                                                                                                                                   no-empty
+  3103:21  warning  Empty block statement                                                                                                                                                   no-empty
+  3195:21  warning  'event' is defined but never used                                                                                                                                       @typescript-eslint/no-unused-vars
+  3326:23  warning  Empty block statement                                                                                                                                                   no-empty
+  3758:15  warning  Empty block statement                                                                                                                                                   no-empty
+  3940:15  warning  Empty block statement                                                                                                                                                   no-empty
+  4056:15  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/modeling/modeling.component.html
+   602:17  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+   603:17  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+   710:20  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+   717:20  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1052:29  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1054:33  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1059:32  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1071:32  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1212:22  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1388:36  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1391:36  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1403:33  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1405:37  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1410:36  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  1413:36  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1563:31  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  1569:32  warning  Expected `===` but received `==`  @angular-eslint/template/eqeqeq
+  2243:30  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+  4032:26  warning  Expected `!==` but received `!=`  @angular-eslint/template/eqeqeq
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/modeling/modeling.component.ts
+    30:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+    31:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+   430:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   431:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   432:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   433:26  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   434:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   435:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   436:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   452:21  warning  '_' is defined but never used                                                                                                                                           @typescript-eslint/no-unused-vars
+   964:17  warning  Empty block statement                                                                                                                                                   no-empty
+   973:13  warning  Empty block statement                                                                                                                                                   no-empty
+  2235:15  warning  Empty block statement                                                                                                                                                   no-empty
+  2238:13  warning  'jitter' is assigned a value but never used                                                                                                                             @typescript-eslint/no-unused-vars
+  2467:13  warning  'ticktext' is assigned a value but never used                                                                                                                           @typescript-eslint/no-unused-vars
+  3899:17  warning  Empty block statement                                                                                                                                                   no-empty
+  4047:13  warning  Empty block statement                                                                                                                                                   no-empty
+  4056:15  warning  Empty block statement                                                                                                                                                   no-empty
+  5145:17  warning  Empty block statement                                                                                                                                                   no-empty
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/pipeline-codeline/pipeline-codeline.component.ts
+   76:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                                 @angular-eslint/prefer-on-push-component-change-detection
+   77:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone      @angular-eslint/prefer-standalone
+  114:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  115:5   warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/preprocessing/preprocessing.component.ts
+  7:44  warning  Components should not opt out of the default `ChangeDetectionStrategy.OnPush` change detection strategy                                                             @angular-eslint/prefer-on-push-component-change-detection
+  8:3   warning  Components, Directives and Pipes should not opt out of standalone. Following this guide is highly recommended: https://angular.dev/reference/migrations/standalone  @angular-eslint/prefer-standalone
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/services/auth.service.ts
+  21:15  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/services/data.service.ts
+   15:15  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+   15:41  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+  618:15  warning  This assigned value is not used in subsequent statements                                                                                                                no-useless-assignment
+
+/private/tmp/declarai-pr-source-f845f584/frontend/src/app/services/session.interceptor.ts
+  9:15  warning  Prefer using the inject() function over constructor parameter injection. Use Angular's migration schematic to automatically refactor: ng generate @angular/core:inject  @angular-eslint/prefer-inject
+
+✖ 158 problems (0 errors, 158 warnings)
+  0 errors and 3 warnings potentially fixable with the `--fix` option.
+

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
@@ -6,7 +6,9 @@ import { SharedService } from '../services/shared.service';
 @Component({
   selector: 'app-deployment',
   templateUrl: './deployment.component.html',
-  styleUrl: './deployment.component.css'
+  styleUrl: './deployment.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class DeploymentComponent implements OnInit, OnDestroy {
   currentFileId: number | null = null;
@@ -85,7 +87,9 @@ export class DeploymentComponent implements OnInit, OnDestroy {
         this.readiness = { ready: true, ...(resp?.manifest || {}) };
         this.isBundling = false;
         this.sharedService.setDeploymentCompleted(true);
-        try { this.sharedService.triggerCheckpoint('deployment_completed'); } catch {}
+        try {
+          this.sharedService.triggerCheckpoint('deployment_completed');
+        } catch {}
       },
       error: (err) => {
         const body = err?.error || {};

@@ -1,16 +1,53 @@
 <!-- Panel Toggle Bar -->
 <div class="panel-toggle-bar">
   <div class="toggle-group">
-    <button class="toggle-btn" [class.active]="showLeftPanel" (click)="toggleLeftPanel()" title="Toggle Progress Navigation">
+    <button
+      class="toggle-btn"
+      [class.active]="showLeftPanel"
+      (click)="toggleLeftPanel()"
+      title="Toggle Progress Navigation"
+    >
       <span class="toggle-icon">&#9776;</span>
       <span class="toggle-label">Navigation</span>
     </button>
-    <button class="toggle-btn" [class.active]="true" disabled title="Pipeline Flow (always visible)">
+    <button
+      class="toggle-btn"
+      [class.active]="true"
+      disabled
+      title="Pipeline Flow (always visible)"
+    >
       <span class="toggle-icon">&#9881;</span>
       <span class="toggle-label">Pipeline</span>
     </button>
-    <button class="toggle-btn" [class.active]="showRightPanel" (click)="toggleRightPanel()" title="Toggle AI Assistant">
-      <span class="toggle-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span>
+    <button
+      class="toggle-btn"
+      [class.active]="showRightPanel"
+      (click)="toggleRightPanel()"
+      title="Toggle AI Assistant"
+    >
+      <span class="toggle-icon"
+        ><svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z"
+            fill="currentColor"
+          />
+          <path
+            d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z"
+            fill="currentColor"
+            opacity="0.7"
+          />
+          <path
+            d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z"
+            fill="currentColor"
+            opacity="0.5"
+          /></svg
+      ></span>
       <span class="toggle-label">AI Assistant</span>
     </button>
   </div>
@@ -18,1003 +55,2421 @@
 
 <div class="layout-panels">
   <!-- Left Panel: Progress Navigation -->
-  <div class="panel-left" *ngIf="showLeftPanel" [style.width.px]="leftPanelWidth">
-    <div class="left-nav">
-      <div class="left-nav-header">
-        <span>Pipeline Flow</span>
-        <span class="nav-overall-pct">{{ getOverallProgress() }}%</span>
-      </div>
-      <!-- Overall progress bar -->
-      <div class="nav-overall-bar">
-        <div class="nav-overall-bar-fill" [style.width.%]="getOverallProgress()"></div>
-      </div>
-
-      <div class="nav-steps">
-        <div *ngFor="let mainStep of navMainSteps; let i = index" class="nav-main-step"
-             [class.nav-active]="isNavStepActive(mainStep.id)"
-             [class.nav-completed]="getMainStepStatus(mainStep.id) === 'completed'"
-             [class.nav-in-progress]="getMainStepStatus(mainStep.id) === 'in_progress'"
-             [class.nav-disabled]="!stepEnabled(mainStep.id)">
-
-          <!-- Main step header (clickable: toggles collapse + navigates) -->
-          <div class="nav-main-header" (click)="toggleNavStep(mainStep.id)">
-            <div class="nav-main-left">
-              <!-- Status icon -->
-              <span class="nav-status-icon"
+  @if (showLeftPanel) {
+    <div class="panel-left" [style.width.px]="leftPanelWidth">
+      <div class="left-nav">
+        <div class="left-nav-header">
+          <span>Pipeline Flow</span>
+          <span class="nav-overall-pct">{{ getOverallProgress() }}%</span>
+        </div>
+        <!-- Overall progress bar -->
+        <div class="nav-overall-bar">
+          <div class="nav-overall-bar-fill" [style.width.%]="getOverallProgress()"></div>
+        </div>
+        <div class="nav-steps">
+          @for (mainStep of navMainSteps; track mainStep; let i = $index) {
+            <div
+              class="nav-main-step"
+              [class.nav-active]="isNavStepActive(mainStep.id)"
+              [class.nav-completed]="getMainStepStatus(mainStep.id) === 'completed'"
+              [class.nav-in-progress]="getMainStepStatus(mainStep.id) === 'in_progress'"
+              [class.nav-disabled]="!stepEnabled(mainStep.id)"
+            >
+              <!-- Main step header (clickable: toggles collapse + navigates) -->
+              <div class="nav-main-header" (click)="toggleNavStep(mainStep.id)">
+                <div class="nav-main-left">
+                  <!-- Status icon -->
+                  <span
+                    class="nav-status-icon"
                     [ngClass]="{
                       'icon-completed': getMainStepStatus(mainStep.id) === 'completed',
                       'icon-in-progress': getMainStepStatus(mainStep.id) === 'in_progress',
-                      'icon-pending': getMainStepStatus(mainStep.id) === 'pending'
-                    }">
-                <span *ngIf="getMainStepStatus(mainStep.id) === 'completed'">&#10003;</span>
-                <span *ngIf="getMainStepStatus(mainStep.id) === 'in_progress'" class="icon-pulse">&#9679;</span>
-                <span *ngIf="getMainStepStatus(mainStep.id) === 'pending'">&#9675;</span>
-              </span>
-              <span class="nav-main-label" (click)="navGoToStep($event, mainStep.id)">
-                {{ i + 1 }}. {{ mainStep.label }}
-              </span>
+                      'icon-pending': getMainStepStatus(mainStep.id) === 'pending',
+                    }"
+                  >
+                    @if (getMainStepStatus(mainStep.id) === 'completed') {
+                      <span>&#10003;</span>
+                    }
+                    @if (getMainStepStatus(mainStep.id) === 'in_progress') {
+                      <span class="icon-pulse">&#9679;</span>
+                    }
+                    @if (getMainStepStatus(mainStep.id) === 'pending') {
+                      <span>&#9675;</span>
+                    }
+                  </span>
+                  <span class="nav-main-label" (click)="navGoToStep($event, mainStep.id)">
+                    {{ i + 1 }}. {{ mainStep.label }}
+                  </span>
+                </div>
+                <div class="nav-main-right">
+                  <span class="nav-pct">{{ getMainStepProgressPct(mainStep.id) }}%</span>
+                  <span class="nav-chevron" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]"
+                    >&#9656;</span
+                  >
+                </div>
+              </div>
+              <!-- Progress bar for main step -->
+              <div class="nav-step-bar">
+                <div
+                  class="nav-step-bar-fill"
+                  [style.width.%]="getMainStepProgressPct(mainStep.id)"
+                  [ngClass]="{
+                    'bar-completed': getMainStepStatus(mainStep.id) === 'completed',
+                    'bar-in-progress': getMainStepStatus(mainStep.id) === 'in_progress',
+                  }"
+                ></div>
+              </div>
+              <!-- Collapsible sub-steps -->
+              @if (navExpandedSteps[mainStep.id]) {
+                <div class="nav-sub-steps">
+                  @for (sub of mainStep.subSteps; track sub) {
+                    <div
+                      class="nav-sub-step"
+                      [class.sub-completed]="getSubStepStatus(sub.id) === 'completed'"
+                      [class.sub-in-progress]="getSubStepStatus(sub.id) === 'in_progress'"
+                      [class.sub-pending]="getSubStepStatus(sub.id) === 'pending'"
+                      (click)="navGoToSubStep($event, mainStep.id, sub.id)"
+                    >
+                      <span class="nav-sub-icon">
+                        @if (getSubStepStatus(sub.id) === 'completed') {
+                          <span>&#10003;</span>
+                        }
+                        @if (getSubStepStatus(sub.id) === 'in_progress') {
+                          <span class="icon-pulse">&#8226;</span>
+                        }
+                        @if (getSubStepStatus(sub.id) === 'pending') {
+                          <span>&#8226;</span>
+                        }
+                      </span>
+                      <span class="nav-sub-label">{{ sub.label }}</span>
+                    </div>
+                  }
+                </div>
+              }
             </div>
-            <div class="nav-main-right">
-              <span class="nav-pct">{{ getMainStepProgressPct(mainStep.id) }}%</span>
-              <span class="nav-chevron" [class.nav-chevron-open]="navExpandedSteps[mainStep.id]">&#9656;</span>
-            </div>
-          </div>
-
-          <!-- Progress bar for main step -->
-          <div class="nav-step-bar">
-            <div class="nav-step-bar-fill"
-                 [style.width.%]="getMainStepProgressPct(mainStep.id)"
-                 [ngClass]="{
-                   'bar-completed': getMainStepStatus(mainStep.id) === 'completed',
-                   'bar-in-progress': getMainStepStatus(mainStep.id) === 'in_progress'
-                 }"></div>
-          </div>
-
-          <!-- Collapsible sub-steps -->
-          <div class="nav-sub-steps" *ngIf="navExpandedSteps[mainStep.id]">
-            <div *ngFor="let sub of mainStep.subSteps" class="nav-sub-step"
-                 [class.sub-completed]="getSubStepStatus(sub.id) === 'completed'"
-                 [class.sub-in-progress]="getSubStepStatus(sub.id) === 'in_progress'"
-                 [class.sub-pending]="getSubStepStatus(sub.id) === 'pending'"
-                 (click)="navGoToSubStep($event, mainStep.id, sub.id)">
-              <span class="nav-sub-icon">
-                <span *ngIf="getSubStepStatus(sub.id) === 'completed'">&#10003;</span>
-                <span *ngIf="getSubStepStatus(sub.id) === 'in_progress'" class="icon-pulse">&#8226;</span>
-                <span *ngIf="getSubStepStatus(sub.id) === 'pending'">&#8226;</span>
-              </span>
-              <span class="nav-sub-label">{{ sub.label }}</span>
-            </div>
-          </div>
+          }
         </div>
       </div>
     </div>
-  </div>
+  }
 
   <!-- Left Resize Handle -->
-  <div class="resize-handle" *ngIf="showLeftPanel" (mousedown)="onLeftResizeStart($event)"></div>
+  @if (showLeftPanel) {
+    <div class="resize-handle" (mousedown)="onLeftResizeStart($event)"></div>
+  }
 
   <!-- Middle Panel: Pipeline Content -->
   <div class="panel-middle">
     <div class="model-development-container">
       <!-- Always show the header -->
-      <br><br>
-  <div style="display: flex; align-items: center; gap: 16px;">
-    <h1 style="margin: 0;">Model Development</h1>
-    <button (click)="toggleSavedPipelines()"
-            style="padding: 8px 16px; background: #1565c0; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-      <span style="font-size: 16px;">&#128193;</span> Saved Pipelines
-    </button>
-    <span *ngIf="activePipelineRunId" style="font-size: 13px; color: #555; background: #e3f2fd; padding: 4px 10px; border-radius: 12px;">
-      Active: <strong>{{ pipelineRunName }}</strong>
-    </span>
+      <br /><br />
+      <div style="display: flex; align-items: center; gap: 16px">
+        <h1 style="margin: 0">Model Development</h1>
+        <button
+          (click)="toggleSavedPipelines()"
+          style="
+            padding: 8px 16px;
+            background: #1565c0;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          "
+        >
+          <span style="font-size: 16px">&#128193;</span> Saved Pipelines
+        </button>
+        @if (activePipelineRunId) {
+          <span
+            style="
+              font-size: 13px;
+              color: #555;
+              background: #e3f2fd;
+              padding: 4px 10px;
+              border-radius: 12px;
+            "
+          >
+            Active: <strong>{{ pipelineRunName }}</strong>
+          </span>
+        }
 
-    <!-- Autosave toggle + Manual save -->
-    <div *ngIf="activePipelineRunId" style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
-      <!-- Autosave toggle -->
-      <button (click)="toggleAutosave()"
-              [title]="autosaveEnabled ? 'Autosave ON — click to disable' : 'Autosave OFF — click to enable'"
-              style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s;"
+        <!-- Autosave toggle + Manual save -->
+        @if (activePipelineRunId) {
+          <div style="display: flex; align-items: center; gap: 6px; margin-left: auto">
+            <!-- Autosave toggle -->
+            <button
+              (click)="toggleAutosave()"
+              [title]="
+                autosaveEnabled
+                  ? 'Autosave ON — click to disable'
+                  : 'Autosave OFF — click to enable'
+              "
+              style="
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 5px 10px;
+                border: 1px solid;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 500;
+                transition: all 0.2s;
+              "
               [style.background]="autosaveEnabled ? '#e8f5e9' : '#fff3e0'"
               [style.borderColor]="autosaveEnabled ? '#4caf50' : '#ff9800'"
-              [style.color]="autosaveEnabled ? '#2e7d32' : '#e65100'">
-        <span style="font-size: 15px;">{{ autosaveEnabled ? '&#9889;' : '&#9888;' }}</span>
-        {{ autosaveEnabled ? 'Autosave' : 'Manual' }}
-      </button>
-
-      <!-- Manual save button (visible when autosave is OFF) -->
-      <button *ngIf="!autosaveEnabled"
-              (click)="manualSave()"
-              [disabled]="!_unsavedChanges"
-              title="Save pipeline now"
-              style="display: flex; align-items: center; gap: 4px; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;"
-              [style.background]="_unsavedChanges ? '#1565c0' : '#bdbdbd'"
-              [style.color]="'white'">
-        <span style="font-size: 15px;">&#128190;</span> Save
-      </button>
-
-      <!-- Unsaved indicator -->
-      <span *ngIf="!autosaveEnabled && _unsavedChanges"
-            style="font-size: 11px; color: #e65100; font-weight: 500; padding: 2px 8px; background: #fff3e0; border-radius: 10px;">
-        Unsaved changes
-      </span>
-
-      <!-- Report download buttons -->
-      <div style="display: flex; align-items: center; gap: 4px; margin-left: 8px; border-left: 1px solid #e0e0e0; padding-left: 10px;">
-        <button (click)="downloadReportHtml()"
+              [style.color]="autosaveEnabled ? '#2e7d32' : '#e65100'"
+            >
+              <span style="font-size: 15px">{{ autosaveEnabled ? '&#9889;' : '&#9888;' }}</span>
+              {{ autosaveEnabled ? 'Autosave' : 'Manual' }}
+            </button>
+            <!-- Manual save button (visible when autosave is OFF) -->
+            @if (!autosaveEnabled) {
+              <button
+                (click)="manualSave()"
+                [disabled]="!_unsavedChanges"
+                title="Save pipeline now"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                  padding: 5px 12px;
+                  border: none;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  font-weight: 600;
+                  transition: all 0.2s;
+                "
+                [style.background]="_unsavedChanges ? '#1565c0' : '#bdbdbd'"
+                [style.color]="'white'"
+              >
+                <span style="font-size: 15px">&#128190;</span> Save
+              </button>
+            }
+            <!-- Unsaved indicator -->
+            @if (!autosaveEnabled && _unsavedChanges) {
+              <span
+                style="
+                  font-size: 11px;
+                  color: #e65100;
+                  font-weight: 500;
+                  padding: 2px 8px;
+                  background: #fff3e0;
+                  border-radius: 10px;
+                "
+              >
+                Unsaved changes
+              </span>
+            }
+            <!-- Report download buttons -->
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-left: 8px;
+                border-left: 1px solid #e0e0e0;
+                padding-left: 10px;
+              "
+            >
+              <button
+                (click)="downloadReportHtml()"
                 title="Download pipeline report as HTML"
-                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #1565c0; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #e3f2fd; color: #1565c0; transition: all 0.2s;">
-          <span style="font-size: 14px;">&#128196;</span> HTML
-        </button>
-        <button (click)="downloadReportPdf()"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                  padding: 5px 10px;
+                  border: 1px solid #1565c0;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  font-weight: 500;
+                  background: #e3f2fd;
+                  color: #1565c0;
+                  transition: all 0.2s;
+                "
+              >
+                <span style="font-size: 14px">&#128196;</span> HTML
+              </button>
+              <button
+                (click)="downloadReportPdf()"
                 title="Open pipeline report for Print / Save as PDF"
-                style="display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid #c62828; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; background: #ffebee; color: #c62828; transition: all 0.2s;">
-          <span style="font-size: 14px;">&#128438;</span> PDF
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Exit Without Saving Dialog -->
-  <div *ngIf="showExitDialog"
-       style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;"
-       (click)="cancelExit()">
-    <div style="background: white; border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); text-align: center;"
-         (click)="$event.stopPropagation()">
-      <div style="font-size: 40px; margin-bottom: 12px;">&#9888;&#65039;</div>
-      <h3 style="margin: 0 0 8px 0; color: #333;">Unsaved Changes</h3>
-      <p style="color: #666; font-size: 14px; margin: 0 0 24px 0;">
-        You have unsaved pipeline changes. Would you like to save before leaving?
-      </p>
-      <div style="display: flex; gap: 10px; justify-content: center;">
-        <button (click)="exitWithSave()"
-                style="padding: 10px 20px; background: #2e7d32; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
-          &#128190; Save &amp; Exit
-        </button>
-        <button (click)="exitWithoutSave()"
-                style="padding: 10px 20px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
-          Exit Without Saving
-        </button>
-        <button (click)="cancelExit()"
-                style="padding: 10px 20px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Saved Pipelines Panel -->
-  <div *ngIf="showSavedPipelines" style="margin: 16px 0; padding: 16px; border: 1px solid #1565c0; border-radius: 8px; background: #f5f9ff; max-height: 400px; overflow-y: auto;">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-      <h3 style="margin: 0; color: #1565c0;">Saved Pipeline Runs</h3>
-      <button (click)="showSavedPipelines = false" style="background: none; border: none; cursor: pointer; font-size: 18px; color: #999;">&times;</button>
-    </div>
-
-    <div *ngIf="savedPipelines.length === 0" style="color: #777; font-size: 13px; padding: 12px 0;">
-      No saved pipeline runs yet. Start a pipeline and checkpoints will be saved automatically.
-    </div>
-
-    <div *ngFor="let run of savedPipelines" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; background: white; border: 1px solid #e0e0e0; border-radius: 6px;">
-      <!-- Name (editable) -->
-      <div style="flex: 1; min-width: 0;">
-        <div *ngIf="renamingPipelineId !== run.id" style="font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" [title]="run.name">
-          {{ run.name }}
-        </div>
-        <div *ngIf="renamingPipelineId === run.id" style="display: flex; gap: 4px;">
-          <input [(ngModel)]="renamingPipelineName" style="flex: 1; padding: 4px 8px; border: 1px solid #1565c0; border-radius: 4px; font-size: 13px;" (keyup.enter)="confirmRenamePipeline(run)" />
-          <button (click)="confirmRenamePipeline(run)" style="padding: 4px 8px; background: #1565c0; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&#10003;</button>
-          <button (click)="cancelRenamePipeline()" style="padding: 4px 8px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">&times;</button>
-        </div>
-        <div style="font-size: 11px; color: #888; margin-top: 2px;">
-          {{ run.pipeline_type | titlecase }} &middot; {{ run.updated_at | date:'short' }}
-        </div>
-      </div>
-
-      <!-- Step Progress -->
-      <div style="width: 180px; flex-shrink: 0;">
-        <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center;">{{ getDetailedStepLabel(run) }}</div>
-        <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
-          <div [style.width.%]="getDetailedStepProgress(run)" style="height: 100%; background: #1565c0; border-radius: 3px; transition: width 0.3s;"></div>
-        </div>
-      </div>
-
-      <!-- Actions -->
-      <div style="display: flex; gap: 4px; flex-shrink: 0;">
-        <button (click)="loadPipelineRun(run.id)" title="Load & Continue"
-                style="padding: 6px 12px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-          Load
-        </button>
-        <button (click)="startRenamePipeline(run)" title="Rename"
-                style="padding: 6px 8px; background: #f57c00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-          &#9998;
-        </button>
-        <button (click)="deletePipelineRun(run.id)" title="Delete"
-                style="padding: 6px 8px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-          &#128465;
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div class="pipeline-declaration">
-    <!-- CRISP-DM: Business Understanding -->
-    <div id="business-understanding-anchor" class="bu-section">
-      <p class="bu-title">Business Understanding</p>
-      <p class="bu-subtitle">
-        Frame the decision problem and success criteria before data work. These fields feed the CRISP-DM export pack,
-        the evaluation business floors, and the AI Assistant&rsquo;s project memory.
-      </p>
-
-      <div class="bu-grid">
-        <label class="bu-field">
-          <span class="bu-label">
-            Business objective
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Business objective: the decision this model supports, in one sentence."
-                  data-tip="The decision this model supports, in one sentence. Write it as an action the business takes — e.g. &quot;Approve or decline unsecured personal loan applications at origination.&quot; Every AI Assistant recommendation is anchored to this.">i</span>
-          </span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.objective" (ngModelChange)="businessUnderstanding.objective = $event; onBusinessUnderstandingChanged()" placeholder="What decision does this model support?"></textarea>
-        </label>
-        <label class="bu-field">
-          <span class="bu-label">
-            Prediction horizon
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Prediction horizon: how far ahead the prediction looks."
-                  data-tip="How far ahead the prediction looks. Use a concrete window — e.g. &quot;12 months from disbursement&quot;. It must match the performance window used to build the target.">i</span>
-          </span>
-          <input type="text" [ngModel]="businessUnderstanding.prediction_horizon" (ngModelChange)="businessUnderstanding.prediction_horizon = $event; onBusinessUnderstandingChanged()" placeholder="e.g. 12 months" />
-        </label>
-        <label class="bu-field">
-          <span class="bu-label">
-            Population
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Population: who gets scored."
-                  data-tip="Who gets scored. State segment, product and channel — e.g. &quot;New-to-bank applicants for unsecured personal loans.&quot; The scoring population at deployment must match this.">i</span>
-          </span>
-          <input type="text" [ngModel]="businessUnderstanding.population" (ngModelChange)="businessUnderstanding.population = $event; onBusinessUnderstandingChanged()" placeholder="Who is scored?" />
-        </label>
-        <label class="bu-field">
-          <span class="bu-label">
-            Exclusions
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Exclusions: cases deliberately kept out of the modelling sample."
-                  data-tip="Cases deliberately kept out of the modelling sample — e.g. &quot;staff accounts, applications withdrawn before decision, restructured loans.&quot; Each exclusion must be reproducible at scoring time.">i</span>
-          </span>
-          <input type="text" [ngModel]="businessUnderstanding.exclusions" (ngModelChange)="businessUnderstanding.exclusions = $event; onBusinessUnderstandingChanged()" placeholder="Segments or cases to exclude" />
-        </label>
-        <label class="bu-field">
-          <span class="bu-label">
-            Target column (contract)
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Target column: exact column name in the data dictionary that holds the target."
-                  data-tip="Exact column name in the data dictionary that holds the target — e.g. Good_Bad_Flag. It must match the uploaded data letter-for-letter, or the split contract check will fail.">i</span>
-          </span>
-          <input type="text" [ngModel]="businessUnderstanding.target_contract.target_column" (ngModelChange)="businessUnderstanding.target_contract.target_column = $event; onBusinessUnderstandingChanged()" placeholder="Column name in data dictionary" />
-        </label>
-        <label class="bu-field">
-          <span class="bu-label">
-            Good/bad window
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Good/bad window: observation and performance windows that define the target."
-                  data-tip="Observation + performance windows that turn raw behaviour into the target — e.g. &quot;observation 2022-01..2022-12, performance 12 months, 90+ DPD = Bad.&quot; Leave empty for a continuous (regression) target.">i</span>
-          </span>
-          <input type="text" [ngModel]="businessUnderstanding.target_contract.good_bad_window" (ngModelChange)="businessUnderstanding.target_contract.good_bad_window = $event; onBusinessUnderstandingChanged()" placeholder="e.g. performance window" />
-        </label>
-        <label class="bu-field bu-field-wide">
-          <span class="bu-label">
-            Event/Target Definition
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Event/Target Definition: the formal, testable definition of what the model predicts."
-                  data-tip="The formal, testable definition of what the model predicts, including the unit of measurement. Classification — &quot;Bad = 90+ days past due within 12 months of disbursement.&quot; Regression — &quot;Loss given default as a share of exposure at default (0–1).&quot; This is the prediction contract the AI Assistant and every downstream step work from.">i</span>
-          </span>
-          <textarea rows="3" id="targetDefinition"
-                    [ngModel]="businessUnderstanding.target_contract.event_definition"
-                    (ngModelChange)="onEventDefinitionChanged($event)"
-                    placeholder="e.g. Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."></textarea>
-        </label>
-      </div>
-
-      <button type="button" class="bu-details-toggle"
-              (click)="toggleBusinessDetails()"
-              [attr.aria-expanded]="showBusinessDetails"
-              aria-controls="bu-details-panel">
-        <span class="bu-details-caret" [class.bu-details-caret-open]="showBusinessDetails" aria-hidden="true">&#9656;</span>
-        Details
-        <span class="bu-details-hint">optional &mdash; assumptions, regulatory notes, forbidden features</span>
-      </button>
-
-      <div id="bu-details-panel" class="bu-grid bu-details" *ngIf="showBusinessDetails">
-        <label class="bu-field bu-field-wide">
-          <span class="bu-label">
-            Assumptions
-            <span class="bu-optional-tag">optional</span>
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Assumptions: what you are taking as given."
-                  data-tip="Anything you take as given — data availability, stable macro conditions, no policy change during the performance window. Validators read this first when the model underperforms.">i</span>
-          </span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.assumptions" (ngModelChange)="businessUnderstanding.assumptions = $event; onBusinessUnderstandingChanged()" placeholder="e.g. Application data is complete at decision time; no policy change during the performance window."></textarea>
-        </label>
-        <label class="bu-field bu-field-wide">
-          <span class="bu-label">
-            Regulatory notes
-            <span class="bu-optional-tag">optional</span>
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Regulatory notes: rules that constrain the model."
-                  data-tip="Rules that constrain the model — protected attributes, explainability obligations, model-risk tier, retention rules. Naming them here keeps the AI Assistant from suggesting anything that breaches them.">i</span>
-          </span>
-          <textarea rows="2" [ngModel]="businessUnderstanding.regulatory_notes" (ngModelChange)="businessUnderstanding.regulatory_notes = $event; onBusinessUnderstandingChanged()" placeholder="e.g. Adverse-action reasons required; no use of protected attributes or their proxies."></textarea>
-        </label>
-        <label class="bu-field bu-field-wide">
-          <span class="bu-label">
-            Forbidden features (comma-separated)
-            <span class="bu-optional-tag">optional</span>
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Forbidden features: columns that must never enter the model."
-                  data-tip="Columns that must never enter the model — post-outcome fields, leakage, proxies for protected attributes. Comma-separated; the AI Assistant treats them as off-limits in every feature recommendation.">i</span>
-          </span>
-          <input type="text" [ngModel]="forbiddenFeaturesText" (ngModelChange)="forbiddenFeaturesText = $event; onBusinessUnderstandingChanged()" placeholder="e.g. post_disbursement_balance, internal_score" />
-        </label>
-      </div>
-
-      <fieldset class="bu-criteria">
-        <legend>
-          Success criteria
-          <span class="bu-info" tabindex="0" role="note"
-                aria-label="Success criteria: the metric, floor and costs evaluation is judged against."
-                data-tip="The single metric that decides whether the model is good enough, the business minimum it must clear, and the relative cost of the two error types. The primary metric also declares the problem type.">i</span>
-        </legend>
-        <div class="bu-criteria-row">
-          <label class="bu-field">
-            <span class="bu-label">
-              Primary metric
-              <span class="bu-info" tabindex="0" role="note"
-                    aria-label="Primary metric: the metric that decides whether the model is good enough."
-                    data-tip="The metric the model is judged on. ROC-AUC / PR-AUC / F1 declare a classification problem; RMSE / R² declare a regression problem — the Pipeline Declarations list below follows this choice.">i</span>
-            </span>
-            <select [ngModel]="businessUnderstanding.success_criteria.primary_metric" (ngModelChange)="businessUnderstanding.success_criteria.primary_metric = $event; onBusinessUnderstandingChanged()">
-              <option value="roc_auc">ROC-AUC</option>
-              <option value="pr_auc">PR-AUC</option>
-              <option value="f1">F1</option>
-              <option value="rmse">RMSE</option>
-              <option value="r2">R&#178;</option>
-            </select>
-          </label>
-          <label class="bu-field">
-            <span class="bu-label">
-              Direction
-              <span class="bu-info" tabindex="0" role="note"
-                    aria-label="Direction: whether the primary metric is maximised or minimised."
-                    data-tip="Whether the primary metric should be maximised (ROC-AUC, PR-AUC, F1, R²) or minimised (RMSE).">i</span>
-            </span>
-            <select [ngModel]="businessUnderstanding.success_criteria.direction" (ngModelChange)="businessUnderstanding.success_criteria.direction = $event; onBusinessUnderstandingChanged()">
-              <option value="maximize">Maximize</option>
-              <option value="minimize">Minimize</option>
-            </select>
-          </label>
-          <label class="bu-field">
-            <span class="bu-label">
-              Floor (business minimum)
-              <span class="bu-info" tabindex="0" role="note"
-                    aria-label="Floor: the business minimum for the primary metric."
-                    data-tip="The business minimum for the primary metric. Evaluation compares the outer-test score against it. Leave empty to proceed without a floor — evaluation will still run, but nothing gates on it.">i</span>
-            </span>
-            <input type="number" step="0.001" [ngModel]="businessUnderstanding.success_criteria.floor" (ngModelChange)="businessUnderstanding.success_criteria.floor = $event === '' ? null : +$event; onBusinessUnderstandingChanged()" placeholder="e.g. 0.65" />
-          </label>
-          <label class="bu-field">
-            <span class="bu-label">
-              FN cost
-              <span class="bu-info" tabindex="0" role="note"
-                    aria-label="FN cost: business cost of a missed event."
-                    data-tip="Relative business cost of a missed event (false negative) — e.g. a defaulter approved. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation.">i</span>
-            </span>
-            <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fn_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fn_cost = +$event; onBusinessUnderstandingChanged()" />
-          </label>
-          <label class="bu-field">
-            <span class="bu-label">
-              FP cost
-              <span class="bu-info" tabindex="0" role="note"
-                    aria-label="FP cost: business cost of a false alarm."
-                    data-tip="Relative business cost of a false alarm (false positive) — e.g. a good applicant declined. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation.">i</span>
-            </span>
-            <input type="number" step="0.1" [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fp_cost" (ngModelChange)="businessUnderstanding.success_criteria.cost_matrix.fp_cost = +$event; onBusinessUnderstandingChanged()" />
-          </label>
-          <label class="bu-checkbox">
-            <input type="checkbox" [ngModel]="businessUnderstanding.hard_block_modeling_without_criteria" (ngModelChange)="businessUnderstanding.hard_block_modeling_without_criteria = $event; onBusinessUnderstandingChanged()" />
-            <span>Block modeling without floor</span>
-            <span class="bu-info" tabindex="0" role="note"
-                  aria-label="Block modeling without floor: hard gate on the success floor."
-                  data-tip="Hard gate: modeling cannot start until a floor is set. Leave off to allow modeling with only a warning.">i</span>
-          </label>
-        </div>
-      </fieldset>
-
-      <div class="bu-problem-type" *ngIf="detectedProblemType">
-        <span class="bu-problem-type-badge">{{ problemTypeLabel() }}</span>
-        <span>Problem type derived from {{ problemTypeReason }}. Pipeline Declarations lists only pipelines that can train it.</span>
-      </div>
-      <div class="bu-conflict" *ngIf="problemTypeMetricConflict" role="alert">
-        The objective wording and the selected primary metric disagree on the problem type. Set the primary metric that
-        matches the target you described &mdash; ROC-AUC / PR-AUC / F1 for classification, RMSE / R&#178; for regression.
-      </div>
-
-      <div *ngIf="modelingCriteriaWarning" class="bu-warning" role="alert">
-        Success criteria floor is empty. Modeling can proceed, but evaluation will compare outer-test metrics against business floors.
-      </div>
-
-      <div class="bu-ai-note">
-        <span class="ai-info-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/>
-            <path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/>
-          </svg>
-        </span>
-        Everything declared here is kept as project metadata in the AI Assistant&rsquo;s memory and applied to every recommendation it makes.
-      </div>
-    </div>
-
-    <div class="pipeline-type-dropdown">
-      <p style="font-size:larger; font-weight:bold">Pipeline Declarations</p>
-      <select [ngModel]="selectedPipeline" (ngModelChange)="selectedPipeline = $event; onPipelineChange2($event)">
-        <option value="" disabled>Select Pipeline</option>
-        <option *ngFor="let option of availablePipelineOptions" [value]="option.value">{{ option.label }}</option>
-      </select>
-      <p class="pipeline-filter-note" *ngIf="detectedProblemType">
-        Filtered to {{ problemTypeLabel().toLowerCase() }} pipelines.
-      </p>
-      <p class="pipeline-reset-notice" *ngIf="pipelineResetNotice" role="alert">{{ pipelineResetNotice }}</p>
-    </div>
-
-    <!-- Start button: only before pipeline is started -->
-    <button *ngIf="!isStarted" class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">Start</button>
-
-  </div>
-  <!-- Declaration specific content (always visible at top) -->
-  <app-declaration></app-declaration>
-
-  <!-- Preprocessing step appears only after Data Declaration (file selected/uploaded) and remains visible -->
-  <div *ngIf="preprocessingAvailable" class="preprocessing-declaration">
-    <h2>Data Purifier Declaration</h2>
-    <div class="selected-options">
-      <h3>Selected Options:</h3>
-      <ul>
-        <li *ngFor="let option of selectedOptions">
-          {{ option.id }}. {{ option.name }}
-        </li>
-      </ul>
-    </div>
-    <mat-form-field appearance="fill">
-      <mat-label>Select Data Purification Options</mat-label>
-      <mat-select multiple [(ngModel)]="selectedOptions" (selectionChange)="onSelectionChange($event); onPipelineConfigChanged()">
-        <mat-option *ngFor="let option of purifierOptions" [value]="option" [disabled]="isOptionDisabled(option)">
-          {{ option.id }}. {{ option.name }}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <!-- Train/Test Split Controls -->
-    <div style="margin-top: 12px; display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
-      <label style="display:flex; align-items:center; gap:6px;">
-        <span>Split Strategy:</span>
-        <select [ngModel]="splitStrategy" (ngModelChange)="splitStrategy = $event; onPipelineConfigChanged()">
-          <option value="random">Random</option>
-          <option value="oot">Out-of-Time (OOT)</option>
-        </select>
-      </label>
-      <ng-container *ngIf="splitStrategy === 'random'">
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>OOS Percent:</span>
-          <input type="number" min="1" max="99" [ngModel]="oosPercent" (ngModelChange)="oosPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
-        </label>
-        <small style="color:#666;">Random {{100 - oosPercent}}/{{oosPercent}} train/test split.</small>
-      </ng-container>
-      <ng-container *ngIf="splitStrategy === 'oot'">
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>Date Column:</span>
-          <select [ngModel]="splitDateColumn" (ngModelChange)="splitDateColumn = $event; onPipelineConfigChanged()">
-            <option [ngValue]="null" disabled>Select date column</option>
-            <option *ngFor="let c of dateColumns" [ngValue]="c">{{ c }}</option>
-          </select>
-        </label>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>OOT Mode:</span>
-          <select [ngModel]="ootMode" (ngModelChange)="ootMode = $event; onPipelineConfigChanged()">
-            <option value="percent">Percent (default 75/25)</option>
-            <option value="cutoff">Time Cutoff</option>
-          </select>
-        </label>
-        <ng-container *ngIf="ootMode === 'percent'">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span>OOT Percent:</span>
-            <input type="number" min="1" max="99" [ngModel]="ootPercent" (ngModelChange)="ootPercent = $event; onPipelineConfigChanged()" style="width:80px;" />
-          </label>
-          <small style="color:#666;">Sorted by time ascending; last {{ootPercent}}% goes to OOT (test).</small>
-        </ng-container>
-        <ng-container *ngIf="ootMode === 'cutoff'">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span>Cutoff:</span>
-            <input type="datetime-local" [ngModel]="splitCutoff" (ngModelChange)="splitCutoff = $event; onPipelineConfigChanged()" />
-          </label>
-          <small style="color:#666;">Train ≤ cutoff, Test &gt; cutoff</small>
-        </ng-container>
-      </ng-container>
-    </div>
-
-    <!-- Note: After Preprocessing Config -->
-    <div class="pipeline-note-slot">
-      <div *ngIf="!hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-add" (click)="toggleNoteEdit('after_preprocessing_config')">
-        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
-      </div>
-      <div *ngIf="hasNote('after_preprocessing_config') && editingNotePosition !== 'after_preprocessing_config'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_preprocessing_config')">
-        <div class="pipeline-note-content">{{ pipelineNotes['after_preprocessing_config'] }}</div>
-        <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_preprocessing_config')" title="Edit">&#9998;</button>
-          <button class="pipeline-note-btn delete" (click)="deleteNote('after_preprocessing_config')" title="Delete">&times;</button>
-        </div>
-      </div>
-      <div *ngIf="editingNotePosition === 'after_preprocessing_config'" class="pipeline-note-editor">
-        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_preprocessing_config'] || ''" (ngModelChange)="onNoteChanged('after_preprocessing_config', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
-        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
-      </div>
-    </div>
-    <app-pipeline-codeline position="after_preprocessing_config"></app-pipeline-codeline>
-
-    <!-- Run preprocessing to compute Data Quality summary -->
-    <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
-      <button mat-raised-button color="primary"
-              (click)="proceedFromPreprocessing()"
-              [disabled]="isProcessing">
-        {{ isProcessing ? 'Processing…' : 'Run Preprocessing' }}
-      </button>
-      <mat-progress-bar *ngIf="isProcessing" mode="indeterminate" style="width: 240px;"></mat-progress-bar>
-    </div>
-
-    <!-- Data Quality Step Anchor and Summary Table -->
-    <div id="data-quality-anchor"></div>
-    <div *ngIf="datqSummary?.length" style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-      <button type="button" (click)="enrichDatqRecommendations()" style="padding: 6px 12px; font-size: 12px;">
-        Refresh shift recommendations
-      </button>
-      <button type="button" (click)="loadSequentialPatterns()" [disabled]="sequentialLoading || currentFileId == null"
-              style="padding: 6px 12px; font-size: 12px;">
-        {{ sequentialLoading ? 'Scanning…' : 'Scan sequential / near-duplicate patterns' }}
-      </button>
-      <button type="button" (click)="exportCrispPack()" [disabled]="currentFileId == null"
-              style="padding: 6px 12px; font-size: 12px;">
-        Download CRISP export pack
-      </button>
-    </div>
-    <div *ngIf="sequentialCandidates?.length" style="margin: 8px 0 16px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; max-width: 900px;">
-      <h4 style="margin: 0 0 8px;">Sequential pattern candidates (MVP)</h4>
-      <p style="font-size: 12px; color: #666; margin: 0 0 8px;">Near-duplicate consecutive rows with few differing columns — review for causality / leakage, not a full causal graph.</p>
-      <ul style="margin: 0; padding-left: 18px; font-size: 12px;">
-        <li *ngFor="let c of sequentialCandidates | slice:0:12">
-          rows {{ c.row_a }} → {{ c.row_b }} · Δ{{ c.n_diff }} · {{ (c.changed_features || []).join(', ') }}
-        </li>
-      </ul>
-    </div>
-    <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
-    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="purifier-summary" style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fffdf7;">
-      <h3 style="margin: 0 0 6px 0;">Data Purifier Summary</h3>
-      <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#444; font-size: 13px; margin-bottom:8px;">
-        <span><strong>Rows:</strong> {{ rowCountBefore }} → {{ rowCountAfter }}</span>
-        <span><strong>Rows removed:</strong> {{ rowsRemovedTotal }}</span>
-        <span><strong>Total columns dropped:</strong> {{ droppedTotalCount() }}</span>
-      </div>
-      <div *ngFor="let s of droppedColumnsByStep; trackBy: trackByStepIndex" style="margin: 6px 0 10px 0;">
-        <div>
-          <strong>{{ s.step }}</strong>
-          <span *ngIf="s.threshold != null"> (threshold: {{ s.threshold }})</span>
-          <span *ngIf="s.option_ids && s.option_ids.length"> — Options: {{ s.option_ids.join(', ') }}</span>
-          <span style="color:#666; margin-left: 8px;">Rows removed in step: {{ s.rows_removed || 0 }}</span>
-        </div>
-        <div *ngIf="s.columns && s.columns.length; else noCols" style="font-size: 12px; color:#333;">
-          <details>
-            <summary>{{ s.columns.length }} column(s)</summary>
-            <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
-              <span *ngFor="let c of s.columns" style="border: 1px solid #eee; padding: 2px 6px; border-radius: 12px; background: #fafafa;">{{ c }}</span>
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                  padding: 5px 10px;
+                  border: 1px solid #c62828;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 12px;
+                  font-weight: 500;
+                  background: #ffebee;
+                  color: #c62828;
+                  transition: all 0.2s;
+                "
+              >
+                <span style="font-size: 14px">&#128438;</span> PDF
+              </button>
             </div>
-          </details>
-        </div>
-        <!-- Categorical outlier merge mapping display -->
-        <div *ngIf="s.merge_mapping && objectKeys(s.merge_mapping).length" class="cat-merge-mapping">
-          <details>
-            <summary style="cursor:pointer; font-weight:500; color:#5c6bc0;">
-              Merge mapping for {{ objectKeys(s.merge_mapping).length }} feature(s)
-            </summary>
-            <div *ngFor="let feat of objectKeys(s.merge_mapping)" class="cat-merge-feature">
-              <div class="cat-merge-feature-name">{{ feat }}</div>
-              <table class="cat-merge-table">
-                <thead>
-                  <tr><th>Original Category</th><th>→</th><th>Merged Into</th></tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let origCat of objectKeys(s.merge_mapping[feat])">
-                    <td>{{ origCat }}</td>
-                    <td style="text-align:center;">→</td>
-                    <td><strong>{{ s.merge_mapping[feat][origCat] }}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </details>
-        </div>
-        <ng-template #noCols>
-          <div *ngIf="!s.merge_mapping || !objectKeys(s.merge_mapping).length" style="font-size: 12px; color: #777;">No columns dropped in this step</div>
-        </ng-template>
-      </div>
-      <!-- AI Support trigger for Data Purifier Summary (v2.41.0) -->
-      <div style="margin-top: 10px; text-align: right;">
-        <button class="ai-support-btn" (click)="requestPurifierAiSupport()">
-          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
-        </button>
-      </div>
-    </div>
-    <!-- Note: After Purifier Summary -->
-    <div *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" class="pipeline-note-slot">
-      <div *ngIf="!hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-add" (click)="toggleNoteEdit('after_purifier_summary')">
-        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
-      </div>
-      <div *ngIf="hasNote('after_purifier_summary') && editingNotePosition !== 'after_purifier_summary'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_purifier_summary')">
-        <div class="pipeline-note-content">{{ pipelineNotes['after_purifier_summary'] }}</div>
-        <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_purifier_summary')" title="Edit">&#9998;</button>
-          <button class="pipeline-note-btn delete" (click)="deleteNote('after_purifier_summary')" title="Delete">&times;</button>
-        </div>
-      </div>
-      <div *ngIf="editingNotePosition === 'after_purifier_summary'" class="pipeline-note-editor">
-        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_purifier_summary'] || ''" (ngModelChange)="onNoteChanged('after_purifier_summary', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
-        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
-      </div>
-    </div>
-    <app-pipeline-codeline *ngIf="droppedColumnsByStep && droppedColumnsByStep.length" position="after_purifier_summary"></app-pipeline-codeline>
-
-    <!-- Split Validation Chart -->
-    <div *ngIf="splitValidation" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafbfc;">
-      <h3 style="margin: 0 0 4px 0; font-size: 15px; color: #333;">Train-Test Split Validation</h3>
-      <p style="margin: 0 0 12px 0; font-size: 12px; color: #777;">Stacked histogram of target label distribution across splits, with target mean overlay. Consistent means across splits indicate a well-balanced split.</p>
-      <canvas #splitValidationCanvas style="width: 100%; height: 320px; display: block;"></canvas>
-      <!-- Summary table -->
-      <div style="margin-top: 12px; overflow-x: auto;">
-        <table style="border-collapse: collapse; width: auto; font-size: 12px;">
-          <thead>
-            <tr style="background: #f5f5f5;">
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: left;">Split</th>
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Count</th>
-              <th *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target={{ lbl }}</th>
-              <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right;">Target Mean</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let sp of splitValidation.splits">
-              <td style="padding: 6px 14px; border: 1px solid #eee; font-weight: 600;">{{ sp.name }}</td>
-              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.count | number }}</td>
-              <td *ngFor="let lbl of splitValidation.labels" style="padding: 6px 14px; border: 1px solid #eee; text-align: right;">{{ sp.label_counts[lbl] | number }}</td>
-              <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right; color: #2e7d32; font-weight: 600;">{{ (sp.target_mean * 100).toFixed(2) }}%</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <!-- Note: After Split Validation -->
-    <div *ngIf="splitValidation" class="pipeline-note-slot">
-      <div *ngIf="!hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-add" (click)="toggleNoteEdit('after_split_validation')">
-        <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
-      </div>
-      <div *ngIf="hasNote('after_split_validation') && editingNotePosition !== 'after_split_validation'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_split_validation')">
-        <div class="pipeline-note-content">{{ pipelineNotes['after_split_validation'] }}</div>
-        <div class="pipeline-note-actions">
-          <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_split_validation')" title="Edit">&#9998;</button>
-          <button class="pipeline-note-btn delete" (click)="deleteNote('after_split_validation')" title="Delete">&times;</button>
-        </div>
-      </div>
-      <div *ngIf="editingNotePosition === 'after_split_validation'" class="pipeline-note-editor">
-        <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_split_validation'] || ''" (ngModelChange)="onNoteChanged('after_split_validation', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
-        <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
-      </div>
-    </div>
-    <app-pipeline-codeline *ngIf="splitValidation" position="after_split_validation"></app-pipeline-codeline>
-
-    <div *ngIf="datqSummary && datqSummary.length" style="margin-top: 24px;">
-      <h2>Data Quality</h2>
-      <h3 style="margin-top: 8px;">Data Quality Summary</h3>
-      <!-- Controls: search + page size + exports -->
-      <div style="display:flex; align-items:center; gap:12px; margin: 8px 0 12px 0; flex-wrap: wrap;">
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>Search:</span>
-          <input type="text" [ngModel]="datqGlobalFilter" (ngModelChange)="datqGlobalFilter = $event; onFilterChange()" placeholder="Global filter" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
-        </label>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>Page size:</span>
-          <select [ngModel]="datqPageSize" (ngModelChange)="changeDatqPageSize($event)">
-            <option *ngFor="let s of datqPageSizes" [value]="s">{{ s }}</option>
-          </select>
-        </label>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span>Columns:</span>
-          <select [ngModel]="datqPreset" (ngModelChange)="applyDatqPreset($event)">
-            <option value="core">Core</option>
-            <option value="all">All</option>
-          </select>
-        </label>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <input type="checkbox" [ngModel]="datqWrapCells" (ngModelChange)="datqWrapCells = $event" />
-          <span>Wrap cells</span>
-        </label>
-        <button mat-stroked-button color="primary" (click)="exportCrispPack()" [disabled]="currentFileId == null" title="Download CRISP-DM audit export pack">
-          Export CRISP pack
-        </button>
-        <span style="color:#666;">Total rows: {{ datqTotal }}</span>
-        <span style="color:#d32f2f; font-weight: 500;" *ngIf="getExcludedVariables().length > 0">
-          Excluded from model: {{ getExcludedVariables().length }}
-        </span>
-        <span style="flex:1 1 auto;"></span>
-        <button mat-stroked-button color="warn" (click)="clearAllModelUsage()" *ngIf="getExcludedVariables().length > 0">Clear All Exclusions</button>
-        <button mat-stroked-button (click)="togglePinVariable()">Pin Variable</button>
-        <button mat-stroked-button (click)="resetSorting()">Reset Sorting</button>
-        <button mat-stroked-button (click)="resetLayout()">Reset Layout</button>
-        <button mat-stroked-button color="primary" (click)="clearFilters()">Clear Filters</button>
-        <button mat-stroked-button color="primary" (click)="exportDatqAsCSV()">Export CSV</button>
-        <button mat-stroked-button color="primary" (click)="exportDatqAsJSON()">Export JSON</button>
-      </div>
-
-      <div class="datq-table-container" style="overflow:auto; max-width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; max-height: 500px;">
-        <table class="datq-table mat-elevation-z1" style="border-collapse: separate; width: 100%; min-width: 1800px; table-layout: auto;">
-          <thead>
-            <tr class="header-row">
-              <th *ngFor="let col of datqDisplayColumns" (click)="onSort(col)" [ngStyle]="getPinnedStyle(col, 'header')"
-                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
-                  [style.position]="'sticky'" [style.top.px]="0" [style.zIndex]="3"
-                  style="text-align: left; padding: 8px; border-bottom: 1px solid #eee; white-space: nowrap; cursor: pointer; background:#fff; overflow:hidden; text-overflow: ellipsis;">
-                <span style="display:inline-flex; align-items:center; gap:6px;">
-                  <span>{{ col }}</span>
-                  <span *ngIf="datqSortColumn === col">{{ datqSortDir === 'asc' ? '▲' : '▼' }}</span>
-                  <button type="button" (click)="togglePin(col); $event.stopPropagation()" title="Pin/Unpin" style="border:none; background:transparent; cursor:pointer; line-height:1;">
-                    📌
-                  </button>
-                  <span *ngIf="selectedCount(col) > 0" class="chip" title="Selected values">{{ selectedCount(col) }}</span>
-                </span>
-                <span class="resize-handle" title="Resize" (mousedown)="onResizeStart(col, $event)"></span>
-              </th>
-            </tr>
-            <tr class="filters">
-              <th *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'filter')"
-                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
-                  [style.position]="'sticky'" [style.top.px]="40" [style.zIndex]="2"
-                  style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; white-space: nowrap; background:#fff; overflow:visible; text-overflow: ellipsis;">
-                <div class="filter-input-wrap">
-                  <input type="text" [ngModel]="datqColumnFilters[col]" (ngModelChange)="datqColumnFilters[col] = $event; onFilterChange()" (focus)="openFilterMenu(col)" (click)="$event.stopPropagation()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
-                  <button type="button" class="filter-trigger" title="Unique filter" (click)="openFilterMenu(col); $event.stopPropagation()">▾</button>
-                </div>
-                <div class="filter-menu" *ngIf="datqFilterMenuFor===col" (click)="$event.stopPropagation()">
-                  <div class="menu-header">Filter {{ col }}</div>
-                  <input type="text" [(ngModel)]="datqFilterMenuSearch" placeholder="Search values" class="menu-search" />
-                  <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin: 6px 0;">
-                    <input type="checkbox" [(ngModel)]="datqShowOnlySelected[col]" /> Show only selected
-                  </label>
-                  <div style="font-size: 11px; color:#888; margin: 4px 0;">
-                    Values: {{ uniqueCount(col) }} · Selected: {{ selectedCount(col) }} · Query: '{{ datqFilterMenuSearch }}'
-                  </div>
-                  <div class="value-list">
-                    <div *ngIf="visibleUniqueValues(col).length === 0" style="color:#777; font-size:12px; padding: 6px;">No values</div>
-                    <label class="value-item" *ngFor="let item of visibleUniqueValues(col)">
-                      <input type="checkbox" [checked]="isValueChecked(col, item.value)" (change)="toggleValue(col, item.value, $any($event.target).checked)" />
-                      <span class="val" [title]="item.value">{{ item.value }}</span>
-                      <span class="cnt">{{ item.count }}</span>
-                    </label>
-                  </div>
-                  <div class="menu-actions">
-                    <button type="button" (click)="selectAllValues(col)">Select all</button>
-                    <button type="button" (click)="clearSelectedValues(col)">Clear</button>
-                    <span style="flex:1 1 auto;"></span>
-                    <button type="button" (click)="applySelectedValues()">Apply</button>
-                    <button type="button" (click)="closeFilterMenu()">Close</button>
-                  </div>
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of datqPagedRows" (click)="onDatqRowClick(row)" style="cursor:pointer;"
-                [class.selected]="datqSelectedVariable === (row['Variable'] || row['variable'] || row['index'])">
-              <td *ngFor="let col of datqDisplayColumns" [ngStyle]="getPinnedStyle(col, 'cell')"
-                  [style.width.px]="getColWidth(col)" [style.minWidth.px]="getColWidth(col)" [style.maxWidth.px]="getColWidth(col)"
-                  [style.white-space]="datqWrapCells ? 'normal' : 'nowrap'" [style.word-break]="datqWrapCells ? 'break-word' : 'normal'"
-                  style="padding: 8px; border-bottom: 1px solid #f5f5f5; background:#fff; overflow:hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;">
-                <ng-container *ngIf="col === 'Model_Usage'; else notModelUsageColumn">
-                  <select [ngModel]="getModelUsage(row)" 
-                          (ngModelChange)="setModelUsage(row, $event)"
-                          (click)="$event.stopPropagation()"
-                          style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                  </select>
-                </ng-container>
-                <ng-template #notModelUsageColumn>
-                  <ng-container *ngIf="isVariableColumn(col); else normalCell">
-                    <a href="#" (click)="openFeatureCardFromDatq(displayCell(row, col)); $event.preventDefault(); $event.stopPropagation()" style="color:#1976d2; text-decoration: underline;">
-                      {{ displayCell(row, col) }}
-                    </a>
-                  </ng-container>
-                  <ng-template #normalCell>{{ displayCell(row, col) }}</ng-template>
-                </ng-template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <!-- Pagination controls -->
-      <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <button mat-button (click)="prevDatqPage()" [disabled]="datqPage <= 1">Prev</button>
-        <span>Page {{ datqPage }} of {{ datqTotalPages }}</span>
-        <button mat-button (click)="nextDatqPage()" [disabled]="datqPage >= datqTotalPages">Next</button>
-        <span style="flex: 1 1 auto;"></span>
-        <button class="ai-support-btn" (click)="requestDatqAiSupport()">
-          <span class="ai-support-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z" fill="currentColor"/><path d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z" fill="currentColor" opacity="0.7"/><path d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z" fill="currentColor" opacity="0.5"/></svg></span> Get AI Support
-        </button>
-      </div>
-
-      <!-- Detail section -->
-      <div *ngIf="datqSelectedVariable" style="margin-top: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa;">
-        <div style="display:flex; align-items:center; gap: 12px;">
-          <h4 style="margin:0;">Data Quality Detail: {{ datqSelectedVariable }}</h4>
-          <span *ngIf="datqDetailLoading" style="color:#666;">Loading…</span>
-          <span style="flex:1 1 auto;"></span>
-          <button mat-stroked-button (click)="exportDatqDetailAsCSV()" [disabled]="!datqDetail || !datqDetailColumns.length">Export Detail CSV</button>
-          <button mat-stroked-button (click)="exportDatqDetailAsJSON()" [disabled]="!datqDetail">Export Detail JSON</button>
-          <button mat-button (click)="closeDatqDetail()">Close</button>
-        </div>
-        <div *ngIf="datqDetail && !datqDetailLoading" style="margin-top: 10px;">
-          <div style="display:flex; gap: 16px; flex-wrap: wrap; color:#333;">
-            <span><strong>Type:</strong> {{ datqDetail.variable_type }}</span>
-            <span><strong>PSI:</strong> {{ datqDetail.psi }}</span>
-            <span><strong>Train N:</strong> {{ datqDetail.train_count }}</span>
-            <span><strong>Test N:</strong> {{ datqDetail.test_count }}</span>
-            <span><strong>Train Missing:</strong> {{ datqDetail.train_missing_ratio }}</span>
-            <span><strong>Test Missing:</strong> {{ datqDetail.test_missing_ratio }}</span>
           </div>
-          <div class="psi-legend">Train share vs Test share per bin</div>
-          <div class="psi-viz">
-            <div class="psi-row" *ngFor="let r of datqDetail?.psi_table">
-              <div class="psi-bin" [title]="r['bin']">{{ r['bin'] }}</div>
-              <div class="psi-bars">
-                <div class="bar-train" [style.width.%]="percent(r['train_share'])" [title]="'Train: ' + r['train_share']"></div>
-                <div class="bar-test" [style.width.%]="percent(r['test_share'])" [title]="'Test: ' + r['test_share']"></div>
+        }
+      </div>
+
+      <!-- Exit Without Saving Dialog -->
+      @if (showExitDialog) {
+        <div
+          style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          "
+          (click)="cancelExit()"
+        >
+          <div
+            style="
+              background: white;
+              border-radius: 12px;
+              padding: 28px 32px;
+              max-width: 420px;
+              width: 90%;
+              box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+              text-align: center;
+            "
+            (click)="$event.stopPropagation()"
+          >
+            <div style="font-size: 40px; margin-bottom: 12px">&#9888;&#65039;</div>
+            <h3 style="margin: 0 0 8px 0; color: #333">Unsaved Changes</h3>
+            <p style="color: #666; font-size: 14px; margin: 0 0 24px 0">
+              You have unsaved pipeline changes. Would you like to save before leaving?
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center">
+              <button
+                (click)="exitWithSave()"
+                style="
+                  padding: 10px 20px;
+                  background: #2e7d32;
+                  color: white;
+                  border: none;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                &#128190; Save &amp; Exit
+              </button>
+              <button
+                (click)="exitWithoutSave()"
+                style="
+                  padding: 10px 20px;
+                  background: #d32f2f;
+                  color: white;
+                  border: none;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                Exit Without Saving
+              </button>
+              <button
+                (click)="cancelExit()"
+                style="
+                  padding: 10px 20px;
+                  background: #e0e0e0;
+                  color: #333;
+                  border: none;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 13px;
+                  font-weight: 500;
+                "
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Saved Pipelines Panel -->
+      @if (showSavedPipelines) {
+        <div
+          style="
+            margin: 16px 0;
+            padding: 16px;
+            border: 1px solid #1565c0;
+            border-radius: 8px;
+            background: #f5f9ff;
+            max-height: 400px;
+            overflow-y: auto;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 12px;
+            "
+          >
+            <h3 style="margin: 0; color: #1565c0">Saved Pipeline Runs</h3>
+            <button
+              (click)="showSavedPipelines = false"
+              style="background: none; border: none; cursor: pointer; font-size: 18px; color: #999"
+            >
+              &times;
+            </button>
+          </div>
+          @if (savedPipelines.length === 0) {
+            <div style="color: #777; font-size: 13px; padding: 12px 0">
+              No saved pipeline runs yet. Start a pipeline and checkpoints will be saved
+              automatically.
+            </div>
+          }
+          @for (run of savedPipelines; track run) {
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 12px;
+                margin-bottom: 8px;
+                background: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+              "
+            >
+              <!-- Name (editable) -->
+              <div style="flex: 1; min-width: 0">
+                @if (renamingPipelineId !== run.id) {
+                  <div
+                    style="
+                      font-weight: 600;
+                      font-size: 14px;
+                      white-space: nowrap;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                    "
+                    [title]="run.name"
+                  >
+                    {{ run.name }}
+                  </div>
+                }
+                @if (renamingPipelineId === run.id) {
+                  <div style="display: flex; gap: 4px">
+                    <input
+                      [(ngModel)]="renamingPipelineName"
+                      style="
+                        flex: 1;
+                        padding: 4px 8px;
+                        border: 1px solid #1565c0;
+                        border-radius: 4px;
+                        font-size: 13px;
+                      "
+                      (keyup.enter)="confirmRenamePipeline(run)"
+                    />
+                    <button
+                      (click)="confirmRenamePipeline(run)"
+                      style="
+                        padding: 4px 8px;
+                        background: #1565c0;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                      "
+                    >
+                      &#10003;
+                    </button>
+                    <button
+                      (click)="cancelRenamePipeline()"
+                      style="
+                        padding: 4px 8px;
+                        background: #999;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                      "
+                    >
+                      &times;
+                    </button>
+                  </div>
+                }
+                <div style="font-size: 11px; color: #888; margin-top: 2px">
+                  {{ run.pipeline_type | titlecase }} &middot; {{ run.updated_at | date: 'short' }}
+                </div>
               </div>
-              <div class="psi-contrib" [ngClass]="{'pos': (r['PSI_contribution']||0) >= 0, 'neg': (r['PSI_contribution']||0) < 0}">{{ r['PSI_contribution'] }}</div>
+              <!-- Step Progress -->
+              <div style="width: 180px; flex-shrink: 0">
+                <div style="font-size: 11px; color: #555; margin-bottom: 3px; text-align: center">
+                  {{ getDetailedStepLabel(run) }}
+                </div>
+                <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden">
+                  <div
+                    [style.width.%]="getDetailedStepProgress(run)"
+                    style="
+                      height: 100%;
+                      background: #1565c0;
+                      border-radius: 3px;
+                      transition: width 0.3s;
+                    "
+                  ></div>
+                </div>
+              </div>
+              <!-- Actions -->
+              <div style="display: flex; gap: 4px; flex-shrink: 0">
+                <button
+                  (click)="loadPipelineRun(run.id)"
+                  title="Load & Continue"
+                  style="
+                    padding: 6px 12px;
+                    background: #2e7d32;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                  "
+                >
+                  Load
+                </button>
+                <button
+                  (click)="startRenamePipeline(run)"
+                  title="Rename"
+                  style="
+                    padding: 6px 8px;
+                    background: #f57c00;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                  "
+                >
+                  &#9998;
+                </button>
+                <button
+                  (click)="deletePipelineRun(run.id)"
+                  title="Delete"
+                  style="
+                    padding: 6px 8px;
+                    background: #d32f2f;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                  "
+                >
+                  &#128465;
+                </button>
+              </div>
             </div>
-          </div>
-          <!-- Detail table controls -->
-          <div style="display:flex; align-items:center; gap:12px; margin: 12px 0 8px 0; flex-wrap: wrap;">
-            <label style="display:flex; align-items:center; gap:6px;">
-              <span>Search:</span>
-              <input type="text" [ngModel]="detailGlobalFilter" (ngModelChange)="detailGlobalFilter = $event; onDetailFilterChange()" placeholder="Filter detail" style="padding:6px 8px; border:1px solid #ccc; border-radius:4px;" />
+          }
+        </div>
+      }
+
+      <div class="pipeline-declaration">
+        <!-- CRISP-DM: Business Understanding -->
+        <div id="business-understanding-anchor" class="bu-section">
+          <p class="bu-title">Business Understanding</p>
+          <p class="bu-subtitle">
+            Frame the decision problem and success criteria before data work. These fields feed the
+            CRISP-DM export pack, the evaluation business floors, and the AI Assistant&rsquo;s
+            project memory.
+          </p>
+
+          <div class="bu-grid">
+            <label class="bu-field">
+              <span class="bu-label">
+                Business objective
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Business objective: the decision this model supports, in one sentence."
+                  data-tip='The decision this model supports, in one sentence. Write it as an action the business takes — e.g. "Approve or decline unsecured personal loan applications at origination." Every AI Assistant recommendation is anchored to this.'
+                  >i</span
+                >
+              </span>
+              <textarea
+                rows="2"
+                [ngModel]="businessUnderstanding.objective"
+                (ngModelChange)="
+                  businessUnderstanding.objective = $event; onBusinessUnderstandingChanged()
+                "
+                placeholder="What decision does this model support?"
+              ></textarea>
             </label>
-            <span style="flex:1 1 auto;"></span>
-            <button mat-stroked-button (click)="clearDetailFilters()">Clear Detail Filters</button>
+            <label class="bu-field">
+              <span class="bu-label">Declared task</span>
+              <select
+                [ngModel]="businessUnderstanding.problem_type"
+                (ngModelChange)="
+                  businessUnderstanding.problem_type = $event; onBusinessUnderstandingChanged()
+                "
+                required
+              >
+                <option value="">Choose a task</option>
+                <option value="classification">Classification</option>
+                <option value="regression">Regression</option>
+                <option value="anomaly">Labeled anomaly analysis</option>
+              </select>
+              <small
+                >Training follows this declaration. Label counts and wording are suggestions
+                only.</small
+              >
+            </label>
+            @if (businessUnderstanding.problem_type === 'classification' || businessUnderstanding.problem_type === 'anomaly') {
+              <label class="bu-field">
+                <span class="bu-label">Positive class for binary outcomes</span>
+                <input
+                  type="text"
+                  [ngModel]="businessUnderstanding.target_contract.positive_class"
+                  (ngModelChange)="
+                    businessUnderstanding.target_contract.positive_class = $event;
+                    onBusinessUnderstandingChanged()
+                  "
+                  placeholder="e.g. 1 or default"
+                />
+                <small
+                  >Enter the exact label representing the event. Leave blank for multiclass
+                  outcomes.</small
+                >
+              </label>
+            }
+            <label class="bu-field">
+              <span class="bu-label">Feature availability at prediction time</span>
+              <select
+                [ngModel]="businessUnderstanding.feature_availability.default"
+                (ngModelChange)="
+                  businessUnderstanding.feature_availability.default = $event;
+                  onBusinessUnderstandingChanged()
+                "
+                required
+              >
+                <option value="">Review feature availability</option>
+                <option value="available_at_prediction">
+                  Included features are available when predictions are made
+                </option>
+              </select>
+              <small
+                >List later observations under forbidden features. This declaration requires
+                independent review.</small
+              >
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">Label maturity rule</span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.target_contract.label_maturity"
+                (ngModelChange)="
+                  businessUnderstanding.target_contract.label_maturity = $event;
+                  onBusinessUnderstandingChanged()
+                "
+                placeholder="When is an outcome complete enough to train on?"
+              />
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">
+                Prediction horizon
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Prediction horizon: how far ahead the prediction looks."
+                  data-tip='How far ahead the prediction looks. Use a concrete window — e.g. "12 months from disbursement". It must match the performance window used to build the target.'
+                  >i</span
+                >
+              </span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.prediction_horizon"
+                (ngModelChange)="
+                  businessUnderstanding.prediction_horizon = $event;
+                  onBusinessUnderstandingChanged()
+                "
+                placeholder="e.g. 12 months"
+              />
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">
+                Population
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Population: who gets scored."
+                  data-tip='Who gets scored. State segment, product and channel — e.g. "New-to-bank applicants for unsecured personal loans." The scoring population at deployment must match this.'
+                  >i</span
+                >
+              </span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.population"
+                (ngModelChange)="
+                  businessUnderstanding.population = $event; onBusinessUnderstandingChanged()
+                "
+                placeholder="Who is scored?"
+              />
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">
+                Exclusions
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Exclusions: cases deliberately kept out of the modelling sample."
+                  data-tip='Cases deliberately kept out of the modelling sample — e.g. "staff accounts, applications withdrawn before decision, restructured loans." Each exclusion must be reproducible at scoring time.'
+                  >i</span
+                >
+              </span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.exclusions"
+                (ngModelChange)="
+                  businessUnderstanding.exclusions = $event; onBusinessUnderstandingChanged()
+                "
+                placeholder="Segments or cases to exclude"
+              />
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">
+                Target column (contract)
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Target column: exact column name in the data dictionary that holds the target."
+                  data-tip="Exact column name in the data dictionary that holds the target — e.g. Good_Bad_Flag. It must match the uploaded data letter-for-letter, or the split contract check will fail."
+                  >i</span
+                >
+              </span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.target_contract.target_column"
+                (ngModelChange)="
+                  businessUnderstanding.target_contract.target_column = $event;
+                  onBusinessUnderstandingChanged()
+                "
+                placeholder="Column name in data dictionary"
+              />
+            </label>
+            <label class="bu-field">
+              <span class="bu-label">
+                Good/bad window
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Good/bad window: observation and performance windows that define the target."
+                  data-tip='Observation + performance windows that turn raw behaviour into the target — e.g. "observation 2022-01..2022-12, performance 12 months, 90+ DPD = Bad." Leave empty for a continuous (regression) target.'
+                  >i</span
+                >
+              </span>
+              <input
+                type="text"
+                [ngModel]="businessUnderstanding.target_contract.good_bad_window"
+                (ngModelChange)="
+                  businessUnderstanding.target_contract.good_bad_window = $event;
+                  onBusinessUnderstandingChanged()
+                "
+                placeholder="e.g. performance window"
+              />
+            </label>
+            <label class="bu-field bu-field-wide">
+              <span class="bu-label">
+                Event/Target Definition
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Event/Target Definition: the formal, testable definition of what the model predicts."
+                  data-tip='The formal, testable definition of what the model predicts, including the unit of measurement. Classification — "Bad = 90+ days past due within 12 months of disbursement." Regression — "Loss given default as a share of exposure at default (0–1)." This is the prediction contract the AI Assistant and every downstream step work from.'
+                  >i</span
+                >
+              </span>
+              <textarea
+                rows="3"
+                id="targetDefinition"
+                [ngModel]="businessUnderstanding.target_contract.event_definition"
+                (ngModelChange)="onEventDefinitionChanged($event)"
+                placeholder="e.g. Good_Bad_Flag indicates whether a credit applicant defaulted (Bad=1) or not (Good=0) within the first 12 months of the loan."
+              ></textarea>
+            </label>
           </div>
 
-          <div style="overflow:auto; max-height: 360px; border: 1px solid #eee; border-radius: 4px;">
-            <table style="border-collapse: collapse; width: 100%; min-width: 520px;">
-              <thead>
-                <tr>
-                  <th *ngFor="let c of datqDetailColumns" (click)="onDetailSort(c)" style="text-align:left; padding:8px; border-bottom:1px solid #eee; white-space:nowrap; cursor:pointer;">
-                    {{ c }}
-                    <span *ngIf="detailSortColumn === c">{{ detailSortDir === 'asc' ? '▲' : '▼' }}</span>
-                  </th>
-                </tr>
-                <tr>
-                  <th *ngFor="let c of datqDetailColumns" style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee; white-space:nowrap;">
-                    <input type="text" [ngModel]="detailColumnFilters[c]" (ngModelChange)="detailColumnFilters[c] = $event; onDetailFilterChange()" placeholder="Filter" style="width: 100%; padding:6px 8px; border:1px solid #ddd; border-radius:4px;" />
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let r of datqDetailSortedRows">
-                  <td *ngFor="let c of datqDetailColumns" style="padding:8px; border-bottom:1px solid #f5f5f5; white-space:nowrap;">{{ r[c] }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <button
+            type="button"
+            class="bu-details-toggle"
+            (click)="toggleBusinessDetails()"
+            [attr.aria-expanded]="showBusinessDetails"
+            aria-controls="bu-details-panel"
+          >
+            <span
+              class="bu-details-caret"
+              [class.bu-details-caret-open]="showBusinessDetails"
+              aria-hidden="true"
+              >&#9656;</span
+            >
+            Details
+            <span class="bu-details-hint"
+              >optional &mdash; assumptions, regulatory notes, forbidden features</span
+            >
+          </button>
+
+          @if (showBusinessDetails) {
+            <div id="bu-details-panel" class="bu-grid bu-details">
+              <label class="bu-field bu-field-wide">
+                <span class="bu-label">
+                  Assumptions
+                  <span class="bu-optional-tag">optional</span>
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Assumptions: what you are taking as given."
+                    data-tip="Anything you take as given — data availability, stable macro conditions, no policy change during the performance window. Validators read this first when the model underperforms."
+                    >i</span
+                  >
+                </span>
+                <textarea
+                  rows="2"
+                  [ngModel]="businessUnderstanding.assumptions"
+                  (ngModelChange)="
+                    businessUnderstanding.assumptions = $event; onBusinessUnderstandingChanged()
+                  "
+                  placeholder="e.g. Application data is complete at decision time; no policy change during the performance window."
+                ></textarea>
+              </label>
+              <label class="bu-field bu-field-wide">
+                <span class="bu-label">
+                  Regulatory notes
+                  <span class="bu-optional-tag">optional</span>
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Regulatory notes: rules that constrain the model."
+                    data-tip="Rules that constrain the model — protected attributes, explainability obligations, model-risk tier, retention rules. Naming them here keeps the AI Assistant from suggesting anything that breaches them."
+                    >i</span
+                  >
+                </span>
+                <textarea
+                  rows="2"
+                  [ngModel]="businessUnderstanding.regulatory_notes"
+                  (ngModelChange)="
+                    businessUnderstanding.regulatory_notes = $event;
+                    onBusinessUnderstandingChanged()
+                  "
+                  placeholder="e.g. Adverse-action reasons required; no use of protected attributes or their proxies."
+                ></textarea>
+              </label>
+              <label class="bu-field bu-field-wide">
+                <span class="bu-label">
+                  Forbidden features (comma-separated)
+                  <span class="bu-optional-tag">optional</span>
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Forbidden features: columns that must never enter the model."
+                    data-tip="Columns that must never enter the model — post-outcome fields, leakage, proxies for protected attributes. Comma-separated; the AI Assistant treats them as off-limits in every feature recommendation."
+                    >i</span
+                  >
+                </span>
+                <input
+                  type="text"
+                  [ngModel]="forbiddenFeaturesText"
+                  (ngModelChange)="forbiddenFeaturesText = $event; onBusinessUnderstandingChanged()"
+                  placeholder="e.g. post_disbursement_balance, internal_score"
+                />
+              </label>
+            </div>
+          }
+
+          <fieldset class="bu-criteria">
+            <legend>
+              Success criteria
+              <span
+                class="bu-info"
+                tabindex="0"
+                role="note"
+                aria-label="Success criteria: the metric, floor and costs evaluation is judged against."
+                data-tip="The single metric that decides whether the model is good enough, the business minimum it must clear, and the relative cost of the two error types. The primary metric also declares the problem type."
+                >i</span
+              >
+            </legend>
+            <div class="bu-criteria-row">
+              <label class="bu-field">
+                <span class="bu-label">
+                  Primary metric
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Primary metric: the metric that decides whether the model is good enough."
+                    data-tip="Choose a metric compatible with the accepted task. Metrics may suggest a task but never replace your declaration. Anomaly ranking supports ROC-AUC and PR-AUC; it does not produce class probabilities."
+                    >i</span
+                  >
+                </span>
+                <select
+                  [ngModel]="businessUnderstanding.success_criteria.primary_metric"
+                  (ngModelChange)="
+                    businessUnderstanding.success_criteria.primary_metric = $event;
+                    onBusinessUnderstandingChanged()
+                  "
+                >
+                  <option value="roc_auc">ROC-AUC</option>
+                  <option value="pr_auc">PR-AUC</option>
+                  <option value="f1">F1</option>
+                  <option value="rmse">RMSE</option>
+                  <option value="r2">R&#178;</option>
+                </select>
+              </label>
+              <label class="bu-field">
+                <span class="bu-label">
+                  Direction
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Direction: whether the primary metric is maximised or minimised."
+                    data-tip="Whether the primary metric should be maximised (ROC-AUC, PR-AUC, F1, R²) or minimised (RMSE)."
+                    >i</span
+                  >
+                </span>
+                <select
+                  [ngModel]="businessUnderstanding.success_criteria.direction"
+                  (ngModelChange)="
+                    businessUnderstanding.success_criteria.direction = $event;
+                    onBusinessUnderstandingChanged()
+                  "
+                >
+                  <option value="maximize">Maximize</option>
+                  <option value="minimize">Minimize</option>
+                </select>
+              </label>
+              <label class="bu-field">
+                <span class="bu-label">
+                  Floor (business minimum)
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="Floor: the business minimum for the primary metric."
+                    data-tip="The business minimum for the primary metric. Evaluation compares the outer-test score against it. Leave empty to proceed without a floor — evaluation will still run, but nothing gates on it."
+                    >i</span
+                  >
+                </span>
+                <input
+                  type="number"
+                  step="0.001"
+                  [ngModel]="businessUnderstanding.success_criteria.floor"
+                  (ngModelChange)="
+                    businessUnderstanding.success_criteria.floor = $event === '' ? null : +$event;
+                    onBusinessUnderstandingChanged()
+                  "
+                  placeholder="e.g. 0.65"
+                />
+              </label>
+              <label class="bu-field">
+                <span class="bu-label">
+                  FN cost
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="FN cost: business cost of a missed event."
+                    data-tip="Relative business cost of a missed event (false negative) — e.g. a defaulter approved. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation."
+                    >i</span
+                  >
+                </span>
+                <input
+                  type="number"
+                  step="0.1"
+                  [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fn_cost"
+                  (ngModelChange)="
+                    businessUnderstanding.success_criteria.cost_matrix.fn_cost = +$event;
+                    onBusinessUnderstandingChanged()
+                  "
+                />
+              </label>
+              <label class="bu-field">
+                <span class="bu-label">
+                  FP cost
+                  <span
+                    class="bu-info"
+                    tabindex="0"
+                    role="note"
+                    aria-label="FP cost: business cost of a false alarm."
+                    data-tip="Relative business cost of a false alarm (false positive) — e.g. a good applicant declined. Only the FN:FP ratio matters; it drives the cost-optimal threshold recommendation."
+                    >i</span
+                  >
+                </span>
+                <input
+                  type="number"
+                  step="0.1"
+                  [ngModel]="businessUnderstanding.success_criteria.cost_matrix.fp_cost"
+                  (ngModelChange)="
+                    businessUnderstanding.success_criteria.cost_matrix.fp_cost = +$event;
+                    onBusinessUnderstandingChanged()
+                  "
+                />
+              </label>
+              <label class="bu-checkbox">
+                <input
+                  type="checkbox"
+                  [ngModel]="businessUnderstanding.hard_block_modeling_without_criteria"
+                  (ngModelChange)="
+                    businessUnderstanding.hard_block_modeling_without_criteria = $event;
+                    onBusinessUnderstandingChanged()
+                  "
+                />
+                <span>Block modeling without floor</span>
+                <span
+                  class="bu-info"
+                  tabindex="0"
+                  role="note"
+                  aria-label="Block modeling without floor: hard gate on the success floor."
+                  data-tip="Hard gate: modeling cannot start until a floor is set. Leave off to allow modeling with only a warning."
+                  >i</span
+                >
+              </label>
+            </div>
+          </fieldset>
+
+          @if (detectedProblemType) {
+            <div class="bu-problem-type">
+              <span class="bu-problem-type-badge">{{ problemTypeLabel() }}</span>
+              <span
+                >Problem type derived from {{ problemTypeReason }}. Pipeline Declarations lists only
+                pipelines that can train it.</span
+              >
+            </div>
+          }
+          @if (problemTypeMetricConflict) {
+            <div class="bu-conflict" role="alert">
+              The objective wording and the selected primary metric disagree on the problem type.
+              Set the primary metric that matches the target you described &mdash; ROC-AUC / PR-AUC
+              / F1 for classification, RMSE / R&#178; for regression.
+            </div>
+          }
+
+          @if (modelingCriteriaWarning) {
+            <div class="bu-warning" role="alert">
+              Success criteria floor is empty. Modeling can proceed, but evaluation will compare
+              outer-test metrics against business floors.
+            </div>
+          }
+
+          <div class="bu-ai-note">
+            <span class="ai-info-icon">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z"
+                  fill="currentColor"
+                />
+                <path
+                  d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z"
+                  fill="currentColor"
+                  opacity="0.7"
+                />
+              </svg>
+            </span>
+            Everything declared here is kept as project metadata in the AI Assistant&rsquo;s memory
+            and applied to every recommendation it makes.
           </div>
         </div>
-      </div>
 
-      <!-- Note: After Data Quality -->
-      <div class="pipeline-note-slot">
-        <div *ngIf="!hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-add" (click)="toggleNoteEdit('after_data_quality')">
-          <span class="pipeline-note-add-icon">+</span> <span class="pipeline-note-add-label">Add note</span>
+        <div class="pipeline-type-dropdown">
+          <p style="font-size: larger; font-weight: bold">Pipeline Declarations</p>
+          <select
+            [ngModel]="selectedPipeline"
+            (ngModelChange)="selectedPipeline = $event; onPipelineChange2($event)"
+          >
+            <option value="" disabled>Select Pipeline</option>
+            @for (option of availablePipelineOptions; track option) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+          @if (detectedProblemType) {
+            <p class="pipeline-filter-note">
+              Filtered to {{ problemTypeLabel().toLowerCase() }} pipelines.
+            </p>
+          }
+          @if (pipelineResetNotice) {
+            <p class="pipeline-reset-notice" role="alert">{{ pipelineResetNotice }}</p>
+          }
         </div>
-        <div *ngIf="hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'" class="pipeline-note-display" (dblclick)="toggleNoteEdit('after_data_quality')">
-          <div class="pipeline-note-content">{{ pipelineNotes['after_data_quality'] }}</div>
-          <div class="pipeline-note-actions">
-            <button class="pipeline-note-btn edit" (click)="toggleNoteEdit('after_data_quality')" title="Edit">&#9998;</button>
-            <button class="pipeline-note-btn delete" (click)="deleteNote('after_data_quality')" title="Delete">&times;</button>
+
+        <!-- Start button: only before pipeline is started -->
+        @if (!isStarted) {
+          <button class="start-button" (click)="onStartClick()" [disabled]="!selectedPipeline">
+            Start
+          </button>
+        }
+      </div>
+      <!-- Declaration specific content (always visible at top) -->
+      <app-declaration></app-declaration>
+
+      <!-- Preprocessing step appears only after Data Declaration (file selected/uploaded) and remains visible -->
+      @if (preprocessingAvailable) {
+        <div class="preprocessing-declaration">
+          <h2>Data Purifier Declaration</h2>
+          <div class="selected-options">
+            <h3>Selected Options:</h3>
+            <ul>
+              @for (option of selectedOptions; track option) {
+                <li>{{ option.id }}. {{ option.name }}</li>
+              }
+            </ul>
           </div>
+          <mat-form-field appearance="fill">
+            <mat-label>Select Data Purification Options</mat-label>
+            <mat-select
+              multiple
+              [(ngModel)]="selectedOptions"
+              (selectionChange)="onSelectionChange($event); onPipelineConfigChanged()"
+            >
+              @for (option of purifierOptions; track option) {
+                <mat-option [value]="option" [disabled]="isOptionDisabled(option)">
+                  {{ option.id }}. {{ option.name }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <!-- Train/Test Split Controls -->
+          <div
+            style="margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap"
+          >
+            <label style="display: flex; align-items: center; gap: 6px">
+              <span>Split Strategy:</span>
+              <select
+                [ngModel]="splitStrategy"
+                (ngModelChange)="splitStrategy = $event; onPipelineConfigChanged()"
+              >
+                <option value="random">Random</option>
+                <option value="oot">Out-of-Time (OOT)</option>
+              </select>
+            </label>
+            @if (splitStrategy === 'random') {
+              <label style="display: flex; align-items: center; gap: 6px">
+                <span>OOS Percent:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  [ngModel]="oosPercent"
+                  (ngModelChange)="oosPercent = $event; onPipelineConfigChanged()"
+                  style="width: 80px"
+                />
+              </label>
+              <small style="color: #666"
+                >Random {{ 100 - oosPercent }}/{{ oosPercent }} train/test split.</small
+              >
+            }
+            @if (splitStrategy === 'oot') {
+              <label style="display: flex; align-items: center; gap: 6px">
+                <span>Date Column:</span>
+                <select
+                  [ngModel]="splitDateColumn"
+                  (ngModelChange)="splitDateColumn = $event; onPipelineConfigChanged()"
+                >
+                  <option [ngValue]="null" disabled>Select date column</option>
+                  @for (c of dateColumns; track c) {
+                    <option [ngValue]="c">{{ c }}</option>
+                  }
+                </select>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px">
+                <span>OOT Mode:</span>
+                <select
+                  [ngModel]="ootMode"
+                  (ngModelChange)="ootMode = $event; onPipelineConfigChanged()"
+                >
+                  <option value="percent">Percent (default 75/25)</option>
+                  <option value="cutoff">Time Cutoff</option>
+                </select>
+              </label>
+              @if (ootMode === 'percent') {
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <span>OOT Percent:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    [ngModel]="ootPercent"
+                    (ngModelChange)="ootPercent = $event; onPipelineConfigChanged()"
+                    style="width: 80px"
+                  />
+                </label>
+                <small style="color: #666"
+                  >Sorted by time ascending; last {{ ootPercent }}% goes to OOT (test).</small
+                >
+              }
+              @if (ootMode === 'cutoff') {
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <span>Cutoff:</span>
+                  <input
+                    type="datetime-local"
+                    [ngModel]="splitCutoff"
+                    (ngModelChange)="splitCutoff = $event; onPipelineConfigChanged()"
+                  />
+                </label>
+                <small style="color: #666">Train ≤ cutoff, Test &gt; cutoff</small>
+              }
+            }
+          </div>
+          <!-- Note: After Preprocessing Config -->
+          <div class="pipeline-note-slot">
+            @if (
+              !hasNote('after_preprocessing_config') &&
+              editingNotePosition !== 'after_preprocessing_config'
+            ) {
+              <div class="pipeline-note-add" (click)="toggleNoteEdit('after_preprocessing_config')">
+                <span class="pipeline-note-add-icon">+</span>
+                <span class="pipeline-note-add-label">Add note</span>
+              </div>
+            }
+            @if (
+              hasNote('after_preprocessing_config') &&
+              editingNotePosition !== 'after_preprocessing_config'
+            ) {
+              <div
+                class="pipeline-note-display"
+                (dblclick)="toggleNoteEdit('after_preprocessing_config')"
+              >
+                <div class="pipeline-note-content">
+                  {{ pipelineNotes['after_preprocessing_config'] }}
+                </div>
+                <div class="pipeline-note-actions">
+                  <button
+                    class="pipeline-note-btn edit"
+                    (click)="toggleNoteEdit('after_preprocessing_config')"
+                    title="Edit"
+                  >
+                    &#9998;
+                  </button>
+                  <button
+                    class="pipeline-note-btn delete"
+                    (click)="deleteNote('after_preprocessing_config')"
+                    title="Delete"
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+            }
+            @if (editingNotePosition === 'after_preprocessing_config') {
+              <div class="pipeline-note-editor">
+                <textarea
+                  class="pipeline-note-textarea"
+                  [ngModel]="pipelineNotes['after_preprocessing_config'] || ''"
+                  (ngModelChange)="onNoteChanged('after_preprocessing_config', $event)"
+                  placeholder="Write your decision notes here..."
+                  rows="3"
+                ></textarea>
+                <button class="pipeline-note-btn done" (click)="editingNotePosition = null">
+                  Done
+                </button>
+              </div>
+            }
+          </div>
+          <app-pipeline-codeline position="after_preprocessing_config"></app-pipeline-codeline>
+          <!-- Run preprocessing to compute Data Quality summary -->
+          <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="proceedFromPreprocessing()"
+              [disabled]="isProcessing"
+            >
+              {{ isProcessing ? 'Processing…' : 'Run Preprocessing' }}
+            </button>
+            @if (isProcessing) {
+              <mat-progress-bar mode="indeterminate" style="width: 240px"></mat-progress-bar>
+            }
+          </div>
+          <!-- Data Quality Step Anchor and Summary Table -->
+          <div id="data-quality-anchor"></div>
+          @if (datqSummary?.length) {
+            <div
+              style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center"
+            >
+              <button
+                type="button"
+                (click)="enrichDatqRecommendations()"
+                style="padding: 6px 12px; font-size: 12px"
+              >
+                Refresh shift recommendations
+              </button>
+              <button
+                type="button"
+                (click)="loadSequentialPatterns()"
+                [disabled]="sequentialLoading || currentFileId == null"
+                style="padding: 6px 12px; font-size: 12px"
+              >
+                {{ sequentialLoading ? 'Scanning…' : 'Scan sequential / near-duplicate patterns' }}
+              </button>
+              <button
+                type="button"
+                (click)="exportCrispPack()"
+                [disabled]="currentFileId == null"
+                style="padding: 6px 12px; font-size: 12px"
+              >
+                Download CRISP export pack
+              </button>
+            </div>
+          }
+          @if (sequentialCandidates?.length) {
+            <div
+              style="
+                margin: 8px 0 16px;
+                padding: 10px;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                background: #fafafa;
+                max-width: 900px;
+              "
+            >
+              <h4 style="margin: 0 0 8px">Sequential pattern candidates (MVP)</h4>
+              <p style="font-size: 12px; color: #666; margin: 0 0 8px">
+                Near-duplicate consecutive rows with few differing columns — review for record
+                dependence or leakage. These patterns do not establish causality.
+              </p>
+              <ul style="margin: 0; padding-left: 18px; font-size: 12px">
+                @for (c of sequentialCandidates | slice: 0 : 12; track c) {
+                  <li>
+                    rows {{ c.row_a }} → {{ c.row_b }} · Δ{{ c.n_diff }} ·
+                    {{ (c.changed_features || []).join(', ') }}
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+          <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
+          @if (droppedColumnsByStep && droppedColumnsByStep.length) {
+            <div
+              class="purifier-summary"
+              style="
+                margin-top: 16px;
+                padding: 12px;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                background: #fffdf7;
+              "
+            >
+              <h3 style="margin: 0 0 6px 0">Data Purifier Summary</h3>
+              <div
+                style="
+                  display: flex;
+                  gap: 16px;
+                  flex-wrap: wrap;
+                  color: #444;
+                  font-size: 13px;
+                  margin-bottom: 8px;
+                "
+              >
+                <span><strong>Rows:</strong> {{ rowCountBefore }} → {{ rowCountAfter }}</span>
+                <span><strong>Rows removed:</strong> {{ rowsRemovedTotal }}</span>
+                <span><strong>Total columns dropped:</strong> {{ droppedTotalCount() }}</span>
+              </div>
+              @for (s of droppedColumnsByStep; track trackByStepIndex($index, s)) {
+                <div style="margin: 6px 0 10px 0">
+                  <div>
+                    <strong>{{ s.step }}</strong>
+                    @if (s.threshold != null) {
+                      <span> (threshold: {{ s.threshold }})</span>
+                    }
+                    @if (s.option_ids && s.option_ids.length) {
+                      <span> — Options: {{ s.option_ids.join(', ') }}</span>
+                    }
+                    <span style="color: #666; margin-left: 8px"
+                      >Rows removed in step: {{ s.rows_removed || 0 }}</span
+                    >
+                  </div>
+                  @if (s.columns && s.columns.length) {
+                    <div style="font-size: 12px; color: #333">
+                      <details>
+                        <summary>{{ s.columns.length }} column(s)</summary>
+                        <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px">
+                          @for (c of s.columns; track c) {
+                            <span
+                              style="
+                                border: 1px solid #eee;
+                                padding: 2px 6px;
+                                border-radius: 12px;
+                                background: #fafafa;
+                              "
+                              >{{ c }}</span
+                            >
+                          }
+                        </div>
+                      </details>
+                    </div>
+                  } @else {
+                    @if (!s.merge_mapping || !objectKeys(s.merge_mapping).length) {
+                      <div style="font-size: 12px; color: #777">
+                        No columns dropped in this step
+                      </div>
+                    }
+                  }
+                  <!-- Categorical outlier merge mapping display -->
+                  @if (s.merge_mapping && objectKeys(s.merge_mapping).length) {
+                    <div class="cat-merge-mapping">
+                      <details>
+                        <summary style="cursor: pointer; font-weight: 500; color: #5c6bc0">
+                          Merge mapping for {{ objectKeys(s.merge_mapping).length }} feature(s)
+                        </summary>
+                        @for (feat of objectKeys(s.merge_mapping); track feat) {
+                          <div class="cat-merge-feature">
+                            <div class="cat-merge-feature-name">{{ feat }}</div>
+                            <table class="cat-merge-table">
+                              <thead>
+                                <tr>
+                                  <th>Original Category</th>
+                                  <th>→</th>
+                                  <th>Merged Into</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                @for (origCat of objectKeys(s.merge_mapping[feat]); track origCat) {
+                                  <tr>
+                                    <td>{{ origCat }}</td>
+                                    <td style="text-align: center">→</td>
+                                    <td>
+                                      <strong>{{ s.merge_mapping[feat][origCat] }}</strong>
+                                    </td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          </div>
+                        }
+                      </details>
+                    </div>
+                  }
+                </div>
+              }
+              <!-- AI Support trigger for Data Purifier Summary (v2.41.0) -->
+              <div style="margin-top: 10px; text-align: right">
+                <button class="ai-support-btn" (click)="requestPurifierAiSupport()">
+                  <span class="ai-support-icon"
+                    ><svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z"
+                        fill="currentColor"
+                        opacity="0.7"
+                      />
+                      <path
+                        d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z"
+                        fill="currentColor"
+                        opacity="0.5"
+                      /></svg
+                  ></span>
+                  Get AI Support
+                </button>
+              </div>
+            </div>
+          }
+          <!-- Note: After Purifier Summary -->
+          @if (droppedColumnsByStep && droppedColumnsByStep.length) {
+            <div class="pipeline-note-slot">
+              @if (
+                !hasNote('after_purifier_summary') &&
+                editingNotePosition !== 'after_purifier_summary'
+              ) {
+                <div class="pipeline-note-add" (click)="toggleNoteEdit('after_purifier_summary')">
+                  <span class="pipeline-note-add-icon">+</span>
+                  <span class="pipeline-note-add-label">Add note</span>
+                </div>
+              }
+              @if (
+                hasNote('after_purifier_summary') &&
+                editingNotePosition !== 'after_purifier_summary'
+              ) {
+                <div
+                  class="pipeline-note-display"
+                  (dblclick)="toggleNoteEdit('after_purifier_summary')"
+                >
+                  <div class="pipeline-note-content">
+                    {{ pipelineNotes['after_purifier_summary'] }}
+                  </div>
+                  <div class="pipeline-note-actions">
+                    <button
+                      class="pipeline-note-btn edit"
+                      (click)="toggleNoteEdit('after_purifier_summary')"
+                      title="Edit"
+                    >
+                      &#9998;
+                    </button>
+                    <button
+                      class="pipeline-note-btn delete"
+                      (click)="deleteNote('after_purifier_summary')"
+                      title="Delete"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              }
+              @if (editingNotePosition === 'after_purifier_summary') {
+                <div class="pipeline-note-editor">
+                  <textarea
+                    class="pipeline-note-textarea"
+                    [ngModel]="pipelineNotes['after_purifier_summary'] || ''"
+                    (ngModelChange)="onNoteChanged('after_purifier_summary', $event)"
+                    placeholder="Write your decision notes here..."
+                    rows="3"
+                  ></textarea>
+                  <button class="pipeline-note-btn done" (click)="editingNotePosition = null">
+                    Done
+                  </button>
+                </div>
+              }
+            </div>
+          }
+          @if (droppedColumnsByStep && droppedColumnsByStep.length) {
+            <app-pipeline-codeline position="after_purifier_summary"></app-pipeline-codeline>
+          }
+          <!-- Split Validation Chart -->
+          @if (splitValidation) {
+            <div
+              style="
+                margin-top: 20px;
+                padding: 16px;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                background: #fafbfc;
+              "
+            >
+              <h3 style="margin: 0 0 4px 0; font-size: 15px; color: #333">
+                Train-Test Split Validation
+              </h3>
+              <p style="margin: 0 0 12px 0; font-size: 12px; color: #777">
+                Stacked histogram of target label distribution across splits, with target mean
+                overlay. Consistent means across splits indicate a well-balanced split.
+              </p>
+              <canvas
+                #splitValidationCanvas
+                style="width: 100%; height: 320px; display: block"
+              ></canvas>
+              <!-- Summary table -->
+              <div style="margin-top: 12px; overflow-x: auto">
+                <table style="border-collapse: collapse; width: auto; font-size: 12px">
+                  <thead>
+                    <tr style="background: #f5f5f5">
+                      <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: left">
+                        Split
+                      </th>
+                      <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right">
+                        Count
+                      </th>
+                      @for (lbl of splitValidation.labels; track lbl) {
+                        <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right">
+                          Target={{ lbl }}
+                        </th>
+                      }
+                      <th style="padding: 6px 14px; border: 1px solid #e0e0e0; text-align: right">
+                        Target Mean
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (sp of splitValidation.splits; track sp) {
+                      <tr>
+                        <td style="padding: 6px 14px; border: 1px solid #eee; font-weight: 600">
+                          {{ sp.name }}
+                        </td>
+                        <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right">
+                          {{ sp.count | number }}
+                        </td>
+                        @for (lbl of splitValidation.labels; track lbl) {
+                          <td style="padding: 6px 14px; border: 1px solid #eee; text-align: right">
+                            {{ sp.label_counts[lbl] | number }}
+                          </td>
+                        }
+                        <td
+                          style="
+                            padding: 6px 14px;
+                            border: 1px solid #eee;
+                            text-align: right;
+                            color: #2e7d32;
+                            font-weight: 600;
+                          "
+                        >
+                          {{ (sp.target_mean * 100).toFixed(2) }}%
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          }
+          <!-- Note: After Split Validation -->
+          @if (splitValidation) {
+            <div class="pipeline-note-slot">
+              @if (
+                !hasNote('after_split_validation') &&
+                editingNotePosition !== 'after_split_validation'
+              ) {
+                <div class="pipeline-note-add" (click)="toggleNoteEdit('after_split_validation')">
+                  <span class="pipeline-note-add-icon">+</span>
+                  <span class="pipeline-note-add-label">Add note</span>
+                </div>
+              }
+              @if (
+                hasNote('after_split_validation') &&
+                editingNotePosition !== 'after_split_validation'
+              ) {
+                <div
+                  class="pipeline-note-display"
+                  (dblclick)="toggleNoteEdit('after_split_validation')"
+                >
+                  <div class="pipeline-note-content">
+                    {{ pipelineNotes['after_split_validation'] }}
+                  </div>
+                  <div class="pipeline-note-actions">
+                    <button
+                      class="pipeline-note-btn edit"
+                      (click)="toggleNoteEdit('after_split_validation')"
+                      title="Edit"
+                    >
+                      &#9998;
+                    </button>
+                    <button
+                      class="pipeline-note-btn delete"
+                      (click)="deleteNote('after_split_validation')"
+                      title="Delete"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              }
+              @if (editingNotePosition === 'after_split_validation') {
+                <div class="pipeline-note-editor">
+                  <textarea
+                    class="pipeline-note-textarea"
+                    [ngModel]="pipelineNotes['after_split_validation'] || ''"
+                    (ngModelChange)="onNoteChanged('after_split_validation', $event)"
+                    placeholder="Write your decision notes here..."
+                    rows="3"
+                  ></textarea>
+                  <button class="pipeline-note-btn done" (click)="editingNotePosition = null">
+                    Done
+                  </button>
+                </div>
+              }
+            </div>
+          }
+          @if (splitValidation) {
+            <app-pipeline-codeline position="after_split_validation"></app-pipeline-codeline>
+          }
+          @if (datqSummary && datqSummary.length) {
+            <div style="margin-top: 24px">
+              <h2>Data Quality</h2>
+              <h3 style="margin-top: 8px">Data Quality Summary</h3>
+              <!-- Controls: search + page size + exports -->
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                  margin: 8px 0 12px 0;
+                  flex-wrap: wrap;
+                "
+              >
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <span>Search:</span>
+                  <input
+                    type="text"
+                    [ngModel]="datqGlobalFilter"
+                    (ngModelChange)="datqGlobalFilter = $event; onFilterChange()"
+                    placeholder="Global filter"
+                    style="padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px"
+                  />
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <span>Page size:</span>
+                  <select [ngModel]="datqPageSize" (ngModelChange)="changeDatqPageSize($event)">
+                    @for (s of datqPageSizes; track s) {
+                      <option [value]="s">{{ s }}</option>
+                    }
+                  </select>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <span>Columns:</span>
+                  <select [ngModel]="datqPreset" (ngModelChange)="applyDatqPreset($event)">
+                    <option value="core">Core</option>
+                    <option value="all">All</option>
+                  </select>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px">
+                  <input
+                    type="checkbox"
+                    [ngModel]="datqWrapCells"
+                    (ngModelChange)="datqWrapCells = $event"
+                  />
+                  <span>Wrap cells</span>
+                </label>
+                <button
+                  mat-stroked-button
+                  color="primary"
+                  (click)="exportCrispPack()"
+                  [disabled]="currentFileId == null"
+                  title="Download CRISP-DM audit export pack"
+                >
+                  Export CRISP pack
+                </button>
+                <span style="color: #666">Total rows: {{ datqTotal }}</span>
+                @if (getExcludedVariables().length > 0) {
+                  <span style="color: #d32f2f; font-weight: 500">
+                    Excluded from model: {{ getExcludedVariables().length }}
+                  </span>
+                }
+                <span style="flex: 1 1 auto"></span>
+                @if (getExcludedVariables().length > 0) {
+                  <button mat-stroked-button color="warn" (click)="clearAllModelUsage()">
+                    Clear All Exclusions
+                  </button>
+                }
+                <button mat-stroked-button (click)="togglePinVariable()">Pin Variable</button>
+                <button mat-stroked-button (click)="resetSorting()">Reset Sorting</button>
+                <button mat-stroked-button (click)="resetLayout()">Reset Layout</button>
+                <button mat-stroked-button color="primary" (click)="clearFilters()">
+                  Clear Filters
+                </button>
+                <button mat-stroked-button color="primary" (click)="exportDatqAsCSV()">
+                  Export CSV
+                </button>
+                <button mat-stroked-button color="primary" (click)="exportDatqAsJSON()">
+                  Export JSON
+                </button>
+              </div>
+              <div
+                class="datq-table-container"
+                style="
+                  overflow: auto;
+                  max-width: 100%;
+                  border: 1px solid #e0e0e0;
+                  border-radius: 4px;
+                  max-height: 500px;
+                "
+              >
+                <table
+                  class="datq-table mat-elevation-z1"
+                  style="
+                    border-collapse: separate;
+                    width: 100%;
+                    min-width: 1800px;
+                    table-layout: auto;
+                  "
+                >
+                  <thead>
+                    <tr class="header-row">
+                      @for (col of datqDisplayColumns; track col) {
+                        <th
+                          (click)="onSort(col)"
+                          [ngStyle]="getPinnedStyle(col, 'header')"
+                          [style.width.px]="getColWidth(col)"
+                          [style.minWidth.px]="getColWidth(col)"
+                          [style.maxWidth.px]="getColWidth(col)"
+                          [style.position]="'sticky'"
+                          [style.top.px]="0"
+                          [style.zIndex]="3"
+                          style="
+                            text-align: left;
+                            padding: 8px;
+                            border-bottom: 1px solid #eee;
+                            white-space: nowrap;
+                            cursor: pointer;
+                            background: #fff;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          <span style="display: inline-flex; align-items: center; gap: 6px">
+                            <span>{{ col }}</span>
+                            @if (datqSortColumn === col) {
+                              <span>{{ datqSortDir === 'asc' ? '▲' : '▼' }}</span>
+                            }
+                            <button
+                              type="button"
+                              (click)="togglePin(col); $event.stopPropagation()"
+                              title="Pin/Unpin"
+                              style="
+                                border: none;
+                                background: transparent;
+                                cursor: pointer;
+                                line-height: 1;
+                              "
+                            >
+                              📌
+                            </button>
+                            @if (selectedCount(col) > 0) {
+                              <span class="chip" title="Selected values">{{
+                                selectedCount(col)
+                              }}</span>
+                            }
+                          </span>
+                          <span
+                            class="resize-handle"
+                            title="Resize"
+                            (mousedown)="onResizeStart(col, $event)"
+                          ></span>
+                        </th>
+                      }
+                    </tr>
+                    <tr class="filters">
+                      @for (col of datqDisplayColumns; track col) {
+                        <th
+                          [ngStyle]="getPinnedStyle(col, 'filter')"
+                          [style.width.px]="getColWidth(col)"
+                          [style.minWidth.px]="getColWidth(col)"
+                          [style.maxWidth.px]="getColWidth(col)"
+                          [style.position]="'sticky'"
+                          [style.top.px]="40"
+                          [style.zIndex]="2"
+                          style="
+                            text-align: left;
+                            padding: 6px 8px;
+                            border-bottom: 1px solid #eee;
+                            white-space: nowrap;
+                            background: #fff;
+                            overflow: visible;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          <div class="filter-input-wrap">
+                            <input
+                              type="text"
+                              [ngModel]="datqColumnFilters[col]"
+                              (ngModelChange)="datqColumnFilters[col] = $event; onFilterChange()"
+                              (focus)="openFilterMenu(col)"
+                              (click)="$event.stopPropagation()"
+                              placeholder="Filter"
+                              style="
+                                width: 100%;
+                                padding: 6px 8px;
+                                border: 1px solid #ddd;
+                                border-radius: 4px;
+                              "
+                            />
+                            <button
+                              type="button"
+                              class="filter-trigger"
+                              title="Unique filter"
+                              (click)="openFilterMenu(col); $event.stopPropagation()"
+                            >
+                              ▾
+                            </button>
+                          </div>
+                          @if (datqFilterMenuFor === col) {
+                            <div class="filter-menu" (click)="$event.stopPropagation()">
+                              <div class="menu-header">Filter {{ col }}</div>
+                              <input
+                                type="text"
+                                [(ngModel)]="datqFilterMenuSearch"
+                                placeholder="Search values"
+                                class="menu-search"
+                              />
+                              <label
+                                style="
+                                  display: flex;
+                                  align-items: center;
+                                  gap: 6px;
+                                  font-size: 12px;
+                                  margin: 6px 0;
+                                "
+                              >
+                                <input type="checkbox" [(ngModel)]="datqShowOnlySelected[col]" />
+                                Show only selected
+                              </label>
+                              <div style="font-size: 11px; color: #888; margin: 4px 0">
+                                Values: {{ uniqueCount(col) }} · Selected:
+                                {{ selectedCount(col) }} · Query: '{{ datqFilterMenuSearch }}'
+                              </div>
+                              <div class="value-list">
+                                @if (visibleUniqueValues(col).length === 0) {
+                                  <div style="color: #777; font-size: 12px; padding: 6px">
+                                    No values
+                                  </div>
+                                }
+                                @for (item of visibleUniqueValues(col); track item) {
+                                  <label class="value-item">
+                                    <input
+                                      type="checkbox"
+                                      [checked]="isValueChecked(col, item.value)"
+                                      (change)="
+                                        toggleValue(col, item.value, $any($event.target).checked)
+                                      "
+                                    />
+                                    <span class="val" [title]="item.value">{{ item.value }}</span>
+                                    <span class="cnt">{{ item.count }}</span>
+                                  </label>
+                                }
+                              </div>
+                              <div class="menu-actions">
+                                <button type="button" (click)="selectAllValues(col)">
+                                  Select all
+                                </button>
+                                <button type="button" (click)="clearSelectedValues(col)">
+                                  Clear
+                                </button>
+                                <span style="flex: 1 1 auto"></span>
+                                <button type="button" (click)="applySelectedValues()">Apply</button>
+                                <button type="button" (click)="closeFilterMenu()">Close</button>
+                              </div>
+                            </div>
+                          }
+                        </th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of datqPagedRows; track row) {
+                      <tr
+                        (click)="onDatqRowClick(row)"
+                        style="cursor: pointer"
+                        [class.selected]="
+                          datqSelectedVariable ===
+                          (row['Variable'] || row['variable'] || row['index'])
+                        "
+                      >
+                        @for (col of datqDisplayColumns; track col) {
+                          <td
+                            [ngStyle]="getPinnedStyle(col, 'cell')"
+                            [style.width.px]="getColWidth(col)"
+                            [style.minWidth.px]="getColWidth(col)"
+                            [style.maxWidth.px]="getColWidth(col)"
+                            [style.white-space]="datqWrapCells ? 'normal' : 'nowrap'"
+                            [style.word-break]="datqWrapCells ? 'break-word' : 'normal'"
+                            style="
+                              padding: 8px;
+                              border-bottom: 1px solid #f5f5f5;
+                              background: #fff;
+                              overflow: hidden;
+                              text-overflow: ellipsis;
+                              font-variant-numeric: tabular-nums;
+                            "
+                          >
+                            @if (col === 'Model_Usage') {
+                              <select
+                                [ngModel]="getModelUsage(row)"
+                                (ngModelChange)="setModelUsage(row, $event)"
+                                (click)="$event.stopPropagation()"
+                                style="
+                                  width: 100%;
+                                  padding: 4px;
+                                  border: 1px solid #ccc;
+                                  border-radius: 4px;
+                                  background: #fff;
+                                "
+                              >
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </select>
+                            } @else {
+                              @if (isVariableColumn(col)) {
+                                <a
+                                  href="#"
+                                  (click)="
+                                    openFeatureCardFromDatq(displayCell(row, col));
+                                    $event.preventDefault();
+                                    $event.stopPropagation()
+                                  "
+                                  style="color: #1976d2; text-decoration: underline"
+                                >
+                                  {{ displayCell(row, col) }}
+                                </a>
+                              } @else {
+                                {{ displayCell(row, col) }}
+                              }
+                            }
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <!-- Pagination controls -->
+              <div
+                style="
+                  margin-top: 12px;
+                  display: flex;
+                  gap: 12px;
+                  align-items: center;
+                  flex-wrap: wrap;
+                "
+              >
+                <button mat-button (click)="prevDatqPage()" [disabled]="datqPage <= 1">Prev</button>
+                <span>Page {{ datqPage }} of {{ datqTotalPages }}</span>
+                <button mat-button (click)="nextDatqPage()" [disabled]="datqPage >= datqTotalPages">
+                  Next
+                </button>
+                <span style="flex: 1 1 auto"></span>
+                <button class="ai-support-btn" (click)="requestDatqAiSupport()">
+                  <span class="ai-support-icon"
+                    ><svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M10 2L12.5 9.5L20 12L12.5 14.5L10 22L7.5 14.5L0 12L7.5 9.5L10 2Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M20 4L21 7L24 8L21 9L20 12L19 9L16 8L19 7L20 4Z"
+                        fill="currentColor"
+                        opacity="0.7"
+                      />
+                      <path
+                        d="M20 16L20.75 18.25L23 19L20.75 19.75L20 22L19.25 19.75L17 19L19.25 18.25L20 16Z"
+                        fill="currentColor"
+                        opacity="0.5"
+                      /></svg
+                  ></span>
+                  Get AI Support
+                </button>
+              </div>
+              <!-- Detail section -->
+              @if (datqSelectedVariable) {
+                <div
+                  style="
+                    margin-top: 20px;
+                    padding: 16px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    background: #fafafa;
+                  "
+                >
+                  <div style="display: flex; align-items: center; gap: 12px">
+                    <h4 style="margin: 0">Data Quality Detail: {{ datqSelectedVariable }}</h4>
+                    @if (datqDetailLoading) {
+                      <span style="color: #666">Loading…</span>
+                    }
+                    <span style="flex: 1 1 auto"></span>
+                    <button
+                      mat-stroked-button
+                      (click)="exportDatqDetailAsCSV()"
+                      [disabled]="!datqDetail || !datqDetailColumns.length"
+                    >
+                      Export Detail CSV
+                    </button>
+                    <button
+                      mat-stroked-button
+                      (click)="exportDatqDetailAsJSON()"
+                      [disabled]="!datqDetail"
+                    >
+                      Export Detail JSON
+                    </button>
+                    <button mat-button (click)="closeDatqDetail()">Close</button>
+                  </div>
+                  @if (datqDetail && !datqDetailLoading) {
+                    <div style="margin-top: 10px">
+                      <div style="display: flex; gap: 16px; flex-wrap: wrap; color: #333">
+                        <span><strong>Type:</strong> {{ datqDetail.variable_type }}</span>
+                        <span><strong>PSI:</strong> {{ datqDetail.psi }}</span>
+                        <span><strong>Train N:</strong> {{ datqDetail.train_count }}</span>
+                        <span><strong>Test N:</strong> {{ datqDetail.test_count }}</span>
+                        <span
+                          ><strong>Train Missing:</strong>
+                          {{ datqDetail.train_missing_ratio }}</span
+                        >
+                        <span
+                          ><strong>Test Missing:</strong> {{ datqDetail.test_missing_ratio }}</span
+                        >
+                      </div>
+                      <div class="psi-legend">Train share vs Test share per bin</div>
+                      <div class="psi-viz">
+                        @for (r of datqDetail?.psi_table; track r) {
+                          <div class="psi-row">
+                            <div class="psi-bin" [title]="r['bin']">{{ r['bin'] }}</div>
+                            <div class="psi-bars">
+                              <div
+                                class="bar-train"
+                                [style.width.%]="percent(r['train_share'])"
+                                [title]="'Train: ' + r['train_share']"
+                              ></div>
+                              <div
+                                class="bar-test"
+                                [style.width.%]="percent(r['test_share'])"
+                                [title]="'Test: ' + r['test_share']"
+                              ></div>
+                            </div>
+                            <div
+                              class="psi-contrib"
+                              [ngClass]="{
+                                pos: (r['PSI_contribution'] || 0) >= 0,
+                                neg: (r['PSI_contribution'] || 0) < 0,
+                              }"
+                            >
+                              {{ r['PSI_contribution'] }}
+                            </div>
+                          </div>
+                        }
+                      </div>
+                      <!-- Detail table controls -->
+                      <div
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 12px;
+                          margin: 12px 0 8px 0;
+                          flex-wrap: wrap;
+                        "
+                      >
+                        <label style="display: flex; align-items: center; gap: 6px">
+                          <span>Search:</span>
+                          <input
+                            type="text"
+                            [ngModel]="detailGlobalFilter"
+                            (ngModelChange)="detailGlobalFilter = $event; onDetailFilterChange()"
+                            placeholder="Filter detail"
+                            style="padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px"
+                          />
+                        </label>
+                        <span style="flex: 1 1 auto"></span>
+                        <button mat-stroked-button (click)="clearDetailFilters()">
+                          Clear Detail Filters
+                        </button>
+                      </div>
+                      <div
+                        style="
+                          overflow: auto;
+                          max-height: 360px;
+                          border: 1px solid #eee;
+                          border-radius: 4px;
+                        "
+                      >
+                        <table style="border-collapse: collapse; width: 100%; min-width: 520px">
+                          <thead>
+                            <tr>
+                              @for (c of datqDetailColumns; track c) {
+                                <th
+                                  (click)="onDetailSort(c)"
+                                  style="
+                                    text-align: left;
+                                    padding: 8px;
+                                    border-bottom: 1px solid #eee;
+                                    white-space: nowrap;
+                                    cursor: pointer;
+                                  "
+                                >
+                                  {{ c }}
+                                  @if (detailSortColumn === c) {
+                                    <span>{{ detailSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                  }
+                                </th>
+                              }
+                            </tr>
+                            <tr>
+                              @for (c of datqDetailColumns; track c) {
+                                <th
+                                  style="
+                                    text-align: left;
+                                    padding: 6px 8px;
+                                    border-bottom: 1px solid #eee;
+                                    white-space: nowrap;
+                                  "
+                                >
+                                  <input
+                                    type="text"
+                                    [ngModel]="detailColumnFilters[c]"
+                                    (ngModelChange)="
+                                      detailColumnFilters[c] = $event; onDetailFilterChange()
+                                    "
+                                    placeholder="Filter"
+                                    style="
+                                      width: 100%;
+                                      padding: 6px 8px;
+                                      border: 1px solid #ddd;
+                                      border-radius: 4px;
+                                    "
+                                  />
+                                </th>
+                              }
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (r of datqDetailSortedRows; track r) {
+                              <tr>
+                                @for (c of datqDetailColumns; track c) {
+                                  <td
+                                    style="
+                                      padding: 8px;
+                                      border-bottom: 1px solid #f5f5f5;
+                                      white-space: nowrap;
+                                    "
+                                  >
+                                    {{ r[c] }}
+                                  </td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+              <!-- Note: After Data Quality -->
+              <div class="pipeline-note-slot">
+                @if (
+                  !hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'
+                ) {
+                  <div class="pipeline-note-add" (click)="toggleNoteEdit('after_data_quality')">
+                    <span class="pipeline-note-add-icon">+</span>
+                    <span class="pipeline-note-add-label">Add note</span>
+                  </div>
+                }
+                @if (
+                  hasNote('after_data_quality') && editingNotePosition !== 'after_data_quality'
+                ) {
+                  <div
+                    class="pipeline-note-display"
+                    (dblclick)="toggleNoteEdit('after_data_quality')"
+                  >
+                    <div class="pipeline-note-content">
+                      {{ pipelineNotes['after_data_quality'] }}
+                    </div>
+                    <div class="pipeline-note-actions">
+                      <button
+                        class="pipeline-note-btn edit"
+                        (click)="toggleNoteEdit('after_data_quality')"
+                        title="Edit"
+                      >
+                        &#9998;
+                      </button>
+                      <button
+                        class="pipeline-note-btn delete"
+                        (click)="deleteNote('after_data_quality')"
+                        title="Delete"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </div>
+                }
+                @if (editingNotePosition === 'after_data_quality') {
+                  <div class="pipeline-note-editor">
+                    <textarea
+                      class="pipeline-note-textarea"
+                      [ngModel]="pipelineNotes['after_data_quality'] || ''"
+                      (ngModelChange)="onNoteChanged('after_data_quality', $event)"
+                      placeholder="Write your decision notes here..."
+                      rows="3"
+                    ></textarea>
+                    <button class="pipeline-note-btn done" (click)="editingNotePosition = null">
+                      Done
+                    </button>
+                  </div>
+                }
+              </div>
+              <app-pipeline-codeline position="after_data_quality"></app-pipeline-codeline>
+              <div
+                style="
+                  margin-top: 12px;
+                  margin-bottom: 30px;
+                  display: flex;
+                  gap: 12px;
+                  align-items: center;
+                "
+              >
+                <button
+                  class="next-button"
+                  (click)="goToModelingFromDQ()"
+                  [disabled]="!(datqSummary && datqSummary.length)"
+                >
+                  <span class="next-icon">&#9654;</span> MODELING
+                </button>
+                @if (!(datqSummary && datqSummary.length)) {
+                  <small style="color: #666"
+                    >Run preprocessing to compute Data Quality summary to proceed.</small
+                  >
+                }
+                @if (datqSummary && datqSummary.length) {
+                  <small style="color: #666"
+                    >Review summary above, then continue to modeling. Categorical encoding is
+                    handled automatically.</small
+                  >
+                }
+              </div>
+            </div>
+          }
         </div>
-        <div *ngIf="editingNotePosition === 'after_data_quality'" class="pipeline-note-editor">
-          <textarea class="pipeline-note-textarea" [ngModel]="pipelineNotes['after_data_quality'] || ''" (ngModelChange)="onNoteChanged('after_data_quality', $event)" placeholder="Write your decision notes here..." rows="3"></textarea>
-          <button class="pipeline-note-btn done" (click)="editingNotePosition = null">Done</button>
-        </div>
-      </div>
-      <app-pipeline-codeline position="after_data_quality"></app-pipeline-codeline>
+      }
 
-      <div style="margin-top: 12px; margin-bottom: 30px; display: flex; gap: 12px; align-items: center;">
-        <button class="next-button" (click)="goToModelingFromDQ()" [disabled]="!(datqSummary && datqSummary.length)">
-          <span class="next-icon">&#9654;</span> MODELING
-        </button>
-        <small style="color:#666;" *ngIf="!(datqSummary && datqSummary.length)">Run preprocessing to compute Data Quality summary to proceed.</small>
-        <small style="color:#666;" *ngIf="(datqSummary && datqSummary.length)">Review summary above, then continue to modeling. Categorical encoding is handled automatically.</small>
-      </div>
-    </div>
-  </div>
+      <!-- Encoding step removed — encoding is now handled automatically by the modeling backend
+      based on the selected algorithm (XGBoost/LightGBM/CatBoost native categorical). -->
 
-  <!-- Encoding step removed — encoding is now handled automatically by the modeling backend
-       based on the selected algorithm (XGBoost/LightGBM/CatBoost native categorical). -->
+      <div class="model-development-line"></div>
 
-  <div class="model-development-line"></div>
+      <!-- Modeling step appears after preprocessing run completes and remains visible -->
+      <div id="modeling-anchor"></div>
+      @if (modelingAvailable) {
+        <app-modeling
+          [businessUnderstanding]="businessUnderstanding"
+          [pipelineRunId]="activePipelineRunId"
+        ></app-modeling>
+      }
 
+      <!-- Evaluation appears only after every Modeling sub-step is complete -->
+      @if (modelingCompleted) {
+        <div class="model-development-line"></div>
+      }
+      <div id="evaluation-anchor"></div>
+      @if (modelingCompleted) {
+        <app-evaluation></app-evaluation>
+      }
 
-  <!-- Modeling step appears after preprocessing run completes and remains visible -->
-  <div id="modeling-anchor"></div>
-  <app-modeling *ngIf="modelingAvailable"></app-modeling>
+      <!-- Deployment appears only after the outer-test evaluation has run -->
+      @if (evaluationCompleted) {
+        <div class="model-development-line"></div>
+      }
+      <div id="deployment-anchor"></div>
+      @if (evaluationCompleted) {
+        <app-deployment></app-deployment>
+      }
 
-  <!-- Evaluation appears only after every Modeling sub-step is complete -->
-  <div class="model-development-line" *ngIf="modelingCompleted"></div>
-  <div id="evaluation-anchor"></div>
-  <app-evaluation *ngIf="modelingCompleted"></app-evaluation>
-
-  <!-- Deployment appears only after the outer-test evaluation has run -->
-  <div class="model-development-line" *ngIf="evaluationCompleted"></div>
-  <div id="deployment-anchor"></div>
-  <app-deployment *ngIf="evaluationCompleted"></app-deployment>
-
-  <div class="model-development-line" *ngIf="deploymentCompleted"></div>
-  <div id="monitoring-anchor" *ngIf="deploymentCompleted" style="margin-top: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px;">
-    <h2>Monitoring</h2>
-    <p style="color: #555; font-size: 14px; max-width: 720px;">
-      Upload a scored production or validation batch to compare score and feature drift against the training reference.
-      When drift exceeds tolerance, start iteration N+1 to clone the pipeline run while preserving Business Understanding.
-    </p>
-
-    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0;">
-      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-        <span>Scored batch file</span>
-        <input type="file" accept=".csv,.xlsx,.xls" (change)="onMonitoringFileSelected($event)" />
-      </label>
-      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-        <span>Score column</span>
-        <input type="text" [(ngModel)]="monitoringScoreCol" placeholder="score" style="width: 120px;" />
-      </label>
-      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;">
-        <span>Target column (optional)</span>
-        <input type="text" [(ngModel)]="monitoringTargetCol" placeholder="optional" style="width: 140px;" />
-      </label>
-      <button mat-raised-button color="primary"
+      @if (deploymentCompleted) {
+        <div class="model-development-line"></div>
+      }
+      @if (deploymentCompleted) {
+        <div
+          id="monitoring-anchor"
+          style="margin-top: 24px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px"
+        >
+          <h2>Monitoring</h2>
+          <p style="color: #555; font-size: 14px; max-width: 720px">
+            Upload a scored production or validation batch to compare score and feature drift
+            against the training reference. When drift exceeds tolerance, start iteration N+1 to
+            clone the pipeline run while preserving Business Understanding.
+          </p>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0">
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+              <span>Scored batch file</span>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                (change)="onMonitoringFileSelected($event)"
+              />
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+              <span>Score column</span>
+              <input
+                type="text"
+                [(ngModel)]="monitoringScoreCol"
+                placeholder="score"
+                style="width: 120px"
+              />
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+              <span>Target column (optional)</span>
+              <input
+                type="text"
+                [(ngModel)]="monitoringTargetCol"
+                placeholder="optional"
+                style="width: 140px"
+              />
+            </label>
+            <button
+              mat-raised-button
+              color="primary"
               (click)="runMonitoringBatch()"
-              [disabled]="!monitoringFile || monitoringRunning || currentFileId == null">
-        {{ monitoringRunning ? 'Running…' : 'Run offline drift check' }}
-      </button>
-      <button mat-stroked-button color="accent"
+              [disabled]="!monitoringFile || monitoringRunning || currentFileId == null"
+            >
+              {{ monitoringRunning ? 'Running…' : 'Run offline drift check' }}
+            </button>
+            <button
+              mat-stroked-button
+              color="accent"
               (click)="startIterationNPlus1()"
-              [disabled]="!activePipelineRunId || iterationCloning">
-        {{ iterationCloning ? 'Cloning…' : 'Start iteration N+1' }}
-      </button>
+              [disabled]="!activePipelineRunId || iterationCloning"
+            >
+              {{ iterationCloning ? 'Cloning…' : 'Start iteration N+1' }}
+            </button>
+          </div>
+          @if (monitoringError) {
+            <div style="color: #c62828; margin-bottom: 12px">{{ monitoringError }}</div>
+          }
+          @if (monitoringReport) {
+            <div
+              style="
+                margin-top: 16px;
+                padding: 12px;
+                background: #fafafa;
+                border: 1px solid #eee;
+                border-radius: 6px;
+                font-size: 13px;
+              "
+            >
+              <h3 style="margin: 0 0 8px 0">Monitoring report</h3>
+              <pre
+                style="white-space: pre-wrap; max-height: 360px; overflow: auto; font-size: 12px"
+                >{{ monitoringReport | json }}</pre>
+            </div>
+          }
+        </div>
+      }
     </div>
-
-    <div *ngIf="monitoringError" style="color: #c62828; margin-bottom: 12px;">{{ monitoringError }}</div>
-
-    <div *ngIf="monitoringReport" style="margin-top: 16px; padding: 12px; background: #fafafa; border: 1px solid #eee; border-radius: 6px; font-size: 13px;">
-      <h3 style="margin: 0 0 8px 0;">Monitoring report</h3>
-      <pre style="white-space: pre-wrap; max-height: 360px; overflow: auto; font-size: 12px;">{{ monitoringReport | json }}</pre>
-    </div>
+    <!-- end .model-development-container -->
   </div>
-
-    </div><!-- end .model-development-container -->
-  </div><!-- end .panel-middle -->
+  <!-- end .panel-middle -->
 
   <!-- Right Resize Handle -->
-  <div class="resize-handle" *ngIf="showRightPanel" (mousedown)="onRightResizeStart($event)"></div>
+  @if (showRightPanel) {
+    <div class="resize-handle" (mousedown)="onRightResizeStart($event)"></div>
+  }
 
   <!-- Right Panel: AI Assistant Chat -->
-  <div class="panel-right" *ngIf="showRightPanel" [style.width.px]="rightPanelWidth">
-    <app-ai-chat-panel></app-ai-chat-panel>
-  </div>
-</div><!-- end .layout-panels -->
+  @if (showRightPanel) {
+    <div class="panel-right" [style.width.px]="rightPanelWidth">
+      <app-ai-chat-panel></app-ai-chat-panel>
+    </div>
+  }
+</div>
+<!-- end .layout-panels -->

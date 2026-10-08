@@ -89,6 +89,16 @@ describe('ModelDevelopmentComponent', () => {
     expect(component.getSubStepStatus('0a')).toBe('pending');
     component.businessUnderstanding.objective = 'Predict default within 12 months';
     component.onBusinessUnderstandingChanged();
+    expect(component.getSubStepStatus('0a')).toBe('in_progress');
+    component.businessUnderstanding.problem_type = 'classification';
+    component.businessUnderstanding.population = 'Eligible applicants';
+    component.businessUnderstanding.prediction_horizon = '12 months';
+    component.businessUnderstanding.target_contract = {
+      ...component.businessUnderstanding.target_contract,
+      target_column: 'Target', event_definition: 'Default', label_maturity: '12-month follow-up',
+    };
+    component.businessUnderstanding.feature_availability.default = 'available_at_prediction';
+    component.onBusinessUnderstandingChanged();
     expect(component.getSubStepStatus('0a')).toBe('completed');
 
     component.deploymentCompleted = true;
@@ -112,13 +122,26 @@ describe('ModelDevelopmentComponent', () => {
     expect(sharedService.getTargetDefinition()).toBe('Bad = 90+ DPD within 12 months');
   });
 
-  it('should derive classification from objective wording and keep all pipelines', () => {
+  it('should suggest classification and show only compatible pipelines', () => {
     component.businessUnderstanding.objective = 'Decide whether to approve a loan application';
     component.onBusinessUnderstandingChanged();
 
     expect(component.detectedProblemType).toBe('classification');
     expect(component.availablePipelineOptions.map((p) => p.value))
-      .toEqual(['boosting', 'logit', 'credit-scoring', 'anomaly-detection']);
+      .toEqual(['boosting', 'logit', 'credit-scoring']);
+  });
+
+  it('keeps anomaly ranking distinct from classification probabilities', () => {
+    component.businessUnderstanding.problem_type = 'anomaly';
+    component.businessUnderstanding.success_criteria.primary_metric = 'roc_auc';
+    component.onBusinessUnderstandingChanged();
+
+    expect(component.availablePipelineOptions.map((p) => p.value)).toEqual(['anomaly-detection']);
+    expect(component.getPipelineConfig().problem_type).toBe('anomaly');
+    expect(component.problemTypeMetricConflict).toBeFalse();
+    component.businessUnderstanding.success_criteria.primary_metric = 'f1';
+    component.onBusinessUnderstandingChanged();
+    expect(component.problemTypeMetricConflict).toBeTrue();
   });
 
   it('should derive regression from an explicit primary metric and filter the catalogue', () => {
@@ -126,8 +149,17 @@ describe('ModelDevelopmentComponent', () => {
     component.onBusinessUnderstandingChanged();
 
     expect(component.detectedProblemType).toBe('regression');
-    expect(component.businessUnderstanding.problem_type).toBe('regression');
+    expect(component.businessUnderstanding.problem_type).toBe('');
     expect(component.availablePipelineOptions.map((p) => p.value)).toEqual(['boosting']);
+  });
+
+  it('keeps the declared task when objective wording suggests another task', () => {
+    component.businessUnderstanding.problem_type = 'regression';
+    component.businessUnderstanding.objective = 'Approve or decline applications';
+    component.businessUnderstanding.success_criteria.primary_metric = 'rmse';
+    component.onBusinessUnderstandingChanged();
+    expect(component.businessUnderstanding.problem_type).toBe('regression');
+    expect(component.getPipelineConfig().problem_type).toBe('regression');
   });
 
   it('should flag a conflict when the wording and the primary metric disagree', () => {
@@ -177,7 +209,7 @@ describe('ModelDevelopmentComponent', () => {
     expect(bu.regulatory_notes).toBe('Adverse-action reasons required');
     expect(bu.forbidden_features).toEqual(['post_disbursement_balance', 'internal_score']);
     expect(bu.target_contract.event_definition).toBe('Bad = 90+ DPD within 12 months');
-    expect(bu.problem_type).toBe('classification');
+    expect(bu.problem_type).toBe('');
   });
 
   it('should block modeling when hard_block is set without success floor', () => {

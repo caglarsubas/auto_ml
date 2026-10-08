@@ -142,8 +142,22 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Allow all origins for development (adjust this for production)
-CORS_ALLOW_ALL_ORIGINS = True
+# Session credentials are accepted only from explicitly configured origins.
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [value.strip() for value in os.environ.get(
+    'DECLARAI_ALLOWED_ORIGINS',
+    'http://localhost:4200,http://localhost:4300,http://localhost:4301,http://127.0.0.1:4301',
+).split(',') if value.strip()]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+}
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_AGE = 8 * 60 * 60
 
 LOGGING = {
     'version': 1,
@@ -169,7 +183,7 @@ LOGGING = {
 # Allow larger request bodies for pipeline checkpoint state (modeling status can be large)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB (default is 2.5 MB)
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:4200', 'http://localhost:4300']
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # OpenAI API key for AI Assistant (set via environment variable)
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')

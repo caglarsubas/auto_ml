@@ -1,4 +1,12 @@
-import { Component, OnInit, Inject, AfterViewInit, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  Inject,
+  Input,
+  AfterViewInit,
+  ChangeDetectorRef,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
@@ -10,14 +18,21 @@ import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
 
-interface PurifierOption { id: number; name: string; }
+interface PurifierOption {
+  id: number;
+  name: string;
+}
 
 @Component({
   selector: 'app-modeling',
   templateUrl: './modeling.component.html',
-  styleUrls: ['./modeling.component.css']
+  styleUrls: ['./modeling.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
+  @Input() businessUnderstanding: any = null;
+  @Input() pipelineRunId: number | null = null;
   selectedOptionIds: number[] = [];
   selectedOptionNames: string[] = [];
   runPreview: any | null = null;
@@ -36,28 +51,28 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   private _configSaveTimer: any = null;
 
   // SFS (Sequential Feature Selection) configuration and results
-  sfsReady: boolean = false;  // Training data saved, ready to run SFS
+  sfsReady: boolean = false; // Training data saved, ready to run SFS
   sfsRunning: boolean = false;
-  sfsStopping: boolean = false;  // Stop signal sent, waiting for current step to finish
-  sfsStopped: boolean = false;  // SFS was stopped by user (partial results available)
+  sfsStopping: boolean = false; // Stop signal sent, waiting for current step to finish
+  sfsStopped: boolean = false; // SFS was stopped by user (partial results available)
   sfsProgress: number = 0;
   sfsMessage: string = '';
   sfsDurationSeconds: number | null = null;
   sfsCurrentMetrics: { [key: string]: number } = {};
-  sfsCompletedSteps: any[] = [];  // Real-time completed steps during SFS
-  showSfsProgressModal: boolean = false;  // Modal for viewing details during SFS
+  sfsCompletedSteps: any[] = []; // Real-time completed steps during SFS
+  showSfsProgressModal: boolean = false; // Modal for viewing details during SFS
   sfsRunHistory: any[] = [];
   sfsHistoryLoading: boolean = false;
   championPromoting: boolean = false;
   private sfsPolling: Subscription | null = null;
-  
+
   // SFS method selection
   sfsMethodForward: boolean = false;
   sfsMethodBackward: boolean = true;
-  
+
   // SFS stopping criteria - multiple metrics
-  sfsMetrics: Array<{ metric: string, pct_change: number }> = [
-    { metric: 'roc_auc', pct_change: 1.0 }
+  sfsMetrics: Array<{ metric: string; pct_change: number }> = [
+    { metric: 'roc_auc', pct_change: 1.0 },
   ];
   sfsMinFeatures: number = 5;
   sfsMaxFeatures: number = 15;
@@ -67,23 +82,23 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   sfsUseCombinedScoreOrder: boolean = true;
   /** Optional truncate after sorter (0 / null = keep all ranked features). */
   sfsCandidateTopK: number | null = null;
-  
+
   // SFS results
   sfsResults: any | null = null;
   sfsForwardResults: any[] = [];
   sfsBackwardResults: any[] = [];
-  sfsBackwardRemainingFeatures: string[] = [];  // Features remaining after backward elimination
-  sfsBackwardCutStep: number | null = null;  // User-selected cutting point step in backward results
-  sfsBackwardCutFeatures: string[] = [];  // Features remaining at the selected cut step
-  sfsForwardFromBackwardResults: any[] = [];  // Forward selection results starting from backward cut features
-  showFwdFromBwdConfig: boolean = false;  // Toggle advanced config for forward-from-backward run
-  sfsModelPaths: { forward?: string; backward?: string; forward_from_backward?: string } = {};  // Paths to final SFS models
-  selectedSfsStep: any | null = null;  // For modal display
-  selectedSfsDirection: 'forward' | 'backward' | 'forward_from_backward' | undefined = undefined;  // Source direction of selectedSfsStep
-  previousSfsStep: any | null = null;  // Previous step for comparison
+  sfsBackwardRemainingFeatures: string[] = []; // Features remaining after backward elimination
+  sfsBackwardCutStep: number | null = null; // User-selected cutting point step in backward results
+  sfsBackwardCutFeatures: string[] = []; // Features remaining at the selected cut step
+  sfsForwardFromBackwardResults: any[] = []; // Forward selection results starting from backward cut features
+  showFwdFromBwdConfig: boolean = false; // Toggle advanced config for forward-from-backward run
+  sfsModelPaths: { forward?: string; backward?: string; forward_from_backward?: string } = {}; // Paths to final SFS models
+  selectedSfsStep: any | null = null; // For modal display
+  selectedSfsDirection: 'forward' | 'backward' | 'forward_from_backward' | undefined = undefined; // Source direction of selectedSfsStep
+  previousSfsStep: any | null = null; // Previous step for comparison
   showSfsModal: boolean = false;
   sfsModalExpanded: boolean = false;
-  fullscreenPlotId: string | null = null;  // Per-plot fullscreen ('shap'|'gain'|'stability'|'performance'|null)
+  fullscreenPlotId: string | null = null; // Per-plot fullscreen ('shap'|'gain'|'stability'|'performance'|null)
 
   // ===== Hyperparameter Tuning state (random joint search + validation curves) =====
   // Runs after SFS on the SFS-selected feature set.  Mirrors the SFS lifecycle:
@@ -104,22 +119,112 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   // it defaults to (max-min)/hpDefaultPieces and drives the derived #checkpoints
   // column.  Mirrors backend DEFAULT_PARAM_SPACE (shared boosting knobs).
   hpParamSpace: any[] = [
-    { name: 'n_estimators',     label: 'n_estimators',      type: 'int',   min: 50,   max: 600, log: false, enabled: true,  walkStep: 27.5 },
-    { name: 'max_depth',        label: 'max_depth',         type: 'int',   min: 2,    max: 10,  log: false, enabled: true,  walkStep: 0.4 },
-    { name: 'learning_rate',    label: 'learning_rate',     type: 'float', min: 0.01, max: 0.3, log: true,  enabled: true,  walkStep: 0.0145 },
-    { name: 'min_child_weight', label: 'min_child_weight',  type: 'int',   min: 1,    max: 10,  log: false, enabled: true,  walkStep: 0.45 },
-    { name: 'subsample',        label: 'subsample',         type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true,  walkStep: 0.025 },
-    { name: 'colsample_bytree', label: 'colsample_bytree',  type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true,  walkStep: 0.025 },
-    { name: 'gamma',            label: 'gamma (min split loss)', type: 'float', min: 0, max: 5, log: false, enabled: false, walkStep: 0.25 },
-    { name: 'reg_alpha',        label: 'reg_alpha (L1)',    type: 'float', min: 0,    max: 5,   log: false, enabled: false, walkStep: 0.25 },
-    { name: 'reg_lambda',       label: 'reg_lambda (L2)',   type: 'float', min: 0,    max: 5,   log: false, enabled: false, walkStep: 0.25 },
+    {
+      name: 'n_estimators',
+      label: 'n_estimators',
+      type: 'int',
+      min: 50,
+      max: 600,
+      log: false,
+      enabled: true,
+      walkStep: 27.5,
+    },
+    {
+      name: 'max_depth',
+      label: 'max_depth',
+      type: 'int',
+      min: 2,
+      max: 10,
+      log: false,
+      enabled: true,
+      walkStep: 0.4,
+    },
+    {
+      name: 'learning_rate',
+      label: 'learning_rate',
+      type: 'float',
+      min: 0.01,
+      max: 0.3,
+      log: true,
+      enabled: true,
+      walkStep: 0.0145,
+    },
+    {
+      name: 'min_child_weight',
+      label: 'min_child_weight',
+      type: 'int',
+      min: 1,
+      max: 10,
+      log: false,
+      enabled: true,
+      walkStep: 0.45,
+    },
+    {
+      name: 'subsample',
+      label: 'subsample',
+      type: 'float',
+      min: 0.5,
+      max: 1.0,
+      log: false,
+      enabled: true,
+      walkStep: 0.025,
+    },
+    {
+      name: 'colsample_bytree',
+      label: 'colsample_bytree',
+      type: 'float',
+      min: 0.5,
+      max: 1.0,
+      log: false,
+      enabled: true,
+      walkStep: 0.025,
+    },
+    {
+      name: 'gamma',
+      label: 'gamma (min split loss)',
+      type: 'float',
+      min: 0,
+      max: 5,
+      log: false,
+      enabled: false,
+      walkStep: 0.25,
+    },
+    {
+      name: 'reg_alpha',
+      label: 'reg_alpha (L1)',
+      type: 'float',
+      min: 0,
+      max: 5,
+      log: false,
+      enabled: false,
+      walkStep: 0.25,
+    },
+    {
+      name: 'reg_lambda',
+      label: 'reg_lambda (L2)',
+      type: 'float',
+      min: 0,
+      max: 5,
+      log: false,
+      enabled: false,
+      walkStep: 0.25,
+    },
   ];
   hpNIter: number = 40;
   hpCvFolds: number = 3;
-  hpNJobs: number = 3;            // compute power — parallel workers (like SFS)
+  hpNJobs: number = 3; // compute power — parallel workers (like SFS)
   hpPrimaryMetric: string = 'roc_auc';
   hpValidationCurvePoints: number = 8;
-  readonly hpClassMetricOptions: string[] = ['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc'];
+  readonly hpClassMetricOptions: string[] = [
+    'roc_auc',
+    'pr_auc',
+    'f1',
+    'f2',
+    'precision',
+    'recall',
+    'accuracy',
+    'mcc',
+  ];
   readonly hpRegMetricOptions: string[] = ['r2', 'rmse', 'mae'];
   get hpMetricOptions(): string[] {
     return this.isRegressionTask ? this.hpRegMetricOptions : this.hpClassMetricOptions;
@@ -127,7 +232,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** True when the current modeling run is a continuous-target regressor. */
   get isRegressionTask(): boolean {
-    const task = String(this.modelingStatus?.model?.task || this.sfsResults?.task || '').toLowerCase();
+    const task = String(
+      this.modelingStatus?.model?.task || this.sfsResults?.task || '',
+    ).toLowerCase();
     if (task === 'regression' || task === 'regressor' || task === 'reg') return true;
     const modelType = String(this.modelingStatus?.model?.model_type || '').toLowerCase();
     return modelType.includes('regressor');
@@ -155,32 +262,53 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   // an underscore prefix to avoid colliding with param names.
   readonly hpHelp: { [key: string]: string } = {
     // ── table columns ──
-    _tune: 'Include this hyperparameter in the search. Unchecked params stay fixed at the model default.',
-    _hyperparameter: 'A boosting setting that controls how the model learns. Tuning searches for the values that maximise the chosen metric.',
-    _type: 'int = whole numbers only; float = decimal values. Controls how values are sampled across the min–max range.',
+    _tune:
+      'Include this hyperparameter in the search. Unchecked params stay fixed at the model default.',
+    _hyperparameter:
+      'A boosting setting that controls how the model learns. Tuning searches for the values that maximise the chosen metric.',
+    _type:
+      'int = whole numbers only; float = decimal values. Controls how values are sampled across the min–max range.',
     _min: 'Lower bound of the search range for this hyperparameter.',
     _max: 'Upper bound of the search range for this hyperparameter.',
     _log: 'Sample values geometrically (…0.001, 0.01, 0.1…) instead of evenly — ideal for params spanning orders of magnitude such as learning_rate. Float params only.',
-    _walk_step: 'Grid step size for this hyperparameter — the gap between consecutive checkpoints across its min–max range. Smaller = finer granularity = more #checkpoints. Defaults to (max−min) ÷ pieces.',
-    _checkpoints: 'Number of distinct grid values this hyperparameter contributes (derived from Walk_Step; integer params de-duplicate). The product of all enabled #checkpoints is the total grid-config count shown on the right.',
+    _walk_step:
+      'Grid step size for this hyperparameter — the gap between consecutive checkpoints across its min–max range. Smaller = finer granularity = more #checkpoints. Defaults to (max−min) ÷ pieces.',
+    _checkpoints:
+      'Number of distinct grid values this hyperparameter contributes (derived from Walk_Step; integer params de-duplicate). The product of all enabled #checkpoints is the total grid-config count shown on the right.',
     // ── per-hyperparameter (keyed by row.name) ──
-    n_estimators: 'Number of boosting rounds (trees). More trees fit more complex patterns but risk overfitting and train slower.',
-    max_depth: 'Maximum depth of each tree. Higher captures richer feature interactions but is more prone to overfitting.',
-    learning_rate: 'Step-size shrinkage (eta) applied to each tree. Lower values generalise better but need more trees.',
-    min_child_weight: 'Minimum sum of instance weight (hessian) required in a child node. Higher = more conservative splits, less overfitting.',
-    subsample: 'Fraction of training rows randomly sampled per boosting round. Below 1 adds randomness that combats overfitting.',
-    colsample_bytree: 'Fraction of features randomly sampled per tree. Lower values decorrelate trees and reduce overfitting.',
-    gamma: 'Minimum loss reduction required to make a further split (min split loss). Higher = fewer, more conservative splits.',
-    reg_alpha: 'L1 regularisation on leaf weights. Higher values push weights to zero (sparsity), reducing overfitting.',
-    reg_lambda: 'L2 regularisation on leaf weights. Higher values shrink weights smoothly, reducing overfitting.',
+    n_estimators:
+      'Number of boosting rounds (trees). More trees fit more complex patterns but risk overfitting and train slower.',
+    max_depth:
+      'Maximum depth of each tree. Higher captures richer feature interactions but is more prone to overfitting.',
+    learning_rate:
+      'Step-size shrinkage (eta) applied to each tree. Lower values generalise better but need more trees.',
+    min_child_weight:
+      'Minimum sum of instance weight (hessian) required in a child node. Higher = more conservative splits, less overfitting.',
+    subsample:
+      'Fraction of training rows randomly sampled per boosting round. Below 1 adds randomness that combats overfitting.',
+    colsample_bytree:
+      'Fraction of features randomly sampled per tree. Lower values decorrelate trees and reduce overfitting.',
+    gamma:
+      'Minimum loss reduction required to make a further split (min split loss). Higher = fewer, more conservative splits.',
+    reg_alpha:
+      'L1 regularisation on leaf weights. Higher values push weights to zero (sparsity), reducing overfitting.',
+    reg_lambda:
+      'L2 regularisation on leaf weights. Higher values shrink weights smoothly, reducing overfitting.',
     // ── search + compute controls ──
-    _search_method: 'How value combinations are explored. Auto picks the method from the search-space size; Grid tries every combination; Random samples n_iter combinations; Bayesian (TPE via Optuna) learns from past trials to focus on promising regions.',
-    _grid_points: 'Bulk control: splits every hyperparameter\'s min–max range into this many pieces, setting each row\'s Walk_Step at once (#checkpoints = pieces + 1). Edit a row\'s Walk_Step to override it individually. Higher = finer but exponentially more grid combinations.',
-    _n_iter: 'Number of hyperparameter combinations to evaluate for Random / Bayesian (TPE) search. Ignored by Grid, which evaluates every combination.',
-    _cv_folds: 'Cross-validation folds. Each combination is trained k times on different data splits and averaged for a robust score. Higher = more reliable but slower.',
-    _n_jobs: 'Parallel workers (CPU cores) used to evaluate trials. Higher = faster but uses more CPU and memory.',
-    _metric: 'The performance metric that is optimised and plotted on the validation curves (e.g. ROC-AUC, F1).',
-    _curve_points: 'Number of values sampled per hyperparameter when drawing its validation curve (metric-vs-value plot).',
+    _search_method:
+      'How value combinations are explored. Auto picks the method from the search-space size; Grid tries every combination; Random samples n_iter combinations; Bayesian (TPE via Optuna) learns from past trials to focus on promising regions.',
+    _grid_points:
+      "Bulk control: splits every hyperparameter's min–max range into this many pieces, setting each row's Walk_Step at once (#checkpoints = pieces + 1). Edit a row's Walk_Step to override it individually. Higher = finer but exponentially more grid combinations.",
+    _n_iter:
+      'Number of hyperparameter combinations to evaluate for Random / Bayesian (TPE) search. Ignored by Grid, which evaluates every combination.',
+    _cv_folds:
+      'Cross-validation folds. Each combination is trained k times on different data splits and averaged for a robust score. Higher = more reliable but slower.',
+    _n_jobs:
+      'Parallel workers (CPU cores) used to evaluate trials. Higher = faster but uses more CPU and memory.',
+    _metric:
+      'The performance metric that is optimised and plotted on the validation curves (e.g. ROC-AUC, F1).',
+    _curve_points:
+      'Number of values sampled per hyperparameter when drawing its validation curve (metric-vs-value plot).',
   };
 
   // Results
@@ -248,7 +376,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   vifDetailSortColumn: string = 'correlation';
   vifDetailSortDirection: 'asc' | 'desc' = 'desc';
   // Cache of VIF decomposition data per feature (for AI context)
-  vifDecompositionCache: { [feature: string]: { vif: number; top_correlations: { feature: string; correlation: number; signed_correlation: number; vif_drop: number }[] } } = {};
+  vifDecompositionCache: {
+    [feature: string]: {
+      vif: number;
+      top_correlations: {
+        feature: string;
+        correlation: number;
+        signed_correlation: number;
+        vif_drop: number;
+      }[];
+    };
+  } = {};
 
   // Mirror of options so we can map ids to labels for display
   private purifierOptions: PurifierOption[] = [
@@ -288,7 +426,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     { id: 34, name: 'Outlier Cleaning (Categorical Features) threshold = 0.05' },
   ];
 
-  constructor(private sharedService: SharedService, private dataService: DataService, private router: Router, @Inject(PLATFORM_ID) platformId: object, private cdr: ChangeDetectorRef, private dialog: MatDialog, private aiAssistant: AiAssistantService) {
+  constructor(
+    private sharedService: SharedService,
+    private dataService: DataService,
+    private router: Router,
+    @Inject(PLATFORM_ID) platformId: object,
+    private cdr: ChangeDetectorRef,
+    private dialog: MatDialog,
+    private aiAssistant: AiAssistantService,
+  ) {
     this.isBrowser = isPlatformBrowser(platformId);
   }
 
@@ -331,8 +477,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       this.aiAssistant.requestSupport(enriched, section, prompt);
     };
     // Ensure data dictionary cache has descriptions before sending to AI
-    const hasDescriptions = Array.isArray(this.dataDictionaryCache) &&
-      this.dataDictionaryCache.some(x => !!x?.Feature_Description);
+    const hasDescriptions =
+      Array.isArray(this.dataDictionaryCache) &&
+      this.dataDictionaryCache.some((x) => !!x?.Feature_Description);
     if (!hasDescriptions && this.currentFileId != null) {
       this.dataService.getDataDictionary(String(this.currentFileId)).subscribe({
         next: (list: any[]) => {
@@ -350,13 +497,30 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   getShapContext(): any {
     const feats = this.modelingStatus?.model?.selected_features;
     if (!feats) return {};
-    return { features: feats.slice(0, 20).map((f: any) => ({ feature: f.feature, impact: f.shap_impact, signed_impact: f.signed_shap_impact })) };
+    return {
+      features: feats
+        .slice(0, 20)
+        .map((f: any) => ({
+          feature: f.feature,
+          impact: f.shap_impact,
+          signed_impact: f.signed_shap_impact,
+        })),
+    };
   }
 
   getSelectedFeaturesContext(): any {
     const feats = this.modelingStatus?.model?.selected_features;
     if (!feats) return {};
-    return { features: feats.map((f: any) => ({ feature: f.feature, combined_score: f.combined_score, shap_percentile: f.shap_percentile, gain_percentile: f.gain_percentile, vif: f.vif, usage: f.usage })) };
+    return {
+      features: feats.map((f: any) => ({
+        feature: f.feature,
+        combined_score: f.combined_score,
+        shap_percentile: f.shap_percentile,
+        gain_percentile: f.gain_percentile,
+        vif: f.vif,
+        usage: f.usage,
+      })),
+    };
   }
 
   ngOnInit(): void {
@@ -367,8 +531,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.sharedService.selectedPurifierOptions$.subscribe((ids) => {
       this.selectedOptionIds = ids;
-      const nameMap = new Map(this.purifierOptions.map(o => [o.id, o.name] as [number, string]));
-      this.selectedOptionNames = ids.map(id => nameMap.get(id) || `Option #${id}`);
+      const nameMap = new Map(this.purifierOptions.map((o) => [o.id, o.name] as [number, string]));
+      this.selectedOptionNames = ids.map((id) => nameMap.get(id) || `Option #${id}`);
     });
 
     this.sharedService.preprocessingRunResult$.subscribe((result) => {
@@ -387,10 +551,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       // Detect date columns from table columns (common date/datetime patterns)
       if (this.tableColumns.length > 0) {
-        this.dateColumns = this.tableColumns.filter(col => {
+        this.dateColumns = this.tableColumns.filter((col) => {
           const lower = col.toLowerCase();
-          return lower.includes('date') || lower.includes('time') || lower.includes('dt_') || 
-                 lower.includes('timestamp') || lower === 'month' || lower === 'year';
+          return (
+            lower.includes('date') ||
+            lower.includes('time') ||
+            lower.includes('dt_') ||
+            lower.includes('timestamp') ||
+            lower === 'month' ||
+            lower === 'year'
+          );
         });
         // Set first date column as default split date column
         this.splitDateColumn = this.dateColumns.length > 0 ? this.dateColumns[0] : null;
@@ -640,10 +810,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       if (typeof _cut === 'number' && _cut > 0) {
         const _cutRow = this.sfsBackwardResults.find((s: any) => s.step === _cut);
         const _hasForward = req.methods.includes('forward');
-        if (_cutRow
-            && Array.isArray(_cutRow.selected_features)
-            && _cutRow.selected_features.length > 0
-            && _hasForward) {
+        if (
+          _cutRow &&
+          Array.isArray(_cutRow.selected_features) &&
+          _cutRow.selected_features.length > 0 &&
+          _hasForward
+        ) {
           // Update the green box display + cut features list, then
           // route to the same code path the manual button takes.
           this.setBackwardCutStep(_cutRow);
@@ -654,8 +826,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         // plain startSfs() so the action isn't silently dropped.
         console.warn(
           `[SFS] backward_cut_step=${_cut} from AI request could not be honored ` +
-          `(cutRow found=${!!_cutRow}, hasForward=${_hasForward}); ` +
-          `falling back to plain startSfs()`
+            `(cutRow found=${!!_cutRow}, hasForward=${_hasForward}); ` +
+            `falling back to plain startSfs()`,
         );
       }
       // Defer the actual SFS kickoff to the next tick so any pending
@@ -689,8 +861,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const spec = (req.param_space as any)[name];
           if (!row || !spec || typeof spec !== 'object') continue;
           let rangeChanged = false;
-          if (typeof spec.min === 'number') { row.min = spec.min; rangeChanged = true; }
-          if (typeof spec.max === 'number') { row.max = spec.max; rangeChanged = true; }
+          if (typeof spec.min === 'number') {
+            row.min = spec.min;
+            rangeChanged = true;
+          }
+          if (typeof spec.max === 'number') {
+            row.max = spec.max;
+            rangeChanged = true;
+          }
           if (typeof spec.log === 'boolean') row.log = spec.log;
           if (typeof spec.enabled === 'boolean') row.enabled = spec.enabled;
           // Re-default this row's Walk_Step to the current pieces when the AI
@@ -701,7 +879,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       if (typeof req.n_iter === 'number') this.hpNIter = req.n_iter;
       if (typeof req.cv_folds === 'number') this.hpCvFolds = req.cv_folds;
       if (typeof req.n_jobs === 'number') this.hpNJobs = req.n_jobs;
-      if (typeof req.primary_metric === 'string' && this.hpMetricOptions.includes(req.primary_metric)) {
+      if (
+        typeof req.primary_metric === 'string' &&
+        this.hpMetricOptions.includes(req.primary_metric)
+      ) {
         this.hpPrimaryMetric = req.primary_metric;
       }
       if (typeof req.validation_curve_points === 'number') {
@@ -738,7 +919,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         const requested = req.algorithm.trim();
         if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(requested)) {
           this.selectedAlgorithm = this.implementedAlgorithms[0] || 'xgboost';
-          console.warn(`[Modeling] AI requested ${requested}; using ${this.selectedAlgorithm} (not available).`);
+          console.warn(
+            `[Modeling] AI requested ${requested}; using ${this.selectedAlgorithm} (not available).`,
+          );
         } else {
           this.selectedAlgorithm = requested;
         }
@@ -761,7 +944,6 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // Clear it so it doesn't re-apply on subsequent navigations
       this.sharedService.setModelingCheckpoint(null);
     }
-
   }
 
   ngAfterViewInit(): void {
@@ -777,9 +959,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       if (this.chartsDrawn) return;
       const ready = this.plotlyReady || Promise.resolve();
       ready.then(() => {
-        try { this.cdr.detectChanges(); } catch {}
+        try {
+          this.cdr.detectChanges();
+        } catch {}
         this.drawCvCharts()
-          .then(() => { this.chartsDrawn = true; })
+          .then(() => {
+            this.chartsDrawn = true;
+          })
           .catch(() => {
             if (attempt < 10) setTimeout(() => this.tryDrawChartsIfReady(attempt + 1), 250);
           });
@@ -821,19 +1007,37 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const algo = (this.selectedAlgorithm || 'xgboost').toLowerCase();
     const labels: { [algo: string]: { [name: string]: string } } = {
       xgboost: {
-        n_estimators: 'n_estimators', max_depth: 'max_depth', learning_rate: 'learning_rate',
-        min_child_weight: 'min_child_weight', subsample: 'subsample', colsample_bytree: 'colsample_bytree',
-        gamma: 'gamma (min split loss)', reg_alpha: 'reg_alpha (L1)', reg_lambda: 'reg_lambda (L2)',
+        n_estimators: 'n_estimators',
+        max_depth: 'max_depth',
+        learning_rate: 'learning_rate',
+        min_child_weight: 'min_child_weight',
+        subsample: 'subsample',
+        colsample_bytree: 'colsample_bytree',
+        gamma: 'gamma (min split loss)',
+        reg_alpha: 'reg_alpha (L1)',
+        reg_lambda: 'reg_lambda (L2)',
       },
       lightgbm: {
-        n_estimators: 'n_estimators', max_depth: 'max_depth', learning_rate: 'learning_rate',
-        min_child_weight: 'min_child_weight', subsample: 'subsample', colsample_bytree: 'colsample_bytree',
-        gamma: 'min_split_gain (gamma)', reg_alpha: 'reg_alpha (L1)', reg_lambda: 'reg_lambda (L2)',
+        n_estimators: 'n_estimators',
+        max_depth: 'max_depth',
+        learning_rate: 'learning_rate',
+        min_child_weight: 'min_child_weight',
+        subsample: 'subsample',
+        colsample_bytree: 'colsample_bytree',
+        gamma: 'min_split_gain (gamma)',
+        reg_alpha: 'reg_alpha (L1)',
+        reg_lambda: 'reg_lambda (L2)',
       },
       catboost: {
-        n_estimators: 'iterations', max_depth: 'depth', learning_rate: 'learning_rate',
-        min_child_weight: 'min_data_in_leaf', subsample: 'subsample', colsample_bytree: 'rsm (colsample)',
-        gamma: 'gamma (unused)', reg_alpha: 'reg_alpha (unused)', reg_lambda: 'l2_leaf_reg',
+        n_estimators: 'iterations',
+        max_depth: 'depth',
+        learning_rate: 'learning_rate',
+        min_child_weight: 'min_data_in_leaf',
+        subsample: 'subsample',
+        colsample_bytree: 'rsm (colsample)',
+        gamma: 'gamma (unused)',
+        reg_alpha: 'reg_alpha (unused)',
+        reg_lambda: 'l2_leaf_reg',
       },
     };
     const map = labels[algo] || labels['xgboost'];
@@ -879,7 +1083,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         error: () => {
           // Proceed without descriptions
           this.analyzeEncoding();
-        }
+        },
       });
     } else {
       this.analyzeEncoding();
@@ -890,21 +1094,28 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.currentFileId || !this.processedFilePath) return;
     this.encodingAnalyzing = true;
     this.encodingError = null;
-    const excluded = Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
-    this.dataService.analyzeEncoding(
-      this.currentFileId, this.processedFilePath, this.dataDictionaryCache, excluded
-    ).subscribe({
-      next: (resp: any) => {
-        this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
-        this.encodingAnalyzing = false;
-        // Checkpoint after encoding analysis completes (includes encodingPlan)
-        this.pushModelingCheckpoint('encoding_completed');
-      },
-      error: (err: any) => {
-        this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
-        this.encodingAnalyzing = false;
-      }
-    });
+    const excluded = Object.keys(this.variableModelUsage).filter(
+      (v) => this.variableModelUsage[v] === 'No',
+    );
+    this.dataService
+      .analyzeEncoding(
+        this.currentFileId,
+        this.processedFilePath,
+        this.dataDictionaryCache,
+        excluded,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          this.encodingPlan = Array.isArray(resp.plan) ? resp.plan : [];
+          this.encodingAnalyzing = false;
+          // Checkpoint after encoding analysis completes (includes encodingPlan)
+          this.pushModelingCheckpoint('encoding_completed');
+        },
+        error: (err: any) => {
+          this.encodingError = 'Failed to analyze encoding: ' + (err?.message || err);
+          this.encodingAnalyzing = false;
+        },
+      });
   }
 
   updateEncodingLom(entry: any, newLom: string): void {
@@ -977,7 +1188,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     entry.encoding_method = method;
     if (method === 'manual_grouping' && !entry.manual_mapping) {
       entry.manual_mapping = {};
-      for (const v of (entry.unique_values || [])) {
+      for (const v of entry.unique_values || []) {
         entry.manual_mapping[v] = null;
       }
       if (entry.has_nulls) {
@@ -1000,26 +1211,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getStrategyLabel(strategy: string): string {
     const labels: { [k: string]: string } = {
-      'native_categorical': 'Native Categorical',
-      'label_encoding': 'Label Encoding',
-      'one_hot_encoding': 'One-Hot Encoding',
-      'ordinal_encoding': 'Ordinal Encoding',
-      'target_encoding': 'Target Encoding',
-      'frequency_encoding': 'Frequency Encoding',
-      'manual_grouping': 'Manual Grouping',
+      native_categorical: 'Native Categorical',
+      label_encoding: 'Label Encoding',
+      one_hot_encoding: 'One-Hot Encoding',
+      ordinal_encoding: 'Ordinal Encoding',
+      target_encoding: 'Target Encoding',
+      frequency_encoding: 'Frequency Encoding',
+      manual_grouping: 'Manual Grouping',
     };
     return labels[strategy] || strategy;
   }
 
   getStrategyColor(strategy: string): string {
     const colors: { [k: string]: string } = {
-      'native_categorical': '#1976d2',
-      'label_encoding': '#7b1fa2',
-      'one_hot_encoding': '#00796b',
-      'ordinal_encoding': '#e65100',
-      'target_encoding': '#c62828',
-      'frequency_encoding': '#0277bd',
-      'manual_grouping': '#4e342e',
+      native_categorical: '#1976d2',
+      label_encoding: '#7b1fa2',
+      one_hot_encoding: '#00796b',
+      ordinal_encoding: '#e65100',
+      target_encoding: '#c62828',
+      frequency_encoding: '#0277bd',
+      manual_grouping: '#4e342e',
     };
     return colors[strategy] || '#616161';
   }
@@ -1032,10 +1243,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getAlgorithmLabel(algo: string | null): string {
     const labels: { [k: string]: string } = {
-      'xgboost': 'XGBoost',
-      'lightgbm': 'LightGBM',
-      'catboost': 'CatBoost',
-      'logistic_regression': 'Logistic Regression',
+      xgboost: 'XGBoost',
+      lightgbm: 'LightGBM',
+      catboost: 'CatBoost',
+      logistic_regression: 'Logistic Regression',
     };
     return labels[algo || ''] || algo || 'Boosting';
   }
@@ -1048,7 +1259,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       this.sfSortColumn = column;
       // Default to descending for numeric columns, ascending for text
-      this.sfSortDirection = (column === 'feature' || column === 'description') ? 'asc' : 'desc';
+      this.sfSortDirection = column === 'feature' || column === 'description' ? 'asc' : 'desc';
     }
     this.applySfSort();
   }
@@ -1073,7 +1284,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         return dir * va.localeCompare(vb);
       }
       // Numeric comparison
-      return dir * ((va > vb ? 1 : va < vb ? -1 : 0));
+      return dir * (va > vb ? 1 : va < vb ? -1 : 0);
     });
   }
 
@@ -1102,7 +1313,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.vifDetailContributions = resp.contributions || [];
         this.vifDetailLoading = false;
         // Cache top 5 correlations for AI context
-        const sorted = [...this.vifDetailContributions].sort((a: any, b: any) => (b.correlation || 0) - (a.correlation || 0));
+        const sorted = [...this.vifDetailContributions].sort(
+          (a: any, b: any) => (b.correlation || 0) - (a.correlation || 0),
+        );
         this.vifDecompositionCache[featureName] = {
           vif: resp.vif,
           top_correlations: sorted.slice(0, 5).map((c: any) => ({
@@ -1117,7 +1330,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       error: (err: any) => {
         this.vifDetailError = err?.error?.error || 'Failed to load VIF detail';
         this.vifDetailLoading = false;
-      }
+      },
     });
   }
 
@@ -1167,55 +1380,74 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Please select an algorithm before starting modeling');
       return;
     }
-    if (this.selectedPipeline === 'boosting' && !this.isAlgorithmImplemented(this.selectedAlgorithm)) {
+    if (
+      this.selectedPipeline === 'boosting' &&
+      !this.isAlgorithmImplemented(this.selectedAlgorithm)
+    ) {
       this.selectedAlgorithm = 'xgboost';
     }
     // Get list of variables to exclude (Model_Usage='No')
-    const excludedVariables = Object.keys(this.variableModelUsage).filter(v => this.variableModelUsage[v] === 'No');
+    const excludedVariables = Object.keys(this.variableModelUsage).filter(
+      (v) => this.variableModelUsage[v] === 'No',
+    );
     if (excludedVariables.length > 0) {
-      console.log(`[Modeling] Excluding ${excludedVariables.length} variables with Model_Usage='No':`, excludedVariables);
+      console.log(
+        `[Modeling] Excluding ${excludedVariables.length} variables with Model_Usage='No':`,
+        excludedVariables,
+      );
     }
 
     this.isStarting = true;
     this.chartsDrawn = false;
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'modeling', file_id: this.currentFileId });
-    this.dataService.startModeling(this.currentFileId, this.processedFilePath!, this.selectedAlgorithm || undefined, excludedVariables, this.encodingPlan, this.encodingUseNative).pipe(
-      finalize(() => this.isStarting = false)
-    ).subscribe({
-      next: (resp) => {
-        console.log('Modeling started:', resp);
-        this.modelingStatus = resp;
-        this.applyTaskMetricDefaults();
-        // Debug: Check SHAP data
-        console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
-        console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
-        this.applySfSort();
-        // Check if SFS is ready (training data saved)
-        this.sfsReady = resp?.model?.sfs_ready || false;
-        console.log('SFS ready?', this.sfsReady);
-        // Build catLabelLookup from the encoding report returned by the modeling backend
-        this.buildCatLabelLookup(resp?.model?.encoding_report);
-        // Propagate encoded file path if returned by backend
-        if (resp?.encoded_file) {
-          this.encodedFilePath = resp.encoded_file;
-          this.sharedService.setEncodedFilePath(resp.encoded_file);
-        }
-        // If the response already indicates completion, draw charts immediately
-        const js = (resp as any)?.job_status || (resp as any)?.status;
-        if (js === 'completed') { 
-          this.sharedService.setActiveProcess(null); // clear active process
-          setTimeout(() => this.tryDrawChartsIfReady(), 0);
-          // Checkpoint: modeling completed
-          this.pushModelingCheckpoint('modeling_completed');
-        }
-        else { this.startStatusPolling(); }
-      },
-      error: (err) => {
-        console.error('Failed to start modeling:', err);
-        this.sharedService.setActiveProcess(null); // clear on error
-      }
-    });
+    this.dataService
+      .startModeling(
+        this.currentFileId,
+        this.processedFilePath!,
+        this.selectedAlgorithm || undefined,
+        excludedVariables,
+        this.encodingPlan,
+        this.encodingUseNative,
+        this.businessUnderstanding,
+        this.pipelineRunId ?? undefined,
+      )
+      .pipe(finalize(() => (this.isStarting = false)))
+      .subscribe({
+        next: (resp) => {
+          console.log('Modeling started:', resp);
+          this.modelingStatus = resp;
+          this.applyTaskMetricDefaults();
+          // Debug: Check SHAP data
+          console.log('SHAP beeswarm present?', !!resp?.model?.shap_beeswarm);
+          console.log('Selected features count:', resp?.model?.selected_features?.length || 0);
+          this.applySfSort();
+          // Check if SFS is ready (training data saved)
+          this.sfsReady = resp?.model?.sfs_ready || false;
+          console.log('SFS ready?', this.sfsReady);
+          // Build catLabelLookup from the encoding report returned by the modeling backend
+          this.buildCatLabelLookup(resp?.model?.encoding_report);
+          // Propagate encoded file path if returned by backend
+          if (resp?.encoded_file) {
+            this.encodedFilePath = resp.encoded_file;
+            this.sharedService.setEncodedFilePath(resp.encoded_file);
+          }
+          // If the response already indicates completion, draw charts immediately
+          const js = (resp as any)?.job_status || (resp as any)?.status;
+          if (js === 'completed') {
+            this.sharedService.setActiveProcess(null); // clear active process
+            setTimeout(() => this.tryDrawChartsIfReady(), 0);
+            // Checkpoint: modeling completed
+            this.pushModelingCheckpoint('modeling_completed');
+          } else {
+            this.startStatusPolling();
+          }
+        },
+        error: (err) => {
+          console.error('Failed to start modeling:', err);
+          this.sharedService.setActiveProcess(null); // clear on error
+        },
+      });
   }
 
   private buildCatLabelLookup(encodingReport: any[] | null | undefined): void {
@@ -1227,12 +1459,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const cats: string[] = r.categories || [];
       if (!feat || cats.length === 0) continue;
       const lookup: { [encoded: string]: string } = {};
-      cats.forEach((c: string, i: number) => { lookup[String(i)] = c; });
+      cats.forEach((c: string, i: number) => {
+        lookup[String(i)] = c;
+      });
       if (Object.keys(lookup).length > 0) {
         this.catLabelLookup[feat] = lookup;
       }
     }
-    console.log('[Modeling] Built catLabelLookup from model response:', Object.keys(this.catLabelLookup));
+    console.log(
+      '[Modeling] Built catLabelLookup from model response:',
+      Object.keys(this.catLabelLookup),
+    );
   }
 
   private startStatusPolling(): void {
@@ -1275,7 +1512,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         error: (err) => {
           console.error('Polling error:', err);
           this.stopStatusPolling();
-        }
+        },
       });
     });
   }
@@ -1302,8 +1539,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (ms.model) {
       ms.model = { ...ms.model };
       // Drop heavy fields that can be re-fetched from the status JSON on disk
-      delete ms.model.shap_beeswarm;   // raw SHAP values array (MBs)
-      delete ms.model.beeswarm_png;    // base64 PNG image
+      delete ms.model.shap_beeswarm; // raw SHAP values array (MBs)
+      delete ms.model.beeswarm_png; // base64 PNG image
       // Keep cv summary metrics but drop per-fold curve points
       if (ms.model.cv && Array.isArray(ms.model.cv)) {
         ms.model.cv = ms.model.cv.map((fold: any) => {
@@ -1399,15 +1636,18 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (feats && feats.length > 0) {
       modelCtx.shap_features = feats.slice(0, 20).map((f: any) => ({
         feature: f.feature,
-        impact: f.impact,                  // |SHAP| magnitude (positive)
-        signed_impact: f.signed_impact,    // impact * direction → sign encodes UP/DOWN
-        signed_mean: f.signed_mean,        // raw mean of signed SHAP values (small)
-        vif: f.vif,                        // pairs SHAP with collinearity context
+        impact: f.impact, // |SHAP| magnitude (positive)
+        signed_impact: f.signed_impact, // impact * direction → sign encodes UP/DOWN
+        signed_mean: f.signed_mean, // raw mean of signed SHAP values (small)
+        vif: f.vif, // pairs SHAP with collinearity context
       }));
       modelCtx.selected_features = feats.map((f: any) => ({
-        feature: f.feature, combined_score: f.combined_score,
-        shap_percentile: f.shap_percentile, gain_percentile: f.gain_percentile,
-        vif: f.vif, usage: f.usage,
+        feature: f.feature,
+        combined_score: f.combined_score,
+        shap_percentile: f.shap_percentile,
+        gain_percentile: f.gain_percentile,
+        vif: f.vif,
+        usage: f.usage,
       }));
     }
     // VIF decomposition cache (pairwise correlations for features the user has inspected)
@@ -1415,7 +1655,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       modelCtx.vif_decomposition = this.vifDecompositionCache;
     }
     // SFS results + configuration
-    if (this.sfsForwardResults?.length || this.sfsBackwardResults?.length || this.sfsForwardFromBackwardResults?.length) {
+    if (
+      this.sfsForwardResults?.length ||
+      this.sfsBackwardResults?.length ||
+      this.sfsForwardFromBackwardResults?.length
+    ) {
       modelCtx.sfs = {
         forward: this.sfsForwardResults,
         backward: this.sfsBackwardResults,
@@ -1598,7 +1842,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (state.hpCvFolds != null) this.hpCvFolds = state.hpCvFolds;
     if (state.hpNJobs != null) this.hpNJobs = state.hpNJobs;
     if (state.hpPrimaryMetric) this.hpPrimaryMetric = state.hpPrimaryMetric;
-    if (state.hpValidationCurvePoints != null) this.hpValidationCurvePoints = state.hpValidationCurvePoints;
+    if (state.hpValidationCurvePoints != null)
+      this.hpValidationCurvePoints = state.hpValidationCurvePoints;
     if (state.hpSearchMethod) this.hpSearchMethod = state.hpSearchMethod;
     this.hpBestPoints = state.hpBestPoints || {};
     this.hpValidationCurves = state.hpValidationCurves || [];
@@ -1623,7 +1868,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.dataService.getModelingStatus(this.currentFileId).subscribe({
           next: (full: any) => {
             if (full && (full.job_status === 'completed' || full.status === 'completed')) {
-              console.log('[Modeling] Re-fetched full modelingStatus from backend for SHAP beeswarm');
+              console.log(
+                '[Modeling] Re-fetched full modelingStatus from backend for SHAP beeswarm',
+              );
               this.modelingStatus = full;
               this.applySfSort();
               this.buildCatLabelLookup(full?.model?.encoding_report);
@@ -1638,7 +1885,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
               this.pushModelingAiContext();
             }
           },
-          error: (err: any) => console.warn('[Modeling] Could not re-fetch modelingStatus:', err)
+          error: (err: any) => console.warn('[Modeling] Could not re-fetch modelingStatus:', err),
         });
       }
     }
@@ -1695,7 +1942,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.isStarting = false;
           console.warn('[Modeling] Resume: could not fetch modeling status:', err);
           this.sharedService.setActiveProcess(null);
-        }
+        },
       });
     } else if (proc.type === 'sfs') {
       // Check SFS status from backend
@@ -1724,9 +1971,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.sfsRunning = false;
             this.sfsStopped = true;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
-            this.sfsMessage = s === 'interrupted'
-              ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
-              : 'SFS stopped — partial results available';
+            this.sfsMessage =
+              s === 'interrupted'
+                ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
+                : 'SFS stopped — partial results available';
             this.sharedService.setActiveProcess(null);
             setTimeout(() => this.fetchSfsResults(), 500);
           } else if (s === 'error') {
@@ -1750,7 +1998,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.sfsRunning = false;
           this.sfsMessage = '';
           this.sharedService.setActiveProcess(null);
-        }
+        },
       });
     } else if (proc.type === 'hyperparam') {
       this.hpRunning = true;
@@ -1760,7 +2008,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const s = statusData.status;
           this.hpProgress = statusData.progress || 0;
           this.hpMessage = statusData.message || 'Tuning running...';
-          if (typeof statusData.completed_trials === 'number') this.hpCompletedTrials = statusData.completed_trials;
+          if (typeof statusData.completed_trials === 'number')
+            this.hpCompletedTrials = statusData.completed_trials;
           if (statusData.current_best) this.hpCurrentBest = statusData.current_best;
           if (s === 'completed') {
             this.hpRunning = false;
@@ -1776,9 +2025,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.hpRunning = false;
             this.hpStopped = true;
             this.hpDurationSeconds = statusData.duration_seconds || null;
-            this.hpMessage = s === 'interrupted'
-              ? 'Tuning was interrupted (server restart).'
-              : 'Tuning stopped — partial results may be available';
+            this.hpMessage =
+              s === 'interrupted'
+                ? 'Tuning was interrupted (server restart).'
+                : 'Tuning stopped — partial results may be available';
             this.sharedService.setActiveProcess(null);
             setTimeout(() => this.fetchHyperparamResults(), 400);
             this.pushModelingCheckpoint('hyperparam_stopped');
@@ -1799,7 +2049,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.hpRunning = false;
           this.hpMessage = '';
           this.sharedService.setActiveProcess(null);
-        }
+        },
       });
     }
   }
@@ -1815,7 +2065,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         const mod: any = await import('plotly.js-dist-min');
         const PlotlyObj: any = (mod && (mod.default || mod)) || null;
         if (!PlotlyObj || typeof PlotlyObj.newPlot !== 'function') {
-          console.warn('[Plotly] Failed to resolve newPlot from module, module keys:', Object.keys(mod || {}));
+          console.warn(
+            '[Plotly] Failed to resolve newPlot from module, module keys:',
+            Object.keys(mod || {}),
+          );
         }
         (window as any).Plotly = PlotlyObj;
       }
@@ -1830,9 +2083,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   private async drawCvCharts(): Promise<void> {
     try {
       if (!this.isBrowser) return;
-      if (this.plotlyReady) { await this.plotlyReady; }
-      const Plotly = (window as any).Plotly; if (!Plotly) return;
-      const cv = this.modelingStatus?.model?.cv; if (!cv) return;
+      if (this.plotlyReady) {
+        await this.plotlyReady;
+      }
+      const Plotly = (window as any).Plotly;
+      if (!Plotly) return;
+      const cv = this.modelingStatus?.model?.cv;
+      if (!cv) return;
       // Try drawing regardless of partial availability; functions will fallback gracefully
       this.drawRocCurvePlot(cv);
       this.drawPrCurvePlot(cv);
@@ -1844,7 +2101,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private drawRocCurvePlot(cv: any, attempt: number = 0): void {
-    const Plotly = (window as any).Plotly; if (!Plotly) return;
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) return;
     const roc = cv.roc_curve || {};
     const el = document.getElementById('cv-roc-plot');
     if (!el) {
@@ -1868,7 +2126,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         line: { color: foldColor, width: 1 },
         name: `ROC fold ${i}${cv?.folds?.[i]?.roc_auc != null ? ` (AUC = ${Number(cv.folds[i].roc_auc).toFixed(2)})` : ''}`,
         hovertemplate: 'FPR=%{x:.3f}<br>TPR=%{y:.3f}<extra></extra>',
-        showlegend: i === 0
+        showlegend: i === 0,
       } as any);
     });
 
@@ -1876,19 +2134,51 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (meanTpr && stdTpr) {
       const lower = meanTpr.map((v, i) => Math.max(0, Math.min(1, v - stdTpr[i])));
       const upper = meanTpr.map((v, i) => Math.max(0, Math.min(1, v + stdTpr[i])));
-      traces.push({ x: fpr, y: lower, type: 'scatter', mode: 'lines', line: {color: 'rgba(0,0,0,0)'}, hoverinfo: 'skip', showlegend: false } as any);
-      traces.push({ x: fpr, y: upper, type: 'scatter', mode: 'lines', line: {color: 'rgba(0,0,0,0)'}, fill: 'tonexty', fillcolor: 'rgba(100,100,100,0.18)', name: '± 1 std. dev.', hoverinfo: 'skip' } as any);
+      traces.push({
+        x: fpr,
+        y: lower,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'rgba(0,0,0,0)' },
+        hoverinfo: 'skip',
+        showlegend: false,
+      } as any);
+      traces.push({
+        x: fpr,
+        y: upper,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'rgba(0,0,0,0)' },
+        fill: 'tonexty',
+        fillcolor: 'rgba(100,100,100,0.18)',
+        name: '± 1 std. dev.',
+        hoverinfo: 'skip',
+      } as any);
     }
 
     // Mean ROC
     if (meanTpr) {
       traces.push({
-        x: fpr, y: meanTpr, type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 3 }, name: `Mean ROC (AUC = ${(cv.roc_auc_mean ?? 0).toFixed(3)})`, hovertemplate: 'FPR=%{x:.3f}<br>TPR=%{y:.3f}<extra></extra>'
+        x: fpr,
+        y: meanTpr,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#1f77b4', width: 3 },
+        name: `Mean ROC (AUC = ${(cv.roc_auc_mean ?? 0).toFixed(3)})`,
+        hovertemplate: 'FPR=%{x:.3f}<br>TPR=%{y:.3f}<extra></extra>',
       } as any);
     }
 
     // Chance diagonal
-    traces.push({ x: [0,1], y: [0,1], type: 'scatter', mode: 'lines', line: { color: '#d32f2f', width: 2, dash: 'dash' }, name: 'Chance', hoverinfo: 'skip' } as any);
+    traces.push({
+      x: [0, 1],
+      y: [0, 1],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#d32f2f', width: 2, dash: 'dash' },
+      name: 'Chance',
+      hoverinfo: 'skip',
+    } as any);
 
     const layout = {
       title: { text: '' },
@@ -1896,19 +2186,42 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       xaxis: { title: { text: 'False Positive Rate', font: { size: 13 } }, range: [0, 1] },
       yaxis: { title: { text: 'True Positive Rate', font: { size: 13 } }, range: [0, 1] },
       hovermode: 'closest',
-      legend: { orientation: 'h', x: 0, y: -0.35, xanchor: 'left', yanchor: 'top', font: { size: 11 }, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#ddd', borderwidth: 1 }
+      legend: {
+        orientation: 'h',
+        x: 0,
+        y: -0.35,
+        xanchor: 'left',
+        yanchor: 'top',
+        font: { size: 11 },
+        bgcolor: 'rgba(255,255,255,0.95)',
+        bordercolor: '#ddd',
+        borderwidth: 1,
+      },
     } as any;
     const config = { responsive: true, displayModeBar: true } as any;
-    try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+    try {
+      Plotly.react(el, traces, layout, config);
+    } catch {
+      Plotly.newPlot(el, traces, layout, config);
+    }
   }
 
   // ===== SHAP Beeswarm (interactive) =====
   public drawShapBeeswarm(attempt: number = 0): void {
     try {
       if (!this.isBrowser) return;
-      const Plotly = (window as any).Plotly; if (!Plotly) { if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250); return; }
-      const payload = this.modelingStatus?.model?.shap_beeswarm; if (!payload) return;
-      const el = document.getElementById('shap-beeswarm'); if (!el) { if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250); return; }
+      const Plotly = (window as any).Plotly;
+      if (!Plotly) {
+        if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250);
+        return;
+      }
+      const payload = this.modelingStatus?.model?.shap_beeswarm;
+      if (!payload) return;
+      const el = document.getElementById('shap-beeswarm');
+      if (!el) {
+        if (attempt < 10) setTimeout(() => this.drawShapBeeswarm(attempt + 1), 250);
+        return;
+      }
 
       const features: string[] = payload.features || [];
       const shapValues: number[][] = payload.shap_values || [];
@@ -1917,19 +2230,21 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const nFeat = features.length;
       if (!nFeat) return;
       // Dynamic height based on feature count (35px per feature for better spacing)
-      try { (el as HTMLElement).style.height = `${Math.max(480, 35 * nFeat)}px`; } catch {}
+      try {
+        (el as HTMLElement).style.height = `${Math.max(480, 35 * nFeat)}px`;
+      } catch {}
 
       const traces: any[] = [];
       const jitter = 0.35;
       const colorscale: any = [
-        [0.0, '#2166ac'],  // blue (low)
-        [0.5, '#f7f7f7'],  // white (mid)
-        [1.0, '#b2182b']   // red (high)
+        [0.0, '#2166ac'], // blue (low)
+        [0.5, '#f7f7f7'], // white (mid)
+        [1.0, '#b2182b'], // red (high)
       ];
 
       const q = (arr: number[], p: number): number => {
         if (!arr || arr.length === 0) return 0;
-        const a = arr.filter(v => Number.isFinite(v)).sort((a, b) => a - b);
+        const a = arr.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
         if (a.length === 0) return 0;
         const pos = (a.length - 1) * p;
         const base = Math.floor(pos);
@@ -1939,10 +2254,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
       let colorbarPlaced = false;
       for (let i = 0; i < nFeat; i++) {
-        const xs = (shapValues[i] || []).map(v => Number(v));
+        const xs = (shapValues[i] || []).map((v) => Number(v));
         const rawArr: any[] = featureValues[i] || [];
-        const isNull = rawArr.map(v => v == null || (typeof v === 'number' && !Number.isFinite(v)));
-        const vs = rawArr.map(v => (v == null ? NaN : Number(v)));
+        const isNull = rawArr.map(
+          (v) => v == null || (typeof v === 'number' && !Number.isFinite(v)),
+        );
+        const vs = rawArr.map((v) => (v == null ? NaN : Number(v)));
         const base = nFeat - 1 - i; // top feature at top
         const N = xs.length;
         // Beeswarm: KDE-based amplitude and uniform placement within the envelope
@@ -1953,22 +2270,28 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const q95x = q(xs, 0.95);
           let xmin = Math.min(q05x, Math.min(...xs));
           let xmax = Math.max(q95x, Math.max(...xs));
-          if (xmin === xmax) { xmin -= 1e-6; xmax += 1e-6; }
+          if (xmin === xmax) {
+            xmin -= 1e-6;
+            xmax += 1e-6;
+          }
           const Benv = 200; // grid for KDE/envelope
           const dxenv = (xmax - xmin) / Benv;
           const xgrid: number[] = Array.from({ length: Benv }, (_, b) => xmin + (b + 0.5) * dxenv);
           // Gaussian KDE with Silverman's rule of thumb
           const mean = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
           const varsum = xs.reduce((a, b) => a + (b - mean) * (b - mean), 0);
-          const stdev = Math.sqrt(varsum / Math.max(1, xs.length - 1)) || (xmax - xmin) * 0.1 || 1e-6;
-          const bw = 1.06 * stdev * Math.pow(Math.max(1, xs.length), -1/5);
+          const stdev =
+            Math.sqrt(varsum / Math.max(1, xs.length - 1)) || (xmax - xmin) * 0.1 || 1e-6;
+          const bw = 1.06 * stdev * Math.pow(Math.max(1, xs.length), -1 / 5);
           const sigma = Math.max(1e-6, bw);
           const inv2s2 = 1 / (2 * sigma * sigma);
           const norm = 1 / (Math.sqrt(2 * Math.PI) * sigma * Math.max(1, xs.length));
-          const dens: number[] = xgrid.map(xc => xs.reduce((acc, v) => acc + Math.exp(-(v - xc) * (v - xc) * inv2s2), 0) * norm);
+          const dens: number[] = xgrid.map(
+            (xc) => xs.reduce((acc, v) => acc + Math.exp(-(v - xc) * (v - xc) * inv2s2), 0) * norm,
+          );
           const dmax = Math.max(1e-9, ...dens);
           const maxRadius = 0.48;
-          const ampGrid = dens.map(d => maxRadius * Math.pow(d / dmax, 0.85));
+          const ampGrid = dens.map((d) => maxRadius * Math.pow(d / dmax, 0.85));
           // helper to interpolate amp at any x
           const ampAt = (x: number): number => {
             let u = (x - xmin) / (xmax - xmin);
@@ -1978,7 +2301,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             const frac = u * (Benv - 1) - idx;
             const a0 = ampGrid[idx];
             const a1 = ampGrid[Math.min(Benv - 1, idx + 1)];
-            return (a0 * (1 - frac) + a1 * frac) || 0;
+            return a0 * (1 - frac) + a1 * frac || 0;
           };
           // place each point uniformly within [-amp(x), +amp(x)] with tiny noise to avoid banding
           for (let j = 0; j < N; j++) {
@@ -1994,14 +2317,18 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         const q99 = q(xs, 0.99);
         let exmin = Math.min(q1, Math.min(...xs));
         let exmax = Math.max(q99, Math.max(...xs));
-        if (exmin === exmax) { exmin -= 1e-6; exmax += 1e-6; }
+        if (exmin === exmax) {
+          exmin -= 1e-6;
+          exmax += 1e-6;
+        }
         const B = 60; // bins for envelope
         const dx = (exmax - exmin) / B;
         const centers: number[] = Array.from({ length: B }, (_, b) => exmin + (b + 0.5) * dx);
         const hist: number[] = Array(B).fill(0);
         for (let t = 0; t < xs.length; t++) {
           let b = Math.floor((xs[t] - exmin) / dx);
-          if (b < 0) b = 0; if (b >= B) b = B - 1;
+          if (b < 0) b = 0;
+          if (b >= B) b = B - 1;
           hist[b]++;
         }
         // Gaussian smoothing kernel in bin units
@@ -2023,12 +2350,30 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         const smax = Math.max(1e-6, ...smooth);
         const maxRadius = 0.48; // half-height at densest x region
         const pow = 0.85; // soften the edges
-        const amp: number[] = smooth.map(s => maxRadius * Math.pow(s / smax, pow));
-        const upperY = amp.map(a => base + a);
-        const lowerY = amp.map(a => base - a);
+        const amp: number[] = smooth.map((s) => maxRadius * Math.pow(s / smax, pow));
+        const upperY = amp.map((a) => base + a);
+        const lowerY = amp.map((a) => base - a);
         // Draw envelope as filled area between upper and lower
-        traces.push({ x: centers, y: upperY, type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false } as any);
-        traces.push({ x: centers, y: lowerY, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(120,120,120,0.20)', line: { width: 0 }, hoverinfo: 'skip', showlegend: false } as any);
+        traces.push({
+          x: centers,
+          y: upperY,
+          type: 'scatter',
+          mode: 'lines',
+          line: { width: 0 },
+          hoverinfo: 'skip',
+          showlegend: false,
+        } as any);
+        traces.push({
+          x: centers,
+          y: lowerY,
+          type: 'scatter',
+          mode: 'lines',
+          fill: 'tonexty',
+          fillcolor: 'rgba(120,120,120,0.20)',
+          line: { width: 0 },
+          hoverinfo: 'skip',
+          showlegend: false,
+        } as any);
         // Split indices by null/non-null for coloring
         const idxNonNull: number[] = [];
         const idxNull: number[] = [];
@@ -2036,16 +2381,20 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
         // Non-null coloring with per-feature normalization
         if (idxNonNull.length > 0) {
-          const vsNN = idxNonNull.map(j => vs[j]);
+          const vsNN = idxNonNull.map((j) => vs[j]);
           let vmin = q(vsNN as number[], 0.05);
           let vmax = q(vsNN as number[], 0.95);
           if (!isFinite(vmin) || !isFinite(vmax) || vmin === vmax) {
             vmin = Math.min(...(vsNN as number[]));
             vmax = Math.max(...(vsNN as number[]));
-            if (vmin === vmax) { vmin = vmax - 1; }
+            if (vmin === vmax) {
+              vmin = vmax - 1;
+            }
           }
-          const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
-          const cnorm = vsNN.map(v => (Number(v) - vmin) / denom).map(u => u < 0 ? 0 : (u > 1 ? 1 : u));
+          const denom = vmax - vmin !== 0 ? vmax - vmin : 1e-12;
+          const cnorm = vsNN
+            .map((v) => (Number(v) - vmin) / denom)
+            .map((u) => (u < 0 ? 0 : u > 1 ? 1 : u));
 
           // Check if this feature has a categorical encoding mapping
           const catLookup = this.catLabelLookup[features[i]];
@@ -2053,14 +2402,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           let hovertemplate: string;
           if (catLookup) {
             // Categorical: show both encoded value and original label
-            customdata = idxNonNull.map(j => {
+            customdata = idxNonNull.map((j) => {
               const enc = String(Math.round(Number(rawArr[j])));
               const label = catLookup[enc] || rawArr[j];
               return [rawArr[j], label];
             });
             hovertemplate = `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Encoded=%{customdata[0]}<br>Original=%{customdata[1]}<extra></extra>`;
           } else {
-            customdata = idxNonNull.map(j => rawArr[j]);
+            customdata = idxNonNull.map((j) => rawArr[j]);
             hovertemplate = `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`;
           }
 
@@ -2068,8 +2417,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             type: 'scatter',
             mode: 'markers',
             name: features[i],
-            x: idxNonNull.map(j => xs[j]),
-            y: idxNonNull.map(j => yvals[j]),
+            x: idxNonNull.map((j) => xs[j]),
+            y: idxNonNull.map((j) => yvals[j]),
             customdata,
             marker: {
               color: cnorm,
@@ -2077,12 +2426,20 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
               cmin: 0,
               cmax: 1,
               showscale: !colorbarPlaced,
-              colorbar: !colorbarPlaced ? { title: { text: 'Feature value' }, thickness: 14, tickmode: 'array', tickvals: [0, 1], ticktext: ['Low', 'High'] } : undefined,
+              colorbar: !colorbarPlaced
+                ? {
+                    title: { text: 'Feature value' },
+                    thickness: 14,
+                    tickmode: 'array',
+                    tickvals: [0, 1],
+                    ticktext: ['Low', 'High'],
+                  }
+                : undefined,
               size: 6,
-              opacity: 0.85
+              opacity: 0.85,
             },
             hovertemplate,
-            showlegend: false
+            showlegend: false,
           } as any);
           if (!colorbarPlaced) colorbarPlaced = true;
         }
@@ -2092,11 +2449,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           traces.push({
             type: 'scatter',
             mode: 'markers',
-            x: idxNull.map(j => xs[j]),
-            y: idxNull.map(j => yvals[j]),
-            marker: { color: 'rgba(130,130,130,0.9)', size: 6, symbol: 'x', line: { width: 0.5, color: 'rgba(80,80,80,0.9)' } },
+            x: idxNull.map((j) => xs[j]),
+            y: idxNull.map((j) => yvals[j]),
+            marker: {
+              color: 'rgba(130,130,130,0.9)',
+              size: 6,
+              symbol: 'x',
+              line: { width: 0.5, color: 'rgba(80,80,80,0.9)' },
+            },
             hovertemplate: `Feature=${features[i]}<br>SHAP=%{x:.4f}<br>Value=null<extra></extra>`,
-            showlegend: false
+            showlegend: false,
           } as any);
         }
       }
@@ -2119,7 +2481,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         } else {
           hoverParts.push(`<b>${fname}</b>`);
         }
-        if (impact != null && Number.isFinite(impact)) hoverParts.push(`Impact: ${Number(impact).toFixed(6)}`);
+        if (impact != null && Number.isFinite(impact))
+          hoverParts.push(`Impact: ${Number(impact).toFixed(6)}`);
         if (psi != null && Number.isFinite(psi)) hoverParts.push(`PSI: ${Number(psi).toFixed(4)}`);
         if (csi != null && Number.isFinite(csi)) hoverParts.push(`CSI: ${Number(csi).toFixed(4)}`);
         return {
@@ -2133,28 +2496,57 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           yanchor: 'middle',
           font: { size: 9, color: '#333' },
           hovertext: hoverParts.join('<br>'),
-          hoverlabel: { bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#999', font: { size: 11 } }
+          hoverlabel: {
+            bgcolor: 'rgba(255,255,255,0.95)',
+            bordercolor: '#999',
+            font: { size: 11 },
+          },
         };
       });
       const layout = {
         title: { text: '' },
         margin: { l: 220, r: 48, t: 12, b: 40 },
-        xaxis: { title: { text: 'SHAP value (impact on model output)' }, zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
-        yaxis: { tickmode: 'array', tickvals, ticktext: [], showticklabels: false, range: [-0.6, nFeat - 0.4] },
+        xaxis: {
+          title: { text: 'SHAP value (impact on model output)' },
+          zeroline: true,
+          zerolinecolor: '#888',
+          zerolinewidth: 1,
+        },
+        yaxis: {
+          tickmode: 'array',
+          tickvals,
+          ticktext: [],
+          showticklabels: false,
+          range: [-0.6, nFeat - 0.4],
+        },
         showlegend: false,
         hovermode: 'closest',
-        shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.5, y1: nFeat - 0.5, line: { color: '#888', width: 1 } }],
-        annotations: yAxisAnnotations
+        shapes: [
+          {
+            type: 'line',
+            x0: 0,
+            x1: 0,
+            y0: -0.5,
+            y1: nFeat - 0.5,
+            line: { color: '#888', width: 1 },
+          },
+        ],
+        annotations: yAxisAnnotations,
       } as any;
       const config = { responsive: true, displayModeBar: true } as any;
-      try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+      try {
+        Plotly.react(el, traces, layout, config);
+      } catch {
+        Plotly.newPlot(el, traces, layout, config);
+      }
     } catch (e) {
       console.warn('drawShapBeeswarm failed:', e);
     }
   }
 
   private drawPrCurvePlot(cv: any, attempt: number = 0): void {
-    const Plotly = (window as any).Plotly; if (!Plotly) return;
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) return;
     const pr = cv.pr_curve || {};
     const el = document.getElementById('cv-pr-plot');
     if (!el) {
@@ -2165,8 +2557,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const meanPrec: number[] | null = Array.isArray(pr.mean_precision) ? pr.mean_precision : null;
     const stdPrec: number[] | null = Array.isArray(pr.std_precision) ? pr.std_precision : null;
     const foldPrec: number[][] = Array.isArray(pr.fold_precision) ? pr.fold_precision : [];
-    const rawFolds: Array<{precision:number[]; recall:number[]; auc?: number}> = Array.isArray(pr.folds_raw) ? pr.folds_raw : [];
-    const baseline: number | null = (pr.baseline ?? cv?.pr_curve?.baseline ?? null);
+    const rawFolds: Array<{ precision: number[]; recall: number[]; auc?: number }> = Array.isArray(
+      pr.folds_raw,
+    )
+      ? pr.folds_raw
+      : [];
+    const baseline: number | null = pr.baseline ?? cv?.pr_curve?.baseline ?? null;
     const micro: any = cv.pr_curve_micro || null;
     const traces: any[] = [];
 
@@ -2174,12 +2570,30 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const foldColor = 'rgba(120,120,120,0.35)';
     if (rawFolds.length) {
       rawFolds.forEach((rf, i) => {
-        traces.push({ x: rf.recall, y: rf.precision, type: 'scatter', mode: 'lines', line: { color: foldColor, width: 1, shape: 'hv' }, name: `PR fold ${i}${(rf as any).auc != null ? ` (AUC = ${Number((rf as any).auc).toFixed(2)})` : (cv?.folds?.[i]?.pr_auc != null ? ` (AUC = ${Number(cv.folds[i].pr_auc).toFixed(2)})` : '')}`, hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>', showlegend: i === 0 } as any);
+        traces.push({
+          x: rf.recall,
+          y: rf.precision,
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: foldColor, width: 1, shape: 'hv' },
+          name: `PR fold ${i}${(rf as any).auc != null ? ` (AUC = ${Number((rf as any).auc).toFixed(2)})` : cv?.folds?.[i]?.pr_auc != null ? ` (AUC = ${Number(cv.folds[i].pr_auc).toFixed(2)})` : ''}`,
+          hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>',
+          showlegend: i === 0,
+        } as any);
       });
     } else {
       // fallback to interpolated grid if raw folds missing
       foldPrec.forEach((prec, i) => {
-        traces.push({ x: recall, y: prec, type: 'scatter', mode: 'lines', line: { color: foldColor, width: 1, shape: 'hv' }, name: `PR fold ${i}${cv?.folds?.[i]?.pr_auc != null ? ` (AUC = ${Number(cv.folds[i].pr_auc).toFixed(2)})` : ''}` , hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>', showlegend: i === 0 } as any);
+        traces.push({
+          x: recall,
+          y: prec,
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: foldColor, width: 1, shape: 'hv' },
+          name: `PR fold ${i}${cv?.folds?.[i]?.pr_auc != null ? ` (AUC = ${Number(cv.folds[i].pr_auc).toFixed(2)})` : ''}`,
+          hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>',
+          showlegend: i === 0,
+        } as any);
       });
     }
 
@@ -2187,23 +2601,65 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (meanPrec && stdPrec) {
       const lower = meanPrec.map((v, i) => Math.max(0, Math.min(1, v - stdPrec[i])));
       const upper = meanPrec.map((v, i) => Math.max(0, Math.min(1, v + stdPrec[i])));
-      traces.push({ x: recall, y: lower, type: 'scatter', mode: 'lines', line: {color: 'rgba(0,0,0,0)'}, hoverinfo: 'skip', showlegend: false } as any);
-      traces.push({ x: recall, y: upper, type: 'scatter', mode: 'lines', line: {color: 'rgba(0,0,0,0)'}, fill: 'tonexty', fillcolor: 'rgba(100,100,100,0.18)', name: '± 1 std. dev.', hoverinfo: 'skip' } as any);
+      traces.push({
+        x: recall,
+        y: lower,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'rgba(0,0,0,0)' },
+        hoverinfo: 'skip',
+        showlegend: false,
+      } as any);
+      traces.push({
+        x: recall,
+        y: upper,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'rgba(0,0,0,0)' },
+        fill: 'tonexty',
+        fillcolor: 'rgba(100,100,100,0.18)',
+        name: '± 1 std. dev.',
+        hoverinfo: 'skip',
+      } as any);
     }
 
     // Mean PR (grid-based) shading/line: show only if micro-avg is not available
     if (meanPrec && !(micro && Array.isArray(micro.recall) && Array.isArray(micro.precision))) {
-      traces.push({ x: recall, y: meanPrec, type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 3, shape: 'hv' }, name: `Precision-Recall (AUC = ${(cv.pr_auc_mean ?? 0).toFixed(3)})`, hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>' } as any);
+      traces.push({
+        x: recall,
+        y: meanPrec,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#1f77b4', width: 3, shape: 'hv' },
+        name: `Precision-Recall (AUC = ${(cv.pr_auc_mean ?? 0).toFixed(3)})`,
+        hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>',
+      } as any);
     }
 
     // Micro-averaged PR (if available), plotted as the main thick line
     if (micro && Array.isArray(micro.recall) && Array.isArray(micro.precision)) {
-      traces.push({ x: micro.recall, y: micro.precision, type: 'scatter', mode: 'lines', line: { color: '#1976d2', width: 4, shape: 'hv' }, name: `Micro-avg PR (AP = ${(micro.ap ?? cv.pr_auc_mean ?? 0).toFixed(3)})`, hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>' } as any);
+      traces.push({
+        x: micro.recall,
+        y: micro.precision,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#1976d2', width: 4, shape: 'hv' },
+        name: `Micro-avg PR (AP = ${(micro.ap ?? cv.pr_auc_mean ?? 0).toFixed(3)})`,
+        hovertemplate: 'Recall=%{x:.3f}<br>Precision=%{y:.3f}<extra></extra>',
+      } as any);
     }
 
     // Baseline
     if (baseline != null && !isNaN(baseline)) {
-      traces.push({ x: [0,1], y: [baseline, baseline], type: 'scatter', mode: 'lines', line: { color: '#d32f2f', width: 2, dash: 'dash' }, name: 'Baseline', hovertemplate: 'Baseline=%{y:.3f}<extra></extra>' } as any);
+      traces.push({
+        x: [0, 1],
+        y: [baseline, baseline],
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#d32f2f', width: 2, dash: 'dash' },
+        name: 'Baseline',
+        hovertemplate: 'Baseline=%{y:.3f}<extra></extra>',
+      } as any);
     }
 
     const layout = {
@@ -2212,10 +2668,24 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       xaxis: { title: { text: 'Recall', font: { size: 13 } }, range: [0, 1] },
       yaxis: { title: { text: 'Precision', font: { size: 13 } }, range: [0, 1] },
       hovermode: 'closest',
-      legend: { orientation: 'h', x: 0, y: -0.40, xanchor: 'left', yanchor: 'top', font: { size: 11 }, bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#ddd', borderwidth: 1 }
+      legend: {
+        orientation: 'h',
+        x: 0,
+        y: -0.4,
+        xanchor: 'left',
+        yanchor: 'top',
+        font: { size: 11 },
+        bgcolor: 'rgba(255,255,255,0.95)',
+        bordercolor: '#ddd',
+        borderwidth: 1,
+      },
     } as any;
     const config = { responsive: true, displayModeBar: true } as any;
-    try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+    try {
+      Plotly.react(el, traces, layout, config);
+    } catch {
+      Plotly.newPlot(el, traces, layout, config);
+    }
   }
 
   public downloadBeeswarm(): void {
@@ -2239,14 +2709,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!featureName || this.currentFileId == null) return;
       const fileId = String(this.currentFileId);
       const processedFile = this.processedFilePath || undefined;
-      const dateColumn = this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
-      
+      const dateColumn =
+        this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
+
       // Extract importance data from modelingStatus if available
-      let importanceOverrides: { gain: Array<{feature: string; score: number}>; shap: Array<{feature: string; score: number}> } | undefined;
+      let importanceOverrides:
+        | {
+            gain: Array<{ feature: string; score: number }>;
+            shap: Array<{ feature: string; score: number }>;
+          }
+        | undefined;
       const importances = this.modelingStatus?.model?.importances;
       if (importances) {
-        const gainArr = (importances.gain || []).map((g: any) => ({ feature: g.feature, score: Number(g.score || 0) }));
-        const shapArr = (importances.shap_mean_abs || []).map((s: any) => ({ feature: s.feature, score: Number(s.score || s.importance || 0) }));
+        const gainArr = (importances.gain || []).map((g: any) => ({
+          feature: g.feature,
+          score: Number(g.score || 0),
+        }));
+        const shapArr = (importances.shap_mean_abs || []).map((s: any) => ({
+          feature: s.feature,
+          score: Number(s.score || s.importance || 0),
+        }));
         if (gainArr.length || shapArr.length) {
           importanceOverrides = { gain: gainArr, shap: shapArr };
         }
@@ -2256,25 +2738,29 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       this.dataService.getDataDictionary(fileId).subscribe({
         next: (dict: any[]) => {
           const features = Array.isArray(dict)
-            ? dict.map(item => ({
-                Feature_Name: String(item?.Feature_Name || ''),
-                Feature_Description: String(item?.Feature_Description || 'No description available')
-              })).filter(x => !!x.Feature_Name)
+            ? dict
+                .map((item) => ({
+                  Feature_Name: String(item?.Feature_Name || ''),
+                  Feature_Description: String(
+                    item?.Feature_Description || 'No description available',
+                  ),
+                }))
+                .filter((x) => !!x.Feature_Name)
             : [{ Feature_Name: featureName, Feature_Description: 'No description available' }];
-          
+
           // Find complete quality summary from datqSummary (full row with all metrics)
           let qualitySummary: any = null;
           if (this.datqSummary && Array.isArray(this.datqSummary)) {
-            const row = this.datqSummary.find(r => 
-              String(r['Variable'] || r['variable'] || r['index']) === String(featureName)
+            const row = this.datqSummary.find(
+              (r) => String(r['Variable'] || r['variable'] || r['index']) === String(featureName),
             );
             qualitySummary = row ? { ...row } : null;
           }
-          
+
           // If not found in datqSummary, try to build from selected_features (partial data)
           if (!qualitySummary) {
             const selectedFeature = this.modelingStatus?.model?.selected_features?.find(
-              (f: any) => f.feature === featureName
+              (f: any) => f.feature === featureName,
             );
             if (selectedFeature) {
               qualitySummary = {
@@ -2282,7 +2768,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
                 impact: selectedFeature.impact,
                 signed_impact: selectedFeature.signed_impact,
                 psi: selectedFeature.psi,
-                csi: selectedFeature.csi
+                csi: selectedFeature.csi,
               };
             }
           }
@@ -2298,8 +2784,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
               dateColumn: dateColumn,
               qualitySummary: qualitySummary || undefined,
               catLabelLookup: this.catLabelLookup,
-              importanceOverrides: importanceOverrides
-            }
+              importanceOverrides: importanceOverrides,
+            },
           });
         },
         error: (err) => {
@@ -2310,15 +2796,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             data: {
               fileId: fileId,
               columnName: featureName,
-              features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
+              features: [
+                { Feature_Name: featureName, Feature_Description: 'No description available' },
+              ],
               processedFile: processedFile,
               encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               catLabelLookup: this.catLabelLookup,
-              importanceOverrides: importanceOverrides
-            }
+              importanceOverrides: importanceOverrides,
+            },
           });
-        }
+        },
       });
     } catch (e) {
       console.warn('openFeatureCard failed:', e);
@@ -2330,12 +2818,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    *   1. Final Model Fit (last step of the direction)
    *   2. Feature Added Step (the specific clicked step)
    */
-  public openFeatureCardFromSfs(featureName: string, step: any, sfsDirection?: 'forward' | 'backward' | 'forward_from_backward'): void {
+  public openFeatureCardFromSfs(
+    featureName: string,
+    step: any,
+    sfsDirection?: 'forward' | 'backward' | 'forward_from_backward',
+  ): void {
     try {
       if (!featureName || this.currentFileId == null || !step) return;
       const fileId = String(this.currentFileId);
       const processedFile = this.processedFilePath || undefined;
-      const dateColumn = this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
+      const dateColumn =
+        this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
 
       // Determine the direction and get the LAST step of that direction
       const directionKey: 'forward' | 'backward' | 'forward_from_backward' =
@@ -2348,10 +2841,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       } else {
         directionResults = this.sfsForwardResults;
       }
-      const lastStep = directionResults.length > 0 ? directionResults[directionResults.length - 1] : step;
+      const lastStep =
+        directionResults.length > 0 ? directionResults[directionResults.length - 1] : step;
 
-      const directionLabel = directionKey === 'forward_from_backward' ? 'Forward-from-Backward'
-                           : directionKey === 'backward' ? 'Backward' : 'Forward';
+      const directionLabel =
+        directionKey === 'forward_from_backward'
+          ? 'Forward-from-Backward'
+          : directionKey === 'backward'
+            ? 'Backward'
+            : 'Forward';
 
       // --- Build Context 1: Final Model Fit ---
       const finalFeatures: string[] = lastStep.selected_features || [];
@@ -2359,12 +2857,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const finalShapRaw = lastStep.shap_importance_by_feature || {};
       const finalNormGain = this.normalizeGainMap(finalGainRaw, finalFeatures);
       const finalGainArr = finalFeatures
-        .map(f => ({ feature: f, score: Number(finalNormGain[f] ?? 0) }))
-        .filter(x => Number.isFinite(x.score))
+        .map((f) => ({ feature: f, score: Number(finalNormGain[f] ?? 0) }))
+        .filter((x) => Number.isFinite(x.score))
         .sort((a, b) => b.score - a.score);
       const finalShapArr = finalFeatures
-        .map(f => ({ feature: f, score: Number(finalShapRaw[f] ?? 0) }))
-        .filter(x => Number.isFinite(x.score))
+        .map((f) => ({ feature: f, score: Number(finalShapRaw[f] ?? 0) }))
+        .filter((x) => Number.isFinite(x.score))
         .sort((a, b) => b.score - a.score);
       const finalModelPath = this.sfsModelPaths[directionKey] || undefined;
 
@@ -2374,12 +2872,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const stepShapRaw = step.shap_importance_by_feature || {};
       const stepNormGain = this.normalizeGainMap(stepGainRaw, stepFeatures);
       const stepGainArr = stepFeatures
-        .map(f => ({ feature: f, score: Number(stepNormGain[f] ?? 0) }))
-        .filter(x => Number.isFinite(x.score))
+        .map((f) => ({ feature: f, score: Number(stepNormGain[f] ?? 0) }))
+        .filter((x) => Number.isFinite(x.score))
         .sort((a, b) => b.score - a.score);
       const stepShapArr = stepFeatures
-        .map(f => ({ feature: f, score: Number(stepShapRaw[f] ?? 0) }))
-        .filter(x => Number.isFinite(x.score))
+        .map((f) => ({ feature: f, score: Number(stepShapRaw[f] ?? 0) }))
+        .filter((x) => Number.isFinite(x.score))
         .sort((a, b) => b.score - a.score);
 
       const actionLabel = step.action === 'added' ? 'Added' : 'Dropped';
@@ -2395,22 +2893,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           gain: stepGainArr,
           shap: stepShapArr,
           selectedFeatures: stepFeatures, // On-demand model for explainability
-        }
+        },
       ];
 
       this.dataService.getDataDictionary(fileId).subscribe({
         next: (dict: any[]) => {
           const features = Array.isArray(dict)
-            ? dict.map(item => ({
-                Feature_Name: String(item?.Feature_Name || ''),
-                Feature_Description: String(item?.Feature_Description || 'No description available')
-              })).filter(x => !!x.Feature_Name)
+            ? dict
+                .map((item) => ({
+                  Feature_Name: String(item?.Feature_Name || ''),
+                  Feature_Description: String(
+                    item?.Feature_Description || 'No description available',
+                  ),
+                }))
+                .filter((x) => !!x.Feature_Name)
             : [{ Feature_Name: featureName, Feature_Description: 'No description available' }];
 
           let qualitySummary: any = null;
           if (this.datqSummary && Array.isArray(this.datqSummary)) {
-            const row = this.datqSummary.find(r =>
-              String(r['Variable'] || r['variable'] || r['index']) === String(featureName)
+            const row = this.datqSummary.find(
+              (r) => String(r['Variable'] || r['variable'] || r['index']) === String(featureName),
             );
             qualitySummary = row ? { ...row } : null;
           }
@@ -2426,8 +2928,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
               dateColumn: dateColumn,
               qualitySummary: qualitySummary || undefined,
               catLabelLookup: this.catLabelLookup,
-              sfsContexts: sfsContexts
-            }
+              sfsContexts: sfsContexts,
+            },
           });
         },
         error: () => {
@@ -2436,15 +2938,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             data: {
               fileId: fileId,
               columnName: featureName,
-              features: [{ Feature_Name: featureName, Feature_Description: 'No description available' }],
+              features: [
+                { Feature_Name: featureName, Feature_Description: 'No description available' },
+              ],
               processedFile: processedFile,
               encodedFile: this.encodedFilePath || undefined,
               dateColumn: dateColumn,
               catLabelLookup: this.catLabelLookup,
-              sfsContexts: sfsContexts
-            }
+              sfsContexts: sfsContexts,
+            },
           });
-        }
+        },
       });
     } catch (e) {
       console.warn('openFeatureCardFromSfs failed:', e);
@@ -2463,9 +2967,22 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Align SFS / HP default metrics to classification vs regression. */
   private applyTaskMetricDefaults(): void {
+    const declared =
+      this.modelingStatus?.model?.prediction_contract?.objective?.primary_metric ||
+      this.businessUnderstanding?.success_criteria?.primary_metric;
+    if (declared) this.hpPrimaryMetric = declared;
     if (!this.isRegressionTask) return;
-    const classOnly = new Set(['roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall', 'accuracy', 'mcc']);
-    if (this.sfsMetrics.every(m => classOnly.has(m.metric))) {
+    const classOnly = new Set([
+      'roc_auc',
+      'pr_auc',
+      'f1',
+      'f2',
+      'precision',
+      'recall',
+      'accuracy',
+      'mcc',
+    ]);
+    if (this.sfsMetrics.every((m) => classOnly.has(m.metric))) {
       this.sfsMetrics = [{ metric: 'r2', pct_change: this.sfsMetrics[0]?.pct_change ?? 1.0 }];
     }
     if (classOnly.has(this.hpPrimaryMetric)) {
@@ -2475,7 +2992,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   sfsMetricLabel(metric: string): string {
     const map: Record<string, string> = {
-      roc_auc: 'ROC-AUC', pr_auc: 'PR-AUC', r2: 'R²', rmse: 'RMSE', mae: 'MAE',
+      roc_auc: 'ROC-AUC',
+      pr_auc: 'PR-AUC',
+      r2: 'R²',
+      rmse: 'RMSE',
+      mae: 'MAE',
     };
     return map[metric] || metric;
   }
@@ -2567,51 +3088,64 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   startSfs(): void {
     if (!this.currentFileId) return;
-    
+
     // Validate: at least one method must be selected
     if (!this.sfsMethodForward && !this.sfsMethodBackward) {
       alert('Please select at least one SFS method (Forward or Backward)');
       return;
     }
-    
+
     // Validate: at least one metric
     if (this.sfsMetrics.length === 0) {
       alert('Please add at least one metric');
       return;
     }
-    
+
     // Build methods array
     const methods: string[] = [];
     if (this.sfsMethodForward) methods.push('forward');
     if (this.sfsMethodBackward) methods.push('backward');
-    
+
     // Build stopping criteria with multiple metrics
     const stoppingCriteria = {
       metrics: this.sfsMetrics,
       min_features: this.sfsMinFeatures,
-      max_features: this.sfsMaxFeatures
+      max_features: this.sfsMaxFeatures,
     };
-    
+
     // Collect features marked as "drop" in the Usage column
-    const excludedFeatures = Object.keys(this.featureUsage).filter(f => this.featureUsage[f] === 'drop');
+    const excludedFeatures = Object.keys(this.featureUsage).filter(
+      (f) => this.featureUsage[f] === 'drop',
+    );
     const excludedReasonsMap: { [feature: string]: string } = {};
-    excludedFeatures.forEach(f => {
+    excludedFeatures.forEach((f) => {
       if (this.featureDropReason[f]) {
         excludedReasonsMap[f] = this.featureDropReason[f];
       }
     });
     if (excludedFeatures.length > 0) {
-      console.log('[SFS] Excluding features marked as "drop":', excludedFeatures, 'Reasons:', excludedReasonsMap);
+      console.log(
+        '[SFS] Excluding features marked as "drop":',
+        excludedFeatures,
+        'Reasons:',
+        excludedReasonsMap,
+      );
     }
-    
+
     const sorterOpts = {
       useCombinedScoreOrder: !!this.sfsUseCombinedScoreOrder,
-      candidateTopK: this.sfsUseCombinedScoreOrder && this.sfsCandidateTopK && this.sfsCandidateTopK > 0
-        ? this.sfsCandidateTopK
-        : null,
+      candidateTopK:
+        this.sfsUseCombinedScoreOrder && this.sfsCandidateTopK && this.sfsCandidateTopK > 0
+          ? this.sfsCandidateTopK
+          : null,
     };
-    console.log('[SFS] Starting with config:', { methods, stoppingCriteria, excludedFeatures, sorterOpts });
-    
+    console.log('[SFS] Starting with config:', {
+      methods,
+      stoppingCriteria,
+      excludedFeatures,
+      sorterOpts,
+    });
+
     this.sfsRunning = true;
     this.sfsStopping = false;
     this.sfsStopped = false;
@@ -2619,27 +3153,35 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sfsMessage = 'Starting SFS...';
     this.sfsCurrentMetrics = {};
     this.sfsCompletedSteps = [];
-    
+
     // Track active process for pipeline resume
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
-    this.dataService.startSfs(
-      this.currentFileId, methods, stoppingCriteria, excludedFeatures,
-      this.sfsNJobs, this.sfsTopK, algo, sorterOpts,
-    ).subscribe({
-      next: (resp: any) => {
-        console.log('[SFS] Started:', resp);
-        this.sfsMessage = resp.message || 'SFS running...';
-        // Start polling for progress
-        this.startSfsStatusPolling();
-      },
-      error: (err: any) => {
-        console.error('[SFS] Failed to start:', err);
-        this.sfsRunning = false;
-        this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
-        this.sharedService.setActiveProcess(null); // clear on error
-      }
-    });
+    this.dataService
+      .startSfs(
+        this.currentFileId,
+        methods,
+        stoppingCriteria,
+        excludedFeatures,
+        this.sfsNJobs,
+        this.sfsTopK,
+        algo,
+        sorterOpts,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          console.log('[SFS] Started:', resp);
+          this.sfsMessage = resp.message || 'SFS running...';
+          // Start polling for progress
+          this.startSfsStatusPolling();
+        },
+        error: (err: any) => {
+          console.error('[SFS] Failed to start:', err);
+          this.sfsRunning = false;
+          this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
+          this.sharedService.setActiveProcess(null); // clear on error
+        },
+      });
   }
 
   /**
@@ -2656,7 +3198,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       error: (err: any) => {
         console.error('[SFS] Stop request failed:', err);
         this.sfsStopping = false;
-      }
+      },
     });
   }
 
@@ -2675,10 +3217,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const stoppingCriteria = {
       metrics: this.sfsMetrics,
       min_features: this.sfsMinFeatures,
-      max_features: this.sfsMaxFeatures
+      max_features: this.sfsMaxFeatures,
     };
 
-    const excludedFeatures = Object.keys(this.featureUsage).filter(f => this.featureUsage[f] === 'drop');
+    const excludedFeatures = Object.keys(this.featureUsage).filter(
+      (f) => this.featureUsage[f] === 'drop',
+    );
 
     console.log('[SFS] Resuming with config:', { methods, stoppingCriteria, excludedFeatures });
 
@@ -2689,22 +3233,32 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
-    this.dataService.resumeSfs(this.currentFileId, methods, stoppingCriteria, excludedFeatures, this.sfsNJobs, this.sfsTopK, algo).subscribe({
-      next: (resp: any) => {
-        console.log('[SFS] Resume started:', resp);
-        this.sfsMessage = resp.message || 'SFS resuming...';
-        this.startSfsStatusPolling();
-        // Checkpoint: sfsStopped is now false, active_process is set → persists on exit
-        this.pushModelingCheckpoint('sfs_running');
-      },
-      error: (err: any) => {
-        console.error('[SFS] Resume failed:', err);
-        this.sfsRunning = false;
-        this.sfsStopped = true; // revert to stopped state on failure
-        this.sfsMessage = 'Failed to resume SFS: ' + (err.message || err);
-        this.sharedService.setActiveProcess(null);
-      }
-    });
+    this.dataService
+      .resumeSfs(
+        this.currentFileId,
+        methods,
+        stoppingCriteria,
+        excludedFeatures,
+        this.sfsNJobs,
+        this.sfsTopK,
+        algo,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          console.log('[SFS] Resume started:', resp);
+          this.sfsMessage = resp.message || 'SFS resuming...';
+          this.startSfsStatusPolling();
+          // Checkpoint: sfsStopped is now false, active_process is set → persists on exit
+          this.pushModelingCheckpoint('sfs_running');
+        },
+        error: (err: any) => {
+          console.error('[SFS] Resume failed:', err);
+          this.sfsRunning = false;
+          this.sfsStopped = true; // revert to stopped state on failure
+          this.sfsMessage = 'Failed to resume SFS: ' + (err.message || err);
+          this.sharedService.setActiveProcess(null);
+        },
+      });
   }
 
   /**
@@ -2712,9 +3266,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   startForwardFromBackwardFeatures(): void {
     if (!this.currentFileId) return;
-    const featuresToUse = this.sfsBackwardCutFeatures.length > 0
-      ? this.sfsBackwardCutFeatures
-      : this.sfsBackwardRemainingFeatures;
+    const featuresToUse =
+      this.sfsBackwardCutFeatures.length > 0
+        ? this.sfsBackwardCutFeatures
+        : this.sfsBackwardRemainingFeatures;
     if (!featuresToUse || featuresToUse.length === 0) {
       alert('No remaining features available from backward elimination');
       return;
@@ -2724,7 +3279,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const stoppingCriteria = {
       metrics: this.sfsMetrics,
       min_features: this.sfsMinFeatures,
-      max_features: this.sfsMaxFeatures
+      max_features: this.sfsMaxFeatures,
     };
 
     this.sfsRunning = true;
@@ -2737,27 +3292,29 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sharedService.setActiveProcess({ type: 'sfs', file_id: this.currentFileId });
     // Call startSfs with initial_features parameter
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
-    this.dataService.startSfsWithInitialFeatures(
-      this.currentFileId,
-      ['forward'],
-      stoppingCriteria,
-      featuresToUse,
-      this.sfsNJobs,
-      this.sfsTopK,
-      algo,
-    ).subscribe({
-      next: (resp: any) => {
-        console.log('[SFS-Chain] Forward from backward started:', resp);
-        this.sfsMessage = `Running forward selection on ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
-        this.startSfsStatusPolling();
-      },
-      error: (err: any) => {
-        console.error('[SFS-Chain] Failed to start:', err);
-        this.sfsRunning = false;
-        this.sfsMessage = 'Failed to start forward selection: ' + (err.message || err);
-        this.sharedService.setActiveProcess(null); // clear on error
-      }
-    });
+    this.dataService
+      .startSfsWithInitialFeatures(
+        this.currentFileId,
+        ['forward'],
+        stoppingCriteria,
+        featuresToUse,
+        this.sfsNJobs,
+        this.sfsTopK,
+        algo,
+      )
+      .subscribe({
+        next: (resp: any) => {
+          console.log('[SFS-Chain] Forward from backward started:', resp);
+          this.sfsMessage = `Running forward selection on ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
+          this.startSfsStatusPolling();
+        },
+        error: (err: any) => {
+          console.error('[SFS-Chain] Failed to start:', err);
+          this.sfsRunning = false;
+          this.sfsMessage = 'Failed to start forward selection: ' + (err.message || err);
+          this.sharedService.setActiveProcess(null); // clear on error
+        },
+      });
   }
 
   /**
@@ -2765,24 +3322,24 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private startSfsStatusPolling(): void {
     if (this.currentFileId == null) return;
-    
+
     // Clear any existing subscription
     if (this.sfsPolling) {
       this.sfsPolling.unsubscribe();
     }
-    
+
     this.sfsPolling = interval(1000).subscribe(() => {
       if (this.currentFileId == null) return;
-      
+
       this.dataService.getSfsStatus(this.currentFileId).subscribe({
         next: (statusData: any) => {
           console.log('[SFS-Status]', statusData);
-          
+
           this.sfsProgress = statusData.progress || 0;
           this.sfsMessage = statusData.message || 'Running...';
           this.sfsCurrentMetrics = statusData.current_metrics || {};
           this.sfsCompletedSteps = statusData.completed_steps || [];
-          
+
           const status = statusData.status;
           if (status === 'completed') {
             this.stopSfsStatusPolling();
@@ -2801,9 +3358,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.sfsStopping = false;
             this.sfsStopped = true;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
-            this.sfsMessage = status === 'interrupted'
-              ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
-              : 'SFS stopped — partial results available';
+            this.sfsMessage =
+              status === 'interrupted'
+                ? 'SFS was interrupted (server restart) — partial results saved. Click Continue to resume.'
+                : 'SFS stopped — partial results available';
             this.sharedService.setActiveProcess(null);
             // Fetch partial results
             setTimeout(() => this.fetchSfsResults(), 500);
@@ -2823,7 +3381,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.stopSfsStatusPolling();
           this.sfsRunning = false;
           this.sfsMessage = 'Failed to get SFS status';
-        }
+        },
       });
     });
   }
@@ -2843,7 +3401,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   fetchSfsResults(): void {
     if (!this.currentFileId) return;
-    
+
     this.dataService.getSfsResults(this.currentFileId).subscribe({
       next: (data: any) => {
         console.log('[SFS] Results received:', data);
@@ -2855,10 +3413,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sfsModelPaths = {
           forward: data.forward_model_path || undefined,
           backward: data.backward_model_path || undefined,
-          forward_from_backward: data.forward_from_backward_model_path || undefined
+          forward_from_backward: data.forward_from_backward_model_path || undefined,
         };
         console.log('[SFS] Backward remaining features:', this.sfsBackwardRemainingFeatures);
-        console.log('[SFS] Forward-from-backward results:', this.sfsForwardFromBackwardResults.length);
+        console.log(
+          '[SFS] Forward-from-backward results:',
+          this.sfsForwardFromBackwardResults.length,
+        );
         // v2.37.0: preserve the user/AI-selected cut step across refetches.
         //
         // Before v2.37.0 this branch unconditionally called
@@ -2879,9 +3440,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         // when there's no prior cut step or it's no longer present in the
         // results (e.g. after a full SFS restart).
         const _existingCut = this.sfsBackwardCutStep;
-        const _cutRow = _existingCut == null
-          ? null
-          : this.sfsBackwardResults.find((s: any) => s.step === _existingCut) || null;
+        const _cutRow =
+          _existingCut == null
+            ? null
+            : this.sfsBackwardResults.find((s: any) => s.step === _existingCut) || null;
         if (_cutRow) {
           // Preserve the user's selection; resync features from latest data.
           if (Array.isArray(_cutRow.selected_features)) {
@@ -2910,7 +3472,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sfsBackwardRemainingFeatures = [];
         this.sfsBackwardCutStep = null;
         this.sfsBackwardCutFeatures = [];
-      }
+      },
     });
   }
 
@@ -2921,18 +3483,90 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Reset the editable param space back to sensible XGBoost defaults. */
   resetHpParamSpace(): void {
     this.hpParamSpace = [
-      { name: 'n_estimators',     label: 'n_estimators',      type: 'int',   min: 50,   max: 600, log: false, enabled: true },
-      { name: 'max_depth',        label: 'max_depth',         type: 'int',   min: 2,    max: 10,  log: false, enabled: true },
-      { name: 'learning_rate',    label: 'learning_rate',     type: 'float', min: 0.01, max: 0.3, log: true,  enabled: true },
-      { name: 'min_child_weight', label: 'min_child_weight',  type: 'int',   min: 1,    max: 10,  log: false, enabled: true },
-      { name: 'subsample',        label: 'subsample',         type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true },
-      { name: 'colsample_bytree', label: 'colsample_bytree',  type: 'float', min: 0.5,  max: 1.0, log: false, enabled: true },
-      { name: 'gamma',            label: 'gamma (min split loss)', type: 'float', min: 0, max: 5, log: false, enabled: false },
-      { name: 'reg_alpha',        label: 'reg_alpha (L1)',    type: 'float', min: 0,    max: 5,   log: false, enabled: false },
-      { name: 'reg_lambda',       label: 'reg_lambda (L2)',   type: 'float', min: 0,    max: 5,   log: false, enabled: false },
+      {
+        name: 'n_estimators',
+        label: 'n_estimators',
+        type: 'int',
+        min: 50,
+        max: 600,
+        log: false,
+        enabled: true,
+      },
+      {
+        name: 'max_depth',
+        label: 'max_depth',
+        type: 'int',
+        min: 2,
+        max: 10,
+        log: false,
+        enabled: true,
+      },
+      {
+        name: 'learning_rate',
+        label: 'learning_rate',
+        type: 'float',
+        min: 0.01,
+        max: 0.3,
+        log: true,
+        enabled: true,
+      },
+      {
+        name: 'min_child_weight',
+        label: 'min_child_weight',
+        type: 'int',
+        min: 1,
+        max: 10,
+        log: false,
+        enabled: true,
+      },
+      {
+        name: 'subsample',
+        label: 'subsample',
+        type: 'float',
+        min: 0.5,
+        max: 1.0,
+        log: false,
+        enabled: true,
+      },
+      {
+        name: 'colsample_bytree',
+        label: 'colsample_bytree',
+        type: 'float',
+        min: 0.5,
+        max: 1.0,
+        log: false,
+        enabled: true,
+      },
+      {
+        name: 'gamma',
+        label: 'gamma (min split loss)',
+        type: 'float',
+        min: 0,
+        max: 5,
+        log: false,
+        enabled: false,
+      },
+      {
+        name: 'reg_alpha',
+        label: 'reg_alpha (L1)',
+        type: 'float',
+        min: 0,
+        max: 5,
+        log: false,
+        enabled: false,
+      },
+      {
+        name: 'reg_lambda',
+        label: 'reg_lambda (L2)',
+        type: 'float',
+        min: 0,
+        max: 5,
+        log: false,
+        enabled: false,
+      },
     ];
     this.hpDefaultPieces = 20;
-    this.applyDefaultPiecesToAll();   // seed each row's Walk_Step from the 20-piece default
+    this.applyDefaultPiecesToAll(); // seed each row's Walk_Step from the 20-piece default
     this.hpSelectedRanges = {};
   }
 
@@ -2963,7 +3597,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Final SFS-selected feature set used as the tuning input (best available). */
   getFinalSelectedFeatures(): string[] {
     if (this.sfsForwardFromBackwardResults?.length) {
-      const last = this.sfsForwardFromBackwardResults[this.sfsForwardFromBackwardResults.length - 1];
+      const last =
+        this.sfsForwardFromBackwardResults[this.sfsForwardFromBackwardResults.length - 1];
       if (last?.selected_features?.length) return last.selected_features;
     }
     if (this.sfsBackwardCutFeatures?.length) return this.sfsBackwardCutFeatures;
@@ -2977,7 +3612,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Number of enabled params in the editable space. */
   hpEnabledCount(): number {
-    return this.hpParamSpace.filter(r => r.enabled).length;
+    return this.hpParamSpace.filter((r) => r.enabled).length;
   }
 
   // ── Walk_Step → #checkpoints granularity (drives the grid-config estimate) ──
@@ -3019,18 +3654,20 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Grid sweep values for one param row at its Walk_Step granularity. */
   private hpGridValues(row: any): number[] {
     const pts = this.hpRequestedPoints(row);
-    const lo = Number(row.min), hi = Number(row.max);
+    const lo = Number(row.min),
+      hi = Number(row.max);
     const seq: number[] = [];
     if (row.log && lo > 0) {
-      const a = Math.log(lo), b = Math.log(hi);
-      for (let i = 0; i < pts; i++) seq.push(Math.exp(a + (b - a) * i / (pts - 1)));
+      const a = Math.log(lo),
+        b = Math.log(hi);
+      for (let i = 0; i < pts; i++) seq.push(Math.exp(a + ((b - a) * i) / (pts - 1)));
     } else {
-      for (let i = 0; i < pts; i++) seq.push(lo + (hi - lo) * i / (pts - 1));
+      for (let i = 0; i < pts; i++) seq.push(lo + ((hi - lo) * i) / (pts - 1));
     }
     if (row.type === 'int') {
-      return Array.from(new Set(seq.map(v => Math.round(v)))).sort((p, q) => p - q);
+      return Array.from(new Set(seq.map((v) => Math.round(v)))).sort((p, q) => p - q);
     }
-    return seq.map(v => +v.toFixed(6));
+    return seq.map((v) => +v.toFixed(6));
   }
 
   /**
@@ -3073,7 +3710,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   hpMethodLabel(m: string): string {
-    const map: any = { grid: 'Grid (exhaustive)', random: 'Random', bayesian: 'Bayesian (TPE)', auto: 'Auto' };
+    const map: any = {
+      grid: 'Grid (exhaustive)',
+      random: 'Random',
+      bayesian: 'Bayesian (TPE)',
+      auto: 'Auto',
+    };
     return map[m] || m;
   }
 
@@ -3089,7 +3731,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Start hyperparameter tuning with the current editable config. */
   startHyperparam(): void {
     if (!this.currentFileId) return;
-    const enabled = this.hpParamSpace.filter(r => r.enabled);
+    const enabled = this.hpParamSpace.filter((r) => r.enabled);
     if (enabled.length === 0) {
       alert('Enable at least one hyperparameter to tune.');
       return;
@@ -3112,34 +3754,36 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const features = this.getFinalSelectedFeatures();
     this.sharedService.setActiveProcess({ type: 'hyperparam', file_id: this.currentFileId });
-    this.dataService.startHyperparam(this.currentFileId, {
-      paramSpace: this.buildHpParamSpacePayload(),
-      features: features.length ? features : undefined,
-      nIter: this.hpNIter,
-      cvFolds: this.hpCvFolds,
-      nJobs: this.hpNJobs,
-      primaryMetric: this.hpPrimaryMetric,
-      validationCurvePoints: this.hpValidationCurvePoints,
-      searchMethod: this.hpSearchMethod,
-      gridPointsPerParam: Math.max(2, Math.round(Number(this.hpDefaultPieces)) + 1),
-      gridPointsPerParamMap: this.buildHpPointsMapPayload(),
-      algorithm: this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined,
-    }).subscribe({
-      next: (resp: any) => {
-        console.log('[Hyperparam] Started:', resp);
-        this.hpMessage = resp.message || 'Tuning running...';
-        this.hpSpaceWarnings = resp.space_warnings || [];
-        this.startHyperparamStatusPolling();
-        this.pushModelingCheckpoint('hyperparam_running');
-      },
-      error: (err: any) => {
-        console.error('[Hyperparam] Failed to start:', err);
-        this.hpRunning = false;
-        const msg = err?.error?.error || err?.message || err;
-        this.hpMessage = 'Failed to start tuning: ' + msg;
-        this.sharedService.setActiveProcess(null);
-      }
-    });
+    this.dataService
+      .startHyperparam(this.currentFileId, {
+        paramSpace: this.buildHpParamSpacePayload(),
+        features: features.length ? features : undefined,
+        nIter: this.hpNIter,
+        cvFolds: this.hpCvFolds,
+        nJobs: this.hpNJobs,
+        primaryMetric: this.hpPrimaryMetric,
+        validationCurvePoints: this.hpValidationCurvePoints,
+        searchMethod: this.hpSearchMethod,
+        gridPointsPerParam: Math.max(2, Math.round(Number(this.hpDefaultPieces)) + 1),
+        gridPointsPerParamMap: this.buildHpPointsMapPayload(),
+        algorithm: this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined,
+      })
+      .subscribe({
+        next: (resp: any) => {
+          console.log('[Hyperparam] Started:', resp);
+          this.hpMessage = resp.message || 'Tuning running...';
+          this.hpSpaceWarnings = resp.space_warnings || [];
+          this.startHyperparamStatusPolling();
+          this.pushModelingCheckpoint('hyperparam_running');
+        },
+        error: (err: any) => {
+          console.error('[Hyperparam] Failed to start:', err);
+          this.hpRunning = false;
+          const msg = err?.error?.error || err?.message || err;
+          this.hpMessage = 'Failed to start tuning: ' + msg;
+          this.sharedService.setActiveProcess(null);
+        },
+      });
   }
 
   /** Request a graceful stop (current trial finishes, then partial results saved). */
@@ -3152,7 +3796,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       error: (err: any) => {
         console.error('[Hyperparam] Stop request failed:', err);
         this.hpStopping = false;
-      }
+      },
     });
   }
 
@@ -3188,7 +3832,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const status = st.status;
           if (status === 'completed') {
             this.stopHyperparamStatusPolling();
-            this.hpRunning = false; this.hpStopping = false; this.hpStopped = false;
+            this.hpRunning = false;
+            this.hpStopping = false;
+            this.hpStopped = false;
             this.hpProgress = 1.0;
             this.hpDurationSeconds = st.duration_seconds || null;
             this.hpMessage = 'Hyperparameter tuning completed!';
@@ -3196,17 +3842,21 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.fetchHyperparamResults(), 400);
           } else if (status === 'stopped' || status === 'interrupted') {
             this.stopHyperparamStatusPolling();
-            this.hpRunning = false; this.hpStopping = false; this.hpStopped = true;
+            this.hpRunning = false;
+            this.hpStopping = false;
+            this.hpStopped = true;
             this.hpDurationSeconds = st.duration_seconds || null;
-            this.hpMessage = status === 'interrupted'
-              ? 'Tuning was interrupted (server restart).'
-              : 'Tuning stopped — partial results may be available';
+            this.hpMessage =
+              status === 'interrupted'
+                ? 'Tuning was interrupted (server restart).'
+                : 'Tuning stopped — partial results may be available';
             this.sharedService.setActiveProcess(null);
             setTimeout(() => this.fetchHyperparamResults(), 400);
             this.pushModelingCheckpoint('hyperparam_stopped');
           } else if (status === 'error') {
             this.stopHyperparamStatusPolling();
-            this.hpRunning = false; this.hpStopping = false;
+            this.hpRunning = false;
+            this.hpStopping = false;
             this.hpDurationSeconds = st.duration_seconds || null;
             this.hpMessage = 'Tuning failed: ' + (st.error || 'Unknown error');
             this.sharedService.setActiveProcess(null);
@@ -3217,7 +3867,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.stopHyperparamStatusPolling();
           this.hpRunning = false;
           this.hpMessage = 'Failed to get tuning status';
-        }
+        },
       });
     });
   }
@@ -3241,11 +3891,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.hpEmphasized = data.emphasized || {};
         this.hpParamImportance = data.param_importance || {};
         this.hpGuidance = data.guidance || [];
-        if (typeof data.duration_seconds === 'number') this.hpDurationSeconds = data.duration_seconds;
+        if (typeof data.duration_seconds === 'number')
+          this.hpDurationSeconds = data.duration_seconds;
         setTimeout(() => this.drawHyperparamCurves(), 100);
-        try { this.pushModelingCheckpoint('hyperparam_completed'); } catch {}
+        try {
+          this.pushModelingCheckpoint('hyperparam_completed');
+        } catch {}
       },
-      error: (err: any) => console.warn('[Hyperparam] Failed to fetch results:', err)
+      error: (err: any) => console.warn('[Hyperparam] Failed to fetch results:', err),
     });
   }
 
@@ -3262,9 +3915,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Human label for a metric key. */
   hpMetricLabel(m: string): string {
     const map: any = {
-      roc_auc: 'ROC-AUC', pr_auc: 'PR-AUC', f1: 'F1', f2: 'F2',
-      precision: 'Precision', recall: 'Recall', accuracy: 'Accuracy', mcc: 'MCC',
-      r2: 'R²', rmse: 'RMSE', mae: 'MAE',
+      roc_auc: 'ROC-AUC',
+      pr_auc: 'PR-AUC',
+      f1: 'F1',
+      f2: 'F2',
+      precision: 'Precision',
+      recall: 'Recall',
+      accuracy: 'Accuracy',
+      mcc: 'MCC',
+      r2: 'R²',
+      rmse: 'RMSE',
+      mae: 'MAE',
     };
     return map[m] || m;
   }
@@ -3281,7 +3942,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   hpParamsSummary(params: any): string {
     if (!params) return '';
     return Object.keys(params)
-      .map(k => `${k}=${this.hpNum(params[k], 3)}`)
+      .map((k) => `${k}=${this.hpNum(params[k], 3)}`)
       .join(', ');
   }
 
@@ -3306,7 +3967,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         search_method: this.hpSearchMethod,
         resolved_method: this.hpResolvedMethod(),
         recommended_method: this.hpRecommendedMethod(),
-        enabled_params: this.hpParamSpace.filter(r => r.enabled).map(r => r.name),
+        enabled_params: this.hpParamSpace.filter((r) => r.enabled).map((r) => r.name),
         param_space: this.hpParamSpace,
         n_iter: this.hpNIter,
         cv_folds: this.hpCvFolds,
@@ -3323,7 +3984,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Importance share (0..1) of a param for a given target, for badge tooltips. */
-  hpImportance(target: 'cv_gain' | 'overfitting' | 'shrinkage', param: string | null): number | null {
+  hpImportance(
+    target: 'cv_gain' | 'overfitting' | 'shrinkage',
+    param: string | null,
+  ): number | null {
     if (!param) return null;
     const v = this.hpParamImportance?.[target]?.[param];
     return typeof v === 'number' ? v : null;
@@ -3332,43 +3996,73 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Apply a backend guidance suggestion (zoom in/out) to the editable space. */
   applyHpGuidance(g: any): void {
     if (!g || !g.param || !Array.isArray(g.suggested_range)) return;
-    const row = this.hpParamSpace.find(r => r.name === g.param);
+    const row = this.hpParamSpace.find((r) => r.name === g.param);
     if (!row) return;
     let [lo, hi] = g.suggested_range;
-    if (row.type === 'int') { lo = Math.round(lo); hi = Math.round(hi); }
+    if (row.type === 'int') {
+      lo = Math.round(lo);
+      hi = Math.round(hi);
+    }
     // Keep within non-negative for params that must be >= 0.
-    if (['n_estimators', 'min_child_weight', 'gamma', 'reg_alpha', 'reg_lambda', 'subsample', 'colsample_bytree', 'learning_rate'].includes(row.name)) {
+    if (
+      [
+        'n_estimators',
+        'min_child_weight',
+        'gamma',
+        'reg_alpha',
+        'reg_lambda',
+        'subsample',
+        'colsample_bytree',
+        'learning_rate',
+      ].includes(row.name)
+    ) {
       lo = Math.max(0, lo);
     }
-    row.min = lo; row.max = hi; row.enabled = true;
+    row.min = lo;
+    row.max = hi;
+    row.enabled = true;
     this.hpSelectedRanges[g.param] = [lo, hi];
   }
 
   /** Record a brush-selected sub-region and push it into the editable space. */
   private onHpRangeSelected(param: string, lo: number, hi: number): void {
-    const row = this.hpParamSpace.find(r => r.name === param);
+    const row = this.hpParamSpace.find((r) => r.name === param);
     if (!row) return;
-    let a = lo, b = hi;
-    if (row.type === 'int') { a = Math.round(a); b = Math.round(b); }
-    else { a = +a.toFixed(6); b = +b.toFixed(6); }
+    let a = lo,
+      b = hi;
+    if (row.type === 'int') {
+      a = Math.round(a);
+      b = Math.round(b);
+    } else {
+      a = +a.toFixed(6);
+      b = +b.toFixed(6);
+    }
     if (a === b) return;
-    row.min = a; row.max = b; row.enabled = true;
+    row.min = a;
+    row.max = b;
+    row.enabled = true;
     this.hpSelectedRanges[param] = [a, b];
-    try { this.cdr.detectChanges(); } catch {}
+    try {
+      this.cdr.detectChanges();
+    } catch {}
   }
 
   /** Clear a brushed sub-region selection for a param. */
   clearHpRange(param: string): void {
     if (this.hpSelectedRanges[param]) {
       delete this.hpSelectedRanges[param];
-      try { this.cdr.detectChanges(); } catch {}
+      try {
+        this.cdr.detectChanges();
+      } catch {}
     }
   }
 
   /** Draw all per-hyperparameter validation curves with Plotly. */
   private async drawHyperparamCurves(): Promise<void> {
     if (!this.isBrowser) return;
-    if (this.plotlyReady) { await this.plotlyReady; }
+    if (this.plotlyReady) {
+      await this.plotlyReady;
+    }
     const Plotly = (window as any).Plotly;
     if (!Plotly) return;
     for (const curve of this.hpValidationCurves) {
@@ -3380,51 +4074,119 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    *  horizontal box-select so the user can brush a sub-region for the next run. */
   private drawOneHpCurve(curve: any, attempt: number = 0): void {
     const Plotly = (window as any).Plotly;
-    if (!Plotly) { if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250); return; }
+    if (!Plotly) {
+      if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250);
+      return;
+    }
     const elId = 'hp-curve-' + curve.param;
     const el = document.getElementById(elId);
-    if (!el) { if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250); return; }
+    if (!el) {
+      if (attempt < 12) setTimeout(() => this.drawOneHpCurve(curve, attempt + 1), 250);
+      return;
+    }
 
     const x = curve.values || [];
     const cvMean = curve.cv_mean || [];
     const cvStd = curve.cv_std || [];
     const trMean = curve.train_mean || [];
     const trStd = curve.train_std || [];
-    const upper = (m: any[], s: any[]) => m.map((v: any, i: number) => (v == null ? null : v + (s[i] || 0)));
-    const lower = (m: any[], s: any[]) => m.map((v: any, i: number) => (v == null ? null : v - (s[i] || 0)));
+    const upper = (m: any[], s: any[]) =>
+      m.map((v: any, i: number) => (v == null ? null : v + (s[i] || 0)));
+    const lower = (m: any[], s: any[]) =>
+      m.map((v: any, i: number) => (v == null ? null : v - (s[i] || 0)));
 
     const traces: any[] = [
       // Training band (mean +/- std)
-      { x, y: upper(trMean, trStd), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
-      { x, y: lower(trMean, trStd), type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(31,119,180,0.15)', hoverinfo: 'skip', showlegend: false },
+      {
+        x,
+        y: upper(trMean, trStd),
+        type: 'scatter',
+        mode: 'lines',
+        line: { width: 0 },
+        hoverinfo: 'skip',
+        showlegend: false,
+      },
+      {
+        x,
+        y: lower(trMean, trStd),
+        type: 'scatter',
+        mode: 'lines',
+        line: { width: 0 },
+        fill: 'tonexty',
+        fillcolor: 'rgba(31,119,180,0.15)',
+        hoverinfo: 'skip',
+        showlegend: false,
+      },
       // CV band (mean +/- std)
-      { x, y: upper(cvMean, cvStd), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
-      { x, y: lower(cvMean, cvStd), type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(44,160,44,0.15)', hoverinfo: 'skip', showlegend: false },
+      {
+        x,
+        y: upper(cvMean, cvStd),
+        type: 'scatter',
+        mode: 'lines',
+        line: { width: 0 },
+        hoverinfo: 'skip',
+        showlegend: false,
+      },
+      {
+        x,
+        y: lower(cvMean, cvStd),
+        type: 'scatter',
+        mode: 'lines',
+        line: { width: 0 },
+        fill: 'tonexty',
+        fillcolor: 'rgba(44,160,44,0.15)',
+        hoverinfo: 'skip',
+        showlegend: false,
+      },
       // Mean lines
-      { x, y: trMean, type: 'scatter', mode: 'lines+markers', name: 'Training Score', line: { color: '#1f77b4', width: 2 }, marker: { size: 6 } },
-      { x, y: cvMean, type: 'scatter', mode: 'lines+markers', name: 'Cross Validation Score', line: { color: '#2ca02c', width: 2 }, marker: { size: 6 } },
+      {
+        x,
+        y: trMean,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Training Score',
+        line: { color: '#1f77b4', width: 2 },
+        marker: { size: 6 },
+      },
+      {
+        x,
+        y: cvMean,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Cross Validation Score',
+        line: { color: '#2ca02c', width: 2 },
+        marker: { size: 6 },
+      },
     ];
 
     const layout: any = {
       title: { text: `Validation Curve — ${curve.param}`, font: { size: 13 } },
       xaxis: { title: { text: curve.param, font: { size: 11 } }, zeroline: false },
-      yaxis: { title: { text: (curve.metric || this.hpPrimaryMetric).toUpperCase(), font: { size: 11 } }, zeroline: false },
-      dragmode: 'select', selectdirection: 'h',
-      margin: { l: 52, r: 16, t: 36, b: 44 }, height: 300,
+      yaxis: {
+        title: { text: (curve.metric || this.hpPrimaryMetric).toUpperCase(), font: { size: 11 } },
+        zeroline: false,
+      },
+      dragmode: 'select',
+      selectdirection: 'h',
+      margin: { l: 52, r: 16, t: 36, b: 44 },
+      height: 300,
       legend: { orientation: 'h', x: 0, y: -0.28, font: { size: 10 } },
       plot_bgcolor: '#fff',
     };
     const config: any = { responsive: true, displayModeBar: true, displaylogo: false };
 
-    Plotly.newPlot(el, traces, layout, config).then(() => {
-      (el as any).on('plotly_selected', (ev: any) => {
-        if (ev && ev.range && Array.isArray(ev.range.x) && ev.range.x.length === 2) {
-          const a = ev.range.x[0], b = ev.range.x[1];
-          this.onHpRangeSelected(curve.param, Math.min(a, b), Math.max(a, b));
-        }
-      });
-      (el as any).on('plotly_deselect', () => this.clearHpRange(curve.param));
-    }).catch((e: any) => console.warn('[Hyperparam] curve draw failed:', e));
+    Plotly.newPlot(el, traces, layout, config)
+      .then(() => {
+        (el as any).on('plotly_selected', (ev: any) => {
+          if (ev && ev.range && Array.isArray(ev.range.x) && ev.range.x.length === 2) {
+            const a = ev.range.x[0],
+              b = ev.range.x[1];
+            this.onHpRangeSelected(curve.param, Math.min(a, b), Math.max(a, b));
+          }
+        });
+        (el as any).on('plotly_deselect', () => this.clearHpRange(curve.param));
+      })
+      .catch((e: any) => console.warn('[Hyperparam] curve draw failed:', e));
   }
 
   /**
@@ -3457,15 +4219,22 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   setBackwardCutStep(step: any): void {
     this.sfsBackwardCutStep = step.step;
     this.sfsBackwardCutFeatures = step.selected_features ? [...step.selected_features] : [];
-    console.log(`[SFS] Cut step set to ${step.step}, remaining features (${this.sfsBackwardCutFeatures.length}):`, this.sfsBackwardCutFeatures);
+    console.log(
+      `[SFS] Cut step set to ${step.step}, remaining features (${this.sfsBackwardCutFeatures.length}):`,
+      this.sfsBackwardCutFeatures,
+    );
   }
 
   /**
    * Open modal to show detailed impact of adding/dropping a feature
    */
-  openSfsDetailModal(step: any, sfsDirection?: 'forward' | 'backward' | 'forward_from_backward'): void {
+  openSfsDetailModal(
+    step: any,
+    sfsDirection?: 'forward' | 'backward' | 'forward_from_backward',
+  ): void {
     this.selectedSfsStep = step;
-    this.selectedSfsDirection = sfsDirection || (step.direction === 'backward' ? 'backward' : 'forward');
+    this.selectedSfsDirection =
+      sfsDirection || (step.direction === 'backward' ? 'backward' : 'forward');
     this.previousSfsStep = this.findPreviousStep(step, this.selectedSfsDirection);
     this.showSfsModal = true;
     setTimeout(() => this.drawSfsFeatureProgressionCharts(), 50);
@@ -3520,10 +4289,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Get human-readable title for a plot ID */
   getPlotTitle(plotId: string | null): string {
     const titles: Record<string, string> = {
-      'shap': 'SHAP Impact per Feature Across Steps',
-      'gain': 'Gain Importance per Feature Across Steps',
-      'stability': 'Stability Metric (PSI/CSI) per Step',
-      'performance': 'Model Performance Across Steps'
+      shap: 'SHAP Impact per Feature Across Steps',
+      gain: 'Gain Importance per Feature Across Steps',
+      stability: 'Stability Metric (PSI/CSI) per Step',
+      performance: 'Model Performance Across Steps',
     };
     return titles[plotId || ''] || '';
   }
@@ -3543,25 +4312,53 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const currentStep = this.selectedSfsStep?.step;
 
     const colors = [
-      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-      '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+      '#1f77b4',
+      '#ff7f0e',
+      '#2ca02c',
+      '#d62728',
+      '#9467bd',
+      '#8c564b',
+      '#e377c2',
+      '#7f7f7f',
+      '#bcbd22',
+      '#17becf',
+      '#aec7e8',
+      '#ffbb78',
+      '#98df8a',
+      '#ff9896',
+      '#c5b0d5',
     ];
 
     const currentStepLine = (yMin: number, yMax: number): any => ({
-      type: 'line', x0: currentStep, x1: currentStep, y0: yMin, y1: yMax,
-      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' }
+      type: 'line',
+      x0: currentStep,
+      x1: currentStep,
+      y0: yMin,
+      y1: yMax,
+      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' },
     });
     const currentStepAnnotation = (yPos: number): any => ({
-      x: currentStep, y: yPos, xanchor: 'left', yanchor: 'bottom',
-      text: ` Step ${currentStep}`, showarrow: false,
-      font: { size: 12, color: 'crimson' }, bgcolor: 'rgba(255,255,255,0.8)'
+      x: currentStep,
+      y: yPos,
+      xanchor: 'left',
+      yanchor: 'bottom',
+      text: ` Step ${currentStep}`,
+      showarrow: false,
+      font: { size: 12, color: 'crimson' },
+      bgcolor: 'rgba(255,255,255,0.8)',
     });
     const baseLayout = {
       margin: { l: 70, r: 30, t: 50, b: 60 },
       hovermode: 'x unified' as const,
-      legend: { orientation: 'h' as const, x: 0, y: -0.15, xanchor: 'left' as const, yanchor: 'top' as const, font: { size: 11 } },
-      xaxis: { title: { text: 'SFS Step', font: { size: 14 } }, dtick: 1 }
+      legend: {
+        orientation: 'h' as const,
+        x: 0,
+        y: -0.15,
+        xanchor: 'left' as const,
+        yanchor: 'top' as const,
+        font: { size: 11 },
+      },
+      xaxis: { title: { text: 'SFS Step', font: { size: 14 } }, dtick: 1 },
     };
     const config = { responsive: true, displayModeBar: true } as any;
 
@@ -3572,72 +4369,191 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       data.featureNames.forEach((feat: string, i: number) => {
         const isHighlighted = feat === currentFeature;
         traces.push({
-          type: 'scatter', mode: 'lines+markers', connectgaps: false,
-          x: data.steps, y: data.shap[feat], name: feat,
+          type: 'scatter',
+          mode: 'lines+markers',
+          connectgaps: false,
+          x: data.steps,
+          y: data.shap[feat],
+          name: feat,
           line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
           marker: { size: isHighlighted ? 8 : 4 },
           opacity: isHighlighted ? 1.0 : 0.5,
-          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`
+          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`,
         });
       });
-      const allVals = Object.values(data.shap).flat().filter((v: any) => v != null) as number[];
+      const allVals = Object.values(data.shap)
+        .flat()
+        .filter((v: any) => v != null) as number[];
       const yMin = Math.min(0, ...allVals);
       const yMax = Math.max(...allVals) * 1.1 || 1;
-      layout = { ...baseLayout, title: { text: 'SHAP Impact per Feature Across Steps', font: { size: 16 } },
+      layout = {
+        ...baseLayout,
+        title: { text: 'SHAP Impact per Feature Across Steps', font: { size: 16 } },
         yaxis: { title: { text: 'Mean |SHAP|', font: { size: 14 } } },
-        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)],
+      };
     } else if (plotId === 'gain') {
       data.featureNames.forEach((feat: string, i: number) => {
         const isHighlighted = feat === currentFeature;
         traces.push({
-          type: 'scatter', mode: 'lines+markers', connectgaps: false,
-          x: data.steps, y: data.gain[feat], name: feat,
+          type: 'scatter',
+          mode: 'lines+markers',
+          connectgaps: false,
+          x: data.steps,
+          y: data.gain[feat],
+          name: feat,
           line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
           marker: { size: isHighlighted ? 8 : 4 },
           opacity: isHighlighted ? 1.0 : 0.5,
-          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`
+          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`,
         });
       });
-      const allVals = Object.values(data.gain).flat().filter((v: any) => v != null) as number[];
+      const allVals = Object.values(data.gain)
+        .flat()
+        .filter((v: any) => v != null) as number[];
       const yMin = Math.min(0, ...allVals);
       const yMax = Math.max(...allVals) * 1.1 || 1;
-      layout = { ...baseLayout, title: { text: 'Gain Importance per Feature Across Steps', font: { size: 16 } },
+      layout = {
+        ...baseLayout,
+        title: { text: 'Gain Importance per Feature Across Steps', font: { size: 16 } },
         yaxis: { title: { text: 'XGBoost Gain', font: { size: 14 } } },
-        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)],
+      };
     } else if (plotId === 'stability') {
       const stabVals = data.stability.values;
-      const stabTexts = data.stability.types.map((t: string, i: number) =>
-        `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`
+      const stabTexts = data.stability.types.map(
+        (t: string, i: number) =>
+          `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`,
       );
-      traces = [{ type: 'scatter', mode: 'lines+markers', x: data.steps, y: stabVals,
-        name: 'PSI / CSI', line: { color: '#e377c2', width: 2 }, marker: { size: 6 },
-        text: stabTexts, hovertemplate: '%{text}<extra></extra>' }];
+      traces = [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: stabVals,
+          name: 'PSI / CSI',
+          line: { color: '#e377c2', width: 2 },
+          marker: { size: 6 },
+          text: stabTexts,
+          hovertemplate: '%{text}<extra></extra>',
+        },
+      ];
       const cleanVals = stabVals.filter((v: any) => v != null) as number[];
       const yMax = cleanVals.length > 0 ? Math.max(...cleanVals) * 1.3 || 0.1 : 0.1;
-      layout = { ...baseLayout, title: { text: 'Stability Metric (PSI/CSI) per Step', font: { size: 16 } },
+      layout = {
+        ...baseLayout,
+        title: { text: 'Stability Metric (PSI/CSI) per Step', font: { size: 16 } },
         yaxis: { title: { text: 'PSI / CSI', font: { size: 14 } }, rangemode: 'tozero' as const },
-        shapes: [currentStepLine(0, yMax),
-          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.1, y1: 0.1, line: { color: '#ff9800', width: 1, dash: 'dash' } },
-          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.25, y1: 0.25, line: { color: '#f44336', width: 1, dash: 'dash' } }],
-        annotations: [currentStepAnnotation(yMax),
-          { x: data.steps[data.steps.length - 1], y: 0.1, xanchor: 'right', yanchor: 'bottom', text: 'Caution (0.1)', showarrow: false, font: { size: 10, color: '#ff9800' } },
-          { x: data.steps[data.steps.length - 1], y: 0.25, xanchor: 'right', yanchor: 'bottom', text: 'Unstable (0.25)', showarrow: false, font: { size: 10, color: '#f44336' } }] };
+        shapes: [
+          currentStepLine(0, yMax),
+          {
+            type: 'line',
+            x0: data.steps[0],
+            x1: data.steps[data.steps.length - 1],
+            y0: 0.1,
+            y1: 0.1,
+            line: { color: '#ff9800', width: 1, dash: 'dash' },
+          },
+          {
+            type: 'line',
+            x0: data.steps[0],
+            x1: data.steps[data.steps.length - 1],
+            y0: 0.25,
+            y1: 0.25,
+            line: { color: '#f44336', width: 1, dash: 'dash' },
+          },
+        ],
+        annotations: [
+          currentStepAnnotation(yMax),
+          {
+            x: data.steps[data.steps.length - 1],
+            y: 0.1,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Caution (0.1)',
+            showarrow: false,
+            font: { size: 10, color: '#ff9800' },
+          },
+          {
+            x: data.steps[data.steps.length - 1],
+            y: 0.25,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Unstable (0.25)',
+            showarrow: false,
+            font: { size: 10, color: '#f44336' },
+          },
+        ],
+      };
     } else if (plotId === 'performance') {
       traces = [
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvRocAuc, name: 'CV ROC-AUC', line: { color: '#1f77b4', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvPrAuc, name: 'CV PR-AUC', line: { color: '#ff7f0e', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.trainRocAuc, name: 'Train ROC-AUC', line: { color: '#1f77b4', width: 1, dash: 'dash' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.testRocAuc, name: 'Test ROC-AUC', line: { color: '#2ca02c', width: 1, dash: 'dot' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>' }
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.cvRocAuc,
+          name: 'CV ROC-AUC',
+          line: { color: '#1f77b4', width: 2.5 },
+          marker: { size: 6 },
+          hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.cvPrAuc,
+          name: 'CV PR-AUC',
+          line: { color: '#ff7f0e', width: 2.5 },
+          marker: { size: 6 },
+          hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.trainRocAuc,
+          name: 'Train ROC-AUC',
+          line: { color: '#1f77b4', width: 1, dash: 'dash' },
+          marker: { size: 4 },
+          opacity: 0.5,
+          hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.testRocAuc,
+          name: 'Test ROC-AUC',
+          line: { color: '#2ca02c', width: 1, dash: 'dot' },
+          marker: { size: 4 },
+          opacity: 0.5,
+          hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>',
+        },
       ];
-      const allPerf = [...data.modelMetrics.cvRocAuc, ...data.modelMetrics.cvPrAuc, ...data.modelMetrics.trainRocAuc, ...data.modelMetrics.testRocAuc].filter((v: number) => Number.isFinite(v));
+      const allPerf = [
+        ...data.modelMetrics.cvRocAuc,
+        ...data.modelMetrics.cvPrAuc,
+        ...data.modelMetrics.trainRocAuc,
+        ...data.modelMetrics.testRocAuc,
+      ].filter((v: number) => Number.isFinite(v));
       const yMin = Math.min(...allPerf) * 0.95 || 0;
       const yMax = Math.max(...allPerf) * 1.02 || 1;
-      layout = { ...baseLayout, title: { text: 'Model Performance Across Steps', font: { size: 16 } },
+      layout = {
+        ...baseLayout,
+        title: { text: 'Model Performance Across Steps', font: { size: 16 } },
         yaxis: { title: { text: 'Metric Value', font: { size: 14 } }, range: [yMin, yMax] },
-        shapes: [currentStepLine(yMin, yMax)], annotations: [currentStepAnnotation(yMax)] };
+        shapes: [currentStepLine(yMin, yMax)],
+        annotations: [currentStepAnnotation(yMax)],
+      };
     }
 
-    try { Plotly.newPlot(targetEl, traces, layout, config); } catch (e) { console.error('[Modeling] Fullscreen plot error:', e); }
+    try {
+      Plotly.newPlot(targetEl, traces, layout, config);
+    } catch (e) {
+      console.error('[Modeling] Fullscreen plot error:', e);
+    }
   }
 
   /**
@@ -3651,15 +4567,26 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /**
    * Get SHAP changes as array for modal display
    */
-  getShapChangesArray(shapChanges: any): Array<{feature: string, change: number}> {
+  getShapChangesArray(shapChanges: any): Array<{ feature: string; change: number }> {
     if (!shapChanges) return [];
-    return Object.keys(shapChanges).map(key => ({
-      feature: key,
-      change: shapChanges[key]
-    })).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    return Object.keys(shapChanges)
+      .map((key) => ({
+        feature: key,
+        change: shapChanges[key],
+      }))
+      .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
   }
 
-  getFeatureImpactRows(step: any, prevStep: any = null): Array<{ feature: string; gain: number; shap: number; prevGain: number | null; prevShap: number | null }> {
+  getFeatureImpactRows(
+    step: any,
+    prevStep: any = null,
+  ): Array<{
+    feature: string;
+    gain: number;
+    shap: number;
+    prevGain: number | null;
+    prevShap: number | null;
+  }> {
     if (!step) return [];
     const selectedFeatures: string[] = step.selected_features || [];
     if (!Array.isArray(selectedFeatures) || selectedFeatures.length === 0) return [];
@@ -3724,7 +4651,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         gain: Number.isFinite(gainVal) ? gainVal : 0,
         shap: Number.isFinite(shapVal) ? shapVal : 0,
         prevGain: prevGainVal !== null && Number.isFinite(prevGainVal) ? prevGainVal : null,
-        prevShap: prevShapVal !== null && Number.isFinite(prevShapVal) ? prevShapVal : null
+        prevShap: prevShapVal !== null && Number.isFinite(prevShapVal) ? prevShapVal : null,
       };
     });
 
@@ -3734,7 +4661,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /**
    * Normalize gain keys (f0, f1... or actual names) to real feature names
    */
-  private normalizeGainMap(gainRaw: Record<string, number>, selectedFeatures: string[]): Record<string, number> {
+  private normalizeGainMap(
+    gainRaw: Record<string, number>,
+    selectedFeatures: string[],
+  ): Record<string, number> {
     const result: Record<string, number> = {};
     for (const k of Object.keys(gainRaw)) {
       const v = Number(gainRaw[k] ?? 0);
@@ -3787,7 +4717,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     // Per-feature SHAP and Gain across steps
     const shapByFeature: Record<string, (number | null)[]> = {};
     const gainByFeature: Record<string, (number | null)[]> = {};
-    allFeatureNames.forEach(f => {
+    allFeatureNames.forEach((f) => {
       shapByFeature[f] = [];
       gainByFeature[f] = [];
     });
@@ -3807,7 +4737,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const gainRaw = step.feature_importance || {};
       const normalizedGain = this.normalizeGainMap(gainRaw, feats);
 
-      allFeatureNames.forEach(f => {
+      allFeatureNames.forEach((f) => {
         if (feats.includes(f)) {
           shapByFeature[f].push(Number(shapRaw[f] ?? 0));
           gainByFeature[f].push(Number(normalizedGain[f] ?? 0));
@@ -3833,7 +4763,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       shap: shapByFeature,
       gain: gainByFeature,
       stability: { steps: stabilitySteps, values: stabilityValues, types: stabilityTypes },
-      modelMetrics: { cvRocAuc, cvPrAuc, trainRocAuc, testRocAuc }
+      modelMetrics: { cvRocAuc, cvPrAuc, trainRocAuc, testRocAuc },
     };
   }
 
@@ -3852,29 +4782,57 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Color palette for features
     const colors = [
-      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-      '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+      '#1f77b4',
+      '#ff7f0e',
+      '#2ca02c',
+      '#d62728',
+      '#9467bd',
+      '#8c564b',
+      '#e377c2',
+      '#7f7f7f',
+      '#bcbd22',
+      '#17becf',
+      '#aec7e8',
+      '#ffbb78',
+      '#98df8a',
+      '#ff9896',
+      '#c5b0d5',
     ];
 
     // Helper: vertical line shape at current step
     const currentStepLine = (yMin: number, yMax: number): any => ({
-      type: 'line', x0: currentStep, x1: currentStep, y0: yMin, y1: yMax,
-      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' }
+      type: 'line',
+      x0: currentStep,
+      x1: currentStep,
+      y0: yMin,
+      y1: yMax,
+      line: { color: 'rgba(220,20,60,0.4)', width: 2, dash: 'dot' },
     });
 
     // Helper: annotation for current step
     const currentStepAnnotation = (yPos: number): any => ({
-      x: currentStep, y: yPos, xanchor: 'left', yanchor: 'bottom',
-      text: ` Step ${currentStep}`, showarrow: false,
-      font: { size: 10, color: 'crimson' }, bgcolor: 'rgba(255,255,255,0.8)'
+      x: currentStep,
+      y: yPos,
+      xanchor: 'left',
+      yanchor: 'bottom',
+      text: ` Step ${currentStep}`,
+      showarrow: false,
+      font: { size: 10, color: 'crimson' },
+      bgcolor: 'rgba(255,255,255,0.8)',
     });
 
     const baseLayout = {
       margin: { l: 60, r: 20, t: 36, b: 50 },
       hovermode: 'x unified' as const,
-      legend: { orientation: 'h' as const, x: 0, y: -0.25, xanchor: 'left' as const, yanchor: 'top' as const, font: { size: 10 } },
-      xaxis: { title: { text: 'SFS Step', font: { size: 12 } }, dtick: 1 }
+      legend: {
+        orientation: 'h' as const,
+        x: 0,
+        y: -0.25,
+        xanchor: 'left' as const,
+        yanchor: 'top' as const,
+        font: { size: 10 },
+      },
+      xaxis: { title: { text: 'SFS Step', font: { size: 12 } }, dtick: 1 },
     };
     const config = { responsive: true, displayModeBar: false } as any;
 
@@ -3885,16 +4843,25 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       data.featureNames.forEach((feat: string, i: number) => {
         const isHighlighted = feat === currentFeature;
         traces.push({
-          type: 'scatter', mode: 'lines+markers', connectgaps: false,
-          x: data.steps, y: data.shap[feat],
+          type: 'scatter',
+          mode: 'lines+markers',
+          connectgaps: false,
+          x: data.steps,
+          y: data.shap[feat],
           name: feat,
-          line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5, dash: isHighlighted ? 'solid' : 'solid' },
+          line: {
+            color: colors[i % colors.length],
+            width: isHighlighted ? 3 : 1.5,
+            dash: isHighlighted ? 'solid' : 'solid',
+          },
           marker: { size: isHighlighted ? 8 : 4 },
           opacity: isHighlighted ? 1.0 : 0.5,
-          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`
+          hovertemplate: `${feat}: %{y:.6f}<extra></extra>`,
         });
       });
-      const allShapVals = Object.values(data.shap).flat().filter((v: any) => v != null) as number[];
+      const allShapVals = Object.values(data.shap)
+        .flat()
+        .filter((v: any) => v != null) as number[];
       const yMin = Math.min(0, ...allShapVals);
       const yMax = Math.max(...allShapVals) * 1.1 || 1;
       const layout = {
@@ -3902,9 +4869,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         title: { text: 'SHAP Impact per Feature Across Steps', font: { size: 13 } },
         yaxis: { title: { text: 'Mean |SHAP|', font: { size: 12 } } },
         shapes: [currentStepLine(yMin, yMax)],
-        annotations: [currentStepAnnotation(yMax)]
+        annotations: [currentStepAnnotation(yMax)],
       };
-      try { Plotly.react(shapEl, traces, layout, config); } catch { Plotly.newPlot(shapEl, traces, layout, config); }
+      try {
+        Plotly.react(shapEl, traces, layout, config);
+      } catch {
+        Plotly.newPlot(shapEl, traces, layout, config);
+      }
     }
 
     // --- 2. Gain Importance Progression ---
@@ -3914,16 +4885,21 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       data.featureNames.forEach((feat: string, i: number) => {
         const isHighlighted = feat === currentFeature;
         traces.push({
-          type: 'scatter', mode: 'lines+markers', connectgaps: false,
-          x: data.steps, y: data.gain[feat],
+          type: 'scatter',
+          mode: 'lines+markers',
+          connectgaps: false,
+          x: data.steps,
+          y: data.gain[feat],
           name: feat,
           line: { color: colors[i % colors.length], width: isHighlighted ? 3 : 1.5 },
           marker: { size: isHighlighted ? 8 : 4 },
           opacity: isHighlighted ? 1.0 : 0.5,
-          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`
+          hovertemplate: `${feat}: %{y:.4f}<extra></extra>`,
         });
       });
-      const allGainVals = Object.values(data.gain).flat().filter((v: any) => v != null) as number[];
+      const allGainVals = Object.values(data.gain)
+        .flat()
+        .filter((v: any) => v != null) as number[];
       const yMin = Math.min(0, ...allGainVals);
       const yMax = Math.max(...allGainVals) * 1.1 || 1;
       const layout = {
@@ -3931,27 +4907,36 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         title: { text: 'Gain Importance per Feature Across Steps', font: { size: 13 } },
         yaxis: { title: { text: 'XGBoost Gain', font: { size: 12 } } },
         shapes: [currentStepLine(yMin, yMax)],
-        annotations: [currentStepAnnotation(yMax)]
+        annotations: [currentStepAnnotation(yMax)],
       };
-      try { Plotly.react(gainEl, traces, layout, config); } catch { Plotly.newPlot(gainEl, traces, layout, config); }
+      try {
+        Plotly.react(gainEl, traces, layout, config);
+      } catch {
+        Plotly.newPlot(gainEl, traces, layout, config);
+      }
     }
 
     // --- 3. Stability (PSI/CSI) Progression ---
     const stabEl = document.getElementById('sfs-progression-stability');
     if (stabEl) {
       const stabVals = data.stability.values;
-      const stabTexts = data.stability.types.map((t: string, i: number) =>
-        `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`
+      const stabTexts = data.stability.types.map(
+        (t: string, i: number) =>
+          `${t}=${stabVals[i] != null ? Number(stabVals[i]).toFixed(4) : 'N/A'}`,
       );
-      const traces: any[] = [{
-        type: 'scatter', mode: 'lines+markers',
-        x: data.steps, y: stabVals,
-        name: 'PSI / CSI',
-        line: { color: '#e377c2', width: 2 },
-        marker: { size: 6 },
-        text: stabTexts,
-        hovertemplate: '%{text}<extra></extra>'
-      }];
+      const traces: any[] = [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: stabVals,
+          name: 'PSI / CSI',
+          line: { color: '#e377c2', width: 2 },
+          marker: { size: 6 },
+          text: stabTexts,
+          hovertemplate: '%{text}<extra></extra>',
+        },
+      ];
       const cleanVals = stabVals.filter((v: any) => v != null) as number[];
       const yMax = cleanVals.length > 0 ? Math.max(...cleanVals) * 1.3 || 0.1 : 0.1;
       const layout = {
@@ -3960,28 +4945,105 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         yaxis: { title: { text: 'PSI / CSI', font: { size: 12 } }, rangemode: 'tozero' as const },
         shapes: [
           currentStepLine(0, yMax),
-          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.1, y1: 0.1, line: { color: '#ff9800', width: 1, dash: 'dash' } },
-          { type: 'line', x0: data.steps[0], x1: data.steps[data.steps.length - 1], y0: 0.25, y1: 0.25, line: { color: '#f44336', width: 1, dash: 'dash' } }
+          {
+            type: 'line',
+            x0: data.steps[0],
+            x1: data.steps[data.steps.length - 1],
+            y0: 0.1,
+            y1: 0.1,
+            line: { color: '#ff9800', width: 1, dash: 'dash' },
+          },
+          {
+            type: 'line',
+            x0: data.steps[0],
+            x1: data.steps[data.steps.length - 1],
+            y0: 0.25,
+            y1: 0.25,
+            line: { color: '#f44336', width: 1, dash: 'dash' },
+          },
         ],
         annotations: [
           currentStepAnnotation(yMax),
-          { x: data.steps[data.steps.length - 1], y: 0.1, xanchor: 'right', yanchor: 'bottom', text: 'Caution (0.1)', showarrow: false, font: { size: 9, color: '#ff9800' } },
-          { x: data.steps[data.steps.length - 1], y: 0.25, xanchor: 'right', yanchor: 'bottom', text: 'Unstable (0.25)', showarrow: false, font: { size: 9, color: '#f44336' } }
-        ]
+          {
+            x: data.steps[data.steps.length - 1],
+            y: 0.1,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Caution (0.1)',
+            showarrow: false,
+            font: { size: 9, color: '#ff9800' },
+          },
+          {
+            x: data.steps[data.steps.length - 1],
+            y: 0.25,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Unstable (0.25)',
+            showarrow: false,
+            font: { size: 9, color: '#f44336' },
+          },
+        ],
       };
-      try { Plotly.react(stabEl, traces, layout, config); } catch { Plotly.newPlot(stabEl, traces, layout, config); }
+      try {
+        Plotly.react(stabEl, traces, layout, config);
+      } catch {
+        Plotly.newPlot(stabEl, traces, layout, config);
+      }
     }
 
     // --- 4. Model Performance (CV ROC-AUC / PR-AUC) Progression ---
     const perfEl = document.getElementById('sfs-progression-performance');
     if (perfEl) {
       const traces: any[] = [
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvRocAuc, name: 'CV ROC-AUC', line: { color: '#1f77b4', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.cvPrAuc, name: 'CV PR-AUC', line: { color: '#ff7f0e', width: 2.5 }, marker: { size: 6 }, hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.trainRocAuc, name: 'Train ROC-AUC', line: { color: '#1f77b4', width: 1, dash: 'dash' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', x: data.steps, y: data.modelMetrics.testRocAuc, name: 'Test ROC-AUC', line: { color: '#2ca02c', width: 1, dash: 'dot' }, marker: { size: 4 }, opacity: 0.5, hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>' }
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.cvRocAuc,
+          name: 'CV ROC-AUC',
+          line: { color: '#1f77b4', width: 2.5 },
+          marker: { size: 6 },
+          hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.cvPrAuc,
+          name: 'CV PR-AUC',
+          line: { color: '#ff7f0e', width: 2.5 },
+          marker: { size: 6 },
+          hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.trainRocAuc,
+          name: 'Train ROC-AUC',
+          line: { color: '#1f77b4', width: 1, dash: 'dash' },
+          marker: { size: 4 },
+          opacity: 0.5,
+          hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          x: data.steps,
+          y: data.modelMetrics.testRocAuc,
+          name: 'Test ROC-AUC',
+          line: { color: '#2ca02c', width: 1, dash: 'dot' },
+          marker: { size: 4 },
+          opacity: 0.5,
+          hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>',
+        },
       ];
-      const allPerf = [...data.modelMetrics.cvRocAuc, ...data.modelMetrics.cvPrAuc, ...data.modelMetrics.trainRocAuc, ...data.modelMetrics.testRocAuc].filter((v: number) => Number.isFinite(v));
+      const allPerf = [
+        ...data.modelMetrics.cvRocAuc,
+        ...data.modelMetrics.cvPrAuc,
+        ...data.modelMetrics.trainRocAuc,
+        ...data.modelMetrics.testRocAuc,
+      ].filter((v: number) => Number.isFinite(v));
       const yMin = Math.min(...allPerf) * 0.95 || 0;
       const yMax = Math.max(...allPerf) * 1.02 || 1;
       const layout = {
@@ -3989,9 +5051,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         title: { text: 'Model Performance Across Steps', font: { size: 13 } },
         yaxis: { title: { text: 'Metric Value', font: { size: 12 } }, range: [yMin, yMax] },
         shapes: [currentStepLine(yMin, yMax)],
-        annotations: [currentStepAnnotation(yMax)]
+        annotations: [currentStepAnnotation(yMax)],
       };
-      try { Plotly.react(perfEl, traces, layout, config); } catch { Plotly.newPlot(perfEl, traces, layout, config); }
+      try {
+        Plotly.react(perfEl, traces, layout, config);
+      } catch {
+        Plotly.newPlot(perfEl, traces, layout, config);
+      }
     }
   }
 
@@ -4003,30 +5069,38 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sfsRunHistory = resp?.history || resp?.runs || (Array.isArray(resp) ? resp : []);
         this.sfsHistoryLoading = false;
       },
-      error: () => { this.sfsHistoryLoading = false; },
+      error: () => {
+        this.sfsHistoryLoading = false;
+      },
     });
   }
 
   exportSfsCsv(): void {
-    const rows = this.sfsCompletedSteps.length ? this.sfsCompletedSteps : [
-      ...this.sfsForwardResults,
-      ...this.sfsBackwardResults,
-      ...this.sfsForwardFromBackwardResults,
-    ];
+    const rows = this.sfsCompletedSteps.length
+      ? this.sfsCompletedSteps
+      : [
+          ...this.sfsForwardResults,
+          ...this.sfsBackwardResults,
+          ...this.sfsForwardFromBackwardResults,
+        ];
     if (!rows.length) return;
     const headers = ['step', 'direction', 'action', 'feature_name', 'cv_metric', 'pct_change'];
     const lines = [headers.join(',')];
     for (const step of rows) {
       const pct = step.pct_changes?.roc_auc ?? step.pct_changes?.r2 ?? '';
       const cv = step.cv_roc_auc ?? step.cv_r2 ?? step.cv_metric ?? '';
-      lines.push([
-        step.step ?? '',
-        step.direction ?? '',
-        step.action ?? step.feature_name ? 'added' : '',
-        step.feature_name ?? step.feature ?? '',
-        cv,
-        pct,
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+      lines.push(
+        [
+          step.step ?? '',
+          step.direction ?? '',
+          (step.action ?? step.feature_name) ? 'added' : '',
+          step.feature_name ?? step.feature ?? '',
+          cv,
+          pct,
+        ]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(','),
+      );
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
@@ -4038,10 +5112,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   canPromoteChampion(): boolean {
-    const sfsDone = this.sfsForwardResults.length > 0
-      || this.sfsBackwardResults.length > 0
-      || this.sfsForwardFromBackwardResults.length > 0
-      || ['sfs_completed', 'sfs_forward_completed', 'sfs_backward_completed', 'sfs_forward_from_backward_completed', 'sfs_stopped'].includes(this._currentSubstep);
+    const sfsDone =
+      this.sfsForwardResults.length > 0 ||
+      this.sfsBackwardResults.length > 0 ||
+      this.sfsForwardFromBackwardResults.length > 0 ||
+      [
+        'sfs_completed',
+        'sfs_forward_completed',
+        'sfs_backward_completed',
+        'sfs_forward_from_backward_completed',
+        'sfs_stopped',
+      ].includes(this._currentSubstep);
     const hpDone = !!this.hpResults || this._currentSubstep === 'hyperparam_completed';
     return !!this.currentFileId && sfsDone && hpDone && !this.championPromoting;
   }
@@ -4050,6 +5131,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.canPromoteChampion() || !this.currentFileId) return;
     this.championPromoting = true;
     const payload = {
+      execution_id: this.hpResults?.execution_id || (this.modelingStatus as any)?.execution_id,
       features: this.getFinalSelectedFeatures(),
       hyperparam: this.hpResults?.best_params || this.hpResults?.best_point?.params,
       search_method: this.hpResults?.search_method,
@@ -4058,9 +5140,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dataService.promoteChampion(this.currentFileId, payload).subscribe({
       next: () => {
         this.championPromoting = false;
-        try { this.sharedService.triggerCheckpoint('champion_promoted'); } catch {}
+        try {
+          this.sharedService.triggerCheckpoint('champion_promoted');
+        } catch {}
         setTimeout(() => {
-          document.getElementById('evaluation-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          document
+            .getElementById('evaluation-anchor')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
       },
       error: (err) => {

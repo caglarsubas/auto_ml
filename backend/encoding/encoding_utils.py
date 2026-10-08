@@ -166,11 +166,14 @@ def apply_encoding(
         }
 
         if strategy == 'native_categorical':
-            encoded[feature] = encoded[feature].astype('category')
+            fit_series = encoded.loc[fit_idx, feature] if fit_idx is not None else encoded[feature]
+            levels = pd.Index(fit_series.dropna().unique())
+            encoded[feature] = pd.Categorical(encoded[feature], categories=levels)
             cats = list(encoded[feature].cat.categories.astype(str))
             feat_report['mapping'] = {
                 'type': 'native_categorical',
                 'categories': cats,
+                'fit_on_train_only': fit_idx is not None,
             }
             feat_report['after_stats'] = _compute_stats(encoded[feature])
         else:
@@ -353,12 +356,13 @@ def _target_encode(
                 va_labels = fit_idx[va]
                 tr_x = x_fit.loc[tr_labels]
                 tr_y = y_fit.loc[tr_labels]
+                fold_prior = float(tr_y.mean())
                 stats = pd.DataFrame({'x': tr_x, 'y': tr_y}).groupby('x')['y'].agg(['mean', 'count'])
                 # Bayesian smoothing toward global mean
-                smooth = (stats['count'] * stats['mean'] + smoothing * global_mean) / (stats['count'] + smoothing)
+                smooth = (stats['count'] * stats['mean'] + smoothing * fold_prior) / (stats['count'] + smoothing)
                 mapping_fold = {str(k): float(v) for k, v in smooth.items()}
                 oof.loc[va_labels] = x_fit.loc[va_labels].map(
-                    lambda v: mapping_fold.get(str(v), global_mean)
+                    lambda v: mapping_fold.get(str(v), fold_prior)
                 ).astype(float)
             encoded.loc[fit_idx] = oof
             used_oof = True

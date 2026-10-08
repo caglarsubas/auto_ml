@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold
+from modeling.development_validation import iter_validation_folds
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, f1_score, fbeta_score,
@@ -449,6 +450,7 @@ def _evaluate_config(
     early_stopping_rounds: int = 50,
     task: str = 'classification',
     algorithm: str = 'xgboost',
+    validation_context=None,
 ) -> Dict[str, Any]:
     """Cross-validate one config and also fit on full train -> valid/train metrics.
 
@@ -458,19 +460,20 @@ def _evaluate_config(
     task = _normalize_task(task)
     t0 = time.time()
 
-    skf = _make_cv_splitter(task, cv_folds)
     fold_metrics: List[Dict[str, float]] = []
-    for tr_idx, va_idx in skf.split(X_train, y_train):
+    provenance = []
+    for X_tr, y_tr, X_va, y_va, fold_receipt in iter_validation_folds(validation_context, X_train, y_train, cv_folds, task):
+        provenance.append(fold_receipt)
         adapter = fit_booster(
             algorithm,
-            X_train.iloc[tr_idx], y_train.iloc[tr_idx],
-            X_train.iloc[va_idx], y_train.iloc[va_idx],
+            X_tr, y_tr,
+            X_va, y_va,
             config, task=task, nthread=nthread,
             scale_pos_weight=scale_pos_weight,
             early_stopping_rounds=early_stopping_rounds,
         )
-        proba = adapter.predict_proba(X_train.iloc[va_idx])
-        fold_metrics.append(_compute_metrics(y_train.iloc[va_idx].values, proba, threshold, task=task))
+        proba = adapter.predict_proba(X_va)
+        fold_metrics.append(_compute_metrics(y_va.values, proba, threshold, task=task))
 
     cv: Dict[str, Dict[str, float]] = {}
     for m in METRIC_NAMES:
@@ -498,6 +501,7 @@ def _evaluate_config(
         'best_iteration': int(getattr(full, 'best_iteration', 0) or 0),
         'fit_time': round(time.time() - t0, 3),
         'algorithm': algorithm,
+        'validation_provenance': provenance,
     }
 
 
@@ -509,30 +513,32 @@ def _evaluate_cv_only(
     early_stopping_rounds: int = 50,
     task: str = 'classification',
     algorithm: str = 'xgboost',
+    validation_context=None,
 ) -> Tuple[float, float, float, float]:
     """Lightweight CV used for validation curves: returns
     (train_mean, train_std, cv_mean, cv_std) for a single ``metric``."""
     task = _normalize_task(task)
-    skf = _make_cv_splitter(task, cv_folds)
     tr_scores, cv_scores = [], []
-    for tr_idx, va_idx in skf.split(X_train, y_train):
+    provenance = []
+    for X_tr, y_tr, X_va, y_va, fold_receipt in iter_validation_folds(validation_context, X_train, y_train, cv_folds, task):
+        provenance.append(fold_receipt)
         adapter = fit_booster(
             algorithm,
-            X_train.iloc[tr_idx], y_train.iloc[tr_idx],
-            X_train.iloc[va_idx], y_train.iloc[va_idx],
+            X_tr, y_tr,
+            X_va, y_va,
             config, task=task, nthread=nthread,
             scale_pos_weight=scale_pos_weight,
             early_stopping_rounds=early_stopping_rounds,
         )
         tr_scores.append(
             _compute_metrics(
-                y_train.iloc[tr_idx].values, adapter.predict_proba(X_train.iloc[tr_idx]),
+                y_tr.values, adapter.predict_proba(X_tr),
                 threshold, task=task,
             )[metric]
         )
         cv_scores.append(
             _compute_metrics(
-                y_train.iloc[va_idx].values, adapter.predict_proba(X_train.iloc[va_idx]),
+                y_va.values, adapter.predict_proba(X_va),
                 threshold, task=task,
             )[metric]
         )
@@ -678,6 +684,7 @@ def run_hyperparam_search_with_progress(
     early_stopping_rounds: int = 50,
     task: str = 'classification',
     algorithm: str = 'xgboost',
+    validation_context=None,
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -832,7 +839,7 @@ def run_hyperparam_search_with_progress(
                 pool.submit(
                     _evaluate_config, X_train, y_train, X_test, y_test,
                     cfg, cv_folds, has_cat, nthread, threshold,
-                    scale_pos_weight, early_stopping_rounds, task, algorithm,
+                    scale_pos_weight, early_stopping_rounds, task, algorithm, validation_context,
                 ): i
                 for i, cfg in enumerate(cfgs)
             }
@@ -902,7 +909,7 @@ def run_hyperparam_search_with_progress(
             result = _evaluate_config(
                 X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
                 nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
-                algorithm,
+                algorithm, validation_context,
             )
             trials.append(result)
             done_units[0] += 1
@@ -1021,7 +1028,7 @@ def run_hyperparam_search_with_progress(
                     pool.submit(
                         _evaluate_cv_only, X_train, y_train, cfg, cv_folds,
                         has_cat, nthread, threshold, primary_metric,
-                        scale_pos_weight, early_stopping_rounds, task, algorithm,
+                        scale_pos_weight, early_stopping_rounds, task, algorithm, validation_context,
                     ): idx
                     for idx, cfg in enumerate(point_configs)
                 }

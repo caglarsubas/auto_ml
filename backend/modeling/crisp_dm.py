@@ -32,6 +32,8 @@ def empty_business_understanding() -> Dict[str, Any]:
             'event_definition': '',
             'good_bad_window': '',
             'target_column': '',
+            'positive_class': None,
+            'label_maturity': '',
         },
         'assumptions': '',
         'regulatory_notes': '',
@@ -51,12 +53,15 @@ def normalize_business_understanding(raw: Optional[Dict[str, Any]]) -> Dict[str,
         if raw.get(k) is not None:
             base[k] = str(raw.get(k) or '')
     problem_type = str(raw.get('problem_type') or '').strip().lower()
-    if problem_type in ('classification', 'regression'):
+    if problem_type in ('classification', 'regression', 'anomaly'):
         base['problem_type'] = problem_type
     tc = raw.get('target_contract') if isinstance(raw.get('target_contract'), dict) else {}
-    for k in ('event_definition', 'good_bad_window', 'target_column'):
+    for k in ('event_definition', 'good_bad_window', 'target_column', 'label_maturity'):
         if tc.get(k) is not None:
             base['target_contract'][k] = str(tc.get(k) or '')
+    base['target_contract']['positive_class'] = tc.get('positive_class')
+    if isinstance(raw.get('feature_availability'), dict):
+        base['feature_availability'] = dict(raw['feature_availability'])
     ff = raw.get('forbidden_features')
     if isinstance(ff, list):
         base['forbidden_features'] = [str(x) for x in ff if str(x).strip()]
@@ -298,7 +303,7 @@ def detect_sequential_pattern_candidates(
     id_cols: Optional[List[str]] = None,
     max_pairs: int = 25,
 ) -> List[Dict[str, Any]]:
-    """MVP causality/sequential flags: near-duplicate rows with few differing columns over time."""
+    """Sequential near-duplicate flags: near-duplicate rows with few differing columns over time."""
     if df is None or df.empty or len(df) < 4:
         return []
     work = df.copy()

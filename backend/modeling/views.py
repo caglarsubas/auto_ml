@@ -22,6 +22,10 @@ from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_p
 from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
+from modeling.development_validation import prepared_folds, development_folds
+from modeling.diagnostics import numeric_collinearity_frame, DIAGNOSTIC_LIMITATIONS
+from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
+from modeling.prediction_contract import PredictionContractError, resolve_prediction_contract
 from modeling.models import PipelineRun
 from modeling.split_contract import (
     resolve_modeling_splits, fit_numeric_imputer, transform_numeric_impute,
@@ -34,6 +38,7 @@ from modeling.cv_strategy import build_cv_splitter, iter_cv_splits, pick_group_c
 from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 import pickle
+from pathlib import Path
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -122,6 +127,16 @@ class ModelingStartView(APIView):
         full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
         if not os.path.exists(full_path):
             return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
+        media_root = os.path.realpath(settings.MEDIA_ROOT)
+        if not os.path.realpath(full_path).startswith(media_root + os.sep):
+            return Response({'error': 'processed_file must be inside managed artifact storage.'}, status=status.HTTP_400_BAD_REQUEST)
+        execution_id, execution_dir, snapshot_path = begin_execution(full_path)
+        original_path = full_path
+        full_path = str(snapshot_path)
+        original_meta = Path(original_path).with_suffix('.meta.json')
+        if original_meta.is_file():
+            import shutil
+            shutil.copyfile(original_meta, snapshot_path.with_suffix('.meta.json'))
 
         # Minimal synchronous "training" stub: compute simple metrics and write a status file
         modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
@@ -190,14 +205,19 @@ class ModelingStartView(APIView):
                 'columns': list(map(str, df.columns[:50]))  # cap to 50 to keep response light
             }
 
-            # Heuristically choose target
-            target_col = None
-            for candidate in ['Target', 'target', 'label', 'Label', 'y']:
-                if candidate in df.columns:
-                    target_col = candidate
-                    break
-            if target_col is None and len(df.columns) >= 2:
-                target_col = df.columns[-1]
+            declaration = request.data.get('business_understanding')
+            run_id = request.data.get('pipeline_run_id')
+            if run_id is not None:
+                run = PipelineRun.objects.filter(pk=run_id, file_id=file_id).first()
+                if run is None:
+                    raise PredictionContractError('The selected pipeline run does not belong to this dataset.')
+                saved = run.state or {}
+                saved_declaration = saved.get('business_understanding') or (saved.get('crisp_dm') or {}).get('business_understanding')
+                if declaration is None:
+                    declaration = saved_declaration
+            prediction_contract, encoded_target = resolve_prediction_contract(df, declaration, algorithm)
+            target_col = prediction_contract['target_column']
+            excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + prediction_contract['forbidden_features']))
 
             if target_col is not None:
                 # Prepare features/target
@@ -230,45 +250,37 @@ class ModelingStartView(APIView):
                 scale_pos_weight = None
                 X_test = y_test = X_test_raw = None
 
-                # Preliminary target encoding for split stratification
-                try:
-                    n_unique_pre = y.nunique(dropna=True)
-                    is_classification = 2 <= n_unique_pre <= 50
-                except Exception:
-                    is_classification = True
+                is_classification = prediction_contract['task'] != 'regression'
+                # Resolve regression partitions too, before any learned encoding.
+                # Use the full frame so declared date/entity columns remain available
+                # even when excluded from model features.
+                train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                    df, encoded_target, file_id=int(file_id), task=prediction_contract['task'],
+                )
 
-                y_encoded_pre = None
-                if is_classification:
-                    try:
-                        y_num_pre = pd.to_numeric(y, errors='coerce')
-                        uniq_pre = y_num_pre.dropna().unique().tolist()
-                        uniq_int_pre = sorted({int(v) for v in uniq_pre if float(v) in (0.0, 1.0)})
-                        if len(uniq_int_pre) == 2 and set(uniq_int_pre) == {0, 1}:
-                            y_encoded_pre = y_num_pre.fillna(0).astype(int)
-                        else:
-                            raise ValueError('not binary 0/1')
-                    except Exception:
-                        y_encoded_pre, _ = pd.factorize(y)
-
-                if y_encoded_pre is not None:
-                    train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
-                        X_raw, y_encoded_pre, file_id=int(file_id),
-                    )
-                    print(
-                        f"[ModelingStart] Split source={split_meta.get('source')} "
-                        f"strategy={split_meta.get('strategy')} "
-                        f"train={len(train_idx)} valid={len(valid_idx)} test={len(test_idx)} "
-                        f"used_pp={split_meta.get('used_preprocessing_split')}"
-                    )
-                else:
-                    train_idx = valid_idx = test_idx = None
+                split_columns = [value for key, value in (split_meta.get('split_config') or {}).items() if key in ('date_column', 'group_column', 'label_end_column') and value in X_raw.columns]
+                excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + split_columns))
+                X_raw = X_raw.drop(columns=split_columns)
+                cat_cols = [column for column in cat_cols if column in X_raw.columns]
+                validation_context = {
+                    'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
+                    'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
+                    'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
+                }
+                target_encoding = not use_native and any(
+                    (entry.get('encoding_method') or entry.get('fallback_strategy')) == 'target_encoding'
+                    for entry in encoding_plan)
+                if target_encoding and (split_meta.get('strategy') in ('oot', 'group') or (split_meta.get('split_config') or {}).get('group_column')):
+                    raise PredictionContractError('Target encoding with temporal/entity constraints requires partition-aware inner encoding; choose native or unsupervised encoding until that path is qualified.')
+                if target_encoding and len(prediction_contract['class_mapping']) > 2:
+                    raise PredictionContractError('Numeric target encoding is not supported for multiclass outcomes. Choose native or unsupervised encoding.')
 
                 # ── Apply encoding via plan (if provided) or fallback to native ──
                 if has_encoding_plan:
                     from encoding.encoding_utils import apply_encoding as _apply_enc
                     # Temporarily attach Target for target_encoding, then drop it
                     X_with_target = X_raw.copy()
-                    X_with_target[target_col] = y.values
+                    X_with_target[target_col] = encoded_target.values
                     X_with_target, enc_report_list = _apply_enc(
                         X_with_target, encoding_plan, target_col=target_col,
                         use_native=use_native, fit_idx=train_idx,
@@ -305,7 +317,8 @@ class ModelingStartView(APIView):
                     enable_cat = len(cat_cols) > 0
                     for c in cat_cols:
                         if c in X_raw.columns:
-                            X_raw[c] = X_raw[c].astype('category')
+                            levels = pd.Index(X_raw.loc[train_idx, c].dropna().unique())
+                            X_raw[c] = pd.Categorical(X_raw[c], categories=levels)
                             cats = [str(v) for v in X_raw[c].cat.categories]
                             encoding_report.append({
                                 'feature': c,
@@ -320,30 +333,9 @@ class ModelingStartView(APIView):
 
                 # If no features remain, skip training
                 if X_raw.shape[1] >= 1 and len(y) >= 5:
-                    # Determine problem type: classification if few unique classes
-                    try:
-                        n_unique = y.nunique(dropna=True)
-                        is_classification = 2 <= n_unique <= 50
-                    except Exception:
-                        is_classification = True
-
                     if is_classification:
-                        # Encode binary targets to 0/1 ensuring 1 == positive class, else fallback to factorize
-                        try:
-                            y_num = pd.to_numeric(y, errors='coerce')
-                            uniq = y_num.dropna().unique().tolist()
-                            uniq_int = sorted({int(v) for v in uniq if float(v) in (0.0, 1.0)})
-                            if len(uniq_int) == 2 and set(uniq_int) == {0, 1}:
-                                y_encoded = y_num.fillna(0).astype(int)
-                            else:
-                                raise ValueError('not binary 0/1')
-                        except Exception:
-                            y_encoded, y_categories = pd.factorize(y)
-
-                        if train_idx is None:
-                            train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
-                                X_raw, y_encoded, file_id=int(file_id),
-                            )
+                        y_encoded = encoded_target
+                        y_categories = [entry['label'] for entry in prediction_contract['class_mapping']]
 
                         # Fit numeric impute on train only; transform all partitions
                         X_train_raw = X_raw.loc[train_idx]
@@ -358,7 +350,9 @@ class ModelingStartView(APIView):
                         y_test = y_encoded.loc[test_idx]
                         X = transform_numeric_impute(X_raw, impute_means)
 
-                        num_classes = int(len(np.unique(y_train)))
+                        num_classes = len(prediction_contract['class_mapping'])
+                        if set(y_train.unique()) != set(range(num_classes)):
+                            raise PredictionContractError('The fit partition does not contain every declared class; adjust the validation design.')
                         objective = 'binary:logistic' if num_classes == 2 else 'multi:softprob'
                         eval_metric = 'logloss' if num_classes == 2 else 'mlogloss'
 
@@ -415,7 +409,7 @@ class ModelingStartView(APIView):
                             })
                             booster = None
                             enable_cat = bool(adapter.enable_categorical or enable_cat)
-                            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                            models_dir = os.path.join(execution_dir, 'models')
                             os.makedirs(models_dir, exist_ok=True)
                             model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
                             adapter.save(model_path)
@@ -442,8 +436,9 @@ class ModelingStartView(APIView):
                                     calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
                                     if calibrator is not None:
                                         calibrator_path = save_calibrator(
-                                            int(file_id), calibrator, settings.MEDIA_ROOT,
+                                            int(file_id), calibrator, str(execution_dir),
                                         )
+                                        calibrator_path = os.path.relpath(execution_dir / calibrator_path, settings.MEDIA_ROOT)
                                         y_prob_cal = apply_calibrator(calibrator, y_prob)
                                         calibration_meta['valid_auc_raw'] = valid_auc
                                         try:
@@ -459,7 +454,10 @@ class ModelingStartView(APIView):
                                         'reason': 'anomaly scores are not calibrated probabilities',
                                     }
                             else:
-                                valid_auc = None
+                                from evaluation.eval_utils import evaluate_multiclass
+                                valid_auc = evaluate_multiclass(y_valid, y_prob)['metrics']['roc_auc']
+                                calibration_meta = {'fitted': False, 'skipped': True,
+                                                    'reason': 'Multiclass calibration is not supported.'}
                         except Exception:
                             valid_auc = None
                             y_prob = None
@@ -479,12 +477,14 @@ class ModelingStartView(APIView):
                                 'signed_impact': float(g.get('score') or 0.0),
                             }
                             for g in (gain_importance or [])[:40]
-                        ] if is_alt else []
+                        ] if is_alt or num_classes > 2 else []
                         beeswarm_png = None
                         shap_beeswarm = None
                         try:
                             if booster is None:
                                 raise _SkipShap('alternate model — TreeExplainer not applicable')
+                            if num_classes > 2:
+                                raise _SkipShap('Multiclass explanations require class-specific SHAP; signed class averages would be misleading.')
                             # Suppress SHAP FutureWarning about feature_perturbation
                             import warnings
                             with warnings.catch_warnings():
@@ -582,17 +582,7 @@ class ModelingStartView(APIView):
                             vif_lookup: dict[str, float] = {}
                             try:
                                 from statsmodels.stats.outliers_influence import variance_inflation_factor
-                                # Build numeric-only matrix for VIF (convert categoricals to codes)
-                                X_vif = X_train.copy()
-                                for c in X_vif.columns:
-                                    if hasattr(X_vif[c], 'cat'):
-                                        X_vif[c] = X_vif[c].cat.codes.astype(float)
-                                        X_vif[c] = X_vif[c].replace(-1, np.nan)
-                                X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
-                                X_vif = X_vif.fillna(X_vif.mean())
-                                # Drop zero-variance columns to avoid inf VIF
-                                nonzero_var = X_vif.columns[X_vif.var() > 0]
-                                X_vif = X_vif[nonzero_var]
+                                X_vif = numeric_collinearity_frame(X_train, encoding_report)
                                 X_vif_arr = X_vif.values.astype(float)
                                 for i, col_name in enumerate(X_vif.columns):
                                     try:
@@ -864,32 +854,11 @@ class ModelingStartView(APIView):
                             base_pr_list = []
                             X_cv = pd.concat([X_train, X_valid], axis=0)
                             y_cv = pd.concat([y_train, y_valid], axis=0)
-                            # Prefer excluded ID-like columns (still on original df) for group CV
-                            group_col, groups_cv = pick_group_column(
-                                df, X_cv.index, excluded_cols_for_modeling,
-                            )
-                            skf, cv_strategy, cv_hint = build_cv_splitter(
-                                split_meta, y_cv, groups=groups_cv, n_splits=5,
-                            )
-                            if cv_strategy == 'time_series':
-                                # Preserve chronological order from outer-train indices
-                                try:
-                                    order = X_cv.index
-                                    X_cv = X_cv.loc[order]
-                                    y_cv = y_cv.loc[order]
-                                    if groups_cv is not None:
-                                        groups_cv = groups_cv.loc[order]
-                                except Exception:
-                                    pass
-                            groups_arr = (
-                                np.asarray(groups_cv) if groups_cv is not None
-                                and cv_hint.get('groups') else None
-                            )
-                            for tr_idx, va_idx in iter_cv_splits(
-                                skf, X_cv.values, y_cv, groups_arr, cv_hint,
-                            ):
-                                X_tr, X_va = X_cv.iloc[tr_idx], X_cv.iloc[va_idx]
-                                y_tr, y_va = y_cv.iloc[tr_idx], y_cv.iloc[va_idx]
+                            group_col = (split_meta.get('split_config') or {}).get('group_column')
+                            cv_strategy = 'time_series' if split_meta.get('strategy') == 'oot' else ('group' if group_col else 'random')
+                            fold_provenance = []
+                            for X_tr, y_tr, X_va, y_va, provenance in prepared_folds(validation_context, X_cv, y_cv, 5):
+                                fold_provenance.append(provenance)
                                 if is_alt:
                                     from modeling.alt_pipelines import get_alt_adapter
                                     fold_adapter = get_alt_adapter(algorithm)
@@ -903,6 +872,12 @@ class ModelingStartView(APIView):
                                         num_boost_round=500, early_stopping_rounds=50,
                                     )
                                 p = fold_adapter.predict_proba(X_va)
+                                if num_classes > 2:
+                                    from evaluation.eval_utils import evaluate_multiclass
+                                    metrics_for_fold = evaluate_multiclass(y_va, p)['metrics']
+                                    cv_details.append({**metrics_for_fold, 'pr_auc': None,
+                                        'best_iteration': int(fold_adapter.best_iteration or 0)})
+                                    continue
                                 # AUCs
                                 roc = None
                                 pr = None
@@ -1007,12 +982,15 @@ class ModelingStartView(APIView):
                                 'pr_curve_micro': pr_curve_micro,
                                 'cv_strategy': cv_strategy,
                                 'group_column': group_col,
+                                'fold_provenance': fold_provenance,
+                                'qualification': 'development; upstream purifier replay not yet qualified',
+                                'metric_semantics': 'weighted one-vs-rest multiclass AUC; binary curves unavailable' if num_classes > 2 else 'binary ranking metrics',
                             }
                         except Exception:
                             cv_summary = None
 
                         # Save model via adapter
-                        models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                        models_dir = os.path.join(execution_dir, 'models')
                         os.makedirs(models_dir, exist_ok=True)
                         model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
                         adapter.save(model_path)
@@ -1021,12 +999,15 @@ class ModelingStartView(APIView):
                         
                         # SFS will be triggered manually by user
                         # Save training data for later SFS use
-                        train_data_dir = os.path.join(settings.MEDIA_ROOT, 'train_data')
+                        train_data_dir = os.path.join(execution_dir, 'train_data')
                         os.makedirs(train_data_dir, exist_ok=True)
                         train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
                         
                         import pickle
                         train_data = {
+                            'prediction_contract': prediction_contract,
+                            'validation_context': validation_context,
+                            'task': prediction_contract['task'],
                             'X_train': X_train,
                             'y_train': y_train,
                             'X_valid': X_valid,
@@ -1048,21 +1029,8 @@ class ModelingStartView(APIView):
                             pickle.dump(train_data, f)
                         print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
 
-                        # Locked outer-test AUC (never used for early stopping / HP)
-                        test_auc = None
-                        test_auc_calibrated = None
-                        try:
-                            yhat_test = adapter.predict_proba(X_test)
-                            if num_classes == 2:
-                                test_auc = float(roc_auc_score(y_test, yhat_test.ravel()))
-                                if calibrator is not None:
-                                    yhat_cal = apply_calibrator(calibrator, yhat_test)
-                                    test_auc_calibrated = float(roc_auc_score(y_test, yhat_cal))
-                            else:
-                                test_auc = float(roc_auc_score(y_test, yhat_test, multi_class='ovr', average='weighted'))
-                        except Exception as te:
-                            print(f"[ModelingStart] Outer test AUC skipped: {te}")
-                        
+                        # Final outcomes are evaluated only through the Evaluation endpoint.
+                        test_auc = test_auc_calibrated = None
                         # Log categorical feature gain importances for validation
                         cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
                         if cat_in_gain:
@@ -1099,7 +1067,8 @@ class ModelingStartView(APIView):
                             'beeswarm_png': beeswarm_png,
                             'shap_beeswarm': shap_beeswarm,
                             # SFS/HP are boosting-path tools; alt models go straight to Evaluation
-                            'sfs_ready': (not is_alt),
+                            'sfs_ready': (not is_alt and num_classes == 2),
+                            'explanation_limitation': 'Multiclass class-specific SHAP is not yet supported; gain is a ranking heuristic.' if num_classes > 2 else None,
                             'split': {
                                 **(split_meta or {}),
                                 'n_train': int(len(X_train)),
@@ -1156,7 +1125,7 @@ class ModelingStartView(APIView):
                             print(f"[ModelingStart] lineage save failed: {lin_err}")
                     else:
                         # Continuous target → boosting regressor (same split/impute contract)
-                        y_num = pd.to_numeric(y, errors='coerce')
+                        y_num = encoded_target
                         valid_y_mask = y_num.notna()
                         if int(valid_y_mask.sum()) >= 5 and X_raw.shape[1] >= 1:
                             X_reg = X_raw.loc[valid_y_mask].copy()
@@ -1211,27 +1180,24 @@ class ModelingStartView(APIView):
                                 num_boost_round=500, early_stopping_rounds=50,
                             )
                             yhat_valid = adapter.predict(X_valid)
-                            yhat_test = adapter.predict(X_test)
                             valid_r2 = float(r2_score(y_valid, yhat_valid)) if len(y_valid) else None
-                            test_r2 = float(r2_score(y_test, yhat_test)) if len(y_test) else None
-                            test_rmse = (
-                                float(np.sqrt(mean_squared_error(y_test, yhat_test)))
-                                if len(y_test) else None
-                            )
-                            test_mae = float(mean_absolute_error(y_test, yhat_test)) if len(y_test) else None
+                            test_r2 = test_rmse = test_mae = None
                             gain_importance = adapter.gain_importance()
 
-                            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                            models_dir = os.path.join(execution_dir, 'models')
                             os.makedirs(models_dir, exist_ok=True)
                             model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
                             adapter.save(model_path)
 
-                            train_data_dir = os.path.join(settings.MEDIA_ROOT, 'train_data')
+                            train_data_dir = os.path.join(execution_dir, 'train_data')
                             os.makedirs(train_data_dir, exist_ok=True)
                             train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
                             import pickle
                             with open(train_data_path, 'wb') as f:
                                 pickle.dump({
+                                    'prediction_contract': prediction_contract,
+                                    'validation_context': validation_context,
+                                    'encoding_report': encoding_report,
                                     'X_train': X_train, 'y_train': y_train,
                                     'X_valid': X_valid, 'y_valid': y_valid,
                                     'X_test': X_test, 'y_test': y_test,
@@ -1249,7 +1215,7 @@ class ModelingStartView(APIView):
                                 'model_type': f'{algorithm}_regressor',
                                 'algorithm': algorithm,
                                 'task': 'regression',
-                                'score': test_r2,
+                                'score': valid_r2,
                                 'valid_r2': valid_r2,
                                 'test_r2': test_r2,
                                 'test_rmse': test_rmse,
@@ -1257,6 +1223,9 @@ class ModelingStartView(APIView):
                                 'best_iteration': int(adapter.best_iteration or 0),
                                 'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
                                 'feature_count': int(X_train.shape[1]),
+                                'categorical_features_used': cat_cols,
+                                'enable_categorical': enable_cat,
+                                'encoding_report': encoding_report,
                                 'importances': {'gain': gain_importance},
                                 'split': {
                                     **(split_meta or {}),
@@ -1311,15 +1280,53 @@ class ModelingStartView(APIView):
                 return o if math.isfinite(o) else None
             return o
 
-        # mark completed
+        if model_info.get('model_path') and 'prediction_contract' in locals():
+            if 'lineage' not in locals():
+                lineage = build_lineage(int(file_id), algorithm=algorithm, processed_file=processed_file,
+                    split_meta=split_meta, feature_names=list(X_train.columns), excluded_variables=excluded_cols_for_modeling,
+                    model_params=params, model_path=model_info['model_path'], impute_means=impute_means,
+                    n_train=len(X_train), n_valid=len(X_valid), n_test=len(X_test))
+            lineage['prediction_contract'] = prediction_contract
+            lineage['execution_id'] = execution_id
+            lineage['encoding_report'] = encoding_report
+            lineage['provenance_qualification'] = 'Input snapshot and fold membership recorded; upstream purifier replay not yet qualified.'
+            lineage_path = execution_dir / 'lineage.json'
+            with lineage_path.open('x', encoding='utf-8') as stream:
+                json.dump(lineage, stream, indent=2, default=str)
+            model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
+            model_info['lineage_id'] = lineage['lineage_id']
+            replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
+        if 'prediction_contract' in locals():
+            model_info['prediction_contract'] = prediction_contract
+            model_info['diagnostic_limitations'] = DIAGNOSTIC_LIMITATIONS
+            model_info['holdout_status'] = 'uninspected_by_training'
+        if 'train_data_path' in locals():
+            with open(train_data_path, 'rb') as stream:
+                development_data = pickle.load(stream)
+            holdout_path = execution_dir / 'final_holdout.pkl'
+            final_data = {key: development_data.pop(key, None) for key in ('X_test', 'y_test', 'X_test_raw')}
+            with holdout_path.open('xb') as stream:
+                pickle.dump(final_data, stream)
+            development_data['encoding_report'] = encoding_report
+            development_data['execution_id'] = execution_id
+            development_data['holdout_path'] = os.path.relpath(holdout_path, settings.MEDIA_ROOT)
+            with open(train_data_path, 'wb') as stream:
+                pickle.dump(development_data, stream)
+            model_info['train_data_path'] = os.path.relpath(train_data_path, settings.MEDIA_ROOT)
+            model_info['holdout_path'] = development_data['holdout_path']
+        failed = 'error' in model_info or not model_info.get('model_path')
+        if failed and 'error' not in model_info:
+            model_info['error'] = model_info.get('warning') or 'No fitted model was produced.'
+        # Publish a truthful terminal status.
         # attach algorithm to model info if provided
         if algorithm:
             model_info['requested_algorithm'] = algorithm
 
         result_payload = {
-            'status': 'ok',
-            'job_status': 'completed',
-            'file_id': file_id,
+            'status': 'error' if failed else 'ok',
+            'job_status': 'failed' if failed else 'completed',
+            'file_id': int(file_id),
+            'execution_id': execution_id,
             'processed_file': processed_file,
             'encoded_file': encoded_file_rel,
             'metrics': metrics,
@@ -1331,10 +1338,13 @@ class ModelingStartView(APIView):
         # Debug: Check if SHAP data made it to the final payload
         print(f"[ModelingStart] Final payload check: shap_beeswarm in model={'shap_beeswarm' in safe_payload.get('model', {})}, selected_features count={len(safe_payload.get('model', {}).get('selected_features', []))}")
 
-        with open(status_path, 'w', encoding='utf-8') as f:
-            json.dump(safe_payload, f)
+        with projection_lock(file_id):
+            publish_execution(execution_id, safe_payload)
+            if not failed and 'train_data_path' in locals():
+                replace_projection(train_data_path, os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl'))
+            replace_projection(execution_dir / 'modeling_status.json', status_path)
 
-        return Response(safe_payload, status=status.HTTP_200_OK)
+        return Response(safe_payload, status=status.HTTP_400_BAD_REQUEST if failed else status.HTTP_200_OK)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -1381,6 +1391,26 @@ class FeatureExplainabilityView(APIView):
 
         try:
             booster = None
+            governed_data = None
+            active_status = {}
+            active_path = Path(settings.MEDIA_ROOT) / 'modeling' / f'{file_id}_status.json'
+            if active_path.is_file():
+                active_status = json.loads(active_path.read_text())
+            execution_id = request.data.get('execution_id') or active_status.get('execution_id')
+            if execution_id:
+                if custom_model_path:
+                    relative = Path(custom_model_path)
+                    if relative.is_absolute():
+                        relative = relative.relative_to(Path(settings.MEDIA_ROOT))
+                    if len(relative.parts) < 3 or relative.parts[0] != 'execution_runs':
+                        return Response({'error': 'Select an immutable candidate execution for explainability.'}, status=status.HTTP_409_CONFLICT)
+                    execution_id = relative.parts[1]
+                active_status, _ = load_execution(execution_id, int(file_id))
+                governed_data = load_development_data(int(file_id), execution_id)
+                if governed_data['algorithm'] != 'xgboost' or len(governed_data['prediction_contract']['class_mapping']) > 2:
+                    return Response({'error': 'This interactive PDP supports binary/regression XGBoost models. Other model families retain their recorded diagnostics; this PDP requires a separately qualified implementation.'}, status=status.HTTP_409_CONFLICT)
+                if custom_model_path and str(relative) != active_status['model']['model_path']:
+                    return Response({'error': 'Model path does not match the verified execution.'}, status=status.HTTP_409_CONFLICT)
 
             # Option 1: On-demand model from selected_features (SFS step context)
             if selected_features and isinstance(selected_features, list) and not custom_model_path:
@@ -1394,8 +1424,7 @@ class FeatureExplainabilityView(APIView):
                 train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
                 if not os.path.exists(train_data_path):
                     return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
-                with open(train_data_path, 'rb') as f:
-                    train_data = pickle.load(f)
+                train_data = governed_data or load_development_data(int(file_id))
                 X_tr = train_data['X_train']
                 y_tr = train_data['y_train']
                 valid_sf = [f for f in selected_features if f in X_tr.columns]
@@ -1407,13 +1436,14 @@ class FeatureExplainabilityView(APIView):
                 )
                 dtrain_sf = xgb.DMatrix(X_tr[valid_sf], label=y_tr, enable_categorical=_has_cat_sf)
                 _params_sf = {
-                    'objective': 'binary:logistic', 'eval_metric': 'auc',
+                    'objective': 'reg:squarederror' if train_data.get('task') == 'regression' else 'binary:logistic',
+                    'eval_metric': 'rmse' if train_data.get('task') == 'regression' else 'auc',
                     'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
                     'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
                 }
                 booster = xgb.train(
                     _params_sf, dtrain_sf, num_boost_round=100,
-                    evals=[(dtrain_sf, 'train')], early_stopping_rounds=10,
+                    evals=[(xgb.DMatrix(train_data['X_valid'][valid_sf], label=train_data['y_valid'], enable_categorical=_has_cat_sf), 'valid')], early_stopping_rounds=10,
                     verbose_eval=False
                 )
                 print(f"[FeatureExplainability] Trained on-demand model with {len(valid_sf)} features for step explainability")
@@ -1424,69 +1454,79 @@ class FeatureExplainabilityView(APIView):
                 if custom_model_path:
                     model_path = os.path.join(settings.MEDIA_ROOT, custom_model_path) if not os.path.isabs(custom_model_path) else custom_model_path
                 else:
-                    model_path = os.path.join(models_dir, f'{file_id}_xgb_classifier.json')
+                    model_path = os.path.join(settings.MEDIA_ROOT, active_status.get('model', {}).get('model_path') or f'models/{file_id}_xgb_classifier.json')
                 if not os.path.exists(model_path):
                     return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
                 
                 booster = xgb.Booster()
                 booster.load_model(model_path)
 
-            # Load processed data
-            if processed_file:
-                full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+            if governed_data:
+                # Diagnostic navigation cannot open sealed final assessment outcomes.
+                X = pd.concat([governed_data['X_train'], governed_data['X_valid']])
+                X_raw = pd.concat([governed_data['X_train_raw'], governed_data['X_valid_raw']])
+                y = pd.concat([governed_data['y_train'], governed_data['y_valid']])
+                _cat_cols_expl = [name for name in X if isinstance(X[name].dtype, pd.CategoricalDtype)]
+                _enable_cat_expl = bool(_cat_cols_expl)
+                if feature_name in _cat_cols_expl:
+                    return Response({'error': 'Categorical PDP needs a category-aware grid; numeric interpolation of category codes is prohibited.'}, status=status.HTTP_409_CONFLICT)
             else:
-                # Try to find from status
-                modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
-                status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
-                if os.path.exists(status_path):
-                    with open(status_path, 'r', encoding='utf-8') as f:
-                        status_data = json.load(f)
-                    processed_file = status_data.get('processed_file')
-                    if processed_file:
-                        full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
-                    else:
-                        return Response({'error': 'processed_file not found in modeling status'}, status=status.HTTP_404_NOT_FOUND)
+                # Load processed data
+                if processed_file:
+                    full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
                 else:
-                    return Response({'error': 'processed_file required'}, status=status.HTTP_400_BAD_REQUEST)
+                    # Try to find from status
+                    modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
+                    status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
+                    if os.path.exists(status_path):
+                        with open(status_path, 'r', encoding='utf-8') as f:
+                            status_data = json.load(f)
+                        processed_file = status_data.get('processed_file')
+                        if processed_file:
+                            full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+                        else:
+                            return Response({'error': 'processed_file not found in modeling status'}, status=status.HTTP_404_NOT_FOUND)
+                    else:
+                        return Response({'error': 'processed_file required'}, status=status.HTTP_400_BAD_REQUEST)
             
-            if not os.path.exists(full_path):
-                return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
+                if not os.path.exists(full_path):
+                    return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Load data
-            df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+                # Load data
+                df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
             
-            # Heuristically choose target
-            target_col = None
-            for candidate in ['Target', 'target', 'label', 'Label', 'y']:
-                if candidate in df.columns:
-                    target_col = candidate
-                    break
-            if target_col is None and len(df.columns) >= 2:
-                target_col = df.columns[-1]
+                # Heuristically choose target
+                target_col = None
+                for candidate in ['Target', 'target', 'label', 'Label', 'y']:
+                    if candidate in df.columns:
+                        target_col = candidate
+                        break
+                if target_col is None and len(df.columns) >= 2:
+                    target_col = df.columns[-1]
             
-            if target_col is None or target_col not in df.columns:
-                return Response({'error': 'Target column not found'}, status=status.HTTP_400_BAD_REQUEST)
+                if target_col is None or target_col not in df.columns:
+                    return Response({'error': 'Target column not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-            y = df[target_col]
-            X_raw = df.drop(columns=[target_col])
-            # Detect categorical columns for enable_categorical support
-            _cat_cols_expl = []
-            for c in X_raw.columns:
-                if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
-                    _cat_cols_expl.append(c)
-                elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
-                    _cat_cols_expl.append(c)
-            _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
-            X_raw = X_raw[_keep_expl].copy()
-            _enable_cat_expl = len(_cat_cols_expl) > 0
-            for c in _cat_cols_expl:
-                if c in X_raw.columns:
-                    X_raw[c] = X_raw[c].astype('category')
-            X_raw = X_raw.dropna(axis=1, how='all')
-            X = X_raw.copy()
-            _num_expl = X.select_dtypes(include=['number']).columns
-            if len(_num_expl) > 0:
-                X[_num_expl] = X[_num_expl].fillna(X[_num_expl].mean())
+                y = df[target_col]
+                X_raw = df.drop(columns=[target_col])
+                # Detect categorical columns for enable_categorical support
+                _cat_cols_expl = []
+                for c in X_raw.columns:
+                    if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                        _cat_cols_expl.append(c)
+                    elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
+                        _cat_cols_expl.append(c)
+                _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
+                X_raw = X_raw[_keep_expl].copy()
+                _enable_cat_expl = len(_cat_cols_expl) > 0
+                for c in _cat_cols_expl:
+                    if c in X_raw.columns:
+                        X_raw[c] = X_raw[c].astype('category')
+                X_raw = X_raw.dropna(axis=1, how='all')
+                X = X_raw.copy()
+                _num_expl = X.select_dtypes(include=['number']).columns
+                if len(_num_expl) > 0:
+                    X[_num_expl] = X[_num_expl].fillna(X[_num_expl].mean())
 
             # Check if feature was used in the trained model FIRST (before checking data)
             # This ensures we give the correct message for features excluded during modeling
@@ -1702,6 +1742,8 @@ class FeatureExplainabilityView(APIView):
                 base_value = 0.0  # Default to 0 if base value is invalid
             
             result = {
+                'execution_id': execution_id,
+                'evidence_partition': 'development_only' if governed_data else 'legacy_provenance_unverified',
                 'feature_name': feature_name,
                 'beeswarm': {
                     'shap_values': shap_values_clean,
@@ -1794,8 +1836,7 @@ class SFSStartView(APIView):
                     'status': 'error'
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            with open(train_data_path, 'rb') as f:
-                train_data = pickle.load(f)
+            train_data = load_development_data(file_id, data.get('execution_id'))
             
             X_train = train_data['X_train']
             y_train = train_data['y_train']
@@ -1804,6 +1845,18 @@ class SFSStartView(APIView):
             # Older regression pickles may omit raw frames — fall back to imputed matrices.
             X_train_raw = train_data.get('X_train_raw', X_train)
             X_valid_raw = train_data.get('X_valid_raw', X_valid)
+            context = train_data.get('validation_context')
+            contract = train_data.get('prediction_contract') or {}
+            metric = (contract.get('objective') or {}).get('primary_metric')
+            if metric and metric not in ('roc_auc', 'r2'):
+                return Response({'error': f'Feature selection objective {metric!r} is not supported by this native selector yet. Revise the objective in a new declaration or use the supported initial model.'}, status=status.HTTP_400_BAD_REQUEST)
+            if len(contract.get('class_mapping') or []) > 2:
+                return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
+            if context is not None:
+                try:
+                    list(development_folds(context, X_train.index, y_train, int(data.get('cv_folds', 3))))
+                except (ValueError, KeyError) as error:
+                    return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
             sfs_task = (train_data.get('task') or 'classification')
             if str(sfs_task).strip().lower() in ('regression', 'regressor', 'reg'):
                 sfs_task = 'regression'
@@ -1928,6 +1981,7 @@ class SFSStartView(APIView):
                         'feature_name': item['feature_name'],
                         'selected_features': item['selected_features'],
                         'task': item.get('task', sfs_task),
+                        'validation_provenance': item.get('validation_provenance', []),
                         'train_roc_auc': float(item['train_roc_auc']),
                         'train_pr_auc': float(item['train_pr_auc']),
                         'cv_roc_auc': float(item['cv_roc_auc']),
@@ -2013,6 +2067,7 @@ class SFSStartView(APIView):
                         stop_flag=SFS_PROGRESS[file_id],
                         resume_state=resume_state,
                         task=sfs_task,
+                        validation_context=train_data.get('validation_context'),
                         algorithm=sfs_algorithm,
                     )
                     
@@ -2045,24 +2100,6 @@ class SFSStartView(APIView):
 
                     # Save the final fitted model for each completed SFS direction
                     # so Feature Card explainability can use it instead of the initial model.
-                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-                    os.makedirs(models_dir, exist_ok=True)
-                    _has_cat = any(
-                        hasattr(X_train[c], 'cat') or X_train[c].dtype.name == 'category' or X_train[c].dtype == 'object' or pd.api.types.is_string_dtype(X_train[c])
-                        for c in X_train.columns
-                    )
-                    if sfs_task == 'regression':
-                        _sfs_model_params = {
-                            'objective': 'reg:squarederror', 'eval_metric': 'rmse',
-                            'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
-                            'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
-                        }
-                    else:
-                        _sfs_model_params = {
-                            'objective': 'binary:logistic', 'eval_metric': 'auc',
-                            'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
-                            'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
-                        }
                     for direction_key in ('forward', 'backward', 'forward_from_backward'):
                         steps = sfs_data.get(direction_key, [])
                         if steps:
@@ -2071,16 +2108,24 @@ class SFSStartView(APIView):
                             valid_features = [f for f in final_features if f in X_train.columns]
                             if valid_features:
                                 try:
-                                    dtrain_f = xgb.DMatrix(X_train[valid_features], label=y_train, enable_categorical=_has_cat)
-                                    sfs_booster = xgb.train(
-                                        _sfs_model_params, dtrain_f, num_boost_round=100,
-                                        evals=[(dtrain_f, 'train')], early_stopping_rounds=10,
-                                        verbose_eval=False
-                                    )
-                                    sfs_model_path = os.path.join(models_dir, f'{file_id}_sfs_{direction_key}_model.json')
-                                    sfs_booster.save_model(sfs_model_path)
-                                    sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
-                                    print(f"[SFS] Saved {direction_key} final model ({len(valid_features)} features) -> {sfs_model_path}")
+                                    from modeling.booster_adapters import fit_booster
+                                    adapter = fit_booster(sfs_algorithm, X_train[valid_features], y_train,
+                                        X_valid[valid_features], y_valid, {'n_estimators': 100},
+                                        task=sfs_task, early_stopping_rounds=10)
+                                    parent_id = train_data.get('execution_id')
+                                    if parent_id:
+                                        candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
+                                            {'n_estimators': 100}, f'sfs_{direction_key}', adopt=False)
+                                        sfs_data[f'{direction_key}_model_path'] = candidate['model']['model_path']
+                                        sfs_data[f'{direction_key}_execution_id'] = candidate['execution_id']
+                                        sfs_data['parent_execution_id'] = parent_id
+                                    else:
+                                        # Legacy candidates receive unique paths too; no overwrite of inspected history.
+                                        import uuid
+                                        models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
+                                        sfs_model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                                        adapter.save(sfs_model_path)
+                                        sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
                                 except Exception as model_err:
                                     print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
 
@@ -2311,21 +2356,32 @@ class HyperparamStartView(APIView):
                     'status': 'error'
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            with open(train_data_path, 'rb') as f:
-                train_data = pickle.load(f)
+            train_data = load_development_data(file_id, data.get('execution_id'))
             X_train = train_data['X_train']
             y_train = train_data['y_train']
             X_valid = train_data['X_valid']
             y_valid = train_data['y_valid']
+            context = train_data.get('validation_context')
+            contract = train_data.get('prediction_contract') or {}
+            if len(contract.get('class_mapping') or []) > 2:
+                return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
+            if context is not None:
+                try:
+                    list(development_folds(context, X_train.index, y_train, cv_folds))
+                except (ValueError, KeyError) as error:
+                    return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
             hp_task = str(train_data.get('task') or data.get('task') or 'classification').strip().lower()
             if hp_task in ('regression', 'regressor', 'reg'):
                 hp_task = 'regression'
             else:
                 hp_task = 'classification'
-            primary_metric = data.get(
-                'primary_metric',
-                'r2' if hp_task == 'regression' else 'roc_auc',
-            )
+            declared_metric = (contract.get('objective') or {}).get('primary_metric')
+            primary_metric = data.get('primary_metric', declared_metric or ('r2' if hp_task == 'regression' else 'roc_auc'))
+            from modeling.hyperparam_utils import METRIC_DIRECTION
+            if primary_metric not in METRIC_DIRECTION:
+                return Response({'error': f'Tuning objective {primary_metric!r} is not supported by this native search path yet.'}, status=status.HTTP_400_BAD_REQUEST)
+            if declared_metric and primary_metric != declared_metric:
+                return Response({'error': 'Tuning objective contradicts the accepted prediction contract. Revise the declaration in a new execution.'}, status=status.HTTP_400_BAD_REQUEST)
             # Prefer train-fitted imbalance weight; never score the locked outer test here
             hp_scale_pos_weight = (
                 None if hp_task == 'regression' else train_data.get('scale_pos_weight')
@@ -2401,6 +2457,7 @@ class HyperparamStartView(APIView):
                         scale_pos_weight=hp_scale_pos_weight,
                         early_stopping_rounds=50,
                         task=hp_task,
+                        validation_context=train_data.get('validation_context'),
                         algorithm=hp_algorithm,
                     )
                     # Refit best config so Evaluation/Deployment score the tuned model
@@ -2419,29 +2476,41 @@ class HyperparamStartView(APIView):
                                 scale_pos_weight=hp_scale_pos_weight,
                                 early_stopping_rounds=50,
                             )
-                            models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-                            os.makedirs(models_dir, exist_ok=True)
-                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                            adapter.save(model_path)
-                            model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
-                            results['refit_model_path'] = model_rel
-                            results['refit_params'] = best_params
-                            # Update modeling status artifact
-                            st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                            if os.path.exists(st_path):
-                                with open(st_path, 'r', encoding='utf-8') as sf:
-                                    st = json.load(sf)
-                                model_info = st.get('model') or {}
-                                model_info['model_path'] = model_rel
-                                model_info['algorithm'] = hp_algorithm
-                                model_info['best_hyperparams'] = best_params
-                                model_info['hyperparam_refit'] = True
-                                model_info['selected_features'] = valid_feats
-                                st['model'] = model_info
-                                st['algorithm'] = hp_algorithm
-                                with open(st_path, 'w', encoding='utf-8') as sf:
-                                    json.dump(st, sf, indent=2)
-                            print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
+                            current_status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                            with open(current_status_path, encoding='utf-8') as stream:
+                                current_status = json.load(stream)
+                            parent_id = train_data.get('execution_id')
+                            if parent_id:
+                                published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search')
+                                results['refit_model_path'] = published['model']['model_path']
+                                results['execution_id'] = published['execution_id']
+                                results['parent_execution_id'] = parent_id
+                                results['adoption_status'] = published['adoption_status']
+                                results['refit_params'] = best_params
+                            else:
+                                models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
+                                os.makedirs(models_dir, exist_ok=True)
+                                model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                                adapter.save(model_path)
+                                model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
+                                results['refit_model_path'] = model_rel
+                                results['refit_params'] = best_params
+                                # Update modeling status artifact
+                                st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                                if os.path.exists(st_path):
+                                    with open(st_path, 'r', encoding='utf-8') as sf:
+                                        st = json.load(sf)
+                                    model_info = st.get('model') or {}
+                                    model_info['model_path'] = model_rel
+                                    model_info['algorithm'] = hp_algorithm
+                                    model_info['best_hyperparams'] = best_params
+                                    model_info['hyperparam_refit'] = True
+                                    model_info['selected_features'] = valid_feats
+                                    st['model'] = model_info
+                                    st['algorithm'] = hp_algorithm
+                                    with open(st_path, 'w', encoding='utf-8') as sf:
+                                        json.dump(st, sf, indent=2)
+                                print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
                     except Exception as refit_err:
                         print(f"[Hyperparam] Refit skipped/failed: {refit_err}")
                         results['refit_error'] = str(refit_err)
@@ -2610,19 +2679,10 @@ class VifDetailView(APIView):
 
             X_train = train_data['X_train']
 
-            # Build numeric VIF matrix (same logic as in ModelingStartView)
-            X_vif = X_train.copy()
-            for c in X_vif.columns:
-                if hasattr(X_vif[c], 'cat'):
-                    X_vif[c] = X_vif[c].cat.codes.astype(float)
-                    X_vif[c] = X_vif[c].replace(-1, np.nan)
-            X_vif = X_vif.select_dtypes(include=['number']).dropna(axis=1, how='all')
-            X_vif = X_vif.fillna(X_vif.mean())
-            nonzero_var = X_vif.columns[X_vif.var() > 0]
-            X_vif = X_vif[nonzero_var]
+            X_vif = numeric_collinearity_frame(X_train, train_data.get('encoding_report'))
 
             if feature_name not in X_vif.columns:
-                return Response({'error': f'Feature "{feature_name}" not found in numeric training data.'},
+                return Response({'error': f'Feature "{feature_name}" is not a nonconstant numeric predictor. Nominal categories have no numeric-code VIF.'},
                                 status=status.HTTP_404_NOT_FOUND)
 
             from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -2673,6 +2733,7 @@ class VifDetailView(APIView):
             return Response({
                 'feature': feature_name,
                 'vif': overall_vif,
+                'limitations': DIAGNOSTIC_LIMITATIONS['vif'],
                 'contributions': contributions,
             }, status=status.HTTP_200_OK)
 
@@ -2975,7 +3036,7 @@ class SFSHistoryView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ChampionPromoteView(APIView):
-    """Accept feature set + HP config as champion and mark ready for Evaluation."""
+    """Fit the accepted native configuration as a new, assessable version."""
 
     def post(self, request, *args, **kwargs):
         data = request.data or {}
@@ -3022,12 +3083,53 @@ class ChampionPromoteView(APIView):
                 'error': 'No accepted feature set found. Complete SFS/HP first.',
             }, status=status.HTTP_409_CONFLICT)
 
+        try:
+            status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+            with open(status_path, encoding='utf-8') as stream:
+                current = json.load(stream)
+            parent_id = current.get('execution_id')
+            if not parent_id:
+                return Response({'error': 'This historical model has no immutable execution. Re-run modeling under an accepted declaration before adopting a champion.'}, status=status.HTTP_409_CONFLICT)
+            if data.get('execution_id') and data['execution_id'] != parent_id:
+                return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
+            development = load_development_data(file_id, parent_id)
+            if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
+                raise ValueError('Accepted features must be a unique list of column names.')
+            missing = [name for name in features if name not in development['X_train']]
+            if missing:
+                raise ValueError(f'Accepted features are absent from this execution: {missing}')
+            if not isinstance(hyperparam, dict):
+                raise ValueError('Accepted hyperparameters must be an object.')
+            algorithm = algorithm or development['algorithm']
+            if algorithm != development['algorithm']:
+                raise ValueError('Changing the algorithm requires a separately evaluated candidate execution.')
+            from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
+            if is_alt_algorithm(algorithm):
+                adapter = get_alt_adapter(algorithm).train(development['X_train'][features], development['y_train'],
+                    development['X_valid'][features], development['y_valid'], hyperparam)
+            else:
+                from modeling.booster_adapters import fit_booster
+                adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
+                    development['X_valid'][features], development['y_valid'], hyperparam,
+                    task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))
+            published = publish_candidate(parent_id, file_id, adapter, features, hyperparam, 'accepted_champion')
+            if published['adoption_status'] != 'adopted':
+                return Response({'error': 'Another execution became current while fitting. The candidate is retained; refresh before adoption.',
+                                 'candidate_execution_id': published['execution_id']}, status=status.HTTP_409_CONFLICT)
+        except (ValueError, KeyError, OSError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+
         champion = {
             'file_id': file_id,
             'features': list(features),
             'feature_count': len(features),
             'hyperparam': hyperparam,
             'algorithm': algorithm,
+            'execution_id': published['execution_id'],
+            'parent_execution_id': parent_id,
+            'model_path': published['model']['model_path'],
+            'evidence_status': 'exploratory',
+            'production_use_approved': False,
             'promoted_at': __import__('datetime').datetime.now(
                 __import__('datetime').timezone.utc
             ).isoformat(),
@@ -3036,9 +3138,10 @@ class ChampionPromoteView(APIView):
 
         champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
         os.makedirs(champ_dir, exist_ok=True)
-        champ_path = os.path.join(champ_dir, 'champion.json')
-        with open(champ_path, 'w', encoding='utf-8') as f:
+        champ_path = os.path.join(champ_dir, f"champion_{published['execution_id']}.json")
+        with open(champ_path, 'x', encoding='utf-8') as f:
             json.dump(champion, f, indent=2, default=str)
+        replace_projection(champ_path, os.path.join(champ_dir, 'champion.json'))
 
         try:
             from modeling.crisp_dm import merge_crisp_dm
