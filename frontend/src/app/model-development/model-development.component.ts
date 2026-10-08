@@ -2594,6 +2594,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
    */
   private refreshProblemType(prune: boolean = true): void {
     const bu = this.businessUnderstanding;
+    const previousType = this.detectedProblemType;
     const metric = String(bu.success_criteria?.primary_metric || '').toLowerCase();
     const metricTask = ModelDevelopmentComponent.METRIC_TASK[metric] || null;
     const metricIsExplicit =
@@ -2636,6 +2637,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.problemTypeMetricConflict = declared === 'anomaly'
       ? !['roc_auc', 'pr_auc', 'auc', 'average_precision'].includes(metric)
       : conflict || !!(declared && metricTask && declared !== metricTask);
+    // Clear the prior task's rejection once the accepted/suggested task changes.
+    if (this.detectedProblemType !== previousType) this.pipelineResetNotice = '';
     if (prune) this.pruneIncompatiblePipeline();
   }
 
