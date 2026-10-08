@@ -146,6 +146,66 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(replay.status()).toBe(200);
       expect((await replay.json()).scores).toEqual(fullScores);
+      const selected = await api.post('modeling/sfs/start/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          initial_features: ['x'],
+          methods: ['forward'],
+          cv_folds: 2,
+          stopping_criteria: {
+            metrics: [{ metric: primary, pct_change: 0 }],
+            min_features: 1,
+            max_features: 1,
+          },
+        },
+      });
+      expect(selected.status()).toBe(200);
+      await expect
+        .poll(async () => (await (await api.get(`modeling/sfs/status/${fileId}/`)).json()).status, {
+          timeout: 30_000,
+        })
+        .toBe('completed');
+      const selectionResponse = await api.get(`modeling/sfs/${fileId}/`);
+      expect(selectionResponse.status()).toBe(200);
+      const selection = await selectionResponse.json();
+      expect(selection.selection_objective).toMatchObject({
+        primary_metric: primary,
+        direction: task === 'regression' ? 'minimize' : 'maximize',
+      });
+      expect(selection.resume_basis).toMatchObject({ execution_id: run.execution_id, cv_folds: 2 });
+      expect(selection.resume_basis.train.features).toEqual(['x']);
+      expect(selection.search_bases[selection.resume_basis.sha256]).toEqual(selection.resume_basis);
+      const step = selection.forward[0];
+      expect(step.selected_features).toEqual(['x']);
+      expect(step.cv_evidence.metric_coverage[primary]).toMatchObject({
+        status: 'complete',
+        n_total: 2,
+        n_valid: 2,
+      });
+      expect(step.test_partition).toBe('development_validation');
+      expect(step.selection_objective.qualification).toContain('Not independent assessment');
+      for (const fold of step.validation_provenance) {
+        expect(fold.purifier.fit_rows).toEqual(fold.train_rows);
+        expect(Math.max(...fold.train_rows)).toBeLessThan(Math.min(...fold.valid_rows));
+        expect(Math.max(...fold.valid_rows)).toBeLessThan(200);
+        expect(fold.native_fit.train.features).toEqual(['x']);
+      }
+      if (task === 'regression') {
+        expect(step.cv_rmse).toBeGreaterThanOrEqual(0);
+        expect(step.cv_roc_auc).toBeUndefined();
+      }
+      const changedResume = await api.post('modeling/sfs/start/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          resume: true,
+          methods: ['forward'],
+          cv_folds: 3,
+        },
+      });
+      expect(changedResume.status()).toBe(409);
+      expect((await changedResume.json()).error).toContain('Start a fresh search');
       for (const incomplete of [{ features: ['x'] }, { execution_id: run.execution_id }]) {
         const blocked = await api.post('modeling/champion/', {
           data: { file_id: fileId, ...incomplete },

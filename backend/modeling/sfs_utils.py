@@ -639,700 +639,381 @@ def run_backward_sfs(
         return results
 
 
-def run_sfs_with_progress(
-    X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-    methods: List[str],  # ['forward', 'backward', 'both']
-    stopping_criteria: Dict[str, Any],  # {metrics: [{metric, pct_change}], min_features, max_features}
-    status_callback: Optional[callable] = None,
-    cv_folds: int = 3,
-    initial_features: Optional[List[str]] = None,  # Optional: Start with specific features
-    n_jobs: int = 1,  # Number of parallel workers for candidate evaluation
-    top_k: int = 3,  # Number of top candidates to CV-evaluate per step
-    stop_flag: Optional[Dict] = None,  # Dict with 'stop_requested' key checked each step
-    resume_state: Optional[Dict] = None,  # State to resume from (forward/backward completed steps)
-    task: str = 'classification',
-    algorithm: str = 'xgboost',
+def _selection_cv(X, y, task, algorithm, context, cv_folds, objective):
+    from modeling.development_assessment import development_metrics, metric_coverage
+
+    rows, provenance = [], []
+    for fold, (X_tr, y_tr, X_va, y_va, receipt) in enumerate(iter_validation_folds(context, X, y, cv_folds, task), 1):
+        if task == "classification" and set(y_tr.unique()) != {0, 1}:
+            raise ValueError(f"Feature-selection fold {fold} lacks a training class; revise the population or split.")
+        adapter = _sfs_fit(algorithm, X_tr, y_tr, X_va, y_va, _sfs_booster_params(task, 0), task=task)
+        predictions = adapter.predict(X_va) if task == "regression" else adapter.predict_proba(X_va)
+        rows.append(development_metrics(y_va, predictions, task, 2, objective["cost_matrix"]))
+        provenance.append({**receipt, "native_fit": adapter.fit_receipt})
+    if len(rows) != cv_folds:
+        raise ValueError("Feature-selection CV did not produce every requested fold.")
+    coverage = {key: metric_coverage([row[key] for row in rows]) for key in rows[0]}
+    primary = objective["primary_metric"]
+    if coverage[primary]["status"] != "complete":
+        raise ValueError(
+            f"Feature-selection objective {primary} is unavailable in one or more folds; revise the metric or validation population."
+        )
+    return {
+        "schema_version": 2,
+        "status": "completed",
+        "metrics": {key: value["mean"] for key, value in coverage.items()},
+        "metric_coverage": coverage,
+        "fold_metrics": rows,
+        "fold_provenance": provenance,
+        "qualification": objective["qualification"],
+        "uncertainty": "Unweighted fold means; fold spread is descriptive, not a confidence interval.",
+        "selection_method": "Development-validation screening then top-K CV; reused selection data, not nested validation.",
+    }
+
+
+def _run_selection_step(
+    X_train,
+    y_train,
+    X_valid,
+    y_valid,
+    current_features,
+    step,
+    cv_folds,
+    n_jobs,
+    top_k,
+    task,
+    algorithm,
+    context,
+    mode,
+    objective,
+):
+    from modeling.development_assessment import development_metrics
+
+    primary = objective["primary_metric"]
+    sign = -1 if objective["direction"] == "minimize" else 1
+    candidates = (
+        [name for name in X_train if name not in current_features] if mode == "forward" else list(current_features)
+    )
+    if not candidates or (mode == "backward" and len(current_features) <= 1):
+        return None
+    subset = lambda name: current_features + [name] if mode == "forward" else [f for f in current_features if f != name]
+    params = _sfs_booster_params(task, 1 if n_jobs > 1 else 0)
+
+    def screen(name):
+        features = subset(name)
+        adapter = _sfs_fit(algorithm, X_train[features], y_train, X_valid[features], y_valid, params, task=task)
+        predictions = (
+            adapter.predict(X_valid[features]) if task == "regression" else adapter.predict_proba(X_valid[features])
+        )
+        value = development_metrics(y_valid, predictions, task, 2, objective["cost_matrix"])[primary]
+        if value is None or not np.isfinite(value):
+            raise ValueError(
+                f"Development-validation screening metric {primary} is unavailable; revise the split or objective."
+            )
+        return name, float(value)
+
+    if n_jobs > 1:
+        with ThreadPoolExecutor(max_workers=min(n_jobs, len(candidates))) as pool:
+            screened = dict(pool.map(screen, candidates))
+    else:
+        screened = dict(screen(name) for name in candidates)
+    # Stable ties preserve the declared feature order, even with parallel workers.
+    ranked = sorted(candidates, key=lambda name: (-sign * screened[name], candidates.index(name)))
+    evidence = {
+        name: _selection_cv(X_train[subset(name)], y_train, task, algorithm, context, cv_folds, objective)
+        for name in ranked[: min(top_k, len(ranked))]
+    }
+    winner = max(evidence, key=lambda name: sign * evidence[name]["metrics"][primary])
+    features, cv = subset(winner), evidence[winner]
+    adapter = _sfs_fit(
+        algorithm, X_train[features], y_train, X_valid[features], y_valid, _sfs_booster_params(task, 0), task=task
+    )
+    train_p = adapter.predict(X_train[features]) if task == "regression" else adapter.predict_proba(X_train[features])
+    valid_p = adapter.predict(X_valid[features]) if task == "regression" else adapter.predict_proba(X_valid[features])
+    metrics = {
+        "train": development_metrics(y_train, train_p, task, 2, objective["cost_matrix"]),
+        "test": development_metrics(y_valid, valid_p, task, 2, objective["cost_matrix"]),
+        "cv": cv["metrics"],
+    }
+    shap_values = compute_shap_importance(adapter.shap_model(), X_train[features], features)
+    result = {
+        "schema_version": 2,
+        "step": step,
+        "direction": mode,
+        "action": "added" if mode == "forward" else "dropped",
+        "feature_name": winner,
+        "selected_features": features,
+        "task": task,
+        "selection_objective": objective,
+        "cv_evidence": cv,
+        "validation_provenance": cv["fold_provenance"],
+        "fit_receipt": adapter.fit_receipt,
+        "screening_scores": screened,
+        "cv_candidate_scores": {name: value["metrics"][primary] for name, value in evidence.items()},
+        "top_k_evaluated": list(evidence),
+        "test_partition": "development_validation",
+        "stability_type": "PSI",
+        "stability_value": calculate_psi(train_p, valid_p),
+        "shap_importance": float(shap_values.get(winner, 0.0)),
+        "shap_changes": {},
+        "feature_importance": {row["feature"]: float(row["score"]) for row in adapter.gain_importance()},
+        "shap_importance_by_feature": shap_values,
+    }
+    for split, values in metrics.items():
+        result.update({split + "_" + name: value for name, value in values.items()})
+    return result
+
+
+def _run_forward_step(
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    X_train_raw,
+    X_test_raw,
+    current_features,
+    step,
+    cv_folds,
+    n_jobs=1,
+    top_k=3,
+    task="classification",
+    algorithm="xgboost",
     validation_context=None,
-) -> Dict[str, Any]:
-    """
-    Run SFS with user-specified methods, stopping criteria, and progress tracking.
-    
-    Args:
-        X_train, y_train: Training data
-        X_test, y_test: Test data
-        X_train_raw, X_test_raw: Raw data for stability calculations
-        methods: List of methods to run ('forward', 'backward', or both)
-        stopping_criteria: Dict with keys:
-            - metrics: List of {metric: 'roc_auc'|'pr_auc'|'r2', pct_change: float}
-            - min_features: Minimum features to keep (for backward)
-            - max_features: Maximum features to add (for forward)
-        status_callback: Function to call with progress updates
-        cv_folds: Number of CV folds
-        task: 'classification' or 'regression'
-    
-    Returns:
-        Dict with forward/backward results and final metrics
-    """
-    task = _normalize_sfs_task(task)
-    algorithm = (algorithm or 'xgboost').strip().lower()
-    results = {'forward': [], 'backward': [], 'status': 'running', 'task': task, 'algorithm': algorithm}
-    completed_steps = []  # Track completed steps for real-time viewing
+    selection_objective=None,
+):
+    from modeling.sfs_objective import resolve_objective
 
-    def is_stop_requested():
-        """Check if stop has been requested via the shared progress dict."""
-        if stop_flag and stop_flag.get('stop_requested'):
-            return True
-        return False
+    objective = selection_objective or resolve_objective(task, validation_context, {})[0]
+    return _run_selection_step(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        current_features,
+        step,
+        cv_folds,
+        n_jobs,
+        top_k,
+        task,
+        algorithm,
+        validation_context,
+        "forward",
+        objective,
+    )
 
-    # Filter by initial_features if provided
-    if initial_features:
-        valid_features = [f for f in initial_features if f in X_train.columns]
-        if valid_features:
-            X_train = X_train[valid_features]
-            X_test = X_test[valid_features]
-            if X_train_raw is not None and hasattr(X_train_raw, 'columns'):
-                X_train_raw = X_train_raw[[c for c in valid_features if c in X_train_raw.columns]]
-            if X_test_raw is not None and hasattr(X_test_raw, 'columns'):
-                X_test_raw = X_test_raw[[c for c in valid_features if c in X_test_raw.columns]]
-            print(f"[SFS] Starting with {len(valid_features)} initial features: {valid_features}")
-    
-    print(f"[SFS] Parallelism: n_jobs={n_jobs}, available CPUs={os.cpu_count()}, task={task}")
-    
-    def update_status(message: str, progress: float, current_metrics: Dict[str, float] = None, step_result: Dict = None):
-        """Update status via callback"""
-        if status_callback:
-            callback_data = {
-                'message': message,
-                'progress': progress,
-                'current_metrics': current_metrics or {},
-                'status': 'running',
-                'completed_steps': completed_steps.copy()  # Send current completed steps
-            }
-            status_callback(callback_data)
-    
+
+def _run_backward_step(
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    X_train_raw,
+    X_test_raw,
+    current_features,
+    step,
+    cv_folds,
+    n_jobs=1,
+    top_k=3,
+    task="classification",
+    algorithm="xgboost",
+    validation_context=None,
+    selection_objective=None,
+):
+    from modeling.sfs_objective import resolve_objective
+
+    objective = selection_objective or resolve_objective(task, validation_context, {})[0]
+    return _run_selection_step(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        current_features,
+        step,
+        cv_folds,
+        n_jobs,
+        top_k,
+        task,
+        algorithm,
+        validation_context,
+        "backward",
+        objective,
+    )
+
+
+def run_sfs_with_progress(
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    X_train_raw,
+    X_test_raw,
+    methods,
+    stopping_criteria,
+    status_callback=None,
+    cv_folds=3,
+    initial_features=None,
+    n_jobs=1,
+    top_k=3,
+    stop_flag=None,
+    resume_state=None,
+    task="classification",
+    algorithm="xgboost",
+    validation_context=None,
+    execution_id=None,
+    prediction_contract=None,
+):
+    """Native exploratory selection; unavailable evidence never means zero/success."""
+    from modeling.sfs_objective import prepare_search, validate_resume, current_metrics, stopping_decision
+
+    results = {"forward": [], "backward": [], "status": "running", "task": task, "algorithm": algorithm}
+    completed = []
     try:
-        total_methods = len(methods)
-        method_progress_weight = 1.0 / total_methods if total_methods > 0 else 1.0
-        
-        # Extract stopping criteria - support multiple metrics
-        default_metric = 'r2' if task == 'regression' else 'roc_auc'
-        metric_criteria = stopping_criteria.get('metrics', [{'metric': default_metric, 'pct_change': 0.0}])
-        if not metric_criteria:  # Fallback for backward compatibility
-            metric_criteria = [{'metric': default_metric, 'pct_change': 0.0}]
-        metric_criteria = _normalize_sfs_metric_criteria(metric_criteria, task)
-        
-        min_features = stopping_criteria.get('min_features', 3)
-        max_features = stopping_criteria.get('max_features', min(10, X_train.shape[1]))
-        
-        # Run Forward Selection
-        if 'forward' in methods:
-            forward_results = []
-            selected_features = []
-            previous_metrics = {mc['metric']: 0.0 for mc in metric_criteria}
-            forward_start_step = 1
+        X_train, X_test, objective, config, basis = prepare_search(
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            task,
+            algorithm,
+            validation_context or {"task": task, "prediction_contract": prediction_contract or {}},
+            stopping_criteria,
+            cv_folds,
+            top_k,
+            methods,
+            initial_features,
+            execution_id,
+            n_jobs,
+        )
+        criteria = config["metrics"]
+        min_features, max_features = config["min_features"], config["max_features"]
+        validate_resume(resume_state, basis)
+        results.update(
+            selection_objective=objective,
+            stopping_criteria=config,
+            resume_basis=basis,
+            change_semantics="Positive percentage means improvement in the metric direction; zero baseline percentages are unavailable. Zero threshold disables its percentage gate.",
+            baselines=(resume_state or {}).get("baselines", {}),
+        )
+        completed = (resume_state or {}).get("completed_steps", []).copy()
 
-            # Resume from previous state if available
-            if resume_state and resume_state.get('forward_results'):
-                forward_results = resume_state['forward_results']
-                selected_features = resume_state.get('forward_selected_features', [])
-                previous_metrics = resume_state.get('forward_previous_metrics', previous_metrics)
-                forward_start_step = resume_state.get('forward_start_step', len(forward_results) + 1)
-                completed_steps = resume_state.get('completed_steps', [])
-                print(f"[SFS] Resuming forward from step {forward_start_step}, {len(selected_features)} features selected")
-
-            update_status(f'Starting forward selection (max {max_features} features)...', 0.0)
-            
-            for step in range(forward_start_step, max_features + 1):
-                if is_stop_requested():
-                    print(f"[SFS] Stop requested at forward step {step}")
-                    results['forward'] = forward_results
-                    results['status'] = 'stopped'
-                    results['stopped_at'] = {'direction': 'forward', 'step': step}
-                    results['resume_state'] = {
-                        'forward_results': forward_results,
-                        'forward_selected_features': selected_features,
-                        'forward_previous_metrics': previous_metrics,
-                        'forward_start_step': step,
-                        'completed_steps': completed_steps.copy()
+        def update(message, progress, state="running", metrics=None):
+            if status_callback:
+                status_callback(
+                    {
+                        "message": message,
+                        "progress": progress,
+                        "status": state,
+                        "current_metrics": metrics or {},
+                        "completed_steps": completed.copy(),
+                        "selection_objective": objective,
+                        "resume_basis": basis,
                     }
-                    update_status(f'SFS stopped by user at forward step {step}', step / max_features)
-                    return results
-                step_progress = (step / max_features) * method_progress_weight
-                update_status(f'Forward selection: Step {step}/{max_features}', step_progress)
-                
-                # Run one step of forward selection
-                step_result = _run_forward_step(
-                    X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    selected_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
-                    algorithm=algorithm, validation_context=validation_context,
                 )
-                
-                if step_result:
-                    # Get current metric values (r2 aliases onto cv_roc_auc for regressors)
-                    current_metrics = {}
-                    for mc in metric_criteria:
-                        metric_name = mc['metric']
-                        key = f'cv_{metric_name}'
-                        if key in step_result:
-                            current_metrics[metric_name] = step_result[key]
-                        elif metric_name == 'r2':
-                            current_metrics[metric_name] = step_result.get('cv_roc_auc', 0.0)
-                        else:
-                            current_metrics[metric_name] = 0.0
-                    
-                    # Calculate percentage changes for display (abs denom supports negative R²)
-                    pct_changes = {}
-                    if step > 1:
-                        for mc in metric_criteria:
-                            metric_name = mc['metric']
-                            current_val = current_metrics[metric_name]
-                            prev_val = previous_metrics[metric_name]
-                            if abs(prev_val) > 1e-12:
-                                pct_changes[metric_name] = ((current_val - prev_val) / abs(prev_val)) * 100
-                            else:
-                                pct_changes[metric_name] = 0.0
-                    
-                    # Forward stopping: stop when signed pct_change is NOT > threshold
-                    # (i.e. improvement is too small or metric decreased)
-                    should_stop = False
-                    if step > 1:
-                        stop_reasons = []
-                        for mc in metric_criteria:
-                            metric_name = mc['metric']
-                            pct_threshold = mc.get('pct_change', 0.0)
-                            if pct_threshold > 0:
-                                current_val = current_metrics[metric_name]
-                                prev_val = previous_metrics[metric_name]
-                                if abs(prev_val) > 1e-12:
-                                    signed_change = ((current_val - prev_val) / abs(prev_val)) * 100
-                                    if not (signed_change > pct_threshold):
-                                        stop_reasons.append(f'{metric_name} change ({signed_change:+.2f}%) not > {pct_threshold}%')
-                        if stop_reasons:
-                            update_status(
-                                f'Forward selection stopped: Feature rejected ({step_result["feature_name"]}), {"; ".join(stop_reasons)}',
-                                step_progress, previous_metrics
-                            )
-                            should_stop = True
-                    
-                    if should_stop:
-                        break
-                    
-                    # Accept the feature
-                    forward_results.append(step_result)
-                    selected_features = step_result['selected_features']
-                    
-                    # Add to completed steps for real-time viewing
-                    completed_step_info = {
-                        'step': step,
-                        'direction': 'forward',
-                        'action': 'added',
-                        'feature_name': step_result['feature_name'],
-                        'cv_roc_auc': step_result.get('cv_roc_auc', 0.0),
-                        'cv_pr_auc': step_result.get('cv_pr_auc', 0.0),
-                        'test_roc_auc': step_result.get('test_roc_auc', 0.0),
-                        'test_pr_auc': step_result.get('test_pr_auc', 0.0),
-                        'cv_r2': step_result.get('cv_r2'),
-                        'cv_rmse': step_result.get('cv_rmse'),
-                        'pct_changes': pct_changes
-                    }
-                    completed_steps.append(completed_step_info)
-                    
-                    previous_metrics = current_metrics.copy()
-                    metric_str = ', '.join([f'{k}={v:.4f}' for k, v in current_metrics.items()])
-                    update_status(f'Forward step {step} complete: {metric_str}', step_progress, current_metrics)
-                else:
-                    break
-            
-            results['forward'] = forward_results
-        
-        # Run Backward Elimination
-        if 'backward' in methods:
-            base_progress = method_progress_weight if 'forward' in methods else 0.0
-            
-            backward_results = []
-            current_features = list(X_train.columns)
-            max_drops = len(current_features) - min_features
-            previous_metrics = None
-            backward_start_step = 1
 
-            # Resume from previous state if available
-            if resume_state and resume_state.get('backward_results'):
-                backward_results = resume_state['backward_results']
-                current_features = resume_state.get('backward_current_features', current_features)
-                previous_metrics = resume_state.get('backward_previous_metrics', None)
-                backward_start_step = resume_state.get('backward_start_step', len(backward_results) + 1)
-                if not completed_steps and resume_state.get('completed_steps'):
-                    completed_steps = resume_state['completed_steps']
-                max_drops = len(list(X_train.columns)) - min_features  # recalculate from full columns
-                print(f"[SFS] Resuming backward from step {backward_start_step}, {len(current_features)} features remaining")
-
-            update_status(f'Starting backward elimination (min {min_features} features)...', base_progress)
-            
-            for step in range(backward_start_step, max_drops + 1):
-                if is_stop_requested():
-                    print(f"[SFS] Stop requested at backward step {step}")
-                    results['backward'] = backward_results
-                    if backward_results:
-                        results['backward_remaining_features'] = current_features
-                    else:
-                        results['backward_remaining_features'] = list(X_train.columns)
-                    results['status'] = 'stopped'
-                    results['stopped_at'] = {'direction': 'backward', 'step': step}
-                    results['resume_state'] = {
-                        'backward_results': backward_results,
-                        'backward_current_features': current_features,
-                        'backward_previous_metrics': previous_metrics,
-                        'backward_start_step': step,
-                        'completed_steps': completed_steps.copy()
+        for method_index, mode in enumerate(methods):
+            steps = (resume_state or {}).get(mode + "_results", []).copy()
+            features = (
+                (resume_state or {}).get("forward_selected_features", [])
+                if mode == "forward"
+                else (resume_state or {}).get("backward_current_features", list(X_train))
+            )
+            previous = (resume_state or {}).get(mode + "_previous_metrics")
+            if steps:
+                previous = current_metrics(steps[-1], criteria)
+            count = max_features if mode == "forward" else max(0, len(X_train.columns) - min_features)
+            start = len(steps) + 1
+            update(
+                f"Starting {mode} selection: {objective['primary_metric']} ({objective['direction']})",
+                method_index / len(methods),
+            )
+            for step in range(start, count + 1):
+                if stop_flag and stop_flag.get("stop_requested"):
+                    results[mode] = steps
+                    if mode == "backward":
+                        results["backward_remaining_features"] = features
+                    state = {
+                        "completed_steps": completed.copy(),
+                        "resume_basis": basis,
+                        "baselines": results["baselines"],
                     }
-                    # Also include any forward results completed earlier
-                    if results.get('forward'):
-                        results['resume_state']['forward_results'] = results['forward']
-                    update_status(f'SFS stopped by user at backward step {step}', base_progress + (step / max_drops) * method_progress_weight)
+                    for name in methods:
+                        if results.get(name):
+                            state[name + "_results"] = results[name]
+                    state.update(
+                        {
+                            mode + "_results": steps,
+                            mode + "_previous_metrics": previous,
+                            "forward_selected_features" if mode == "forward" else "backward_current_features": features,
+                        }
+                    )
+                    results.update(status="stopped", stopped_at={"direction": mode, "step": step}, resume_state=state)
+                    update(
+                        f"Selection stopped at {mode} step {step}",
+                        (method_index + (step - 1) / count) / len(methods),
+                        "stopped",
+                    )
                     return results
-                step_progress = base_progress + (step / max_drops) * method_progress_weight
-                update_status(f'Backward elimination: Step {step}/{max_drops}', step_progress)
-                
-                # Run one step of backward elimination
-                step_result = _run_backward_step(
-                    X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                    current_features, step, cv_folds, n_jobs=n_jobs, top_k=top_k, task=task,
-                    algorithm=algorithm, validation_context=validation_context,
+                if mode == "backward" and previous is None:
+                    baseline = _selection_cv(
+                        X_train[features], y_train, task, algorithm, validation_context, cv_folds, objective
+                    )
+                    results["baselines"]["backward"] = baseline
+                    previous = current_metrics({"cv_" + k: v for k, v in baseline["metrics"].items()}, criteria)
+                function = _run_forward_step if mode == "forward" else _run_backward_step
+                candidate = function(
+                    X_train,
+                    y_train,
+                    X_test,
+                    y_test,
+                    X_train_raw,
+                    X_test_raw,
+                    features,
+                    step,
+                    cv_folds,
+                    n_jobs=n_jobs,
+                    top_k=top_k,
+                    task=task,
+                    algorithm=algorithm,
+                    validation_context=validation_context,
+                    selection_objective=objective,
                 )
-                
-                if step_result:
-                    # Get current metric values (r2 aliases onto cv_roc_auc for regressors)
-                    current_metrics = {}
-                    for mc in metric_criteria:
-                        metric_name = mc['metric']
-                        key = f'cv_{metric_name}'
-                        if key in step_result:
-                            current_metrics[metric_name] = step_result[key]
-                        elif metric_name == 'r2':
-                            current_metrics[metric_name] = step_result.get('cv_roc_auc', 0.0)
-                        else:
-                            current_metrics[metric_name] = 0.0
-                    
-                    # Calculate percentage changes for display (abs denom supports negative R²)
-                    pct_changes = {}
-                    if previous_metrics is not None:
-                        for mc in metric_criteria:
-                            metric_name = mc['metric']
-                            current_val = current_metrics[metric_name]
-                            prev_val = previous_metrics[metric_name]
-                            if abs(prev_val) > 1e-12:
-                                pct_changes[metric_name] = ((current_val - prev_val) / abs(prev_val)) * 100
-                            else:
-                                pct_changes[metric_name] = 0.0
-                    
-                    # Backward stopping: stop when |pct_change| > threshold
-                    # (dropping this feature degrades metric too much)
-                    should_stop = False
-                    if previous_metrics is not None:
-                        stop_reasons = []
-                        for mc in metric_criteria:
-                            metric_name = mc['metric']
-                            pct_threshold = mc.get('pct_change', 0.0)
-                            if pct_threshold > 0:
-                                current_val = current_metrics[metric_name]
-                                prev_val = previous_metrics[metric_name]
-                                if abs(prev_val) > 1e-12:
-                                    signed_change = ((current_val - prev_val) / abs(prev_val)) * 100
-                                    if abs(signed_change) > pct_threshold:
-                                        stop_reasons.append(f'{metric_name} |change| ({abs(signed_change):.2f}%) > {pct_threshold}%')
-                        if stop_reasons:
-                            update_status(
-                                f'Backward elimination stopped: Feature drop rejected ({step_result["feature_name"]}), {"; ".join(stop_reasons)}',
-                                step_progress, previous_metrics
-                            )
-                            should_stop = True
-                    
-                    if should_stop:
-                        break
-                    
-                    # Accept the drop
-                    backward_results.append(step_result)
-                    current_features = step_result['selected_features']
-                    
-                    # Add to completed steps for real-time viewing
-                    completed_step_info = {
-                        'step': step,
-                        'direction': 'backward',
-                        'action': 'dropped',
-                        'feature_name': step_result['feature_name'],
-                        'cv_roc_auc': step_result.get('cv_roc_auc', 0.0),
-                        'cv_pr_auc': step_result.get('cv_pr_auc', 0.0),
-                        'test_roc_auc': step_result.get('test_roc_auc', 0.0),
-                        'test_pr_auc': step_result.get('test_pr_auc', 0.0),
-                        'cv_r2': step_result.get('cv_r2'),
-                        'cv_rmse': step_result.get('cv_rmse'),
-                        'pct_changes': pct_changes
-                    }
-                    completed_steps.append(completed_step_info)
-                    
-                    previous_metrics = current_metrics.copy()
-                    metric_str = ', '.join([f'{k}={v:.4f}' for k, v in current_metrics.items()])
-                    update_status(f'Backward step {step} complete: {metric_str}', step_progress, current_metrics)
-                else:
+                if candidate is None:
                     break
-            
-            results['backward'] = backward_results
-            # Add remaining features after backward elimination
-            if backward_results:
-                results['backward_remaining_features'] = current_features
-                print(f"[SFS-Backward] Completed with {len(current_features)} remaining features: {current_features}")
-            else:
-                results['backward_remaining_features'] = list(X_train.columns)
-        
-        results['status'] = 'completed'
-        update_status('SFS completed successfully', 1.0)
-        
-    except Exception as e:
-        results['status'] = 'error'
-        results['error'] = str(e)
+                metrics = current_metrics(candidate, criteria)
+                changes, reasons = stopping_decision(metrics, previous, criteria, mode)
+                candidate.update(
+                    pct_changes=changes,
+                    change_semantics=results["change_semantics"],
+                    search_basis_sha256=basis["sha256"],
+                )
+                if reasons:
+                    results.setdefault("rejected_steps", []).append({**candidate, "rejection_reasons": reasons})
+                    update(
+                        f"{mode} step rejected: " + "; ".join(reasons),
+                        (method_index + step / count) / len(methods),
+                        metrics=previous,
+                    )
+                    break
+                steps.append(candidate)
+                features, previous = candidate["selected_features"], metrics
+                completed.append(candidate)
+                results[mode] = steps
+                update(f"{mode} step {step} complete", (method_index + step / count) / len(methods), metrics=metrics)
+            results[mode] = steps
+            if mode == "backward":
+                results["backward_remaining_features"] = features
+        results["status"] = "completed"
+        update("Feature selection completed; evidence is exploratory", 1.0, "completed")
+    except Exception as error:
+        results.update(status="error", error=str(error))
         if status_callback:
-            status_callback({
-                'message': f'SFS failed: {str(e)}',
-                'progress': 0.0,
-                'status': 'error',
-                'error': str(e)
-            })
-        print(f"[SFS] Error: {e}")
-        import traceback
-        traceback.print_exc()
-
+            status_callback(
+                {
+                    "status": "error",
+                    "error": str(error),
+                    "message": f"Feature selection failed: {error}",
+                    "progress": 0.0,
+                    "completed_steps": completed.copy(),
+                }
+            )
     return results
-
-
-def _run_forward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw, 
-                      current_features: List[str], step: int, cv_folds: int,
-                      n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
-                      algorithm: str = 'xgboost', validation_context=None) -> Optional[Dict]:
-    """Run a single forward selection step with parallel candidate evaluation.
-    
-    Optimizations applied:
-    - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
-    - CV only for the winning candidate (train+test score used for ranking)
-    - Early stopping in booster training (early_stopping_rounds=10)
-    """
-    try:
-        task = _normalize_sfs_task(task)
-        algorithm = (algorithm or 'xgboost').strip().lower()
-        
-        remaining_features = [f for f in X_train.columns if f not in current_features]
-        if not remaining_features:
-            return None
-        
-        # When parallelizing, restrict booster to 1 thread per worker to avoid oversubscription
-        ranking_params = _sfs_booster_params(task, nthread=1 if n_jobs > 1 else 0)
-        
-        def evaluate_candidate(feature):
-            """Evaluate adding one feature using train+test only (no CV for ranking)."""
-            candidate_features = current_features + [feature]
-            adapter = _sfs_fit(
-                algorithm,
-                X_train[candidate_features], y_train,
-                X_test[candidate_features], y_test,
-                ranking_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-            )
-            y_tr = adapter.predict_proba(X_train[candidate_features])
-            y_te = adapter.predict_proba(X_test[candidate_features])
-            fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
-            fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
-            return feature, fields
-        
-        # --- Phase 1: Rank candidates in parallel (train+test only, no CV) ---
-        effective_jobs = min(n_jobs, len(remaining_features))
-        candidate_results = {}
-        
-        if effective_jobs > 1:
-            with ThreadPoolExecutor(max_workers=effective_jobs) as pool:
-                futures = {pool.submit(evaluate_candidate, f): f for f in remaining_features}
-                for future in as_completed(futures):
-                    feat, metrics = future.result()
-                    candidate_results[feat] = metrics
-        else:
-            for feat in remaining_features:
-                _, metrics = evaluate_candidate(feat)
-                candidate_results[feat] = metrics
-        
-        # Pick top-K candidates by primary test score for full CV evaluation
-        TOP_K = min(top_k, len(candidate_results))
-        sorted_candidates = sorted(candidate_results, key=lambda f: candidate_results[f]['test_roc_auc'], reverse=True)
-        top_candidates = sorted_candidates[:TOP_K]
-        
-        # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
-        winner_params = {**ranking_params, 'nthread': 0}  # Use all cores for final model
-        
-        best_feature = None
-        best_cv_roc = float('-inf')
-        best_cv_result = {}
-        
-        for candidate_feat in top_candidates:
-            cand_features = current_features + [candidate_feat]
-            X_train_cand = X_train[cand_features]
-            
-            cv_roc_scores = []
-            cv_pr_scores = []
-            provenance = []
-            for X_cv_train, y_cv_train, X_cv_val, y_cv_val, receipt in iter_validation_folds(validation_context, X_train_cand, y_train, cv_folds, task):
-                provenance.append(receipt)
-                
-                cv_adapter = _sfs_fit(
-                    algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
-                    winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-                )
-                y_cv_pred = cv_adapter.predict_proba(X_cv_val)
-                p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
-                cv_roc_scores.append(p)
-                cv_pr_scores.append(s)
-            
-            cand_cv_roc = float(np.mean(cv_roc_scores))
-            cand_cv_pr = float(np.mean(cv_pr_scores))
-            print(f"[SFS-Forward-Step] Top-K CV: {candidate_feat} cv_primary={cand_cv_roc:.4f}")
-            
-            if cand_cv_roc > best_cv_roc:
-                best_cv_roc = cand_cv_roc
-                best_feature = candidate_feat
-                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr, 'validation_provenance': provenance}
-        
-        cv_roc_auc = best_cv_result['cv_roc_auc']
-        cv_pr_auc = best_cv_result['cv_pr_auc']
-        
-        # Retrain final winner model for metrics
-        new_features = current_features + [best_feature]
-        X_train_subset = X_train[new_features]
-        X_test_subset = X_test[new_features]
-        
-        winner_adapter = _sfs_fit(
-            algorithm, X_train_subset, y_train, X_test_subset, y_test,
-            winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-        )
-        winner_booster = winner_adapter.shap_model()
-        
-        y_tr_pred = winner_adapter.predict_proba(X_train_subset)
-        y_te_pred = winner_adapter.predict_proba(X_test_subset)
-        train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
-        test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
-        
-        # --- Phase 3: Model PSI & SHAP for the winner ---
-        try:
-            train_scores = winner_adapter.predict_proba(X_train[new_features])
-            test_scores = winner_adapter.predict_proba(X_test[new_features])
-            stability_value = calculate_psi(train_scores, test_scores)
-            stability_type = 'PSI'
-        except Exception as e:
-            print(f"[SFS-Forward-Step] Model PSI error: {e}")
-            stability_value = None
-            stability_type = 'PSI'
-        
-        shap_importance_by_feature = compute_shap_importance(winner_booster, X_train[new_features], new_features)
-        shap_importance = float(shap_importance_by_feature.get(best_feature, 0.0))
-        
-        try:
-            feature_importance = {d['feature']: float(d['score']) for d in winner_adapter.gain_importance()}
-        except Exception:
-            feature_importance = {}
-        
-        result = {
-            'step': step,
-            'direction': 'forward',
-            'action': 'added',
-            'feature_name': best_feature,
-            'selected_features': new_features,
-            'task': task,
-            'train_roc_auc': train_fields['train_roc_auc'],
-            'cv_roc_auc': cv_roc_auc,
-            'validation_provenance': best_cv_result['validation_provenance'],
-            'test_roc_auc': test_fields['test_roc_auc'],
-            'train_pr_auc': train_fields['train_pr_auc'],
-            'cv_pr_auc': cv_pr_auc,
-            'test_pr_auc': test_fields['test_pr_auc'],
-            'stability_type': stability_type,
-            'stability_value': stability_value,
-            'shap_importance': shap_importance,
-            'shap_changes': {},
-            'feature_importance': feature_importance,
-            'shap_importance_by_feature': shap_importance_by_feature
-        }
-        if task == 'regression':
-            result.update({
-                'train_r2': train_fields.get('train_r2'),
-                'test_r2': test_fields.get('test_r2'),
-                'cv_r2': cv_roc_auc,
-                'train_rmse': train_fields.get('train_rmse'),
-                'test_rmse': test_fields.get('test_rmse'),
-                'cv_rmse': -cv_pr_auc if cv_pr_auc is not None else None,
-            })
-        return result
-    except Exception as e:
-        print(f"[SFS-Forward-Step] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
-def _run_backward_step(X_train, y_train, X_test, y_test, X_train_raw, X_test_raw,
-                       current_features: List[str], step: int, cv_folds: int,
-                       n_jobs: int = 1, top_k: int = 3, task: str = 'classification',
-                       algorithm: str = 'xgboost', validation_context=None) -> Optional[Dict]:
-    """Run a single backward elimination step with parallel candidate evaluation.
-    
-    Optimizations applied:
-    - Parallel evaluation of candidates via ThreadPoolExecutor (n_jobs)
-    - CV only for the winning candidate (train+test score used for ranking)
-    - Early stopping in booster training (early_stopping_rounds=10)
-    """
-    try:
-        task = _normalize_sfs_task(task)
-        algorithm = (algorithm or 'xgboost').strip().lower()
-        
-        if len(current_features) <= 1:
-            return None
-        
-        ranking_params = _sfs_booster_params(task, nthread=1 if n_jobs > 1 else 0)
-        
-        def evaluate_candidate(feature):
-            """Evaluate dropping one feature using train+test only (no CV for ranking)."""
-            candidate_features = [f for f in current_features if f != feature]
-            adapter = _sfs_fit(
-                algorithm,
-                X_train[candidate_features], y_train,
-                X_test[candidate_features], y_test,
-                ranking_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-            )
-            y_tr = adapter.predict_proba(X_train[candidate_features])
-            y_te = adapter.predict_proba(X_test[candidate_features])
-            fields = _sfs_metric_fields(y_train, y_tr, task, 'train_')
-            fields.update(_sfs_metric_fields(y_test, y_te, task, 'test_'))
-            return feature, fields
-        
-        # --- Phase 1: Rank candidates in parallel (train+test only, no CV) ---
-        effective_jobs = min(n_jobs, len(current_features))
-        candidate_results = {}
-        
-        if effective_jobs > 1:
-            with ThreadPoolExecutor(max_workers=effective_jobs) as pool:
-                futures = {pool.submit(evaluate_candidate, f): f for f in current_features}
-                for future in as_completed(futures):
-                    feat, metrics = future.result()
-                    candidate_results[feat] = metrics
-        else:
-            for feat in current_features:
-                _, metrics = evaluate_candidate(feat)
-                candidate_results[feat] = metrics
-        
-        # Pick top-K candidates whose removal maintains best primary test score
-        TOP_K = min(top_k, len(candidate_results))
-        sorted_candidates = sorted(candidate_results, key=lambda f: candidate_results[f]['test_roc_auc'], reverse=True)
-        top_candidates = sorted_candidates[:TOP_K]
-        
-        # --- Phase 2: Run CV for top-K candidates, pick best by CV primary score ---
-        winner_params = {**ranking_params, 'nthread': 0}
-        
-        best_feature_to_drop = None
-        best_cv_roc = float('-inf')
-        best_cv_result = {}
-        
-        for candidate_feat in top_candidates:
-            cand_remaining = [f for f in current_features if f != candidate_feat]
-            X_train_cand = X_train[cand_remaining]
-            
-            cv_roc_scores = []
-            cv_pr_scores = []
-            provenance = []
-            for X_cv_train, y_cv_train, X_cv_val, y_cv_val, receipt in iter_validation_folds(validation_context, X_train_cand, y_train, cv_folds, task):
-                provenance.append(receipt)
-                
-                cv_adapter = _sfs_fit(
-                    algorithm, X_cv_train, y_cv_train, X_cv_val, y_cv_val,
-                    winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-                )
-                y_cv_pred = cv_adapter.predict_proba(X_cv_val)
-                p, s = _sfs_score_pair(y_cv_val, y_cv_pred, task)
-                cv_roc_scores.append(p)
-                cv_pr_scores.append(s)
-            
-            cand_cv_roc = float(np.mean(cv_roc_scores))
-            cand_cv_pr = float(np.mean(cv_pr_scores))
-            print(f"[SFS-Backward-Step] Top-K CV: drop {candidate_feat} cv_primary={cand_cv_roc:.4f}")
-            
-            if cand_cv_roc > best_cv_roc:
-                best_cv_roc = cand_cv_roc
-                best_feature_to_drop = candidate_feat
-                best_cv_result = {'cv_roc_auc': cand_cv_roc, 'cv_pr_auc': cand_cv_pr, 'validation_provenance': provenance}
-        
-        cv_roc_auc = best_cv_result['cv_roc_auc']
-        cv_pr_auc = best_cv_result['cv_pr_auc']
-        
-        # Retrain final winner model for metrics
-        remaining_features = [f for f in current_features if f != best_feature_to_drop]
-        X_train_subset = X_train[remaining_features]
-        X_test_subset = X_test[remaining_features]
-        
-        winner_adapter = _sfs_fit(
-            algorithm, X_train_subset, y_train, X_test_subset, y_test,
-            winner_params, task=task, num_boost_round=100, early_stopping_rounds=10,
-        )
-        winner_booster = winner_adapter.shap_model()
-        
-        y_tr_pred = winner_adapter.predict_proba(X_train_subset)
-        y_te_pred = winner_adapter.predict_proba(X_test_subset)
-        train_fields = _sfs_metric_fields(y_train, y_tr_pred, task, 'train_')
-        test_fields = _sfs_metric_fields(y_test, y_te_pred, task, 'test_')
-        
-        # --- Phase 3: Model PSI & SHAP ---
-        try:
-            train_scores = winner_adapter.predict_proba(X_train[remaining_features])
-            test_scores = winner_adapter.predict_proba(X_test[remaining_features])
-            stability_value = calculate_psi(train_scores, test_scores)
-            stability_type = 'PSI'
-        except Exception as e:
-            print(f"[SFS-Backward-Step] Model PSI error: {e}")
-            stability_value = None
-            stability_type = 'PSI'
-        
-        shap_importance_by_feature = compute_shap_importance(winner_booster, X_train[remaining_features], remaining_features)
-        shap_importance = 0.0
-        
-        try:
-            feature_importance = {d['feature']: float(d['score']) for d in winner_adapter.gain_importance()}
-        except Exception:
-            feature_importance = {}
-        
-        result = {
-            'step': step,
-            'direction': 'backward',
-            'action': 'dropped',
-            'feature_name': best_feature_to_drop,
-            'selected_features': remaining_features,
-            'task': task,
-            'train_roc_auc': train_fields['train_roc_auc'],
-            'cv_roc_auc': cv_roc_auc,
-            'validation_provenance': best_cv_result['validation_provenance'],
-            'test_roc_auc': test_fields['test_roc_auc'],
-            'train_pr_auc': train_fields['train_pr_auc'],
-            'cv_pr_auc': cv_pr_auc,
-            'test_pr_auc': test_fields['test_pr_auc'],
-            'stability_type': stability_type,
-            'stability_value': stability_value,
-            'shap_importance': shap_importance,
-            'shap_changes': {},
-            'feature_importance': feature_importance,
-            'shap_importance_by_feature': shap_importance_by_feature
-        }
-        if task == 'regression':
-            result.update({
-                'train_r2': train_fields.get('train_r2'),
-                'test_r2': test_fields.get('test_r2'),
-                'cv_r2': cv_roc_auc,
-                'train_rmse': train_fields.get('train_rmse'),
-                'test_rmse': test_fields.get('test_rmse'),
-                'cv_rmse': -cv_pr_auc if cv_pr_auc is not None else None,
-            })
-        return result
-    except Exception as e:
-        print(f"[SFS-Backward-Step] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None

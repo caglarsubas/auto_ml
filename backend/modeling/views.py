@@ -1679,7 +1679,9 @@ class SFSResultsView(APIView):
                 sfs_data = json.load(f)
             
             return Response({
-                'sfs_completed': True,
+                'sfs_completed': sfs_data.get('status', 'completed') in ('completed', 'stopped'),
+                'status': sfs_data.get('status', 'completed'),
+                **{key: sfs_data.get(key) for key in ('selection_objective', 'resume_basis', 'search_bases', 'stopping_criteria', 'baselines', 'rejected_steps', 'change_semantics')},
                 'forward': sfs_data.get('forward', []),
                 'backward': sfs_data.get('backward', []),
                 'backward_remaining_features': sfs_data.get('backward_remaining_features', []),
@@ -1708,6 +1710,7 @@ class SFSStartView(APIView):
             initial_features = data.get('initial_features', None)  # Optional: Start with specific features
             excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
             n_jobs = int(data.get('n_jobs', 1))  # Parallel workers for candidate evaluation
+            cv_folds = int(data.get('cv_folds', 3))
             top_k = int(data.get('top_k', 3))  # Top-K candidates to CV-evaluate per step
             
             # Validate required parameters
@@ -1737,9 +1740,6 @@ class SFSStartView(APIView):
             X_valid_raw = train_data.get('X_valid_raw', X_valid)
             context = train_data.get('validation_context')
             contract = train_data.get('prediction_contract') or {}
-            metric = (contract.get('objective') or {}).get('primary_metric')
-            if metric and metric not in ('roc_auc', 'r2'):
-                return Response({'error': f'Feature selection objective {metric!r} is not supported by this native selector yet. Revise the objective in a new declaration or use the supported initial model.'}, status=status.HTTP_400_BAD_REQUEST)
             if len(contract.get('class_mapping') or []) > 2:
                 return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
             if context is not None:
@@ -1752,6 +1752,9 @@ class SFSStartView(APIView):
                 sfs_task = 'regression'
             else:
                 sfs_task = 'classification'
+
+            # Historical inputs without fold provenance remain explicitly unverified.
+            objective_context = context or {'task': sfs_task, 'prediction_contract': contract}
 
             algo_raw = data.get('algorithm') or train_data.get('algorithm')
             if not algo_raw:
@@ -1800,6 +1803,17 @@ class SFSStartView(APIView):
                     f"top_k={candidate_top_k} n={len(initial_features)} meta={sorter_meta}"
                 )
             
+            from modeling.sfs_objective import prepare_search, validate_resume, json_record
+            try:
+                _, _, selection_objective, effective_criteria, resume_basis = prepare_search(
+                    X_train, y_train, X_valid, y_valid, sfs_task, sfs_algorithm, objective_context,
+                    stopping_criteria, cv_folds, top_k, methods, initial_features,
+                    train_data.get('execution_id'), n_jobs)
+                if n_jobs > 32 or cv_folds > 10:
+                    raise ValueError('Native selection supports at most 32 workers and 10 CV folds.')
+            except (ValueError, TypeError, KeyError) as error:
+                return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
             # Initialize progress tracking
             import time as _time
             sfs_start_time = _time.time()
@@ -1812,6 +1826,7 @@ class SFSStartView(APIView):
                     try:
                         with open(sfs_path, 'r', encoding='utf-8') as rf:
                             saved = json.load(rf)
+                        validate_resume({'resume_basis': saved.get('resume_basis')}, resume_basis)
                         if saved.get('resume_state'):
                             # Graceful stop — resume_state was explicitly saved
                             resume_state = saved['resume_state']
@@ -1819,7 +1834,7 @@ class SFSStartView(APIView):
                         elif saved.get('status') in ('running', 'interrupted', 'stopped'):
                             # Interrupted (server restart) or stopped without resume_state —
                             # build resume_state from the intermediate results on disk
-                            resume_state = {}
+                            resume_state = {'resume_basis': saved.get('resume_basis'), 'baselines': saved.get('baselines', {})}
                             fwd = saved.get('forward', [])
                             bwd = saved.get('backward', [])
                             if fwd:
@@ -1841,8 +1856,12 @@ class SFSStartView(APIView):
                             # Rebuild completed_steps from forward + backward results
                             resume_state['completed_steps'] = fwd + bwd
                             print(f"[SFS] Built resume_state from intermediate results: fwd={len(fwd)}, bwd={len(bwd)}")
-                    except Exception as re_err:
-                        print(f"[SFS] Failed to load resume state: {re_err}")
+                        else:
+                            raise ValueError('Recorded selection is not resumable. Start a fresh search.')
+                    except (ValueError, OSError, KeyError) as re_err:
+                        return Response({'error': str(re_err)}, status=status.HTTP_409_CONFLICT)
+                else:
+                    return Response({'error': 'No recorded feature-selection evidence to resume. Start a fresh search.'}, status=status.HTTP_409_CONFLICT)
 
             SFS_PROGRESS[file_id] = {
                 'status': 'running',
@@ -1861,35 +1880,15 @@ class SFSStartView(APIView):
             sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
 
             def sanitize_sfs(results_list):
-                """Sanitize step dicts for JSON serialization (numpy → float)."""
-                sanitized = []
-                for item in results_list:
-                    sanitized_item = {
-                        'step': item['step'],
-                        'direction': item['direction'],
-                        'action': item['action'],
-                        'feature_name': item['feature_name'],
-                        'selected_features': item['selected_features'],
-                        'task': item.get('task', sfs_task),
-                        'validation_provenance': item.get('validation_provenance', []),
-                        'train_roc_auc': float(item['train_roc_auc']),
-                        'train_pr_auc': float(item['train_pr_auc']),
-                        'cv_roc_auc': float(item['cv_roc_auc']),
-                        'cv_pr_auc': float(item['cv_pr_auc']),
-                        'test_roc_auc': float(item['test_roc_auc']),
-                        'test_pr_auc': float(item['test_pr_auc']),
-                        'stability_type': item['stability_type'],
-                        'stability_value': float(item['stability_value']) if item['stability_value'] is not None else None,
-                        'shap_importance': float(item['shap_importance']),
-                        'shap_changes': {k: float(v) for k, v in item['shap_changes'].items()},
-                        'feature_importance': {k: float(v) for k, v in item.get('feature_importance', {}).items()},
-                        'shap_importance_by_feature': {k: float(v) for k, v in item.get('shap_importance_by_feature', {}).items()}
-                    }
-                    for reg_key in ('train_r2', 'cv_r2', 'test_r2', 'train_rmse', 'cv_rmse', 'test_rmse'):
-                        if item.get(reg_key) is not None:
-                            sanitized_item[reg_key] = float(item[reg_key])
-                    sanitized.append(sanitized_item)
-                return sanitized
+                return [json_record(item) for item in results_list]
+
+            def same_execution(existing):
+                recorded = existing.get('resume_basis') or {}
+                return (recorded.get('schema_version') == 2 and
+                        recorded.get('execution_id') == resume_basis.get('execution_id') and
+                        recorded.get('algorithm') == resume_basis.get('algorithm') and
+                        existing.get('selection_objective') == selection_objective and
+                        (bool(resume_basis.get('execution_id')) or recorded == resume_basis))
 
             _last_saved_step_count = [0]  # mutable for closure
 
@@ -1910,6 +1909,8 @@ class SFSStartView(APIView):
                         except Exception:
                             existing = {}
 
+                    if not same_execution(existing):
+                        existing = {}
                     # Detect forward-from-backward: new forward steps but existing backward data on disk
                     is_fwd_from_bwd = bool(fwd and not bwd and existing.get('backward'))
 
@@ -1921,15 +1922,23 @@ class SFSStartView(APIView):
                         'status': 'running',
                         'error': None,
                         'task': sfs_task,
+                        'selection_objective': selection_objective,
+                        'resume_basis': resume_basis,
+                        'search_bases': {**existing.get('search_bases', {}), resume_basis['sha256']: resume_basis},
                     }
                     with open(sfs_path, 'w', encoding='utf-8') as f:
-                        json.dump(intermediate, f, indent=2)
+                        json.dump(intermediate, f, indent=2, allow_nan=False)
                 except Exception as save_err:
                     print(f"[SFS] Intermediate save error: {save_err}")
 
             # Define status callback
             def update_progress(status_info):
-                SFS_PROGRESS[file_id].update(status_info)
+                public_info = dict(status_info)
+                # A terminal search callback precedes candidate publication and the final save.
+                # Pollers may observe completion only after those operations finish.
+                if public_info.get('status') in ('completed', 'stopped', 'error'):
+                    public_info.update(status='running', message='Saving feature-selection evidence...')
+                SFS_PROGRESS[file_id].update(public_info)
                 # Save intermediate results to disk after each new completed step
                 completed = status_info.get('completed_steps', [])
                 if len(completed) > _last_saved_step_count[0]:
@@ -1950,15 +1959,17 @@ class SFSStartView(APIView):
                         methods=methods,
                         stopping_criteria=stopping_criteria,
                         status_callback=update_progress,
-                        cv_folds=3,
+                        cv_folds=cv_folds,
                         initial_features=initial_features,
                         n_jobs=n_jobs,
                         top_k=top_k,
                         stop_flag=SFS_PROGRESS[file_id],
                         resume_state=resume_state,
                         task=sfs_task,
-                        validation_context=train_data.get('validation_context'),
+                        validation_context=context,
+                        prediction_contract=contract,
                         algorithm=sfs_algorithm,
+                        execution_id=train_data.get('execution_id'),
                     )
                     
                     # Final save — merge with existing results to preserve previous runs
@@ -1970,6 +1981,8 @@ class SFSStartView(APIView):
                         except Exception:
                             existing_data = {}
 
+                    if not same_execution(existing_data):
+                        existing_data = {}
                     new_forward = sanitize_sfs(results.get('forward', []))
                     new_backward = sanitize_sfs(results.get('backward', []))
                     new_backward_remaining = results.get('backward_remaining_features', [])
@@ -1986,26 +1999,36 @@ class SFSStartView(APIView):
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None),
                         'task': sfs_task,
+                        'selection_objective': selection_objective,
+                        'resume_basis': resume_basis,
+                        'search_bases': {**existing_data.get('search_bases', {}), resume_basis['sha256']: resume_basis},
                     }
+
+                    sfs_data.update({key: results.get(key) for key in ('selection_objective', 'resume_basis', 'stopping_criteria', 'baselines', 'rejected_steps', 'change_semantics')})
+
+                    for key, value in existing_data.items():
+                        if key.endswith(('_model_path', '_execution_id')):
+                            sfs_data[key] = value
 
                     # Save the final fitted model for each completed SFS direction
                     # so Feature Card explainability can use it instead of the initial model.
-                    for direction_key in ('forward', 'backward', 'forward_from_backward'):
+                    new_directions = ([('forward_from_backward' if is_forward_from_backward else 'forward')] if new_forward else []) + (['backward'] if new_backward else [])
+                    for direction_key in (() if results.get('status') == 'error' else new_directions):
                         steps = sfs_data.get(direction_key, [])
                         if steps:
                             last_step = steps[-1]
                             final_features = last_step.get('selected_features', [])
-                            valid_features = [f for f in final_features if f in X_train.columns]
+                            valid_features = final_features
                             if valid_features:
                                 try:
-                                    from modeling.booster_adapters import fit_booster
-                                    adapter = fit_booster(sfs_algorithm, X_train[valid_features], y_train,
-                                        X_valid[valid_features], y_valid, {'n_estimators': 100},
-                                        task=sfs_task, early_stopping_rounds=10)
+                                    from modeling.sfs_utils import _sfs_fit, _sfs_booster_params
+                                    fit_params = _sfs_booster_params(sfs_task, 0)
+                                    adapter = _sfs_fit(sfs_algorithm, X_train[valid_features], y_train,
+                                        X_valid[valid_features], y_valid, fit_params, task=sfs_task)
                                     parent_id = train_data.get('execution_id')
                                     if parent_id:
                                         candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
-                                            {'n_estimators': 100}, f'sfs_{direction_key}', adopt=False)
+                                            fit_params, f'sfs_{direction_key}', adopt=False)
                                         sfs_data[f'{direction_key}_model_path'] = candidate['model']['model_path']
                                         sfs_data[f'{direction_key}_execution_id'] = candidate['execution_id']
                                         sfs_data['parent_execution_id'] = parent_id
@@ -2018,6 +2041,7 @@ class SFSStartView(APIView):
                                         sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
                                 except Exception as model_err:
                                     sfs_data[f'{direction_key}_refit_error'] = str(model_err)
+                                    sfs_data.update(status='error', error=f'Candidate publication failed: {model_err}')
                                     print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
 
                     # Persist resume_state if stopped (for continue later)
@@ -2026,7 +2050,7 @@ class SFSStartView(APIView):
                         sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
                     with open(sfs_path, 'w', encoding='utf-8') as f:
-                        json.dump(sfs_data, f, indent=2)
+                        json.dump(sfs_data, f, indent=2, allow_nan=False)
 
                     # Archive completed (non-stopped) runs for CRISP-DM SFS history
                     if results.get('status') != 'stopped':
@@ -2037,7 +2061,9 @@ class SFSStartView(APIView):
                     
                     elapsed = round(_time.time() - sfs_start_time, 1)
 
-                    if results.get('status') == 'stopped':
+                    if sfs_data.get('status') == 'error':
+                        SFS_PROGRESS[file_id].update(status='error', error=sfs_data.get('error'), message=sfs_data.get('error'), duration_seconds=elapsed)
+                    elif results.get('status') == 'stopped':
                         SFS_PROGRESS[file_id]['status'] = 'stopped'
                         SFS_PROGRESS[file_id]['message'] = 'SFS stopped by user'
                         SFS_PROGRESS[file_id]['duration_seconds'] = elapsed

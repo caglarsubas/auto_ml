@@ -409,6 +409,21 @@ describe('DataService', () => {
       req.flush({});
     });
 
+    it('binds native selection to its execution and preserves actionable conflicts', () => {
+      let failure: any;
+      service
+        .startSfs(1, ['forward'], {}, [], 1, 3, 'xgboost', { executionId: 'recorded-run' })
+        .subscribe({
+          error: (error) => {
+            failure = error;
+          },
+        });
+      const request = httpMock.expectOne(`${apiUrl}modeling/sfs/start/`);
+      expect(request.request.body.execution_id).toBe('recorded-run');
+      request.flush({ error: 'Start a fresh search' }, { status: 409, statusText: 'Conflict' });
+      expect(failure.error.error).toBe('Start a fresh search');
+    });
+
     it('getSfsStatus should GET', () => {
       service.getSfsStatus(5).subscribe();
       const req = httpMock.expectOne(`${apiUrl}modeling/sfs/status/5/`);

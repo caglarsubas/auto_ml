@@ -1859,9 +1859,20 @@
                         @if (!isRegressionTask) {
                           <option value="roc_auc">ROC-AUC</option>
                           <option value="pr_auc">PR-AUC</option>
+                          <option value="log_loss">Log loss</option>
+                          <option value="brier">Brier score</option>
+                          <option value="expected_cost">Expected cost</option>
+                          <option value="accuracy">Accuracy</option>
+                          <option value="f1">F1</option>
+                          <option value="precision">Precision</option>
+                          <option value="recall">Recall</option>
+                          <option value="ks">KS</option>
                         }
                         @if (isRegressionTask) {
                           <option value="r2">R²</option>
+                          <option value="rmse">RMSE</option>
+                          <option value="mae">MAE</option>
+                          <option value="mse">MSE</option>
                         }
                       </select>
                     </div>
@@ -1872,16 +1883,16 @@
                       >
                         Stop if
                         @if (sfsMethodBackward && !sfsMethodForward) {
-                          <span>|change| &gt;</span>
+                          <span>deterioration &gt;</span>
                         }
                         @if (sfsMethodForward && !sfsMethodBackward) {
-                          <span>change &lt;</span>
+                          <span>improvement ≤</span>
                         }
                         @if (sfsMethodForward && sfsMethodBackward) {
-                          <span>change &lt; / |change| &gt;</span>
+                          <span>forward improvement ≤ / backward deterioration &gt;</span>
                         }
                         @if (!sfsMethodForward && !sfsMethodBackward) {
-                          <span>change &lt;</span>
+                          <span>improvement ≤</span>
                         }
                         (%) <span style="color: #999">(0 = no stop)</span>
                       </label>
@@ -2000,10 +2011,15 @@
                       min="1"
                       max="10"
                       style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px"
-                      title="Number of top candidates (ranked by test AUC) to cross-validate per step. Higher = more accurate but slower."
+                      title="Number of top candidates (ranked by the accepted development-validation objective) to cross-validate per step. Higher = more accurate but slower."
                     />
                   </div>
                 </div>
+                <p>
+                  Ranking objective: {{ sfsMetricLabel(sfsPrimaryMetric()) }} from the accepted
+                  declaration. Stopping metrics add constraints. Positive percentages mean
+                  improvement; zero-baseline percentages are unavailable.
+                </p>
                 <!-- Feature sorter: combined SHAP% × Gain% order as SFS candidate pool -->
                 <div
                   style="
@@ -2020,7 +2036,7 @@
                   <p style="font-size: 12px; color: #666; margin: 0 0 10px">
                     Reorder the SFS feature pool by modeling <strong>combined score</strong>
                     (√(SHAP% × Gain%)) before selection. Per-step winners still use the SFS metric
-                    (ROC-AUC / R²).
+                    using the accepted objective and direction.
                   </p>
                   <label
                     style="
@@ -2460,7 +2476,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.train_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2471,7 +2491,11 @@
                                 color: #1976d2;
                               "
                             >
-                              {{ step.cv_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2480,7 +2504,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.test_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2489,7 +2517,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'train') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2498,7 +2530,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'cv') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2507,7 +2543,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'test') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2547,7 +2587,9 @@
                         requestAiSupport(
                           { forward: sfsForwardResults },
                           'sfs_forward',
-                          'Analyze ONLY the forward feature selection results below. Identify the inflection point where adding the next feature stops improving CV ROC-AUC meaningfully, recommend a feature-count cut-off, and flag the top 3 features by marginal contribution. Do NOT compare against backward elimination or forward-from-backward — those are separate analyses.'
+                          'Analyze ONLY the forward feature selection results below. Identify the inflection point where adding the next feature stops improving CV ' +
+                            sfsMetricLabel(sfsPrimaryMetric()) +
+                            ' meaningfully, recommend a feature-count cut-off, and flag the top 3 features by marginal contribution. Do NOT compare against backward elimination or forward-from-backward — those are separate analyses.'
                         )
                       "
                     >
@@ -2733,7 +2775,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.train_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2744,7 +2790,11 @@
                                 color: #1976d2;
                               "
                             >
-                              {{ step.cv_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2753,7 +2803,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.test_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2762,7 +2816,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'train') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2771,7 +2829,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'cv') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2780,7 +2842,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'test') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -2824,7 +2890,9 @@
                             cut_features: sfsBackwardCutFeatures,
                           },
                           'sfs_backward',
-                          'Analyze ONLY the backward elimination results below. Identify the optimal cut step where additional removal starts hurting CV ROC-AUC, recommend which features should be dropped first based on their |drop in metric|, and flag features that look safe to remove vs risky. If a cut_step is already selected by the user, comment on whether their choice looks reasonable. Do NOT compare against forward selection or forward-from-backward — those are separate analyses.'
+                          'Analyze ONLY the backward elimination results below. Identify the optimal cut step where additional removal starts hurting CV ' +
+                            sfsMetricLabel(sfsPrimaryMetric()) +
+                            ', recommend which features should be dropped first based on deterioration in the declared metric direction, and flag features that look safe to remove vs risky. If a cut_step is already selected by the user, comment on whether their choice looks reasonable. Do NOT compare against forward selection or forward-from-backward — those are separate analyses.'
                         )
                       "
                     >
@@ -2993,9 +3061,20 @@
                                     @if (!isRegressionTask) {
                                       <option value="roc_auc">ROC-AUC</option>
                                       <option value="pr_auc">PR-AUC</option>
+                                      <option value="log_loss">Log loss</option>
+                                      <option value="brier">Brier score</option>
+                                      <option value="expected_cost">Expected cost</option>
+                                      <option value="accuracy">Accuracy</option>
+                                      <option value="f1">F1</option>
+                                      <option value="precision">Precision</option>
+                                      <option value="recall">Recall</option>
+                                      <option value="ks">KS</option>
                                     }
                                     @if (isRegressionTask) {
                                       <option value="r2">R²</option>
+                                      <option value="rmse">RMSE</option>
+                                      <option value="mae">MAE</option>
+                                      <option value="mse">MSE</option>
                                     }
                                   </select>
                                 </div>
@@ -3008,7 +3087,7 @@
                                       color: #555;
                                     "
                                   >
-                                    Stop if change &lt; (%)
+                                    Stop if improvement ≤ (%)
                                     <span style="color: #999">(0 = no stop)</span>
                                   </label>
                                   <input
@@ -3404,7 +3483,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.train_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3415,7 +3498,11 @@
                                 color: #2e7d32;
                               "
                             >
-                              {{ step.cv_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3424,7 +3511,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ step.test_roc_auc | number: '1.4-4' }}
+                              {{
+                                sfsPrimaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsPrimaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3433,7 +3524,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'train') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'train') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'train') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3442,7 +3537,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'cv') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'cv') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'cv') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3451,7 +3550,11 @@
                                 text-align: right;
                               "
                             >
-                              {{ sfsSecondaryValue(step, 'test') | number: '1.4-4' }}
+                              {{
+                                sfsSecondaryValue(step, 'test') === null
+                                  ? '—'
+                                  : (sfsSecondaryValue(step, 'test') | number: '1.4-4')
+                              }}
                             </td>
                             <td
                               style="
@@ -3644,17 +3747,21 @@
                             CV
                           </th>
                           <th style="padding: 8px; border: 1px solid #ddd; text-align: right">
-                            Test
+                            Validation
                           </th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr>
                           <td style="padding: 8px; border: 1px solid #ddd">
-                            {{ isRegressionTask ? 'R²' : 'ROC-AUC' }}
+                            {{ sfsMetricLabel(sfsPrimaryMetric(selectedSfsStep)) }}
                           </td>
                           <td style="padding: 8px; border: 1px solid #ddd; text-align: right">
-                            {{ selectedSfsStep.train_roc_auc | number: '1.4-4' }}
+                            {{
+                              sfsPrimaryValue(selectedSfsStep, 'train') === null
+                                ? '—'
+                                : (sfsPrimaryValue(selectedSfsStep, 'train') | number: '1.4-4')
+                            }}
                           </td>
                           <td
                             style="
@@ -3664,18 +3771,30 @@
                               font-weight: 500;
                             "
                           >
-                            {{ selectedSfsStep.cv_roc_auc | number: '1.4-4' }}
+                            {{
+                              sfsPrimaryValue(selectedSfsStep, 'cv') === null
+                                ? '—'
+                                : (sfsPrimaryValue(selectedSfsStep, 'cv') | number: '1.4-4')
+                            }}
                           </td>
                           <td style="padding: 8px; border: 1px solid #ddd; text-align: right">
-                            {{ selectedSfsStep.test_roc_auc | number: '1.4-4' }}
+                            {{
+                              sfsPrimaryValue(selectedSfsStep, 'test') === null
+                                ? '—'
+                                : (sfsPrimaryValue(selectedSfsStep, 'test') | number: '1.4-4')
+                            }}
                           </td>
                         </tr>
                         <tr>
                           <td style="padding: 8px; border: 1px solid #ddd">
-                            {{ isRegressionTask ? 'RMSE' : 'PR-AUC' }}
+                            {{ sfsMetricLabel(sfsSecondaryMetric(selectedSfsStep)) }}
                           </td>
                           <td style="padding: 8px; border: 1px solid #ddd; text-align: right">
-                            {{ sfsSecondaryValue(selectedSfsStep, 'train') | number: '1.4-4' }}
+                            {{
+                              sfsSecondaryValue(selectedSfsStep, 'train') === null
+                                ? '—'
+                                : (sfsSecondaryValue(selectedSfsStep, 'train') | number: '1.4-4')
+                            }}
                           </td>
                           <td
                             style="
@@ -3685,15 +3804,42 @@
                               font-weight: 500;
                             "
                           >
-                            {{ sfsSecondaryValue(selectedSfsStep, 'cv') | number: '1.4-4' }}
+                            {{
+                              sfsSecondaryValue(selectedSfsStep, 'cv') === null
+                                ? '—'
+                                : (sfsSecondaryValue(selectedSfsStep, 'cv') | number: '1.4-4')
+                            }}
                           </td>
                           <td style="padding: 8px; border: 1px solid #ddd; text-align: right">
-                            {{ sfsSecondaryValue(selectedSfsStep, 'test') | number: '1.4-4' }}
+                            {{
+                              sfsSecondaryValue(selectedSfsStep, 'test') === null
+                                ? '—'
+                                : (sfsSecondaryValue(selectedSfsStep, 'test') | number: '1.4-4')
+                            }}
                           </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
+                  <details aria-label="Feature-selection evidence">
+                    <summary>Details: feature-selection evidence</summary>
+                    <p>
+                      {{
+                        selectedSfsStep.selection_objective?.qualification ||
+                          'Historical search semantics and provenance are unverified.'
+                      }}
+                    </p>
+                    <p>
+                      Objective: {{ sfsMetricLabel(sfsPrimaryMetric(selectedSfsStep)) }} ({{
+                        selectedSfsStep.selection_objective?.direction || 'unverified'
+                      }}). Validation values use development data.
+                    </p>
+                    <p>{{ selectedSfsStep.change_semantics }}</p>
+                    <p>{{ selectedSfsStep.cv_evidence?.uncertainty }}</p>
+                    <p>{{ selectedSfsStep.selection_objective?.training_policy }}</p>
+                    <p>Search digest: {{ selectedSfsStep.search_basis_sha256 || 'unverified' }}</p>
+                    <pre>{{ selectedSfsStep.cv_evidence?.metric_coverage | json }}</pre>
+                  </details>
                   <!-- SHAP Impact Changes -->
                   @if (getShapChangesArray(selectedSfsStep.shap_changes).length > 0) {
                     <div>
@@ -5053,10 +5199,10 @@
                     {{ sfsSecondaryHeader('CV') }}
                   </th>
                   <th style="padding: 12px; text-align: center; border: 1px solid #ddd">
-                    {{ isRegressionTask ? 'R² Change %' : 'ROC-AUC Change %' }}
+                    {{ sfsMetricLabel(sfsPrimaryMetric()) }} improvement %
                   </th>
                   <th style="padding: 12px; text-align: center; border: 1px solid #ddd">
-                    {{ isRegressionTask ? 'RMSE Change %' : 'PR-AUC Change %' }}
+                    {{ sfsMetricLabel(sfsSecondaryMetric()) }} improvement %
                   </th>
                 </tr>
               </thead>
@@ -5124,7 +5270,11 @@
                         color: #1976d2;
                       "
                     >
-                      {{ sfsPrimaryValue(step, 'cv') | number: '1.4-4' }}
+                      {{
+                        sfsPrimaryValue(step, 'cv') === null
+                          ? '—'
+                          : (sfsPrimaryValue(step, 'cv') | number: '1.4-4')
+                      }}
                     </td>
                     <td
                       style="
@@ -5135,46 +5285,24 @@
                         color: #1976d2;
                       "
                     >
-                      {{ sfsSecondaryValue(step, 'cv') | number: '1.4-4' }}
+                      {{
+                        sfsSecondaryValue(step, 'cv') === null
+                          ? '—'
+                          : (sfsSecondaryValue(step, 'cv') | number: '1.4-4')
+                      }}
                     </td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center">
-                      @if (
-                        step.pct_changes &&
-                        (step.pct_changes.roc_auc !== undefined ||
-                          step.pct_changes.r2 !== undefined)
-                      ) {
-                        <span
-                          [style.color]="
-                            (step.pct_changes.r2 ?? step.pct_changes.roc_auc) >= 0
-                              ? '#4caf50'
-                              : '#f44336'
-                          "
-                          style="font-weight: 600"
-                        >
-                          {{ (step.pct_changes.r2 ?? step.pct_changes.roc_auc) >= 0 ? '+' : ''
-                          }}{{ (step.pct_changes.r2 ?? step.pct_changes.roc_auc).toFixed(2) }}%
-                        </span>
-                      }
-                      @if (
-                        !step.pct_changes ||
-                        (step.pct_changes.roc_auc === undefined &&
-                          step.pct_changes.r2 === undefined)
-                      ) {
-                        <span style="color: #999"> — </span>
+                      @if (sfsPctChange(step) !== null) {
+                        <span>{{ sfsPctChange(step) | number: '1.2-2' }}%</span>
+                      } @else {
+                        <span>—</span>
                       }
                     </td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center">
-                      @if (step.pct_changes && step.pct_changes.pr_auc !== undefined) {
-                        <span
-                          [style.color]="step.pct_changes.pr_auc >= 0 ? '#4caf50' : '#f44336'"
-                          style="font-weight: 600"
-                        >
-                          {{ step.pct_changes.pr_auc >= 0 ? '+' : ''
-                          }}{{ step.pct_changes.pr_auc.toFixed(2) }}%
-                        </span>
-                      }
-                      @if (!step.pct_changes || step.pct_changes.pr_auc === undefined) {
-                        <span style="color: #999"> — </span>
+                      @if (sfsPctChange(step, true) !== null) {
+                        <span>{{ sfsPctChange(step, true) | number: '1.2-2' }}%</span>
+                      } @else {
+                        <span>—</span>
                       }
                     </td>
                   </tr>
