@@ -18,4 +18,12 @@ Callback integration follows the official [XGBoost custom-metric interface](http
 
 This is exploratory development evidence: stopping, selection, calibration and post-selection CV still reuse development data. It is not nested validation, a protected confirmatory protocol, independent reproduction, authenticated proof of fit, or customer acceptance. Legacy unbound fit paths remain explicitly unverified. Durable concurrent jobs, project roles/data egress, qualified expert isolation, private production recovery, independent review and D18–D26 agentic capabilities remain open. No outcome, milestone or release gate is closed by P09.
 
-Qualification is recorded separately in the canonical ledger. Exact-head PR CI, merged-main CI, deployment and customer acceptance are separate claims.
+Qualification is recorded in [P09 source qualification](evidence/p09-qualification-2026-10-09.json). Exact-head PR CI, merged-main CI, deployment and customer acceptance are separate claims.
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite | 1,541 passed; six explicit skips; 67.94% coverage against the unchanged 50% gate |
+| Frontend unit suite | 531 passed |
+| Governed Chromium/authenticated API suite | 19 passed, no skips |
+| Lint, migration drift, dependency consistency, skip budget, build, scoped formatting and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
+| Primary checkout and cleanup | All 11 starting hashes unchanged; disposable services and credentials removed |

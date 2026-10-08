@@ -73,7 +73,9 @@
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
         "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
-        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
+        "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
       ],
       "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
@@ -105,7 +107,9 @@
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
         "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
-        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
+        "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
       ],
       "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
@@ -156,7 +160,9 @@
         "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
         "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)",
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
-        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
+        "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
       ],
       "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
@@ -184,7 +190,9 @@
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
         "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
-        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
+        "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
       ],
       "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
@@ -879,6 +887,11 @@
       "date": "2026-10-09",
       "packet": "P08",
       "event": "Merged-main CI 37803553112 passed all five jobs at aded1f2b5ee2b5dcc72ae38008e31e455022384d; this verifies the merged source, not deployment or customer acceptance."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P09",
+      "event": "Local qualification passed 1541 backend tests with six explicit skips and 67.94% coverage, 531 frontend tests and 19 governed browser/API checks. Gates and D18-D26 remain open/planned; shared foundations stay first in the canonical queue."
     }
   ],
   "implementation_packets": [
@@ -1030,7 +1043,7 @@
       "title": "Declared native early stopping and scoring rounds",
       "kind": "product_implementation",
       "owner": "Backend/ML",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D01",
         "D02",
@@ -1038,7 +1051,10 @@
         "D05"
       ],
       "description": "Bind initial native training, fold fitting, selection/tuning and candidate refits to the accepted validation metric. Preserve trusted metric semantics, separate surrogate fit loss/weights, record per-round stopping evidence and replay the selected scoring rounds.",
-      "evidence": [],
+      "evidence": [
+        "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
+      ],
       "remaining": "Complete scientific path, protected independent assessment/reproduction, immutable durable jobs, project governance, expert isolation, agentic outcomes and customer/value qualification remain open."
     }
   ],

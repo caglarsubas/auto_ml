@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P09",
+  "branch": "codex/declared-early-stopping",
+  "base_commit": "aded1f2b5ee2b5dcc72ae38008e31e455022384d",
+  "qualified_source_commit": "7b9f89ab8de6bdfcc0001c7633b924b8a1e06a42",
+  "scope": "Bounded local native early-stopping/source qualification. Subsequent commits contain documentation/ledger/evidence only. D01/D02/D04/D05 remain partial; no milestone, deployment, agentic outcome or customer gate is closed.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/98",
+    "state": "MERGED",
+    "merged_at": "2026-10-08T15:46:47Z",
+    "merge_commit": "aded1f2b5ee2b5dcc72ae38008e31e455022384d",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37803553112",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "backend_environment": {
+    "python": "3.12.15",
+    "packages": {
+      "Django": "5.2.18",
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "scipy": "1.18.1",
+      "scikit-learn": "1.9.1",
+      "xgboost": "2.1.4",
+      "lightgbm": "4.7.0",
+      "catboost": "1.2.10",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10"
+    },
+    "full_suite_image": "declarai-core-p07:local",
+    "full_suite_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p09:local",
+    "api_image_id": "sha256:3578190950c1fe56def730e1b5b3eedd51f17109e23c76cc6adc3cad3b01fd3b",
+    "details": "Unchanged public core dependencies; full suite mounts final backend source at /app. Disposable API copies the same backend source into the cached image. Four CPU affinities, temporary Redis/network, telemetry disabled, blank provider key and unreachable model endpoint. No private SDK, timeout/skip/coverage gate changes or capacity/offline qualification."
+  },
+  "frontend_environment": {
+    "node": "24.16.0",
+    "npm": "11.13.0",
+    "angular": "22.2.1",
+    "dependencies": "Unchanged package lock; installed dependencies linked from primary checkout. Built assets served on disposable loopback 4300. Final unit/build checks followed the evidence-copy wording correction; API/browser behavior is unchanged by that correction."
+  },
+  "checks": [
+    {
+      "name": "Full CI-marked backend suite and static checks",
+      "status": "passed",
+      "command": "ruff check . && python manage.py makemigrations --check --dry-run && python -m pip check && python -m pytest -m \"unit or functional or regression or integration or uat\" --tb=short --junitxml=../test-reports/p09-backend.xml --cov --cov-report=xml:../test-reports/p09-backend-coverage.xml --cov-report=term-missing --cov-fail-under=50",
+      "passed": 1541,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 182.04,
+      "coverage_percent": 67.94,
+      "coverage_gate_percent": 50,
+      "log": "backend.log"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "command": "python3 .github/scripts/check_skip_budget.py test-reports/p09-backend.xml --max-skips 15",
+      "skipped": 6,
+      "maximum": 15,
+      "reasons": [
+        "Four optional SDK checks",
+        "One unavailable live model-engine check",
+        "One absent local .env check"
+      ],
+      "log": "skip-budget.log"
+    },
+    {
+      "name": "Governed Chromium and authenticated API suite",
+      "status": "passed",
+      "command": "npm run test:e2e:governed",
+      "passed": 19,
+      "skipped": 0,
+      "duration_seconds": 19.1,
+      "details": "Real non-admin sessions/CSRF. Temporal classification PR-AUC and regression MSE flow through initial training/folds, SFS, exact candidate acceptance, tuning/refit, protected assessment and immutable scoring/batch replay. Existing session/reload/local-font behavior also passes.",
+      "log": "browser-api.log"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "command": "npm run test:ci",
+      "passed": 531,
+      "details": "Rendered Details stays collapsed; accepted metric/direction, zero selected score, prediction round count and separate surrogate loss are visible. Historical receipts without stopping evidence still render.",
+      "log": "frontend-unit.log"
+    },
+    {
+      "name": "Frontend build/lint/types/scoped formatting",
+      "status": "passed",
+      "commands": [
+        "npm run build",
+        "npm run lint",
+        "npx tsc --ignoreConfig --noEmit --module nodenext --moduleResolution nodenext --target es2022 --types node --skipLibCheck e2e/raw-replay-api.spec.ts",
+        "npx prettier --check src/app/modeling/modeling.component.html e2e/raw-replay-api.spec.ts"
+      ],
+      "lint_errors": 0,
+      "lint_warnings": 158,
+      "details": "Existing bundle/CommonJS warnings remain; no bundle or coverage budgets changed."
+    },
+    {
+      "name": "Roadmap projection/Git whitespace and preservation",
+      "status": "passed",
+      "commands": [
+        "python3 scripts/render_product_roadmap.py --check",
+        "git diff --check"
+      ],
+      "preserved_primary_tracked_files": 11,
+      "details": "All starting primary file hashes unchanged; P01-P08 packet records preserved and D18-D26 objects remain planned/unchanged. Disposable API/Redis/network/preview and credentials removed; primary services remain on prior ports."
+    }
+  ],
+  "accepted_scenarios": [
+    "Independent sklearn/manual references for all ten binary and four regression metrics across three native boosters; unweighted validation despite training weights and asymmetric expected costs.",
+    "Three-class and 65-class weighted ROC-AUC/F1, accuracy and log loss preserve probability dimensions/order and declared semantics.",
+    "Per-round evidence selects the correct minimizing/maximizing round, including first-round deterioration; saved-model and split-batch predictions reproduce.",
+    "Disabled stopping uses no validation labels, preserves the supported budget and produces identical predictions when validation labels change.",
+    "Available binary losses work with single-class validation; undefined ROC-AUC/PR-AUC/KS/R2 block without fallback; zero budgets and contradictory/stale specifications reject.",
+    "Unbound/wrong-metric native candidates cannot stage/adopt or modify parent evidence; fold-local transformations and protected final outcomes remain preserved."
+  ],
+  "limitations": [
+    "Stopping/search/calibration and post-selection CV still reuse development data; exploratory, not nested or protected confirmatory evidence.",
+    "Native logistic/multiclass/squared-error surrogate losses and training weights remain separate from the business validation objective. Legacy unbound paths remain unverified; multiclass selection/tuning remain blocked.",
+    "Native labels/history have recorded numerical precision; CatBoost warns that the trusted Python callback cannot be JIT-optimized. Workload/capacity profiling remains open.",
+    "Receipts are controller records, not authenticated proof or an independent reproduction runner. Durable concurrent jobs/recovery, project roles/egress, expert isolation and private production qualification remain open.",
+    "D18-D26 are still planned. No milestone, deployment, production-use approval, customer acceptance or value gate is qualified by this packet."
+  ],
+  "qualified_source_sha256": {
+    "backend/modeling/booster_adapters.py": "ece8bd1c47f0cb14a7ca9b42939974dccd4ad554c57e8a7b4e7032e7d7ef237b",
+    "backend/modeling/declared_metric.py": "5c1456a890c6626742a629acb063e9d92033ee60331879d81dd6b40c7081385b",
+    "backend/modeling/development_assessment.py": "8a0edd9e19a9843fb9039e8f4f96da64df1e347d5b34cb2a4ac9d80120f8d529",
+    "backend/modeling/fit_receipts.py": "9c4707aede5fd7751e26d286fb118d20cceb8c0a36dadde1c4487011c36713b2",
+    "backend/modeling/sfs_objective.py": "fba67971b998903c8aba6b5de294bc6a7772750a3a578a4becb8a139c1413723",
+    "backend/modeling/sfs_utils.py": "5d87eb1917f39ffe3b1aac3cbf411e5500fa45886841ea9e22d21a691148d79f",
+    "backend/modeling/tuning_evidence.py": "315b695827674de2dac0d2fe0de03f37739e2ca6cf575d3148a371c88bae2c3f",
+    "backend/modeling/views.py": "8f805be7206fab8b74b349c66d909fdbac88231556c13a6e613391f6912f77c9",
+    "backend/tests/unit/test_candidate_evidence.py": "3113d6feb92b521023f05a90c0a616efac58faaa59bb6ff5636f98e63f0b7a44",
+    "backend/tests/unit/test_declared_metric.py": "4afa1346e52c580ce7b9fac75b2b6d6bb1cb2c07935f46cd653d9943f2c5a276",
+    "backend/tests/unit/test_development_assessment.py": "874904454c7aca9412a5023e561bc262e4f19d73d13b888a162148467d8e4854",
+    "backend/tests/unit/test_purifier_replay.py": "110908aff73289ab330e2cb3b5d7223169dc9343dfc8c9b947a9ea0a73d0f47e",
+    "backend/tests/unit/test_sfs_objective.py": "d7194cbcd05275f5eb0174cfb7ed830ede94e2828bca126cf75be66d6e4abd39",
+    "backend/tests/unit/test_tuning_evidence.py": "13e83b09888e345c77c3ffca4ffbbe8f79c9487e121632ed862ff92b9b68df1a",
+    "frontend/e2e/raw-replay-api.spec.ts": "4638efb609c2505f1017572631fc37aa8b35d99b807ba1f114d5ca9189bb9bfb",
+    "frontend/src/app/modeling/modeling.component.html": "9bdc646658e2d7c3f9f475ef87099aeede9e235f911a8e1d06585766ba3b90b0",
+    "frontend/src/app/modeling/modeling.component.spec.ts": "2177f5f4577de9b30ab1122eb6fd7f1272605c9267966c306421d33a79346945"
+  },
+  "retained_reports": {
+    "directory": "/Users/caglarsubasi/.codex/worktrees/foundation-packaging/auto-ml/test-reports/p09",
+    "files": {
+      "api.log": "79d221c9d9bbc84170f6f851f1ec7e5a01c9163ac7677407ed0340e024e65426",
+      "backend-coverage.xml": "81cf93b8a27eebd45cf61efd5cf20b8489c988cef8b0c931e6448cf0e1851acc",
+      "backend.log": "b31ea64a288083dafa70d5ecd67fb6c028e46de36d8287e1601bc48574cc7ef4",
+      "backend.xml": "13a6c41c5940e5305069175dbb8884f1bd3400b3a2460ddfc1d07ca3f61a93ac",
+      "browser-api.log": "94c7837366d4d56b0abe672ba0a11da88fc99c37276a5cce20ef0ec2590b526e",
+      "e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "environment.json": "02022ec2264a60a191d584918d2e91cf73158fa2aa371703e6eff89e8f9d573e",
+      "frontend-build.log": "a785ea0170b9ba61f28af7eb1b64f38a50c3d136e1673a64be8028ebfc61c12e",
+      "frontend-lint.log": "63b47e9190ce957e54516dbc6b54379abe5f7b9d61ce1d8dcd5511f0c41b7f2c",
+      "frontend-unit.log": "9473e54f13f1887914ff987ee085b9befcc1212872d8bd635c56845b07275a33",
+      "image-build.log": "8ca83736ba7a75b4898922fc2dddb78cb2f0363ac3f6ac32209578e84c5ca2da",
+      "prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "skip-budget.log": "6e69047b698b45315ed6d436ca9e5d55e9ae6328724f3aea923b0ddd88f660c9"
+    }
+  },
+  "git_hooks": "Shared hooks target user-owned primary Docker containers. Per-command core.hooksPath=/dev/null was used after equivalent isolated backend/frontend/API/static/projection checks; persistent configuration unchanged. Exact-head standard PR CI remains required before review readiness."
+}
