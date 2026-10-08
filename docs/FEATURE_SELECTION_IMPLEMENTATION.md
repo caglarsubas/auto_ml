@@ -21,7 +21,7 @@ Qualification is recorded in [P06 source qualification](evidence/p06-qualificati
 
 | Local check | Result |
 | --- | --- |
-| Full CI-marked backend suite, four CPU affinities | 1,345 passed, six explicit skips; 67.04% coverage against the unchanged 50% gate |
+| Full CI-marked backend suite, four CPU affinities | 1,347 passed, six explicit skips; 67.06% coverage against the unchanged 50% gate |
 | Frontend unit suite | 529 passed |
 | Governed Chromium/authenticated API suite | 19 passed, no skips |
 | Lint, migration drift, package consistency, skip budget, production build and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |

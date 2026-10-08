@@ -4,7 +4,7 @@
   "packet": "P06",
   "branch": "codex/sfs-objective-evidence",
   "base_commit": "9c3c1ee6f65a83914d2cf2698ac9e8476a18bb26",
-  "qualified_source_commit": "78f79af28736778c09fbbb748b8c49af2a3b92c5",
+  "qualified_source_commit": "6a41f44e09634aafc7cc8595aabf3d07b44ad914",
   "scope": "Bounded local source qualification; subsequent commits contain documentation/ledger/evidence only. D01/D02/D05 remain partial; no milestone, production or customer gate is closed.",
   "preceding_pr": {
     "url": "https://github.com/caglarsubas/auto_ml/pull/95",
@@ -17,7 +17,7 @@
   },
   "backend_environment": {
     "image": "declarai-core-p06:local",
-    "image_id": "sha256:2caad542896db40333c578af19da1b17357a4c3a1f16977076fb731abddfd020",
+    "image_id": "sha256:fc5b107019952985f020e202df24d16b19ee87af379faa27e339a3be6ee7d235",
     "platform": "linux/arm64",
     "python": "3.12.15",
     "packages": {
@@ -48,12 +48,12 @@
       "name": "Full CI-marked backend suite and static checks",
       "status": "passed",
       "command": "ruff check . && python manage.py makemigrations --check --dry-run && python -m pip check && python -m pytest -m 'unit or functional or regression or integration or uat' --tb=short --junitxml=../test-reports/p06-backend.xml --cov --cov-report=xml:../test-reports/p06-backend-coverage.xml --cov-report=term-missing --cov-fail-under=50",
-      "passed": 1345,
+      "passed": 1347,
       "skipped": 6,
       "deselected": 62,
-      "warnings": 137,
-      "duration_seconds": 105.56,
-      "coverage_percent": 67.04,
+      "warnings": 138,
+      "duration_seconds": 86.68,
+      "coverage_percent": 67.06,
       "coverage_gate_percent": 50,
       "log": "backend-full.log"
     },
@@ -76,7 +76,7 @@
       "command": "npm run test:e2e:governed",
       "passed": 19,
       "skipped": 0,
-      "duration_seconds": 16.0,
+      "duration_seconds": 14.4,
       "details": "Real non-admin sessions/CSRF; temporal classification and RMSE feature selection with two recorded folds, fold-local purifier/native fit evidence, changed-resume conflicts, exact-version candidate acceptance and older-bundle scoring replay. Existing UI session/reload/local-font checks also pass.",
       "log": "browser-api.log"
     },
@@ -135,7 +135,8 @@
     "Negative R2 and minimizing loss percentage direction; undefined zero baseline; backward first-removal baseline, improvements and tolerated deterioration.",
     "Mid-search failure retains partial full-step evidence without completion; cancellation and exact-basis resume; changed labels/rows/features/folds/threshold/execution/raw inputs/validation/runtime rejected.",
     "API search/refit failure persists an error, prevents publication and keeps sfs_completed false; terminal callback cannot precede public persistence.",
-    "Authenticated temporal selection preserves training/validation chronology and fold-local purification and cannot read final assessment outcomes."
+    "Authenticated temporal selection preserves training/validation chronology and fold-local purification and cannot read final assessment outcomes.",
+    "Single-class screening/temporal validation partitions fail when the fixed native AUC early-stopping criterion is unavailable, even for a computable declared Brier objective."
   ],
   "limitations": [
     "Exploratory post-selection evidence: reused development screening/early-stopping/CV data, unweighted fold means and descriptive spread; no nested validation, independent assessment or paired-effect uncertainty.",
@@ -148,17 +149,17 @@
   "retained_reports": {
     "directory": "/Users/caglarsubasi/.codex/worktrees/foundation-packaging/auto-ml/test-reports/p06",
     "files": {
-      "backend-full.log": "996ae5de3c0b140d89140c0f469db0b66619701398cf649f6ae7aefe820ececd",
-      "backend.xml": "0b3338d01cb095f70a70633d53892a1362b34d419b7c5fb07722521bc19bc808",
-      "backend-coverage.xml": "a2d25abc685fe2cb508b7292b7f1a75884adb0beeaa42a33ec8143e4279c2332",
-      "skip-budget.log": "4102ea9f32b6e63a7516f72a124cd79dbb3ed751c0fb6bbf6a83815ba8eee5c0",
+      "backend-full.log": "6ccd2628b973d00522601f6fd8152a4e410a214388f476c9bf54832e5d8d116f",
+      "backend.xml": "29365f8d4750300445b54495ec7a6da4da5af315a4e0df3293286f7b7d467981",
+      "backend-coverage.xml": "201479faefd771f6760be2d643ae345495ed1c4c9b2d5e3799bf39f5d92a6eec",
+      "skip-budget.log": "7a367d729562004a4505c1d636659ee63ab801a641f65c1466a17d631a9a1eeb",
       "frontend-unit.log": "08a4f76a7aea5452ddfa3ee08640e0ad5257998f4841cc8cf5151fbbf7613d6b",
       "frontend-build.log": "357c0b7f373f275ca3493b8d564f9fc9b35d675c81b41e3be14df324e3cf584e",
       "frontend-lint.log": "5ccf1385b6f74c0b908e20462e34fbc922defee13b483f64abf5e84f9afe5706",
       "e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
-      "browser-api.log": "af243044e9d872251179adc1e7a2f69b50679f8316e67ce2f2eb20fe13e06196",
-      "image-build.log": "040d3e9acd9d70f4b679467c8f37d79b70c08f0320a525c745914af96e546a4c"
+      "browser-api.log": "3a27558b99dda00980536ffbfaeb4cce3c2beebf8e7b8c4f023b9e8c50843e6d",
+      "image-build.log": "4a9030486d9bc7e538285e98ab3d1552e6a2f51f3ae493312b12f0ff268af55d"
     }
   },
   "git_hooks": "Shared hooks target user-owned primary Docker containers. Per-command core.hooksPath=/dev/null was used after equivalent isolated full backend/frontend/API/lint/build checks; persistent Git hook configuration was unchanged."
