@@ -108,6 +108,17 @@
       ],
       "preserved_primary_tracked_files": 11,
       "details": "All starting primary file hashes unchanged; P01-P08 packet records preserved and D18-D26 objects remain planned/unchanged. Disposable API/Redis/network/preview and credentials removed; primary services remain on prior ports."
+    },
+    {
+      "name": "Targeted CI timeout reproduction with two CPU affinities",
+      "status": "passed",
+      "command": "python -m pytest 'tests/unit/test_governed_foundation.py::test_native_booster_contract_survives_assessment_and_scoring[classification]' -q --tb=short --durations=2",
+      "passed": 1,
+      "skipped": 0,
+      "duration_seconds": 16.29,
+      "test_call_seconds": 15.61,
+      "details": "Same final source, unchanged 120-second timeout and 65-class/chunk/replay assertions. Linux core image constrained to CPUs 0-1, network disabled. Does not establish CI-runner or deployment capacity.",
+      "log": "ci-timeout-reproduction.log"
     }
   ],
   "accepted_scenarios": [
@@ -159,8 +170,24 @@
       "frontend-unit.log": "9473e54f13f1887914ff987ee085b9befcc1212872d8bd635c56845b07275a33",
       "image-build.log": "48489fe272999c6685209005b54c6734a61099b52ff5cc23f8e32b62482523ce",
       "prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
-      "skip-budget.log": "64444c446a74c4ae0dbf4fa4964717774e534ec545d68055093de74433b1f896"
+      "skip-budget.log": "64444c446a74c4ae0dbf4fa4964717774e534ec545d68055093de74433b1f896",
+      "ci-failure.log": "3cf062832c631b706469f1b10c0b39438c1a9a1244f2a8c3a2ddfd287888f0a4",
+      "ci-timeout-reproduction.log": "95433e36c85a4b4da388a9c35cfe6eeced714237a70da478795c4e06a5d66275"
     }
   },
-  "git_hooks": "Shared hooks target user-owned primary Docker containers. Per-command core.hooksPath=/dev/null was used after equivalent isolated backend/frontend/API/static/projection checks; persistent configuration unchanged. Exact-head standard PR CI remains required before review readiness."
+  "git_hooks": "Shared hooks target user-owned primary Docker containers. Per-command core.hooksPath=/dev/null was used after equivalent isolated backend/frontend/API/static/projection checks; persistent configuration unchanged. Exact-head standard PR CI remains required before review readiness.",
+  "ci_observations": [
+    {
+      "head_commit": "8edf81225d53419c1342125f01e79b1609fe39ed",
+      "run": "https://github.com/caglarsubas/auto_ml/actions/runs/37810103589",
+      "attempt": 1,
+      "outcome": "Four jobs passed; backend pytest failed on the existing 120-second per-test timeout.",
+      "test": "tests/unit/test_governed_foundation.py::test_native_booster_contract_survives_assessment_and_scoring[classification]",
+      "location": "Repeated XGBoost model loading during chunked score_frame calls, after training and assessment.",
+      "remaining_results": "1398 backend tests passed, five explicit skips and 207 deselected.",
+      "comparison": "Earlier native/source-equivalent PR CI heads passed; the unchanged final-source test passes locally with two CPU affinities. Runtime/capacity profiling remains open.",
+      "rerun": "Actions API rerun permission was unavailable; the evidence update triggers normal PR CI. Review readiness requires success at the new exact head.",
+      "log": "ci-failure.log"
+    }
+  ]
 }
