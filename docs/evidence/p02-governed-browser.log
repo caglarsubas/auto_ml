@@ -1,0 +1,30 @@
+
+> frontend@0.0.0 test:e2e:governed
+> playwright test e2e/governed-session.spec.ts e2e/hyperparameter-api.spec.ts e2e/preprocessing-options-api.spec.ts e2e/session-boundary-api.spec.ts
+
+
+Running 17 tests using 1 worker
+
+(node:62510) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:62510) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › e2e/governed-session.spec.ts:4:5 › server session, declared task and local fonts survive a browser reload (2.2s)
+  ✓   2 [chromium] › e2e/hyperparameter-api.spec.ts:5:7 › Authenticated hyperparameter API contract › start requires file_id (561ms)
+  ✓   3 [chromium] › e2e/hyperparameter-api.spec.ts:10:7 › Authenticated hyperparameter API contract › start requires persisted development training data (299ms)
+  ✓   4 [chromium] › e2e/hyperparameter-api.spec.ts:17:7 › Authenticated hyperparameter API contract › unknown run status is not_started (334ms)
+  ✓   5 [chromium] › e2e/hyperparameter-api.spec.ts:24:7 › Authenticated hyperparameter API contract › unknown results are absent (306ms)
+  ✓   6 [chromium] › e2e/hyperparameter-api.spec.ts:29:7 › Authenticated hyperparameter API contract › unknown run cannot be stopped (295ms)
+  ✓   7 [chromium] › e2e/preprocessing-options-api.spec.ts:4:7 › Authenticated purifier options catalog › returns the catalog and selected IDs (252ms)
+  ✓   8 [chromium] › e2e/preprocessing-options-api.spec.ts:11:7 › Authenticated purifier options catalog › retains all 34 option identifiers (256ms)
+  ✓   9 [chromium] › e2e/preprocessing-options-api.spec.ts:18:7 › Authenticated purifier options catalog › option labels and quantiles retain their declared meaning (255ms)
+  ✓  10 [chromium] › e2e/preprocessing-options-api.spec.ts:32:7 › Authenticated purifier options catalog › default selection only references valid options (252ms)
+  ✓  11 [chromium] › e2e/session-boundary-api.spec.ts:4:5 › anonymous requests cannot read installation data or artifacts (134ms)
+  ✓  12 [chromium] › e2e/session-boundary-api.spec.ts:11:5 › an authenticated mutation still requires CSRF (341ms)
+  ✓  13 [chromium] › e2e/session-boundary-api.spec.ts:21:5 › logout revokes access using the previous session cookie (347ms)
+  ✓  14 [chromium] › e2e/session-boundary-api.spec.ts:31:5 › a wrong password does not establish a server session (241ms)
+  ✓  15 [chromium] › e2e/session-boundary-api.spec.ts:42:5 › expert code stays blocked until isolation is available (313ms)
+  ✓  16 [chromium] › e2e/session-boundary-api.spec.ts:50:5 › session and CSRF parsing preserves feature-selection requests (349ms)
+  ✓  17 [chromium] › e2e/session-boundary-api.spec.ts:57:5 › a signed-in user can create, update and delete a pipeline (485ms)
+
+  17 passed (7.7s)

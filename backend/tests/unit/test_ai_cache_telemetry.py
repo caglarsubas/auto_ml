@@ -114,7 +114,7 @@ class TestPrometaConfig:
 
     # ── Stable Prometa agent id wiring (v2.34.0 / SDK 0.7.0+) ─────────
 
-    def test_get_prometa_passes_agent_id_when_env_var_set(self, monkeypatch):
+    def test_get_prometa_passes_agent_id_when_env_var_set(self, sdk_stub, monkeypatch):
         """When PROMETA_AGENT_ID is set, get_prometa() must forward it
         as agent_id= to Prometa(...).  This is the platform-correctness
         path: matching the trace's prometa.agent.id to the registry's
@@ -146,7 +146,7 @@ class TestPrometaConfig:
                 self.agent_id = kwargs.get('agent_id', '<would-be-random>')
 
         import ai_assistant.prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
         # Avoid OpenAI auto-instrumentation side-effect during the test.
         if hasattr(prometa, 'integrations'):
@@ -166,7 +166,7 @@ class TestPrometaConfig:
         # — kept aligned with the new default slug for consistency).
         assert captured_kwargs['agent_id'] == 'declarai-agent-staging'
 
-    def test_get_prometa_uses_stable_slug_when_env_var_unset(self, monkeypatch):
+    def test_get_prometa_uses_stable_slug_when_env_var_unset(self, sdk_stub, monkeypatch):
         """When PROMETA_AGENT_ID is NOT set, use a deterministic slug.
 
         The attached Prometa feedback documents why we no longer ask
@@ -188,7 +188,7 @@ class TestPrometaConfig:
                 self.agent_id = kwargs.get('agent_id', '<random>')
 
         import ai_assistant.prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
         if hasattr(prometa, 'integrations'):
             monkeypatch.setattr(prometa.integrations.openai, 'install',
@@ -207,7 +207,7 @@ class TestPrometaConfig:
             "random per-process id"
         )
 
-    def test_get_prometa_uses_stable_slug_when_env_var_empty_string(self, monkeypatch):
+    def test_get_prometa_uses_stable_slug_when_env_var_empty_string(self, sdk_stub, monkeypatch):
         """Edge case: PROMETA_AGENT_ID set to empty string (often happens
         when an operator unsets a deployment var by leaving it blank in
         the env file). Treat as unset and use the deterministic slug."""
@@ -226,7 +226,7 @@ class TestPrometaConfig:
                 self.agent_id = kwargs.get('agent_id', '<random>')
 
         import ai_assistant.prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, 'Prometa', _StubPrometa)
         if hasattr(prometa, 'integrations'):
             monkeypatch.setattr(prometa.integrations.openai, 'install',
@@ -1161,12 +1161,12 @@ class TestPrometaCorrelationHelpers:
     the SDK helpers when available, fall back to ``set_span_attr`` on
     ImportError, and never propagate exceptions."""
 
-    def test_set_span_attr_forwards_to_sdk_set_attribute_when_available(self, monkeypatch):
+    def test_set_span_attr_forwards_to_sdk_set_attribute_when_available(self, sdk_stub, monkeypatch):
         from ai_assistant import prometa_config as pc
 
         sdk_calls: list[tuple[str, object]] = []
         fallback_calls: list[tuple[str, object]] = []
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(
             prometa,
             'set_attribute',
@@ -1184,12 +1184,12 @@ class TestPrometaCorrelationHelpers:
         assert sdk_calls == [('declarai.mcp.operation', 'read_tool')]
         assert fallback_calls == []
 
-    def test_set_span_attrs_forwards_to_sdk_set_attributes_when_available(self, monkeypatch):
+    def test_set_span_attrs_forwards_to_sdk_set_attributes_when_available(self, sdk_stub, monkeypatch):
         from ai_assistant import prometa_config as pc
 
         sdk_calls: list[dict] = []
         fallback_calls: list[tuple[str, object]] = []
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(
             prometa,
             'set_attributes',
@@ -1213,14 +1213,14 @@ class TestPrometaCorrelationHelpers:
         }]
         assert fallback_calls == []
 
-    def test_set_customer_id_forwards_to_sdk_helper_when_available(self, monkeypatch):
+    def test_set_customer_id_forwards_to_sdk_helper_when_available(self, sdk_stub, monkeypatch):
         """Happy path: SDK on 0.6.0+ exposes ``set_customer_id``; our
         wrapper must call it verbatim, NOT the set_span_attr fallback."""
         from ai_assistant import prometa_config as pc
         sdk_calls: list[str] = []
         attr_calls: list[tuple[str, object]] = []
         # Patch the SDK symbol our wrapper imports.
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, 'set_customer_id',
                             lambda v: sdk_calls.append(v), raising=False)
         # Patch set_span_attr to ensure the fallback path is NOT taken.
@@ -1237,7 +1237,7 @@ class TestPrometaCorrelationHelpers:
             f"got {attr_calls}"
         )
 
-    def test_set_customer_id_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+    def test_set_customer_id_falls_back_to_set_span_attr_on_import_error(self, sdk_stub, monkeypatch):
         """If the SDK is older than 0.5.0 (no ``set_customer_id`` symbol),
         the wrapper must still emit the canonical attribute via
         ``set_span_attr('prometa.customer_id', ...)`` so the platform's
@@ -1248,7 +1248,7 @@ class TestPrometaCorrelationHelpers:
                             lambda k, v: attr_calls.append((k, v)))
         # Simulate the helper being absent: stash a real ImportError
         # behind the import statement by deleting the SDK attribute.
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'set_customer_id', raising=False)
 
         pc.set_customer_id('cus_99')
@@ -1257,12 +1257,12 @@ class TestPrometaCorrelationHelpers:
             f"Fallback must stamp prometa.customer_id; got {attr_calls}"
         )
 
-    def test_set_customer_id_swallows_other_exceptions(self, monkeypatch):
+    def test_set_customer_id_swallows_other_exceptions(self, sdk_stub, monkeypatch):
         """Defensive: if the SDK helper raises something other than
         ImportError (e.g. a runtime error from inside an in-progress
         span flush), the wrapper must NOT propagate."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
 
         def boom(_v):
             raise RuntimeError('span flush in progress')
@@ -1271,12 +1271,12 @@ class TestPrometaCorrelationHelpers:
         # Must not raise.
         pc.set_customer_id('cus_ok')
 
-    def test_set_request_model_forwards_to_sdk_helper_when_available(self, monkeypatch):
+    def test_set_request_model_forwards_to_sdk_helper_when_available(self, sdk_stub, monkeypatch):
         """Same contract as set_customer_id, mirrored for set_request_model."""
         from ai_assistant import prometa_config as pc
         sdk_calls: list[str] = []
         attr_calls: list[tuple[str, object]] = []
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, 'set_request_model',
                             lambda v: sdk_calls.append(v), raising=False)
         monkeypatch.setattr(pc, 'set_span_attr',
@@ -1287,23 +1287,23 @@ class TestPrometaCorrelationHelpers:
         assert sdk_calls == ['gpt-5.5']
         assert attr_calls == []
 
-    def test_set_request_model_falls_back_to_set_span_attr_on_import_error(self, monkeypatch):
+    def test_set_request_model_falls_back_to_set_span_attr_on_import_error(self, sdk_stub, monkeypatch):
         """SDK <0.5.0 path: must still stamp gen_ai.request.model so the
         cost panel and AML model_route detector keep working."""
         from ai_assistant import prometa_config as pc
         attr_calls: list[tuple[str, object]] = []
         monkeypatch.setattr(pc, 'set_span_attr',
                             lambda k, v: attr_calls.append((k, v)))
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'set_request_model', raising=False)
 
         pc.set_request_model('gpt-5.5')
 
         assert attr_calls == [('gen_ai.request.model', 'gpt-5.5')]
 
-    def test_set_request_model_swallows_other_exceptions(self, monkeypatch):
+    def test_set_request_model_swallows_other_exceptions(self, sdk_stub, monkeypatch):
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
 
         def boom(_v):
             raise RuntimeError('span context lost')
@@ -2022,11 +2022,11 @@ class TestPrometaAMLHelpers:
             # Calling .result() must not raise on either path.
             sv.result(passed=True)
 
-    def test_schema_validate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+    def test_schema_validate_falls_back_to_noop_handle_on_import_error(self, sdk_stub, monkeypatch):
         """SDK without schema_validate symbol → wrapper yields
         _NoOpAMLHandle.  Validates the ImportError branch."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         # Simulate the helper being absent.
         monkeypatch.delattr(prometa, 'schema_validate', raising=False)
 
@@ -2065,11 +2065,11 @@ class TestPrometaAMLHelpers:
             # Must accept .cost() and not raise on either path.
             mr.cost(cost_estimate_usd=0.001)
 
-    def test_model_route_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+    def test_model_route_falls_back_to_noop_handle_on_import_error(self, sdk_stub, monkeypatch):
         """SDK without model_route symbol → wrapper yields
         _NoOpAMLHandle.  Same fallback contract as schema_validate."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'model_route', raising=False)
 
         with pc.model_route(
@@ -2163,11 +2163,11 @@ class TestPrometaAMLHelpers:
             # And the optional kwarg form of .hit() too.
             ch.hit(ttl_remaining_seconds=86400)
 
-    def test_cache_lookup_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+    def test_cache_lookup_falls_back_to_noop_handle_on_import_error(self, sdk_stub, monkeypatch):
         """SDK without cache_lookup symbol → wrapper yields _NoOpAMLHandle.
         Same fallback contract as schema_validate and model_route."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'cache_lookup', raising=False)
 
         with pc.cache_lookup('tool_call', key='ai:pipeline:42:foo') as ch:
@@ -2347,10 +2347,10 @@ class TestPrometaAMLHelpers:
                 permissions_enforced=False,
             )
 
-    def test_retrieval_query_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+    def test_retrieval_query_falls_back_to_noop_handle_on_import_error(self, sdk_stub, monkeypatch):
         """SDK without retrieval_query symbol → wrapper yields _NoOpAMLHandle."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'retrieval_query', raising=False)
 
         with pc.retrieval_query(
@@ -2389,7 +2389,7 @@ class TestPrometaAMLHelpers:
                 r.results(result_ids=[])
                 raise _ChromaDown('chroma query failed')
 
-    def test_record_retrieval_raw_stamps_when_raw_channel_enabled(self, monkeypatch):
+    def test_record_retrieval_raw_stamps_when_raw_channel_enabled(self, sdk_stub, monkeypatch):
         """After-fetch raw stamp lands on the active span when raw channel is on."""
         from ai_assistant import prometa_config as pc
 
@@ -2401,13 +2401,13 @@ class TestPrometaAMLHelpers:
                 return True
 
         monkeypatch.setattr(pc, 'set_span_attr', lambda k, v: stamped.__setitem__(k, v))
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, '_raw_channel', _RawChannel, raising=False)
 
         pc.record_retrieval_raw('KB snippet text')
         assert stamped.get('prometa.raw.retrieved_content') == 'KB snippet text'
 
-    def test_record_retrieval_raw_noops_when_raw_channel_disabled(self, monkeypatch):
+    def test_record_retrieval_raw_noops_when_raw_channel_disabled(self, sdk_stub, monkeypatch):
         from ai_assistant import prometa_config as pc
 
         stamped: dict = {}
@@ -2418,7 +2418,7 @@ class TestPrometaAMLHelpers:
                 return False
 
         monkeypatch.setattr(pc, 'set_span_attr', lambda k, v: stamped.__setitem__(k, v))
-        import prometa
+        prometa = sdk_stub
         monkeypatch.setattr(prometa, '_raw_channel', _RawChannel, raising=False)
 
         pc.record_retrieval_raw('should not stamp')
@@ -2590,11 +2590,11 @@ class TestPrometaAMLHelpers:
                 complexity_estimate=2,
             )
 
-    def test_plan_generate_falls_back_to_noop_handle_on_import_error(self, monkeypatch):
+    def test_plan_generate_falls_back_to_noop_handle_on_import_error(self, sdk_stub, monkeypatch):
         """SDK without plan_generate symbol → wrapper yields _NoOpAMLHandle.
         Same fallback contract as the other AML helpers."""
         from ai_assistant import prometa_config as pc
-        import prometa
+        prometa = sdk_stub
         monkeypatch.delattr(prometa, 'plan_generate', raising=False)
 
         with pc.plan_generate('declarai-file-42-1700000000') as p:
@@ -2997,9 +2997,9 @@ class TestProMetaSdkVersionLock:
     """Defense against installed-vs-required SDK drift.
 
     The bug that motivated v2.42.0 hid for ~24 hours because
-    requirements.txt was pinned to >=0.7.1 but the running container
+    requirements-observability.txt was pinned to >=0.7.1 but the running container
     was on v0.6.0 (Docker layer cache wasn't invalidated when the floor
-    was bumped).  This test reads the requirement from requirements.txt and
+    was bumped).  This test reads the requirement from requirements-observability.txt and
     asserts the installed prometa.__version__ satisfies it."""
 
     # Interim archive pin for SDK #82 (retrieval.namespace) until PyPI catch-up.
@@ -3009,18 +3009,18 @@ class TestProMetaSdkVersionLock:
 
     def _read_requirement_line(self) -> str:
         from tests.unit._shared import backend_root
-        req = (backend_root() / 'requirements.txt').read_text()
+        req = (backend_root() / 'requirements-observability.txt').read_text()
         for line in req.splitlines():
             line = line.strip()
             if line.startswith('prometa-sdk'):
                 return line
         raise AssertionError(
-            "prometa-sdk entry not found in requirements.txt — "
+            "prometa-sdk entry not found in requirements-observability.txt — "
             "the version-floor test cannot run without a requirement."
         )
 
     def _read_min_version(self) -> str:
-        """Return the minimum version required in requirements.txt.
+        """Return the minimum version required in requirements-observability.txt.
 
         Supports:
           - ``prometa-sdk>=X.Y.Z`` / ``==X.Y.Z``
@@ -3056,14 +3056,14 @@ class TestProMetaSdkVersionLock:
         return tuple(int(part) for part in match.groups())
 
     def test_installed_prometa_sdk_satisfies_requirements_floor(self):
-        import prometa
+        prometa = pytest.importorskip('prometa', reason='Optional SDK profile is not installed')
         installed = prometa.__version__
         required = self._read_min_version()
         assert self._version_tuple(installed) >= self._version_tuple(required), (
             f"prometa-sdk version drift detected: installed={installed!r} "
-            f"but requirements.txt requires >={required!r}.  Rebuild the "
+            f"but requirements-observability.txt requires >={required!r}.  Rebuild the "
             f"backend Docker image with --no-cache or re-run "
-            f"`pip install -r requirements.txt` to align.  This drift "
+            f"`pip install -r requirements-observability.txt` to align.  This drift "
             f"is precisely what hid the v2.41.x AML A4 truncation bug "
             f"from us for ~24h."
         )
@@ -3076,12 +3076,12 @@ class TestProMetaSdkVersionLock:
             assert 'namespace' in inspect.signature(_sdk_retrieval_query).parameters, (
                 "archive-pinned prometa-sdk must support retrieval_query("
                 "namespace=...). Rebuild the backend image or run "
-                "`pip install -r requirements.txt`."
+                "`pip install -r requirements-observability.txt`."
             )
             assert hasattr(prometa_openai, '_embeddings_request_attrs'), (
                 "archive-pinned prometa-sdk must expose embeddings "
                 "instrumentation (_embeddings_request_attrs). Rebuild the "
-                "backend image or run `pip install -r requirements.txt`."
+                "backend image or run `pip install -r requirements-observability.txt`."
             )
 
     def test_prompt_render_helper_is_importable_on_pinned_version(self):
@@ -3089,7 +3089,7 @@ class TestProMetaSdkVersionLock:
         crystallized in prometa-sdk 0.7.x.  If we ever downgrade the
         pin, this test forces explicit acknowledgement that we'd lose
         the A4 contract.  Read-only check — does not invoke the helper."""
-        from prometa import prompt_render
+        prompt_render = pytest.importorskip('prometa', reason='Optional SDK profile is not installed').prompt_render
         assert callable(prompt_render), (
             "prompt_render must be importable; the AML A4 contract "
             "(prompt.role_boundaries + prometa.raw.rendered_prompt) "
@@ -3101,7 +3101,7 @@ class TestProMetaSdkVersionLock:
         Without it, prompt_render(raw_rendered_prompt=...) drops the
         raw kwarg at the SDK boundary and A4 falls back to the
         truncated gen_ai.prompt — re-introducing the v2.41.x bug."""
-        from prometa import _raw_channel
+        _raw_channel = pytest.importorskip('prometa', reason='Optional SDK profile is not installed')._raw_channel
         assert callable(_raw_channel.enable)
         assert callable(_raw_channel.is_enabled)
 

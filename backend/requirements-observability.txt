@@ -1,0 +1,4 @@
+# Optional telemetry only; core modeling, assistant and governance do not require it.
+# Install from your approved package index or a separately supplied SDK wheel.
+# Private SDK source and credentials must not be committed to this public repository.
+prometa-sdk>=0.20.2

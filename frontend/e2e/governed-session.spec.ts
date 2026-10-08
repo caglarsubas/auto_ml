@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { API_BASE_URL, requireTestCredentials } from './fixtures/credentials';
 
 test('server session, declared task and local fonts survive a browser reload', async ({ page, baseURL }, testInfo) => {
-  const username = process.env['E2E_USER'];
-  const password = process.env['E2E_PASSWORD'];
-  test.skip(!username || !password, 'Requires an existing Django test account in the chosen installation.');
-  const apiURL = process.env['E2E_API_BASE_URL'] || 'http://localhost:8002/api/';
+  const { username, password } = requireTestCredentials();
+  const apiURL = API_BASE_URL;
   const allowed = new Set([new URL(baseURL!).origin, new URL(apiURL).origin]);
   const external: string[] = [];
   const runtimeErrors: string[] = [];

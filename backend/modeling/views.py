@@ -1810,8 +1810,10 @@ class SFSStartView(APIView):
     """Start Sequential Feature Selection with user-defined parameters."""
     
     def post(self, request, *args, **kwargs):
+        data = request.data
+        if not isinstance(data, dict):
+            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            data = json.loads(request.body)
             file_id = data.get('file_id')
             methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
             stopping_criteria = data.get('stopping_criteria', {})
@@ -2314,8 +2316,10 @@ class HyperparamStartView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
+        data = request.data
+        if not isinstance(data, dict):
+            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            data = json.loads(request.body) if request.body else {}
             file_id = data.get('file_id')
             if not file_id:
                 return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2808,8 +2812,10 @@ class PipelineRunCreateView(APIView):
     """Create a new pipeline run."""
 
     def post(self, request, *args, **kwargs):
+        body = request.data
+        if not isinstance(body, dict):
+            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            body = json.loads(request.body)
             name = body.get('name', '')
             pipeline_type = body.get('pipeline_type', 'boosting')
             file_id = body.get('file_id')
@@ -2874,9 +2880,11 @@ class PipelineRunDetailView(APIView):
     }
 
     def put(self, request, pk, *args, **kwargs):
+        body = request.data
+        if not isinstance(body, dict):
+            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             run = PipelineRun.objects.get(pk=pk)
-            body = json.loads(request.body)
             old_step = run.current_step
             new_step = body.get('current_step', old_step)
             state_substep = (body.get('state', {}).get('modeling') or {}).get('substep', '-')

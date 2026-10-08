@@ -68,3 +68,21 @@ def _stub_engine_models(monkeypatch):
     mr.invalidate_engine_cache()
     yield fake
     mr.invalidate_engine_cache()
+
+
+@pytest.fixture
+def sdk_stub(monkeypatch):
+    """An import boundary for wrapper unit tests, never an SDK implementation.
+
+    Tests supply the exact callable they are checking. Installed-SDK version
+    and instrumentation tests remain separate and use the optional real SDK.
+    """
+    import sys
+    from types import ModuleType
+    module = ModuleType('prometa')
+    module.Prometa = object
+    for name in list(sys.modules):
+        if name.startswith('prometa.'):
+            monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setitem(sys.modules, 'prometa', module)
+    return module

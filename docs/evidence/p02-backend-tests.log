@@ -1,0 +1,226 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0
+django: version: 5.2.18, settings: backend.settings (from env)
+rootdir: /app/backend
+configfile: pytest.ini
+testpaths: tests
+plugins: metadata-3.1.1, anyio-4.15.1, cov-7.1.0, django-4.14.0, html-4.2.0, timeout-2.4.0
+timeout: 120.0s
+timeout method: signal
+timeout func_only: False
+collected 1284 items / 62 deselected / 1222 selected
+
+tests/test_functional.py ............................................... [  3%]
+........................................................s.........       [  9%]
+tests/test_integration.py ..................                             [ 10%]
+tests/test_regression.py ........                                        [ 11%]
+tests/test_uat.py .........                                              [ 12%]
+tests/unit/test_ai_skills.py ......                                      [ 12%]
+tests/unit/test_declaration.py .........                                 [ 13%]
+tests/unit/test_feature_card.py ...........                              [ 14%]
+tests/unit/test_governed_foundation.py ....                              [ 14%]
+tests/unit/test_mcp_auth_and_commands.py .                               [ 14%]
+tests/unit/test_modeling.py ......                                       [ 15%]
+tests/unit/test_report_generator.py ..                                   [ 15%]
+tests/unit/test_session_boundary.py ............................         [ 17%]
+tests/test_functional.py .....                                           [ 18%]
+tests/test_mcp_server.py ...............                                 [ 19%]
+tests/test_prometa_bundle_runner.py ...............                      [ 20%]
+tests/test_regression.py ..........................                      [ 22%]
+tests/unit/test_ai_actions.py .......................................... [ 26%]
+........................................................................ [ 31%]
+.........................................                                [ 35%]
+tests/unit/test_ai_cache_telemetry.py ................s................. [ 38%]
+........................................................................ [ 43%]
+............................................sss.........                 [ 48%]
+tests/unit/test_ai_chat.py ............................................. [ 52%]
+.........                                                                [ 52%]
+tests/unit/test_ai_engine.py ........................................... [ 56%]
+.........................................................                [ 61%]
+tests/unit/test_ai_engine_admission.py .................                 [ 62%]
+tests/unit/test_ai_progress.py ......................                    [ 64%]
+tests/unit/test_ai_prompts.py .........................................  [ 67%]
+tests/unit/test_ai_skills.py ........................................... [ 71%]
+....                                                                     [ 71%]
+tests/unit/test_common.py ...................                            [ 73%]
+tests/unit/test_cv_strategy.py .....                                     [ 73%]
+tests/unit/test_data_quality.py .........                                [ 74%]
+tests/unit/test_declaration.py ..............................            [ 76%]
+tests/unit/test_deploy_readiness.py .....                                [ 77%]
+tests/unit/test_embedding_cache.py s....                                 [ 77%]
+tests/unit/test_encoding.py .........................                    [ 79%]
+tests/unit/test_evaluation_regression.py ....                            [ 79%]
+tests/unit/test_feature_card.py .....                                    [ 80%]
+tests/unit/test_governed_foundation.py .........................         [ 82%]
+tests/unit/test_hyperparam.py .......................................... [ 85%]
+                                                                         [ 85%]
+tests/unit/test_mcp_auth_and_commands.py ..........                      [ 86%]
+tests/unit/test_modeling.py ............................................ [ 90%]
+..........                                                               [ 90%]
+tests/unit/test_optional_observability.py ..........                     [ 91%]
+tests/unit/test_preprocessing.py ....................................... [ 95%]
+..............                                                           [ 96%]
+tests/unit/test_purifier_contract.py .....                               [ 96%]
+tests/unit/test_rag_eval.py .......                                      [ 97%]
+tests/unit/test_rag_intent_telemetry.py ..................               [ 98%]
+tests/unit/test_report_generator.py ..                                   [ 98%]
+tests/unit/test_sfs_utils.py ...............                             [100%]
+
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:47
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:47: PendingDeprecationWarning: The set_bad function will be deprecated in a future version. Use cmap.with_extremes(bad=...) or Colormap(bad=...) instead.
+    red_blue.set_bad(gray_rgb.tolist(), 1.0)
+
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:48
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:48: PendingDeprecationWarning: The set_over function will be deprecated in a future version. Use cmap.with_extremes(over=...) or Colormap(over=...) instead.
+    red_blue.set_over(gray_rgb.tolist(), 1.0)
+
+../../usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:49
+  /usr/local/lib/python3.12/site-packages/shap/plots/colors/_colors.py:49: PendingDeprecationWarning: The set_under function will be deprecated in a future version. Use cmap.with_extremes(under=...) or Colormap(under=...) instead.
+    red_blue.set_under(gray_rgb.tolist(), 1.0)  # "under" is incorrectly used instead of "bad" in the scatter plot
+
+tests/test_functional.py: 3 warnings
+tests/test_integration.py: 11 warnings
+tests/test_regression.py: 1 warning
+tests/test_uat.py: 2 warnings
+tests/unit/test_ai_skills.py: 3 warnings
+tests/unit/test_ai_actions.py: 7 warnings
+tests/unit/test_ai_cache_telemetry.py: 28 warnings
+  /app/backend/ai_assistant/cache.py:126: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    r.setex(_key(file_id, artifact), ttl, payload)
+
+tests/test_functional.py::TestDataDictionaryAPI::test_data_dictionary_handles_inf_and_nan_columns
+  /app/backend/declaration/views.py:415: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+    'Skewness': round(scipy_stats.skew(numeric_data.dropna()), 2),
+
+tests/test_functional.py::TestDataDictionaryAPI::test_data_dictionary_handles_inf_and_nan_columns
+  /app/backend/declaration/views.py:416: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+    'Kurtosis': round(scipy_stats.kurtosis(numeric_data.dropna()), 2)
+
+tests/unit/test_ai_cache_telemetry.py: 11 warnings
+  /app/backend/ai_assistant/cache.py:234: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    pipe.setex(_key(file_id, artifact), ttl, payload)
+
+tests/unit/test_data_quality.py: 10 warnings
+  /usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4608: RuntimeWarning: invalid value encountered in subtract
+    diff_b_a = b - a
+
+tests/unit/test_data_quality.py: 10 warnings
+  /usr/local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:4609: RuntimeWarning: invalid value encountered in multiply
+    lerp_interpolation = add(a, diff_b_a * t, out=... if out is None else out)
+
+tests/unit/test_hyperparam.py::TestHyperparamMetrics::test_single_class_roc_auc_is_nan
+  /usr/local/lib/python3.12/site-packages/sklearn/metrics/_classification.py:614: UserWarning: A single label was found in 'y_true' and 'y_pred'. For the confusion matrix to have the correct shape, use the 'labels' parameter to pass all known labels.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+------------ generated xml file: /app/test-reports/p02-backend.xml -------------
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.15-final-0 _______________
+
+Name                                              Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------
+ai_assistant/__init__.py                              0      0      0      0   100%
+ai_assistant/action_executor.py                     732    160    294     28    77%   86-93, 98-104, 112-113, 126-127, 137-139, 149, 157-172, 177-189, 208-209, 236-237, 275-276, 385-387, 414, 455-456, 468-470, 526, 584-589, 669-670, 696-697, 715, 725, 743-744, 842-843, 999-1000, 1015, 1253, 1316, 1429, 1504, 1623-1624, 1667-1687, 1702->1721, 1707, 1712->1721, 1718-1719, 1805-1806, 1808-1809, 1864, 1868-1870, 1961-2008, 2042, 2055-2064, 2068, 2122, 2128->2136, 2134-2135, 2153-2159
+ai_assistant/cache.py                               165     45     16      5    72%   80-82, 120-122, 129-133, 171-175, 190-196, 225-227, 239-243, 265-267, 272-276, 301-303, 310-314
+ai_assistant/feedback.py                            189     26     62     11    84%   142-143, 145->149, 183-184, 187-189, 202, 204-205, 226, 230-235, 237, 258, 275, 287-293
+ai_assistant/intent_classifier.py                   112     19     50     16    76%   87-90, 94, 99->97, 110->112, 172, 214, 217, 224-225, 253, 257, 259->255, 271-273, 278, 330, 332, 334, 337->340
+ai_assistant/knowledge_bank.py                      157     12     54     11    89%   46-47, 54-56, 96->94, 98, 137->139, 146, 156, 184, 186, 192, 238->255, 242
+ai_assistant/management/__init__.py                   0      0      0      0   100%
+ai_assistant/mcp_server/__init__.py                   0      0      0      0   100%
+ai_assistant/mcp_server/__main__.py                  18     18      0      0     0%   3-44
+ai_assistant/mcp_server/actions.py                   56      6     10      4    85%   58, 100, 136-138, 148, 150
+ai_assistant/mcp_server/auth.py                      36      0     10      0   100%
+ai_assistant/mcp_server/observability.py             45      3     30      3    92%   80, 83, 86
+ai_assistant/mcp_server/registry.py                  95      2     28      3    96%   168, 319, 328->330
+ai_assistant/mcp_server/server.py                   134     24     10      1    83%   89, 123-129, 133, 198-204, 227, 243, 259, 275, 291, 307, 323, 339, 355, 371, 387, 419, 435, 451, 467, 573
+ai_assistant/model_registry.py                      219     23     72      6    88%   238, 311-313, 318, 394, 398, 402-404, 416, 478-494, 538-539
+ai_assistant/progress.py                             50      0      4      0   100%
+ai_assistant/prometa_config.py                      335     72     58      9    78%   98-99, 136-137, 140-141, 164-165, 168-169, 174-175, 184-187, 218-219, 291-304, 326, 372-374, 391-392, 398, 405-407, 441->443, 443->445, 476, 536, 539-540, 671-672, 711-712, 751-752, 813-820, 833, 878-883, 968-969, 1026-1033, 1038-1048
+ai_assistant/prometa_runner/__init__.py               4      0      0      0   100%
+ai_assistant/prometa_runner/canonicalization.py      22      2      6      2    86%   28, 30
+ai_assistant/prometa_runner/client.py                30     22      4      0    24%   26-50
+ai_assistant/prometa_runner/context.py               10      0      0      0   100%
+ai_assistant/prometa_runner/policy.py               125     20     56     16    78%   23, 39, 53, 62, 64, 86-87, 101, 134, 143, 146, 154, 157, 165-172, 178, 189
+ai_assistant/prometa_runner/runner.py               101     25     20      3    70%   44, 67-71, 88, 100-110, 132, 198-201, 212-221, 243-246
+ai_assistant/prometa_runner/signature.py             46      9     14      6    72%   36, 48-50, 52, 56, 58, 66, 91
+ai_assistant/prometa_runner/telemetry.py             17      0      8      4    84%   29->33, 34->37, 37->39, 39->41
+ai_assistant/rag/__init__.py                          2      0      0      0   100%
+ai_assistant/rag/chroma_store.py                     71     34     18      2    48%   13-21, 43-44, 55-56, 62, 95, 111-146
+ai_assistant/rag/embeddings.py                      115     33     22      2    73%   22-26, 35-36, 40-51, 78-81, 88-89, 92-94, 104-105, 122, 164-165
+ai_assistant/rag/indexer.py                          58      9     14      4    82%   28-29, 65->68, 70, 78-81, 141-142
+ai_assistant/rag/retriever.py                        99     15     32      8    81%   36-37, 40, 87->119, 91, 97, 137, 146, 156, 185, 218-229
+ai_assistant/skill_registry.py                      135     21     50      8    84%   69-71, 90, 122, 128-129, 135-136, 142, 161, 170, 172, 194-195, 204-206, 210-211, 233
+ai_assistant/skills/__init__.py                       0      0      0      0   100%
+ai_assistant/tool_definitions.py                     21      3      6      2    81%   29-30, 75
+ai_assistant/tool_executor.py                       560    107    198     22    78%   47, 65->exit, 98-101, 138-141, 296-297, 349, 355-358, 363-366, 371-374, 406-409, 437, 443, 453, 458-477, 483, 486-487, 490-491, 506, 539-555, 572, 630->632, 632->643, 655, 660->669, 665, 671, 688-701, 705-712, 716-733, 781->784, 835, 838-840, 885, 887->892
+ai_assistant/views.py                              1545    444    710    126    67%   1045->1063, 1048->1050, 1050->1052, 1082, 1121->1117, 1169, 1193, 1209, 1471-1475, 1481, 1527->1523, 1632, 1654-1655, 1659-1660, 1681->1685, 1718->1721, 1732-1740, 1753->1759, 1771->1768, 1954-1957, 1978-1979, 2122-2123, 2179, 2288-2289, 2395-2397, 2423-2442, 2485, 2559, 2563, 2568, 2594, 2597, 2600, 2611-2614, 2629, 2652, 2662, 2671-2674, 2682-2686, 2696, 2712, 2714, 2716, 2719-2721, 2726, 2729, 2736, 2742, 2745, 2748, 2759, 2762-2783, 2898, 2910, 2919, 2942, 2948, 2954, 2970, 2975, 2977, 2978->2981, 2985, 2996-3007, 3027, 3031, 3056, 3058, 3071, 3073, 3096-3098, 3115, 3120, 3168, 3187, 3202, 3205, 3208, 3234, 3253-3254, 3257-3258, 3296, 3378, 3405, 3409, 3432, 3441-3442, 3444-3445, 3455->3438, 3458-3459, 3464->3467, 3468->3470, 3472-3474, 3486-3490, 3494->3547, 3519, 3522, 3528, 3530, 3532, 3534, 3536, 3538, 3540, 3542, 3544, 3549-3576, 3580-3587, 3591-3593, 3597->3857, 3608->3678, 3617-3619, 3627-3629, 3636-3642, 3648-3670, 3675-3676, 3679-3682, 3686->3857, 3695->3705, 3707-3711, 3719-3734, 3747->3749, 3766->3769, 3771-3778, 3782-3788, 3791, 3796-3801, 3804, 3808-3810, 3814-3818, 3824-3833, 3837-3843, 3847, 3853-3854, 3859-4040
+declaration/apps.py                                   9      0      0      0   100%
+declaration/management/__init__.py                    0      0      0      0   100%
+declaration/models.py                                34      2      6      1    88%   21-22
+declaration/serializers.py                            6      0      0      0   100%
+declaration/views.py                                458    203    172     25    54%   39, 59, 73, 76-77, 80, 85-86, 89, 97-98, 100, 102->94, 107, 135, 178, 216-222, 224->233, 235-243, 250, 266-268, 298, 300, 304-307, 310-320, 332-333, 337-342, 351, 363-375, 392-397, 456-468, 474, 488, 492, 537-539, 552-581, 589-594, 602-603, 607-611, 628-711, 716-753, 757-764
+deployment/__init__.py                                0      0      0      0   100%
+deployment/admin.py                                   1      0      0      0   100%
+deployment/apps.py                                    4      0      0      0   100%
+deployment/deploy_utils.py                          303     81    116     35    67%   40, 61, 66-75, 94, 100->110, 103, 115, 121->140, 131-138, 141->144, 163-175, 178, 182->193, 187->193, 189-190, 205-213, 216->221, 229-235, 284->289, 290->304, 295->304, 297->304, 301-302, 323-343, 354, 359, 364, 365->367, 371-375, 380, 385->384, 391-397, 410, 416, 425, 440->448, 443->448, 445-446
+deployment/models.py                                  1      0      0      0   100%
+deployment/views.py                                 152    125     22      0    16%   38-45, 48-96, 107-162, 168-177, 185-213
+encoding/__init__.py                                  0      0      0      0   100%
+encoding/apps.py                                      4      0      0      0   100%
+encoding/encoding_utils.py                          230     96     70      9    56%   61, 66-67, 132, 150, 207-209, 217-242, 246, 284, 299-302, 330, 335-386, 418-425, 434-450
+encoding/fitted.py                                   34     16     18      3    48%   15-18, 22, 26-38
+encoding/views.py                                    79     16     16      2    81%   45-48, 66-68, 92-95, 124-125, 144-146
+evaluation/__init__.py                                0      0      0      0   100%
+evaluation/admin.py                                   1      0      0      0   100%
+evaluation/apps.py                                    4      0      0      0   100%
+evaluation/eval_utils.py                            204     23     60     12    87%   22-23, 33-34, 41, 43, 51->53, 71, 164-165, 172-173, 206->216, 212-213, 218->227, 224-225, 255-256, 268, 270, 331, 457, 459, 541
+evaluation/models.py                                  1      0      0      0   100%
+evaluation/views.py                                 343    146     94     25    53%   46, 47->49, 50-58, 84, 88-89, 103, 106-107, 112-114, 121->129, 125, 127-128, 132, 134->140, 143, 156->159, 162, 166->168, 169-171, 175-185, 253-258, 266->273, 268->270, 273->275, 281->287, 285-286, 313->320, 317-318, 324, 351-354, 367-393, 396-399, 405-412, 420-459, 467-510
+feature_card/__init__.py                              0      0      0      0   100%
+feature_card/admin.py                                 1      0      0      0   100%
+feature_card/apps.py                                  4      0      0      0   100%
+feature_card/models.py                                1      0      0      0   100%
+feature_card/serializers.py                           6      0      0      0   100%
+feature_card/views.py                               185     50     58      6    70%   25-29, 41, 50, 53-61, 78, 83-85, 102, 120-145, 201-207, 228, 275-277
+modeling/__init__.py                                  0      0      0      0   100%
+modeling/admin.py                                     1      0      0      0   100%
+modeling/alt_pipelines.py                           312    121     64     15    59%   62, 64, 70, 87-98, 106->109, 110-111, 113, 139-211, 215-229, 241-256, 295, 316-345, 369-371, 381, 384, 389, 392, 396-402, 408, 467, 473, 489->491, 507->518, 512-513, 516-517
+modeling/apps.py                                      4      0      0      0   100%
+modeling/booster_adapters.py                        343    109     86     25    65%   21, 23, 29-40, 45, 104-105, 121, 125, 129, 139, 169, 189-190, 196-197, 229-232, 249-250, 252-254, 255->257, 260->262, 273-274, 279-281, 285-293, 296-302, 305-306, 323-324, 341-343, 351, 352->354, 362-363, 370-371, 375, 379, 382, 385-387, 391-404, 407-413, 416-417, 433-434, 438-439, 443-444, 526, 529, 546-551
+modeling/calibration_utils.py                        80     16     22      8    76%   46-47, 52-53, 56->58, 59, 64-65, 72-74, 80-81, 103, 107, 112, 118
+modeling/crisp_dm.py                                246    165    110      7    29%   56->58, 64, 66->68, 76-77, 84-85, 92, 112-142, 152->156, 167-175, 194-201, 209, 218-225, 229-247, 258-296, 307-353, 365-420
+modeling/crisp_views.py                             151    121     32      0    16%   35-69, 77-144, 157-173, 186-227, 242-250
+modeling/cv_strategy.py                              54     13     28      8    70%   41->40, 45, 49, 55->47, 57-59, 81->97, 93-95, 108-113
+modeling/development_validation.py                   85     13     40     12    80%   18, 23, 26, 31, 38, 43-44, 46, 49, 56, 61, 79-80, 81->84
+modeling/diagnostics.py                              10      0      0      0   100%
+modeling/execution_artifacts.py                     178      9     44     10    91%   64-65, 76, 80, 122, 147-148, 174->173, 188->193, 190->193, 197, 199, 235->239
+modeling/feature_sorter.py                           61     54     24      0     8%   12-34, 44-63, 81-99
+modeling/hyperparam_utils.py                        578     96    194     30    82%   76, 78, 169->189, 175-177, 184, 217-218, 221-222, 225-226, 247-248, 251-252, 260-261, 264-265, 268-269, 274-276, 293-294, 299, 304, 411, 420-434, 575-578, 605-606, 609-610, 628->631, 708, 710, 712, 716-718, 727, 728->736, 732->736, 734-735, 806, 852-853, 857->846, 870-873, 890, 894, 907, 923, 931-933, 941-947, 948->953, 959, 1014, 1039-1041, 1052->1055, 1075-1084
+modeling/leakage_heuristics.py                       86     21     28     10    73%   38, 42-43, 48, 56-57, 77, 84-85, 87-88, 90-91, 107-110, 116->123, 119-122, 126->129
+modeling/lineage.py                                  32      2      2      0    94%   100-101
+modeling/models.py                                   30      0      0      0   100%
+modeling/prediction_contract.py                      95     20     56     18    75%   22, 25, 29, 32, 35, 38, 40, 53, 56, 58, 60, 79, 81, 85, 91, 94-96, 100, 103
+modeling/report_generator.py                        295    205    100      8    28%   27-28, 35-39, 47-51, 101-169, 198-203, 208-223, 255-277, 297-340, 359-498, 520-570
+modeling/sfs_utils.py                               657    334    182     19    47%   78-80, 119, 123->125, 127, 177-179, 215-217, 246, 297, 342-346, 403-405, 440-444, 474-639, 689-697, 721, 728->849, 736-741, 778-781, 793, 804-809, 811-815, 818, 844, 850-985, 990-1002, 1024, 1049-1053, 1124-1127, 1134-1135, 1168-1172, 1186-1338
+modeling/split_contract.py                          170     40     76     25    72%   31, 34-35, 39, 41, 46-48, 75, 94, 96-97, 103, 135, 137, 159, 162, 167, 170, 173, 179->193, 181, 184, 190-192, 194, 202, 204, 214-218, 235->234, 251, 256, 264-271
+modeling/views.py                                  1912    970    590    101    47%   61, 63, 65, 67-69, 109-110, 132, 138-139, 151-152, 165-168, 179-188, 197-200, 211-217, 235, 237, 274, 276, 288->290, 312-314, 319-323, 355, 385->394, 389->394, 400, 437->465, 448-449, 461-463, 489-826, 829-837, 886-887, 890-891, 908-909, 919-920, 927-928, 935-936, 958-959, 1037, 1090-1091, 1124-1125, 1136, 1139, 1148, 1240-1257, 1266, 1268, 1270-1272, 1276, 1280, 1283->1299, 1299->1303, 1303->1317, 1319, 1322->1325, 1343->1345, 1359-1364, 1390, 1398, 1402-1407, 1411, 1413, 1424-1449, 1452->1464, 1455, 1459, 1472-1529, 1536->1539, 1540-1541, 1550, 1559->1566, 1567-1569, 1584-1587, 1613, 1616-1617, 1619-1620, 1665, 1673, 1675, 1706-1709, 1722, 1724, 1740, 1742, 1769-1772, 1802-1805, 1841-2196, 2212-2233, 2246-2270, 2284-2293, 2348, 2371, 2373-2376, 2379, 2386, 2388, 2395->2404, 2399-2403, 2406, 2419-2420, 2476->2522, 2485-2517, 2536-2544, 2570-2573, 2585-2596, 2608-2611, 2621-2623, 2629-2632, 2649-2652, 2676-2747, 2796-2807, 2847-2848, 2903, 2923-2929, 2940-2943, 2991-3003, 3011-3037, 3053, 3056-3057, 3066-3074, 3076-3087, 3090, 3100, 3105, 3108, 3110, 3113, 3119-3120, 3125-3128, 3158-3167, 3186-3261
+preprocessing/__init__.py                             0      0      0      0   100%
+preprocessing/admin.py                                1      0      0      0   100%
+preprocessing/apps.py                                 4      0      0      0   100%
+preprocessing/data_quality.py                       832    404    102     20    50%   47-52, 80-81, 89-90, 93-94, 97-98, 108, 115-116, 123-136, 138-149, 151-161, 172-201, 208-246, 255-256, 259-267, 287-288, 297->299, 308-309, 320-322, 326-330, 331->333, 334, 340-341, 351-420, 441, 474-475, 485-486, 500-501, 512, 517-522, 541-547, 550-582, 586-587, 600-601, 610-613, 620-631, 643-644, 647-650, 659-669, 741-742, 754-758, 787-789, 793-795, 809-813, 845-876, 886-887, 894-895, 898-899, 902-903, 910-911, 914-915, 918-919, 922-923, 926-927, 930-931, 934-935, 938-939, 942-943, 946-947, 950-951, 990-1049
+preprocessing/models.py                               1      0      0      0   100%
+preprocessing/purifier_catalog.py                    38      1      4      0    98%   195
+preprocessing/purifier_contract.py                  111     53     44     11    47%   40-63, 65-71, 73, 76->83, 79->83, 81-82, 87, 106, 107->111, 114, 115->120, 137-149, 156-164
+preprocessing/views.py                             1317    978    388     22    25%   69-70, 128-129, 152, 157-158, 163-164, 183->185, 189-526, 556-1124, 1160-1161, 1164-1165, 1173-1181, 1186-1197, 1223->1221, 1226-1227, 1230, 1240-1244, 1258, 1269-1285, 1317, 1323, 1342, 1366, 1371, 1395, 1432->1429, 1450->1504, 1456-1457, 1475-1476, 1506-1626, 1639-1640, 1673->1675, 1682-1688, 1695-1842, 1865-1866, 1877-1879, 1888-1891
+---------------------------------------------------------------------------------------------
+TOTAL                                             15053   5657   4704    769    60%
+Required test coverage of 50% reached. Total coverage: 60.03%
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_functional.py:1552: engine /v1/models unreachable (network/401); a live engine is required for engine-routed models
+SKIPPED [1] tests/unit/test_ai_cache_telemetry.py:365: .env not present at /app/.env — skipping
+SKIPPED [1] tests/unit/test_ai_cache_telemetry.py:3059: Optional SDK profile is not installed
+SKIPPED [1] tests/unit/test_ai_cache_telemetry.py:3092: Optional SDK profile is not installed
+SKIPPED [1] tests/unit/test_ai_cache_telemetry.py:3104: Optional SDK profile is not installed
+SKIPPED [1] tests/unit/test_embedding_cache.py:15: Optional SDK profile is not installed
+=== 1216 passed, 6 skipped, 62 deselected, 92 warnings in 154.65s (0:02:34) ====

@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "packet": "P02",
+  "branch": "codex/foundation-packaging",
+  "base_commit": "d91b453cca6b607d6aa0fcd2f32af5ca4dfff258",
+  "qualified_source_commit": "6dfcd3ce30f40e3ba7b466dec673e39288e9c2e7",
+  "scope": "Local executable/configuration source qualification. Later commits add only documentation and retained evidence. Clean core dependency installation and a bounded real-session workflow were tested; production deployment, all legacy browser journeys and customer acceptance were not.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/91",
+    "state": "MERGED",
+    "merged_at": "2026-10-08T02:48:58Z",
+    "merge_commit": "d91b453cca6b607d6aa0fcd2f32af5ca4dfff258",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37719717496",
+    "observed_problem": "Backend dependency installation and E2E backend build failed on unavailable mandatory prometa-sdk>=0.20.2."
+  },
+  "backend_environment": {
+    "image": "declarai-core-p02:local",
+    "image_id": "sha256:dc2e242598dcc94f7f0fb234a6bf1646882580e7c2b0ea5dcb416d2411a1d692",
+    "platform": "linux/arm64",
+    "base_image": "python:3.12-slim",
+    "origin": "Stock Dockerfile, public core requirements, isolated worktree context; no SDK context or package installed. Initial dependency installation log retained separately from the cached source refresh.",
+    "python": "3.12.15",
+    "packages": {
+      "Django": "5.2.18",
+      "djangorestframework": "3.16.1",
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "scikit-learn": "1.9.1",
+      "xgboost": "2.1.4",
+      "lightgbm": "4.7.0",
+      "catboost": "1.2.10",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10"
+    },
+    "test_network": "Internal Redis network, telemetry disabled, external provider keys blank and model endpoint unreachable."
+  },
+  "frontend_environment": {
+    "node": "24.16.0",
+    "npm": "11.13.0",
+    "angular": "22.2.1",
+    "typescript": "6.0.3",
+    "dependencies": "Unchanged package-lock.json; installed locked dependencies linked from the original checkout. Production built assets served by the loopback Node preview helper.",
+    "browser_network": "Disposable API container also connected to a test bridge for loopback publication. Browser scenario checks only frontend/API origins; no live model-provider calls were exercised."
+  },
+  "checks": [
+    {
+      "name": "Clean core backend installation",
+      "status": "passed",
+      "command": "docker build -f docker/backend.Dockerfile -t declarai-core-p02:local .",
+      "log": "p02-core-install.log",
+      "source_refresh_log": "p02-core-image-refresh.log",
+      "optional_sdk_installed": false
+    },
+    {
+      "name": "Full CI-marked backend suite",
+      "status": "passed",
+      "command": "python -m pytest -m 'unit or functional or regression or integration or uat' --tb=short --junitxml=../test-reports/p02-backend.xml --cov --cov-report=term-missing --cov-fail-under=50",
+      "workdir": "backend",
+      "passed": 1216,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 92,
+      "duration_seconds": 154.65,
+      "coverage_percent": 60.03,
+      "coverage_gate_percent": 50,
+      "log": "p02-backend-tests.log"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "command": "python3 .github/scripts/check_skip_budget.py test-reports/p02-backend.xml --max-skips 15",
+      "skipped": 6,
+      "maximum": 15,
+      "reasons": [
+        "Four optional installed-SDK checks",
+        "One live model-engine check",
+        "One absent local .env check"
+      ]
+    },
+    {
+      "name": "Governed browser and real-session API suite",
+      "status": "passed",
+      "command": "npm run test:e2e:governed",
+      "workdir": "frontend",
+      "passed": 17,
+      "skipped": 0,
+      "duration_seconds": 7.7,
+      "log": "p02-governed-browser.log",
+      "credentials": "Generated disposable non-admin account, supplied through an uncommitted temporary environment file; real login and CSRF enabled."
+    },
+    {
+      "name": "Optional installed-SDK boundary profile",
+      "status": "passed",
+      "command": "python -m pytest tests/unit/test_ai_cache_telemetry.py tests/unit/test_embedding_cache.py -q",
+      "passed": 166,
+      "skipped": 1,
+      "warnings": 42,
+      "duration_seconds": 1.1,
+      "log": "p02-sdk-profile.log",
+      "environment": "Existing cached SDK-installed backend image with repository mounted, Redis available. Compatibility checks, not a fresh optional package installation or telemetry-egress qualification."
+    },
+    {
+      "name": "Backend/static packaging checks",
+      "status": "passed",
+      "command": "ruff check backend scripts/seed_e2e_user.py scripts/render_product_roadmap.py; python backend/manage.py makemigrations --check --dry-run; python -m pip check; assert importlib.util.find_spec(\"prometa\") is None",
+      "log": "p02-backend-static.log"
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "command": "npm run build",
+      "workdir": "frontend",
+      "log": "p02-frontend-build.log",
+      "note": "Existing bundle/style/CommonJS size warnings remain."
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "command": "npm run lint",
+      "errors": 0,
+      "warnings": 155,
+      "log": "p02-frontend-lint.log"
+    },
+    {
+      "name": "Browser TypeScript check",
+      "status": "passed",
+      "command": "npx tsc --ignoreConfig --noEmit --module nodenext --moduleResolution nodenext --target es2022 --types node --skipLibCheck e2e/fixtures/session.ts e2e/session-boundary-api.spec.ts e2e/hyperparameter-api.spec.ts e2e/preprocessing-options-api.spec.ts e2e/governed-session.spec.ts"
+    },
+    {
+      "name": "Workflow YAML and suite selection",
+      "status": "passed",
+      "note": "Parsed workflow; five jobs, governed browser job enabled on PRs, expected suite script selected."
+    },
+    {
+      "name": "Roadmap projection and whitespace",
+      "status": "passed",
+      "command": "python3 scripts/render_product_roadmap.py --check; git diff --cached --check"
+    },
+    {
+      "name": "Original workspace preservation",
+      "status": "passed",
+      "files": 11,
+      "note": "All pre-existing modified files match their starting hashes; none were staged in this managed worktree."
+    }
+  ],
+  "defects_found": [
+    "SDK-absent execution stopped validating documented cache/retrieval metadata; moved validation into DeclarAI.",
+    "The existing unit marker selector omitted 44 governed-foundation/session checks; explicitly marked those suites for CI selection.",
+    "Real session/CSRF consumed the request stream before four handlers read request.body. Used DRF request.data, preserving valid input and rejecting malformed/non-object JSON. Added 13 backend cases and two browser/API cases."
+  ],
+  "commit_hook": {
+    "note": "Local shared Git hooks require the stopped auto-ml-backend-1 development container. Equivalent full marked backend suite, build and other checks ran on the isolated worktree; hooks disabled only per commit/push command, without changing repository configuration."
+  },
+  "open_gates": [
+    "M1 remaining scientific workflow qualification, purifier replay and complete immutable stages",
+    "D06 project roles, MCP identity, attributable audit, retention and egress policy",
+    "D07 locked offline supply, production PostgreSQL/durable jobs/TLS, upgrades and coordinated restore",
+    "D08 qualified Linux expert-code isolation; expert execution remains unavailable",
+    "M3 independent review/reproduction, paired comparisons and complete accessibility",
+    "Design-partner, credit-process, monitoring-cycle and value acceptance"
+  ],
+  "ci_at_record_creation": "Not yet observed for the forthcoming PR; local checks do not imply GitHub CI success.",
+  "qualified_source_sha256": {
+    ".dockerignore": "c7084093fd190daeee8ba371fd3eb715856edac4bb369e42b4be04297358be04",
+    ".github/workflows/ci.yml": "3ade25fada41a0d496e5f28485efed05333cdfb01a3ba970a5982dfba6607241",
+    "backend/ai_assistant/prometa_config.py": "4f0fa0490deb4efea95232d66f6d2bbfb9cc8964d703f92e240cf77d064bdb93",
+    "backend/backend/auth_views.py": "6573f9da5af310a337b8b960e6bef8e78652c03c40917e12fbac60aba804ec4c",
+    "backend/backend/settings.py": "1dfc8375cb228765400420795bfddf2c69259c727294d479c0d0b9d49080b073",
+    "backend/conftest.py": "26df6a543c3704b689c08eed11dc30bfa5d54389607b516814f1ac7bfbfd99b9",
+    "backend/modeling/views.py": "59d3b44343bae4ced4e96a8047b43dd20bdea596f5cf2ede04aa4f8bc5b22562",
+    "backend/pytest.ini": "dd7d952c34ced2462b98e2756b5407dd5023eca15ef763fb4f6106825d0e6133",
+    "backend/requirements-observability.txt": "612f2fb963764c21fa59923687a795fd7f54d4b20d16490f29604ae114d4a3df",
+    "backend/requirements.txt": "4bcc97120e0e79e1423bb2b2ee49102655b277a0bd50cba9d1ad968268b11288",
+    "backend/tests/unit/conftest.py": "9af500d28c2f824c5e4ee985dcdd49cb86fc22a4499a059a5947bd3a51361bed",
+    "backend/tests/unit/test_ai_cache_telemetry.py": "d5bb2d55d621348933ccaca3da2587a2527afede4182cc34bd65f8646271fc35",
+    "backend/tests/unit/test_embedding_cache.py": "e30ee52875df78fbfd571975d1d997e042eec7e6d44862b3a8dcc371d83bed6f",
+    "backend/tests/unit/test_governed_foundation.py": "bd3057ee16c7e0c0da4e000c07a4d9968a3a37acdee6a12694d01b0c978a5892",
+    "backend/tests/unit/test_optional_observability.py": "a056027b02678476943140d513f11986ce8e0478613d4bc2a6156e5f478714fe",
+    "backend/tests/unit/test_session_boundary.py": "daf54eb23ad58cc3e3945cc2cc17bc221dfdf6e4f22d91ec8d07b31d991c60c5",
+    "docker-compose.yml": "7e0fd02a3cb85782c400e8fedcd77fb112cd8572286e1dd08637f87e6b958728",
+    "docker/backend-entrypoint.sh": "f070cb7c295baad249c838970974fce5a5649876b5846900d2f813e9ebe23468",
+    "docker/backend.Dockerfile": "46be6dd1a057adc0bb0154b686b65b5701d507543223b98c5ff739181f66989b",
+    "frontend/e2e/fixtures/credentials.ts": "bc85d1cbb5568da993f603e887497f25e061e332340e4fd170071d370a27f587",
+    "frontend/e2e/fixtures/session.ts": "25b88e4d0bb6aca248d0afb414aa64cbb39acb9674b058200fc4b068ab823c03",
+    "frontend/e2e/governed-session.spec.ts": "585d64d12eb385ae94a6b7f45770f528e624c2f807fb077f869c63c7f06061e7",
+    "frontend/e2e/hyperparameter-api.spec.ts": "1755c0cad7223d2b0f55faf6e8da7c455973a610623f5d84c4023069603eecb6",
+    "frontend/e2e/pages/login.page.ts": "7085c10e224e26eceef2e7c4d225aff828a267dadfa6c8a763a78989f60f3fb7",
+    "frontend/e2e/preprocessing-options-api.spec.ts": "3b3f1849544452e723d13419a3896e7f77aa620fd24078d3f5b40f47afaff8d7",
+    "frontend/e2e/session-boundary-api.spec.ts": "707c4e052a2cfb7db98145e624adab8fee9a5b0093f8eb2d681f57c50d234621",
+    "frontend/package-lock.json": "dd213fdb3d7338e28e15e1e2f7d8808b95eea49a5e353fdec4ebd709b69cd59e",
+    "frontend/package.json": "2b789b5eef37ad57d796fb269783e6f174e06b763985cea8f15dea4f2f686b9c",
+    "frontend/playwright.config.ts": "cf5d39438defcc53ff6fada1cdd9f7610fcf8b9fa0ba1267ad7ce52c4c4575bc",
+    "frontend/src/app/services/auth.service.ts": "1c442da351342cd9faa04bd15a06ab4689c9e5b5792895c9d1195aa4a0f02886",
+    "frontend/src/app/services/session.interceptor.ts": "04de95233b86970886fcbcb717e1a62dd040693ca8f82cac61731824ffdfcf1b",
+    "frontend/src/environments/environment.development.ts": "60b47a0f6dbf7acfbd9ff88267b2305fd595be0978872665b32374d8078780e6",
+    "frontend/src/environments/environment.ts": "95346cd6f2a2e204f6884f1a91211b0f91f76dbbc7d4c2e1541a31c4782be3cd",
+    "scripts/render_product_roadmap.py": "70760498abe4df0a5aa316ba920d3cf2bb8f41e6924f315ee298d76a90041fc3",
+    "scripts/seed_e2e_user.py": "4a0e9aea379e9118d4dd7830f99b87d09db08c8c2db68ebd46635ab329dd079f",
+    "scripts/serve_frontend.mjs": "1591e62c7d7b8b7190a7b60db57ab2e70ff8592d0319559a042b0ac51abd663b"
+  },
+  "evidence_sha256": {
+    "p02-core-install.log": "8991c9a5c6852825244c879ef1f25580d7c2a679c64ea292642f924e274fe147",
+    "p02-core-image-refresh.log": "a6e5c9bf03b43c518cce819cd3f9df78dff696f48b4b3d19da6b7b73ca02bd3e",
+    "p02-backend-tests.log": "f4e63c0dd1fd965afe2d97cdf982850eb64f11bca5e7e4ed3a6629bfe566dae3",
+    "p02-governed-browser.log": "bebf7f93ddbde98bb51696751f5ecb6b4c2988505e46d6725dd9fcbc44a014ed",
+    "p02-sdk-profile.log": "acd075cdad8a54cf15540557f41229641ffe801d6763895093874507915c4cbf",
+    "p02-backend-static.log": "e0c171ee35350f686ed2e3d27ab2e0b5b3b774c778e4e35fd073dd090a962dd6",
+    "p02-frontend-build.log": "9bb72a95c20044b3ec0cf39ff24c3d79259df709707fc0ca1bf7672cb520ed46",
+    "p02-frontend-lint.log": "aa38beb04a9cbc9cc2c8f2b2282e622367efbf507af655ce8ca00d3a6d9b79cb"
+  }
+}

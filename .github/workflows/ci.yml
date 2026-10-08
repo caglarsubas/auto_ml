@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
   schedule:
-    # Nightly full run at 03:00 UTC
+    # Nightly full backend and governed browser run at 03:00 UTC
     - cron: "0 3 * * *"
   workflow_dispatch:
 
@@ -166,22 +166,20 @@ jobs:
         run: npm run format:check
 
   # ---------------------------------------------------------------------------
-  # Frontend: Playwright E2E (heavy; runs on main / nightly / manual only)
+  # Frontend: real session/CSRF + API contracts on every PR and main run
   # ---------------------------------------------------------------------------
   frontend-e2e:
     name: Frontend E2E (Playwright)
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     env:
       CI: "true"
-      # E2E credentials are supplied by repository secrets. When absent the
-      # login-dependent journeys are expected to fail; the API-contract specs
-      # still exercise the stack. Seed a dedicated test user for these.
-      E2E_USER: ${{ secrets.E2E_USER }}
-      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-      # The backend compose service requires an engine key; a dummy value is
-      # sufficient for UI journeys that never register an 'engine' model.
-      LLM_ENGINE_API_KEY: ${{ secrets.LLM_ENGINE_API_KEY || 'ci-dummy-key' }}
+      # Test accounts and their database exist only for this job.
+      PROMETA_DISABLE: "1"
+      OPENAI_API_KEY: ""
+      LLM_ENGINE_BASE_URL: http://127.0.0.1:9/v1
+      LLM_ENGINE_API_KEY: ci-unused
+      E2E_BASE_URL: http://localhost:4300
+      E2E_API_BASE_URL: http://localhost:8001/api/
     steps:
       - uses: actions/checkout@v4
 
@@ -203,37 +201,49 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Wait for backend to be ready
+      - name: Wait for backend session endpoint
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8001/api/ >/dev/null 2>&1 || \
-               curl -s http://localhost:8001/ >/dev/null 2>&1; then
-              echo "Backend is up"; break
+            if curl -fsS http://localhost:8001/api/auth/session/ >/dev/null; then
+              exit 0
             fi
-            echo "Waiting for backend ($i)..."; sleep 2
+            sleep 2
           done
+          docker compose logs backend
+          exit 1
 
-      - name: Serve frontend (production build)
-        working-directory: frontend
+      - name: Create disposable test credentials
         run: |
-          npm run build
-          npx --yes http-server dist/frontend/browser -p 4300 -s &
+          python - <<'PY'
+          import os, secrets
+          password = secrets.token_urlsafe(32)
+          print(f"::add-mask::{password}")
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f"E2E_USER=ci-session-{os.environ['GITHUB_RUN_ID']}\n")
+              output.write(f"E2E_PASSWORD={password}\n")
+          PY
+
+      - name: Seed a non-admin account in the disposable database
+        run: |
+          docker compose exec -T -e E2E_USER -e E2E_PASSWORD \
+            -e DECLARAI_TEST_INSTALLATION=1 backend python scripts/seed_e2e_user.py
+
+      - name: Build and serve frontend assets
+        run: |
+          npm --prefix frontend run build
+          node scripts/serve_frontend.mjs frontend/dist/frontend/browser 4300 > /tmp/frontend-preview.log 2>&1 &
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:4300/ >/dev/null 2>&1; then
-              echo "Frontend is up"; break
+            if curl -fsS -H 'Accept: text/html' http://localhost:4300/login >/dev/null; then
+              exit 0
             fi
-            echo "Waiting for frontend ($i)..."; sleep 2
+            sleep 2
           done
+          cat /tmp/frontend-preview.log
+          exit 1
 
-      - name: Run Playwright tests
+      - name: Run governed browser and authenticated API contracts
         working-directory: frontend
-        run: |
-          if [ -z "$E2E_USER" ] || [ -z "$E2E_PASSWORD" ]; then
-            echo "E2E credentials unavailable; running API-contract specs only."
-            npm run test:e2e -- e2e/*-api.spec.ts
-          else
-            npm run test:e2e
-          fi
+        run: npm run test:e2e:governed
 
       - name: Upload Playwright report
         if: always()

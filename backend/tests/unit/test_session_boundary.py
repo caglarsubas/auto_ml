@@ -2,7 +2,61 @@
 import pytest
 from rest_framework.test import APIClient
 
-pytestmark = [pytest.mark.django_db, pytest.mark.auth_boundary]
+pytestmark = [pytest.mark.unit, pytest.mark.django_db, pytest.mark.auth_boundary]
+
+
+@pytest.fixture
+def csrf_session_client(django_user_model):
+    django_user_model.objects.create_user(username='mutation-test', password='synthetic-session-test-pass')
+    client = APIClient(enforce_csrf_checks=True)
+    csrf = client.get('/api/auth/session/').json()['csrf_token']
+    login = client.post('/api/auth/login/', {
+        'username': 'mutation-test', 'password': 'synthetic-session-test-pass',
+    }, format='json', HTTP_X_CSRFTOKEN=csrf)
+    assert login.status_code == 200
+    client.credentials(HTTP_X_CSRFTOKEN=login.json()['csrf_token'])
+    return client
+
+
+@pytest.mark.parametrize('path', ['/api/modeling/sfs/start/', '/api/modeling/hyperparam/start/'])
+@pytest.mark.parametrize('request_format', ['json', 'multipart'])
+def test_session_csrf_parsing_preserves_modeling_payload(csrf_session_client, path, request_format):
+    response = csrf_session_client.post(path, {}, format=request_format)
+    assert response.status_code == 400
+    assert response.json()['error'] == 'file_id is required'
+    response = csrf_session_client.post(path, {'file_id': 999999999}, format=request_format)
+    assert response.status_code == 404
+    assert 'Training data not found' in response.json()['error']
+
+
+@pytest.mark.parametrize('method,path', [
+    ('post', '/api/modeling/sfs/start/'), ('post', '/api/modeling/hyperparam/start/'),
+    ('post', '/api/pipeline/create/'), ('put', '/api/pipeline/999999999/'),
+])
+@pytest.mark.parametrize('payload', ['{"broken":', '[]'])
+def test_session_mutations_reject_malformed_or_non_object_json(csrf_session_client, method, path, payload):
+    response = getattr(csrf_session_client, method)(path, payload, content_type='application/json')
+    assert response.status_code == 400
+    if payload == '[]':
+        assert response.json()['error'] == 'Request payload must be an object'
+    else:
+        assert 'JSON parse error' in response.json()['detail']
+
+
+def test_pipeline_lifecycle_uses_session_parsed_json(csrf_session_client):
+    created = csrf_session_client.post('/api/pipeline/create/', {
+        'name': 'session-pipeline', 'state': {'modeling': {'substep': 'encoding_completed'}},
+    }, format='json')
+    assert created.status_code == 201
+    path = f'/api/pipeline/{created.json()["id"]}/'
+    changed = csrf_session_client.put(path, {
+        'current_step': 'modeling', 'state': {'modeling': {'substep': 'modeling_started'}},
+    }, format='json')
+    assert changed.status_code == 200
+    assert changed.json()['current_step'] == 'modeling'
+    assert csrf_session_client.get(path).json()['state']['modeling']['substep'] == 'modeling_started'
+    assert csrf_session_client.delete(path).status_code == 200
+    assert csrf_session_client.get(path).status_code == 404
 
 
 @pytest.mark.parametrize('method,path', [

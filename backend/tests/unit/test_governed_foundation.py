@@ -17,6 +17,8 @@ from modeling.prediction_contract import PredictionContractError, resolve_predic
 from modeling.split_contract import resolve_modeling_splits, save_split_artifact
 from modeling.views import ModelingStartView, ChampionPromoteView, FeatureExplainabilityView
 
+pytestmark = pytest.mark.unit
+
 
 def declaration(task='classification', positive='bad'):
     return {'problem_type': task, 'objective': 'Predict the stated outcome',

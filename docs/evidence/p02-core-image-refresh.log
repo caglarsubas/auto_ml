@@ -1,0 +1,54 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from backend.Dockerfile
+#1 transferring dockerfile: 682B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 2.6s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 508B done
+#3 DONE 0.0s
+
+#4 [1/8] FROM docker.io/library/python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+#4 resolve docker.io/library/python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 266.47kB 0.0s done
+#5 DONE 0.0s
+
+#6 [3/8] RUN apt-get update     && apt-get install -y --no-install-recommends libmagic1 file build-essential gcc g++ libgomp1     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [4/8] RUN pip install --no-cache-dir --upgrade pip
+#7 CACHED
+
+#8 [5/8] COPY backend/requirements.txt backend/requirements.txt
+#8 CACHED
+
+#9 [2/8] WORKDIR /app
+#9 CACHED
+
+#10 [6/8] RUN pip install --no-cache-dir -r backend/requirements.txt
+#10 CACHED
+
+#11 [7/8] COPY . .
+#11 DONE 0.0s
+
+#12 [8/8] RUN chmod +x docker/backend-entrypoint.sh
+#12 DONE 0.1s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 0.3s done
+#13 exporting manifest sha256:4e89d8870f14745180b361363d28546d2eacc6bd8510aea412dd12ac1e4c0709 done
+#13 exporting config sha256:c8f26b3c9000781d4d61272a63df89660bb6926a02221af18b2f8cdf9d881907 done
+#13 exporting attestation manifest sha256:b24bae7f8ae7c6fceecbae63284e12ab46202c368b53d04d7f77359597d996bc done
+#13 exporting manifest list sha256:dc2e242598dcc94f7f0fb234a6bf1646882580e7c2b0ea5dcb416d2411a1d692 done
+#13 naming to docker.io/library/declarai-core-p02:local done
+#13 unpacking to docker.io/library/declarai-core-p02:local 0.1s done
+#13 DONE 0.4s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/ncu2vo8l4ippul3upgdukaq7p
