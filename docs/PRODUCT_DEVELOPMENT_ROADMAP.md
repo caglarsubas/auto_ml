@@ -126,11 +126,11 @@ Resolve native tuning from the accepted objective; retain fold/fit and failed-at
 
 ### P08 — Canonical agentic roadmap reconciliation
 
-**Packet status:** in_progress. **Mapped outcomes:** D18, D19, D20, D21, D22, D23, D24, D25, D26.
+**Packet status:** tested. **Mapped outcomes:** D18, D19, D20, D21, D22, D23, D24, D25, D26.
 
 Adopt the approved agentic requirements into this sole ledger, its generated projection, supporting execution specification and dependency-ordered planning queue; preserve all prior outcome IDs/evidence and foundation credit. No feature implementation is dispatched.
 
-**Evidence:** Qualification pending.
+**Evidence:** [Agentic contracts and acceptance](AGENTIC_EXECUTION_SPEC.md); [P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)
 
 **Remaining:** D18–D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence.
 

@@ -859,6 +859,11 @@
       "date": "2026-10-08",
       "packet": "P08",
       "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01\u2013P07. Add planned D18\u2013D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P08",
+      "event": "Documentation/validator qualification passed 49 regression tests, scoped Ruff, projection/whitespace and preservation checks; D18-D26 remain planned and no product/release/customer gate is closed."
     }
   ],
   "implementation_packets": [
@@ -985,7 +990,7 @@
       "title": "Canonical agentic roadmap reconciliation",
       "kind": "roadmap_reconciliation",
       "owner": "Roadmap implementation owner / Product",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D18",
         "D19",
@@ -999,7 +1004,10 @@
       ],
       "description": "Adopt the approved agentic requirements into this sole ledger, its generated projection, supporting execution specification and dependency-ordered planning queue; preserve all prior outcome IDs/evidence and foundation credit. No feature implementation is dispatched.",
       "qualification_scope": "Documentation and roadmap-validator consistency only; no product capability, deployment, scientific/security gate or customer acceptance is qualified by P08.",
-      "evidence": [],
+      "evidence": [
+        "[Agentic contracts and acceptance](AGENTIC_EXECUTION_SPEC.md)",
+        "[P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)"
+      ],
       "remaining": "D18\u2013D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
     }
   ],
