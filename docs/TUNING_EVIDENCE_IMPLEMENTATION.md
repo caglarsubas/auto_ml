@@ -19,3 +19,11 @@ Browser starts bind the displayed execution. Completed, failed and stopped resul
 These results reuse development data for search, early stopping, curves and post-selection assessment. They are **exploratory evidence**, not nested validation, independent reproduction, paired effects/uncertainty or proof of customer value. Native training/early stopping still uses fixed AUC/RMSE; complete fitter alignment remains open. Per-file result projections and in-process progress remain mutable; failed searches can be superseded by later searches. This packet does not deliver immutable durable search jobs, concurrent per-file jobs, authenticated signatures, storage/controller tamper resistance, expert Python isolation, full project roles/egress, production recovery or independent review/reproduction. Security, accessibility milestone and partner/value gates remain open.
 
 Qualification is recorded in [P07 source qualification](evidence/p07-qualification-2026-10-08.json). Local checks, exact-head PR CI, merged-main CI, deployment and customer acceptance are separate claims. D01/D02/D04/D05 remain partial; no milestone or release gate is closed.
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite, four CPU affinities | 1,386 passed, six explicit skips; 67.61% coverage against unchanged 50% gate |
+| Frontend unit suite | 531 passed |
+| Governed Chromium/authenticated API suite | 19 passed, no skips |
+| Lint, migration drift, dependency consistency, skip budget, build, scoped formatting and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
+| Original checkout and cleanup | All 11 starting hashes unchanged; disposable services and credentials removed |
