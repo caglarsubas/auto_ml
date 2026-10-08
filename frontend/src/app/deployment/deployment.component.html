@@ -2,7 +2,8 @@
   <h2>Review package and batch scoring</h2>
   <p style="color: #555; max-width: 720px; font-size: 14px">
     Freeze the model and its evidence into a versioned score bundle. Batch-score a CSV with the
-    declared processed input schema. Production decision use requires separate review and approval.
+    input schema recorded in the bundle. Production decision use requires separate review and
+    approval.
   </p>
 
   @if (currentFileId != null) {
@@ -69,6 +70,28 @@
           Path: <code>{{ bundle.bundle_path }}</code>
         </div>
         @if (bundle.manifest) {
+          <p>
+            @if (bundle.manifest.input_stage === 'raw_unencoded') {
+              Scoring input: raw data before preprocessing and encoding. The bundle applies its
+              fitted transformations.
+            } @else if (bundle.manifest.input_stage === 'processed_unencoded') {
+              Scoring input: processed data before encoding. Historical preprocessing provenance is
+              unverified.
+            } @else {
+              Scoring input: the recorded model features. Historical preprocessing provenance is
+              unverified.
+            }
+          </p>
+          @if (bundle.manifest.input_features?.length) {
+            <details>
+              <summary>Required input columns</summary>
+              <ul>
+                @for (column of bundle.manifest.input_features; track column) {
+                  <li>{{ column }}</li>
+                }
+              </ul>
+            </details>
+          }
           <div>
             Features: {{ bundle.manifest.feature_names?.length || 0 }} · Categorical:
             {{ bundle.manifest.categorical_features?.length || 0 }} · Lineage:

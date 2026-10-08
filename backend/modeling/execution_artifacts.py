@@ -55,7 +55,7 @@ def publish_execution(execution_id, payload):
         'file_id': payload['file_id'], 'files': files,
         'python_version': platform.python_version(),
         'prediction_contract_sha256': (payload.get('model', {}).get('prediction_contract') or {}).get('sha256'),
-        'historical_provenance': 'new execution snapshot; upstream preprocessing provenance requires separate review',
+        'historical_provenance': 'partition-fitted purifier replay; exploratory evidence' if payload.get('model', {}).get('purifier_path') else 'legacy upstream preprocessing provenance unverified',
     }
     manifest['packages'] = {}
     for package in ('Django', 'djangorestframework', 'pandas', 'numpy', 'scikit-learn', 'xgboost', 'lightgbm', 'catboost', 'joblib'):
@@ -168,6 +168,9 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     parent_root = execution_root(parent_id)
     dataset_name = next(name for name in manifest['files'] if name.startswith('dataset.'))
     execution_id, root, _ = begin_execution(parent_root / dataset_name)
+    for name in ('raw_input.csv', 'purifier_recipe.json', 'purifier.json'):
+        if name in manifest['files']:
+            shutil.copyfile(parent_root / name, root / name)
     with open(Path(settings.MEDIA_ROOT) / parent['model']['train_data_path'], 'rb') as stream:
         data = pickle.load(stream)
     for name in ('X_train', 'X_valid', 'X_train_raw', 'X_valid_raw'):
@@ -206,11 +209,13 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     lineage = build_lineage(file_id, algorithm=data['algorithm'], model_path=relative_model,
         split_meta=data['split_meta'], feature_names=features, impute_means=data['impute_means'], model_params=params)
     lineage.update(execution_id=execution_id, parent_execution_id=parent_id, source=source,
-                   prediction_contract=data['prediction_contract'], encoding_report=data.get('encoding_report', []))
+                   prediction_contract=data['prediction_contract'], encoding_report=data.get('encoding_report', []),
+                   purifier=data.get('purifier_state'))
     lineage_path = root / 'lineage.json'
     lineage_path.write_text(json.dumps(lineage, indent=2, default=str), encoding='utf-8')
     model.update(model_path=relative_model, train_data_path=str(data_path.relative_to(Path(settings.MEDIA_ROOT))),
         holdout_path=data['holdout_path'], feature_count=len(features), selected_features=features,
+        purifier_path=str((root / 'purifier.json').relative_to(Path(settings.MEDIA_ROOT))) if data.get('purifier_state') else None,
         encoding_report=data['encoding_report'],
         categorical_features_used=[name for name in model.get('categorical_features_used', []) if name in features],
         calibration=calibration, calibrator_path=calibrator_path, algorithm=data['algorithm'],

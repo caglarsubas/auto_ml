@@ -22,6 +22,16 @@ PURIFIER_DIRNAME = 'purifier'
 PURIFIER_VERSION = 1
 
 
+def parse_split_dates(values):
+    """Keep ISO year-first dates unambiguous; retain day-first legacy parsing."""
+    series = values if isinstance(values, pd.Series) else pd.Series([values])
+    iso = series.astype(str).str.match(r'^\d{4}-\d{2}-\d{2}(?:$|[ T])')
+    parsed = pd.to_datetime(series, errors='coerce', format='mixed', dayfirst=True, utc=True)
+    if iso.any():
+        parsed.loc[iso] = pd.to_datetime(series.loc[iso], errors='coerce', format='ISO8601', utc=True)
+    return parsed
+
+
 def purifier_path(file_id: int) -> str:
     return os.path.join(settings.MEDIA_ROOT, PURIFIER_DIRNAME, f'{file_id}_purifier.json')
 
@@ -40,7 +50,7 @@ def build_outer_split_indices(
         date_col = split.get('date_column')
         if not date_col or date_col not in frame:
             raise ValueError('Out-of-time validation requires an existing date_column; random fallback is prohibited.')
-        dates = pd.to_datetime(frame[date_col], errors='coerce', dayfirst=True, utc=True)
+        dates = parse_split_dates(frame[date_col])
         if dates.isna().any():
             raise ValueError('Out-of-time validation requires a valid timestamp for every eligible row.')
         if split.get('percent') is not None:
@@ -54,7 +64,9 @@ def build_outer_split_indices(
             boundary = dates.loc[ordered[position]]
             train, test = dates.index[dates < boundary], dates.index[dates >= boundary]
         elif split.get('cutoff'):
-            cutoff = pd.to_datetime(split['cutoff'], dayfirst=True, utc=True)
+            cutoff = parse_split_dates(split['cutoff']).iloc[0]
+            if pd.isna(cutoff):
+                raise ValueError('The declared temporal cutoff is not a valid timestamp.')
             train, test = dates.index[dates <= cutoff], dates.index[dates > cutoff]
         else:
             raise ValueError('Declare an out-of-time cutoff or holdout percentage.')

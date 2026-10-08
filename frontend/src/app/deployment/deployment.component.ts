@@ -117,7 +117,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
         this.isScoring = false;
       },
       error: (err) => {
-        this.error = err?.message || 'Scoring failed';
+        this.error = err?.error?.error || err?.message || 'Scoring failed';
         this.isScoring = false;
       },
     });

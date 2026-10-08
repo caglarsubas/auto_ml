@@ -300,7 +300,13 @@ class EvaluationRunView(APIView):
             evaluation['prediction_contract'] = contract
             evaluation['holdout_access_id'] = str(receipt.pk)
             evaluation['evidence_status'] = 'exploratory'
-            evaluation['evidence_limitation'] = 'Final outcomes inspected; upstream fold-local preprocessing and independent review are not yet qualified for confirmatory claims.'
+            purifier = train_data.get('purifier_state')
+            evaluation['purifier_provenance'] = purifier
+            evaluation['evidence_limitation'] = (
+                'Final outcomes inspected; partition-fitted purifier provenance is recorded. Independent review and complete workflow qualification remain required for confirmatory claims.'
+                if purifier else
+                'Final outcomes inspected; upstream fold-local preprocessing and independent review are not yet qualified for confirmatory claims.'
+            )
             evaluation['split'] = train_data.get('split_meta') or model_info.get('split') or {}
             evaluation['n_test'] = int(len(y_test))
             evaluation['feature_count'] = int(X_test.shape[1])

@@ -2,6 +2,7 @@ import json
 import math
 import os
 import time
+import uuid
 import warnings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -564,6 +565,8 @@ class PreprocessingRunView(APIView):
             if not isinstance(options, list) or not all(isinstance(x, int) for x in options):
                 return Response({'error': 'options must be a list of integers'}, status=status.HTTP_400_BAD_REQUEST)
             print(f"[PreprocessingRun] options={sorted(options)} (outlier cleaning 28-30: {[o for o in options if o in (28,29,30)]})")
+            from preprocessing.replay import validate_options, save_recipe
+            validate_options(options)
 
             file_path = decl.file.path
             if not os.path.exists(file_path):
@@ -605,6 +608,8 @@ class PreprocessingRunView(APIView):
             preserve_cols: set[str] = set()
             if 'Target' in df.columns:
                 preserve_cols.add('Target')
+            if data.get('target_column') in df.columns:
+                preserve_cols.add(data['target_column'])
             try:
                 if isinstance(split, dict):
                     for key in ('date_column', 'group_column', 'label_end_column'):
@@ -643,6 +648,10 @@ class PreprocessingRunView(APIView):
                 print(f"[PreprocessingRun] split build failed: {split_build_err}")
                 train_idx_sv = test_idx_sv = None
                 split_meta_built = {}
+            if train_idx_sv is None or test_idx_sv is None:
+                raise ValueError('Cannot publish preprocessing without the declared outer partition. Revise the split configuration.')
+            eligible_source_rows = df_processed.index.tolist()
+            eligible_raw = df.loc[eligible_source_rows].reset_index(drop=True)
             if train_idx_sv is not None and test_idx_sv is not None:
                 df_processed, train_idx_sv, test_idx_sv = remap_indices_to_positions(
                     df_processed, train_idx_sv, test_idx_sv,
@@ -665,12 +674,15 @@ class PreprocessingRunView(APIView):
                 print(f"[PreprocessingRun] failed to save purifier artifact: {pur_err}")
 
             # Save processed file
-            out_name = f"processed_{file_id}_{self._safe_timestamp()}.csv"
+            out_name = f"processed_{file_id}_{uuid.uuid4().hex}.csv"
             out_rel = os.path.join('data_files', out_name)
             out_full = os.path.join(settings.MEDIA_ROOT, out_rel)
             os.makedirs(os.path.dirname(out_full), exist_ok=True)
             t_save_start = time.monotonic()
             df_processed.to_csv(out_full, index=False)
+            recipe = save_recipe(out_full, file_id, eligible_raw, options, data_dictionary_payload, preserve_cols,
+                {'strategy': split_meta_built['strategy'], 'split_config': split or {'strategy': 'random'},
+                 'train_idx': train_idx_sv.tolist(), 'test_idx': test_idx_sv.tolist()}, eligible_source_rows)
             print(f"[PreprocessingRun] saved processed csv in {time.monotonic()-t_save_start:.3f}s -> {out_rel}")
 
             # Compute AFTER-preprocessing per-feature descriptive stats
@@ -1062,6 +1074,8 @@ class PreprocessingRunView(APIView):
                 'new_columns_count': len(df_processed.columns),
                 'head': df_processed.head(5).replace({np.nan: None}).to_dict(orient='records'),
                 'processed_file': out_rel,
+                'purifier_recipe_id': recipe['recipe_id'],
+                'modeling_input_stage': 'raw_eligible_input_with_partition_fitted_purifier',
                 'datq_summary': datq_summary_records,
                 'split_validation': split_validation,
                 'split_artifact': (
@@ -1118,6 +1132,8 @@ class PreprocessingRunView(APIView):
 
             print(f"[PreprocessingRun] completed in {time.monotonic()-t0:.3f}s")
             return Response(preview, status=status.HTTP_200_OK)
+        except ValueError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             import traceback
             print("[PreprocessingRun] ERROR:\n" + traceback.format_exc())
@@ -1198,7 +1214,7 @@ class PreprocessingRunView(APIView):
 
     def _apply_options(self, df: pd.DataFrame, options: set[int], preserve: set[str] | None = None,
                        split: dict | None = None, data_dictionary: list | None = None,
-                       train_idx=None):
+                       train_idx=None, collect_stats=True):
         dropped_cols: list[str] = []
         breakdown: list[dict] = []
         step_stats: list[dict] = []  # per-step before/after stats for value-modifying steps
@@ -1207,6 +1223,7 @@ class PreprocessingRunView(APIView):
             'dropped_by_rule': {},
             'clip_bounds': {},
             'cat_merge_maps': {},
+            'category_replacements': {},
             'options': sorted(int(x) for x in options),
         }
 
@@ -1214,20 +1231,9 @@ class PreprocessingRunView(APIView):
         if 1 in options:
             _rows_before = len(work)
             before_cols = list(work.columns)
-            orig_dtypes = work.dtypes.to_dict()  # save dtypes before transpose (T destroys them)
-            work = work.T.drop_duplicates().T
-            # Restore only numeric dtypes (transpose converts everything to object)
-            # Non-numeric columns safely stay as object; restoring StringDtype etc. breaks downstream code
-            for col in work.columns:
-                dt = orig_dtypes.get(col)
-                if dt is not None and hasattr(dt, 'kind') and dt.kind in ('i', 'u', 'f', 'b'):
-                    try:
-                        work[col] = work[col].astype(dt)
-                    except (ValueError, TypeError):
-                        pass
-            dc = [c for c in before_cols if c not in work.columns]
-            if preserve:
-                dc = [c for c in dc if c not in preserve]
+            dc = [column for column, duplicate in zip(before_cols, work.T.duplicated())
+                  if duplicate and column not in (preserve or set())]
+            work = work.drop(columns=dc)
             dropped_cols += dc
             _rows_after = len(work)
             _rows_removed = int(max(0, _rows_before - _rows_after))
@@ -1452,7 +1458,7 @@ class PreprocessingRunView(APIView):
                 # snapshot describes the whole dataset state, not just
                 # the clip subset).
                 try:
-                    stats_before_oc = PreprocessingRunView._compute_feature_stats(work)
+                    stats_before_oc = PreprocessingRunView._compute_feature_stats(work) if collect_stats else None
                 except Exception:
                     stats_before_oc = None
 
@@ -1471,7 +1477,7 @@ class PreprocessingRunView(APIView):
 
                 # Snapshot AFTER outlier cleaning
                 try:
-                    stats_after_oc = PreprocessingRunView._compute_feature_stats(work)
+                    stats_after_oc = PreprocessingRunView._compute_feature_stats(work) if collect_stats else None
                 except Exception:
                     stats_after_oc = None
 
@@ -1521,7 +1527,7 @@ class PreprocessingRunView(APIView):
             # Volume-shares learned on the same outer-train fit_idx as other rules
             cat_fit_idx = fit_idx.intersection(work.index)
             if len(cat_fit_idx) == 0:
-                cat_fit_idx = work.index
+                raise ValueError('Categorical purifier has no permitted fit rows; full-frame fallback is prohibited.')
 
             merge_mapping: dict[str, dict[str, str]] = {}
             affected_features: list[str] = []
@@ -1545,12 +1551,15 @@ class PreprocessingRunView(APIView):
                     if len(outlier_cats) > 1:
                         mapping = {str(cat): 'Others-Outliers' for cat in outlier_cats}
                         merge_mapping[col] = mapping
+                        artifact['category_replacements'][col] = [
+                            {'from': cat.item() if isinstance(cat, np.generic) else cat, 'to': 'Others-Outliers'}
+                            for cat in outlier_cats]
                         affected_features.append(col)
                         work[col] = work[col].replace({cat: 'Others-Outliers' for cat in outlier_cats})
 
                 elif lom == 'ordinal':
                     # Ordinal features must be sortable (numerical dtype)
-                    unique_vals = work[col].dropna().unique()
+                    unique_vals = work.loc[cat_fit_idx, col].dropna().unique()
                     try:
                         sorted_cats = sorted(unique_vals, key=lambda x: float(x))
                     except (ValueError, TypeError):
@@ -1601,6 +1610,10 @@ class PreprocessingRunView(APIView):
                     actual_merges = {str(k): str(v) for k, v in cat_map.items() if k != v}
                     if actual_merges:
                         merge_mapping[col] = actual_merges
+                        artifact['category_replacements'][col] = [
+                            {'from': key.item() if isinstance(key, np.generic) else key,
+                             'to': value.item() if isinstance(value, np.generic) else value}
+                            for key, value in cat_map.items() if key != value]
                         affected_features.append(col)
                         work[col] = work[col].map(lambda x, cm=cat_map: cm.get(x, x))
 

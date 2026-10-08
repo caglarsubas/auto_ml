@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold, TimeSeriesSplit
 
 from modeling.split_contract import fit_numeric_imputer, transform_numeric_impute
+from preprocessing.purifier_contract import parse_split_dates
 
 
 def development_folds(context, row_index, y, n_splits):
@@ -21,12 +22,12 @@ def development_folds(context, row_index, y, n_splits):
         date_column = config.get('date_column')
         if not date_column or date_column not in frame:
             raise ValueError('Development temporal folds require an explicit date_column. Legacy chronology cannot be qualified.')
-        dates = pd.to_datetime(frame[date_column], errors='coerce', utc=True)
+        dates = parse_split_dates(frame[date_column])
         if dates.isna().any():
             raise ValueError('Development temporal folds require valid timestamps.')
         order = dates.sort_values(kind='mergesort').index
         end_column = config.get('label_end_column')
-        ends = pd.to_datetime(frame[end_column], errors='coerce', utc=True) if end_column else dates
+        ends = parse_split_dates(frame[end_column]) if end_column else dates
         if ends.isna().any() or (ends < dates).any():
             raise ValueError('Development label windows are invalid.')
         splitter = TimeSeriesSplit(n_splits=n_splits)
@@ -66,6 +67,15 @@ def prepare_fold(context, train, valid, features=None):
     target = context['target_column']
     columns = [column for column in source if column != target and column not in context.get('excluded_features', [])]
     work = source.loc[train.append(valid), columns].copy()
+    purifier = None
+    if context.get('purifier_recipe'):
+        from preprocessing.replay import fit_purifier, apply_purifier
+        purifier = fit_purifier(work, context['purifier_recipe'], train)
+        work = apply_purifier(work, purifier)
+        if features is not None:
+            dropped = set(columns) - set(work.columns)
+            features = [feature for feature in features if feature not in dropped and
+                (feature in work.columns or not any(feature.startswith(column + '_') for column in dropped))]
     plan = context.get('encoding_plan') or []
     if plan:
         from encoding.encoding_utils import apply_encoding
@@ -81,17 +91,20 @@ def prepare_fold(context, train, valid, features=None):
     if features is not None:
         # An OHE column whose category is absent in the fit fold is all zero.
         work = work.reindex(columns=features, fill_value=0.)
+    if work.shape[1] == 0:
+        raise ValueError('The declared purifier and candidate leave no model features in this training fold.')
     fit = work.loc[train]
     means = fit_numeric_imputer(fit)
     provenance = {'train_rows': train.tolist(), 'valid_rows': valid.tolist(),
                   'impute_means': means, 'encoding': report,
-                  'upstream_limitation': 'Input is the versioned processed dataset; purifier decisions still require fold-local replay.'}
+                  'purifier': purifier,
+                  'upstream_limitation': None if purifier else 'Legacy processed input; upstream purifier provenance unverified.'}
     return transform_numeric_impute(fit, means), transform_numeric_impute(work.loc[valid], means), provenance
 
 
-def prepared_folds(context, X, y, n_splits):
+def prepared_folds(context, X, y, n_splits, *, all_declared_features=False):
     for train, valid in development_folds(context, X.index, y, n_splits):
-        X_train, X_valid, provenance = prepare_fold(context, train, valid, list(X.columns))
+        X_train, X_valid, provenance = prepare_fold(context, train, valid, None if all_declared_features else list(X.columns))
         yield X_train, context['labels'].loc[train], X_valid, context['labels'].loc[valid], provenance
 
 
