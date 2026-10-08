@@ -717,7 +717,7 @@
                   }}). Early stopping: {{ stopping.mode }}.
                 </p>
                 <p>
-                  Prediction uses {{ stopping.prediction_rounds }} boosting rounds.
+                  Boosting rounds used for prediction: {{ stopping.prediction_rounds }}.
                   @if (stopping.selected_validation_score !== null) {
                     Selected validation score: {{ stopping.selected_validation_score }}.
                   }

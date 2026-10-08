@@ -72,7 +72,7 @@ describe('ModelingComponent', () => {
     expect(details.open).toBeFalse();
     expect(details.textContent).toContain('Maximum boosting rounds: 10');
     expect(details.textContent).toContain('Declared fit metric: mse (minimize)');
-    expect(details.textContent).toContain('Prediction uses 1 boosting rounds');
+    expect(details.textContent).toContain('Boosting rounds used for prediction: 1');
     expect(details.textContent).toContain('Selected validation score: 0');
     expect(details.textContent).toContain('Fitter surrogate loss, distinct from the business validation metric.');
     expect(details.textContent).toContain('train-hash');
