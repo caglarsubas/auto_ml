@@ -88,7 +88,8 @@ def resolve_objective(task, context, criteria):
         if task == "regression"
         else "Binary probabilities; threshold metrics use 0.5; expected cost is per observation.",
         "qualification": "Post-selection development evidence; screening, early stopping and selection reuse development data. Not independent assessment.",
-        "training_policy": "Native fixed training/early-stopping criterion is recorded separately; full objective alignment remains open.",
+        "training_policy": "Accepted objectives govern native early stopping. Fitter surrogate loss and training weights are recorded separately; development data are reused." if contract else
+                           "Historical input: native fixed criteria and upstream provenance remain unverified.",
     }
     return objective, normalized
 
@@ -120,6 +121,7 @@ def search_basis(
             "development_validation.py",
             "development_assessment.py",
             "booster_adapters.py",
+            "declared_metric.py",
         )
     }
     validation = {"qualification": "Legacy; upstream preprocessing and partition provenance unverified."}
@@ -142,6 +144,8 @@ def search_basis(
                 )
             },
         }
+    from modeling.declared_metric import bind_declared_metric
+    contract = (context or {}).get('prediction_contract')
     basis = {
         "schema_version": 2,
         "execution_id": execution_id,
@@ -158,8 +162,8 @@ def search_basis(
         "num_boost_round": 100,
         "early_stopping_rounds": 10,
         "validation": validation,
-        "native_fit_params": _sfs_booster_params(task, 0),
-        "screening_fit_params": _sfs_booster_params(task, 1 if n_jobs > 1 else 0),
+        "native_fit_params": bind_declared_metric(_sfs_booster_params(task, 0), contract),
+        "screening_fit_params": bind_declared_metric(_sfs_booster_params(task, 1 if n_jobs > 1 else 0), contract),
         "runtime": {**runtime_versions(algorithm), "validation": runtime_versions("sklearn")},
         "implementation_sha256": implementation,
     }

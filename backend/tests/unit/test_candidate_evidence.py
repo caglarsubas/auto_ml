@@ -67,10 +67,12 @@ def development(task='classification'):
 
 
 def fitted(data, features=('x',), algorithm='xgboost', rounds=10):
+    from modeling.declared_metric import bind_declared_metric
     params = {'task': data['task'], 'objective': 'reg:squarederror' if data['task'] == 'regression' else 'binary:logistic',
               'eval_metric': 'rmse' if data['task'] == 'regression' else 'auc', 'max_depth': 2, 'nthread': 1}
     return get_adapter(algorithm).train(data['X_train'][list(features)], data['y_train'],
-        data['X_valid'][list(features)], data['y_valid'], params, num_boost_round=rounds, early_stopping_rounds=3)
+        data['X_valid'][list(features)], data['y_valid'], bind_declared_metric(params, data['prediction_contract']),
+        num_boost_round=rounds, early_stopping_rounds=3)
 
 
 @pytest.fixture
@@ -152,7 +154,7 @@ def test_input_receipts_bind_row_order_labels_and_category_semantics():
         input_receipt(X.iloc[[0, 0]], y.iloc[[0, 0]])
 
 
-@pytest.mark.parametrize('rounds', [0, 10])
+@pytest.mark.parametrize('rounds', [1, 10])
 def test_candidate_has_fresh_metrics_selected_cv_and_preserves_parent(parent, rounds):
     execution_id, data, root, current = parent
     before = {p.name: p.read_bytes() for p in root.iterdir() if p.is_file()}
@@ -200,6 +202,22 @@ def test_mismatched_candidate_never_stages_or_adopts(parent, mismatch):
         publish_candidate(execution_id, 1, adapter, ['x'], {}, 'wrong')
     assert current.read_bytes() == before
     assert set(root.parent.iterdir()) == directories
+
+
+@pytest.mark.parametrize('criterion', ['missing', 'changed'])
+def test_candidate_with_unbound_or_changed_fit_metric_cannot_publish(parent, criterion):
+    from modeling.declared_metric import bind_declared_metric
+    execution_id, data, root, current = parent
+    params = {'objective': 'binary:logistic', 'eval_metric': 'auc', 'nthread': 1, 'max_depth': 2}
+    if criterion == 'changed':
+        contract = {**data['prediction_contract'], 'objective': {'primary_metric': 'brier'}}
+        params = bind_declared_metric(params, contract)
+    adapter = get_adapter('xgboost').train(data['X_train'][['x']], data['y_train'],
+        data['X_valid'][['x']], data['y_valid'], params, num_boost_round=5, early_stopping_rounds=2)
+    before, directories = current.read_bytes(), set(root.parent.iterdir())
+    with pytest.raises(ValueError, match='accepted metric contract'):
+        publish_candidate(execution_id, 1, adapter, ['x'], {}, 'wrong_criterion')
+    assert current.read_bytes() == before and set(root.parent.iterdir()) == directories
 
 
 def test_failed_candidate_cv_cannot_publish(parent, monkeypatch):

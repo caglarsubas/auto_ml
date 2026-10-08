@@ -115,6 +115,8 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
             adapter.train(X_tr, y_tr, X_va, y_va, params=fold_params)
         else:
             from modeling.booster_adapters import get_adapter
+            from modeling.declared_metric import bind_declared_metric
+            fold_params = bind_declared_metric(fold_params, contract)
             adapter = get_adapter(algorithm)
             adapter.train(X_tr, y_tr, X_va, y_va, fold_params,
                           num_boost_round=num_boost_round, early_stopping_rounds=early_stopping_rounds)

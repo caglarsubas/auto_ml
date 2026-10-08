@@ -50,8 +50,10 @@ def record_native_fit(adapter, X_train, y_train, X_valid, y_valid, requested_par
                'effective_params': dict(effective_params), 'num_boost_round': num_boost_round,
                'early_stopping_rounds': early_stopping_rounds,
                'training_eval_metric': getattr(adapter, 'training_eval_metric', None),
+               'stopping_evidence': getattr(adapter, 'stopping_evidence', None),
                'runtime': runtime_versions(adapter.name),
-               'validation_role': ('not_used_by_fitter' if adapter.name == 'sklearn' else
+               'validation_role': ('not_used_by_fitter' if adapter.name == 'sklearn' or
+                                   (getattr(adapter, 'declared_metric_spec', None) and not early_stopping_rounds) else
                                    'early_stopping' if early_stopping_rounds else 'evaluation_only'),
                'qualification': 'Native controller record; effective parameters are those supplied to the fitter (resolved defaults for CatBoost/sklearn). Not independent reproduction or actor authentication.'}
     # Preserve native metric/weight parameter types while detaching containers.
@@ -87,4 +89,10 @@ def verify_candidate_fit(adapter, data, features):
     for partition in ('train', 'valid'):
         if input_receipt(data['X_' + partition][features], data['y_' + partition]) != receipt[partition]:
             raise ValueError(f'Candidate {partition} inputs differ from the selected immutable execution; refit before publication.')
+    if adapter.name != 'sklearn':
+        from modeling.declared_metric import metric_spec
+        expected = metric_spec(data.get('prediction_contract'))
+        if expected and (receipt['requested_params'].get('_metric_spec') != expected or
+                         (receipt.get('stopping_evidence') or {}).get('metric_spec') != expected):
+            raise ValueError('Candidate fitter lacks the accepted metric contract; refit before publication.')
     return receipt

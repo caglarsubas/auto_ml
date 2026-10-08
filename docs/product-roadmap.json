@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-10-08",
+  "updated": "2026-10-09",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -75,7 +75,7 @@
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Complete objective/early-stopping consistency and unsupported-channel handling remain open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fixed native fitter criteria remain open."
+      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
     {
       "id": "D02",
@@ -107,7 +107,7 @@
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
     {
       "id": "D03",
@@ -158,7 +158,7 @@
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
     {
       "id": "D05",
@@ -186,7 +186,7 @@
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal."
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
     },
     {
       "id": "D06",
@@ -864,6 +864,21 @@
       "date": "2026-10-08",
       "packet": "P08",
       "event": "Documentation/validator qualification passed 49 regression tests, scoped Ruff, projection/whitespace and preservation checks; D18-D26 remain planned and no product/release/customer gate is closed."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P08",
+      "event": "PR #98 merged as aded1f2b5ee2b5dcc72ae38008e31e455022384d; documentation adoption is separate from agentic implementation and product/release qualification."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P09",
+      "event": "User continued after PR #98. Dispatch bounded native declared-metric early-stopping/scoring-round foundation packet; owner Backend/ML; no agentic outcome is promoted."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P08",
+      "event": "Merged-main CI 37803553112 passed all five jobs at aded1f2b5ee2b5dcc72ae38008e31e455022384d; this verifies the merged source, not deployment or customer acceptance."
     }
   ],
   "implementation_packets": [
@@ -1009,6 +1024,22 @@
         "[P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)"
       ],
       "remaining": "D18\u2013D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
+    },
+    {
+      "id": "P09",
+      "title": "Declared native early stopping and scoring rounds",
+      "kind": "product_implementation",
+      "owner": "Backend/ML",
+      "status": "in_progress",
+      "items": [
+        "D01",
+        "D02",
+        "D04",
+        "D05"
+      ],
+      "description": "Bind initial native training, fold fitting, selection/tuning and candidate refits to the accepted validation metric. Preserve trusted metric semantics, separate surrogate fit loss/weights, record per-round stopping evidence and replay the selected scoring rounds.",
+      "evidence": [],
+      "remaining": "Complete scientific path, protected independent assessment/reproduction, immutable durable jobs, project governance, expert isolation, agentic outcomes and customer/value qualification remain open."
     }
   ],
   "release_qualification": {

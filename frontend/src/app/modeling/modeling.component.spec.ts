@@ -52,6 +52,12 @@ describe('ModelingComponent', () => {
           valid: { n_rows: 60, sha256: 'valid-hash' },
           num_boost_round: 10,
           early_stopping_rounds: 3,
+          stopping_evidence: {
+            metric_spec: { primary_metric: 'mse', direction: 'minimize', weighting: 'Unweighted observations.', semantics: 'Regression errors' },
+            mode: 'declared_metric', prediction_rounds: 1, selected_validation_score: 0,
+            training_loss: { native_name: 'reg:squarederror', role: 'Fitter surrogate loss, distinct from the business validation metric.' },
+            qualification: 'Exploratory development stopping.',
+          },
           validation_role: 'early_stopping',
           qualification: 'Native controller record; not independent reproduction.',
           sha256: 'receipt-hash',
@@ -65,6 +71,10 @@ describe('ModelingComponent', () => {
     ) as HTMLDetailsElement;
     expect(details.open).toBeFalse();
     expect(details.textContent).toContain('Maximum boosting rounds: 10');
+    expect(details.textContent).toContain('Declared fit metric: mse (minimize)');
+    expect(details.textContent).toContain('Prediction uses 1 boosting rounds');
+    expect(details.textContent).toContain('Selected validation score: 0');
+    expect(details.textContent).toContain('Fitter surrogate loss, distinct from the business validation metric.');
     expect(details.textContent).toContain('train-hash');
     expect(fixture.nativeElement.textContent).toContain('Post-selection development CV');
   });
