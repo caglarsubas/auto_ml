@@ -65,6 +65,10 @@ def _sfs_fit(
     num_boost_round: int = 100,
     early_stopping_rounds: int = 10,
 ):
+    if task == 'classification' and early_stopping_rounds and (
+        set(np.unique(y_tr)) != {0, 1} or set(np.unique(y_va)) != {0, 1}
+    ):
+        raise ValueError('Native selection uses AUC early stopping, which requires both encoded classes in training and validation. Revise the population or validation split; objective-aligned fitting remains open.')
     return fit_booster(
         algorithm, X_tr, y_tr, X_va, y_va, params,
         task=task,

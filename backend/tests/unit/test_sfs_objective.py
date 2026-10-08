@@ -381,3 +381,22 @@ def test_resume_rejects_changed_runtime_and_native_configuration(monkeypatch):
     monkeypatch.setattr("modeling.sfs_objective.runtime_versions", lambda algorithm: {"python": "changed"})
     result = run(parts, resume_state=state)
     assert result["status"] == "error" and "different or unverified" in result["error"]
+
+
+@pytest.mark.parametrize('single_class', ['screening', 'fold'])
+def test_available_brier_objective_cannot_hide_unavailable_native_early_stopping(single_class):
+    X, y, V, z, context = data('classification', 'brier')
+    if single_class == 'screening':
+        z = z * 0
+        context['labels'].loc[z.index] = z
+    else:
+        y = y.copy()
+        y.iloc[:20] = np.tile([0, 1], 10)
+        y.iloc[20:] = 0
+        context['labels'].loc[y.index] = y
+        context['frame']['date'] = pd.date_range('2025-01-01', periods=90)
+        context['split_meta'] = {'strategy': 'oot', 'split_config': {'date_column': 'date'}}
+    result = run((X, y, V, z, context))
+    assert result['status'] == 'error' and result['forward'] == []
+    assert 'AUC early stopping' in result['error']
+    assert 'both encoded classes' in result['error']
