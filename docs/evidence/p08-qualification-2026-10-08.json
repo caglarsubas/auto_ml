@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "packet": "P08",
+  "kind": "roadmap_reconciliation",
+  "branch": "codex/agentic-roadmap-reconciliation",
+  "base_commit": "506945f9742bd7bdc5d599f422ad360dc473c929",
+  "qualified_source_commit": "ced1848a5d4978d4a77f6c078125e4fa10f02ea4",
+  "scope": "Documentation and ledger-validator qualification only. Subsequent changes record this evidence and regenerate the projection. D18-D26 remain planned with no implementation evidence; all product, release and customer qualification gates remain open. No feature packet is dispatched.",
+  "approved_source": {
+    "title": "Plan agentic roadmap shift",
+    "thread_id": "01a11b66-2049-7542-8d8b-daefb9f7ab2b",
+    "authority": "Direct human request to reconcile the canonical roadmap, followed by plan mode closed. go on; delegated bounded documentation-only execution."
+  },
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/97",
+    "state": "MERGED",
+    "merged_at": "2026-10-08T12:52:41Z",
+    "merge_commit": "506945f9742bd7bdc5d599f422ad360dc473c929",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37780048421",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "test_environment": {
+    "image": "declarai-core-p07:local",
+    "image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "python": "3.12.15",
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "details": "Disposable Docker process with current repository mounted read/write, telemetry disabled, blank provider key and unreachable model endpoint. No service replacement or runtime qualification."
+  },
+  "checks": [
+    {
+      "name": "Ledger validation, extension and deterministic projection regression",
+      "status": "passed",
+      "command": "python -m pytest tests/unit/test_product_roadmap.py --no-cov -q --tb=short --junitxml=../test-reports/p08-roadmap-tests.xml",
+      "passed": 49,
+      "skipped": 0,
+      "duration_seconds": 0.14,
+      "scenarios": [
+        "Original schema-1 ledger compatibility and future D27 extension",
+        "Duplicate/unknown IDs, dependencies, cycles, invalid metadata, state/evidence requirements and canonical queue/source validation",
+        "Deterministic projection and CLI drift rejection",
+        "Documentation packet evidence cannot promote a planned outcome"
+      ]
+    },
+    {
+      "name": "Scoped Python lint",
+      "status": "passed",
+      "command": "ruff check tests/unit/test_product_roadmap.py ../scripts/render_product_roadmap.py"
+    },
+    {
+      "name": "Canonical projection and Git whitespace",
+      "status": "passed",
+      "commands": [
+        "python3 scripts/render_product_roadmap.py --check",
+        "git diff --check"
+      ]
+    },
+    {
+      "name": "Existing evidence and primary-checkout preservation",
+      "status": "passed",
+      "details": "Original 17 outcome objects, seven packet objects, history prefix, baseline and research sources are unchanged. All nine added outcomes are planned with empty implementation evidence. All 11 pre-existing tracked primary-workspace file hashes are unchanged.",
+      "canonical_original_record_sha256": {
+        "outcomes": "a25897234d93ace5f975ff8c93dd29969c65918ace340971c71f281a8ab15c20",
+        "packets": "d8e8febc622646e0be7f8f708ca97794c64109009d7dc1d7f1c76134d80e652f",
+        "history": "db21dd38da7418516b9cf0485dc013968b54b510daa9b79c5cf25c825aea2a9f",
+        "unchanged_primary_tracked_files": 11,
+        "local_document_links": "passed",
+        "source_mapping": "passed",
+        "all_new_outcomes": "planned_without_evidence"
+      }
+    },
+    {
+      "name": "Documentation links and approved source mapping",
+      "status": "passed",
+      "details": "Local Markdown targets exist. AR01-AR10 are defined and all new outcome source references resolve. Independent read-only review of the specification, priority queue and qualification requirements reported no actionable gap."
+    }
+  ],
+  "qualified_source_sha256": {
+    "scripts/render_product_roadmap.py": "8b4a5b232b4a11381a79a48e6d76e39067ced760d5cbfe14594e504509457604",
+    "backend/tests/unit/test_product_roadmap.py": "8447686f404d071ab3a2cc5be5834ebd689bbd2179286187db844b9f30493d4b",
+    "docs/AGENTIC_EXECUTION_SPEC.md": "4794c299a7da7f91f718d18229a5a80af3fb6b2fa1464c936f082e17c4c8d1d8"
+  },
+  "retained_reports": {
+    "directory": "/Users/caglarsubasi/.codex/worktrees/foundation-packaging/auto-ml/test-reports/p08",
+    "files": {
+      "p08-preservation.json": "fcbd02d04a7572aab01958fbaed6e5200614dd567cd3119ebfc5b4264d012333",
+      "p08-roadmap-tests.log": "e5a0fc16a911ee81a50b0f351c85efadfeab9139d6cb049dbf6db9f575862fb9",
+      "p08-roadmap-tests.xml": "eccadf3d1e2e97a966c84811229b73f183d3232709c1672d74aa46ac8d6a3165"
+    }
+  },
+  "limitations": [
+    "P08 qualifies the roadmap, supporting specification and validator only; mission orchestration, oversight, independent gates, connectors, decision history and autonomy are not implemented by this packet.",
+    "D01-D17 retain their existing partial states and qualification. P01-P07 checks do not complete any outcome or milestone.",
+    "The pilot requires both upload and PostgreSQL intake, live accountability, qualified isolation and clean independent reproduction. Production autonomy remains disabled pending a separate bounded, expiring/revocable grant and lifecycle qualification.",
+    "The >=30% combined development/review effort reduction is a proposed value target, not an achieved result. No delivery dates, capacity, deployment or customer acceptance are claimed."
+  ],
+  "git_hooks": "Shared hooks target the user-owned primary Docker checkout. Per-command core.hooksPath=/dev/null was used after scoped isolated lint, validator, projection and preservation checks; persistent configuration was unchanged. Standard PR CI remains required before review readiness."
+}

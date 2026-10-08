@@ -1,14 +1,18 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "updated": "2026-10-08",
   "baseline_commit": "dac05741",
-  "vision": "Build a developer-first platform where business declarations govern model execution and every model carries reproducible evidence for independent review. Credit risk is the first use case; the classification/regression core remains reusable.",
+  "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
     "On-premise/private cloud, initially one customer organization per installation.",
     "Distinct developer and independent-reviewer roles; jurisdiction-neutral, versioned customer policies.",
     "First governed release includes typed AI actions AND sandboxed expert Python.",
     "Model development, review, export and batch-scoring handoff; production decision use is tracked separately.",
-    "Primary success measure: less development/reproduction/review effort without increased validation defects."
+    "Primary success measure: less development/reproduction/review effort without increased validation defects.",
+    "Autonomous development first; per-stage/action HITL/HOTL governs authority, live visibility and intervention. Production autonomy starts disabled and is a later, separately granted capability.",
+    "First agentic pilot is an end-to-end binary-classification/regression baseline with simple reference models and existing XGBoost, not an HPO-only pilot. Preserve other supported capabilities and qualify them separately.",
+    "Both CSV/XLSX uploads and authorized PostgreSQL tables/views feed encrypted, versioned private snapshots in the customer deployment; every mission pins its DatasetVersion.",
+    "Full user-visible decision history, independent confirmation, both intake paths and clean reproduction are mandatory first-pilot requirements."
   ],
   "milestones": [
     {
@@ -27,7 +31,7 @@
       "id": "M3",
       "title": "Reviewable product and feature development",
       "purpose": "Independent reproduction and paired experiments make developer-to-reviewer handoff useful.",
-      "gate": "Technical pilot requires M1\u2013M3 including expert isolation, clean reproduction and accessibility. Broader rollout requires two partner workflows and proposed >=30% evidence/reproduction effort reduction or one fewer review iteration without increased defects."
+      "gate": "Bounded agentic pilot requires remaining D01\u2013D09/D12 foundations and D18\u2013D22/D25\u2013D26, including isolation, both intake paths, live accountability, accessible oversight and clean independent reproduction. D10/D11/D23 deeper experiments follow the baseline pilot; full M1\u2013M3 outcome completion remains separate. Broader rollout requires two partner workflows meeting the proposed >=30% combined development/review effort reduction against equal-data/policy/budget guided and single-agent baselines without increased validation defects."
     },
     {
       "id": "M4",
@@ -39,7 +43,7 @@
       "id": "M5",
       "title": "Ongoing model use and selective expansion",
       "purpose": "Connect mature outcomes to accountable model review.",
-      "gate": "Complete a real monitoring/review cycle; retraining/promotion require approved scope."
+      "gate": "Complete a real monitoring/review cycle. Alerts may initiate review; retraining/promotion require an approved scope. D24 production autonomy remains disabled until a separately authorized expiring/revocable recipe-bounded grant and a customer-observed lifecycle/rollback qualification."
     },
     {
       "id": "Research",
@@ -458,6 +462,236 @@
       "status": "planned",
       "evidence": [],
       "progress": ""
+    },
+    {
+      "id": "D18",
+      "milestone": "M2",
+      "title": "Mission contracts and configurable oversight",
+      "owner": "Backend/Security/Product",
+      "description": "Version MissionSpec, PolicyPack, OversightPolicy and revocable AutonomyGrant. Resolve installation restrictions, project policies and narrower mission authority per CRISP-DM stage/action; bind HITL approvals to exact proposals or explicitly bounded plans and HOTL work to standing grants.",
+      "acceptance": "Mixed HITL/HOTL rules show their effective origin and govern every action. Wrong-role/stale approval, scope expansion, policy changes, unavailable supervision, expiry/revocation and intervention enforce declared behavior. Silence/timeouts never approve; dependent input changes invalidate authority.",
+      "dependencies": [
+        "D01",
+        "D04",
+        "D06",
+        "D08"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR01",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR04",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR09"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D19",
+      "milestone": "M2",
+      "title": "Durable agent orchestration on shared execution services",
+      "owner": "Platform/Backend/Security",
+      "description": "Extend the shared Django/PostgreSQL/Celery/Redis execution services with persisted missions, role-scoped worker identities, common budget accounting, pause/cancel, checkpoints, recovery and idempotent publication. All workers, retries and child tasks consume one mission budget.",
+      "acceptance": "Browser closure, worker/broker crashes, duplicate delivery, budget exhaustion and revocation recover without duplicate publication or unauthorized dispatch. Pause stops dispatch; cancellation records active/partial effects; ambiguous external outcomes are reconciled before retry. Audit-store failure blocks consequential transitions.",
+      "dependencies": [
+        "D07",
+        "D08",
+        "D18",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR03",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR09"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D20",
+      "milestone": "M3",
+      "title": "Independent verification and accountable policy gates",
+      "owner": "ML/Independent Review/Security",
+      "description": "Workers propose/execute; trusted software computes mandatory scientific/security checks. Independent evaluator agents investigate evidence and qualitative policy requirements; accountable people resolve reserved decisions. GateDecision separates execution completion from scientific/policy/review/production eligibility.",
+      "acceptance": "Completed but ineligible results stay blocked; LLM agreement cannot override trusted checks or reserved human review. Confirmers have independent responsibilities and scoped identities; workers cannot change enforcement/evaluator source. Protected assessment, exceptions, evidence invalidation and replay expose explicit findings.",
+      "dependencies": [
+        "D03",
+        "D05",
+        "D09",
+        "D18",
+        "D19",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR03",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR04",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D21",
+      "milestone": "M3",
+      "title": "Mission supervision and review workspace",
+      "owner": "Product/Frontend/Independent Review",
+      "description": "Provide declarations, effective oversight and its origin, source sharing, mission progress/budgets, a live decision timeline and CRISP-DM stage views. Show concise rationale/evidence/authority/outcomes with expandable Details and controls for review, intervention, pause/cancel and grant revocation.",
+      "acceptance": "Assigned users follow every consequential decision live and recover the full authorized history on reconnect. Keyboard/screen-reader workflows support review/intervention and clearly distinguish job state from eligibility. Hidden details remain inspectable; no credentials or unsupported reasoning claims enter the interface.",
+      "dependencies": [
+        "D12",
+        "D18",
+        "D19",
+        "D20",
+        "D25",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR01",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR04",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR05",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D22",
+      "milestone": "M3",
+      "title": "End-to-end agentic baseline pilot",
+      "owner": "Product/ML/Platform/Independent Review",
+      "description": "Execute accepted business/oversight declarations through uploaded or connected data, a pinned private snapshot, checks/preparation, simple references and bounded XGBoost candidate search, independent assessment, a reproducible review package and batch-scoring handoff. Start with binary classification/regression; preserve and separately qualify other product workflows.",
+      "acceptance": "Both intake paths complete the bounded workflow under mixed HITL/HOTL, full live accountability and qualified isolation. An independent reviewer reproduces a clean package; protected outcomes cannot drive adaptive search or silently retain confirmatory status. Pilot is not production-use approval or closure of all M1\u2013M3 outcomes.",
+      "dependencies": [
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D12",
+        "D18",
+        "D19",
+        "D20",
+        "D21",
+        "D25",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR01",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR03",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR05",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR06",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR10"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D23",
+      "milestone": "M3",
+      "title": "Adaptive feature and hyperparameter experimentation",
+      "owner": "ML/Product/Independent Review",
+      "description": "Extend existing numerical search and immutable experiments with agent-selected bounded strategies, correlated alternatives, grouped ablation and paired before/after analysis. Integrate R3/D10 comparison, R1 alternatives and R2/D11 controlled objectives/scorers; do not create competing optimizers or rewrite shared pipeline source.",
+      "acceptance": "Equal data/policy/folds/budgets comparisons disclose retuning, cost, effect size, uncertainty, calibration/stability and limitations. Agents cannot expand approved ranges or override trusted reference checks; custom code stays isolated. Additional agents/experiments must improve value over guided and single-agent baselines without increasing validation defects.",
+      "dependencies": [
+        "D10",
+        "D11",
+        "D20",
+        "D22"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR01",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR03",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR10"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D24",
+      "milestone": "M5",
+      "title": "Conditional lifecycle autonomy within an approved recipe",
+      "owner": "Platform/ML/Security/Policy Owner",
+      "description": "Production autonomy is disabled initially. A separately authorized, expiring/revocable standing grant may later refresh training data and tune approved ranges while feature definitions, model family, target, population and decision policy remain fixed. Broader recipe changes require human authorization. Reuse monitoring/challenger and batch-release/rollback interfaces.",
+      "acceptance": "A customer-observed monitoring/review/release exercise verifies standing authority, independent gates, shadow evaluation, atomic version selection, affected-batch attribution and rollback. Missing/immature evidence, unauthorized recipe changes, expired/revoked grants or failed rollout checks block promotion. Prior decisions and effects remain attributable after rollback.",
+      "dependencies": [
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D18",
+        "D19",
+        "D20",
+        "D22",
+        "D23",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR02",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR04",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR09",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR10"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D25",
+      "milestone": "M2",
+      "title": "Upload and PostgreSQL private snapshot intake",
+      "owner": "Backend/Platform/Security/Data Owner",
+      "description": "Unify CSV/XLSX and PostgreSQL intake behind DataSourceSpec/DatasetVersion. Authorized users register/test secret-referenced connections, select one allowed table/view per dataset plus columns/filters, preview and share it with a project. Customer views support joins; no arbitrary agent SQL or database writes. Publish encrypted, versioned private snapshots after bounded consistent read-only extraction and integrity checks.",
+      "acceptance": "Both sources preserve file/parser/sheet or source/relation/column/filter/schema/row-count/time/fingerprint provenance. Verify effective connector view/row-security permissions, credential rotation/revocation and project scopes; never expose credentials in prompts/logs/browser responses. Failed/cancelled extraction publishes nothing usable; missions pin versions, refresh creates a new version and schema/access changes trigger review. Retention/deletion, extraction/source-load limits and additive legacy unknown-provenance behavior pass.",
+      "dependencies": [
+        "D01",
+        "D02",
+        "D04",
+        "D06",
+        "D07",
+        "D18",
+        "D26"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR01",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR05",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR06",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR09"
+      ],
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "D26",
+      "milestone": "M2",
+      "title": "Authoritative decision history and user accountability",
+      "owner": "Backend/Security/Product/Independent Review",
+      "description": "Persist each consequential proposal before execution with concise rationale, actual alternatives/evidence, policy/origin, expected effect and HITL/HOTL authority. Append outcomes, resources, verifier findings and human intervention; identify mission/stage/agent version/executor/verifier and exact data/code/environment/model/policy versions. Include rejected, failed, blocked, cancelled, overridden and abandoned decisions.",
+      "acceptance": "Every consequential action has a prior decision/authority event and attributable outcome. State transitions and authoritative events persist together; audit-store failure blocks consequential transitions. Access-controlled append-only history reconnects/replays completely, corrections append rather than erase, and job state remains distinct from scientific/policy eligibility. Sensitive data is redacted while accountability survives.",
+      "dependencies": [
+        "D04",
+        "D06",
+        "D07",
+        "D18"
+      ],
+      "sources": [
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR03",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR04",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR07",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR08",
+        "Agentic requirements approved in Plan agentic roadmap shift (01a11b66-2049-7542-8d8b-daefb9f7ab2b) / AR09"
+      ],
+      "status": "planned",
+      "evidence": []
     }
   ],
   "research_sources": [
@@ -481,7 +715,13 @@
     "Approvals bind actor/project/code/input/environment/partition/resources; changed state invalidates approval. Outputs remain candidates until adopted.",
     "Governance states distinguish technical evaluation, policy checks, independent review, human approval, packaging, deployment and accepted use.",
     "Additive legacy migration preserves files/history, records missing provenance and starts new versioned execution when an old project is continued.",
-    "Retries may recompute; atomic publication and idempotent adoption prevent duplicate evidence or overwrites."
+    "Retries may recompute; atomic publication and idempotent adoption prevent duplicate evidence or overwrites.",
+    "One execution platform: agent families are logical worker/confirmer roles, not mandated microservices or permanently running LLMs. Extend shared scientific/data/artifact/identity/job/isolation/review services; do not create another execution queue.",
+    "Extend shared versioned interfaces with MissionSpec, PolicyPack, AutonomyGrant, OversightPolicy, DataSourceSpec, DatasetVersion, ActionProposal/StageReceipt, GateDecision and DecisionEvent. Project-scoped REST/MCP/UI share source registration/testing/sharing/snapshot, mission create/start/status/events/pause/resume/cancel, review/grants and eventual promotion operations.",
+    "Installation restrictions constrain project policies; missions can narrow authority. Expansion requires an authorized policy version. Effective per-stage/action HITL/HOTL rules show permitted changes, budgets, approver/supervisor roles and separation, evidence/checkpoints, routing/deadlines, unavailable-oversight behavior, expiry/revocation and intervention. Silence/timeouts never approve.",
+    "Initial oversight preset: HITL accepts business requirements, data-access grants, broader authority, new expert code, exceptions and production promotion. HOTL covers authorized profiling, approved preparation recipes, training/tuning and evidence assembly. Stronger project checkpoints are allowed; later D24 production HOTL needs a separately authorized grant.",
+    "Customer-private encrypted DatasetVersions publish atomically only after bounded read-only consistent extraction and integrity checks. Upload and PostgreSQL provenance share one downstream contract; source/schema/access changes cannot silently alter pinned missions or approvals.",
+    "Persist authoritative decisions before execution and append outcomes with state transitions. Audit-store failure blocks consequential transitions; workers/retries/children share one budget. Pause stops dispatch, cancel records active/partial effects and uncertain external outcomes are reconciled before retry."
   ],
   "release_acceptance": [
     "Task semantics: low-cardinality regression, many-class labels, reversed positives, missing labels and unsupported combinations.",
@@ -489,7 +729,12 @@
     "Evidence: concurrent runs, iteration preservation, holdout reuse, stale approval, tampered manifest and legacy import.",
     "Scoring: calibration, unseen categories, row/feature alignment, batch invariance and explicit required-transform failure.",
     "Expert execution: valid operations plus unauthorized access, malicious serialization/output, exhaustion, cancellation and unavailable runtime.",
-    "Operations/UX: real auth/project isolation, crash/duplicate recovery, restore/rollback, restricted-network deployment and accessible review."
+    "Operations/UX: real auth/project isolation, crash/duplicate recovery, restore/rollback, restricted-network deployment and accessible review.",
+    "Oversight: mixed per-stage/action HITL/HOTL; exact/bounded and stale approvals, wrong roles, policy expansion, unavailable supervision, expiry/revocation, routing/deadlines and live intervention; silence never approves.",
+    "Both intake paths: CSV/XLSX parser/sheet provenance and PostgreSQL selected table/view/columns/filters; effective restricted row/view access, secret isolation/rotation/revocation, source-load limits and extraction cancellation. Concurrent source updates preserve a consistent snapshot; partial extraction publishes no usable version.",
+    "Accountability: prior proposal/rationale/evidence/authority and subsequent outcome/resources/verification/intervention for every consequential action; all failure/override/abandonment states survive reconnect/replay and attributable corrections; audit-store loss blocks transitions.",
+    "Agentic operations: scoped identities and one mission budget across workers/retries/children; browser closure, crashes, duplicates, pause/cancel, restore and ambiguous external effects; workers cannot change trusted enforcement/evaluator machinery.",
+    "Later production: unauthorized recipe changes, missing/immature evidence, expired/revoked grants and failed rollout checks block promotion; shadow evaluation, atomic version selection, rollback and affected-batch attribution reproduce."
   ],
   "decisions": [
     "Elevate R3; deliver paired comparisons before R1 cluster-aware alternatives.",
@@ -498,9 +743,13 @@
     "Preserve/harden existing classification, regression, scorecard and anomaly functionality.",
     "No universal p-value, ECE, GVIF or score-range promotion gate; methods/tolerances follow declared task and sampling.",
     "Customer/jurisdiction policy is versioned; provider-report deadlines and blanket legal claims do not become product guarantees.",
-    "Defer general real-time/A-B platforms, mandatory registries/feature stores, full causal discovery, automatic reject inference/promotion and managed multitenant SaaS."
+    "Defer general real-time/A-B platforms, mandatory registries/feature stores, full causal discovery, automatic reject-inference correction, unrestricted self-modification and managed multitenant SaaS. Replace blanket automatic-promotion deferral with planned D24 conditional recipe-bounded lifecycle authority; production autonomy remains disabled until separately granted and qualified.",
+    "Agentic baseline pilot is end-to-end rather than HPO-only; both intake paths, configurable oversight, live accountability and independent reproduction are first-pilot requirements.",
+    "Preserve P01\u2013P07 scientific/data/fit/identity foundation credit. Planned durable jobs, expert isolation, project governance and independent review remain prerequisites, not delivered capabilities.",
+    "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
+    "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
-  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions.",
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates.",
   "history": [
     {
       "date": "2026-10-07",
@@ -600,6 +849,21 @@
       "date": "2026-10-08",
       "packet": "P07",
       "event": "Bounded local qualification passed: 1,386 backend tests, six skips, 67.61% coverage, 531 frontend tests and 19 authenticated browser/API checks. Exact tuning/winner evidence is recorded; milestone/release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P07",
+      "event": "PR #97 merged as 506945f9; all five main CI jobs at that exact merge passed (run 37780048421). Product/release/customer qualification remains separate."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P08",
+      "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01\u2013P07. Add planned D18\u2013D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P08",
+      "event": "Documentation/validator qualification passed 49 regression tests, scoped Ruff, projection/whitespace and preservation checks; D18-D26 remain planned and no product/release/customer gate is closed."
     }
   ],
   "implementation_packets": [
@@ -720,6 +984,31 @@
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
       "remaining": "Full training/early-stopping objective alignment, immutable durable search jobs, independent reproduction/paired comparison, security/operations, expert isolation and customer acceptance remain open."
+    },
+    {
+      "id": "P08",
+      "title": "Canonical agentic roadmap reconciliation",
+      "kind": "roadmap_reconciliation",
+      "owner": "Roadmap implementation owner / Product",
+      "status": "tested",
+      "items": [
+        "D18",
+        "D19",
+        "D20",
+        "D21",
+        "D22",
+        "D23",
+        "D24",
+        "D25",
+        "D26"
+      ],
+      "description": "Adopt the approved agentic requirements into this sole ledger, its generated projection, supporting execution specification and dependency-ordered planning queue; preserve all prior outcome IDs/evidence and foundation credit. No feature implementation is dispatched.",
+      "qualification_scope": "Documentation and roadmap-validator consistency only; no product capability, deployment, scientific/security gate or customer acceptance is qualified by P08.",
+      "evidence": [
+        "[Agentic contracts and acceptance](AGENTIC_EXECUTION_SPEC.md)",
+        "[P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)"
+      ],
+      "remaining": "D18\u2013D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
     }
   ],
   "release_qualification": {
@@ -730,6 +1019,153 @@
       "M3"
     ],
     "design_partner_acceptance": "not_performed",
-    "value_gate": "not_performed"
-  }
+    "value_gate": "not_performed",
+    "pilot_required_outcomes": [
+      "D01",
+      "D02",
+      "D03",
+      "D04",
+      "D05",
+      "D06",
+      "D07",
+      "D08",
+      "D09",
+      "D12",
+      "D18",
+      "D19",
+      "D20",
+      "D21",
+      "D22",
+      "D25",
+      "D26"
+    ],
+    "broader_release_required_outcomes": [
+      "D01",
+      "D02",
+      "D03",
+      "D04",
+      "D05",
+      "D06",
+      "D07",
+      "D08",
+      "D09",
+      "D10",
+      "D11",
+      "D12",
+      "D18",
+      "D19",
+      "D20",
+      "D21",
+      "D22",
+      "D23",
+      "D25",
+      "D26"
+    ],
+    "pilot_scope": "A bounded agentic pilot is separate from completing all milestone outcomes or authorizing production use. D10/D11/D23 deeper experiments follow it; D24 production autonomy stays disabled.",
+    "value_target": "Proposed acceptance target: >=30% lower combined development/review effort across two partner workflows, comparing guided and single-agent baselines under equal data/policy/budgets without increased validation defects; not an achieved result."
+  },
+  "reconciliation": {
+    "date": "2026-10-08",
+    "source_title": "Plan agentic roadmap shift",
+    "source_thread_id": "01a11b66-2049-7542-8d8b-daefb9f7ab2b",
+    "source_authority": "User-approved requirements; the user requested canonical reconciliation and then closed Plan mode with go on",
+    "implementation_base": "506945f9742bd7bdc5d599f422ad360dc473c929",
+    "preceding_pr": 97,
+    "specification": "AGENTIC_EXECUTION_SPEC.md",
+    "scope": "P08 adopts the roadmap and execution specification only. D18\u2013D26 are planned, without implementation evidence. P01\u2013P07 remain tested; their partial foundation credit and all open product/release/customer gates are preserved. No feature packet is dispatched.",
+    "added_outcomes": [
+      "D18",
+      "D19",
+      "D20",
+      "D21",
+      "D22",
+      "D23",
+      "D24",
+      "D25",
+      "D26"
+    ],
+    "priority_delta": [
+      "Finish remaining scientific, shared security/runtime, expert isolation and reproduction foundations first; extend delivered P01\u2013P07 behavior rather than rebuilding it.",
+      "Add mission/oversight contracts, durable orchestration, independent gates and authoritative decision history before autonomous product execution.",
+      "Move both upload/PostgreSQL snapshot intake and the supervision/review workspace into the first end-to-end pilot prerequisites.",
+      "Qualify declaration-to-scoring handoff with configurable HITL/HOTL and live accountability before deeper adaptive feature/HPO families; D23 integrates D10/D11 and R1/R2/R3.",
+      "Replace blanket automatic-promotion deferral with later D24 recipe-bounded lifecycle authority. Production autonomy remains disabled until a separate expiring/revocable grant and lifecycle qualification.",
+      "Measure combined development/review effort against guided and single-agent baselines under equal data, policies and budgets; agent count is not a success metric."
+    ]
+  },
+  "implementation_queue": [
+    {
+      "order": 1,
+      "title": "Finish remaining shared foundations",
+      "items": [
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D12"
+      ],
+      "owner": "Backend/ML/Platform/Security/Independent Review",
+      "exit_requirement": "Supported scientific, access-control, runtime/isolation, recovery and clean-reproduction workflows pass; preserve P01\u2013P07 tested evidence."
+    },
+    {
+      "order": 2,
+      "title": "Oversight, orchestration, independent gates and decision history",
+      "items": [
+        "D18",
+        "D26",
+        "D19",
+        "D20"
+      ],
+      "owner": "Backend/Platform/Security/ML/Independent Review",
+      "exit_requirement": "Declared authority controls every consequential transition; budget, intervention, revocation and accountable history survive failures."
+    },
+    {
+      "order": 3,
+      "title": "Both intake paths and supervision/review workspace",
+      "items": [
+        "D25",
+        "D21"
+      ],
+      "owner": "Backend/Platform/Security/Product/Frontend",
+      "exit_requirement": "Upload/PostgreSQL private snapshots and accessible live supervision/review work with verified scopes and complete decision history."
+    },
+    {
+      "order": 4,
+      "title": "End-to-end agentic baseline pilot",
+      "items": [
+        "D22"
+      ],
+      "owner": "Product/ML/Platform/Independent Review",
+      "exit_requirement": "Both sources execute a bounded binary/regression baseline under HITL/HOTL with live accountability, independent assessment, clean reproduction and scoring handoff."
+    },
+    {
+      "order": 5,
+      "title": "Deeper paired/adaptive experiment families",
+      "items": [
+        "D10",
+        "D11",
+        "D23"
+      ],
+      "owner": "ML/Product/Independent Review",
+      "exit_requirement": "R3 before R1; R2 remains controlled/isolated. Comparable-budget experiments demonstrate value without weakening mandatory checks."
+    },
+    {
+      "order": 6,
+      "title": "Credit lifecycle qualification, then conditional autonomy",
+      "items": [
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D24"
+      ],
+      "owner": "ML/Platform/Security/Policy Owner/Design Partner",
+      "exit_requirement": "Real mature-outcome monitoring/review cycle and batch-release/rollback qualification precede separately granted recipe-bounded production authority."
+    }
+  ]
 }
