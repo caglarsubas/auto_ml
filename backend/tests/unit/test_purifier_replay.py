@@ -188,6 +188,8 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
     assert trained.status_code == 200, trained.data
     model = trained.data['model']
     assert model['input_stage'] == 'raw_unencoded'
+    assert model['cv']['task'] == task and model['cv']['status'] == 'completed'
+    assert model['cv']['metric_coverage']['rmse' if task == 'regression' else 'roc_auc']['n_valid'] == 5
     with (Path(settings.MEDIA_ROOT)/model['train_data_path']).open('rb') as stream:
         development = pickle.load(stream)
     state = development['purifier_state']
@@ -263,8 +265,9 @@ def test_iso_and_day_first_dates_agree_in_preprocessing_and_folds():
 
 
 @pytest.mark.django_db
-def test_invalid_purifier_fold_is_not_silently_discarded(_use_tmp_media, settings):
-    frame = pd.DataFrame({'x': [1.] * 80 + list(range(220)), 'outcome': ['bad', 'good'] * 150,
+@pytest.mark.parametrize('task', ['classification', 'regression'])
+def test_invalid_purifier_fold_is_not_silently_discarded(_use_tmp_media, settings, task):
+    frame = pd.DataFrame({'x': [1.] * 80 + list(range(220)), 'outcome': ['bad', 'good'] * 150 if task == 'classification' else np.arange(300.),
                           'date': pd.date_range('2025-01-01', periods=300)})
     source = Path(settings.MEDIA_ROOT)/'data_files'/'invalid-fold.csv'
     frame.to_csv(source, index=False)
@@ -277,7 +280,7 @@ def test_invalid_purifier_fold_is_not_silently_discarded(_use_tmp_media, setting
     assert preprocessed.status_code == 200, preprocessed.data
     trained = ModelingStartView.as_view()(factory.post('/modeling/start/', {
         'file_id': file.pk, 'processed_file': preprocessed.data['processed_file'], 'algorithm': 'xgboost',
-        'business_understanding': declaration(),
+        'business_understanding': declaration(task),
     }, format='json'))
     assert trained.status_code == 400, trained.data
     assert trained.data['job_status'] == 'failed'

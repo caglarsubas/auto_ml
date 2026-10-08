@@ -191,7 +191,7 @@ def evaluate_regression(y_true, y_pred) -> Dict[str, Any]:
 
     metrics: Dict[str, Any] = {
         'n_samples': int(len(y_true)),
-        'r2': _safe_float(r2_score(y_true, y_pred)) if len(y_true) >= 2 else None,
+        'r2': _safe_float(r2_score(y_true, y_pred, force_finite=False)) if len(y_true) >= 2 and np.var(y_true) > 0 else None,
         'rmse': _safe_float(np.sqrt(mean_squared_error(y_true, y_pred))) if len(y_true) else None,
         'mae': _safe_float(mean_absolute_error(y_true, y_pred)) if len(y_true) else None,
         'mean_residual': _safe_float(residuals.mean()) if len(residuals) else None,

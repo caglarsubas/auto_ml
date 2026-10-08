@@ -10,14 +10,23 @@ from preprocessing.purifier_contract import parse_split_dates
 
 
 def development_folds(context, row_index, y, n_splits):
+    row_index = pd.Index(row_index)
+    if type(n_splits) is not int or n_splits < 2:
+        raise ValueError('Development validation requires an integer fold count of at least two.')
+    if not row_index.is_unique or not row_index.isin(context['frame'].index).all():
+        raise ValueError('Development rows must be unique members of the recorded development population.')
     frame = context['frame'].loc[row_index]
     config = (context.get('split_meta') or {}).get('split_config') or {}
     strategy = (context.get('split_meta') or {}).get('strategy', 'random')
     group_column = config.get('group_column')
+    if strategy == 'group' and not group_column:
+        raise ValueError('Declared group validation requires group_column; shuffled fallback is prohibited.')
     groups = frame[group_column] if group_column else None
     if groups is not None and groups.isna().any():
         raise ValueError('Development groups contain missing identifiers.')
     labels = pd.Series(y, index=row_index)
+    if labels.isna().any() or not np.array_equal(labels.to_numpy(), context['labels'].loc[row_index].to_numpy()):
+        raise ValueError('Development labels must match the recorded row membership and target semantics.')
     if strategy == 'oot':
         date_column = config.get('date_column')
         if not date_column or date_column not in frame:
@@ -110,6 +119,8 @@ def prepared_folds(context, X, y, n_splits, *, all_declared_features=False):
 
 def iter_validation_folds(context, X, y, n_splits, task):
     if context is not None:
+        if context['task'] != task:
+            raise ValueError('Search task contradicts the recorded development validation task.')
         yield from prepared_folds(context, X, y, n_splits)
         return
     # Existing callers remain inspectable, explicitly lacking upstream provenance.
