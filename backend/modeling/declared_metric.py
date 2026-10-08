@@ -36,9 +36,10 @@ def metric_spec(contract):
         raise PredictionContractError('Business costs must be finite and nonnegative.') from error
     metric_runtime = {package: version(package) for package in ('numpy', 'scipy', 'scikit-learn')}
     implementation = hashlib.sha256()
-    for name in ('declared_metric.py', 'development_assessment.py'):
+    root = Path(__file__).parent.parent
+    for name in ('modeling/declared_metric.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
         implementation.update(name.encode())
-        implementation.update((Path(__file__).parent / name).read_bytes())
+        implementation.update((root / name).read_bytes())
     return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
             'direction': direction(primary), 'cost_matrix': costs, 'threshold': .5,
             'contract_sha256': contract.get('sha256'),

@@ -36,6 +36,11 @@ jobs:
       # The redis service is reachable on localhost from the job container.
       REDIS_URL: redis://localhost:6379/0
       DJANGO_SETTINGS_MODULE: backend.settings
+      # Bound native pools on shared runners. Keep dataset, round, assertion,
+      # timeout and coverage budgets unchanged.
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@v4
 
