@@ -245,6 +245,72 @@ for (const task of ['classification', 'regression'] as const) {
         data: { file_id: fileId, execution_id: run.execution_id, features: ['x'] },
       });
       expect(stale.status()).toBe(409);
+      const tuned = await api.post('modeling/hyperparam/start/', {
+        data: {
+          file_id: fileId,
+          execution_id: child.execution_id,
+          features: ['x'],
+          primary_metric: primary,
+          search_method: 'grid',
+          cv_folds: 2,
+          n_jobs: 1,
+          grid_points_per_param: 2,
+          validation_curve_points: 2,
+          fixed_params: { n_estimators: 5 },
+          param_space: Object.fromEntries(
+            [
+              'n_estimators',
+              'max_depth',
+              'learning_rate',
+              'min_child_weight',
+              'subsample',
+              'colsample_bytree',
+              'gamma',
+              'reg_alpha',
+              'reg_lambda',
+            ].map((name) => [
+              name,
+              name === 'max_depth' ? { enabled: true, min: 1, max: 2 } : { enabled: false },
+            ]),
+          ),
+        },
+      });
+      expect(tuned.status()).toBe(200);
+      expect((await tuned.json()).parent_execution_id).toBe(child.execution_id);
+      await expect
+        .poll(
+          async () =>
+            (await (await api.get(`modeling/hyperparam/status/${fileId}/`)).json()).status,
+          { timeout: 30_000 },
+        )
+        .toBe('completed');
+      const tuning = await (await api.get(`modeling/hyperparam/${fileId}/`)).json();
+      expect(tuning.hyperparam_completed).toBe(true);
+      expect(tuning.search_basis.execution_id).toBe(child.execution_id);
+      expect(tuning.selection_objective.primary_metric).toBe(primary);
+      expect(tuning.n_attempted).toBe(2);
+      expect(tuning.n_failed).toBe(0);
+      expect(tuning.refit_params).toEqual(tuning.selected_params);
+      expect(tuning.refit_receipt.num_boost_round).toBe(5);
+      expect(tuning.execution_id).not.toBe(child.execution_id);
+      for (const trial of tuning.trials) {
+        expect(trial.cv[primary]).toMatchObject({ status: 'complete', n_valid: 2, n_total: 2 });
+        for (const fold of trial.validation_provenance) {
+          expect(Math.max(...fold.train_rows)).toBeLessThan(Math.min(...fold.valid_rows));
+          expect(Math.max(...fold.valid_rows)).toBeLessThan(200);
+          expect(fold.purifier.fit_rows).toEqual(fold.train_rows);
+          expect(fold.fit_receipt.train.features).toEqual(['x']);
+          expect(fold.fit_receipt.num_boost_round).toBe(5);
+        }
+      }
+      const evidenceUrl = new URL(
+        `/media/execution_runs/${tuning.execution_id}/tuning_selection.json`,
+        API_BASE_URL,
+      );
+      const evidenceResponse = await api.get(evidenceUrl.href);
+      expect(evidenceResponse.status()).toBe(200);
+      expect((await evidenceResponse.json()).search_basis.sha256).toBe(tuning.search_basis.sha256);
+      expect(await (await api.get(parentStatus.href)).body()).toEqual(parentBytes);
       const oldReplay = await api.post('deployment/score/', {
         data: { file_id: fileId, bundle_id: bundle.manifest.bundle_id, rows: scoreRows },
       });

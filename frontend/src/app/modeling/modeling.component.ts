@@ -224,10 +224,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     'recall',
     'accuracy',
     'mcc',
+    'log_loss',
+    'brier',
+    'ks',
+    'expected_cost',
   ];
-  readonly hpRegMetricOptions: string[] = ['r2', 'rmse', 'mae'];
+  readonly hpRegMetricOptions: string[] = ['r2', 'rmse', 'mae', 'mse'];
   get hpMetricOptions(): string[] {
-    return this.isRegressionTask ? this.hpRegMetricOptions : this.hpClassMetricOptions;
+    const metrics = this.isRegressionTask ? this.hpRegMetricOptions : this.hpClassMetricOptions;
+    return this.modelingStatus?.model?.prediction_contract
+      ? metrics.filter(metric => !['f2', 'mcc'].includes(metric))
+      : metrics;
   }
 
   /** True when the current modeling run is a continuous-target regressor. */
@@ -772,7 +779,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       const sc: any = req.stopping_criteria || {};
       if (Array.isArray(sc.metrics) && sc.metrics.length > 0) {
         const allowed = this.isRegressionTask
-          ? new Set(['r2', 'rmse', 'mae'])
+          ? new Set(['r2', 'rmse', 'mae', 'mse'])
           : new Set(['roc_auc', 'pr_auc']);
         this.sfsMetrics = sc.metrics
           .filter((m: any) => m && allowed.has(m.metric))
@@ -2991,7 +2998,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const declared =
       this.modelingStatus?.model?.prediction_contract?.objective?.primary_metric ||
       this.businessUnderstanding?.success_criteria?.primary_metric;
-    if (declared) this.hpPrimaryMetric = declared;
+    if (declared)
+      this.hpPrimaryMetric =
+        ({ auc: 'roc_auc', average_precision: 'pr_auc' } as Record<string, string>)[declared] ||
+        declared;
     else if (this.isRegressionTask && !['r2', 'rmse', 'mae', 'mse'].includes(this.hpPrimaryMetric))
       this.hpPrimaryMetric = 'r2';
     const primary =
@@ -3817,6 +3827,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sharedService.setActiveProcess({ type: 'hyperparam', file_id: this.currentFileId });
     this.dataService
       .startHyperparam(this.currentFileId, {
+        executionId: this.modelingStatus?.execution_id,
         paramSpace: this.buildHpParamSpacePayload(),
         features: features.length ? features : undefined,
         nIter: this.hpNIter,
@@ -3921,6 +3932,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.hpDurationSeconds = st.duration_seconds || null;
             this.hpMessage = 'Tuning failed: ' + (st.error || 'Unknown error');
             this.sharedService.setActiveProcess(null);
+            this.fetchHyperparamResults();
           }
         },
         error: (err: any) => {
@@ -3956,7 +3968,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.hpDurationSeconds = data.duration_seconds;
         setTimeout(() => this.drawHyperparamCurves(), 100);
         try {
-          this.pushModelingCheckpoint('hyperparam_completed');
+          this.hpMessage =
+            data.error ||
+            (data.status === 'completed'
+              ? 'Hyperparameter tuning completed'
+              : `Tuning ${data.status}`);
+          this.hpStopped = data.status === 'stopped' || data.status === 'interrupted';
+          this.pushModelingCheckpoint(
+            data.status === 'completed' ? 'hyperparam_completed' : 'hyperparam_stopped',
+          );
         } catch {}
       },
       error: (err: any) => console.warn('[Hyperparam] Failed to fetch results:', err),
@@ -3987,6 +4007,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       r2: 'R²',
       rmse: 'RMSE',
       mae: 'MAE',
+      mse: 'MSE',
+      log_loss: 'Log loss',
+      brier: 'Brier score',
+      ks: 'KS',
+      expected_cost: 'Expected cost per observation',
     };
     return map[m] || m;
   }
@@ -4152,9 +4177,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const trMean = curve.train_mean || [];
     const trStd = curve.train_std || [];
     const upper = (m: any[], s: any[]) =>
-      m.map((v: any, i: number) => (v == null ? null : v + (s[i] || 0)));
+      m.map((v: any, i: number) => (v == null || s[i] == null ? null : v + s[i]));
     const lower = (m: any[], s: any[]) =>
-      m.map((v: any, i: number) => (v == null ? null : v - (s[i] || 0)));
+      m.map((v: any, i: number) => (v == null || s[i] == null ? null : v - s[i]));
 
     const traces: any[] = [
       // Training band (mean +/- std)
@@ -5215,13 +5240,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         'sfs_forward_from_backward_completed',
         'sfs_stopped',
       ].includes(this._currentSubstep);
-    const hpDone = !!this.hpResults || this._currentSubstep === 'hyperparam_completed';
+    const hpDone = this.hpResults?.status === 'completed';
     return (
       !!this.currentFileId &&
       sfsDone &&
       hpDone &&
       !this.championPromoting &&
       !!this.hpResults?.execution_id &&
+      !String(this.hpResults?.adoption_status || '').startsWith('candidate_only') &&
       (this.hpResults?.features || this.getFinalSelectedFeatures()).length > 0 &&
       !!this.championParameters()
     );

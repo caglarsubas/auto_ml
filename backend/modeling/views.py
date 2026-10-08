@@ -1255,7 +1255,7 @@ class ModelingStatusView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class FeatureExplainabilityView(APIView):
     """Returns SHAP explainability data for a single feature: beeswarm and partial dependence.
-    
+
     Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number,
               model_path?: string, selected_features?: string[] }
     When selected_features is provided (without model_path), a temporary model is trained
@@ -1663,7 +1663,7 @@ class FeatureExplainabilityView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class SFSResultsView(APIView):
     """Returns Sequential Feature Selection results for a given file_id."""
-    
+
     def get(self, request, file_id: int, *args, **kwargs):
         try:
             # Load SFS results from JSON file
@@ -1698,7 +1698,7 @@ class SFSResultsView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class SFSStartView(APIView):
     """Start Sequential Feature Selection with user-defined parameters."""
-    
+
     def post(self, request, *args, **kwargs):
         data = request.data
         if not isinstance(data, dict):
@@ -2115,7 +2115,7 @@ class SFSStartView(APIView):
 class SFSStopView(APIView):
     """Request SFS to stop gracefully for a given file_id.
     The background thread checks stop_requested flag at each step."""
-    
+
     def post(self, request, file_id: int, *args, **kwargs):
         try:
             if file_id not in SFS_PROGRESS:
@@ -2151,7 +2151,7 @@ class SFSStopView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class SFSStatusView(APIView):
     """Get current SFS progress/status for a file_id."""
-    
+
     def get(self, request, file_id: int, *args, **kwargs):
         try:
             if file_id not in SFS_PROGRESS:
@@ -2252,7 +2252,7 @@ class HyperparamStartView(APIView):
             # Clamp user inputs to sane bounds.
             param_space = data.get('param_space')
             fixed_params = data.get('fixed_params')
-            features = data.get('features') or None
+            features = data.get('features')
             n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
             cv_folds = max(2, min(int(data.get('cv_folds', 5)), 10))
             n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
@@ -2294,13 +2294,13 @@ class HyperparamStartView(APIView):
                 hp_task = 'regression'
             else:
                 hp_task = 'classification'
-            declared_metric = (contract.get('objective') or {}).get('primary_metric')
-            primary_metric = data.get('primary_metric', declared_metric or ('r2' if hp_task == 'regression' else 'roc_auc'))
-            from modeling.hyperparam_utils import METRIC_DIRECTION
-            if primary_metric not in METRIC_DIRECTION:
-                return Response({'error': f'Tuning objective {primary_metric!r} is not supported by this native search path yet.'}, status=status.HTTP_400_BAD_REQUEST)
-            if declared_metric and primary_metric != declared_metric:
-                return Response({'error': 'Tuning objective contradicts the accepted prediction contract. Revise the declaration in a new execution.'}, status=status.HTTP_400_BAD_REQUEST)
+            from modeling.tuning_evidence import resolve_tuning_objective, validate_features
+            try:
+                objective = resolve_tuning_objective(hp_task, context, data.get('primary_metric'), threshold)
+                features = validate_features(features, X_train, X_valid)
+            except (ValueError, TypeError) as error:
+                return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+            primary_metric = objective['primary_metric']
             # Prefer train-fitted imbalance weight; never score the locked outer test here
             hp_scale_pos_weight = (
                 None if hp_task == 'regression' else train_data.get('scale_pos_weight')
@@ -2358,9 +2358,10 @@ class HyperparamStartView(APIView):
             hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
 
             def update_progress(info):
-                HYPERPARAM_PROGRESS[file_id].update(info)
+                HYPERPARAM_PROGRESS[file_id].update({**info, 'status': 'running'})
 
             def run_thread():
+                results = {'status': 'running'}
                 try:
                     results = run_hyperparam_search_with_progress(
                         X_train=X_train, y_train=y_train,
@@ -2378,61 +2379,65 @@ class HyperparamStartView(APIView):
                         task=hp_task,
                         validation_context=train_data.get('validation_context'),
                         algorithm=hp_algorithm,
+                        execution_id=train_data.get('execution_id'),
                     )
-                    # Refit best config so Evaluation/Deployment score the tuned model
-                    try:
-                        from modeling.booster_adapters import fit_booster
-                        best_point = (results.get('best_points') or {}).get(primary_metric) or {}
-                        best_params = best_point.get('params') or {}
-                        feat_list = results.get('features') or list(X_train.columns)
-                        valid_feats = [c for c in feat_list if c in X_train.columns]
-                        Xtr = X_train[valid_feats] if valid_feats else X_train
-                        Xva = X_valid[valid_feats] if valid_feats else X_valid
-                        if best_params:
-                            adapter = fit_booster(
-                                hp_algorithm, Xtr, y_train, Xva, y_valid, best_params,
-                                task=hp_task, nthread=0,
-                                scale_pos_weight=hp_scale_pos_weight,
-                                early_stopping_rounds=50,
-                            )
-                            current_status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                            with open(current_status_path, encoding='utf-8') as stream:
-                                current_status = json.load(stream)
-                            parent_id = train_data.get('execution_id')
-                            if parent_id:
-                                published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search')
-                                results['refit_model_path'] = published['model']['model_path']
-                                results['execution_id'] = published['execution_id']
-                                results['parent_execution_id'] = parent_id
-                                results['adoption_status'] = published['adoption_status']
-                                results['refit_params'] = best_params
-                            else:
-                                models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-                                os.makedirs(models_dir, exist_ok=True)
-                                model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                                adapter.save(model_path)
-                                model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
-                                results['refit_model_path'] = model_rel
-                                results['refit_params'] = best_params
-                                # Update modeling status artifact
-                                st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                                if os.path.exists(st_path):
-                                    with open(st_path, 'r', encoding='utf-8') as sf:
-                                        st = json.load(sf)
-                                    model_info = st.get('model') or {}
-                                    model_info['model_path'] = model_rel
-                                    model_info['algorithm'] = hp_algorithm
-                                    model_info['best_hyperparams'] = best_params
-                                    model_info['hyperparam_refit'] = True
-                                    model_info['selected_features'] = valid_feats
-                                    st['model'] = model_info
-                                    st['algorithm'] = hp_algorithm
-                                    with open(st_path, 'w', encoding='utf-8') as sf:
-                                        json.dump(st, sf, indent=2)
-                                print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
-                    except Exception as refit_err:
-                        print(f"[Hyperparam] Refit skipped/failed: {refit_err}")
-                        results['refit_error'] = str(refit_err)
+                    # Only a completed search can publish its exact winning configuration.
+                    if results.get('status') == 'completed' and not HYPERPARAM_PROGRESS[file_id].get('stop_requested'):
+                        try:
+                            from modeling.tuning_evidence import fit_for_tuning
+                            best_params = results.get('selected_params') or {}
+                            if not best_params:
+                                raise ValueError('Completed tuning lacks an exact selected configuration.')
+                            feat_list = results.get('features') or list(X_train.columns)
+                            valid_feats = validate_features(feat_list, X_train, X_valid)
+                            Xtr, Xva = X_train[valid_feats], X_valid[valid_feats]
+                            if best_params:
+                                adapter = fit_for_tuning(
+                                    hp_algorithm, Xtr, y_train, Xva, y_valid, best_params,
+                                    task=hp_task, nthread=1 if n_jobs > 1 else 0,
+                                    scale_pos_weight=results.get('scale_pos_weight'),
+                                    early_stopping_rounds=50, context=context,
+                                )
+                                results['refit_receipt'] = adapter.fit_receipt
+                                parent_id = train_data.get('execution_id')
+                                if parent_id:
+                                    published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search', selection_evidence=results)
+                                    results['refit_model_path'] = published['model']['model_path']
+                                    results['execution_id'] = published['execution_id']
+                                    results['parent_execution_id'] = parent_id
+                                    results['adoption_status'] = published['adoption_status']
+                                    results['refit_params'] = best_params
+                                else:
+                                    import uuid
+                                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
+                                    os.makedirs(models_dir, exist_ok=True)
+                                    model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                                    adapter.save(model_path)
+                                    model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
+                                    results['refit_model_path'] = model_rel
+                                    results['refit_params'] = best_params
+                                    # Update modeling status artifact
+                                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                                    if os.path.exists(st_path):
+                                        with open(st_path, 'r', encoding='utf-8') as sf:
+                                            st = json.load(sf)
+                                        model_info = st.get('model') or {}
+                                        model_info['model_path'] = model_rel
+                                        model_info['algorithm'] = hp_algorithm
+                                        model_info['best_hyperparams'] = best_params
+                                        model_info['hyperparam_refit'] = True
+                                        model_info['selected_features'] = valid_feats
+                                        st['model'] = model_info
+                                        st['algorithm'] = hp_algorithm
+                                        with open(st_path, 'w', encoding='utf-8') as sf:
+                                            json.dump(st, sf, indent=2)
+                                    print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
+                        except Exception as refit_err:
+                            print(f"[Hyperparam] Refit skipped/failed: {refit_err}")
+                            results.update(status='error', error=f'Winning configuration could not be published: {refit_err}', refit_error=str(refit_err))
+
+                    elif results.get('status') == 'completed':
+                        results['status'] = 'stopped'
 
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed
@@ -2446,10 +2451,17 @@ class HyperparamStartView(APIView):
                         'message': ('Hyperparameter tuning completed' if final_status == 'completed'
                                     else f'Hyperparameter tuning {final_status}'),
                         'duration_seconds': elapsed,
+                        'error': results.get('error'),
                     })
                     print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
                 except Exception as e:
                     elapsed = round(_time.time() - start_time, 1)
+                    results.update(status='error', error=str(e), duration_seconds=elapsed)
+                    try:
+                        with open(hp_path, 'w', encoding='utf-8') as stream:
+                            json.dump(_hp_sanitize_json(results), stream, indent=2, allow_nan=False)
+                    except OSError:
+                        pass  # Progress still exposes a persistence failure.
                     HYPERPARAM_PROGRESS[file_id].update({
                         'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
                         'error': str(e), 'duration_seconds': elapsed,
@@ -2474,6 +2486,8 @@ class HyperparamStartView(APIView):
                 'cv_folds': cv_folds,
                 'n_jobs': n_jobs,
                 'primary_metric': primary_metric,
+                'selection_objective': objective,
+                'parent_execution_id': train_data.get('execution_id'),
                 'validation_curve_points': curve_points,
                 'search_method': resolved_method,
                 'search_method_requested': search_method,
@@ -2481,6 +2495,9 @@ class HyperparamStartView(APIView):
                 'grid_points_per_param_map': points_map,
                 'recommendation': recommendation,
             }, status=status.HTTP_200_OK)
+
+        except (ValueError, TypeError, KeyError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             import traceback
@@ -2869,7 +2886,7 @@ class PipelineRunDetailView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class PipelineReportView(APIView):
     """Generate and download a pipeline report as HTML.
-    
+
     Query params:
       ?output=html  → attachment download (default)
       ?output=print → inline HTML with auto-print JS (for browser Save-as-PDF)

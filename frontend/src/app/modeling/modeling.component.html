@@ -4292,9 +4292,36 @@
                   </div>
                 </div>
               }
+              @if (hpMessage && !hpRunning) {
+                <p role="status">{{ hpMessage }}</p>
+              }
               <!-- ===== Results ===== -->
               @if (hpResults && !hpRunning) {
                 <div>
+                  <p>
+                    {{
+                      hpResults.selection_objective?.qualification ||
+                        'Historical tuning evidence; provenance unverified.'
+                    }}
+                  </p>
+                  <p>
+                    Failed/unusable trials: {{ hpResults.n_failed ?? 'unverified' }}. Failed curve
+                    points: {{ hpResults.n_failed_curve_points ?? 'unverified' }}.
+                  </p>
+                  <details>
+                    <summary>Details: tuning objective, coverage and fit evidence</summary>
+                    <p>{{ hpResults.selection_objective?.training_policy }}</p>
+                    <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
+                      hpResults.selection_objective | json
+                    }}</pre>
+                    <p>Search basis: {{ hpResults.search_basis?.sha256 || 'unverified' }}</p>
+                    <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
+                      hpResults.trial_attempts | json
+                    }}</pre>
+                    @for (limitation of hpResults.limitations || []; track limitation) {
+                      <p>{{ limitation }}</p>
+                    }
+                  </details>
                   <!-- Best metric space points -->
                   <h4 style="color: #740505; margin: 16px 0 8px">Best Metric Space Points</h4>
                   <div style="overflow-x: auto">
@@ -4303,7 +4330,7 @@
                         <tr style="background: #740505; color: white">
                           <th style="padding: 8px; text-align: left">Metric</th>
                           <th style="padding: 8px; text-align: right">CV (mean ± std)</th>
-                          <th style="padding: 8px; text-align: right">Test</th>
+                          <th style="padding: 8px; text-align: right">Development validation</th>
                           <th style="padding: 8px; text-align: right">Train</th>
                           <th style="padding: 8px; text-align: left">Best config</th>
                         </tr>

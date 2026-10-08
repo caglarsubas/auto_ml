@@ -78,6 +78,16 @@ Use the accepted metric and direction for native feature-selection screening, CV
 
 **Remaining:** Full objective/early-stopping and tuning alignment, independent reproduction/paired comparisons, complete immutable durable jobs, security/operations, expert isolation and customer acceptance remain open.
 
+### P07 — Declared tuning objectives and winner evidence
+
+**Packet status:** in_progress. **Mapped outcomes:** D01, D02, D04, D05.
+
+Resolve native tuning from the accepted objective; retain fold/fit and failed-attempt evidence, publish only the exact valid winner, and preserve tuning selection with immutable native candidates.
+
+**Evidence:** Qualification pending.
+
+**Remaining:** Full training/early-stopping objective alignment, immutable durable search jobs, independent reproduction/paired comparison, security/operations, expert isolation and customer acceptance remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 ## M1 — Scientifically reliable execution

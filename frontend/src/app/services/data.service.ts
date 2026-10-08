@@ -308,6 +308,7 @@ export class DataService {
 
   // Start hyperparameter tuning with an editable param space + compute config.
   startHyperparam(fileId: number, options: {
+    executionId?: string;
     paramSpace?: any;
     fixedParams?: any;
     features?: string[];
@@ -323,6 +324,7 @@ export class DataService {
     algorithm?: string;
   } = {}): Observable<any> {
     const payload: any = { file_id: fileId };
+    if (options.executionId) payload.execution_id = options.executionId;
     if (options.paramSpace) payload.param_space = options.paramSpace;
     if (options.fixedParams) payload.fixed_params = options.fixedParams;
     if (options.features && options.features.length) payload.features = options.features;

@@ -236,7 +236,7 @@ describe('ModelDevelopmentComponent', () => {
       substep: 'hyperparam_completed',
       modelingStatus: { model: {} },
       sfsBackwardResults: [{ step: 1 }],
-      hpResults: { best_params: {} },
+      hpResults: { status: 'completed', best_params: {} },
     });
     expect(component.getSubStepStatus('2d')).toBe('completed');
   });
