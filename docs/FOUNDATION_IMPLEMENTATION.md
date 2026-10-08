@@ -143,9 +143,9 @@ and dictionary data for both exploratory and apply requests.
 
 CI now uses Node 24. New Angular architectural preferences remain warnings for
 existing NgModule components during this compatibility migration. The local
-commit hook hard-codes a stopped development container; equivalent tests were
+commit/push hooks hard-code a stopped development container; equivalent tests were
 run independently in a disposable environment and the hook was disabled only
-for these commits. No persistent hook configuration was changed.
+for these commits and push. No persistent hook configuration was changed.
 
 Existing `main` CI fails dependency installation because the configured index
 cannot provide `prometa-sdk>=0.20.2`. The PR preserves that dependency requirement;

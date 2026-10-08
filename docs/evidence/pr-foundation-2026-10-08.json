@@ -118,7 +118,7 @@
     "pr_ci_status": "Not yet observed at record creation."
   },
   "commit_hook": {
-    "runtime": "Local hook requires a stopped auto-ml-backend-1 development container. Equivalent marked suites, frontend tests and build ran independently; hooks were disabled only per commit, without persistent configuration changes."
+    "runtime": "Local commit/push hooks require a stopped auto-ml-backend-1 development container. Equivalent marked suites, frontend tests and build ran independently; hooks were disabled only per commit/push, without persistent configuration changes."
   },
   "excluded_preexisting_local_changes": [
     ".dockerignore",
