@@ -91,9 +91,11 @@
         "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
         "[P03 qualification](evidence/p03-qualification-2026-10-08.json)",
         "[P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md)",
-        "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)"
+        "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)",
+        "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
+        "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence."
     },
     {
       "id": "D03",
@@ -138,9 +140,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
-        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)"
+        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)",
+        "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
+        "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence."
     },
     {
       "id": "D05",
@@ -537,6 +541,21 @@
       "date": "2026-10-08",
       "packet": "P04",
       "event": "Bounded local qualification passed: 1,283 backend tests, six skips, 65.01% coverage, 523 frontend unit tests and 19 real-session browser/API checks. Exact source/environment evidence is recorded; milestone/release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P04",
+      "event": "PR #94 merged as ddca8239; all five main CI jobs at that exact merge passed (run 37736276269). Production and customer acceptance remain separate."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P05",
+      "event": "Continue M1 with candidate-specific native fit receipts, selected-feature development assessment and exact-version acceptance. Candidate CV remains exploratory after selection; independent reproduction and complete scientific paths remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P05",
+      "event": "Bounded local qualification passed: 1,305 backend tests, six skips, 65.27% coverage, 526 frontend tests and 19 authenticated browser/API checks. Candidate evidence and exact-version acceptance are recorded; milestone/release/customer gates remain open."
     }
   ],
   "implementation_packets": [
@@ -609,6 +628,21 @@
         "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)"
       ],
       "remaining": "Full scientific path and objective/early-stopping consistency, independent reproduction/review, security/operations, expert isolation and customer acceptance remain open."
+    },
+    {
+      "id": "P05",
+      "title": "Candidate fit evidence and exact-version acceptance",
+      "status": "tested",
+      "items": [
+        "D02",
+        "D04"
+      ],
+      "description": "Bind native candidate fits to exact development inputs and training configuration, recompute candidate metrics/CV on selected features, discard parent model diagnostics and require explicit version/feature acceptance.",
+      "evidence": [
+        "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
+        "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)"
+      ],
+      "remaining": "Full paired change analysis, objective/search consistency, independently reproducible artifacts, immutable durable jobs, security/operations, expert isolation and customer acceptance remain open."
     }
   ],
   "release_qualification": {
