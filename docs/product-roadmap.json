@@ -891,7 +891,7 @@
     {
       "date": "2026-10-09",
       "packet": "P09",
-      "event": "Local qualification passed 1544 backend tests with six explicit skips and 67.96% coverage, 531 frontend tests and 19 governed browser/API checks. Metric-code/runtime/delegated-evaluation change publication checks pass; CI native pools are bounded without weakening gates. Gates and D18-D26 remain open/planned; shared foundations stay first in the canonical queue."
+      "event": "Local qualification passed 1547 backend tests with six explicit skips and 67.97% coverage, 531 frontend tests and 19 governed browser/API checks. Metric-code/runtime/delegated-evaluation/callback-integration change publication checks pass. Native XGBoost exports selected rounds, reloads with one scoring thread and skips unrelated stopping diagnostics; full assessment retains its complete checks. CI pools are bounded without weakening gates. Gates and D18-D26 remain open/planned; shared foundations stay first in the canonical queue."
     }
   ],
   "implementation_packets": [
