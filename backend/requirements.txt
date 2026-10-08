@@ -21,11 +21,7 @@ statsmodels>=0.14
 
 # AI Assistant
 openai>=1.0
-# retrieval.namespace (SDK #82) + embeddings.create (SDK #80) shipped in
-# 0.20.2 on PyPI, so the interim commit-archive pin is retired as its comment
-# always intended. That URL is now unfetchable anyway — the source repo 404s,
-# which broke `pip install -r` (and therefore all of CI) on every branch.
-prometa-sdk>=0.20.2
+# Optional telemetry SDK: see requirements-observability.txt.
 redis>=5.0
 mcp>=1.27,<2
 cryptography>=42

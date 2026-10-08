@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated": "2026-10-07",
+  "updated": "2026-10-08",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first platform where business declarations govern model execution and every model carries reproducible evidence for independent review. Credit risk is the first use case; the classification/regression core remains reusable.",
   "direction": [
@@ -27,7 +27,7 @@
       "id": "M3",
       "title": "Reviewable product and feature development",
       "purpose": "Independent reproduction and paired experiments make developer-to-reviewer handoff useful.",
-      "gate": "Technical pilot requires M1–M3 including expert isolation, clean reproduction and accessibility. Broader rollout requires two partner workflows and proposed >=30% evidence/reproduction effort reduction or one fewer review iteration without increased defects."
+      "gate": "Technical pilot requires M1\u2013M3 including expert isolation, clean reproduction and accessibility. Broader rollout requires two partner workflows and proposed >=30% evidence/reproduction effort reduction or one fewer review iteration without increased defects."
     },
     {
       "id": "M4",
@@ -472,12 +472,22 @@
   "history": [
     {
       "date": "2026-10-07",
-      "event": "User approved the reconciled D01–D17 roadmap; implementation started on codex/governed-foundation."
+      "event": "User approved the reconciled D01\u2013D17 roadmap; implementation started on codex/governed-foundation."
     },
     {
       "date": "2026-10-07",
       "packet": "P01",
       "event": "Native foundation implemented and locally tested; outcomes remain in_progress and release gates remain open. Expert Python fails closed until qualified isolation exists."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P01",
+      "event": "PR #91 merged as d91b453c. Local tests and frontend/lint CI passed; backend/main E2E CI still failed dependency installation. This is merged source, not a qualified release."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P02",
+      "event": "Prioritize portable core installation and authenticated CI/browser qualification (D07/D06) to remove the verified SDK-install blocker before further M1 qualification."
     }
   ],
   "implementation_packets": [
@@ -504,6 +514,19 @@
         "[Qualification commands and source hashes](evidence/foundation-2026-10-07.json)"
       ],
       "remaining": "Fold-local purifier replay, complete immutable stage/job contracts, project roles and egress, durable Linux deployment, qualified expert isolation and M3 review/reproduction are still required."
+    },
+    {
+      "id": "P02",
+      "title": "Portable core installation and authenticated CI",
+      "status": "in_progress",
+      "items": [
+        "D06",
+        "D07",
+        "D12"
+      ],
+      "description": "Make the core backend independent of the optional private telemetry SDK; exercise real session/CSRF browser and API checks against clean CI installations. Preserve optional SDK support without publishing private source.",
+      "evidence": [],
+      "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1\u2013M3 gates remain open."
     }
   ],
   "release_qualification": {

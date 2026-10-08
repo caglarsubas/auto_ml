@@ -44,11 +44,11 @@ def render(data):
             raise ValueError(f'Packet evidence required: {packet["id"]}')
     lines = [
         '# DeclarAI product development roadmap', '',
-        f'Updated {data["updated"]}. Generated from `product-roadmap.json`; edit the ledger and run '
-        '`python3 scripts/render_product_roadmap.py`.', '', data['vision'], '',
+        (f'Updated {data["updated"]}. Generated from `product-roadmap.json`; edit the ledger and run '
+         '`python3 scripts/render_product_roadmap.py`.'), '', data['vision'], '',
         '## Release direction', '', *[f'- {v}' for v in data['direction']], '',
-        'Outcome status is separate from packet evidence. Implemented, tested, released, and '
-        'customer accepted are distinct states. No dates or capacity estimates are commitments.', '',
+        ('Outcome status is separate from packet evidence. Implemented, tested, released, and '
+         'customer accepted are distinct states. No dates or capacity estimates are commitments.'), '',
     ]
     if packets:
         lines += ['## Implementation evidence', '',
@@ -56,7 +56,7 @@ def render(data):
         for packet in packets:
             lines += [f'### {packet["id"]} — {packet["title"]}', '',
                       f'**Packet status:** {packet["status"]}. **Mapped outcomes:** ' + ', '.join(packet['items']) + '.', '',
-                      packet['description'], '', '**Evidence:** ' + '; '.join(packet['evidence']), '',
+                      packet['description'], '', '**Evidence:** ' + ('; '.join(packet['evidence']) or 'Qualification pending.'), '',
                       '**Remaining:** ' + packet['remaining'], '']
     qualification = data.get('release_qualification')
     if qualification:

@@ -170,7 +170,7 @@ def get_prometa():
 
     except ImportError:
         logger.warning("prometa-sdk not installed — tracing disabled. "
-                       "Install with: pip install prometa-sdk")
+                       "Install the optional backend/requirements-observability.txt from an approved source")
     except Exception as exc:
         logger.warning("Failed to initialize Prometa: %s", exc)
 
@@ -719,8 +719,8 @@ def cache_lookup(kind: str, *, key: str):
     yields a ``_NoOpAMLHandle`` otherwise.
 
     ``kind`` MUST be one of ``{response, tool_call, embedding}`` — the
-    SDK enforces this with a ValueError that we deliberately let
-    propagate (it's a programmer error, not a runtime failure).
+    DeclarAI validates this even when the optional SDK is absent; invalid
+    values raise ValueError (a programmer error, not a telemetry failure).
 
     Usage::
 
@@ -741,6 +741,8 @@ def cache_lookup(kind: str, *, key: str):
 
     Body exceptions propagate normally — only ImportError is caught.
     """
+    if kind not in ('response', 'tool_call', 'embedding'):
+        raise ValueError('kind must be one of response, tool_call, embedding')
     try:
         from prometa import cache_lookup as _sdk_cache_lookup
     except ImportError:
@@ -764,8 +766,8 @@ def retrieval_query(
     yields a ``_NoOpAMLHandle`` otherwise.
 
     ``system`` MUST be one of ``{vector, graph, keyword, hybrid}`` — the
-    SDK enforces this with a ValueError that we deliberately let
-    propagate (programmer error, not a runtime failure).
+    DeclarAI validates this even when the optional SDK is absent; invalid
+    values raise ValueError (a programmer error, not a telemetry failure).
 
     ``namespace`` is the searched corpus / collection identifier stamped
     as ``retrieval.namespace``.  Prefer the Chroma collection name when
@@ -801,6 +803,8 @@ def retrieval_query(
 
     Body exceptions propagate normally — only ImportError is caught.
     """
+    if system not in ('vector', 'graph', 'keyword', 'hybrid'):
+        raise ValueError('system must be one of vector, graph, keyword, hybrid')
     try:
         from prometa import retrieval_query as _sdk_retrieval_query
     except ImportError:

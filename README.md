@@ -261,10 +261,14 @@ Score-bundle freeze + batch CSV scoring:
 
 ## AI Assistant observability (Prometa integration)
 
-The backend's AI Assistant emits structured agent telemetry through
-[`prometa-sdk`](https://github.com/prometa-ai/orchestra-python-sdk)
-(≥ 0.18.2) to the **Prometa Agentic Lifecycle Intelligence Platform**
-for tracing, evaluation, and lifecycle governance.
+The backend optionally emits AI Assistant telemetry through `prometa-sdk`
+(≥ 0.20.2) when the SDK and endpoint are configured. Core modeling, scoring,
+governance and assistant operation do not require this integration. The default
+installation uses only `backend/requirements.txt`; the separate
+`backend/requirements-observability.txt` describes the optional SDK profile.
+Supply it through an approved package index or SDK wheel. Its private source
+and credentials are not included in this repository. Customer egress controls
+and policy qualification remain D06 release work.
 
 **Integration point**:
 [`backend/ai_assistant/prometa_config.py`](backend/ai_assistant/prometa_config.py)
@@ -365,6 +369,9 @@ Expected result: HTTP 200 with model data. A `401 missing bearer token` or
 match the engine-side key file.
 
 ### Run
+The core backend builds without the optional telemetry SDK or a sibling SDK
+checkout. Install the SDK separately only when this integration is approved.
+
 ```bash
 docker compose up --build -d
 ```
@@ -479,7 +486,7 @@ auto-ml/
 | python-magic | ≥ 0.4 | MIME-type detection for uploaded files |
 | django-cors-headers | ≥ 4.3 | Cross-origin requests (frontend ↔ backend) |
 | openai | ≥ 1.0 | LLM client for AI Assistant action layer |
-| [prometa-sdk](https://github.com/prometa-ai/orchestra-python-sdk) | ≥ 0.18.2 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
+| prometa-sdk (optional profile) | ≥ 0.20.2 | Agent telemetry — emits OTLP traces, generic tool keys, agent correlation, and assistant-answer feedback to the Prometa platform |
 | redis | ≥ 5.0 | Cache + session store for AI Assistant |
 
 ### Frontend
@@ -537,7 +544,8 @@ unavailable and run in CI (which provides a Redis service).
 ```bash
 cd frontend
 npm run test:ci        # headless Karma unit tests + coverage
-npm run test:e2e       # Playwright E2E (needs the stack running)
+npm run test:e2e:governed # Real server-session/API contracts (needs a disposable account)
+npm run test:e2e       # Broader legacy workflows, separately qualified
 npm run lint           # ESLint (angular-eslint)
 npm run format:check   # Prettier
 ```

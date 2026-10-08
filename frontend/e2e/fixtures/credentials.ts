@@ -1,14 +1,14 @@
-/**
- * Test credentials for E2E journeys.
- *
- * Never hard-code real credentials in specs. Values come from the environment
- * (set E2E_USER / E2E_PASSWORD, e.g. via CI secrets or a local .env) and fall
- * back to a conventional local dev account for convenience.
- */
+/** Disposable test account supplied by the caller; no account is shipped. */
 export const TEST_CREDENTIALS = {
-  username: process.env['E2E_USER'] ?? 'test@example.com',
-  password: process.env['E2E_PASSWORD'] ?? 'changeme',
+  username: process.env['E2E_USER'] ?? '',
+  password: process.env['E2E_PASSWORD'] ?? '',
 };
-
-/** Base URL of the running frontend under test. */
 export const BASE_URL = process.env['E2E_BASE_URL'] ?? 'http://localhost:4300';
+export const API_BASE_URL = (process.env['E2E_API_BASE_URL'] ?? 'http://localhost:8001/api/').replace(/\/?$/, '/');
+
+export function requireTestCredentials(): typeof TEST_CREDENTIALS {
+  if (!TEST_CREDENTIALS.username || !TEST_CREDENTIALS.password) {
+    throw new Error('Supply E2E_USER and E2E_PASSWORD for a disposable Django account.');
+  }
+  return TEST_CREDENTIALS;
+}

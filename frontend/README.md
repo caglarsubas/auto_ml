@@ -51,7 +51,8 @@ coverage thresholds. Coverage reports land in `coverage/`.
 ### End-to-end tests (Playwright)
 
 ```bash
-npm run test:e2e         # headless
+npm run test:e2e:governed # 17 session/API checks used by CI
+npm run test:e2e         # broader legacy suite; not fully qualified
 npm run test:e2e:headed  # headed
 ```
 
@@ -74,3 +75,20 @@ npm run format:check  # Prettier check
 
 Run `ng help` or see the
 [Angular CLI reference](https://angular.dev/tools/cli).
+
+The governed suite requires the declared backend at `E2E_API_BASE_URL`
+(default `http://localhost:8001/api/`) and a real disposable Django account.
+Missing credentials, an unreachable backend and authentication failures stop
+the tests. API fixtures obtain CSRF tokens, sign in and dispose their sessions.
+CI generates its account/password for the job; no repository password is used.
+The older full modeling/UI suite remains available for separate qualification.
+
+To preview built assets with deep-link fallback, run from the repository root:
+
+```bash
+npm --prefix frontend run build
+node scripts/serve_frontend.mjs frontend/dist/frontend/browser 4300
+```
+
+This loopback preview is for tests and local inspection. It does not qualify a
+production web server or TLS deployment.

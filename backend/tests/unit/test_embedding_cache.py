@@ -12,11 +12,11 @@ import pytest
 class TestOpenAIEmbeddingsInstrumentation:
     def test_openai_install_patches_embeddings_create(self):
         """SDK #80: install() must expose embeddings request attrs (git pin)."""
-        from prometa.integrations import openai as prometa_openai
+        prometa_openai = pytest.importorskip('prometa.integrations.openai', reason='Optional SDK profile is not installed')
 
         assert hasattr(prometa_openai, "_embeddings_request_attrs"), (
             "prometa-sdk missing embeddings instrumentation. Install the "
-            "git pin from requirements.txt (SDK #80) and rebuild the "
+            "optional requirements-observability.txt profile (SDK #80) and rebuild the "
             "backend image if needed."
         )
 

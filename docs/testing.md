@@ -1,16 +1,16 @@
 # Testing Strategy
 
 This document describes how DeclarAI is tested across the backend (Django + DRF)
-and frontend (Angular 18), how to run the suites locally, and how CI enforces
+and frontend (Angular 22), how to run the suites locally, and how CI enforces
 them.
 
 ## Overview
 
-| Layer | Framework | Location | Count |
-|-------|-----------|----------|------:|
-| Backend | pytest + pytest-django | `backend/tests/` | ~1009 |
-| Frontend unit | Karma + Jasmine | `frontend/src/app/**/*.spec.ts` | ~433 |
-| Frontend E2E | Playwright | `frontend/e2e/*.spec.ts` | ~72 |
+| Layer | Framework | Location | Scope |
+|-------|-----------|----------|-------|
+| Backend | pytest + pytest-django | `backend/tests/` | Marker scope selected by CI; use `pytest --collect-only` for current inventory |
+| Frontend unit | Karma + Jasmine | `frontend/src/app/**/*.spec.ts` | All component/service tests |
+| Frontend E2E | Playwright | `frontend/e2e/*.spec.ts` | 17 governed CI checks; broader legacy suite separately qualified |
 
 ## Backend
 
@@ -36,13 +36,13 @@ Root fixtures are in `backend/conftest.py`; configuration in
 
 ### Markers
 
-| Marker | Scope | Count |
-|--------|-------|------:|
-| `unit` | Isolated component tests | ~832 |
-| `functional` | API endpoint behaviour | ~118 |
-| `regression` | Previously-fixed bugs | ~34 |
-| `integration` | Multi-component workflows | ~16 |
-| `uat` | End-to-end user scenarios | ~9 |
+| Marker | Scope |
+|--------|-------|
+| `unit` | Component tests, including governed foundation and real session/CSRF boundaries |
+| `functional` | API endpoint behaviour |
+| `regression` | Previously-fixed bugs |
+| `integration` | Multi-component workflows |
+| `uat` | End-to-end user scenarios |
 
 ### Running
 
@@ -97,7 +97,8 @@ guard against regression). Coverage output lands in `frontend/coverage/`.
 
 ```bash
 cd frontend
-npm run test:e2e            # headless
+npm run test:e2e:governed  # real session/CSRF and authenticated API contracts
+npm run test:e2e            # broader legacy suite; separately qualified
 npm run test:e2e:headed     # headed
 ```
 
@@ -136,8 +137,12 @@ manual dispatch:
 - **frontend-unit**: `npm run test:ci` (headless Karma + coverage).
 - **backend-lint**: `ruff check`.
 - **frontend-lint**: ESLint (blocking) + Prettier (advisory).
-- **frontend-e2e**: Playwright against a docker-compose stack (main/nightly/
-  manual only, since it needs the full stack and secrets).
+- **frontend-e2e**: 17 governed Playwright checks against a clean core Compose
+  backend and built frontend assets on every PR/main/nightly/manual run. The job
+  creates a non-admin account with a masked random password in its disposable
+  database. Real login/CSRF, unauthorized access, logout revocation, expert-code
+  blocking, pipeline saves and the purifier/SFS/HPO API contracts are checked. No repository account
+  secret is required. This bounded suite does not qualify all legacy journeys.
 
 ## Pre-commit hooks
 
@@ -149,3 +154,20 @@ pip install pre-commit
 pre-commit install
 pre-commit install --hook-type pre-push
 ```
+
+## Optional observability SDK profile
+
+Core requirements and CI do not need `prometa-sdk`. Wrapper unit tests inject
+only the import/call boundary under test; they do not emulate SDK internals.
+Installed-SDK version and OpenAI instrumentation checks remain available and
+explicitly skip when the optional profile is absent. The skip-budget gate stays
+at 15. Run these checks after installing the SDK from your approved source;
+`backend/requirements-observability.txt` retains the compatibility floor.
+
+## Disposable browser account
+
+`scripts/seed_e2e_user.py` reads `E2E_USER` / `E2E_PASSWORD` and requires
+`DECLARAI_TEST_INSTALLATION=1`. Use it only against a disposable, migrated test
+database. It creates a non-admin account and refuses to modify an existing
+user. It never prints the password. Production account administration remains
+a separate responsibility.

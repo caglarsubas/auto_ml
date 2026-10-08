@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-10-07. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-10-08. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first platform where business declarations govern model execution and every model carries reproducible evidence for independent review. Credit risk is the first use case; the classification/regression core remains reusable.
 
@@ -27,6 +27,16 @@ Local native-execution, assessment/scoring, identity and framework foundation. T
 **Evidence:** [Implementation record](FOUNDATION_IMPLEMENTATION.md); [Qualification commands and source hashes](evidence/foundation-2026-10-07.json)
 
 **Remaining:** Fold-local purifier replay, complete immutable stage/job contracts, project roles and egress, durable Linux deployment, qualified expert isolation and M3 review/reproduction are still required.
+
+### P02 — Portable core installation and authenticated CI
+
+**Packet status:** in_progress. **Mapped outcomes:** D06, D07, D12.
+
+Make the core backend independent of the optional private telemetry SDK; exercise real session/CSRF browser and API checks against clean CI installations. Preserve optional SDK support without publishing private source.
+
+**Evidence:** Qualification pending.
+
+**Remaining:** Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1–M3 gates remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

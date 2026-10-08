@@ -1,5 +1,5 @@
 import { Page, expect } from '@playwright/test';
-import { TEST_CREDENTIALS } from '../fixtures/credentials';
+import { TEST_CREDENTIALS, requireTestCredentials } from '../fixtures/credentials';
 
 /**
  * Page object for the login screen and the shared "sign in" journey.
@@ -28,6 +28,7 @@ export class LoginPage {
     username: string = TEST_CREDENTIALS.username,
     password: string = TEST_CREDENTIALS.password,
   ): Promise<void> {
+    if (!username || !password) requireTestCredentials();
     await this.goto();
     await this.fill(username, password);
     await this.submit();
