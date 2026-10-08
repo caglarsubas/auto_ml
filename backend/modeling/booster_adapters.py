@@ -60,6 +60,7 @@ class BoosterAdapter(ABC):
         self.best_iteration: int = 0
         self.enable_categorical: bool = False
         self.task: str = 'classification'
+        self.training_eval_metric: Optional[str] = None
 
     @abstractmethod
     def train(
@@ -135,6 +136,7 @@ class XGBoostAdapter(BoosterAdapter):
             p.setdefault('eval_metric', 'rmse')
             p.pop('num_class', None)
             p.pop('scale_pos_weight', None)
+        self.training_eval_metric = p.get('eval_metric')
         if self.enable_categorical:
             p['enable_categorical'] = True
         dtrain = xgb.DMatrix(
@@ -254,6 +256,7 @@ class LightGBMAdapter(BoosterAdapter):
             p['metric'] = 'multi_logloss'
         if 'scale_pos_weight' in params and self.task != 'regression':
             p['scale_pos_weight'] = float(params['scale_pos_weight'])
+        self.training_eval_metric = p['metric']
         dtrain = lgb.Dataset(Xtr, label=y_train, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
         dvalid = lgb.Dataset(Xva, label=y_valid, reference=dtrain, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
         callbacks = [lgb.log_evaluation(period=0)]
@@ -352,6 +355,7 @@ class CatBoostAdapter(BoosterAdapter):
             if 'scale_pos_weight' in params and params['scale_pos_weight'] is not None:
                 cb_kwargs['scale_pos_weight'] = float(params['scale_pos_weight'])
             self.model = CatBoostClassifier(**cb_kwargs)
+        self.training_eval_metric = cb_kwargs['eval_metric']
         self.model.fit(
             train_pool, eval_set=valid_pool,
             early_stopping_rounds=early_stopping_rounds or None,

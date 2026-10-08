@@ -213,7 +213,7 @@ def _compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[
     y_pred = np.asarray(y_pred, dtype=float).ravel()
     out = _nan_metric_map()
     try:
-        out['r2'] = float(r2_score(y_true, y_pred)) if len(y_true) >= 2 else float('nan')
+        out['r2'] = float(r2_score(y_true, y_pred, force_finite=False)) if len(y_true) >= 2 and np.var(y_true) > 0 else float('nan')
     except Exception:
         out['r2'] = float('nan')
     try:
@@ -476,13 +476,11 @@ def _evaluate_config(
         fold_metrics.append(_compute_metrics(y_va.values, proba, threshold, task=task))
 
     cv: Dict[str, Dict[str, float]] = {}
+    from modeling.development_assessment import metric_coverage
     for m in METRIC_NAMES:
-        vals = np.array([fm[m] for fm in fold_metrics], dtype=float)
-        vals = vals[np.isfinite(vals)]
-        if len(vals):
-            cv[m] = {'mean': float(np.mean(vals)), 'std': float(np.std(vals))}
-        else:
-            cv[m] = {'mean': float('nan'), 'std': float('nan')}
+        coverage = metric_coverage([fm[m] for fm in fold_metrics], complete_only=validation_context is not None)
+        cv[m] = {**coverage, 'mean': coverage['mean'] if coverage['mean'] is not None else float('nan'),
+                 'std': coverage['std'] if coverage['std'] is not None else float('nan')}
 
     # Full-fit on train with early stopping on the modeling validation holdout.
     full = fit_booster(
@@ -542,6 +540,10 @@ def _evaluate_cv_only(
                 threshold, task=task,
             )[metric]
         )
+    from modeling.development_assessment import metric_coverage
+    coverage = metric_coverage(cv_scores)
+    if validation_context is not None and coverage['status'] != 'complete':
+        raise ValueError(f'Requested validation-curve metric {metric} is available in {coverage["n_valid"]} of {coverage["n_total"]} folds; partial-fold averaging is prohibited.')
     tr_scores = np.array([s for s in tr_scores if np.isfinite(s)], dtype=float)
     cv_scores = np.array([s for s in cv_scores if np.isfinite(s)], dtype=float)
     return (

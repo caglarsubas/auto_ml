@@ -14,7 +14,7 @@ import numpy as np
 from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit
 from sklearn.metrics import (
     accuracy_score, mean_absolute_error, mean_squared_error, r2_score,
-    roc_auc_score, average_precision_score,
+    roc_auc_score,
 )
 import xgboost as xgb
 import shap
@@ -22,7 +22,7 @@ from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_p
 from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
-from modeling.development_validation import prepared_folds, development_folds
+from modeling.development_validation import development_folds
 from modeling.diagnostics import numeric_collinearity_frame, DIAGNOSTIC_LIMITATIONS
 from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
 from modeling.prediction_contract import PredictionContractError, resolve_prediction_contract
@@ -281,7 +281,8 @@ class ModelingStartView(APIView):
                     'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
                     'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
                     'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
-                    'purifier_recipe': purifier_recipe,
+                    'purifier_recipe': purifier_recipe, 'prediction_contract': prediction_contract,
+                    'class_weight_policy': 'train_label_ratio' if prediction_contract['task'] == 'classification' and len(prediction_contract['class_mapping']) == 2 else None,
                 }
                 if purifier_recipe:
                     purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx)
@@ -857,160 +858,10 @@ class ModelingStartView(APIView):
                             beeswarm_png = None
                             shap_beeswarm = None
 
-                        # Cross-Validation metrics (ROC-AUC, PR-AUC) + curve points
-                        # Run on train+valid only — outer test stays locked for Evaluation.
-                        cv_details = []
-                        try:
-                            if is_alt and algorithm == 'isolation_forest':
-                                raise RuntimeError('skip CV curves for isolation_forest')
-                            from sklearn.metrics import roc_curve, precision_recall_curve
-                            # grids for consistent interpolation across folds
-                            roc_fpr_grid = np.linspace(0.0, 1.0, 101)
-                            pr_recall_grid = np.linspace(0.0, 1.0, 101)
-                            tpr_fold_list = []
-                            prec_fold_list = []
-                            pr_raw_folds = []
-                            y_all_list = []
-                            p_all_list = []
-                            base_pr_list = []
-                            X_cv = pd.concat([X_train, X_valid], axis=0)
-                            y_cv = pd.concat([y_train, y_valid], axis=0)
-                            group_col = (split_meta.get('split_config') or {}).get('group_column')
-                            cv_strategy = 'time_series' if split_meta.get('strategy') == 'oot' else ('group' if group_col else 'random')
-                            fold_provenance = []
-                            for X_tr, y_tr, X_va, y_va, provenance in prepared_folds(validation_context, X_cv, y_cv, 5, all_declared_features=True):
-                                fold_provenance.append(provenance)
-                                if is_alt:
-                                    from modeling.alt_pipelines import get_alt_adapter
-                                    fold_adapter = get_alt_adapter(algorithm)
-                                    fold_adapter.train(X_tr, y_tr, X_va, y_va, params={
-                                        'C': 1.0, 'max_iter': 300, 'class_weight': 'balanced',
-                                    })
-                                else:
-                                    fold_adapter = get_adapter(algorithm)
-                                    fold_adapter.train(
-                                        X_tr, y_tr, X_va, y_va, params,
-                                        num_boost_round=500, early_stopping_rounds=50,
-                                    )
-                                p = fold_adapter.predict_proba(X_va)
-                                if num_classes > 2:
-                                    from evaluation.eval_utils import evaluate_multiclass
-                                    metrics_for_fold = evaluate_multiclass(y_va, p)['metrics']
-                                    cv_details.append({**metrics_for_fold, 'pr_auc': None,
-                                        'best_iteration': int(fold_adapter.best_iteration or 0)})
-                                    continue
-                                # AUCs
-                                roc = None
-                                pr = None
-                                try:
-                                    roc = float(roc_auc_score(y_va, p))
-                                except Exception:
-                                    pass
-                                try:
-                                    pr = float(average_precision_score(y_va, p))
-                                except Exception:
-                                    pass
-                                cv_details.append({
-                                    'roc_auc': roc,
-                                    'pr_auc': pr,
-                                    'best_iteration': int(fold_adapter.best_iteration or 0),
-                                })
-                                # ROC/PR curves on fixed grids
-                                try:
-                                    # Suppress numpy warnings for invalid values during interpolation
-                                    import warnings
-                                    with warnings.catch_warnings():
-                                        warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
-                                        fpr, tpr, _ = roc_curve(y_va, p)
-                                        tpr_interp = np.interp(roc_fpr_grid, fpr, tpr)
-                                        tpr_interp[0] = 0.0
-                                        tpr_interp[-1] = 1.0
-                                        tpr_fold_list.append(tpr_interp)
-                                except Exception:
-                                    pass
-                                try:
-                                    # Suppress numpy warnings for invalid values during interpolation
-                                    import warnings
-                                    with warnings.catch_warnings():
-                                        warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
-                                        precision, recall, _ = precision_recall_curve(y_va, p)
-                                        # keep raw curve for plotting
-                                        try:
-                                            pr_raw_folds.append({'precision': precision.tolist(), 'recall': recall.tolist(), 'auc': pr})
-                                        except Exception:
-                                            pass
-                                        # Step-wise (previous value) interpolation on a fixed recall grid
-                                        # For each r in grid, take precision at last recall <= r
-                                        idxs = np.searchsorted(recall, pr_recall_grid, side='right') - 1
-                                        idxs = np.clip(idxs, 0, len(precision) - 1)
-                                        prec_interp = precision[idxs]
-                                        prec_fold_list.append(prec_interp)
-                                except Exception:
-                                    pass
-                                # Baseline (no-skill) level equals positive rate in the validation fold
-                                base_pr_list.append(float(np.mean(y_va)))
-                                # collect for micro-averaged PR
-                                try:
-                                    y_all_list.append(y_va)
-                                    p_all_list.append(p)
-                                except Exception:
-                                    pass
-                            # aggregate
-                            roc_vals = [d['roc_auc'] for d in cv_details if d['roc_auc'] is not None]
-                            pr_vals = [d['pr_auc'] for d in cv_details if d['pr_auc'] is not None]
-                            mean_tpr = list(np.mean(np.vstack(tpr_fold_list), axis=0)) if tpr_fold_list else None
-                            std_tpr = list(np.std(np.vstack(tpr_fold_list), axis=0)) if tpr_fold_list else None
-                            mean_prec = list(np.mean(np.vstack(prec_fold_list), axis=0)) if prec_fold_list else None
-                            std_prec = list(np.std(np.vstack(prec_fold_list), axis=0)) if prec_fold_list else None
-                            # micro-averaged PR across all validation predictions
-                            try:
-                                if y_all_list and p_all_list:
-                                    y_all = np.concatenate(y_all_list)
-                                    p_all = np.concatenate(p_all_list)
-                                    micro_prec, micro_recall, _ = precision_recall_curve(y_all, p_all)
-                                    ap_micro = float(average_precision_score(y_all, p_all))
-                                    pr_curve_micro = {
-                                        'recall': micro_recall.tolist(),
-                                        'precision': micro_prec.tolist(),
-                                        'ap': ap_micro,
-                                    }
-                                else:
-                                    pr_curve_micro = None
-                            except Exception:
-                                pr_curve_micro = None
-
-                            cv_summary = {
-                                'n_splits': 5,
-                                'roc_auc_mean': float(np.mean(roc_vals)) if roc_vals else None,
-                                'roc_auc_std': float(np.std(roc_vals)) if roc_vals else None,
-                                'pr_auc_mean': float(np.mean(pr_vals)) if pr_vals else None,
-                                'pr_auc_std': float(np.std(pr_vals)) if pr_vals else None,
-                                'folds': cv_details,
-                                'roc_curve': {
-                                    'fpr': list(roc_fpr_grid),
-                                    'mean_tpr': mean_tpr,
-                                    'std_tpr': std_tpr,
-                                    'fold_tpr': [list(arr) for arr in tpr_fold_list]
-                                } if tpr_fold_list else None,
-                                'pr_curve': {
-                                    'recall': list(pr_recall_grid),
-                                    'mean_precision': mean_prec,
-                                    'std_precision': std_prec,
-                                    'fold_precision': [list(arr) for arr in prec_fold_list],
-                                    'folds_raw': pr_raw_folds,
-                                    'baseline': float(np.mean(base_pr_list)) if base_pr_list else None,
-                                } if prec_fold_list else None,
-                                'pr_curve_micro': pr_curve_micro,
-                                'cv_strategy': cv_strategy,
-                                'group_column': group_col,
-                                'fold_provenance': fold_provenance,
-                                'qualification': 'development; partition-fitted purifier replay' if purifier_recipe else 'development; legacy upstream purifier provenance unverified',
-                                'metric_semantics': 'weighted one-vs-rest multiclass AUC; binary curves unavailable' if num_classes > 2 else 'binary ranking metrics',
-                            }
-                        except Exception as cv_error:
-                            if purifier_recipe and prediction_contract['task'] == 'classification':
-                                raise PredictionContractError(f"Declared development validation failed: {str(cv_error).rstrip('.')}. Revise the split, purifier or feature configuration.") from cv_error
-                            cv_summary = None
+                        # Shared development assessment uses only permitted raw development rows.
+                        from modeling.development_assessment import run_development_cv
+                        cv_summary = run_development_cv(validation_context, pd.concat([X_train, X_valid]),
+                            pd.concat([y_train, y_valid]), algorithm, params)
 
                         # Save model via adapter
                         models_dir = os.path.join(execution_dir, 'models')
@@ -1203,9 +1054,13 @@ class ModelingStartView(APIView):
                                 num_boost_round=500, early_stopping_rounds=50,
                             )
                             yhat_valid = adapter.predict(X_valid)
-                            valid_r2 = float(r2_score(y_valid, yhat_valid)) if len(y_valid) else None
+                            valid_r2 = float(r2_score(y_valid, yhat_valid, force_finite=False)) if len(y_valid) >= 2 and np.var(y_valid) > 0 else None
                             test_r2 = test_rmse = test_mae = None
                             gain_importance = adapter.gain_importance()
+
+                            from modeling.development_assessment import run_development_cv
+                            cv_summary = run_development_cv(validation_context, pd.concat([X_train, X_valid]),
+                                pd.concat([y_train, y_valid]), algorithm, params)
 
                             models_dir = os.path.join(execution_dir, 'models')
                             os.makedirs(models_dir, exist_ok=True)
@@ -1240,6 +1095,7 @@ class ModelingStartView(APIView):
                                 'task': 'regression',
                                 'score': valid_r2,
                                 'valid_r2': valid_r2,
+                                'cv': cv_summary,
                                 'test_r2': test_r2,
                                 'test_rmse': test_rmse,
                                 'test_mae': test_mae,

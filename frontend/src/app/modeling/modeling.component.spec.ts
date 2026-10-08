@@ -41,6 +41,57 @@ describe('ModelingComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('renders regression CV errors and expandable fold evidence without probability curves', () => {
+    component.modelingStatus = {
+      status: 'ok',
+      model: {
+        task: 'regression',
+        cv: {
+          task: 'regression',
+          status: 'completed',
+          n_splits: 5,
+          cv_strategy: 'time_series',
+          rmse_mean: 1.2,
+          rmse_std: 0.3,
+          mae_mean: 0.9,
+          mae_std: 0.1,
+          metric_coverage: { rmse: { n_valid: 5, n_total: 5, status: 'complete' } },
+          aggregation: 'Unweighted fold mean.',
+          uncertainty: 'Fold spread is descriptive.',
+        },
+      },
+    };
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('RMSE (mean ± std)');
+    expect(root.textContent).toContain('MAE (mean ± std)');
+    expect(root.querySelector('details summary')?.textContent).toContain(
+      'Validation evidence details',
+    );
+    expect(root.querySelector('details')?.textContent).toContain('5 of 5 folds');
+    expect(root.querySelector('#cv-roc-plot')).toBeNull();
+    expect(root.querySelector('#cv-pr-plot')).toBeNull();
+  });
+
+  it('explains unavailable validation and metric coverage without a numeric substitute', () => {
+    component.modelingStatus = {
+      status: 'ok',
+      model: {
+        cv: {
+          status: 'unavailable',
+          limitations: ['R² is undefined for constant validation outcomes.'],
+        },
+      },
+    };
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('Development validation: unavailable');
+    expect(root.querySelector('[aria-label="Validation limitations"]')?.textContent).toContain(
+      'R² is undefined',
+    );
+    expect(root.querySelector('#cv-roc-plot')).toBeNull();
+  });
+
   it('should initialize with null processedFilePath', () => {
     expect(component.processedFilePath).toBeNull();
   });

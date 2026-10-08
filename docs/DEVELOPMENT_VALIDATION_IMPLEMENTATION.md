@@ -1,0 +1,29 @@
+# P04 — Auditable development validation and metric coverage
+
+Updated 8 October 2026. This packet follows [PR #93](https://github.com/caglarsubas/auto_ml/pull/93), merged as `c32e6069`. All five [main CI jobs](https://github.com/caglarsubas/auto_ml/actions/runs/37730653637) passed at that exact merge. P04 partially advances D02/D05; milestone and release gates remain open in the [roadmap ledger](product-roadmap.json).
+
+Initial regression training previously skipped development cross-validation. Classification and tuning could omit undefined fold metrics from their averages. A declared group split without its group column could silently become shuffled validation, and constant validation outcomes could receive a fabricated finite R².
+
+Initial supervised modeling now uses one development assessment helper. Classification and regression replay raw purifier recipes, encoding and imputation within each permitted training fold. Recorded receipts include train/validation membership, fitted transformations, sample counts and best iteration. Initial binary booster CV also recomputes its automatic class-weight ratio from each training fold and records the permitted fit rows; explicit search-weight choices are unchanged. Shared fold construction rejects missing group declarations, altered labels, duplicated/out-of-population rows and search-task contradictions. Temporal/entity/outcome-window constraints retain the P03 behavior; final holdout outcomes remain outside development inputs.
+
+Schema-2 development summaries report each metric's valid/total fold coverage and availability. A fold mean and descriptive standard deviation require every fold to support that metric. New raw-recipe runs fail with an actionable error if their declared primary metric or any required fold cannot be assessed. A missing secondary metric remains explicitly unavailable while supported metrics remain usable. Legacy fold failures receive an unavailable receipt with their unverified provenance. Supervised CV is explicitly not applicable to anomaly rankings.
+
+Regression reports RMSE, MSE, MAE and R². Constant or insufficient validation outcomes have undefined R² across initial training, development CV, HPO and final assessment; prediction error metrics remain available. Binary metrics use the frozen positive-class mapping; probability shape/range and row-count checks reject malformed predictions. Multiclass probabilities must match the declared class order/count and sum to one within `1e-6`; a training fold missing a declared class fails. Classification plots retain raw and pooled curves; PR grid sampling now respects sklearn's decreasing recall and repeated recall points.
+
+Governed HPO reports coverage and leaves incomplete metric aggregates unavailable, so they cannot become best-trial scores. Validation curves reject an incomplete requested metric. Legacy searches without a validation context retain their previous available-fold aggregate, with coverage marked partial. Binary threshold metrics here use a fixed `0.5`; cost is per observation. This packet records the declared primary metric and actual training evaluation metric but does not align every selection, tuning, threshold and early-stopping objective. That D01/D11 work remains open.
+
+The modeling panel presents regression error metrics, unavailable-state explanations and limitations. Expandable validation evidence contains fold coverage, strategy, metric semantics and uncertainty. Unsupported probability charts are omitted. Fold standard deviations describe spread across dependent folds and are not confidence intervals.
+
+The [qualification record](evidence/p04-qualification-2026-10-08.json) binds commands, source hashes and environments. Focused cases cover actual temporal/grouped CV for XGBoost, LightGBM and CatBoost on numeric classification/regression fixtures; binary logistic/scorecard CV; partial discrimination and R² coverage; malformed probabilities; immutable target membership; and deliberate invalid purifier folds. Rendered Angular tests exercise the regression/evidence and unavailable states. The real-session API suite exercises both classification and regression through upload, preprocessing, training, assessment, bundle creation, raw scoring and replay after another preprocessing version. These bounded checks do not qualify every alternate pipeline, search mode or data shape.
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite, four CPU affinities | 1,283 passed, six explicit skips; 65.01% coverage against the unchanged 50% gate |
+| Frontend unit suite on final template | 523 passed |
+| Governed Chromium/authenticated API suite | 19 passed, no skips |
+| Lint, migration drift, package consistency, skip budget, production build and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
+| Original checkout preservation | All 11 pre-existing modified files retain their starting hashes |
+
+The final backend run mounted the complete repository and retained its existing 120-second test timeout. A first container attempt incorrectly hid the knowledge-bank documents and timed out on the existing 65-class fixture under unrestricted default threading. The final four-CPU profile passed it. These local checks are separate from forthcoming exact-head GitHub CI and do not establish workload capacity. Ignored reports and their hashes are retained in the qualification record.
+
+ Full objective/early-stopping consistency, remaining SFS metric semantics, supervised encoding, independent reproduction/review, immutable stage/jobs, workload/concurrency/recovery, project roles/egress, production operations, expert isolation and customer/value acceptance remain open. Expert Python remains unavailable until its required isolation boundary is qualified. No outcome or milestone is marked released or customer accepted.
