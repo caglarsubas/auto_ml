@@ -17,3 +17,12 @@ These are **post-selection exploratory development results**, not independent as
 Legacy `run_forward_sfs`/`run_backward_sfs` helpers retain historical semantics. Inputs without validation context retain an explicitly unverified preprocessing/partition record; this packet does not qualify their upstream transformations. It does not implement grouped ablation/R3, uncertainty for paired effects, signed evidence, independent reproduction, full immutable search/job storage, simultaneous per-file jobs, durable worker recovery, expert Python isolation, project roles/egress or production deployment. Per-file search projections and in-process progress remain; new run-level job architecture is still required. Security and customer gates remain open.
 
 Qualification is recorded in [P06 source qualification](evidence/p06-qualification-2026-10-08.json). Local checks, exact-head PR CI, merged-main CI, deployment and customer acceptance remain distinct. D01/D02/D05 remain partial; no milestone or release gate is closed.
+
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite, four CPU affinities | 1,345 passed, six explicit skips; 67.04% coverage against the unchanged 50% gate |
+| Frontend unit suite | 529 passed |
+| Governed Chromium/authenticated API suite | 19 passed, no skips |
+| Lint, migration drift, package consistency, skip budget, production build and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
+| Original checkout and cleanup | All 11 starting hashes unchanged; disposable services and credentials removed |
