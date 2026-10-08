@@ -126,4 +126,5 @@ def record_stopping(adapter, values, training_loss, enabled, prediction_rounds):
         'metric_precision': 'Native callback precision; XGBoost records evaluation history to six decimal places.',
         'training_loss': {'native_name': training_loss,
                           'role': 'Fitter surrogate loss, distinct from the business validation metric; class weights are recorded in effective parameters.'},
-        'qualification': 'Exploratory development stopping; these validation outcomes are used during fitting, not independent assessment.'}
+        'qualification': ('Exploratory development stopping; these validation outcomes are used during fitting, not independent assessment.'
+                          if enabled else 'Early stopping disabled; validation outcomes are not used by the fitter. No independent-assessment claim.')}
