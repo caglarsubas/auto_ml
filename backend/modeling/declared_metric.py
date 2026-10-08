@@ -37,7 +37,7 @@ def metric_spec(contract):
     metric_runtime = {package: version(package) for package in ('numpy', 'scipy', 'scikit-learn')}
     implementation = hashlib.sha256()
     root = Path(__file__).parent.parent
-    for name in ('modeling/declared_metric.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
+    for name in ('modeling/declared_metric.py', 'modeling/booster_adapters.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
         implementation.update(name.encode())
         implementation.update((root / name).read_bytes())
     return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
@@ -62,7 +62,8 @@ def bind_declared_metric(params, contract):
 
 def metric_value(spec, labels, predictions):
     from modeling.development_assessment import development_metrics
-    value = development_metrics(labels, predictions, spec['task'], spec['class_count'], spec['cost_matrix'])[spec['primary_metric']]
+    value = development_metrics(labels, predictions, spec['task'], spec['class_count'], spec['cost_matrix'],
+                                metric=spec['primary_metric'])[spec['primary_metric']]
     if value is None or not np.isfinite(value):
         raise PredictionContractError(f"Declared early-stopping metric {spec['primary_metric']} is unavailable in this partition. Revise the split/population or explicitly disable early stopping; no fallback criterion is used.")
     return float(value)

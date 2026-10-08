@@ -95,6 +95,12 @@ def test_declared_metric_selects_rounds_and_matches_independent_reference(algori
     adapter.save(str(path))
     replay = type(adapter).load(str(path), feature_names=list(X.columns))
     np.testing.assert_allclose(replay.predict(X), prediction, atol=1e-12, rtol=1e-12)
+    if algorithm == 'xgboost':
+        import xgboost as xgb
+        assert replay.model.num_boosted_rounds() == stopping['prediction_rounds']
+        # A customer using native predict without wrapper iteration arguments
+        # receives the evaluated prediction, not unused patience-round trees.
+        np.testing.assert_allclose(replay.model.predict(xgb.DMatrix(X)), prediction, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(np.concatenate([replay.predict(X.iloc[:9]), replay.predict(X.iloc[9:])]), prediction,
                                atol=1e-12, rtol=1e-12)
 
@@ -185,3 +191,21 @@ def test_contradictory_contract_cannot_supply_a_fit_metric(change):
 def test_zero_round_budget_is_explicitly_unsupported(algorithm):
     with pytest.raises(ValueError, match='positive boosting rounds'):
         fit(algorithm, 'brier', rounds=0)
+
+
+@pytest.mark.parametrize('classes,metric', [(2, 'brier'), (3, 'log_loss')])
+def test_stopping_avoids_unrelated_metrics_but_assessment_keeps_full_checks(monkeypatch, classes, metric):
+    from modeling.declared_metric import metric_value
+    from modeling.development_assessment import development_metrics
+    y = np.arange(classes)
+    p = np.eye(classes) * .8 + .2 / classes if classes > 2 else np.array([.1, .9])
+    spec = metric_spec({'task': 'classification', 'class_mapping': [{}] * classes,
+                        'objective': {'primary_metric': metric}})
+    expected = development_metrics(y, p, 'classification', classes)[metric]
+    def unrelated(*args, **kwargs):
+        raise RuntimeError('Full assessment still evaluates discrimination')
+    namespace = 'evaluation.eval_utils' if classes > 2 else 'modeling.development_assessment'
+    monkeypatch.setattr(namespace + '.roc_auc_score', unrelated)
+    assert metric_value(spec, y, p) == pytest.approx(expected)
+    with pytest.raises(RuntimeError, match='Full assessment'):
+        development_metrics(y, p, 'classification', classes)

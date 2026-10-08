@@ -191,15 +191,24 @@ class XGBoostAdapter(BoosterAdapter):
 
     def save(self, path: str) -> str:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-        self.model.save_model(path)
+        model = self.model
+        if self.best_iteration is not None and 0 <= self.best_iteration < model.num_boosted_rounds() - 1:
+            # Native predict defaults to all saved rounds. Publish precisely the
+            # evaluated model, excluding patience rounds after its selected round.
+            model = model[:self.best_iteration + 1]
+            model.set_attr(**self.model.attributes())
+        model.save_model(path)
         return path
 
     @classmethod
     def load(cls, path: str, feature_names=None, cat_features=None):
         import xgboost as xgb
         obj = cls()
-        obj.model = xgb.Booster()
+        # Model loading and small scoring batches must not create an all-core
+        # OpenMP team for every request. Training parallelism is independent.
+        obj.model = xgb.Booster(params={'nthread': 1})
         obj.model.load_model(path)
+        obj.model.set_param({'nthread': 1})
         obj.feature_names = list(feature_names or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)

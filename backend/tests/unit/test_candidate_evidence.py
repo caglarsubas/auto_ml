@@ -204,7 +204,7 @@ def test_mismatched_candidate_never_stages_or_adopts(parent, mismatch):
     assert set(root.parent.iterdir()) == directories
 
 
-@pytest.mark.parametrize('criterion', ['missing', 'changed', 'metric_runtime', 'metric_definitions', 'evaluation_definitions'])
+@pytest.mark.parametrize('criterion', ['missing', 'changed', 'metric_runtime', 'metric_definitions', 'evaluation_definitions', 'callback_integration'])
 def test_candidate_with_unbound_or_changed_fit_metric_cannot_publish(parent, criterion, monkeypatch):
     from modeling.declared_metric import bind_declared_metric
     execution_id, data, root, current = parent
@@ -212,16 +212,17 @@ def test_candidate_with_unbound_or_changed_fit_metric_cannot_publish(parent, cri
     if criterion == 'changed':
         contract = {**data['prediction_contract'], 'objective': {'primary_metric': 'brier'}}
         params = bind_declared_metric(params, contract)
-    elif criterion in {'metric_runtime', 'metric_definitions', 'evaluation_definitions'}:
+    elif criterion in {'metric_runtime', 'metric_definitions', 'evaluation_definitions', 'callback_integration'}:
         params = bind_declared_metric(params, data['prediction_contract'])
     adapter = get_adapter('xgboost').train(data['X_train'][['x']], data['y_train'],
         data['X_valid'][['x']], data['y_valid'], params, num_boost_round=5, early_stopping_rounds=2)
     before, directories = current.read_bytes(), set(root.parent.iterdir())
     if criterion == 'metric_runtime':
         monkeypatch.setattr('modeling.declared_metric.version', lambda package: 'changed-runtime')
-    elif criterion in {'metric_definitions', 'evaluation_definitions'}:
+    elif criterion in {'metric_definitions', 'evaluation_definitions', 'callback_integration'}:
         original = Path.read_bytes
-        changed_file = 'development_assessment.py' if criterion == 'metric_definitions' else 'eval_utils.py'
+        changed_file = {'metric_definitions': 'development_assessment.py', 'evaluation_definitions': 'eval_utils.py',
+                        'callback_integration': 'booster_adapters.py'}[criterion]
         monkeypatch.setattr(Path, 'read_bytes', lambda path: original(path) + b'changed metric definitions'
                             if path.name == changed_file else original(path))
     with pytest.raises(ValueError, match='accepted metric contract'):

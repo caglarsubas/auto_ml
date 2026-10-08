@@ -21,7 +21,7 @@ def metric_coverage(values, *, complete_only=True):
             'status': 'complete' if complete else ('partial' if usable else 'unavailable')}
 
 
-def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5):
+def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
         raise ValueError('Development predictions must be finite and preserve every validation row.')
@@ -29,10 +29,12 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         if p.ndim != 1 or not np.isfinite(y.astype(float)).all():
             raise ValueError('Regression validation requires one finite numeric label and prediction per row.')
         # A constant validation target has undefined R², rather than an invented 0/1.
-        r2 = float(r2_score(y, p, force_finite=False)) if len(y) >= 2 and np.var(y) > 0 else None
-        mse = float(mean_squared_error(y, p))
-        return {'r2': r2 if r2 is not None and np.isfinite(r2) else None,
-                'rmse': float(np.sqrt(mse)), 'mse': mse, 'mae': float(mean_absolute_error(y, p))}
+        def r2_value():
+            value = float(r2_score(y, p, force_finite=False)) if len(y) >= 2 and np.var(y) > 0 else None
+            return value if value is not None and np.isfinite(value) else None
+        values = {'r2': r2_value, 'rmse': lambda: float(np.sqrt(mean_squared_error(y, p))),
+                  'mse': lambda: float(mean_squared_error(y, p)), 'mae': lambda: float(mean_absolute_error(y, p))}
+        return {name: values[name]() for name in ([metric] if metric else values)}
     if task != 'classification':
         raise ValueError('Supervised development CV supports classification and regression only.')
     if not np.isin(y, np.arange(class_count)).all():
@@ -43,25 +45,28 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         if (p < 0).any() or (p > 1).any() or not np.allclose(p.sum(axis=1), 1., atol=1e-6, rtol=0):
             raise ValueError('Multiclass development validation requires probabilities in [0, 1] summing to one per row.')
         from evaluation.eval_utils import evaluate_multiclass
-        return {key: value for key, value in evaluate_multiclass(y, p)['metrics'].items() if key != 'n_samples'}
+        result = evaluate_multiclass(y, p, metric_names=[metric]) if metric else evaluate_multiclass(y, p)
+        return {key: value for key, value in result['metrics'].items() if key != 'n_samples'}
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')
     both = len(np.unique(y)) == 2
     pred = (p >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
     costs = costs or {}
-    ks = None
-    if both:
+    def ks_value():
+        if not both:
+            return None
         fpr, tpr, _ = roc_curve(y, p)
-        ks = float(np.max(np.abs(tpr - fpr)))
-    return {'roc_auc': float(roc_auc_score(y, p)) if both else None,
-            'pr_auc': float(average_precision_score(y, p)) if both else None,
-            'ks': ks, 'log_loss': float(log_loss(y, p, labels=[0, 1])),
-            'brier': float(brier_score_loss(y, p)), 'accuracy': float(accuracy_score(y, pred)),
-            'f1': float(f1_score(y, pred, zero_division=0)),
-            'precision': float(precision_score(y, pred, zero_division=0)),
-            'recall': float(recall_score(y, pred, zero_division=0)),
-            'expected_cost': float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))}
+        return float(np.max(np.abs(tpr - fpr)))
+    values = {'roc_auc': lambda: float(roc_auc_score(y, p)) if both else None,
+              'pr_auc': lambda: float(average_precision_score(y, p)) if both else None,
+              'ks': ks_value, 'log_loss': lambda: float(log_loss(y, p, labels=[0, 1])),
+              'brier': lambda: float(brier_score_loss(y, p)), 'accuracy': lambda: float(accuracy_score(y, pred)),
+              'f1': lambda: float(f1_score(y, pred, zero_division=0)),
+              'precision': lambda: float(precision_score(y, pred, zero_division=0)),
+              'recall': lambda: float(recall_score(y, pred, zero_division=0)),
+              'expected_cost': lambda: float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))}
+    return {name: values[name]() for name in ([metric] if metric else values)}
 
 
 def _binary_curves(labels, predictions):
