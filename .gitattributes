@@ -1,3 +1,6 @@
 
 # Preserve upstream font license bytes, including their original whitespace.
 frontend/src/assets/fonts/*-OFL.txt -whitespace
+
+# Qualification logs retain original output bytes for their recorded hashes.
+docs/evidence/*.log -whitespace

@@ -68,11 +68,14 @@ outcomes are rejected rather than converted to negative labels.
 
 ## Verification
 
-The [qualification evidence](evidence/foundation-2026-10-07.json) records local
-commands, environments, test results and source hashes. It is local execution
-evidence, not CI, release, penetration-test or customer-acceptance evidence.
+The [original qualification evidence](evidence/foundation-2026-10-07.json) records
+the 7 October local working-tree snapshot, including pre-existing endpoint and
+SDK configuration. Those hashes remain historical. The [PR qualification
+record](evidence/pr-foundation-2026-10-08.json) records checks against the
+committed source, which excludes those local configuration edits. Both are local
+execution evidence, not CI, release, penetration-test or customer acceptance.
 
-Latest results: **1,033 backend tests; 517 Angular tests; one persisted browser
+7 October results: **1,033 backend tests; 517 Angular tests; one persisted browser
 workflow**, all passed. Production frontend compilation passed on the host and
 in a clean Linux container with networking disabled; migration drift and ledger
 projection checks passed. The [declaration screenshot](evidence/foundation-business-declaration.png)
@@ -123,3 +126,28 @@ adopted dependency sequence.
 No milestone gate or broader rollout/value gate is closed. Two real partner
 workflows and the proposed effort/defect acceptance target still require
 customer evidence.
+
+## PR preparation — 8 October 2026
+
+Committed-source checks passed **1,153 backend tests and 518 Angular tests**;
+two backend tests require unavailable live/local resources and are explicitly
+skipped. Lint, migration drift, ledger projection and a frontend production
+build with networking disabled passed. See the PR qualification record for
+commands and exact source hashes.
+
+The branch incorporates `main` at `7e284d3f`, including the pipeline-reset notice
+fix, while preserving the accepted task contract. Legacy API handler tests now
+use an authenticated actor; real session/CSRF boundary tests retain the runtime
+policy. Expert-code HTTP tests require a blocked response and unchanged preview
+and dictionary data for both exploratory and apply requests.
+
+CI now uses Node 24. New Angular architectural preferences remain warnings for
+existing NgModule components during this compatibility migration. The local
+commit hook hard-codes a stopped development container; equivalent tests were
+run independently in a disposable environment and the hook was disabled only
+for these commits. No persistent hook configuration was changed.
+
+Existing `main` CI fails dependency installation because the configured index
+cannot provide `prometa-sdk>=0.20.2`. The PR preserves that dependency requirement;
+pre-existing local SDK build wiring is excluded. A clean backend build and CI
+qualification therefore remain open.

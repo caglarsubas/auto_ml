@@ -1,0 +1,86 @@
+
+> frontend@0.0.0 test:ci
+> ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage
+
+The "@angular-devkit/build-angular:karma" builder is deprecated as part of Angular's Webpack support deprecation. Use "@angular/build:karma" instead. For more information, see https://angular.dev/tools/cli/build-system-migration.
+- Generating browser application bundles (phase: setup)...
+✔ Browser application bundle generation complete.
+08 10 2026 10:26:22.983:INFO [karma-server]: Karma v6.4.4 server started at http://localhost:9876/
+08 10 2026 10:26:22.984:INFO [launcher]: Launching browsers ChromeHeadlessCI with concurrency unlimited
+08 10 2026 10:26:22.986:INFO [launcher]: Starting browser ChromeHeadless
+08 10 2026 10:26:23.924:INFO [Chrome Headless 129.0.0.0 (Mac OS 10.15.7)]: Connected on socket ub6SgqXFF6GmenESAAAA with id 44672807
+ERROR: 'Error applying preprocessing:', HttpErrorResponse{headers: HttpHeaders{headers: Map{}, normalizedNames: Map{}, lazyInit: undefined, lazyUpdate: null}, status: 500, statusText: 'Server Error', url: 'http://localhost:8001/api/preprocessing/apply/', ok: false, type: undefined, redirected: undefined, responseType: undefined, name: 'HttpErrorResponse', message: 'Http failure response for http://localhost:8001/api/preprocessing/apply/: 500 Server Error', error: 'Error'}
+ERROR: 'Error applying preprocessing:', HttpErrorResponse{headers: HttpHeaders{headers: Map{}, normalizedNames: Map{}, lazyInit: undefined, lazyUpdate: null}, status: 500, statusText: 'Server Error', url: 'http://localhost:8001/api/preprocessing/apply/', ok: false, type: undefined, redirected: undefined, responseType: undefined, name: 'HttpErrorResponse', message: 'Http failure response for http://localhost:8001/api/preprocessing/apply/: 500 Server Error', error: 'Error'}
+ERROR: 'Error in AI assistant chat:', Object{status: 400, error: Object{error: 'Message is required'}, message: 'Message is required'}
+ERROR: 'Error in AI assistant chat:', Object{status: 400, error: Object{error: 'Message is required'}, message: 'Message is required'}
+ERROR: 'Error in AI assistant chat:', Object{status: 0, message: 'The assistant connection closed before the answer arrived.'}
+ERROR: 'Error in AI assistant chat:', Object{status: 0, message: 'The assistant connection closed before the answer arrived.'}
+LOG: 'Requesting URL:', 'http://localhost:8001/api/feature-card/2/get_stacked_feature_data/?column=Region'
+LOG: 'Requesting URL:', 'http://localhost:8001/api/feature-card/2/get_stacked_feature_data/?column=Region'
+LOG: 'Raw response:', Object{stacked_data: Object{0: Object{A: ...}, 1: Object{A: ...}}, target_averages: []}
+LOG: 'Raw response:', Object{stacked_data: Object{0: Object{A: ...}, 1: Object{A: ...}}, target_averages: []}
+LOG: 'Requesting URL:', 'http://localhost:8001/api/feature-card/2/get_stacked_feature_data/?column=Score'
+LOG: 'Requesting URL:', 'http://localhost:8001/api/feature-card/2/get_stacked_feature_data/?column=Score'
+LOG: 'Raw response:', Object{stacked_data: Object{0: [..., ...]}, target_averages: null}
+LOG: 'Raw response:', Object{stacked_data: Object{0: [..., ...]}, target_averages: null}
+WARN: '[CRISP-DM] Success criteria floor is empty — modeling may proceed without a business floor.'
+WARN: '[CRISP-DM] Success criteria floor is empty — modeling may proceed without a business floor.'
+ALERT: 'Modeling is blocked until a success criteria floor is set in Business Understanding.'
+ALERT: 'Modeling is blocked until a success criteria floor is set in Business Understanding.'
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., selected_features: ...}, Object{step: ..., selected_features: ...}], backward_remaining_features: [], forward_from_backward: []}
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., selected_features: ...}, Object{step: ..., selected_features: ...}], backward_remaining_features: [], forward_from_backward: []}
+LOG: '[SFS] Backward remaining features:', []
+LOG: '[SFS] Backward remaining features:', []
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}, Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}, Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}], backward_remaining_features: ['Var_D'], forward_from_backward: []}
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}, Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}, Object{step: ..., direction: ..., action: ..., feature_name: ..., cv_roc_auc: ..., selected_features: ...}], backward_remaining_features: ['Var_D'], forward_from_backward: []}
+LOG: '[SFS] Backward remaining features:', ['Var_D']
+LOG: '[SFS] Backward remaining features:', ['Var_D']
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[SFS] Cut step set to 1, remaining features (2):', ['Var_OLD_1', 'Var_OLD_2']
+LOG: '[SFS] Cut step set to 1, remaining features (2):', ['Var_OLD_1', 'Var_OLD_2']
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., selected_features: ...}], backward_remaining_features: [], forward_from_backward: []}
+LOG: '[SFS] Results received:', Object{forward: [], backward: [Object{step: ..., selected_features: ...}], backward_remaining_features: [], forward_from_backward: []}
+LOG: '[SFS] Backward remaining features:', []
+LOG: '[SFS] Backward remaining features:', []
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[SFS] Forward-from-backward results:', 0
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[Modeling] Checkpoint pushed:', 'sfs_backward_completed'
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Cut step set to 2, remaining features (2):', ['Var_C', 'Var_D']
+LOG: '[SFS] Cut step set to 7, remaining features (0):', []
+LOG: '[SFS] Cut step set to 7, remaining features (0):', []
+LOG: '[Hyperparam] Started:', Object{status: 'started', message: 'go', space_warnings: []}
+LOG: '[Hyperparam] Started:', Object{status: 'started', message: 'go', space_warnings: []}
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_running'
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_running'
+LOG: '[Hyperparam] Results received:', Object{status: 'completed', best_points: Object{roc_auc: Object{params: ..., cv_mean: ..., cv_std: ..., test: ..., train: ...}}, validation_curves: [Object{param: ..., values: ..., cv_mean: ..., cv_std: ..., train_mean: ..., train_std: ...}], emphasized: Object{most_cv_gain: 'max_depth', most_overfitting: 'learning_rate', most_shrinkage: 'subsample'}, param_importance: Object{cv_gain: Object{max_depth: ...}}, guidance: [Object{param: ..., type: ..., suggested_range: ..., rationale: ...}], duration_seconds: 12.3}
+LOG: '[Hyperparam] Results received:', Object{status: 'completed', best_points: Object{roc_auc: Object{params: ..., cv_mean: ..., cv_std: ..., test: ..., train: ...}}, validation_curves: [Object{param: ..., values: ..., cv_mean: ..., cv_std: ..., train_mean: ..., train_std: ...}], emphasized: Object{most_cv_gain: 'max_depth', most_overfitting: 'learning_rate', most_shrinkage: 'subsample'}, param_importance: Object{cv_gain: Object{max_depth: ...}}, guidance: [Object{param: ..., type: ..., suggested_range: ..., rationale: ...}], duration_seconds: 12.3}
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_completed'
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_completed'
+LOG: '[Hyperparam] Started:', Object{status: 'started'}
+LOG: '[Hyperparam] Started:', Object{status: 'started'}
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_running'
+LOG: '[Modeling] Checkpoint pushed:', 'hyperparam_running'
+LOG: '[Hyperparam] Stop signal sent:', Object{status: 'stop_requested'}
+LOG: '[Hyperparam] Stop signal sent:', Object{status: 'stop_requested'}
+TOTAL: 518 SUCCESS
+✔ Browser application bundle generation complete.
+
+=============================== Coverage summary ===============================
+Statements   : 33.22% ( 2593/7804 )
+Branches     : 26.34% ( 1270/4820 )
+Functions    : 32.66% ( 492/1506 )
+Lines        : 34.39% ( 2376/6907 )
+================================================================================
