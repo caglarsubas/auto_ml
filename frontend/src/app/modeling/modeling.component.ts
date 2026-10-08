@@ -2968,35 +2968,71 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    * Add a new metric to SFS criteria
    */
   addSfsMetric(): void {
-    this.sfsMetrics.push({
-      metric: this.isRegressionTask ? 'r2' : 'pr_auc',
-      pct_change: 1.0,
-    });
+    const available = this.isRegressionTask
+      ? ['r2', 'rmse', 'mae', 'mse']
+      : [
+          'roc_auc',
+          'pr_auc',
+          'log_loss',
+          'brier',
+          'expected_cost',
+          'accuracy',
+          'f1',
+          'precision',
+          'recall',
+          'ks',
+        ];
+    const metric = available.find((name) => !this.sfsMetrics.some((row) => row.metric === name));
+    if (metric) this.sfsMetrics.push({ metric, pct_change: 1.0 });
   }
 
-  /** Align SFS / HP default metrics to classification vs regression. */
+  /** Use accepted semantics; the search controls do not redefine the declaration. */
   private applyTaskMetricDefaults(): void {
     const declared =
       this.modelingStatus?.model?.prediction_contract?.objective?.primary_metric ||
       this.businessUnderstanding?.success_criteria?.primary_metric;
     if (declared) this.hpPrimaryMetric = declared;
-    if (!this.isRegressionTask) return;
-    const classOnly = new Set([
-      'roc_auc',
-      'pr_auc',
-      'f1',
-      'f2',
-      'precision',
-      'recall',
-      'accuracy',
-      'mcc',
-    ]);
-    if (this.sfsMetrics.every((m) => classOnly.has(m.metric))) {
-      this.sfsMetrics = [{ metric: 'r2', pct_change: this.sfsMetrics[0]?.pct_change ?? 1.0 }];
-    }
-    if (classOnly.has(this.hpPrimaryMetric)) {
+    else if (this.isRegressionTask && !['r2', 'rmse', 'mae', 'mse'].includes(this.hpPrimaryMetric))
       this.hpPrimaryMetric = 'r2';
-    }
+    const primary =
+      ({ auc: 'roc_auc', average_precision: 'pr_auc' } as Record<string, string>)[declared] ||
+      declared ||
+      (this.isRegressionTask ? 'r2' : 'roc_auc');
+    const threshold = this.sfsMetrics[0]?.pct_change ?? 1.0;
+    this.sfsMetrics = [
+      { metric: primary, pct_change: threshold },
+      ...this.sfsMetrics.filter(
+        (row) =>
+          row.metric !== primary &&
+          (this.isRegressionTask
+            ? ['r2', 'rmse', 'mae', 'mse'].includes(row.metric)
+            : !['r2', 'rmse', 'mae', 'mse'].includes(row.metric)),
+      ),
+    ];
+  }
+
+  sfsPrimaryMetric(step?: any): string {
+    const name =
+      step?.selection_objective?.primary_metric ||
+      this.sfsResults?.selection_objective?.primary_metric ||
+      this.sfsCompletedSteps[0]?.selection_objective?.primary_metric ||
+      this.modelingStatus?.model?.prediction_contract?.objective?.primary_metric ||
+      this.businessUnderstanding?.success_criteria?.primary_metric ||
+      (this.isRegressionTask ? 'r2' : 'roc_auc');
+    return (
+      ({ auc: 'roc_auc', average_precision: 'pr_auc' } as Record<string, string>)[name] || name
+    );
+  }
+
+  sfsSecondaryMetric(step?: any): string {
+    const primary = this.sfsPrimaryMetric(step);
+    return this.isRegressionTask
+      ? primary === 'r2'
+        ? 'rmse'
+        : 'r2'
+      : primary === 'roc_auc'
+        ? 'pr_auc'
+        : 'roc_auc';
   }
 
   sfsMetricLabel(metric: string): string {
@@ -3006,33 +3042,41 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       r2: 'R²',
       rmse: 'RMSE',
       mae: 'MAE',
+      mse: 'MSE',
+      log_loss: 'Log loss',
+      brier: 'Brier score',
+      expected_cost: 'Expected cost',
+      accuracy: 'Accuracy',
+      f1: 'F1',
+      precision: 'Precision',
+      recall: 'Recall',
+      ks: 'KS',
     };
     return map[metric] || metric;
   }
 
   sfsPrimaryHeader(prefix: string): string {
-    return this.isRegressionTask ? `${prefix} R²` : `${prefix} ROC-AUC`;
+    return `${prefix === 'Test' ? 'Validation' : prefix} ${this.sfsMetricLabel(this.sfsPrimaryMetric())}`;
   }
 
   sfsSecondaryHeader(prefix: string): string {
-    return this.isRegressionTask ? `${prefix} RMSE` : `${prefix} PR-AUC`;
+    return `${prefix === 'Test' ? 'Validation' : prefix} ${this.sfsMetricLabel(this.sfsSecondaryMetric())}`;
   }
 
   sfsPrimaryValue(step: any, split: 'train' | 'cv' | 'test'): number | null {
-    if (!step) return null;
-    if (this.isRegressionTask && step[`${split}_r2`] != null) return step[`${split}_r2`];
-    return step[`${split}_roc_auc`] ?? null;
+    const value = step?.[`${split}_${this.sfsPrimaryMetric(step)}`];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
   sfsSecondaryValue(step: any, split: 'train' | 'cv' | 'test'): number | null {
-    if (!step) return null;
-    if (this.isRegressionTask) {
-      if (step[`${split}_rmse`] != null) return step[`${split}_rmse`];
-      const alias = step[`${split}_pr_auc`];
-      // Regression aliases store −RMSE in *_pr_auc for higher-is-better ranking.
-      return alias != null ? Math.abs(alias) : null;
-    }
-    return step[`${split}_pr_auc`] ?? null;
+    const value = step?.[`${split}_${this.sfsSecondaryMetric(step)}`];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  sfsPctChange(step: any, secondary = false): number | null {
+    const metric = secondary ? this.sfsSecondaryMetric(step) : this.sfsPrimaryMetric(step);
+    const value = step?.pct_changes?.[metric];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
   /**
@@ -3142,6 +3186,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const sorterOpts = {
+      executionId: this.modelingStatus?.execution_id,
       useCombinedScoreOrder: !!this.sfsUseCombinedScoreOrder,
       candidateTopK:
         this.sfsUseCombinedScoreOrder && this.sfsCandidateTopK && this.sfsCandidateTopK > 0
@@ -3187,7 +3232,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         error: (err: any) => {
           console.error('[SFS] Failed to start:', err);
           this.sfsRunning = false;
-          this.sfsMessage = 'Failed to start SFS: ' + (err.message || err);
+          this.sfsMessage = 'Failed to start SFS: ' + (err.error?.error || err.message || err);
           this.sharedService.setActiveProcess(null); // clear on error
         },
       });
@@ -3251,6 +3296,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sfsNJobs,
         this.sfsTopK,
         algo,
+        this.modelingStatus?.execution_id,
       )
       .subscribe({
         next: (resp: any) => {
@@ -3264,7 +3310,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           console.error('[SFS] Resume failed:', err);
           this.sfsRunning = false;
           this.sfsStopped = true; // revert to stopped state on failure
-          this.sfsMessage = 'Failed to resume SFS: ' + (err.message || err);
+          this.sfsMessage = 'Failed to resume SFS: ' + (err.error?.error || err.message || err);
           this.sharedService.setActiveProcess(null);
         },
       });
@@ -3310,6 +3356,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sfsNJobs,
         this.sfsTopK,
         algo,
+        this.modelingStatus?.execution_id,
       )
       .subscribe({
         next: (resp: any) => {
@@ -3383,6 +3430,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
             this.sharedService.setActiveProcess(null); // clear on error
+            setTimeout(() => this.fetchSfsResults(), 500);
           }
         },
         error: (err: any) => {
@@ -3463,6 +3511,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.initBackwardCutStep();
         }
         // Determine SFS checkpoint substep based on what results we have
+        if (data.status === 'error') {
+          this.sfsMessage = 'SFS failed: ' + (data.error || 'Unavailable evidence');
+          return;
+        }
         if (this.sfsForwardFromBackwardResults.length > 0) {
           this.pushModelingCheckpoint('sfs_forward_from_backward_completed');
         } else if (this.sfsBackwardResults.length > 0 && this.sfsForwardResults.length > 0) {
@@ -4735,10 +4787,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const stabilitySteps: number[] = [];
     const stabilityValues: (number | null)[] = [];
     const stabilityTypes: string[] = [];
-    const cvRocAuc: number[] = [];
-    const cvPrAuc: number[] = [];
-    const trainRocAuc: number[] = [];
-    const testRocAuc: number[] = [];
+    const cvRocAuc: (number | null)[] = [];
+    const cvPrAuc: (number | null)[] = [];
+    const trainRocAuc: (number | null)[] = [];
+    const testRocAuc: (number | null)[] = [];
 
     for (const step of sortedSteps) {
       const feats: string[] = step.selected_features || [];
@@ -4760,10 +4812,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       stabilityValues.push(step.stability_value != null ? Number(step.stability_value) : null);
       stabilityTypes.push(step.stability_type || 'N/A');
 
-      cvRocAuc.push(Number(step.cv_roc_auc ?? 0));
-      cvPrAuc.push(Number(step.cv_pr_auc ?? 0));
-      trainRocAuc.push(Number(step.train_roc_auc ?? 0));
-      testRocAuc.push(Number(step.test_roc_auc ?? 0));
+      cvRocAuc.push(this.sfsPrimaryValue(step, 'cv'));
+      cvPrAuc.push(this.sfsSecondaryValue(step, 'cv'));
+      trainRocAuc.push(this.sfsPrimaryValue(step, 'train'));
+      testRocAuc.push(this.sfsPrimaryValue(step, 'test'));
     }
 
     return {
@@ -5007,58 +5059,75 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         {
           type: 'scatter',
           mode: 'lines+markers',
+          connectgaps: false,
           x: data.steps,
           y: data.modelMetrics.cvRocAuc,
-          name: 'CV ROC-AUC',
+          name: this.sfsPrimaryHeader('CV'),
           line: { color: '#1f77b4', width: 2.5 },
           marker: { size: 6 },
-          hovertemplate: 'CV ROC-AUC: %{y:.4f}<extra></extra>',
+          hovertemplate: `${this.sfsPrimaryHeader('CV')}: %{y:.4f}<extra></extra>`,
         },
         {
           type: 'scatter',
           mode: 'lines+markers',
+          connectgaps: false,
           x: data.steps,
           y: data.modelMetrics.cvPrAuc,
-          name: 'CV PR-AUC',
+          yaxis: 'y2',
+          name: this.sfsSecondaryHeader('CV'),
           line: { color: '#ff7f0e', width: 2.5 },
           marker: { size: 6 },
-          hovertemplate: 'CV PR-AUC: %{y:.4f}<extra></extra>',
+          hovertemplate: `${this.sfsSecondaryHeader('CV')}: %{y:.4f}<extra></extra>`,
         },
         {
           type: 'scatter',
           mode: 'lines+markers',
+          connectgaps: false,
           x: data.steps,
           y: data.modelMetrics.trainRocAuc,
-          name: 'Train ROC-AUC',
+          name: this.sfsPrimaryHeader('Train'),
           line: { color: '#1f77b4', width: 1, dash: 'dash' },
           marker: { size: 4 },
           opacity: 0.5,
-          hovertemplate: 'Train ROC-AUC: %{y:.4f}<extra></extra>',
+          hovertemplate: `${this.sfsPrimaryHeader('Train')}: %{y:.4f}<extra></extra>`,
         },
         {
           type: 'scatter',
           mode: 'lines+markers',
+          connectgaps: false,
           x: data.steps,
           y: data.modelMetrics.testRocAuc,
-          name: 'Test ROC-AUC',
+          name: this.sfsPrimaryHeader('Validation'),
           line: { color: '#2ca02c', width: 1, dash: 'dot' },
           marker: { size: 4 },
           opacity: 0.5,
-          hovertemplate: 'Test ROC-AUC: %{y:.4f}<extra></extra>',
+          hovertemplate: `${this.sfsPrimaryHeader('Validation')}: %{y:.4f}<extra></extra>`,
         },
       ];
       const allPerf = [
         ...data.modelMetrics.cvRocAuc,
-        ...data.modelMetrics.cvPrAuc,
         ...data.modelMetrics.trainRocAuc,
         ...data.modelMetrics.testRocAuc,
       ].filter((v: number) => Number.isFinite(v));
-      const yMin = Math.min(...allPerf) * 0.95 || 0;
-      const yMax = Math.max(...allPerf) * 1.02 || 1;
+      const low = allPerf.length ? Math.min(...allPerf) : 0;
+      const high = allPerf.length ? Math.max(...allPerf) : 1;
+      const padding = Math.max((high - low) * 0.05, Math.abs(high) * 0.02, 0.01);
+      const yMin = low - padding;
+      const yMax = high + padding;
       const layout = {
         ...baseLayout,
         title: { text: 'Model Performance Across Steps', font: { size: 13 } },
-        yaxis: { title: { text: 'Metric Value', font: { size: 12 } }, range: [yMin, yMax] },
+        yaxis: {
+          title: { text: this.sfsMetricLabel(this.sfsPrimaryMetric()), font: { size: 12 } },
+          range: [yMin, yMax],
+        },
+        yaxis2: {
+          title: { text: this.sfsMetricLabel(this.sfsSecondaryMetric()) },
+          overlaying: 'y',
+          side: 'right',
+          showgrid: false,
+        },
+        margin: { ...baseLayout.margin, r: 70 },
         shapes: [currentStepLine(yMin, yMax)],
         annotations: [currentStepAnnotation(yMax)],
       };
@@ -5093,19 +5162,33 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           ...this.sfsForwardFromBackwardResults,
         ];
     if (!rows.length) return;
-    const headers = ['step', 'direction', 'action', 'feature_name', 'cv_metric', 'pct_change'];
+    const headers = [
+      'step',
+      'direction',
+      'action',
+      'feature_name',
+      'metric',
+      'metric_direction',
+      'cv_value',
+      'improvement_pct',
+      'evidence_scope',
+    ];
     const lines = [headers.join(',')];
     for (const step of rows) {
-      const pct = step.pct_changes?.roc_auc ?? step.pct_changes?.r2 ?? '';
-      const cv = step.cv_roc_auc ?? step.cv_r2 ?? step.cv_metric ?? '';
+      const pct = this.sfsPctChange(step) ?? '';
+      const cv = this.sfsPrimaryValue(step, 'cv') ?? '';
       lines.push(
         [
           step.step ?? '',
           step.direction ?? '',
-          (step.action ?? step.feature_name) ? 'added' : '',
+          step.action ?? (step.direction === 'backward' ? 'dropped' : 'added'),
           step.feature_name ?? step.feature ?? '',
+          this.sfsPrimaryMetric(step),
+          step.selection_objective?.direction ?? 'unverified',
           cv,
           pct,
+          step.selection_objective?.qualification ??
+            'Historical evidence; search semantics unverified',
         ]
           .map((v) => `"${String(v).replace(/"/g, '""')}"`)
           .join(','),

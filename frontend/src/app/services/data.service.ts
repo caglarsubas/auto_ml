@@ -176,6 +176,7 @@ export class DataService {
     topK: number = 3,
     algorithm?: string,
     opts?: {
+      executionId?: string;
       initialFeatures?: string[];
       useCombinedScoreOrder?: boolean;
       candidateTopK?: number | null;
@@ -186,12 +187,13 @@ export class DataService {
       methods: methods,
       stopping_criteria: stoppingCriteria,
       n_jobs: nJobs,
-      top_k: topK
+      top_k: topK,
     };
     if (excludedFeatures.length > 0) {
       payload.excluded_features = excludedFeatures;
     }
     if (algorithm) payload.algorithm = algorithm;
+    if (opts?.executionId) payload.execution_id = opts.executionId;
     if (opts?.initialFeatures?.length) {
       payload.initial_features = opts.initialFeatures;
     }
@@ -204,27 +206,37 @@ export class DataService {
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS:', error);
-        return throwError(() => new Error(error.message || 'Failed to start SFS'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 
   // Start SFS with initial features (for chained backward→forward SFS)
-  startSfsWithInitialFeatures(fileId: number, methods: string[], stoppingCriteria: any, initialFeatures: string[], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
+  startSfsWithInitialFeatures(
+    fileId: number,
+    methods: string[],
+    stoppingCriteria: any,
+    initialFeatures: string[],
+    nJobs: number = 1,
+    topK: number = 3,
+    algorithm?: string,
+    executionId?: string,
+  ): Observable<any> {
     const payload: any = {
       file_id: fileId,
       methods: methods,
       stopping_criteria: stoppingCriteria,
       initial_features: initialFeatures,
       n_jobs: nJobs,
-      top_k: topK
+      top_k: topK,
     };
     if (algorithm) payload.algorithm = algorithm;
+    if (executionId) payload.execution_id = executionId;
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS with initial features:', error);
-        return throwError(() => new Error(error.message || 'Failed to start SFS'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 
@@ -233,8 +245,8 @@ export class DataService {
     return this.http.get(`${this.apiUrl}modeling/sfs/status/${fileId}/`).pipe(
       catchError((error: any) => {
         console.error('Error getting SFS status:', error);
-        return throwError(() => new Error(error.message || 'Failed to get SFS status'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 
@@ -243,30 +255,40 @@ export class DataService {
     return this.http.post(`${this.apiUrl}modeling/sfs/stop/${fileId}/`, {}).pipe(
       catchError((error: any) => {
         console.error('Error stopping SFS:', error);
-        return throwError(() => new Error(error.message || 'Failed to stop SFS'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 
   // Resume SFS from where it was stopped
-  resumeSfs(fileId: number, methods: string[], stoppingCriteria: any, excludedFeatures: string[] = [], nJobs: number = 1, topK: number = 3, algorithm?: string): Observable<any> {
+  resumeSfs(
+    fileId: number,
+    methods: string[],
+    stoppingCriteria: any,
+    excludedFeatures: string[] = [],
+    nJobs: number = 1,
+    topK: number = 3,
+    algorithm?: string,
+    executionId?: string,
+  ): Observable<any> {
     const payload: any = {
       file_id: fileId,
       methods: methods,
       stopping_criteria: stoppingCriteria,
       n_jobs: nJobs,
       top_k: topK,
-      resume: true
+      resume: true,
     };
     if (excludedFeatures.length > 0) {
       payload.excluded_features = excludedFeatures;
     }
     if (algorithm) payload.algorithm = algorithm;
+    if (executionId) payload.execution_id = executionId;
     return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error resuming SFS:', error);
-        return throwError(() => new Error(error.message || 'Failed to resume SFS'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 
@@ -275,8 +297,8 @@ export class DataService {
     return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`).pipe(
       catchError((error: any) => {
         console.error('Error getting SFS results:', error);
-        return throwError(() => new Error(error.message || 'Failed to get SFS results'));
-      })
+        return throwError(() => error);
+      }),
     );
   }
 

@@ -69,6 +69,73 @@ describe('ModelingComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Post-selection development CV');
   });
 
+  it('renders RMSE selection with unavailable R² and collapsed evidence', () => {
+    component.modelingStatus = {
+      status: 'ok',
+      model: { task: 'regression', prediction_contract: { objective: { primary_metric: 'rmse' } } },
+    };
+    const step = {
+      step: 1,
+      direction: 'forward',
+      feature_name: 'x',
+      selected_features: ['x'],
+      train_rmse: 1,
+      cv_rmse: 2,
+      test_rmse: 3,
+      cv_r2: null,
+      cv_roc_auc: 99,
+      selection_objective: {
+        primary_metric: 'rmse',
+        direction: 'minimize',
+        qualification: 'Post-selection development evidence; not independent assessment.',
+      },
+      cv_evidence: { metric_coverage: { r2: { status: 'unavailable', mean: null } } },
+      search_basis_sha256: 'exact-search-hash',
+      pct_changes: { rmse: null },
+    };
+    component.sfsResults = { selection_objective: step.selection_objective };
+    component.sfsForwardResults = [step];
+    component.selectedSfsStep = step;
+    component.showSfsModal = true;
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    const details = root.querySelector(
+      '[aria-label="Feature-selection evidence"]',
+    ) as HTMLDetailsElement;
+    expect(details.open).toBeFalse();
+    expect(details.textContent).toContain('Objective: RMSE (minimize)');
+    expect(details.textContent).toContain('exact-search-hash');
+    expect(component.sfsPrimaryValue(step, 'cv')).toBe(2);
+    expect(component.sfsSecondaryValue(step, 'cv')).toBeNull();
+    expect(component.sfsPrimaryHeader('Test')).toBe('Validation RMSE');
+    expect(component.sfsPctChange(step)).toBeNull();
+    expect(root.textContent).toContain('—');
+  });
+
+  it('keeps the accepted loss in selection controls and leaves missing chart values as gaps', () => {
+    component.modelingStatus = {
+      model: { task: 'regression', prediction_contract: { objective: { primary_metric: 'rmse' } } },
+    };
+    (component as any).applyTaskMetricDefaults();
+    expect(component.sfsMetrics).toEqual([{ metric: 'rmse', pct_change: 1 }]);
+    component.selectedSfsStep = { step: 1, direction: 'forward' };
+    component.sfsForwardResults = [
+      {
+        step: 1,
+        selected_features: ['x'],
+        cv_rmse: null,
+        cv_r2: -0.5,
+        test_rmse: 0,
+        pct_changes: { rmse: 0 },
+      },
+    ];
+    const progression = component.buildFeatureProgressionData();
+    expect(progression.modelMetrics.cvRocAuc).toEqual([null]);
+    expect(progression.modelMetrics.cvPrAuc).toEqual([-0.5]);
+    expect(progression.modelMetrics.testRocAuc).toEqual([0]);
+    expect(component.sfsPctChange(component.sfsForwardResults[0])).toBe(0);
+  });
+
   it('requires versioned tuning evidence before candidate acceptance', () => {
     component.currentFileId = 17;
     (component as any)._currentSubstep = 'sfs_completed';

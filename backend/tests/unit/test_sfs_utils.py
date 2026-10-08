@@ -230,7 +230,7 @@ class TestRunSfsWithProgress:
             X_train_raw=X_train, X_test_raw=X_test,
             methods=['forward'],
             stopping_criteria={
-                'metrics': [{'metric': 'roc_auc', 'pct_change': 0.0}],
+                'metrics': [{'metric': 'r2', 'pct_change': 0.0}],
                 'min_features': 1,
                 'max_features': 2,
             },

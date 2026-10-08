@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "packet": "P06",
+  "branch": "codex/sfs-objective-evidence",
+  "base_commit": "9c3c1ee6f65a83914d2cf2698ac9e8476a18bb26",
+  "qualified_source_commit": "6a41f44e09634aafc7cc8595aabf3d07b44ad914",
+  "scope": "Bounded local source qualification; subsequent commits contain documentation/ledger/evidence only. D01/D02/D05 remain partial; no milestone, production or customer gate is closed.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/95",
+    "state": "MERGED",
+    "merged_at": "2026-10-08T08:38:21Z",
+    "merge_commit": "9c3c1ee6f65a83914d2cf2698ac9e8476a18bb26",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37751170368",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "backend_environment": {
+    "image": "declarai-core-p06:local",
+    "image_id": "sha256:fc5b107019952985f020e202df24d16b19ee87af379faa27e339a3be6ee7d235",
+    "platform": "linux/arm64",
+    "python": "3.12.15",
+    "packages": {
+      "Django": "5.2.18",
+      "djangorestframework": "3.16.1",
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "scikit-learn": "1.9.1",
+      "xgboost": "2.1.4",
+      "lightgbm": "4.7.0",
+      "catboost": "1.2.10",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10"
+    },
+    "origin": "Unchanged cached public core dependencies, no optional private SDK. Full backend checks mounted final repository source at /app using the P05 dependency image. Authenticated API qualification used the refreshed stock P06 image with final backend source.",
+    "network": "Internal Redis/test network. Telemetry disabled, provider key blank and model endpoint unreachable. Disposable API also uses a bridge for loopback publication; this is not a complete offline-installation qualification.",
+    "cpu_allocation": "Final full suite and API use --cpuset-cpus=0-3. Timeout, skip and coverage gates unchanged. No workload/capacity claim."
+  },
+  "frontend_environment": {
+    "node": "24.16.0",
+    "npm": "11.13.0",
+    "angular": "22.2.1",
+    "typescript": "6.0.3",
+    "dependencies": "Unchanged package-lock.json; locked installed dependencies linked from primary checkout. Final production assets served by loopback preview helper."
+  },
+  "checks": [
+    {
+      "name": "Full CI-marked backend suite and static checks",
+      "status": "passed",
+      "command": "ruff check . && python manage.py makemigrations --check --dry-run && python -m pip check && python -m pytest -m 'unit or functional or regression or integration or uat' --tb=short --junitxml=../test-reports/p06-backend.xml --cov --cov-report=xml:../test-reports/p06-backend-coverage.xml --cov-report=term-missing --cov-fail-under=50",
+      "passed": 1347,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 138,
+      "duration_seconds": 86.68,
+      "coverage_percent": 67.06,
+      "coverage_gate_percent": 50,
+      "log": "backend-full.log"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "command": "python3 .github/scripts/check_skip_budget.py test-reports/p06-backend.xml --max-skips 15",
+      "skipped": 6,
+      "maximum": 15,
+      "reasons": [
+        "Four optional SDK checks",
+        "One unavailable live model-engine check",
+        "One absent local .env check"
+      ],
+      "log": "skip-budget.log"
+    },
+    {
+      "name": "Governed Chromium and authenticated API suite",
+      "status": "passed",
+      "command": "npm run test:e2e:governed",
+      "passed": 19,
+      "skipped": 0,
+      "duration_seconds": 14.4,
+      "details": "Real non-admin sessions/CSRF; temporal classification and RMSE feature selection with two recorded folds, fold-local purifier/native fit evidence, changed-resume conflicts, exact-version candidate acceptance and older-bundle scoring replay. Existing UI session/reload/local-font checks also pass.",
+      "log": "browser-api.log"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "command": "npm run test:ci",
+      "passed": 529,
+      "details": "Rendered RMSE selection details, unavailable R2, chart gaps/zero values, declaration-based controls and execution-bound service conflict behavior. Existing coverage gates unchanged.",
+      "log": "frontend-unit.log"
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "command": "npm run build",
+      "details": "Existing bundle budget and CommonJS warnings remain.",
+      "log": "frontend-build.log"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "command": "npm run lint",
+      "warnings": 158,
+      "errors": 0,
+      "log": "frontend-lint.log"
+    },
+    {
+      "name": "Scoped formatting",
+      "status": "passed",
+      "command": "npx prettier --check src/app/modeling/modeling.component.html e2e/raw-replay-api.spec.ts",
+      "details": "Changed TS blocks formatted without broad legacy formatting changes; repository-wide Prettier remains advisory.",
+      "log": "prettier.log"
+    },
+    {
+      "name": "Browser TypeScript",
+      "status": "passed",
+      "command": "npx tsc --ignoreConfig --noEmit --module nodenext --moduleResolution nodenext --target es2022 --types node --skipLibCheck e2e/raw-replay-api.spec.ts",
+      "log": "e2e-types.log"
+    },
+    {
+      "name": "Roadmap projection and Git whitespace",
+      "status": "passed",
+      "command": "python3 scripts/render_product_roadmap.py --check; git diff --check"
+    },
+    {
+      "name": "Primary checkout preservation and cleanup",
+      "status": "passed",
+      "preserved_tracked_files": 11,
+      "details": "All 11 pre-existing file hashes unchanged. Disposable P06 API/Redis/network/preview and credentials removed. Existing primary services remain running on their prior ports."
+    }
+  ],
+  "accepted_scenarios": [
+    "Actual XGBoost/LightGBM/CatBoost native searches for regression RMSE, binary PR-AUC and expected cost with complete fold metrics/receipts.",
+    "Independent sklearn prediction checks; controlled cost-optimal feature differs from AUC-optimal feature and wins when cost is declared.",
+    "Constant targets preserve null R2; unavailable primary/stopping metrics, contradictory objectives/task metrics, duplicate or invalid thresholds fail.",
+    "Negative R2 and minimizing loss percentage direction; undefined zero baseline; backward first-removal baseline, improvements and tolerated deterioration.",
+    "Mid-search failure retains partial full-step evidence without completion; cancellation and exact-basis resume; changed labels/rows/features/folds/threshold/execution/raw inputs/validation/runtime rejected.",
+    "API search/refit failure persists an error, prevents publication and keeps sfs_completed false; terminal callback cannot precede public persistence.",
+    "Authenticated temporal selection preserves training/validation chronology and fold-local purification and cannot read final assessment outcomes.",
+    "Single-class screening/temporal validation partitions fail when the fixed native AUC early-stopping criterion is unavailable, even for a computable declared Brier objective."
+  ],
+  "limitations": [
+    "Exploratory post-selection evidence: reused development screening/early-stopping/CV data, unweighted fold means and descriptive spread; no nested validation, independent assessment or paired-effect uncertainty.",
+    "Native training/early stopping remains fixed AUC/RMSE; complete objective and tuning alignment is open. Full class-weight/search/alternate/supervised-encoding qualification is not claimed.",
+    "Legacy standalone SFS helpers retain historical semantics. Missing validation context leaves upstream provenance unverified.",
+    "Per-file search projections/in-process jobs remain; simultaneous jobs, immutable job storage, durable recovery, signatures and controller/storage tamper resistance are open.",
+    "Exact native receipts and source/runtime digests do not provide an independent reproduction runner or malicious expert-code isolation.",
+    "Private production operation, roles/data egress, recovery/upgrade drills, mandatory expert isolation, independent reviewer workflow, accessibility gate and partner/value acceptance are open."
+  ],
+  "retained_reports": {
+    "directory": "/Users/caglarsubasi/.codex/worktrees/foundation-packaging/auto-ml/test-reports/p06",
+    "files": {
+      "backend-full.log": "6ccd2628b973d00522601f6fd8152a4e410a214388f476c9bf54832e5d8d116f",
+      "backend.xml": "29365f8d4750300445b54495ec7a6da4da5af315a4e0df3293286f7b7d467981",
+      "backend-coverage.xml": "201479faefd771f6760be2d643ae345495ed1c4c9b2d5e3799bf39f5d92a6eec",
+      "skip-budget.log": "7a367d729562004a4505c1d636659ee63ab801a641f65c1466a17d631a9a1eeb",
+      "frontend-unit.log": "08a4f76a7aea5452ddfa3ee08640e0ad5257998f4841cc8cf5151fbbf7613d6b",
+      "frontend-build.log": "357c0b7f373f275ca3493b8d564f9fc9b35d675c81b41e3be14df324e3cf584e",
+      "frontend-lint.log": "5ccf1385b6f74c0b908e20462e34fbc922defee13b483f64abf5e84f9afe5706",
+      "e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "browser-api.log": "3a27558b99dda00980536ffbfaeb4cce3c2beebf8e7b8c4f023b9e8c50843e6d",
+      "image-build.log": "4a9030486d9bc7e538285e98ab3d1552e6a2f51f3ae493312b12f0ff268af55d"
+    }
+  },
+  "git_hooks": "Shared hooks target user-owned primary Docker containers. Per-command core.hooksPath=/dev/null was used after equivalent isolated full backend/frontend/API/lint/build checks; persistent Git hook configuration was unchanged."
+}

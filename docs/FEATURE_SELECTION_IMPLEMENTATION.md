@@ -1,0 +1,28 @@
+# P06 — Declared feature-selection objectives and evidence
+
+Native feature selection previously screened and ranked using ROC-AUC/R² regardless of the accepted objective. The API rejected loss objectives such as RMSE, regression stopping criteria could silently become R², and percentage changes could reject an improved backward removal. Missing values and failed CV could be shown as zero or completed evidence. The first backward removal lacked a full-feature baseline.
+
+The current `run_sfs_with_progress`/API path now resolves the accepted prediction contract once. Binary classification supports ROC-AUC, PR-AUC, log loss, Brier score, expected cost, accuracy, F1, precision, recall and KS; regression supports R², RMSE, MAE and MSE. Aliases resolve to their metric; task-incompatible criteria and contradictory objectives/directions fail. Threshold metrics use 0.5 and expected cost is per observation using declared costs. Multiclass selection remains blocked. The fixed AUC early-stopping policy requires both encoded classes in every training/validation partition; a single-class partition fails explicitly even when the declared loss metric is computable. Screening and top-K CV ranking use the accepted direction; the requested fold count is honored. Stable ties preserve feature order.
+
+Selected steps contain trusted training/development-validation metrics, complete fold coverage, fold-local preprocessing and native fit receipts, candidate screening/CV scores and a search digest. Regression results carry their own fields, without ROC/PR aliases. Undefined R² remains null; every ranking/stopping metric requires complete availability. Failed search or candidate publication stays an error, retains available evidence and cannot publish a successful candidate or advance the UI completion checkpoint. API completion is visible only after final persistence/publication finishes.
+
+Percentage change is `(current - previous) / abs(previous)` for maximizing metrics, reversed for minimizing metrics. Positive always means improvement, including negative R². A zero/near-zero baseline has no percentage value. Zero threshold disables that percentage gate; a positive gate with an undefined baseline rejects the step with an explanation. Forward selection requires improvement above its threshold; backward removal permits improvements and deterioration within its threshold. The first backward removal uses full-feature CV as its baseline. Rejected steps retain metrics and reasons.
+
+Cancellation records full steps and a resume basis. Resume requires matching execution, ordered prepared and raw development inputs/labels, declared validation/transformation policy, objective, feature pool, stopping constraints, methods, native fitter configuration, runtime/runner digests and compute budgets. Changed or unverified historical searches return a conflict and require a fresh search. Resume does not imply a tamper-resistant checkpoint. Each step identifies its basis; chained searches retain the corresponding basis records. Existing immutable candidate publication preserves the parent and creates candidate-only versions; the final refit uses the selector's recorded native configuration. Browser starts/resumes submit the displayed execution when available.
+
+The interface uses actual objective labels and values for tables, plots, CSV and assistant prompts. Validation values are named as development validation; missing values appear as gaps/dashes. Primary and secondary chart scales are separate. Technical qualification and fold coverage stay inside native expandable Details.
+
+These are **post-selection exploratory development results**, not independent assessment, nested validation, confidence intervals, a paired before/after comparison or proof of business value. Development-validation screening, native early stopping and selection reuse development data. Native fitting/early stopping still uses its fixed AUC/RMSE training policy; full alignment to every declared objective and tuning path remains open. Native parameters do not silently acquire initial-model automatic class weights. Fold means are unweighted and fold spread is descriptive.
+
+Legacy `run_forward_sfs`/`run_backward_sfs` helpers retain historical semantics. Inputs without validation context retain an explicitly unverified preprocessing/partition record; this packet does not qualify their upstream transformations. It does not implement grouped ablation/R3, uncertainty for paired effects, signed evidence, independent reproduction, full immutable search/job storage, simultaneous per-file jobs, durable worker recovery, expert Python isolation, project roles/egress or production deployment. Per-file search projections and in-process progress remain; new run-level job architecture is still required. Security and customer gates remain open.
+
+Qualification is recorded in [P06 source qualification](evidence/p06-qualification-2026-10-08.json). Local checks, exact-head PR CI, merged-main CI, deployment and customer acceptance remain distinct. D01/D02/D05 remain partial; no milestone or release gate is closed.
+
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite, four CPU affinities | 1,347 passed, six explicit skips; 67.06% coverage against the unchanged 50% gate |
+| Frontend unit suite | 529 passed |
+| Governed Chromium/authenticated API suite | 19 passed, no skips |
+| Lint, migration drift, package consistency, skip budget, production build and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
+| Original checkout and cleanup | All 11 starting hashes unchanged; disposable services and credentials removed |
