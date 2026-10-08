@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import uuid
+import hashlib
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -12,6 +15,8 @@ import numpy as np
 import pandas as pd
 from django.conf import settings
 
+from encoding.fitted import apply_fitted_encoding
+from modeling.execution_artifacts import digest_file, load_execution, load_assessment, replace_projection
 from modeling.lineage import load_lineage
 from evaluation.eval_utils import assess_deploy_readiness
 
@@ -24,8 +29,15 @@ class DeployNotReadyError(Exception):
         super().__init__(self.readiness.get('summary') or 'Not deploy-ready')
 
 
-def bundle_dir(file_id: int) -> str:
-    return os.path.join(settings.MEDIA_ROOT, 'deployment_bundles', str(file_id))
+def bundle_dir(file_id: int, bundle_id=None) -> str:
+    base = Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id)
+    pointer = base / 'current.json'
+    if bundle_id is None and pointer.is_file():
+        with pointer.open(encoding='utf-8') as stream:
+            bundle_id = json.load(stream)['bundle_id']
+    if bundle_id is not None:
+        return str(base / 'versions' / str(uuid.UUID(str(bundle_id))))
+    return str(base)
 
 
 def assess_file_deploy_readiness(file_id: int) -> Dict[str, Any]:
@@ -84,6 +96,17 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     with open(modeling_path, 'r', encoding='utf-8') as f:
         modeling = json.load(f)
     model = modeling.get('model') or {}
+    exact_assessment = None
+    if modeling.get('execution_id'):
+        frozen, _ = load_execution(modeling['execution_id'], file_id)
+        if model.get('model_path') != frozen['model'].get('model_path'):
+            raise ValueError('Model changed since its execution snapshot. Create a new version before packaging.')
+        with open(os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json'), encoding='utf-8') as stream:
+            evaluated = json.load(stream).get('evaluation') or {}
+        if evaluated.get('execution_id') != modeling['execution_id']:
+            raise ValueError('Final assessment belongs to a different execution. Evaluate this exact version before packaging.')
+        exact_assessment = load_assessment(modeling['execution_id'], evaluated['holdout_access_id'], file_id)
+        model = frozen['model']
     algo = model.get('algorithm') or (model.get('model_type') or 'xgboost')
     algo = str(algo).replace('_classifier', '').replace('_regressor', '')
     model_rel = model.get('model_path') or f'models/{file_id}_xgb_classifier.json'
@@ -91,7 +114,7 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     if not os.path.exists(model_abs):
         raise FileNotFoundError(f'Model artifact missing: {model_rel}')
 
-    train_pkl = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+    train_pkl = os.path.join(settings.MEDIA_ROOT, model.get('train_data_path') or f'train_data/{file_id}_train_data.pkl')
     feature_names: List[str] = []
     impute_means: Dict[str, float] = {}
     categorical_features: List[str] = list(model.get('categorical_features_used') or [])
@@ -104,7 +127,7 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         algo = td.get('algorithm') or algo
         # Prefer HP / SFS feature subset when available
         hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
-        if os.path.exists(hp_path):
+        if not modeling.get('execution_id') and os.path.exists(hp_path):
             try:
                 with open(hp_path, 'r', encoding='utf-8') as hf:
                     hp = json.load(hf)
@@ -115,8 +138,12 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
                 pass
 
     lineage = load_lineage(file_id) or {}
-    out = bundle_dir(file_id)
-    os.makedirs(out, exist_ok=True)
+    if model.get('lineage_path'):
+        with open(os.path.join(settings.MEDIA_ROOT, model['lineage_path']), encoding='utf-8') as stream:
+            lineage = json.load(stream)
+    bundle_id = str(uuid.uuid4())
+    out = bundle_dir(file_id, bundle_id)
+    os.makedirs(out, exist_ok=False)
     model_basename = os.path.basename(model_abs)
     bundled_model = os.path.join(out, model_basename)
     shutil.copy2(model_abs, bundled_model)
@@ -146,6 +173,9 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
                     if os.path.exists(cal_abs):
                         calibrator_file = os.path.basename(cal_abs)
                         shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
+
+    if (model.get('calibration') or {}).get('fitted') and not calibrator_file:
+        raise ValueError('Required calibrator is missing; package publication is blocked.')
 
     # Categorical level freeze from train raw if possible
     cat_levels: Dict[str, List[str]] = {}
@@ -182,9 +212,21 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         from modeling.crisp_dm import empty_business_understanding
         bu = empty_business_understanding()
 
+    contract = model.get('prediction_contract') or {}
+    if contract:
+        bu = {'problem_type': contract['task'], 'target_contract': contract['target_contract'],
+              'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
+              'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features']}
+        success_criteria = contract['objective']
     card_abs = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
     model_card = None
-    if os.path.exists(card_abs):
+    if exact_assessment:
+        model_card = exact_assessment['model_card']
+        with open(os.path.join(out, 'model_card.json'), 'w', encoding='utf-8') as stream:
+            json.dump(model_card, stream, indent=2, allow_nan=False)
+        with open(os.path.join(out, 'evaluation.json'), 'w', encoding='utf-8') as stream:
+            json.dump(exact_assessment, stream, indent=2, allow_nan=False)
+    elif os.path.exists(card_abs):
         try:
             with open(card_abs, 'r', encoding='utf-8') as f:
                 model_card = json.load(f)
@@ -202,8 +244,14 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     freeze_stamp = datetime.now(timezone.utc).isoformat()
     lineage_hash = (lineage or {}).get('lineage_id') or model.get('lineage_id')
     manifest = {
-        'schema_version': 2,
-        'scoring_schema_version': 2,
+        'schema_version': 3,
+        'scoring_schema_version': 3,
+        'bundle_id': bundle_id,
+        'execution_id': modeling.get('execution_id'),
+        'prediction_contract': contract,
+        'task': model.get('task') or 'classification',
+        'encoding_report': td.get('encoding_report', []) if os.path.exists(train_pkl) else [],
+        'input_stage': 'processed_unencoded' if contract else 'legacy_model_features',
         'file_id': int(file_id),
         'created_at': freeze_stamp,
         'immutable_freeze_at': freeze_stamp,
@@ -221,6 +269,9 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'lineage_id': lineage_hash,
         'model_path_source': model_rel,
         'deploy_ready': True,
+        'package_purpose': 'development_review_and_batch_scoring_handoff',
+        'production_use_approved': False,
+        'evidence_status': 'exploratory' if contract else 'legacy_provenance_unverified',
         'model_card_path': 'model_card.json' if model_card else None,
         'business_understanding_path': 'business_understanding.json',
         'success_criteria_path': 'success_criteria.json',
@@ -250,9 +301,18 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     except Exception:
         pass
 
+    manifest['artifact_integrity'] = {path.name: {'sha256': digest_file(path), 'bytes': path.stat().st_size}
+        for path in Path(out).iterdir() if path.is_file() and path.name != 'manifest.json'}
+    manifest['immutable_freeze_hash'] = hashlib.sha256(json.dumps(manifest['artifact_integrity'], sort_keys=True).encode()).hexdigest()
+    with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as stream:
+        json.dump(manifest, stream, indent=2, allow_nan=False)
+    pointer = Path(out) / 'publication.json'
+    pointer.write_text(json.dumps({'bundle_id': bundle_id}), encoding='utf-8')
+    replace_projection(pointer, Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id) / 'current.json')
     return {
         'status': 'ok',
         'file_id': file_id,
+        'bundle_id': bundle_id,
         'bundle_path': os.path.relpath(out, settings.MEDIA_ROOT),
         'manifest': manifest,
     }
@@ -283,19 +343,27 @@ def build_deployment_pack_zip(file_id: int) -> tuple:
     return buf.getvalue(), name
 
 
-def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
+def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any]:
     """Score a batch DataFrame with the frozen bundle."""
     from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
     from evaluation.eval_utils import feature_psi_report
 
-    out = bundle_dir(file_id)
+    out = bundle_dir(file_id, bundle_id)
     manifest_path = os.path.join(out, 'manifest.json')
     if not os.path.exists(manifest_path):
         raise FileNotFoundError('Deployment bundle not found. Create the bundle first.')
 
     with open(manifest_path, 'r', encoding='utf-8') as f:
         manifest = json.load(f)
+    if manifest.get('file_id') != file_id or (bundle_id and manifest.get('bundle_id') != str(bundle_id)):
+        raise ValueError('Scoring bundle identity does not match the requested dataset/version.')
 
+    for name, recorded in (manifest.get('artifact_integrity') or {}).items():
+        path = (Path(out) / name).resolve()
+        if not path.is_relative_to(Path(out).resolve()) or not path.is_file() or digest_file(path) != recorded['sha256']:
+            raise ValueError(f'Scoring artifact failed integrity verification: {name}')
+    if manifest.get('input_stage') == 'processed_unencoded':
+        df = apply_fitted_encoding(df, manifest.get('encoding_report') or [])
     model_file = manifest.get('model_file') or 'model.json'
     model_path = os.path.join(out, model_file)
     if not os.path.exists(model_path):
@@ -334,26 +402,36 @@ def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
         feature_names=feature_names,
         cat_features=list(cat_feats),
     )
-    proba = np.asarray(adapter.predict_proba(X), dtype=float).ravel()
+    proba = np.asarray(adapter.predict(X) if manifest.get('task') == 'regression' else adapter.predict_proba(X), dtype=float)
+    multiclass = proba.ndim == 2 and proba.shape[1] > 1
+    if not multiclass:
+        proba = proba.ravel()
+    if len(proba) != len(df) or not np.isfinite(proba).all():
+        raise ValueError('Scoring output must be finite and preserve row alignment.')
     scores_calibrated = False
     cal_file = manifest.get('calibrator_file')
     if cal_file:
         cal_path = os.path.join(out, cal_file)
-        if os.path.exists(cal_path):
-            try:
-                from modeling.calibration_utils import apply_calibrator, load_calibrator
-                calibrator = load_calibrator(cal_path)
-                proba = apply_calibrator(calibrator, proba)
-                scores_calibrated = True
-            except Exception:
-                scores_calibrated = False
+        if not os.path.exists(cal_path):
+            raise ValueError('Required calibrator is missing from the scoring bundle. Rebuild a complete bundle.')
+        try:
+            from modeling.calibration_utils import apply_calibrator, load_calibrator
+            calibrator = load_calibrator(cal_path)
+            proba = apply_calibrator(calibrator, proba)
+            scores_calibrated = True
+        except Exception as error:
+            raise ValueError('Required calibrator could not be applied; uncalibrated scoring is blocked.') from error
+    elif (manifest.get('calibration') or {}).get('fitted'):
+        raise ValueError('Bundle declares fitted calibration but has no calibrator artifact.')
 
     monitoring: Dict[str, Any] = {
-        'score_mean': float(np.mean(proba)) if len(proba) else None,
-        'score_std': float(np.std(proba)) if len(proba) else None,
-        'score_p50': float(np.median(proba)) if len(proba) else None,
+        'score_mean': float(np.mean(proba)) if len(proba) and not multiclass else None,
+        'score_std': float(np.std(proba)) if len(proba) and not multiclass else None,
+        'score_p50': float(np.median(proba)) if len(proba) and not multiclass else None,
         'scores_calibrated': scores_calibrated,
     }
+    if multiclass:
+        monitoring['class_probability_mean'] = np.mean(proba, axis=0).tolist() if len(proba) else []
     # Optional PSI vs train reference snapshot if present in bundle sidecar
     ref_path = os.path.join(out, 'train_reference.parquet')
     # Also accept a lightweight CSV reference written at bundle time (optional)
@@ -371,7 +449,10 @@ def score_frame(file_id: int, df: pd.DataFrame) -> Dict[str, Any]:
         'status': 'ok',
         'file_id': file_id,
         'n_scored': int(len(proba)),
-        'scores': [float(x) for x in proba],
+        'scores': proba.tolist(),
+        'class_mapping': (manifest.get('prediction_contract') or {}).get('class_mapping'),
+        'score_semantics': 'class probabilities' if multiclass else ('anomaly ranking; not a probability' if manifest.get('task') == 'anomaly' else manifest.get('task')),
+        'bundle_id': manifest.get('bundle_id'),
         'scores_calibrated': scores_calibrated,
         'feature_count': len(feature_names),
         'algorithm': manifest.get('algorithm'),

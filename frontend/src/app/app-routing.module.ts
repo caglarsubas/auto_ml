@@ -9,14 +9,16 @@ import { ModelDevelopmentComponent } from './model-development/model-development
 import { HomeComponent } from './home/home.component';
 import { LoginComponent } from './login/login.component';
 import { UnsavedChangesGuard } from './guards/unsaved-changes.guard';
+import { SessionGuard } from './guards/session.guard';
 
 const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   { path: 'login', component: LoginComponent },
-  { path: 'home', component: HomeComponent },
+  { path: 'home', component: HomeComponent, canActivate: [SessionGuard] },
   {
     path: 'model-development',
     component: ModelDevelopmentComponent,
+    canActivate: [SessionGuard],
     canDeactivate: [UnsavedChangesGuard],
     children: [
       { path: 'declaration', component: DeclarationComponent },

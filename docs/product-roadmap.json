@@ -1,0 +1,519 @@
+{
+  "schema_version": 1,
+  "updated": "2026-10-07",
+  "baseline_commit": "dac05741",
+  "vision": "Build a developer-first platform where business declarations govern model execution and every model carries reproducible evidence for independent review. Credit risk is the first use case; the classification/regression core remains reusable.",
+  "direction": [
+    "On-premise/private cloud, initially one customer organization per installation.",
+    "Distinct developer and independent-reviewer roles; jurisdiction-neutral, versioned customer policies.",
+    "First governed release includes typed AI actions AND sandboxed expert Python.",
+    "Model development, review, export and batch-scoring handoff; production decision use is tracked separately.",
+    "Primary success measure: less development/reproduction/review effort without increased validation defects."
+  ],
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Scientifically reliable execution",
+      "purpose": "Correctness and evidence foundations precede feature expansion.",
+      "gate": "Representative supported workflows pass cross-stage correctness tests; historical evidence remains inspectable and honestly qualified."
+    },
+    {
+      "id": "M2",
+      "title": "Secure and operable private deployment",
+      "purpose": "Security/platform work may progress alongside M1; release qualification requires both.",
+      "gate": "Private deployment passes threat-model and recovery checks; expert Python isolation is mandatory for the first governed release."
+    },
+    {
+      "id": "M3",
+      "title": "Reviewable product and feature development",
+      "purpose": "Independent reproduction and paired experiments make developer-to-reviewer handoff useful.",
+      "gate": "Technical pilot requires M1–M3 including expert isolation, clean reproduction and accessibility. Broader rollout requires two partner workflows and proposed >=30% evidence/reproduction effort reduction or one fewer review iteration without increased defects."
+    },
+    {
+      "id": "M4",
+      "title": "Credit-specific decision support",
+      "purpose": "Specialize around demonstrated customer credit workflows.",
+      "gate": "A design partner validates the workflow and customer-specific policy applicability."
+    },
+    {
+      "id": "M5",
+      "title": "Ongoing model use and selective expansion",
+      "purpose": "Connect mature outcomes to accountable model review.",
+      "gate": "Complete a real monitoring/review cycle; retraining/promotion require approved scope."
+    },
+    {
+      "id": "Research",
+      "title": "Bounded parallel research",
+      "purpose": "Model-family research starts after scientific foundations are verified.",
+      "gate": "Exact-version benchmark, license/privacy review and deployability evidence precede adoption."
+    }
+  ],
+  "items": [
+    {
+      "id": "D01",
+      "milestone": "M1",
+      "title": "Executable prediction contract",
+      "owner": "Backend/ML",
+      "description": "Govern accepted task, target, positive class, population, feature availability, horizon, maturity, and objective from a versioned declaration. Inference proposes and cannot override accepted values.",
+      "acceptance": "UI, assistant, training, evaluation, and scoring agree; contradictory or unsupported configurations fail with actionable errors.",
+      "dependencies": [],
+      "sources": [
+        "Claude CC-2/RM-1",
+        "GPT P01/FIX-01",
+        "Gemini C1"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Complete objective/early-stopping consistency and unsupported-channel handling remain open."
+    },
+    {
+      "id": "D02",
+      "milestone": "M1",
+      "title": "Shared validation and fold-local preprocessing",
+      "owner": "Backend/ML",
+      "description": "Preserve time, entity, and outcome-window constraints through early stopping, encoding, selection, tuning, and calibration. Fit learned operations within their training partitions.",
+      "acceptance": "Export fold membership and fit provenance; no prohibited overlap or silent shuffled fallback.",
+      "dependencies": [
+        "D01"
+      ],
+      "sources": [
+        "Claude CC-1/CC-5",
+        "GPT P02/P03",
+        "Gemini C2/C3"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships; fold-local encoding/imputation is implemented. Upstream learned purifier replay and legacy paths remain unqualified. Constrained target encoding is blocked."
+    },
+    {
+      "id": "D03",
+      "milestone": "M1",
+      "title": "Protected final assessment",
+      "owner": "Backend/ML",
+      "description": "Separate development, calibration, and threshold choice from final holdout assessment. Record access and distinguish exploratory and confirmatory evidence.",
+      "acceptance": "Development cannot inspect final outcomes; changed candidates cannot inherit confirmatory status after holdout inspection.",
+      "dependencies": [
+        "D01",
+        "D02"
+      ],
+      "sources": [
+        "Claude CC-6",
+        "GPT P03",
+        "Gemini C3"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open."
+    },
+    {
+      "id": "D04",
+      "milestone": "M1",
+      "title": "Immutable runs and reliable scoring",
+      "owner": "Backend/ML",
+      "description": "Version dataset, contract, transforms, models, evaluations and bundles by run. Preserve older iterations; fail explicitly on required-calibration failure and make anomaly scores batch invariant.",
+      "acceptance": "Iteration N+1 cannot overwrite N; evaluated and bundled scores match across row ordering and batch sizes within declared tolerances.",
+      "dependencies": [
+        "D01"
+      ],
+      "sources": [
+        "Claude CC-7/RM-7",
+        "GPT P06",
+        "Repository artifact and scoring inspection"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. Fitted encoding/calibration replay, multiclass matrices, XGBoost iteration-zero replay and anomaly batch invariance have regression coverage. Upstream transforms, all stage receipts and concurrency/recovery qualification remain open."
+    },
+    {
+      "id": "D05",
+      "milestone": "M1",
+      "title": "Trustworthy diagnostics",
+      "owner": "Backend/ML",
+      "description": "Correct categorical collinearity treatment, describe combined importance as a heuristic, and use associational terminology for sequential pattern detection.",
+      "acceptance": "Diagnostics are invariant to arbitrary category-code permutations; uncertainty and limitations accompany comparisons.",
+      "dependencies": [
+        "D01"
+      ],
+      "sources": [
+        "Claude CC-9",
+        "GPT FIX-04",
+        "Gemini C4"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open."
+    },
+    {
+      "id": "D06",
+      "milestone": "M2",
+      "title": "Identity and data governance",
+      "owner": "Security/Backend",
+      "description": "Server-side identity, project authorization, developer/reviewer/admin roles, audit actors, retention/deletion and controlled egress across inference, embeddings and telemetry.",
+      "acceptance": "Unauthorized UI/API/MCP/download access fails; all outbound data follows the configured customer policy.",
+      "dependencies": [
+        "D04"
+      ],
+      "sources": [
+        "Claude CC-4/RM-2",
+        "GPT P04",
+        "Gemini C5"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open."
+    },
+    {
+      "id": "D07",
+      "milestone": "M2",
+      "title": "Durable execution and production packaging",
+      "owner": "Platform",
+      "description": "PostgreSQL, dedicated Celery/Redis jobs, bounded concurrency, cancellation, recovery, monitoring and backups. Production TLS/static assets and reproducible private deployment; Django 5.2 LTS and Angular 22.",
+      "acceptance": "Clean install, upgrade/rollback, worker/broker recovery and coordinated data/artifact restore pass on the supported Linux profile.",
+      "dependencies": [
+        "D04"
+      ],
+      "sources": [
+        "Claude RM-2",
+        "GPT P04 and operations gaps",
+        "Repository development topology"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified."
+    },
+    {
+      "id": "D08",
+      "milestone": "M2",
+      "title": "Governed assistant and sandboxed expert Python",
+      "owner": "Security/AI",
+      "description": "Typed actions plus generated/user-authored Python in separate Linux gVisor/runsc jobs. Bind approval to code/input/environment/partition/resource policy; keep fitted expert state sandbox-only through replay and scoring.",
+      "acceptance": "Supported expert transformations/scorers succeed; unauthorized data/host/network access and resource exhaustion fail safely; no fallback into host execution.",
+      "dependencies": [
+        "D01",
+        "D02",
+        "D04",
+        "D06",
+        "D07"
+      ],
+      "sources": [
+        "Claude CC-3/CC-7/RM-3",
+        "GPT FIX-07/P04",
+        "Gemini C5",
+        "User first-release expert-code requirement"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release."
+    },
+    {
+      "id": "D09",
+      "milestone": "M3",
+      "title": "Independent review and reproducible evidence",
+      "owner": "Backend/Review UX",
+      "description": "Extend cards/exports with attributable findings, responses, exceptions, approvals, manifests and a clean-environment replay runner. Separate technical, policy, reviewed, approved, packaged, deployed and accepted states.",
+      "acceptance": "An independent reviewer reproduces a supported package and traces every material decision; changed inputs invalidate dependent approvals.",
+      "dependencies": [
+        "D03",
+        "D04",
+        "D06"
+      ],
+      "sources": [
+        "Claude CC-8/RM-7",
+        "GPT P05/P06",
+        "Gemini C6"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. Reviewer findings/responses/approvals and clean-environment reproduction runner are not implemented."
+    },
+    {
+      "id": "D10",
+      "milestone": "M3",
+      "title": "Paired change analysis",
+      "owner": "ML/Frontend",
+      "description": "Deliver R3 before/after comparison, then R1 correlated alternatives and grouped ablations as immutable branches. Match folds/budgets and disclose retuning.",
+      "acceptance": "Effect size, uncertainty, calibration, stability and operational tradeoffs are visible; holdout-led feature search cannot appear confirmatory.",
+      "dependencies": [
+        "D02",
+        "D03",
+        "D04",
+        "D05"
+      ],
+      "sources": [
+        "Claude RD-R3/RD-R1/RM-4",
+        "GPT P07",
+        "Gemini R1/R3"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    },
+    {
+      "id": "D11",
+      "milestone": "M3",
+      "title": "Business objectives and custom scoring",
+      "owner": "ML/AI",
+      "description": "Deliver R2 with versioned built-ins, costs, constrained expressions and expert scorer plug-ins through D08; preserve trusted reference metrics.",
+      "acceptance": "Selection, tuning and evaluation agree on objective semantics; custom code cannot override mandatory trusted checks.",
+      "dependencies": [
+        "D01",
+        "D02",
+        "D08"
+      ],
+      "sources": [
+        "Claude RD-R2/RM-9",
+        "GPT P08",
+        "Gemini R2 need retained with safer implementation"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    },
+    {
+      "id": "D12",
+      "milestone": "M3",
+      "title": "Accessible developer and reviewer workflow",
+      "owner": "Frontend/Product",
+      "description": "Improve onboarding, actionable blocked states, experiment navigation, progress/cancellation and evidence summaries with expandable detail under the existing design system.",
+      "acceptance": "Keyboard/screen-reader users complete representative workflows and can explain what ran, stopped, changed and requires review.",
+      "dependencies": [
+        "D06",
+        "D07",
+        "D09"
+      ],
+      "sources": [
+        "Claude RM-3 and usability studies",
+        "GPT usability gaps",
+        "Existing DESIGN.md"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open."
+    },
+    {
+      "id": "D13",
+      "milestone": "M4",
+      "title": "Credit outcome and population analysis",
+      "owner": "ML/Credit SME",
+      "description": "Extend target contracts with maturity/vintage, delayed outcomes, accepted/applicant population diagnostics and selection-bias sensitivity.",
+      "acceptance": "Immature labels/population limitations are explicit; reject-inference assumptions cannot silently alter training data.",
+      "dependencies": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "sources": [
+        "Claude RM-5",
+        "GPT P09",
+        "Gemini fairness/population concerns"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    },
+    {
+      "id": "D14",
+      "milestone": "M4",
+      "title": "Decision policy and explanations",
+      "owner": "ML/Credit SME",
+      "description": "Extend cost/calibration/scorecard functionality with capacity scenarios, policy comparisons, segment/fairness analysis and customer-approved reason mapping.",
+      "acceptance": "Performance and policy reproduce separately; explanation fidelity passes and a named policy owner approves use.",
+      "dependencies": [
+        "D09",
+        "D13"
+      ],
+      "sources": [
+        "Claude RM-6/RM-8",
+        "GPT P09",
+        "Gemini reason codes/calibration/PDO hardening"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    },
+    {
+      "id": "D15",
+      "milestone": "M5",
+      "title": "Scheduled outcome monitoring",
+      "owner": "Platform/ML",
+      "description": "Immutable batch history, schema/category coverage, mature-label performance, calibration/cost checks, alerts and review queues.",
+      "acceptance": "Injected changes trigger intended review; insufficient/immature evidence is explicit; retries do not duplicate events.",
+      "dependencies": [
+        "D04",
+        "D09",
+        "D13"
+      ],
+      "sources": [
+        "Claude RM-10",
+        "GPT P10",
+        "Existing offline monitoring hardening"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
+        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+      ],
+      "progress": "Batch-scoring outputs receive immutable identifiers and paths. Scheduled monitoring, mature-label outcomes, deduplicated alerts and review queues remain unimplemented."
+    },
+    {
+      "id": "D16",
+      "milestone": "M5",
+      "title": "Lifecycle interoperability",
+      "owner": "Platform/Backend",
+      "description": "Versioned evidence/scoring interfaces and optional customer-registry adapters; reviewed challenger evaluation and rollback.",
+      "acceptance": "A customer system consumes packages without losing provenance/approvals; promotion remains attributable and reversible.",
+      "dependencies": [
+        "D04",
+        "D09",
+        "D15"
+      ],
+      "sources": [
+        "Claude RM-7/RM-10",
+        "GPT registry integration/lifecycle",
+        "Gemini export and serving boundaries"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    },
+    {
+      "id": "D17",
+      "milestone": "Research",
+      "title": "Contemporary tabular model benchmark",
+      "owner": "ML Research",
+      "description": "After M1, compare current boosters/scorecards with TabICLv2 and legally permitted TabPFN checkpoints under representative temporal/grouped data and equal budgets. Pin versions, licenses, privacy and hardware requirements.",
+      "acceptance": "A reproducible benchmark and legal/deployment review justify any integration; leaderboards alone do not trigger adoption.",
+      "dependencies": [
+        "D02",
+        "D03",
+        "D04"
+      ],
+      "sources": [
+        "Claude TE-4/ALT-1",
+        "GPT model-family benchmark",
+        "Primary 2026 TabICLv2 and TabPFN research"
+      ],
+      "status": "planned",
+      "evidence": [],
+      "progress": ""
+    }
+  ],
+  "research_sources": [
+    {
+      "name": "DeclarAI Product Roadmap Analysis claude.md",
+      "sha256": "5ef9965e3d859022dc4d2c31dd37d775386e39cde0547583debd94002531f8b3"
+    },
+    {
+      "name": "DeclarAI Product Roadmap Analysis gpt.md",
+      "sha256": "71b64802d21847313d40458359963f6b694764c33aa354fa6ec8729059ef65f7"
+    },
+    {
+      "name": "DeclarAI Product Roadmap Analysis gemini.md",
+      "sha256": "e1eb2125f04e59c29b5ed23b486966cd257dec93ead3c12abed1dba877140e03"
+    }
+  ],
+  "architecture": [
+    "Single-organization Linux production deployment; built Angular assets/TLS, Django, PostgreSQL, dedicated Celery/Redis jobs, encrypted versioned artifacts; caches and indexes are rebuildable.",
+    "Versioned prediction/validation/metric specs, run/artifact manifests, execution requests/receipts and review records. New execution resolves exact versions; asynchronous requests return job IDs with status/cancellation.",
+    "Dedicated per-job gVisor/runsc expert runner: fixed environments, no default network, partition-scoped read-only inputs, bounded CPU/RAM/time/process/disk/output, validated staged outputs. API/controller never imports expert code or fitted serialized objects. Runtime failure blocks execution.",
+    "Approvals bind actor/project/code/input/environment/partition/resources; changed state invalidates approval. Outputs remain candidates until adopted.",
+    "Governance states distinguish technical evaluation, policy checks, independent review, human approval, packaging, deployment and accepted use.",
+    "Additive legacy migration preserves files/history, records missing provenance and starts new versioned execution when an old project is continued.",
+    "Retries may recompute; atomic publication and idempotent adoption prevent duplicate evidence or overwrites."
+  ],
+  "release_acceptance": [
+    "Task semantics: low-cardinality regression, many-class labels, reversed positives, missing labels and unsupported combinations.",
+    "Scientific validity: entity/time/horizon constraints, fold-local learned transforms and deliberate leakage fixtures.",
+    "Evidence: concurrent runs, iteration preservation, holdout reuse, stale approval, tampered manifest and legacy import.",
+    "Scoring: calibration, unseen categories, row/feature alignment, batch invariance and explicit required-transform failure.",
+    "Expert execution: valid operations plus unauthorized access, malicious serialization/output, exhaustion, cancellation and unavailable runtime.",
+    "Operations/UX: real auth/project isolation, crash/duplicate recovery, restore/rollback, restricted-network deployment and accessible review."
+  ],
+  "decisions": [
+    "Elevate R3; deliver paired comparisons before R1 cluster-aware alternatives.",
+    "Retain/revise R1 into immutable experiments; no temporary global source edits or compulsory one-feature-per-cluster rule.",
+    "Retain R2 as controlled metrics AND sandboxed expert scorers.",
+    "Preserve/harden existing classification, regression, scorecard and anomaly functionality.",
+    "No universal p-value, ECE, GVIF or score-range promotion gate; methods/tolerances follow declared task and sampling.",
+    "Customer/jurisdiction policy is versioned; provider-report deadlines and blanket legal claims do not become product guarantees.",
+    "Defer general real-time/A-B platforms, mandatory registries/feature stores, full causal discovery, automatic reject inference/promotion and managed multitenant SaaS."
+  ],
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions.",
+  "history": [
+    {
+      "date": "2026-10-07",
+      "event": "User approved the reconciled D01–D17 roadmap; implementation started on codex/governed-foundation."
+    },
+    {
+      "date": "2026-10-07",
+      "packet": "P01",
+      "event": "Native foundation implemented and locally tested; outcomes remain in_progress and release gates remain open. Expert Python fails closed until qualified isolation exists."
+    }
+  ],
+  "implementation_packets": [
+    {
+      "id": "P01",
+      "title": "Governed execution and identity foundation",
+      "status": "tested",
+      "items": [
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D12",
+        "D15"
+      ],
+      "description": "Local native-execution, assessment/scoring, identity and framework foundation. This is partial delivery against the listed outcomes; no milestone or release gate is closed.",
+      "evidence": [
+        "[Implementation record](FOUNDATION_IMPLEMENTATION.md)",
+        "[Qualification commands and source hashes](evidence/foundation-2026-10-07.json)"
+      ],
+      "remaining": "Fold-local purifier replay, complete immutable stage/job contracts, project roles and egress, durable Linux deployment, qualified expert isolation and M3 review/reproduction are still required."
+    }
+  ],
+  "release_qualification": {
+    "status": "open",
+    "technical_milestones": [
+      "M1",
+      "M2",
+      "M3"
+    ],
+    "design_partner_acceptance": "not_performed",
+    "value_gate": "not_performed"
+  }
+}

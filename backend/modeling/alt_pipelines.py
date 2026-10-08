@@ -277,6 +277,7 @@ class SklearnModelAdapter:
         self.best_iteration: int = 0
         self.enable_categorical: bool = False
         self.iv_table: List[Dict[str, Any]] = []
+        self.anomaly_score_range: Optional[Tuple[float, float]] = None
 
     def train(
         self,
@@ -357,6 +358,8 @@ class SklearnModelAdapter:
             n_jobs=-1,
         )
         self.model.fit(Xt)
+        reference = -np.asarray(self.model.score_samples(Xt), dtype=float)
+        self.anomaly_score_range = (float(reference.min()), float(reference.max()))
         self.task = 'anomaly'
         self.algorithm = 'isolation_forest'
         return self
@@ -372,13 +375,14 @@ class SklearnModelAdapter:
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         Xm = self._matrix(X)
         if self.algorithm == 'isolation_forest':
-            # Higher = more anomalous; map to (0,1) via rank-ish logistic of -score
+            # This is an anomaly ranking score, not an outcome probability.
             raw = -np.asarray(self.model.score_samples(Xm), dtype=float)
-            # Min-max on batch for deployability
-            lo, hi = float(np.min(raw)), float(np.max(raw))
+            if self.anomaly_score_range is None:
+                raise ValueError('Legacy anomaly model lacks a fitted score reference. Retrain before evaluation or scoring; batch normalization cannot be reproduced.')
+            lo, hi = self.anomaly_score_range
             if hi - lo < 1e-12:
                 return np.full(len(raw), 0.5)
-            return (raw - lo) / (hi - lo)
+            return np.clip((raw - lo) / (hi - lo), 0.0, 1.0)
         proba = self.model.predict_proba(Xm)
         if proba.ndim == 2 and proba.shape[1] >= 2:
             return proba[:, 1]
@@ -422,6 +426,7 @@ class SklearnModelAdapter:
             'iv_table': self.iv_table,
             'design': self.design,
             'model': self.model,
+            'anomaly_score_range': self.anomaly_score_range,
         }
         joblib.dump(payload, path)
         # Sidecar JSON for humans
@@ -434,6 +439,8 @@ class SklearnModelAdapter:
                 'n_features': len(self.feature_names),
                 'iv_table': self.iv_table,
                 'score_points': self.score_points[:50],
+                'anomaly_score_range': self.anomaly_score_range,
+                'anomaly_score_semantics': 'training-reference normalized ranking; not a probability' if self.algorithm == 'isolation_forest' else None,
             }, f, indent=2, default=str)
         return path
 
@@ -449,6 +456,7 @@ class SklearnModelAdapter:
         obj.iv_table = payload.get('iv_table') or []
         obj.design = payload.get('design')
         obj.model = payload.get('model')
+        obj.anomaly_score_range = payload.get('anomaly_score_range')
         obj.enable_categorical = bool(obj.cat_features)
         return obj
 

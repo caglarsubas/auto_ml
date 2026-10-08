@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
@@ -14,8 +14,9 @@ import { environment } from '../../environments/environment';
   selector: 'app-declaration',
   templateUrl: './declaration.component.html',
   styleUrls: ['./declaration.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
-
 export class DeclarationComponent implements OnInit, OnDestroy {
   selectedFiles: File[] = [];
   selectedDictionaryFile: File | null = null;
@@ -61,7 +62,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private sharedService: SharedService,
     private router: Router,
-    private dataService: DataService
+    private dataService: DataService,
   ) {}
 
   ngOnInit() {
@@ -69,18 +70,18 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       combineLatest([
         this.sharedService.isStarted$,
         this.sharedService.selectedPipeline$,
-        this.sharedService.preprocessingInitiated$
+        this.sharedService.preprocessingInitiated$,
       ]).subscribe(([isStarted, selectedPipeline, preprocessingInitiated]) => {
         this.showContent = isStarted && !!selectedPipeline;
         this.preprocessingInitiated = preprocessingInitiated;
-      })
+      }),
     );
 
     // Sync pipeline notes from SharedService
     this.subscription.add(
       this.sharedService.pipelineNotes$.subscribe((notes) => {
         this.pipelineNotes = notes;
-      })
+      }),
     );
 
     // Auto-hydrate when file ID is set externally (e.g., from loadPipelineRun restore)
@@ -91,23 +92,24 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.getPreview(id);
           this.showDataDictionaryCollection = true;
           // Fetch existing data dictionary
-          this.http.get(`${this.apiBase}declaration/${id}/data_dictionary/`)
-            .subscribe(
-              (data: any) => {
-                if (Array.isArray(data) && data.length > 0) {
-                  this.dataDictionary = data;
-                  this.initializeModelUsageFromBackend(data);
-                  this.pushDeclarationAiContext();
-                  // Push to Redis cache for AI assistant
-                  this.dataService.pushAiCache(id, { data_dictionary: data }).subscribe({
-                    error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
-                  });
-                }
-              },
-              () => { /* dictionary may not exist yet — that's fine */ }
-            );
+          this.http.get(`${this.apiBase}declaration/${id}/data_dictionary/`).subscribe(
+            (data: any) => {
+              if (Array.isArray(data) && data.length > 0) {
+                this.dataDictionary = data;
+                this.initializeModelUsageFromBackend(data);
+                this.pushDeclarationAiContext();
+                // Push to Redis cache for AI assistant
+                this.dataService.pushAiCache(id, { data_dictionary: data }).subscribe({
+                  error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
+                });
+              }
+            },
+            () => {
+              /* dictionary may not exist yet — that's fine */
+            },
+          );
         }
-      })
+      }),
     );
 
     // v2.23.0+: keep the declaration table in sync with AI assistant
@@ -142,7 +144,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           this.dataDictionary = [...this.dataDictionary];
           this.pushDeclarationAiContext();
         }
-      })
+      }),
     );
 
     // Listen for data refresh events (e.g., after AI creates features)
@@ -151,7 +153,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         if (this.currentFileId !== null) {
           console.log('[Declaration] Data refresh triggered — re-fetching preview and dictionary');
           this.getPreview(this.currentFileId);
-          this.http.get(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`)
+          this.http
+            .get(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`)
             .subscribe(
               (data: any) => {
                 if (Array.isArray(data) && data.length > 0) {
@@ -160,16 +163,21 @@ export class DeclarationComponent implements OnInit, OnDestroy {
                   this.pushDeclarationAiContext();
                   // Push to Redis cache for AI assistant
                   if (this.currentFileId !== null) {
-                    this.dataService.pushAiCache(this.currentFileId, { data_dictionary: data }).subscribe({
-                      error: (err: any) => console.warn('[AI Cache] data dictionary push failed:', err),
-                    });
+                    this.dataService
+                      .pushAiCache(this.currentFileId, { data_dictionary: data })
+                      .subscribe({
+                        error: (err: any) =>
+                          console.warn('[AI Cache] data dictionary push failed:', err),
+                      });
                   }
                 }
               },
-              () => { /* dictionary may not exist yet */ }
+              () => {
+                /* dictionary may not exist yet */
+              },
             );
         }
-      })
+      }),
     );
 
     // Load saved model usage settings
@@ -213,7 +221,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     this.errorMessage = null;
     this.showUseExistingButton = false;
     this.columnSeparator = 'semicolon';
-    
+
     // Reset Excel-related properties
     this.isExcelFile = false;
     this.hasMultipleSheets = false;
@@ -225,7 +233,11 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.isExcelFile = true;
         this.checkExcelSheets();
         this.detectExcelHeader(this.selectedFiles[0]);
-      } else if (fileName.endsWith('.csv') || fileName.endsWith('.txt') || fileName.endsWith('.tsv')) {
+      } else if (
+        fileName.endsWith('.csv') ||
+        fileName.endsWith('.txt') ||
+        fileName.endsWith('.tsv')
+      ) {
         this.detectCsvSeparator(this.selectedFiles[0]);
         // Header detection runs after separator is detected (inside detectCsvSeparator callback)
       }
@@ -241,14 +253,17 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     reader.onload = (e: any) => {
       const text: string = e.target.result;
       // Take first 5 lines for analysis
-      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 5);
+      const lines = text
+        .split(/\r?\n/)
+        .filter((l) => l.trim().length > 0)
+        .slice(0, 5);
       if (lines.length === 0) return;
 
       const candidates: { char: string; key: string }[] = [
         { char: ',', key: 'comma' },
         { char: ';', key: 'semicolon' },
         { char: '\t', key: 'tab' },
-        { char: ' ', key: 'space' }
+        { char: ' ', key: 'space' },
       ];
 
       // For each candidate, count occurrences per line and check consistency
@@ -256,13 +271,16 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       let bestScore = -1;
 
       for (const sep of candidates) {
-        const counts = lines.map(line => {
+        const counts = lines.map((line) => {
           // Count separators outside quoted strings
           let count = 0;
           let inQuote = false;
           for (const ch of line) {
-            if (ch === '"') { inQuote = !inQuote; }
-            else if (!inQuote && ch === sep.char) { count++; }
+            if (ch === '"') {
+              inQuote = !inQuote;
+            } else if (!inQuote && ch === sep.char) {
+              count++;
+            }
           }
           return count;
         });
@@ -292,10 +310,16 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
   private detectCsvHeader(text: string, separatorKey: string): void {
     const sepMap: { [key: string]: string } = {
-      'comma': ',', 'semicolon': ';', 'tab': '\t', 'space': ' '
+      comma: ',',
+      semicolon: ';',
+      tab: '\t',
+      space: ' ',
     };
     const sep = sepMap[separatorKey] || ';';
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 21);
+    const lines = text
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0)
+      .slice(0, 21);
     if (lines.length < 2) return;
 
     const parseLine = (line: string): string[] => {
@@ -303,9 +327,14 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       let current = '';
       let inQuote = false;
       for (const ch of line) {
-        if (ch === '"') { inQuote = !inQuote; }
-        else if (!inQuote && ch === sep) { result.push(current.trim()); current = ''; }
-        else { current += ch; }
+        if (ch === '"') {
+          inQuote = !inQuote;
+        } else if (!inQuote && ch === sep) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
       }
       result.push(current.trim());
       return result;
@@ -319,10 +348,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
     for (let col = 0; col < firstRow.length; col++) {
       const firstVal = firstRow[col];
-      const colVals = dataRows.map(r => r[col] || '').filter(v => v !== '');
+      const colVals = dataRows.map((r) => r[col] || '').filter((v) => v !== '');
 
       // Is column data predominantly numeric?
-      const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+      const numericCount = colVals.filter((v) => !isNaN(Number(v)) && v !== '').length;
       const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
 
       const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
@@ -345,7 +374,9 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
     const hasHeader = headerSignals >= dataSignals;
     this.firstLineIsNotHeader = !hasHeader;
-    console.log(`[CSV Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+    console.log(
+      `[CSV Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`,
+    );
   }
 
   private detectExcelHeader(file: File): void {
@@ -367,9 +398,9 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
       for (let col = 0; col < firstRow.length; col++) {
         const firstVal = String(firstRow[col] ?? '').trim();
-        const colVals = dataRows.map(r => String(r[col] ?? '').trim()).filter(v => v !== '');
+        const colVals = dataRows.map((r) => String(r[col] ?? '').trim()).filter((v) => v !== '');
 
-        const numericCount = colVals.filter(v => !isNaN(Number(v)) && v !== '').length;
+        const numericCount = colVals.filter((v) => !isNaN(Number(v)) && v !== '').length;
         const dataIsNumeric = colVals.length > 0 && numericCount / colVals.length > 0.5;
         const firstIsNumeric = firstVal !== '' && !isNaN(Number(firstVal));
 
@@ -389,7 +420,9 @@ export class DeclarationComponent implements OnInit, OnDestroy {
 
       const hasHeader = headerSignals >= dataSignals;
       this.firstLineIsNotHeader = !hasHeader;
-      console.log(`[Excel Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`);
+      console.log(
+        `[Excel Auto-detect] Header detection: headerSignals=${headerSignals}, dataSignals=${dataSignals}, hasHeader=${hasHeader}`,
+      );
     };
     reader.readAsArrayBuffer(file);
   }
@@ -398,7 +431,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     const reader = new FileReader();
     reader.onload = (e: any) => {
       const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, {type: 'array'});
+      const workbook = XLSX.read(data, { type: 'array' });
       this.hasMultipleSheets = workbook.SheetNames.length > 1;
     };
     reader.readAsArrayBuffer(this.selectedFiles[0] as Blob);
@@ -419,92 +452,90 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       formData.append('first_sheet_has_not_dataset', this.firstSheetHasNotDataset.toString());
       formData.append('merge_column_wise', this.mergeColumnWise.toString());
 
-      this.http.post(`${this.apiBase}declaration/`, formData)
-        .subscribe(
-          (response: any) => {
-            console.log('File uploaded successfully', response);
-            this.currentFileId = response.id;
-            this.sharedService.setCurrentFileId(this.currentFileId);
-            const notes = Array.isArray(response?.import_notes) ? response.import_notes : [];
-            this.importNotice = notes.length
-              ? notes.join(' ')
-              : (response?.auto_skipped_dictionary_sheet
-                ? 'First sheet looked like a data dictionary; modeling sheet was auto-selected.'
-                : null);
-            if (this.currentFileId !== null) {
-              this.getPreview(this.currentFileId);
-            }
-            this.errorMessage = null;
-            this.showUseExistingButton = false;
-            this.showDataDictionaryCollection = true;
-            // Checkpoint: data imported
-            this.sharedService.triggerCheckpoint('decl_data_imported');
-          },
-          (error: HttpErrorResponse) => {
-            console.error('Error uploading file:', error);
-            this.errorMessage = 'An error occurred while uploading the file: ' + (error.error?.error || error.message);
-            if (error.status === 409) {
-              this.showUseExistingButton = true;
-              this.existingFileName = this.selectedFiles[0]?.name || null;
-            } else {
-              this.showUseExistingButton = false;
-            }
-            // Log more details about the error
-            if (error.error instanceof ErrorEvent) {
-              console.error('Client-side error:', error.error.message);
-            } else {
-              console.error('Server-side error:', error.status, error.error);
-            }
+      this.http.post(`${this.apiBase}declaration/`, formData).subscribe(
+        (response: any) => {
+          console.log('File uploaded successfully', response);
+          this.currentFileId = response.id;
+          this.sharedService.setCurrentFileId(this.currentFileId);
+          const notes = Array.isArray(response?.import_notes) ? response.import_notes : [];
+          this.importNotice = notes.length
+            ? notes.join(' ')
+            : response?.auto_skipped_dictionary_sheet
+              ? 'First sheet looked like a data dictionary; modeling sheet was auto-selected.'
+              : null;
+          if (this.currentFileId !== null) {
+            this.getPreview(this.currentFileId);
           }
-        );
+          this.errorMessage = null;
+          this.showUseExistingButton = false;
+          this.showDataDictionaryCollection = true;
+          // Checkpoint: data imported
+          this.sharedService.triggerCheckpoint('decl_data_imported');
+        },
+        (error: HttpErrorResponse) => {
+          console.error('Error uploading file:', error);
+          this.errorMessage =
+            'An error occurred while uploading the file: ' + (error.error?.error || error.message);
+          if (error.status === 409) {
+            this.showUseExistingButton = true;
+            this.existingFileName = this.selectedFiles[0]?.name || null;
+          } else {
+            this.showUseExistingButton = false;
+          }
+          // Log more details about the error
+          if (error.error instanceof ErrorEvent) {
+            console.error('Client-side error:', error.error.message);
+          } else {
+            console.error('Server-side error:', error.status, error.error);
+          }
+        },
+      );
     }
   }
 
   useExistingFile(): void {
     if (this.existingFileName) {
-      this.http.get(`${this.apiBase}declaration/by-name/${this.existingFileName}/`)
-        .subscribe(
-          (response: any) => {
-            this.currentFileId = response.id;
-            this.sharedService.setCurrentFileId(this.currentFileId);
-            if (this.currentFileId !== null) {
-              this.getPreview(this.currentFileId);
-            }
-            this.errorMessage = null;
-            this.showUseExistingButton = false;
-            // Show Data Dictionary Collection after using existing file
-            this.showDataDictionaryCollection = true;
-            // Checkpoint: data imported (via existing file)
-            this.sharedService.triggerCheckpoint('decl_data_imported');
-          },
-          error => {
-            console.error('Error fetching existing file:', error);
-            this.errorMessage = 'An error occurred while fetching the existing file.';
+      this.http.get(`${this.apiBase}declaration/by-name/${this.existingFileName}/`).subscribe(
+        (response: any) => {
+          this.currentFileId = response.id;
+          this.sharedService.setCurrentFileId(this.currentFileId);
+          if (this.currentFileId !== null) {
+            this.getPreview(this.currentFileId);
           }
-        );
+          this.errorMessage = null;
+          this.showUseExistingButton = false;
+          // Show Data Dictionary Collection after using existing file
+          this.showDataDictionaryCollection = true;
+          // Checkpoint: data imported (via existing file)
+          this.sharedService.triggerCheckpoint('decl_data_imported');
+        },
+        (error) => {
+          console.error('Error fetching existing file:', error);
+          this.errorMessage = 'An error occurred while fetching the existing file.';
+        },
+      );
     }
   }
 
   getPreview(fileId: number): void {
-    this.http.get(`${this.apiBase}declaration/${fileId}/preview/`)
-      .subscribe(
-        (data: any) => {
-          this.previewData = data;
-          // Default OOT date column candidate if exists
-          const cols: string[] = Array.isArray(data?.columns) ? data.columns : [];
-          if (cols.length && !this.splitDateColumn) {
-            const dateLike = cols.find(c => /date|time|dt/i.test(String(c)));
-            this.splitDateColumn = dateLike || null;
-          }
-          if (this.firstLineIsNotHeader) {
-            this.previewData.note = "Note: First line is treated as data, generic headers are used.";
-          }
-          this.showDataDictionaryCollection = true;
-          // Push data preview to cumulative AI context
-          this.pushDeclarationAiContext();
-        },
-        error => console.error('Error getting preview:', error)
-      );
+    this.http.get(`${this.apiBase}declaration/${fileId}/preview/`).subscribe(
+      (data: any) => {
+        this.previewData = data;
+        // Default OOT date column candidate if exists
+        const cols: string[] = Array.isArray(data?.columns) ? data.columns : [];
+        if (cols.length && !this.splitDateColumn) {
+          const dateLike = cols.find((c) => /date|time|dt/i.test(String(c)));
+          this.splitDateColumn = dateLike || null;
+        }
+        if (this.firstLineIsNotHeader) {
+          this.previewData.note = 'Note: First line is treated as data, generic headers are used.';
+        }
+        this.showDataDictionaryCollection = true;
+        // Push data preview to cumulative AI context
+        this.pushDeclarationAiContext();
+      },
+      (error) => console.error('Error getting preview:', error),
+    );
   }
 
   onEditDataImport(): void {
@@ -537,7 +568,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       formData.append('cutoff', this.splitCutoff);
     }
 
-    this.http.post(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`, formData)
+    this.http
+      .post(`${this.apiBase}declaration/${this.currentFileId}/data_dictionary/`, formData)
       .subscribe(
         (data: any) => {
           this.dataDictionary = data;
@@ -554,23 +586,23 @@ export class DeclarationComponent implements OnInit, OnDestroy {
           // Checkpoint: dictionary generated
           this.sharedService.triggerCheckpoint('decl_dictionary_generated');
         },
-        error => console.error('Error generating data dictionary:', error)
+        (error) => console.error('Error generating data dictionary:', error),
       );
   }
 
   openFeatureCard(feature: any): void {
     if (this.currentFileId !== null && feature.Feature_Name) {
-      const features = this.dataDictionary.map(item => ({
+      const features = this.dataDictionary.map((item) => ({
         Feature_Name: item.Feature_Name,
-        Feature_Description: item.Feature_Description || 'No description available'
+        Feature_Description: item.Feature_Description || 'No description available',
       }));
       this.dialog.open(FeatureCardComponent, {
         width: '600px',
-        data: { 
-          fileId: this.currentFileId.toString(), 
+        data: {
+          fileId: this.currentFileId.toString(),
           columnName: feature.Feature_Name,
-          features: features
-        }
+          features: features,
+        },
       });
     } else {
       console.error('Cannot open feature card: fileId or columnName is missing');
@@ -591,7 +623,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       return this.variableModelUsage[featureName];
     }
     // Fall back to backend's predetermined value from data dictionary
-    const feature = this.dataDictionary.find(f => f.Feature_Name === featureName);
+    const feature = this.dataDictionary.find((f) => f.Feature_Name === featureName);
     if (feature && feature.Model_Usage_YN) {
       return feature.Model_Usage_YN;
     }
@@ -633,12 +665,12 @@ export class DeclarationComponent implements OnInit, OnDestroy {
   // Initialize Model_Usage from backend's predetermined values
   private initializeModelUsageFromBackend(dataDictionary: any[]): void {
     if (!Array.isArray(dataDictionary)) return;
-    
+
     // For each feature in the data dictionary
-    dataDictionary.forEach(feature => {
+    dataDictionary.forEach((feature) => {
       const featureName = feature.Feature_Name;
       const backendValue = feature.Model_Usage_YN;
-      
+
       // Only initialize if:
       // 1. Feature has a backend value
       // 2. User hasn't already set a value (localStorage override)
@@ -646,7 +678,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
         this.variableModelUsage[featureName] = backendValue;
       }
     });
-    
+
     // Save the initialized values (merging with any existing user overrides)
     this.saveModelUsage();
   }
@@ -698,9 +730,10 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     // 'No' entries left in localStorage by a previously-loaded dataset (the
     // modelUsageKey is global, not per-file) from inflating the count.
     return this.dataDictionary
-      .map(feature => feature?.Feature_Name)
-      .filter((featureName): featureName is string =>
-        !!featureName && this.getModelUsage(featureName) === 'No');
+      .map((feature) => feature?.Feature_Name)
+      .filter(
+        (featureName): featureName is string =>
+          !!featureName && this.getModelUsage(featureName) === 'No',
+      );
   }
-  
 }

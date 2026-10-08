@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import uuid
 
 import pandas as pd
 from django.conf import settings
@@ -65,7 +66,8 @@ class DeploymentBundleView(APIView):
                     st['deployment'] = {
                         'bundle_path': payload.get('bundle_path'),
                         'lineage_id': (payload.get('manifest') or {}).get('lineage_id'),
-                        'deploy_ready': True,
+                        'package_ready': True,
+                        'production_use_approved': False,
                     }
                     step_order = {
                         'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
@@ -132,13 +134,17 @@ class DeploymentScoreView(APIView):
                     'error': 'Provide multipart file upload or JSON rows array.',
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            result = score_frame(file_id, df)
+            result = score_frame(file_id, df, bundle_id=request.data.get('bundle_id'))
             # Cap inline scores for large batches — also write artifact
             scores = result.get('scores') or []
             out_dir = os.path.join(settings.MEDIA_ROOT, 'deployment')
             os.makedirs(out_dir, exist_ok=True)
-            scored_path = os.path.join(out_dir, f'{file_id}_scores.json')
-            with open(scored_path, 'w', encoding='utf-8') as f:
+            batch_id = str(uuid.uuid4())
+            batch_dir = os.path.join(out_dir, str(file_id), 'batches')
+            os.makedirs(batch_dir, exist_ok=True)
+            scored_path = os.path.join(batch_dir, f'{batch_id}.json')
+            result['batch_id'] = batch_id
+            with open(scored_path, 'x', encoding='utf-8') as f:
                 json.dump(result, f)
             result['scores_path'] = os.path.relpath(scored_path, settings.MEDIA_ROOT)
             if len(scores) > 500:

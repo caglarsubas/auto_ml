@@ -7,6 +7,12 @@
 node_modules
 frontend/node_modules
 frontend/dist
+frontend/.angular
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+# E2E runs use the local checkout; account fixtures are not application assets.
+frontend/e2e
 backend/db.sqlite3
 **/.DS_Store
 datasets

@@ -77,3 +77,13 @@ def media_root(tmp_path):
 def _use_tmp_media(settings, media_root):
     """Automatically redirect MEDIA_ROOT to a temp directory."""
     settings.MEDIA_ROOT = str(media_root)
+
+
+@pytest.fixture
+def authenticated_api_client(db, django_user_model):
+    """Authenticated API actor for handler tests; boundary tests use real sessions."""
+    from rest_framework.test import APIClient
+    user = django_user_model.objects.create_user(username='handler-test-actor', password=None)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client

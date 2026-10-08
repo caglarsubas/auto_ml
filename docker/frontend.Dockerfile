@@ -1,12 +1,13 @@
 # Frontend (Angular)
 # Use Debian-based image to avoid occasional esbuild deadlocks on Alpine
-FROM node:20-bullseye
+FROM node:24-bookworm
 
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
 COPY frontend/package*.json ./
-RUN npm install
+COPY frontend/vendor/ ./vendor/
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --maxsockets=5
 
 # Copy the rest of the app
 COPY frontend/ .

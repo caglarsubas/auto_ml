@@ -151,7 +151,7 @@ class CrispMonitoringRunView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CrispSequentialPatternsView(APIView):
-    """MVP causality / sequential near-duplicate pattern flags on train data."""
+    """Sequential near-duplicate pattern flags on train data."""
 
     def get(self, request, file_id: int, *args, **kwargs):
         pkl = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')

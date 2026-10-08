@@ -1,0 +1,64 @@
+"""Exercise actual session middleware, permissions and CSRF on HTTP routes."""
+import pytest
+from rest_framework.test import APIClient
+
+pytestmark = [pytest.mark.django_db, pytest.mark.auth_boundary]
+
+
+@pytest.mark.parametrize('method,path', [
+    ('get', '/api/declaration/'), ('get', '/api/pipeline/'),
+    ('get', '/api/modeling/status/1/'), ('get', '/api/evaluation/status/1/'),
+    ('get', '/api/deployment/status/1/'), ('get', '/api/ai-assistant/models/'),
+    ('post', '/api/modeling/start/'), ('post', '/api/preprocessing/run/'),
+    ('post', '/api/evaluation/run/'), ('post', '/api/deployment/score/'),
+    ('post', '/api/ai-assistant/execute-action/'), ('post', '/api/evaluation/pack/'),
+])
+def test_anonymous_requests_are_blocked(method, path):
+    response = getattr(APIClient(), method)(path, {}, format='json')
+    assert response.status_code == 403
+
+
+def test_signin_csrf_session_rotation_and_logout(django_user_model):
+    django_user_model.objects.create_user(username='developer-test', password='synthetic-session-test-pass')
+    client = APIClient(enforce_csrf_checks=True)
+    credentials = {'username': 'developer-test', 'password': 'synthetic-session-test-pass'}
+    assert client.post('/api/auth/login/', credentials, format='json').status_code == 403
+    session = client.get('/api/auth/session/').json()
+    assert session['authenticated'] is False
+    login = client.post('/api/auth/login/', credentials, format='json', HTTP_X_CSRFTOKEN=session['csrf_token'])
+    assert login.status_code == 200
+    assert login.json()['authenticated'] is True
+    assert login.json()['csrf_token'] != session['csrf_token']
+    assert client.get('/api/declaration/').status_code == 200
+    assert client.post('/api/modeling/start/', {}, format='json').status_code == 403
+    assert client.post('/api/modeling/start/', {}, format='json', HTTP_X_CSRFTOKEN=login.json()['csrf_token']).status_code == 400
+    assert client.post('/api/auth/logout/', {}, format='json').status_code == 403
+    assert client.post('/api/auth/logout/', {}, format='json', HTTP_X_CSRFTOKEN=login.json()['csrf_token']).status_code == 200
+    assert client.get('/api/declaration/').status_code == 403
+
+
+def test_invalid_and_inactive_credentials_cannot_authenticate(django_user_model):
+    django_user_model.objects.create_user(username='inactive-test', password='synthetic-session-test-pass', is_active=False)
+    client = APIClient(enforce_csrf_checks=True)
+    csrf = client.get('/api/auth/session/').json()['csrf_token']
+    for username in ('unknown-test', 'inactive-test'):
+        response = client.post('/api/auth/login/', {'username': username, 'password': 'synthetic-session-test-pass'}, format='json', HTTP_X_CSRFTOKEN=csrf)
+        assert response.status_code == 401
+    assert client.get('/api/auth/session/').json()['authenticated'] is False
+
+
+def test_artifacts_require_session_and_block_internal_serialization(_use_tmp_media, settings, django_user_model):
+    from pathlib import Path
+    root = Path(settings.MEDIA_ROOT)
+    (root / 'data_files' / 'public.csv').write_text('x\n1\n')
+    (root / 'private.pkl').write_bytes(b'not a pickle')
+    client = APIClient()
+    assert client.get('/media/data_files/public.csv').status_code == 403
+    user = django_user_model.objects.create_user(username='artifact-test', password='synthetic-session-test-pass')
+    client.force_login(user)
+    response = client.get('/media/data_files/public.csv')
+    assert response.status_code == 200
+    assert response['Cache-Control'] == 'private, no-store'
+    response.close()
+    assert client.get('/media/private.pkl').status_code == 404
+    assert client.get('/media/../outside.csv').status_code == 404

@@ -10,6 +10,20 @@ import numpy as np
 from scipy import stats as scipy_stats
 
 
+@pytest.fixture(autouse=True)
+def _isolate_handler_unit_tests_from_authentication(request, monkeypatch):
+    """Scientific handler unit tests use no session; boundary tests use the real policy.
+
+    This is test-only isolation, never a runtime configuration or bypass.
+    Authentication/CSRF regressions explicitly opt into the production defaults.
+    """
+    if request.node.get_closest_marker('auth_boundary'):
+        return
+    from rest_framework.permissions import AllowAny
+    from rest_framework.views import APIView
+    monkeypatch.setattr(APIView, 'permission_classes', [AllowAny])
+
+
 # ---------------------------------------------------------------------------
 # Model registry tests
 # ---------------------------------------------------------------------------

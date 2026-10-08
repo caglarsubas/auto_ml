@@ -1,0 +1,3 @@
+
+# Preserve upstream font license bytes, including their original whitespace.
+frontend/src/assets/fonts/*-OFL.txt -whitespace

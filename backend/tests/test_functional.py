@@ -15,8 +15,8 @@ from rest_framework.test import APIClient
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
+def api_client(authenticated_api_client):
+    return authenticated_api_client
 
 
 @pytest.fixture
@@ -1479,7 +1479,7 @@ class TestAIActionExecuteAPI:
         assert response.status_code == 400
 
     def test_execute_code_nonexistent_file(self, api_client, _use_tmp_media):
-        """POST /api/ai-assistant/execute-action/ execute_code with missing file returns error."""
+        """Isolation blocks code before probing even a nonexistent dataset."""
         response = api_client.post(
             '/api/ai-assistant/execute-action/',
             data=json.dumps({
@@ -1490,7 +1490,7 @@ class TestAIActionExecuteAPI:
             content_type='application/json',
         )
         assert response.status_code == 400
-        assert 'not found' in response.data['error']
+        assert response.data['error_code'] == 'expert_isolation_unavailable'
 
 
 # ---------------------------------------------------------------------------

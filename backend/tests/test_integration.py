@@ -14,8 +14,8 @@ from rest_framework.test import APIClient
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
+def api_client(authenticated_api_client):
+    return authenticated_api_client
 
 
 @pytest.fixture
@@ -488,202 +488,31 @@ class TestUploadFeatureCardStackedWorkflow:
 @pytest.mark.django_db
 class TestAIActionExecuteWorkflow:
 
-    def test_upload_then_execute_code(self, api_client, _use_tmp_media):
-        """Upload CSV → execute AI code action → verify changes."""
-        df = pd.DataFrame({
-            'A': [10, 20, 30, 40, 50],
-            'B': [1, 2, 3, 4, 5],
-            'Target': [0, 1, 0, 1, 0],
-        })
-        buf = io.BytesIO()
-        df.to_csv(buf, index=False)
-        buf.seek(0)
-        buf.name = 'ai_code_test.csv'
-
-        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
-        assert resp.status_code == 201
-        file_id = resp.data['id']
-
-        # Execute code to add a new column
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'execute_code',
-                'payload': {
-                    'code': 'df["Ratio"] = df["A"] / df["B"]',
-                    'description': 'Add A/B ratio column',
-                },
-            }),
-            content_type='application/json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['status'] == 'success'
-        assert 'Ratio' in resp.data['changes']['columns_added']
-        assert resp.data['changes']['rows_before'] == 5
-        assert resp.data['changes']['rows_after'] == 5
-
-        # Verify the new column is visible via preview
-        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
-        assert resp.status_code == 200
-        assert 'Ratio' in resp.data['columns']
-
-    def test_execute_code_new_cols_appear_in_dictionary(self, api_client, _use_tmp_media):
-        """After AI creates columns, data_dictionary GET must return them all."""
-        df = pd.DataFrame({
-            'A': [10, 20, 30, 40, 50],
-            'B': [1, 2, 3, 4, 5],
-            'Target': [0, 1, 0, 1, 0],
-        })
-        buf = io.BytesIO()
-        df.to_csv(buf, index=False)
-        buf.seek(0)
-        buf.name = 'dict_sync_test.csv'
-
-        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
-        assert resp.status_code == 201
-        file_id = resp.data['id']
-
-        # Execute code that adds a new column
-        code = 'df["Log1p_A"] = np.log1p(df["A"])\ndf["A_to_B"] = df["A"] / df["B"].replace(0, np.nan)'
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'execute_code',
-                'payload': {'code': code, 'description': 'Add features'},
-            }),
-            content_type='application/json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['status'] == 'success'
-
-        # Data dictionary must now return all 5 columns
-        resp = api_client.get(f'/api/declaration/{file_id}/data_dictionary/')
-        assert resp.status_code == 200
-        names = [d['Feature_Name'] for d in resp.data]
-        assert len(names) == 5  # A, B, Target, Log1p_A, A_to_B
-        assert 'Log1p_A' in names
-        assert 'A_to_B' in names
-
-        # New columns should have feature-specific descriptions from DataDictionary
-        dd_map = {d['Feature_Name']: d for d in resp.data}
-        log1p_desc = dd_map['Log1p_A'].get('Feature_Description', '')
-        assert 'ln(1 + A)' in log1p_desc or 'log' in log1p_desc.lower()
-
-    def test_execute_code_with_nested_function(self, api_client, _use_tmp_media):
-        """Nested functions (closures) inside executed code must see `df`."""
-        df = pd.DataFrame({
-            'A': [10, 20, 30, 40, 50],
-            'B': [1, 2, 3, 4, 5],
-        })
-        buf = io.BytesIO()
-        df.to_csv(buf, index=False)
-        buf.seek(0)
-        buf.name = 'closure_test.csv'
-
-        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
-        assert resp.status_code == 201
-        file_id = resp.data['id']
-
-        code = (
-            'def safe_ratio(a, b):\n'
-            '    return pd.to_numeric(df[a], errors="coerce") / pd.to_numeric(df[b], errors="coerce").replace(0, np.nan)\n'
-            'df["A_to_B"] = safe_ratio("A", "B")\n'
-        )
-
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'execute_code',
-                'payload': {'code': code, 'description': 'Nested closure test'},
-            }),
-            content_type='application/json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['status'] == 'success'
-        assert 'A_to_B' in resp.data['changes']['columns_added']
-
-    def test_execute_code_exploratory_does_not_mutate(self, api_client, _use_tmp_media):
-        """Exploratory Codeline runs must not persist dataset changes."""
-        df = pd.DataFrame({
-            'A': [10, 20, 30, 40, 50],
-            'B': [1, 2, 3, 4, 5],
-            'Target': [0, 1, 0, 1, 0],
-        })
-        buf = io.BytesIO()
-        df.to_csv(buf, index=False)
-        buf.seek(0)
-        buf.name = 'exploratory_code_test.csv'
-
-        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
-        assert resp.status_code == 201
-        file_id = resp.data['id']
-
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'execute_code',
-                'payload': {
-                    'code': 'print(df.shape)\ndf["Ratio"] = df["A"] / df["B"]\nresult = df[["A", "Ratio"]].head(2)',
-                    'description': 'Exploratory ratio check',
-                    'mode': 'exploratory',
-                },
-            }),
-            content_type='application/json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['status'] == 'success'
-        assert resp.data['mode'] == 'exploratory'
-        assert resp.data['changes'] is None
-        assert '5' in (resp.data.get('stdout') or '')
-        assert resp.data.get('preview') is not None
-        assert 'Ratio' in resp.data['preview']['columns']
-
-        # Dataset on disk must remain unchanged
-        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
-        assert resp.status_code == 200
-        assert 'Ratio' not in resp.data['columns']
-        assert set(resp.data['columns']) == {'A', 'B', 'Target'}
-
-    def test_execute_code_apply_still_mutates(self, api_client, _use_tmp_media):
-        """Explicit apply mode (default) still mutates the dataset."""
-        df = pd.DataFrame({
-            'A': [10, 20, 30],
-            'B': [1, 2, 3],
-        })
-        buf = io.BytesIO()
-        df.to_csv(buf, index=False)
-        buf.seek(0)
-        buf.name = 'apply_code_test.csv'
-
-        resp = api_client.post('/api/declaration/', {'file': buf, 'column_separator': 'comma'}, format='multipart')
-        assert resp.status_code == 201
-        file_id = resp.data['id']
-
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'execute_code',
-                'payload': {
-                    'code': 'df["Sum"] = df["A"] + df["B"]',
-                    'description': 'Apply sum column',
-                    'mode': 'apply',
-                },
-            }),
-            content_type='application/json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['status'] == 'success'
-        assert resp.data['mode'] == 'apply'
-        assert 'Sum' in resp.data['changes']['columns_added']
-
-        resp = api_client.get(f'/api/declaration/{file_id}/preview/')
-        assert resp.status_code == 200
-        assert 'Sum' in resp.data['columns']
+    @pytest.mark.parametrize('payload', [
+        {'code': 'df["Ratio"] = df["A"] / df["B"]'},
+        {'code': 'df["Log1p_A"] = np.log1p(df["A"])'},
+        {'code': 'def ratio(): return df["A"] / df["B"]\ndf["Ratio"] = ratio()'},
+        {'code': 'print(df.shape)', 'mode': 'exploratory'},
+        {'code': 'df["Sum"] = df["A"] + df["B"]', 'mode': 'apply'},
+    ])
+    def test_expert_code_blocked_without_isolation(self, api_client, _use_tmp_media, payload):
+        """Both modes fail closed through HTTP and preserve preview/dictionary data."""
+        buf = io.BytesIO(b"A,B,Target\n10,1,0\n20,2,1\n30,3,0\n")
+        buf.name = 'expert_boundary.csv'
+        uploaded = api_client.post('/api/declaration/',
+            {'file': buf, 'column_separator': 'comma'}, format='multipart')
+        assert uploaded.status_code == 201
+        file_id = uploaded.data['id']
+        before = api_client.get(f'/api/declaration/{file_id}/preview/').data
+        before_dict = api_client.get(f'/api/declaration/{file_id}/data_dictionary/').data
+        result = api_client.post('/api/ai-assistant/execute-action/', {
+            'file_id': file_id, 'action_type': 'execute_code', 'payload': payload,
+        }, format='json')
+        assert result.status_code == 400
+        assert result.data['status'] == 'error'
+        assert result.data['error_code'] == 'expert_isolation_unavailable'
+        assert api_client.get(f'/api/declaration/{file_id}/preview/').data == before
+        assert api_client.get(f'/api/declaration/{file_id}/data_dictionary/').data == before_dict
 
     def test_upload_then_update_metadata(self, api_client, _use_tmp_media):
         """Upload CSV → update metadata description via AI action."""

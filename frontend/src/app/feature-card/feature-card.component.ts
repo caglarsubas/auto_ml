@@ -1,9 +1,16 @@
-import { Component, Inject, OnInit, OnDestroy, PLATFORM_ID } from '@angular/core';
+import {
+  Component,
+  Inject,
+  OnInit,
+  OnDestroy,
+  PLATFORM_ID,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { MAT_DIALOG_DATA, MatDialogRef, } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { DataService } from '../services/data.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import * as math from 'mathjs';  // Optional: using math.js for easier percentile calculation
+import * as math from 'mathjs'; // Optional: using math.js for easier percentile calculation
 import { forkJoin } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
@@ -17,7 +24,7 @@ interface FeatureData {
   Descriptive_Stats: {
     [key: string]: any;
   };
-  histogram_data?: number[];  // Add this line
+  histogram_data?: number[]; // Add this line
   value_counts?: { [key: string]: number };
   Target_Classes?: string[];
   Stacked_Stats?: { [targetClass: string]: { [stat: string]: any } };
@@ -29,11 +36,11 @@ interface FeatureInfo {
 }
 
 interface SfsImportanceContext {
-  label: string;  // e.g. "Final Model (12 features)" or "Step 5 — Added: feature_x"
+  label: string; // e.g. "Final Model (12 features)" or "Step 5 — Added: feature_x"
   gain: Array<{ feature: string; score: number }>;
   shap: Array<{ feature: string; score: number }>;
-  modelPath?: string;  // For explainability — saved SFS model path
-  selectedFeatures?: string[];  // For on-demand step explainability
+  modelPath?: string; // For explainability — saved SFS model path
+  selectedFeatures?: string[]; // For on-demand step explainability
 }
 
 interface FeatureCardDialogData {
@@ -56,23 +63,36 @@ interface FeatureCardDialogData {
   sfsContexts?: SfsImportanceContext[];
 }
 
-
 @Component({
   selector: 'app-feature-card',
   templateUrl: './feature-card.component.html',
-  styleUrls: ['./feature-card.component.css']
+  styleUrls: ['./feature-card.component.css'],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
-
 export class FeatureCardComponent implements OnInit, OnDestroy {
-  
   numericalStats = [
-    'Mean', 'Min', '1st_Quantile', '5th_Quantile', '25th_Q1', 
-    '50th_Median', '75th_Q3', '95th_Quantile', '99th_Quantile', 
-    'Max', 'Std', 'Skewness', 'Kurtosis'
+    'Mean',
+    'Min',
+    '1st_Quantile',
+    '5th_Quantile',
+    '25th_Q1',
+    '50th_Median',
+    '75th_Q3',
+    '95th_Quantile',
+    '99th_Quantile',
+    'Max',
+    'Std',
+    'Skewness',
+    'Kurtosis',
   ];
 
   categoricalStats = [
-    '#_of_Categories', 'Mode_Value', 'Mode_Ratio', 'Missing_Ratio', '#_of_Outlier_Categories'
+    '#_of_Categories',
+    'Mode_Value',
+    'Mode_Ratio',
+    'Missing_Ratio',
+    '#_of_Outlier_Categories',
   ];
 
   isBrowser: boolean;
@@ -114,7 +134,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   showWindowCounts: boolean = true;
   private metricLockedByUser: boolean = false;
   // Cached dropdown options for current feature type
-  metricOptions: Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd', label: string }> = [];
+  metricOptions: Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd'; label: string }> = [];
   // Cached labels to avoid heavy template calls
   metricLabelText: string = 'PSI';
   qualityWindowsLabelText: string = '1m/3m/6m';
@@ -139,19 +159,23 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   explainabilityData: any = null;
   explainabilityLoading: boolean = false;
   explainabilityError: string | null = null;
-  explainabilityFetched: boolean = false;  // Track if we've already fetched
-  showNullsBeeswarm: boolean = false;  // Control showing null values in SHAP Beeswarm (Single Feature)
-  beeswarmMissingRatio: number = 0;  // Missing ratio for current feature in beeswarm plot
+  explainabilityFetched: boolean = false; // Track if we've already fetched
+  showNullsBeeswarm: boolean = false; // Control showing null values in SHAP Beeswarm (Single Feature)
+  beeswarmMissingRatio: number = 0; // Missing ratio for current feature in beeswarm plot
   sequentialCandidates: any[] = [];
   sequentialLoading = false;
-  
+
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
   currentTabIndex: number = 0;
 
   // Data version dropdown state
   dataVersion: 'raw' | 'preprocessed' | 'encoded' = 'raw';
-  dataVersionOptions: Array<{ value: 'raw' | 'preprocessed' | 'encoded'; label: string; disabled: boolean }> = [];
-  
+  dataVersionOptions: Array<{
+    value: 'raw' | 'preprocessed' | 'encoded';
+    label: string;
+    disabled: boolean;
+  }> = [];
+
   loadSequentialPatterns(): void {
     const fileId = Number(this.data?.fileId);
     if (!fileId || Number.isNaN(fileId)) return;
@@ -257,11 +281,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   // Robust description getter for dropdown display
   getFeatureDescription(featureName: string): string {
     try {
-      const f: any = this.features.find(x => x.Feature_Name === featureName);
-      const desc = f?.Feature_Description ?? f?.Description ?? f?.description ?? f?.Variable_Description;
+      const f: any = this.features.find((x) => x.Feature_Name === featureName);
+      const desc =
+        f?.Feature_Description ?? f?.Description ?? f?.description ?? f?.Variable_Description;
       const s = desc != null ? String(desc).trim() : '';
       return s !== '' ? s : 'No description available';
-    } catch { return 'No description available'; }
+    } catch {
+      return 'No description available';
+    }
   }
 
   onMetricChange(metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd') {
@@ -275,12 +302,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   private computeMetricLabel(): string {
     switch (this.qualityTimeseriesMetric) {
-      case 'psi': return 'PSI';
-      case 'csi': return 'CSI';
-      case 'ks': return 'KS';
-      case 'jsd': return 'JSD';
-      case 'wd': return 'Wasserstein';
-      default: return String(this.qualityTimeseriesMetric).toUpperCase();
+      case 'psi':
+        return 'PSI';
+      case 'csi':
+        return 'CSI';
+      case 'ks':
+        return 'KS';
+      case 'jsd':
+        return 'JSD';
+      case 'wd':
+        return 'Wasserstein';
+      default:
+        return String(this.qualityTimeseriesMetric).toUpperCase();
     }
   }
 
@@ -321,7 +354,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         error: () => {
           // Status endpoint failed — fall back to full training
           this._runFullModeling(fid);
-        }
+        },
       });
     } catch (e) {
       console.warn('proceedModeling failed:', e);
@@ -346,7 +379,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       },
       complete: () => {
         this.modelingLoading = false;
-      }
+      },
     });
   }
 
@@ -363,20 +396,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const el = document.getElementById('importance-plot');
       if (!el) return;
 
-      const items = (this.selectedImportanceType === 'shap') ? this.importanceShap : this.importanceGain;
+      const items =
+        this.selectedImportanceType === 'shap' ? this.importanceShap : this.importanceGain;
       if (!Array.isArray(items) || items.length === 0) {
-        (el as any).innerHTML = '<div style="color:#777; font-size:12px;">No importances available.</div>';
+        (el as any).innerHTML =
+          '<div style="color:#777; font-size:12px;">No importances available.</div>';
         return;
       }
-      const sorted = [...items].sort((a, b) => (b.score - a.score));
+      const sorted = [...items].sort((a, b) => b.score - a.score);
       const top = sorted.slice(0, Math.max(5, Math.min(100, this.importanceLimit || 20)));
-      const y = top.map(d => d.feature).reverse();
-      const x = top.map(d => d.score).reverse();
+      const y = top.map((d) => d.feature).reverse();
+      const x = top.map((d) => d.score).reverse();
       const title = this.selectedImportanceType === 'shap' ? 'SHAP mean |impact|' : 'XGBoost gain';
 
       // Highlight the selected feature
       const selFeat = this.selectedFeatureName;
-      const barColors = y.map(f => f === selFeat ? '#C02942' : '#4E79A7');
+      const barColors = y.map((f) => (f === selFeat ? '#C02942' : '#4E79A7'));
 
       const trace = {
         x,
@@ -384,7 +419,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         type: 'bar',
         orientation: 'h',
         marker: { color: barColors },
-        hovertemplate: '%{y}: %{x:.6f}<extra></extra>'
+        hovertemplate: '%{y}: %{x:.6f}<extra></extra>',
       } as any;
 
       // Annotation arrow pointing to the selected feature bar
@@ -392,11 +427,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const selIdx = y.indexOf(selFeat);
       if (selIdx >= 0) {
         annotations.push({
-          x: x[selIdx], y: y[selIdx],
-          xanchor: 'left', yanchor: 'middle',
+          x: x[selIdx],
+          y: y[selIdx],
+          xanchor: 'left',
+          yanchor: 'middle',
           text: ` ← ${selFeat}`,
           showarrow: false,
-          font: { size: 11, color: '#C02942', weight: 'bold' }
+          font: { size: 11, color: '#C02942', weight: 'bold' },
         });
       }
 
@@ -407,11 +444,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         xaxis: { title: 'Score' },
         yaxis: { automargin: true },
         showlegend: false,
-        annotations
+        annotations,
       } as any;
       const config = { responsive: true, displayModeBar: false } as any;
-      try { (window as any).Plotly.react(el, [trace], layout, config); }
-      catch { Plotly.newPlot(el, [trace], layout, config); }
+      try {
+        (window as any).Plotly.react(el, [trace], layout, config);
+      } catch {
+        Plotly.newPlot(el, [trace], layout, config);
+      }
     } catch (e) {
       console.warn('drawImportancePlot failed:', e);
     }
@@ -420,11 +460,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   /**
    * Get the selected feature's rank and score for a given importance type
    */
-  getFeatureImportanceRank(type: 'gain' | 'shap'): { rank: number; score: number; total: number } | null {
+  getFeatureImportanceRank(
+    type: 'gain' | 'shap',
+  ): { rank: number; score: number; total: number } | null {
     const items = type === 'shap' ? this.importanceShap : this.importanceGain;
     if (!Array.isArray(items) || items.length === 0) return null;
     const sorted = [...items].sort((a, b) => b.score - a.score);
-    const idx = sorted.findIndex(d => d.feature === this.selectedFeatureName);
+    const idx = sorted.findIndex((d) => d.feature === this.selectedFeatureName);
     if (idx < 0) return null;
     return { rank: idx + 1, score: sorted[idx].score, total: sorted.length };
   }
@@ -440,7 +482,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
    * - Numerical: PSI, KS, JSD, Wasserstein
    * - Categorical: CSI, JSD
    */
-  availableMetrics(): Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd', label: string }> {
+  availableMetrics(): Array<{ value: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd'; label: string }> {
     if (this.isNumerical()) {
       return [
         { value: 'psi', label: 'Population Stability Index (PSI)' },
@@ -468,41 +510,46 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   private computeQualityWindowsLabel(): string {
     try {
-      return [...this.selectedQualityWindows].sort((a,b)=>a-b).map(w => `${w}m`).join('/');
-    } catch { return '3m/6m'; }
+      return [...this.selectedQualityWindows]
+        .sort((a, b) => a - b)
+        .map((w) => `${w}m`)
+        .join('/');
+    } catch {
+      return '3m/6m';
+    }
   }
 
   // Magnitude categories per metric (heuristics for non-PSI/CSI)
   // Returns two thresholds for the three bands: low < T1, T1..T2 mid, >= T2 high
-  private metricThresholds(metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd'):
-    Array<{ y: number; band: 'low' | 'high'; color: string; dash?: 'dash' | 'dot' | 'dashdot' }>
-  {
+  private metricThresholds(
+    metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd',
+  ): Array<{ y: number; band: 'low' | 'high'; color: string; dash?: 'dash' | 'dot' | 'dashdot' }> {
     // PSI/CSI: industry convention
     if (metric === 'psi' || metric === 'csi') {
       return [
-        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.1, band: 'low', color: '#388e3c', dash: 'dot' },
         { y: 0.25, band: 'high', color: '#d32f2f', dash: 'dash' },
       ];
     }
     // KS: common guidance — <0.10 small, 0.10–0.20 moderate, >0.20 strong
     if (metric === 'ks') {
       return [
-        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
-        { y: 0.20, band: 'high', color: '#d32f2f', dash: 'dash' },
+        { y: 0.1, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.2, band: 'high', color: '#d32f2f', dash: 'dash' },
       ];
     }
     // JSD (base 2): heuristic bands — <0.10 low, 0.10–0.30 medium, ≥0.30 high
     if (metric === 'jsd') {
       return [
-        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
-        { y: 0.30, band: 'high', color: '#d32f2f', dash: 'dash' },
+        { y: 0.1, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.3, band: 'high', color: '#d32f2f', dash: 'dash' },
       ];
     }
     // Wasserstein (normalized): heuristic — <0.10 low, 0.10–0.30 medium, ≥0.30 high
     if (metric === 'wd') {
       return [
-        { y: 0.10, band: 'low', color: '#388e3c', dash: 'dot' },
-        { y: 0.30, band: 'high', color: '#d32f2f', dash: 'dash' },
+        { y: 0.1, band: 'low', color: '#388e3c', dash: 'dot' },
+        { y: 0.3, band: 'high', color: '#d32f2f', dash: 'dash' },
       ];
     }
     return [];
@@ -510,8 +557,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   toggleQualityWindow(w: number, checked: boolean): void {
     const set = new Set(this.selectedQualityWindows);
-    if (checked) set.add(w); else set.delete(w);
-    this.selectedQualityWindows = Array.from(set).sort((a,b)=>a-b);
+    if (checked) set.add(w);
+    else set.delete(w);
+    this.selectedQualityWindows = Array.from(set).sort((a, b) => a - b);
     this.qualityWindowsLabelText = this.computeQualityWindowsLabel();
     // Redraw immediately for responsiveness
     this.drawQualityTimeseries();
@@ -530,16 +578,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   fetchQualitySummaryRow(): void {
     const fid = Number(this.data.fileId);
     if (!isFinite(fid)) return;
-    this.dataService.getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName).subscribe({
-      next: (resp: any) => {
-        if (resp?.row) {
-          this.qualitySummary = resp.row;
-          this.initialQualitySummary = resp.row;
-          this.fetchQualityTimeseries();
-        }
-      },
-      error: () => { /* Quality stays as placeholder */ }
-    });
+    this.dataService
+      .getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName)
+      .subscribe({
+        next: (resp: any) => {
+          if (resp?.row) {
+            this.qualitySummary = resp.row;
+            this.initialQualitySummary = resp.row;
+            this.fetchQualityTimeseries();
+          }
+        },
+        error: () => {
+          /* Quality stays as placeholder */
+        },
+      });
   }
 
   // Quality helpers
@@ -548,11 +600,22 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     return !!q && Object.keys(q).length > 0;
   }
 
-  qualityPairs(): Array<{ key: string, value: any }> {
+  qualityPairs(): Array<{ key: string; value: any }> {
     const src = this.qualitySummary ?? this.initialQualitySummary;
     if (!src) return [];
     const entries = Object.entries(src);
-    const preferred = ['Variable', 'variable', 'index', 'Datq_Decision', 'Variable_Type', 'PSI', 'CSI', 'KS', 'JSD', 'Wasserstein'];
+    const preferred = [
+      'Variable',
+      'variable',
+      'index',
+      'Datq_Decision',
+      'Variable_Type',
+      'PSI',
+      'CSI',
+      'KS',
+      'JSD',
+      'Wasserstein',
+    ];
     const score = (k: string) => {
       const i = preferred.indexOf(k);
       return i === -1 ? 1000 : i;
@@ -564,14 +627,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.loadFeatureData();
     if (this.isBrowser) {
-      this.loadPlotly().then(() => {
-        window.addEventListener('resize', this.resizeListener);
-        // Once Plotly is available, attempt to draw quality timeseries
-        this.fetchQualityTimeseries();
-      }).catch(error => {
-        console.error('Error loading Plotly:', error);
-        this.errorMessage = 'An error occurred while loading the visualization library. Please try again.';
-      });
+      this.loadPlotly()
+        .then(() => {
+          window.addEventListener('resize', this.resizeListener);
+          // Once Plotly is available, attempt to draw quality timeseries
+          this.fetchQualityTimeseries();
+        })
+        .catch((error) => {
+          console.error('Error loading Plotly:', error);
+          this.errorMessage =
+            'An error occurred while loading the visualization library. Please try again.';
+        });
     }
   }
 
@@ -595,7 +661,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityData = null;
       this.explainabilityFetched = false;
       this.explainabilityError = null;
-      
+
       // If user is currently on Quality tab, fetch quality for new feature
       if (this.currentTabIndex === 1) {
         this.fetchQualitySummaryRow();
@@ -610,16 +676,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     this.metricLockedByUser = false;
     // Ensure selected metric is valid for new feature type
     this.refreshMetricOptions();
-    const allowed = new Set(this.metricOptions.map(m => m.value));
+    const allowed = new Set(this.metricOptions.map((m) => m.value));
     if (!allowed.has(this.qualityTimeseriesMetric)) {
       this.qualityTimeseriesMetric = this.defaultMetricForFeature();
       this.metricLabelText = this.computeMetricLabel();
     }
     this.fetchQualityTimeseries();
   }
-  
+
   getFileOverride(): string | undefined {
-    if (this.dataVersion === 'preprocessed' && this.data.processedFile) return this.data.processedFile;
+    if (this.dataVersion === 'preprocessed' && this.data.processedFile)
+      return this.data.processedFile;
     if (this.dataVersion === 'encoded' && this.data.encodedFile) return this.data.encodedFile;
     return undefined;
   }
@@ -644,10 +711,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   loadFeatureData() {
     const fileOverride = this.getFileOverride();
-    console.log(`Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}, version: ${this.dataVersion}`);
+    console.log(
+      `Loading feature data for fileId: ${this.data.fileId}, columnName: ${this.data.columnName}, version: ${this.dataVersion}`,
+    );
     forkJoin({
-      featureCard: this.dataService.getFeatureCard(this.data.fileId, this.data.columnName, fileOverride),
-      stackedData: this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride)
+      featureCard: this.dataService.getFeatureCard(
+        this.data.fileId,
+        this.data.columnName,
+        fileOverride,
+      ),
+      stackedData: this.dataService.getStackedFeatureData(
+        this.data.fileId,
+        this.data.columnName,
+        fileOverride,
+      ),
     }).subscribe({
       next: ({ featureCard, stackedData: stackedResp }) => {
         this.featureData = featureCard;
@@ -657,13 +734,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           this.targetAverages = stackedResp?.target_averages ?? null;
 
           // Store the original histogram data
-          this.originalHistogramData = this.featureData.Descriptive_Stats['histogram_data'] as number[] || null;
+          this.originalHistogramData =
+            (this.featureData.Descriptive_Stats['histogram_data'] as number[]) || null;
           this.originalStackedData = this.preprocessStackedData(stackedData);
-          this.isCategorical = this.featureData.Level_of_Measurement === 'nominal' || this.featureData.Level_of_Measurement === 'ordinal';
+          this.isCategorical =
+            this.featureData.Level_of_Measurement === 'nominal' ||
+            this.featureData.Level_of_Measurement === 'ordinal';
           this.refreshMetricOptions();
           // Ensure metric consistency with detected feature type if user hasn't explicitly chosen
           if (!this.metricLockedByUser) {
-            const allowed = new Set(this.metricOptions.map(m => m.value));
+            const allowed = new Set(this.metricOptions.map((m) => m.value));
             if (!allowed.has(this.qualityTimeseriesMetric)) {
               this.qualityTimeseriesMetric = this.defaultMetricForFeature();
             }
@@ -671,31 +751,35 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           // Update cached labels
           this.metricLabelText = this.computeMetricLabel();
           this.qualityWindowsLabelText = this.computeQualityWindowsLabel();
-          
+
           // Disable cleaning options for categorical data
           if (this.isCategorical) {
             this.outlierCleaningEnabled = false;
             this.sparsityCleaningEnabled = false;
           }
-          
+
           // Process stacked data
           this.featureData.Target_Classes = Object.keys(stackedData);
           this.featureData.Stacked_Stats = {};
-          
+
           for (const targetClass of this.featureData.Target_Classes) {
             const classData = stackedData[targetClass];
             if (this.featureData.Stacked_Stats) {
-              this.featureData.Stacked_Stats[targetClass] = this.calculateDescriptiveStats(classData);
+              this.featureData.Stacked_Stats[targetClass] =
+                this.calculateDescriptiveStats(classData);
             }
           }
-  
+
           // If Descriptive_Stats is not calculated by the backend, calculate it here
-          if (!this.featureData.Descriptive_Stats || Object.keys(this.featureData.Descriptive_Stats).length === 0) {
+          if (
+            !this.featureData.Descriptive_Stats ||
+            Object.keys(this.featureData.Descriptive_Stats).length === 0
+          ) {
             const rawData = this.featureData['histogram_data'] || [];
             this.featureData.Descriptive_Stats = this.calculateDescriptiveStats(rawData);
           }
         }
-        
+
         if (this.isBrowser) {
           this.loadPlotly().then(() => {
             setTimeout(() => {
@@ -709,7 +793,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.error('Error loading feature data:', error);
         // If the encoded version 404s (column missing from encoded file), fallback to preprocessed
         if (error.status === 404 && this.dataVersion === 'encoded' && this.data.processedFile) {
-          console.warn(`[FeatureCard] Column '${this.data.columnName}' not found in encoded file, falling back to preprocessed`);
+          console.warn(
+            `[FeatureCard] Column '${this.data.columnName}' not found in encoded file, falling back to preprocessed`,
+          );
           this.dataVersion = 'preprocessed';
           this.loadFeatureData();
           return;
@@ -719,7 +805,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         } else {
           this.errorMessage = 'An error occurred while loading the feature data. Please try again.';
         }
-      }
+      },
     });
   }
 
@@ -733,7 +819,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         if (error instanceof Error) {
           this.errorMessage = `An error occurred while loading the visualization library: ${error.message}. Please try again.`;
         } else {
-          this.errorMessage = 'An unknown error occurred while loading the visualization library. Please try again.';
+          this.errorMessage =
+            'An unknown error occurred while loading the visualization library. Please try again.';
         }
         throw error;
       }
@@ -773,37 +860,37 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
     const layout: any = {
       title: `Distribution of ${this.featureData.Feature_Name}`,
-      xaxis: { 
+      xaxis: {
         title: this.isNumerical() ? `Values of ${this.featureData.Feature_Name}` : 'Categories',
-        domain: [0, 1]  // Full width for x-axis
+        domain: [0, 1], // Full width for x-axis
       },
       yaxis: {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count',
-        domain: [0, 0.85]
+        domain: [0, 0.85],
       },
       yaxis2: {
         domain: [0.87, 1],
         showticklabels: false,
         zeroline: false,
         showgrid: false,
-        title: ''
+        title: '',
       },
-      height: this.isFullScreen ? window.innerHeight * 0.40 : this.originalPlotSize.height,
-      width: this.isFullScreen ? window.innerWidth * 0.90 : this.originalPlotSize.width,
+      height: this.isFullScreen ? window.innerHeight * 0.4 : this.originalPlotSize.height,
+      width: this.isFullScreen ? window.innerWidth * 0.9 : this.originalPlotSize.width,
       showlegend: true,
       legend: {
         title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
-        traceorder: 'normal'
+        traceorder: 'normal',
       },
       // Add margin to accommodate the box plot
       margin: { t: 50, b: 50, l: 50, r: 50 },
-      colorway: this.stackedWrtTarget 
+      colorway: this.stackedWrtTarget
         ? ['#740505', '#a34203', '#d28100', '#f7b538'] // Complementary colors for stacked
         : ['#740505'], // Single maroon color for non-stacked
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
     };
-  
+
     if (this.stackedWrtTarget) {
       const stackedData = data || this.processStackedData(this.originalStackedData);
       if (Object.keys(stackedData).length === 0) {
@@ -845,7 +932,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       if (this.featureData) return this.defaultMetricForFeature();
       // 3) Safe fallback to PSI to avoid unexpected CSI on numerics before feature loads
       return 'psi';
-    } catch { return 'psi'; }
+    } catch {
+      return 'psi';
+    }
   }
 
   fetchQualityTimeseries(): void {
@@ -868,53 +957,60 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
       this.qualityTimeseriesLoading = true;
       this.qualityTimeseriesError = null;
-      this.dataService.getDatqTimeseries(
-        fid,
-        qualityFile,
-        this.selectedFeatureName || this.data.columnName,
-        this.data.dateColumn,
-        this.qualityTimeseriesMetric,
-        this.selectedQualityWindows,
-        this.minBinShareAllowed
-      ).subscribe({
-        next: (resp: any) => {
-          const series = Array.isArray(resp?.series) ? resp.series : [];
-          this.qualityTimeseries = series;
-          // Prefer the PSI/CSI value from the qualitySummary row to ensure exact match with the summary table
-          let overallFromSummary: number | null = null;
-          try {
-            const qs = this.qualitySummary ?? this.initialQualitySummary;
-            if (qs) {
-              const metric = this.qualityTimeseriesMetric;
-              let key: string | null = null;
-              if (metric === 'psi') key = ('PSI' in qs) ? 'PSI' : (('psi' in qs) ? 'psi' : null);
-              else if (metric === 'csi') key = ('CSI' in qs) ? 'CSI' : (('csi' in qs) ? 'csi' : null);
-              else if (metric === 'ks') key = 'KS';
-              else if (metric === 'jsd') key = 'JSD';
-              else if (metric === 'wd') key = 'Wasserstein';
-              if (key) {
-                const v = (qs as any)[key];
-                const n = Number(v);
-                overallFromSummary = (isFinite(n) && !isNaN(n)) ? n : null;
+      this.dataService
+        .getDatqTimeseries(
+          fid,
+          qualityFile,
+          this.selectedFeatureName || this.data.columnName,
+          this.data.dateColumn,
+          this.qualityTimeseriesMetric,
+          this.selectedQualityWindows,
+          this.minBinShareAllowed,
+        )
+        .subscribe({
+          next: (resp: any) => {
+            const series = Array.isArray(resp?.series) ? resp.series : [];
+            this.qualityTimeseries = series;
+            // Prefer the PSI/CSI value from the qualitySummary row to ensure exact match with the summary table
+            let overallFromSummary: number | null = null;
+            try {
+              const qs = this.qualitySummary ?? this.initialQualitySummary;
+              if (qs) {
+                const metric = this.qualityTimeseriesMetric;
+                let key: string | null = null;
+                if (metric === 'psi') key = 'PSI' in qs ? 'PSI' : 'psi' in qs ? 'psi' : null;
+                else if (metric === 'csi') key = 'CSI' in qs ? 'CSI' : 'csi' in qs ? 'csi' : null;
+                else if (metric === 'ks') key = 'KS';
+                else if (metric === 'jsd') key = 'JSD';
+                else if (metric === 'wd') key = 'Wasserstein';
+                if (key) {
+                  const v = (qs as any)[key];
+                  const n = Number(v);
+                  overallFromSummary = isFinite(n) && !isNaN(n) ? n : null;
+                }
               }
+            } catch {}
+            const overallFromApi =
+              resp && resp.overall != null && resp.overall !== '' ? Number(resp.overall) : null;
+            // For non-preprocessed data versions, prefer the API-computed overall
+            // because the pre-saved summary was computed on preprocessed data only.
+            if (this.dataVersion !== 'preprocessed') {
+              this.qualityTimeseriesOverall =
+                overallFromApi != null ? overallFromApi : overallFromSummary;
+            } else {
+              this.qualityTimeseriesOverall =
+                overallFromSummary != null ? overallFromSummary : overallFromApi;
             }
-          } catch {}
-          const overallFromApi = (resp && resp.overall != null && resp.overall !== '') ? Number(resp.overall) : null;
-          // For non-preprocessed data versions, prefer the API-computed overall
-          // because the pre-saved summary was computed on preprocessed data only.
-          if (this.dataVersion !== 'preprocessed') {
-            this.qualityTimeseriesOverall = (overallFromApi != null) ? overallFromApi : overallFromSummary;
-          } else {
-            this.qualityTimeseriesOverall = (overallFromSummary != null) ? overallFromSummary : overallFromApi;
-          }
-          this.drawQualityTimeseries();
-        },
-        error: (err: any) => {
-          console.error('Failed to fetch quality timeseries:', err);
-          this.qualityTimeseriesError = 'Failed to fetch timeseries';
-        },
-        complete: () => { this.qualityTimeseriesLoading = false; }
-      });
+            this.drawQualityTimeseries();
+          },
+          error: (err: any) => {
+            console.error('Failed to fetch quality timeseries:', err);
+            this.qualityTimeseriesError = 'Failed to fetch timeseries';
+          },
+          complete: () => {
+            this.qualityTimeseriesLoading = false;
+          },
+        });
     } catch (e) {
       console.warn('fetchQualityTimeseries failed:', e);
       this.qualityTimeseriesError = 'Failed to compute timeseries';
@@ -937,17 +1033,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const x = series.map((r: any) => r?.month || null).filter((v: any) => v != null);
       const traces: any[] = [];
       // add rolling windows dynamically
-      const windowStyles: {[w: number]: {color: string; dash?: string}} = {
+      const windowStyles: { [w: number]: { color: string; dash?: string } } = {
         1: { color: '#388e3c' },
         3: { color: '#1976d2' },
         6: { color: '#d32f2f', dash: 'dot' },
       };
       let hasAnyRolling = false;
-      for (const w of this.selectedQualityWindows.sort((a,b)=>a-b)) {
-        const prefix = (this.qualityTimeseriesMetric === 'psi' || this.qualityTimeseriesMetric === 'csi') ? 'psi' : this.qualityTimeseriesMetric;
+      for (const w of this.selectedQualityWindows.sort((a, b) => a - b)) {
+        const prefix =
+          this.qualityTimeseriesMetric === 'psi' || this.qualityTimeseriesMetric === 'csi'
+            ? 'psi'
+            : this.qualityTimeseriesMetric;
         const key = `${prefix}_${w}m`;
         const y = series.map((r: any) => (r && r[key] != null ? Number(r[key]) : null));
-        const has = y.some(v => v != null);
+        const has = y.some((v) => v != null);
         if (has) {
           hasAnyRolling = true;
           const st = windowStyles[w] || { color: '#455a64' };
@@ -957,7 +1056,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             mode: 'lines+markers',
             name: `${w}-month ${this.metricLabelText} rolling`,
             line: { color: st.color, width: 2, ...(st.dash ? { dash: st.dash } : {}) },
-            connectgaps: false
+            connectgaps: false,
           });
           if (this.showWindowCounts) {
             const nkey = `n_${w}m`;
@@ -971,13 +1070,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
               yaxis: 'y2',
               opacity: 0.25,
               marker: { color: baseColor },
-              hovertemplate: `${w}m N: %{y}<extra></extra>`
+              hovertemplate: `${w}m N: %{y}<extra></extra>`,
             });
           }
         }
       }
       if (!hasAnyRolling && this.qualityTimeseriesOverall == null) {
-        (el as any).innerHTML = '<div style="color:#777; font-size:12px;">No series available.</div>';
+        (el as any).innerHTML =
+          '<div style="color:#777; font-size:12px;">No series available.</div>';
         return;
       }
       if (this.qualityTimeseriesOverall != null && x.length) {
@@ -987,18 +1087,39 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           mode: 'lines',
           name: `overall ${this.metricLabelText}`,
           line: { color: '#455a64', width: 2, dash: 'dash' },
-          hovertemplate: `Overall ${this.metricLabelText}: %{y:.6f}<extra></extra>`
+          hovertemplate: `Overall ${this.metricLabelText}: %{y:.6f}<extra></extra>`,
         });
       }
       const layout: any = {
         margin: { t: 24, r: 64, b: 100, l: 56 },
-        height: this.isFullScreen ? Math.floor(window.innerHeight * 0.50) : 560,
+        height: this.isFullScreen ? Math.floor(window.innerHeight * 0.5) : 560,
         width: this.isFullScreen ? Math.floor(window.innerWidth * 0.85) : undefined,
         xaxis: { title: 'Month' },
-        yaxis: { title: { text: `Rolling ${this.metricLabelText} (${this.qualityWindowsLabelText})`, standoff: 12 }, tickformat: '.6f', automargin: true, rangemode: 'tozero' },
-        yaxis2: { title: { text: 'N (test)', standoff: 12 }, overlaying: 'y', side: 'right', rangemode: 'tozero', automargin: true },
+        yaxis: {
+          title: {
+            text: `Rolling ${this.metricLabelText} (${this.qualityWindowsLabelText})`,
+            standoff: 12,
+          },
+          tickformat: '.6f',
+          automargin: true,
+          rangemode: 'tozero',
+        },
+        yaxis2: {
+          title: { text: 'N (test)', standoff: 12 },
+          overlaying: 'y',
+          side: 'right',
+          rangemode: 'tozero',
+          automargin: true,
+        },
         showlegend: true,
-        legend: { orientation: 'h', y: -0.3, x: 0.5, xanchor: 'center', itemclick: 'toggle', itemdoubleclick: 'toggleothers' }
+        legend: {
+          orientation: 'h',
+          y: -0.3,
+          x: 0.5,
+          xanchor: 'center',
+          itemclick: 'toggle',
+          itemdoubleclick: 'toggleothers',
+        },
       };
 
       // Reset threshold trace indices before adding new ones
@@ -1006,7 +1127,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       // Add magnitude guidance using line traces (appear in legend) and concise annotations
       const guides = this.metricThresholds(this.qualityTimeseriesMetric);
       if (guides && guides.length) {
-        const xGuide = x.length >= 2 ? [x[0], x[x.length - 1]] : (x.length === 1 ? [x[0], x[0]] : ['0','1']);
+        const xGuide =
+          x.length >= 2 ? [x[0], x[x.length - 1]] : x.length === 1 ? [x[0], x[0]] : ['0', '1'];
         // low and high threshold lines
         for (const g of guides) {
           traces.push({
@@ -1016,7 +1138,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             name: g.band, // legend label: low or high
             line: { color: g.color, width: 2, dash: g.dash || 'dash' },
             hoverinfo: 'skip',
-            meta: { threshold: true, band: g.band }
+            meta: { threshold: true, band: g.band },
           });
           this.qualityThresholdTraceIndices.push(traces.length - 1);
         }
@@ -1028,23 +1150,28 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           name: 'mid',
           line: { color: '#9e9e9e', width: 1.5, dash: 'dashdot' },
           visible: 'legendonly',
-          hoverinfo: 'skip'
+          hoverinfo: 'skip',
         });
         // concise annotations at right edge
         layout.annotations = (layout.annotations || []).concat(
-          guides.map(g => ({
-            xref: 'paper', x: 1.005, xanchor: 'left',
-            yref: 'y', y: g.y,
+          guides.map((g) => ({
+            xref: 'paper',
+            x: 1.005,
+            xanchor: 'left',
+            yref: 'y',
+            y: g.y,
             text: g.band,
             showarrow: false,
             font: { size: 10, color: g.color },
-            align: 'left'
-          }))
+            align: 'left',
+          })),
         );
         // shapes removed; rely on trace-only for legend-driven on/off behavior
       }
       const gd: any = document.getElementById('quality-timeseries');
-      try { (gd as any).style.pointerEvents = 'auto'; } catch {}
+      try {
+        (gd as any).style.pointerEvents = 'auto';
+      } catch {}
       // If graph div changed (e.g., metric switched), allow reattaching handlers
       if (this.qualityGraphDiv !== gd) {
         this.qualityLegendHandlersAttached = false;
@@ -1052,13 +1179,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
       const config = { responsive: true, displayModeBar: false, staticPlot: false } as any;
       // Purge any previous plot to ensure clean listeners/state across metric switches
-      try { (window as any).Plotly.purge(gd); } catch {}
+      try {
+        (window as any).Plotly.purge(gd);
+      } catch {}
       Plotly.newPlot(gd, traces, layout, config).then(() => {
         this.attachQualityLegendHandlers(gd);
         // Ensure annotations match visibility on first render
         this.updateThresholdAnnotationsFromVisibility(gd);
         // Let Plotly compute initial autorange and then apply robust rescale
-        (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true, 'yaxis2.autorange': true }).then(() => {
+        (window as any).Plotly.relayout(gd, {
+          'yaxis.autorange': true,
+          'yaxis2.autorange': true,
+        }).then(() => {
           this.recomputeYAxisFromVisible(gd);
         });
       });
@@ -1074,12 +1206,18 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         try {
           this.updateThresholdAnnotationsFromVisibility(gd);
           // Trigger autorange based on current visibility after legend toggle
-          (window as any).Plotly.relayout(gd, { 'yaxis.autorange': true, 'yaxis2.autorange': true }).then(() => {
+          (window as any).Plotly.relayout(gd, {
+            'yaxis.autorange': true,
+            'yaxis2.autorange': true,
+          }).then(() => {
             this.recomputeYAxisFromVisible(gd);
           });
         } catch {}
       };
-      const schedule = () => { setTimeout(refresh, 0); setTimeout(refresh, 80); };
+      const schedule = () => {
+        setTimeout(refresh, 0);
+        setTimeout(refresh, 80);
+      };
       // Manually handle legend clicks only for threshold traces (low/high).
       // For all other traces, let Plotly perform its default toggling.
       gd.on('plotly_legendclick', (eventData: any) => {
@@ -1148,14 +1286,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         visibleBands.add('high');
       }
       const ann = guides
-        .filter(g => visibleBands.has(g.band))
-        .map(g => ({
-          xref: 'paper', x: 1.005, xanchor: 'left',
-          yref: 'y', y: g.y,
+        .filter((g) => visibleBands.has(g.band))
+        .map((g) => ({
+          xref: 'paper',
+          x: 1.005,
+          xanchor: 'left',
+          yref: 'y',
+          y: g.y,
           text: g.band,
           showarrow: false,
           font: { size: 10, color: g.color },
-          align: 'left'
+          align: 'left',
         }));
       (window as any).Plotly.relayout(gd, { annotations: ann, shapes: [] });
     } catch {}
@@ -1193,7 +1334,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       // enforce to-zero bottom unless negative values are present
       if (!(ymin < 0)) ymin = 0;
       const span = Math.max(1e-12, ymax - ymin);
-      const pad = Math.max(0.02, 0.10 * span);
+      const pad = Math.max(0.02, 0.1 * span);
       const yMaxPadded = ymax + pad;
       Plotly.relayout(gd, { 'yaxis.autorange': false, 'yaxis.range': [ymin, yMaxPadded] });
     } catch {}
@@ -1201,21 +1342,21 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   plotCategoricalData(valueCounts: { [key: string]: number }, layout: any) {
     const Plotly = (window as any).Plotly;
-    const categories = Object.keys(valueCounts).map(k => k === 'nan' || k === 'NaN' ? '(null)' : String(k));
+    const categories = Object.keys(valueCounts).map((k) =>
+      k === 'nan' || k === 'NaN' ? '(null)' : String(k),
+    );
     const counts: number[] = Object.values(valueCounts);
     const total = counts.reduce((sum, val) => sum + val, 0);
 
     const trace = {
       x: categories,
-      y: this.usePercentageYAxis 
-        ? counts.map(v => (v / total) * 100)
-        : counts,
+      y: this.usePercentageYAxis ? counts.map((v) => (v / total) * 100) : counts,
       type: 'bar',
       marker: {
         color: layout.colorway[0],
         line: {
           color: 'rgba(100, 149, 237, 1)',
-          width: 1
+          width: 1,
         },
       },
     };
@@ -1236,14 +1377,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   preprocessStackedData(data: any): any {
     return Object.keys(data).reduce((acc, key) => {
       if (Array.isArray(data[key])) {
-        acc[key] = data[key].map((value: any) => 
-          value === null || value === 'NaN' ? 'NaN' : parseFloat(value) || 0
+        acc[key] = data[key].map((value: any) =>
+          value === null || value === 'NaN' ? 'NaN' : parseFloat(value) || 0,
         );
       } else {
-        acc[key] = Object.entries(data[key]).reduce((innerAcc, [innerKey, innerValue]) => {
-          innerAcc[innerKey] = innerValue === null || innerValue === 'NaN' ? 'NaN' : parseFloat(innerValue as string) || 0;
-          return innerAcc;
-        }, {} as {[key: string]: number | string});
+        acc[key] = Object.entries(data[key]).reduce(
+          (innerAcc, [innerKey, innerValue]) => {
+            innerAcc[innerKey] =
+              innerValue === null || innerValue === 'NaN'
+                ? 'NaN'
+                : parseFloat(innerValue as string) || 0;
+            return innerAcc;
+          },
+          {} as { [key: string]: number | string },
+        );
       }
       return acc;
     }, {} as any);
@@ -1265,11 +1412,11 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const histogramTraces: any[] = [];
       const boxplotTraces: any[] = [];
       //const colors = Plotly.d3 ? Plotly.d3.schemeCategory10 : ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
-      
+
       Object.keys(stackedData).forEach((targetClass, index) => {
         const data = stackedData[targetClass];
         const filteredData = data.filter((v: any) => v !== 'NaN' && !isNaN(v)).map(Number);
-        
+
         // Histogram trace
         histogramTraces.push({
           x: filteredData,
@@ -1277,9 +1424,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           name: `${targetClass}`,
           opacity: 0.7,
           histnorm: this.usePercentageYAxis ? 'percent' : '',
-          marker: { color: layout.colorway[index % layout.colorway.length] }
+          marker: { color: layout.colorway[index % layout.colorway.length] },
         });
-        
+
         // Box plot trace
         boxplotTraces.push({
           x: filteredData,
@@ -1290,56 +1437,62 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           boxmean: true,
           line: { width: 1 },
           yaxis: 'y2',
-          showlegend: false
+          showlegend: false,
         });
       });
-      
+
       layout.barmode = 'group';
       layout.bargap = 0.1;
       layout.bargroupgap = 0.05;
       layout.showlegend = true;
-      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
+      layout.legend = {
+        title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
+        traceorder: 'normal',
+      };
 
       // Adjust layout for combined plot
       layout.yaxis = {
         title: this.usePercentageYAxis ? 'Percentage' : 'Count',
-        domain: [0, 0.85]
+        domain: [0, 0.85],
       };
       layout.yaxis2 = {
         domain: [0.87, 1],
         showticklabels: false,
         zeroline: false,
         showgrid: false,
-        title: ''
+        title: '',
       };
 
-      const allTraces = [...boxplotTraces, ...histogramTraces];  // Box plots first to be behind histograms
+      const allTraces = [...boxplotTraces, ...histogramTraces]; // Box plots first to be behind histograms
 
       Plotly.newPlot('visualization', allTraces, layout).catch((error: Error) => {
         console.error('Error plotting data:', error);
-        this.errorMessage = 'An error occurred while creating the visualization. Please try again.'});
+        this.errorMessage = 'An error occurred while creating the visualization. Please try again.';
+      });
       console.log('Plotly.newPlot called with:', allTraces, layout);
     } else {
       // For categorical data, create grouped bar chart
       const allCategories = new Set<string>();
       Object.values(stackedData).forEach((data: any) => {
         if (typeof data === 'object') {
-          Object.keys(data).forEach(key => allCategories.add(key === 'nan' || key === 'NaN' ? '(null)' : String(key)));
+          Object.keys(data).forEach((key) =>
+            allCategories.add(key === 'nan' || key === 'NaN' ? '(null)' : String(key)),
+          );
         }
       });
       const categories = Array.from(allCategories);
-      const traces = Object.keys(stackedData).map(targetClass => {
+      const traces = Object.keys(stackedData).map((targetClass) => {
         const data = stackedData[targetClass];
-        const values = categories.map(cat => {
+        const values = categories.map((cat) => {
           const origKey = cat === '(null)' ? 'NaN' : cat;
           return data[origKey] || data[cat] || 0;
         });
         const total = values.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
         return {
           x: categories,
-          y: this.usePercentageYAxis 
-          ? values.map(v => (typeof v === 'number' ? (v / total) * 100 : 0))
-          : values,
+          y: this.usePercentageYAxis
+            ? values.map((v) => (typeof v === 'number' ? (v / total) * 100 : 0))
+            : values,
           type: 'bar',
           name: targetClass,
           opacity: 0.7,
@@ -1349,7 +1502,10 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       layout.bargap = 0.15;
       layout.bargroupgap = 0.1;
       layout.showlegend = true;
-      layout.legend = { title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined, traceorder: 'normal' };
+      layout.legend = {
+        title: this.stackedWrtTarget ? { text: 'Target Classes' } : undefined,
+        traceorder: 'normal',
+      };
       layout.yaxis.title = this.usePercentageYAxis ? 'Percentage' : 'Count';
       // Force categorical x-axis so each distinct value gets its own tick
       if (categories.length <= 20) {
@@ -1359,7 +1515,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       console.log('Plotly.newPlot called with:', traces, layout);
     }
   }
-  
+
   plotNonStackedData(histogramData: any[], layout: any) {
     const Plotly = (window as any).Plotly;
     const traces: any[] = [];
@@ -1375,7 +1531,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           boxmean: true,
           line: { color: '#ffffff', width: 1 },
           ysrc: 'y2',
-          showlegend: false
+          showlegend: false,
         });
         // Histogram trace
         traces.push({
@@ -1388,7 +1544,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             color: layout.colorway[0],
             line: {
               color: 'black',
-              width: 1
+              width: 1,
             },
           },
         });
@@ -1396,22 +1552,21 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         console.warn('No histogram data available');
       }
     } else {
-      const valueCounts = this.featureData?.Descriptive_Stats['value_counts'] as { [key: string]: number } | undefined;
+      const valueCounts = this.featureData?.Descriptive_Stats['value_counts'] as
+        { [key: string]: number } | undefined;
       if (valueCounts && Object.keys(valueCounts).length > 0) {
         const categories = Object.keys(valueCounts);
         const counts = Object.values(valueCounts);
         const total = counts.reduce((sum: number, val: number) => sum + val, 0);
         traces.push({
           x: categories,
-          y: this.usePercentageYAxis 
-            ? counts.map((v: number) => ((v / total) * 100))
-            : counts,
+          y: this.usePercentageYAxis ? counts.map((v: number) => (v / total) * 100) : counts,
           type: 'bar',
           marker: {
             color: layout.colorway[0],
             line: {
               color: 'black',
-              width: 1
+              width: 1,
             },
           },
         });
@@ -1423,19 +1578,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     // Adjust layout for combined plot
     layout.yaxis = {
       title: this.usePercentageYAxis ? 'Percentage' : 'Count',
-      domain: [0, 0.85]
+      domain: [0, 0.85],
     };
     layout.yaxis2 = {
       domain: [0.87, 1],
       showticklabels: false,
       zeroline: false,
       showgrid: false,
-      title: ''
+      title: '',
     };
 
     Plotly.newPlot('visualization', traces, layout).catch((error: Error) => {
       console.error('Error plotting data:', error);
-      this.errorMessage = 'An error occurred while creating the visualization. Please try again.'});
+      this.errorMessage = 'An error occurred while creating the visualization. Please try again.';
+    });
     console.log('Plotly.newPlot called with:', traces, layout);
   }
 
@@ -1458,19 +1614,21 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   fetchStackedData() {
     const fileOverride = this.getFileOverride();
-    this.dataService.getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride).subscribe(
-      (resp: any) => {
-        const stackedData = resp?.stacked_data ?? resp;
-        this.targetAverages = resp?.target_averages ?? null;
-        this.originalStackedData = this.preprocessStackedData(stackedData);
-        this.updateVisualizationAndStats();
-      },
-      error => {
-        console.error('Error fetching stacked data:', error);
-        this.errorMessage = 'Failed to fetch stacked data. Please try again.';
-        this.stackedWrtTarget = false;
-      }
-    );
+    this.dataService
+      .getStackedFeatureData(this.data.fileId, this.data.columnName, fileOverride)
+      .subscribe(
+        (resp: any) => {
+          const stackedData = resp?.stacked_data ?? resp;
+          this.targetAverages = resp?.target_averages ?? null;
+          this.originalStackedData = this.preprocessStackedData(stackedData);
+          this.updateVisualizationAndStats();
+        },
+        (error) => {
+          console.error('Error fetching stacked data:', error);
+          this.errorMessage = 'Failed to fetch stacked data. Please try again.';
+          this.stackedWrtTarget = false;
+        },
+      );
   }
 
   updateVisualizationAndStats() {
@@ -1551,7 +1709,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
 
     if (this.isNumerical()) {
-      const numericData = processedData.filter((v): v is number => typeof v === 'number' && !isNaN(v));
+      const numericData = processedData.filter(
+        (v): v is number => typeof v === 'number' && !isNaN(v),
+      );
       try {
         stats['Mean'] = math.mean(numericData);
         stats['Min'] = math.min(numericData);
@@ -1573,11 +1733,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       try {
         const valueCounts = this.calculateValueCounts(processedData);
         stats['#_of_Categories'] = Object.keys(valueCounts).length;
-        const modeEntry = Object.entries(valueCounts).reduce((a, b) => a[1] > b[1] ? a : b);
+        const modeEntry = Object.entries(valueCounts).reduce((a, b) => (a[1] > b[1] ? a : b));
         stats['Mode_Value'] = modeEntry[0];
         stats['Mode_Ratio'] = (modeEntry[1] / processedData.length) * 100;
-        stats['Missing_Ratio'] = (processedData.filter((v: number | null | undefined) => v === null || v === undefined).length / processedData.length) * 100;
-        stats['#_of_Outlier_Categories'] = Object.values(valueCounts).filter(count => (count / processedData.length) < 0.005).length;
+        stats['Missing_Ratio'] =
+          (processedData.filter((v: number | null | undefined) => v === null || v === undefined)
+            .length /
+            processedData.length) *
+          100;
+        stats['#_of_Outlier_Categories'] = Object.values(valueCounts).filter(
+          (count) => count / processedData.length < 0.005,
+        ).length;
       } catch (error) {
         console.error('Error calculating categorical stats:', error);
       }
@@ -1599,7 +1765,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const n = data.length;
     const mean = this.ensureNumber(math.mean(data));
     const std = this.ensureNumber(math.std(data));
-    
+
     if (std === 0) return 0; // Avoid division by zero
 
     let sumCubedDeviations = 0;
@@ -1614,7 +1780,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const n = data.length;
     const mean = this.ensureNumber(math.mean(data));
     const std = this.ensureNumber(math.std(data));
-    
+
     if (std === 0) return 0; // Avoid division by zero
 
     let sumFourthPowerDeviations = 0;
@@ -1622,9 +1788,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const deviation = this.ensureNumber((data[i] - mean) / std);
       sumFourthPowerDeviations += Math.pow(deviation, 4);
     }
-    return (sumFourthPowerDeviations / n) - 3;
+    return sumFourthPowerDeviations / n - 3;
   }
-  
+
   getStats(): string[] {
     return this.isNumerical() ? this.numericalStats : this.categoricalStats;
   }
@@ -1654,7 +1820,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     }
     const lowerBound = this.getPercentile(data, 5);
     const upperBound = this.getPercentile(data, 95);
-    return data.filter(value => value >= lowerBound && value <= upperBound);
+    return data.filter((value) => value >= lowerBound && value <= upperBound);
   }
 
   // Helper function to calculate percentile
@@ -1668,15 +1834,15 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   cleanSparsity(data: number[] | { [key: string]: number }): number[] | { [key: string]: number } {
     if (Array.isArray(data)) {
       const modeValue = this.getMode(data);
-      const modeCount = data.filter(value => value === modeValue).length;
+      const modeCount = data.filter((value) => value === modeValue).length;
       const modeRatio = (modeCount / data.length) * 100;
-      return modeRatio > 25 ? data.filter(value => value !== modeValue) : data;
+      return modeRatio > 25 ? data.filter((value) => value !== modeValue) : data;
     } else {
       const values = Object.values(data);
       const modeValue = this.getMode(values);
-      const modeCount = values.filter(value => value === modeValue).length;
+      const modeCount = values.filter((value) => value === modeValue).length;
       const modeRatio = (modeCount / values.length) * 100;
-      return modeRatio > 25 
+      return modeRatio > 25
         ? Object.fromEntries(Object.entries(data).filter(([_, value]) => value !== modeValue))
         : data;
     }
@@ -1687,7 +1853,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const frequencyMap: { [key: number]: number } = {};
 
     // Create a frequency map for the data
-    data.forEach(value => {
+    data.forEach((value) => {
       if (!frequencyMap[value]) {
         frequencyMap[value] = 0;
       }
@@ -1700,7 +1866,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
     for (const key in frequencyMap) {
       if (frequencyMap[key] > maxCount) {
-        mode = +key;  // Convert key to number and assign to mode
+        mode = +key; // Convert key to number and assign to mode
         maxCount = frequencyMap[key];
       }
     }
@@ -1726,17 +1892,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   getOutlierCleaningTooltip(): string {
     if (this.isCategorical) {
-      return "Outlier cleaning is only available for numerical features";
+      return 'Outlier cleaning is only available for numerical features';
     } else {
-      return "Datapoints falling outside 5th-95th percentile interval are removed from the numerical features.";
+      return 'Datapoints falling outside 5th-95th percentile interval are removed from the numerical features.';
     }
   }
 
   getSparsityCleaningTooltip(): string {
     if (this.isCategorical) {
-      return "Sparsity cleaning is only available for numerical features";
+      return 'Sparsity cleaning is only available for numerical features';
     } else {
-      return "Datapoints equal the Sparse-Value (mode-value having greater than 25% share) are removed from the numerical features.";
+      return 'Datapoints equal the Sparse-Value (mode-value having greater than 25% share) are removed from the numerical features.';
     }
   }
 
@@ -1748,8 +1914,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   // Handle tab change to auto-load explainability
   onTabChange(event: any): void {
     const tabIndex = event.index;
-    this.currentTabIndex = tabIndex;  // Track current tab
-    
+    this.currentTabIndex = tabIndex; // Track current tab
+
     // Tab indices: 0=Descriptives, 1=Quality, 2=Importance, 3=Explainability
     if (tabIndex === 1) {
       // Quality tab — fetch summary from backend if not available
@@ -1772,9 +1938,20 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
     }
     if (tabIndex === 3) {
-      console.log('[Explainability] Tab activated. preModelingMode=', this.preModelingMode, 'fetched=', this.explainabilityFetched, 'loading=', this.explainabilityLoading, 'hasSfsContexts=', this.hasSfsContexts, 'sfsViewMode=', this.sfsViewMode);
+      console.log(
+        '[Explainability] Tab activated. preModelingMode=',
+        this.preModelingMode,
+        'fetched=',
+        this.explainabilityFetched,
+        'loading=',
+        this.explainabilityLoading,
+        'hasSfsContexts=',
+        this.hasSfsContexts,
+        'sfsViewMode=',
+        this.sfsViewMode,
+      );
       // Always try sequential-pattern MVP (works with train_data even pre-SHAP)
-      if (!this.sequentialLoading && !(this.sequentialCandidates?.length)) {
+      if (!this.sequentialLoading && !this.sequentialCandidates?.length) {
         this.loadSequentialPatterns();
       }
       if (this.preModelingMode) {
@@ -1790,7 +1967,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   // ===== Explainability (SHAP beeswarm + Partial Dependence) =====
   fetchFeatureExplainability(): void {
     try {
-      console.log('[Explainability] fetchFeatureExplainability called. isBrowser=', this.isBrowser, 'processedFile=', this.data.processedFile, 'fileId=', this.data.fileId);
+      console.log(
+        '[Explainability] fetchFeatureExplainability called. isBrowser=',
+        this.isBrowser,
+        'processedFile=',
+        this.data.processedFile,
+        'fileId=',
+        this.data.fileId,
+      );
       if (!this.isBrowser) return;
       if (!this.data.processedFile) {
         this.explainabilityError = 'Processed file required. Please run preprocessing first.';
@@ -1805,7 +1989,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.explainabilityLoading = true;
       this.explainabilityError = null;
       this.explainabilityFetched = true;
-      
+
       // Determine model source: SFS context (dropdown) → legacy sfsModelPath → default
       let explModelPath: string | undefined = this.data.sfsModelPath;
       let explSelectedFeatures: string[] | undefined = undefined;
@@ -1815,51 +1999,96 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         explSelectedFeatures = ctx.selectedFeatures || undefined;
       }
 
-      console.log('[Explainability] API call params: fid=', fid, 'feature=', this.selectedFeatureName, 'modelPath=', explModelPath, 'selectedFeatures=', explSelectedFeatures);
-      this.dataService.getFeatureExplainability(fid, this.selectedFeatureName, this.data.processedFile, 500, explModelPath, explSelectedFeatures).subscribe({
-        next: (resp: any) => {
-          console.log('[Explainability] API response received. Keys:', Object.keys(resp || {}), 'beeswarm?', !!resp?.beeswarm, 'pdp?', !!resp?.partial_dependence);
-          if (resp?.beeswarm) console.log('[Explainability] beeswarm shap_values length:', resp.beeswarm.shap_values?.length);
-          this.explainabilityData = resp;
-          setTimeout(() => this.drawExplainabilityPlots(), 0);
-        },
-        error: (err: any) => {
-          console.error('Fetch explainability failed:', err);
-          
-          // Check if this is a "feature not in model" case (expected, not an error)
-          const reason = err?.error?.reason;
-          const detail = err?.error?.detail;
-          
-          if (reason === 'feature_not_in_model') {
-            // This is expected - feature was not selected during modeling
-            this.explainabilityError = detail || err?.error?.error || 
-              `Feature "${this.selectedFeatureName}" was not selected during the modeling phase. Explainability analysis is only available for features used in the trained model.`;
-            this.explainabilityFetched = true;  // Don't allow retry - this is expected
-          } else {
-            // This is an actual error
-            this.explainabilityError = err?.error?.error || err?.message || 
-              'Failed to load explainability data. Please ensure a model has been trained.';
-            this.explainabilityFetched = false;  // Allow retry on actual error
-          }
-        },
-        complete: () => {
-          this.explainabilityLoading = false;
-        }
-      });
+      console.log(
+        '[Explainability] API call params: fid=',
+        fid,
+        'feature=',
+        this.selectedFeatureName,
+        'modelPath=',
+        explModelPath,
+        'selectedFeatures=',
+        explSelectedFeatures,
+      );
+      this.dataService
+        .getFeatureExplainability(
+          fid,
+          this.selectedFeatureName,
+          this.data.processedFile,
+          500,
+          explModelPath,
+          explSelectedFeatures,
+        )
+        .subscribe({
+          next: (resp: any) => {
+            console.log(
+              '[Explainability] API response received. Keys:',
+              Object.keys(resp || {}),
+              'beeswarm?',
+              !!resp?.beeswarm,
+              'pdp?',
+              !!resp?.partial_dependence,
+            );
+            if (resp?.beeswarm)
+              console.log(
+                '[Explainability] beeswarm shap_values length:',
+                resp.beeswarm.shap_values?.length,
+              );
+            this.explainabilityData = resp;
+            setTimeout(() => this.drawExplainabilityPlots(), 0);
+          },
+          error: (err: any) => {
+            console.error('Fetch explainability failed:', err);
+
+            // Check if this is a "feature not in model" case (expected, not an error)
+            const reason = err?.error?.reason;
+            const detail = err?.error?.detail;
+
+            if (reason === 'feature_not_in_model') {
+              // This is expected - feature was not selected during modeling
+              this.explainabilityError =
+                detail ||
+                err?.error?.error ||
+                `Feature "${this.selectedFeatureName}" was not selected during the modeling phase. Explainability analysis is only available for features used in the trained model.`;
+              this.explainabilityFetched = true; // Don't allow retry - this is expected
+            } else {
+              // This is an actual error
+              this.explainabilityError =
+                err?.error?.error ||
+                err?.message ||
+                'Failed to load explainability data. Please ensure a model has been trained.';
+              this.explainabilityFetched = false; // Allow retry on actual error
+            }
+          },
+          complete: () => {
+            this.explainabilityLoading = false;
+          },
+        });
     } catch (e) {
       console.warn('fetchFeatureExplainability failed:', e);
       this.explainabilityError = 'Failed to load explainability data';
       this.explainabilityLoading = false;
-      this.explainabilityFetched = false;  // Allow retry on error
+      this.explainabilityFetched = false; // Allow retry on error
     }
   }
 
   drawExplainabilityPlots(): void {
-    console.log('[Explainability] drawExplainabilityPlots called. isBrowser=', this.isBrowser, 'data?', !!this.explainabilityData);
+    console.log(
+      '[Explainability] drawExplainabilityPlots called. isBrowser=',
+      this.isBrowser,
+      'data?',
+      !!this.explainabilityData,
+    );
     if (!this.isBrowser || !this.explainabilityData) return;
     const beeEl = document.getElementById('explainability-beeswarm');
     const pdpEl = document.getElementById('explainability-pdp');
-    console.log('[Explainability] DOM elements: beeswarm=', !!beeEl, 'pdp=', !!pdpEl, 'Plotly?', !!(window as any).Plotly);
+    console.log(
+      '[Explainability] DOM elements: beeswarm=',
+      !!beeEl,
+      'pdp=',
+      !!pdpEl,
+      'Plotly?',
+      !!(window as any).Plotly,
+    );
     this.drawShapBeeswarmSingle();
     this.drawPartialDependencePlot();
   }
@@ -1893,12 +2122,13 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const featureName = this.explainabilityData?.feature_name || this.selectedFeatureName || 'feature';
+      const featureName =
+        this.explainabilityData?.feature_name || this.selectedFeatureName || 'feature';
       link.href = url;
       link.download = `shap_pdp_${featureName}.png`;
       document.body.appendChild(link);
       link.click();
-      
+
       // Cleanup
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
@@ -1909,7 +2139,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   drawShapBeeswarmSingle(): void {
     try {
-      console.log('[Explainability] drawShapBeeswarmSingle: Plotly?', !!Plotly, 'beeswarm?', !!this.explainabilityData?.beeswarm);
+      console.log(
+        '[Explainability] drawShapBeeswarmSingle: Plotly?',
+        !!Plotly,
+        'beeswarm?',
+        !!this.explainabilityData?.beeswarm,
+      );
       if (!Plotly || !this.explainabilityData?.beeswarm) return;
       const el = document.getElementById('explainability-beeswarm');
       console.log('[Explainability] drawShapBeeswarmSingle: el?', !!el);
@@ -1930,7 +2165,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
       // Filter valid points (check both SHAP values and feature values)
       const isNull = featValsRaw.map((v: any, i: number) => {
-        const shapInvalid = shapVals[i] == null || (typeof shapVals[i] === 'number' && !Number.isFinite(shapVals[i]));
+        const shapInvalid =
+          shapVals[i] == null || (typeof shapVals[i] === 'number' && !Number.isFinite(shapVals[i]));
         const featInvalid = v == null || (typeof v === 'number' && !Number.isFinite(v));
         return shapInvalid || featInvalid;
       });
@@ -1941,39 +2177,47 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
 
       // Calculate and store missing ratio for display in checkbox label
-      this.beeswarmMissingRatio = shapVals.length > 0 ? (idxNull.length / shapVals.length) : 0;
+      this.beeswarmMissingRatio = shapVals.length > 0 ? idxNull.length / shapVals.length : 0;
 
       // Compute color normalization (5th-95th percentile)
-      const nonNullVals = idxNonNull.map(i => Number(featValsRaw[i])).filter(v => Number.isFinite(v));
-      let vmin = 0, vmax = 1;
+      const nonNullVals = idxNonNull
+        .map((i) => Number(featValsRaw[i]))
+        .filter((v) => Number.isFinite(v));
+      let vmin = 0,
+        vmax = 1;
       if (nonNullVals.length > 0) {
         const sorted = nonNullVals.slice().sort((a, b) => a - b);
         const q05idx = Math.floor(sorted.length * 0.05);
         const q95idx = Math.floor(sorted.length * 0.95);
         vmin = sorted[q05idx] || sorted[0];
         vmax = sorted[q95idx] || sorted[sorted.length - 1];
-        if (vmin === vmax) { vmin = sorted[0]; vmax = sorted[sorted.length - 1]; }
-        if (vmin === vmax) { vmin = vmax - 1; }
+        if (vmin === vmax) {
+          vmin = sorted[0];
+          vmax = sorted[sorted.length - 1];
+        }
+        if (vmin === vmax) {
+          vmin = vmax - 1;
+        }
       }
-      const denom = (vmax - vmin) !== 0 ? (vmax - vmin) : 1e-12;
+      const denom = vmax - vmin !== 0 ? vmax - vmin : 1e-12;
 
       // Build traces
       const traces: any[] = [];
       const colorscale: any = [
-        [0.0, '#2166ac'],  // blue (low)
-        [0.5, '#f7f7f7'],  // white (mid)
-        [1.0, '#b2182b']   // red (high)
+        [0.0, '#2166ac'], // blue (low)
+        [0.5, '#f7f7f7'], // white (mid)
+        [1.0, '#b2182b'], // red (high)
       ];
 
       // Non-null points
       if (idxNonNull.length > 0) {
-        const xVals = idxNonNull.map(i => shapVals[i]);
+        const xVals = idxNonNull.map((i) => shapVals[i]);
         // Use deterministic jitter based on sample index so points stay in same position
-        const yVals = idxNonNull.map(i => (seededRandom(i + 1) * 2 - 1) * 0.2);
-        const colors = idxNonNull.map(i => {
+        const yVals = idxNonNull.map((i) => (seededRandom(i + 1) * 2 - 1) * 0.2);
+        const colors = idxNonNull.map((i) => {
           const v = Number(featValsRaw[i]);
           const u = (v - vmin) / denom;
-          return u < 0 ? 0 : (u > 1 ? 1 : u);
+          return u < 0 ? 0 : u > 1 ? 1 : u;
         });
 
         // Check if this feature has a categorical encoding mapping
@@ -1981,14 +2225,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         let customdata: any[];
         let hovertemplate: string;
         if (singleCatLookup) {
-          customdata = idxNonNull.map(i => {
+          customdata = idxNonNull.map((i) => {
             const enc = String(Math.round(Number(featValsRaw[i])));
             const label = singleCatLookup[enc] || featValsRaw[i];
             return [featValsRaw[i], label];
           });
           hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Encoded=%{customdata[0]}<br>Original=%{customdata[1]}<extra></extra>`;
         } else {
-          customdata = idxNonNull.map(i => featValsRaw[i]);
+          customdata = idxNonNull.map((i) => featValsRaw[i]);
           hovertemplate = `${featName}<br>SHAP=%{x:.4f}<br>Value=%{customdata:.4f}<extra></extra>`;
         }
 
@@ -2004,42 +2248,64 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             cmin: 0,
             cmax: 1,
             showscale: true,
-            colorbar: { title: { text: 'Feature value' }, thickness: 14, tickmode: 'array', tickvals: [0, 1], ticktext: ['Low', 'High'] },
+            colorbar: {
+              title: { text: 'Feature value' },
+              thickness: 14,
+              tickmode: 'array',
+              tickvals: [0, 1],
+              ticktext: ['Low', 'High'],
+            },
             size: 8,
-            opacity: 0.85
+            opacity: 0.85,
           },
           hovertemplate,
-          showlegend: false
+          showlegend: false,
         });
       }
 
       // Null points (grey X markers) - only shown if checkbox is enabled
       if (this.showNullsBeeswarm && idxNull.length > 0) {
-        const xVals = idxNull.map(i => shapVals[i]);
+        const xVals = idxNull.map((i) => shapVals[i]);
         // Use deterministic jitter for null points too
-        const yVals = idxNull.map(i => (seededRandom(i + 1) * 2 - 1) * 0.2);
+        const yVals = idxNull.map((i) => (seededRandom(i + 1) * 2 - 1) * 0.2);
         traces.push({
           type: 'scatter',
           mode: 'markers',
           x: xVals,
           y: yVals,
-          marker: { color: 'rgba(130,130,130,0.9)', size: 8, symbol: 'x', line: { width: 0.5, color: 'rgba(80,80,80,0.9)' } },
+          marker: {
+            color: 'rgba(130,130,130,0.9)',
+            size: 8,
+            symbol: 'x',
+            line: { width: 0.5, color: 'rgba(80,80,80,0.9)' },
+          },
           hovertemplate: `${featName}<br>SHAP=%{x:.4f}<br>Value=null<extra></extra>`,
-          showlegend: false
+          showlegend: false,
         });
       }
 
       const layout = {
         title: { text: `SHAP values for ${featName}`, font: { size: 14 } },
         margin: { l: 60, r: 48, t: 40, b: 50 },
-        xaxis: { title: { text: 'SHAP value (impact on model output)' }, zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
+        xaxis: {
+          title: { text: 'SHAP value (impact on model output)' },
+          zeroline: true,
+          zerolinecolor: '#888',
+          zerolinewidth: 1,
+        },
         yaxis: { showticklabels: false, zeroline: false, range: [-0.3, 0.3] },
         hovermode: 'closest',
         showlegend: false,
-        shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.3, y1: 0.3, line: { color: '#888', width: 1 } }]
+        shapes: [
+          { type: 'line', x0: 0, x1: 0, y0: -0.3, y1: 0.3, line: { color: '#888', width: 1 } },
+        ],
       } as any;
       const config = { responsive: true, displayModeBar: true } as any;
-      try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+      try {
+        Plotly.react(el, traces, layout, config);
+      } catch {
+        Plotly.newPlot(el, traces, layout, config);
+      }
     } catch (e) {
       console.warn('drawShapBeeswarmSingle failed:', e);
     }
@@ -2047,7 +2313,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   private drawPartialDependencePlot(): void {
     try {
-      console.log('[Explainability] drawPDP: Plotly?', !!Plotly, 'pdp?', !!this.explainabilityData?.partial_dependence);
+      console.log(
+        '[Explainability] drawPDP: Plotly?',
+        !!Plotly,
+        'pdp?',
+        !!this.explainabilityData?.partial_dependence,
+      );
       if (!Plotly || !this.explainabilityData?.partial_dependence) return;
       const el = document.getElementById('explainability-pdp');
       console.log('[Explainability] drawPDP: el?', !!el);
@@ -2060,10 +2331,12 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const iceCurves: number[][] = (pdp.ice_curves || [])
         .map((curve: any[]) => curve.filter((v: any) => v != null && isFinite(v)))
         .filter((curve: any[]) => curve.length > 0);
-      const baseValue: number = (pdp.base_value != null && isFinite(pdp.base_value)) ? pdp.base_value : 0;
-      const expectedFeatureValue: number = (pdp.expected_feature_value != null && isFinite(pdp.expected_feature_value)) 
-        ? pdp.expected_feature_value 
-        : grid[Math.floor(grid.length / 2)] || 0;
+      const baseValue: number =
+        pdp.base_value != null && isFinite(pdp.base_value) ? pdp.base_value : 0;
+      const expectedFeatureValue: number =
+        pdp.expected_feature_value != null && isFinite(pdp.expected_feature_value)
+          ? pdp.expected_feature_value
+          : grid[Math.floor(grid.length / 2)] || 0;
       const histogram = pdp.histogram || { centers: [], counts: [] };
       // Filter histogram data
       if (histogram.centers && histogram.counts) {
@@ -2073,21 +2346,26 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             validIndices.push(i);
           }
         });
-        histogram.centers = validIndices.map(i => histogram.centers[i]);
-        histogram.counts = validIndices.map(i => histogram.counts[i]);
+        histogram.centers = validIndices.map((i) => histogram.centers[i]);
+        histogram.counts = validIndices.map((i) => histogram.counts[i]);
       }
       const featName = this.explainabilityData.feature_name || this.selectedFeatureName;
 
       if (!grid.length || !pdpMean.length) return;
 
       const traces: any[] = [];
-      
+
       // Add histogram as background (if available)
-      if (histogram.centers && histogram.centers.length > 0 && histogram.counts && histogram.counts.length > 0) {
+      if (
+        histogram.centers &&
+        histogram.centers.length > 0 &&
+        histogram.counts &&
+        histogram.counts.length > 0
+      ) {
         // Normalize histogram counts for better visualization
         const maxCount = Math.max(...histogram.counts);
         const normalizedCounts = histogram.counts.map((c: number) => c / maxCount);
-        
+
         traces.push({
           type: 'bar',
           x: histogram.centers,
@@ -2096,7 +2374,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           name: 'Distribution',
           yaxis: 'y2',
           hoverinfo: 'skip',
-          showlegend: false
+          showlegend: false,
         });
       }
 
@@ -2110,7 +2388,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       const yRangeMax = yMax + yPadding;
 
       // Filter ICE curves to only show those within visible range (avoid extreme outliers)
-      const filteredIceCurves = iceCurves.filter(curve => {
+      const filteredIceCurves = iceCurves.filter((curve) => {
         const curveMin = Math.min(...curve);
         const curveMax = Math.max(...curve);
         // Keep ICE curves that have at least some overlap with visible range
@@ -2128,7 +2406,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             line: { color: 'rgba(150,150,150,0.1)', width: 0.8 },
             name: idx === 0 ? 'ICE curves' : undefined,
             hoverinfo: 'skip',
-            showlegend: idx === 0
+            showlegend: idx === 0,
           });
         });
       }
@@ -2141,27 +2419,34 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         y: pdpMean,
         line: { color: '#1f77b4', width: 3 },
         name: 'PDP (mean)',
-        hovertemplate: `${featName}=%{x:.4f}<br>E[f(X) | ${featName}]=%{y:.4f}<extra></extra>`
+        hovertemplate: `${featName}=%{x:.4f}<br>E[f(X) | ${featName}]=%{y:.4f}<extra></extra>`,
       });
 
       const layout = {
         title: { text: `Partial Dependence Plot for ${featName}`, font: { size: 14 } },
         margin: { l: 70, r: 48, t: 40, b: 80 },
         xaxis: { title: { text: featName, font: { size: 13 } } },
-        yaxis: { 
-          title: { text: `E[f(X) | ${featName}]`, font: { size: 13 } }, 
+        yaxis: {
+          title: { text: `E[f(X) | ${featName}]`, font: { size: 13 } },
           range: [yRangeMin, yRangeMax],
-          side: 'left'
+          side: 'left',
         },
         yaxis2: {
           overlaying: 'y',
           side: 'right',
           showticklabels: false,
           showgrid: false,
-          range: [0, 1.2]
+          range: [0, 1.2],
         },
         hovermode: 'closest',
-        legend: { orientation: 'h', x: 0, y: -0.15, xanchor: 'left', yanchor: 'top', font: { size: 11 } },
+        legend: {
+          orientation: 'h',
+          x: 0,
+          y: -0.15,
+          xanchor: 'left',
+          yanchor: 'top',
+          font: { size: 11 },
+        },
         barmode: 'overlay',
         shapes: [
           {
@@ -2171,7 +2456,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             y0: baseValue,
             y1: baseValue,
             line: { color: '#888', width: 1.5, dash: 'dash' },
-            name: 'E[f(X)]'
+            name: 'E[f(X)]',
           },
           {
             type: 'line',
@@ -2180,8 +2465,8 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             y0: yRangeMin,
             y1: yRangeMax,
             line: { color: '#888', width: 1.5, dash: 'dash' },
-            name: `E[${featName}]`
-          }
+            name: `E[${featName}]`,
+          },
         ],
         annotations: [
           {
@@ -2193,7 +2478,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             showarrow: false,
             font: { size: 10, color: '#555' },
             bgcolor: 'rgba(255,255,255,0.8)',
-            borderpad: 2
+            borderpad: 2,
           },
           {
             x: expectedFeatureValue,
@@ -2204,12 +2489,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             showarrow: false,
             font: { size: 10, color: '#555' },
             bgcolor: 'rgba(255,255,255,0.8)',
-            borderpad: 2
-          }
-        ]
+            borderpad: 2,
+          },
+        ],
       } as any;
       const config = { responsive: true, displayModeBar: true } as any;
-      try { Plotly.react(el, traces, layout, config); } catch { Plotly.newPlot(el, traces, layout, config); }
+      try {
+        Plotly.react(el, traces, layout, config);
+      } catch {
+        Plotly.newPlot(el, traces, layout, config);
+      }
     } catch (e) {
       console.warn('drawPartialDependencePlot failed:', e);
     }

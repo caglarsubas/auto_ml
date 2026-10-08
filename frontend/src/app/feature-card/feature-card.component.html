@@ -1,375 +1,688 @@
 <div class="feature-card-container" [class.full-screen]="isFullScreen">
+  <h2 id="feature-card" mat-dialog-title><strong>Feature Card</strong></h2>
 
-  <h2 id="feature-card" mat-dialog-title> <strong>Feature Card</strong></h2>
-
-  <div *ngIf="errorMessage" class="error-message"> {{ errorMessage }} </div>
+  @if (errorMessage) {
+    <div class="error-message">{{ errorMessage }}</div>
+  }
 
   <mat-form-field>
     <mat-label>Select Feature</mat-label>
     <mat-select [(ngModel)]="selectedFeatureName" (selectionChange)="onFeatureChange()">
-      <mat-option *ngFor="let feature of features" [value]="feature.Feature_Name">
-        {{ feature.Feature_Name }}: {{ getFeatureDescription(feature.Feature_Name) }}
-      </mat-option>
+      @for (feature of features; track feature) {
+        <mat-option [value]="feature.Feature_Name">
+          {{ feature.Feature_Name }}: {{ getFeatureDescription(feature.Feature_Name) }}
+        </mat-option>
+      }
     </mat-select>
   </mat-form-field>
 
-  <mat-dialog-content *ngIf="featureData">
-  
-    <mat-tab-group (selectedTabChange)="onTabChange($event)">
-      <mat-tab label="Descriptives">
-        <ng-container *ngIf="featureData">
-          <!-- Data version dropdown -->
-          <div style="display: flex; align-items: center; gap: 10px; margin: 12px 0 4px 0;">
-            <span style="font-size: 12px; font-weight: 500; color: #555;">Data Version:</span>
-            <select [ngModel]="dataVersion" (ngModelChange)="onDataVersionChange($event)"
-                    style="padding: 3px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; min-width: 130px;">
-              <option *ngFor="let opt of dataVersionOptions" [value]="opt.value" [disabled]="opt.disabled">
-                {{ opt.label }}{{ opt.disabled ? ' (not available)' : '' }}
-              </option>
-            </select>
-          </div>
-          <p style="font-size: 14px"><strong>Descriptive Statistics</strong></p>
-          <div class="table-container" [class.transposed]="isFullScreen">
-            <table class="descriptive-stats-table">
-              <thead>
-                <tr>
-                  <th *ngIf="stackedWrtTarget">Target Classes</th>
-                  <th *ngFor="let stat of getStats()">{{ stat }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <ng-container *ngIf="!stackedWrtTarget">
+  @if (featureData) {
+    <mat-dialog-content>
+      <mat-tab-group (selectedTabChange)="onTabChange($event)">
+        <mat-tab label="Descriptives">
+          @if (featureData) {
+            <!-- Data version dropdown -->
+            <div style="display: flex; align-items: center; gap: 10px; margin: 12px 0 4px 0">
+              <span style="font-size: 12px; font-weight: 500; color: #555">Data Version:</span>
+              <select
+                [ngModel]="dataVersion"
+                (ngModelChange)="onDataVersionChange($event)"
+                style="
+                  padding: 3px 8px;
+                  border: 1px solid #ccc;
+                  border-radius: 4px;
+                  font-size: 12px;
+                  min-width: 130px;
+                "
+              >
+                @for (opt of dataVersionOptions; track opt) {
+                  <option [value]="opt.value" [disabled]="opt.disabled">
+                    {{ opt.label }}{{ opt.disabled ? ' (not available)' : '' }}
+                  </option>
+                }
+              </select>
+            </div>
+            <p style="font-size: 14px"><strong>Descriptive Statistics</strong></p>
+            <div class="table-container" [class.transposed]="isFullScreen">
+              <table class="descriptive-stats-table">
+                <thead>
                   <tr>
-                    <td *ngFor="let stat of getStats()">{{ getStatValue(stat) }}</td>
+                    @if (stackedWrtTarget) {
+                      <th>Target Classes</th>
+                    }
+                    @for (stat of getStats(); track stat) {
+                      <th>{{ stat }}</th>
+                    }
                   </tr>
-                </ng-container>
-                <ng-container *ngIf="stackedWrtTarget && featureData?.Target_Classes">
-                  <tr *ngFor="let targetClass of featureData.Target_Classes">
-                    <td>{{ targetClass }}</td>
-                    <td *ngFor="let stat of getStats()">{{ getStatValue(stat, targetClass) }}</td>
-                  </tr>
-                </ng-container>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Category Statistics table (shown by default for features with ≤20 unique values) -->
-          <div *ngIf="targetAverages && targetAverages.length > 0" style="margin-top: 12px;">
-            <p style="font-size: 14px; margin-bottom: 6px;"><strong>Category Statistics</strong></p>
+                </thead>
+                <tbody>
+                  @if (!stackedWrtTarget) {
+                    <tr>
+                      @for (stat of getStats(); track stat) {
+                        <td>{{ getStatValue(stat) }}</td>
+                      }
+                    </tr>
+                  }
+                  @if (stackedWrtTarget && featureData?.Target_Classes) {
+                    @for (targetClass of featureData.Target_Classes; track targetClass) {
+                      <tr>
+                        <td>{{ targetClass }}</td>
+                        @for (stat of getStats(); track stat) {
+                          <td>{{ getStatValue(stat, targetClass) }}</td>
+                        }
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+            <!-- Category Statistics table (shown by default for features with ≤20 unique values) -->
+            @if (targetAverages && targetAverages.length > 0) {
+              <div style="margin-top: 12px">
+                <p style="font-size: 14px; margin-bottom: 6px">
+                  <strong>Category Statistics</strong>
+                </p>
+                <div class="table-container">
+                  <table class="descriptive-stats-table">
+                    <thead>
+                      <tr>
+                        <th>Category</th>
+                        <th>Count</th>
+                        <th>Volume Share (%)</th>
+                        <th>Target Average</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of targetAverages; track row) {
+                        <tr>
+                          <td>{{ row.category }}</td>
+                          <td>{{ row.count }}</td>
+                          <td>{{ row.volume_share }}</td>
+                          <td>{{ row.target_average }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
+            <p style="font-size: 14px"><br /><strong>Distribution Plot</strong></p>
+            <!-- <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div> -->
+            <div
+              id="visualization"
+              [style.width.px]="isFullScreen ? null : originalPlotSize.width"
+              [style.height.px]="isFullScreen ? null : originalPlotSize.height"
+            ></div>
+            <!--<div id="visualization" [style.height.px]="isFullScreen ? null : 800"></div>-->
+            <div class="checkbox-container">
+              <div>
+                <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
+                  Percentage Y-axis
+                </mat-checkbox>
+              </div>
+              <div
+                [matTooltip]="getOutlierCleaningTooltip()"
+                [matTooltipPosition]="tooltipPosition"
+              >
+                <mat-checkbox
+                  [(ngModel)]="outlierCleaningEnabled"
+                  (change)="onOutlierCleaningChange()"
+                  [disabled]="isCategorical"
+                >
+                  Outlier Cleaning
+                </mat-checkbox>
+              </div>
+              <div
+                [matTooltip]="getSparsityCleaningTooltip()"
+                [matTooltipPosition]="tooltipPosition"
+              >
+                <mat-checkbox
+                  [(ngModel)]="sparsityCleaningEnabled"
+                  (change)="onSparsityCleaningChange()"
+                  [disabled]="isCategorical"
+                >
+                  Sparsity Cleaning
+                </mat-checkbox>
+              </div>
+              <div>
+                <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="onStackedWrtTargetChange()">
+                  Stacked wrt Target
+                </mat-checkbox>
+              </div>
+            </div>
+          }
+        </mat-tab>
+        <mat-tab label="Quality">
+          @if (hasQuality()) {
+            <p style="font-size: 14px"><br /><strong>Data Quality Summary</strong></p>
             <div class="table-container">
               <table class="descriptive-stats-table">
                 <thead>
                   <tr>
-                    <th>Category</th>
-                    <th>Count</th>
-                    <th>Volume Share (%)</th>
-                    <th>Target Average</th>
+                    <th>Metric</th>
+                    <th>Value</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let row of targetAverages">
-                    <td>{{ row.category }}</td>
-                    <td>{{ row.count }}</td>
-                    <td>{{ row.volume_share }}</td>
-                    <td>{{ row.target_average }}</td>
-                  </tr>
+                  @for (kv of qualityPairs(); track kv) {
+                    <tr>
+                      <td>{{ kv.key }}</td>
+                      <td>{{ kv.value }}</td>
+                    </tr>
+                  }
                 </tbody>
               </table>
             </div>
-          </div>
-
-          <p style="font-size: 14px"><br><strong>Distribution Plot</strong></p>
-          <!-- <div id="visualization" [style.width]="'100%'" [style.height]="isFullScreen ? '70vh' : '400px'"></div> -->
-          <div id="visualization" [style.width.px]="isFullScreen ? null : originalPlotSize.width" [style.height.px]="isFullScreen ? null : originalPlotSize.height"></div>
-          <!--<div id="visualization" [style.height.px]="isFullScreen ? null : 800"></div>-->
-          <div class="checkbox-container">
-            
-            <div>
-              <mat-checkbox [(ngModel)]="usePercentageYAxis" (change)="createVisualization()">
-                Percentage Y-axis
-              </mat-checkbox>
+            <p style="font-size: 14px">
+              <br /><strong>Rolling {{ metricLabelText }} ({{ qualityWindowsLabelText }})</strong>
+            </p>
+            <div
+              class="checkbox-container"
+              style="gap: 16px; align-items: center; margin: 8px 0 0; flex-wrap: wrap"
+            >
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 12px; color: #555">Metric</span>
+                <mat-form-field appearance="outline" style="width: 260px; margin-bottom: 0">
+                  <mat-select
+                    [value]="qualityTimeseriesMetric"
+                    (selectionChange)="onMetricChange($event.value)"
+                  >
+                    @for (m of metricOptions; track m) {
+                      <mat-option [value]="m.value">{{ m.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <div>
+                <mat-checkbox
+                  [checked]="selectedQualityWindows.includes(1)"
+                  (change)="toggleQualityWindow(1, $event.checked)"
+                  >1m</mat-checkbox
+                >
+                <mat-checkbox
+                  [checked]="selectedQualityWindows.includes(3)"
+                  (change)="toggleQualityWindow(3, $event.checked)"
+                  >3m</mat-checkbox
+                >
+                <mat-checkbox
+                  [checked]="selectedQualityWindows.includes(6)"
+                  (change)="toggleQualityWindow(6, $event.checked)"
+                  >6m</mat-checkbox
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 12px; color: #555">min_bin_share_allowed</span>
+                <mat-form-field appearance="outline" style="width: 120px; margin-bottom: 0">
+                  <input
+                    matInput
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="0.5"
+                    [(ngModel)]="minBinShareAllowed"
+                    (ngModelChange)="onMinBinShareChange($event)"
+                  />
+                </mat-form-field>
+              </div>
+              <div>
+                <mat-checkbox [(ngModel)]="showWindowCounts" (change)="drawQualityTimeseries()"
+                  >Show N bars</mat-checkbox
+                >
+              </div>
             </div>
-
-            <div 
-            [matTooltip]="getOutlierCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
-              <mat-checkbox [(ngModel)]="outlierCleaningEnabled" (change)="onOutlierCleaningChange()" [disabled]="isCategorical">
-                Outlier Cleaning
-              </mat-checkbox>
+            @if (qualityTimeseriesLoading) {
+              <div style="color: #666; font-size: 12px; margin: 6px 0">Loading timeseries…</div>
+            }
+            @if (qualityTimeseriesError) {
+              <div style="color: #b71c1c; font-size: 12px; margin: 6px 0">
+                {{ qualityTimeseriesError }}
+              </div>
+            }
+            <div style="position: relative; z-index: 10; pointer-events: auto">
+              <div id="quality-timeseries" style="width: 100%; height: 640px"></div>
             </div>
-            
-            <div [matTooltip]="getSparsityCleaningTooltip()" [matTooltipPosition]="tooltipPosition">
-              <mat-checkbox [(ngModel)]="sparsityCleaningEnabled" (change)="onSparsityCleaningChange()" [disabled]="isCategorical">
-                Sparsity Cleaning
-              </mat-checkbox>
+          } @else {
+            <p>Quality information will be displayed here.</p>
+          }
+        </mat-tab>
+        <mat-tab label="Importance">
+          @if (modelingLoading) {
+            <div style="margin-top: 16px; display: flex; gap: 12px; align-items: center">
+              <mat-spinner diameter="24"></mat-spinner>
+              <span style="font-size: 12px; color: #555">Loading importance data…</span>
             </div>
-            
-            <div>
-              <mat-checkbox [(ngModel)]="stackedWrtTarget" (change)="onStackedWrtTargetChange()">
-                Stacked wrt Target
-              </mat-checkbox>
+          }
+          @if (preModelingMode) {
+            <div
+              style="
+                margin-top: 16px;
+                padding: 16px;
+                border-radius: 4px;
+                background-color: #e3f2fd;
+                border-left: 4px solid #2196f3;
+              "
+            >
+              <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6">
+                <strong>ℹ Importance data is not yet available.</strong><br />
+                Feature importance scores will be computed in the <strong>Modeling</strong> step
+                when a model is trained. Please proceed to the Modeling phase first.
+              </p>
             </div>
-          </div>
-        </ng-container>
-      </mat-tab>
-
-      <mat-tab label="Quality">
-        <ng-container *ngIf="hasQuality(); else noQuality">
-          <p style="font-size: 14px"><br><strong>Data Quality Summary</strong></p>
-          <div class="table-container">
-            <table class="descriptive-stats-table">
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let kv of qualityPairs()">
-                  <td>{{ kv.key }}</td>
-                  <td>{{ kv.value }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p style="font-size: 14px"><br><strong>Rolling {{ metricLabelText }} ({{ qualityWindowsLabelText }})</strong></p>
-          <div class="checkbox-container" style="gap: 16px; align-items: center; margin: 8px 0 0; flex-wrap: wrap;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:12px; color:#555;">Metric</span>
-              <mat-form-field appearance="outline" style="width: 260px; margin-bottom: 0;">
-                <mat-select [value]="qualityTimeseriesMetric" (selectionChange)="onMetricChange($event.value)">
-                  <mat-option *ngFor="let m of metricOptions" [value]="m.value">{{ m.label }}</mat-option>
+          }
+          @if (
+            !preModelingMode &&
+            !modelingLoading &&
+            !(importanceGain?.length || importanceShap?.length)
+          ) {
+            <div
+              style="
+                margin-top: 16px;
+                padding: 16px;
+                border-radius: 4px;
+                background-color: #e3f2fd;
+                border-left: 4px solid #2196f3;
+              "
+            >
+              <p style="font-size: 13px; color: #1565c0; margin: 0">
+                <strong>ℹ No importance data available.</strong> Run modeling from the Modeling page
+                first.
+              </p>
+            </div>
+          }
+          @if (modelingError) {
+            <div style="color: #b71c1c; font-size: 12px; margin-top: 8px">{{ modelingError }}</div>
+          }
+          <!-- SFS context dropdown (Final Model Fit / Feature Added Step) -->
+          @if (
+            hasSfsContexts && !modelingLoading && (importanceGain?.length || importanceShap?.length)
+          ) {
+            <div
+              style="
+                margin-top: 14px;
+                margin-bottom: -4px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              "
+            >
+              <span style="font-size: 12px; color: #555; font-weight: 500">Model Context</span>
+              <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0">
+                <mat-select
+                  [value]="sfsViewMode"
+                  (selectionChange)="onSfsViewModeChange($event.value)"
+                >
+                  @for (ctx of sfsContexts; track ctx; let i = $index) {
+                    <mat-option [value]="i">
+                      {{ ctx.label }}
+                    </mat-option>
+                  }
                 </mat-select>
               </mat-form-field>
             </div>
-            <div>
-              <mat-checkbox [checked]="selectedQualityWindows.includes(1)" (change)="toggleQualityWindow(1, $event.checked)">1m</mat-checkbox>
-              <mat-checkbox [checked]="selectedQualityWindows.includes(3)" (change)="toggleQualityWindow(3, $event.checked)">3m</mat-checkbox>
-              <mat-checkbox [checked]="selectedQualityWindows.includes(6)" (change)="toggleQualityWindow(6, $event.checked)">6m</mat-checkbox>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:12px; color:#555;">min_bin_share_allowed</span>
-              <mat-form-field appearance="outline" style="width: 120px; margin-bottom: 0;">
-                <input matInput type="number" step="0.01" min="0" max="0.5" [(ngModel)]="minBinShareAllowed" (ngModelChange)="onMinBinShareChange($event)">
-              </mat-form-field>
-            </div>
-            <div>
-              <mat-checkbox [(ngModel)]="showWindowCounts" (change)="drawQualityTimeseries()">Show N bars</mat-checkbox>
-            </div>
-          </div>
-          <div *ngIf="qualityTimeseriesLoading" style="color:#666; font-size:12px; margin: 6px 0;">Loading timeseries…</div>
-          <div *ngIf="qualityTimeseriesError" style="color:#b71c1c; font-size:12px; margin: 6px 0;">{{ qualityTimeseriesError }}</div>
-          <div style="position: relative; z-index: 10; pointer-events: auto;">
-            <div id="quality-timeseries" style="width:100%; height: 640px;"></div>
-          </div>
-        </ng-container>
-        <ng-template #noQuality>
-          <p>Quality information will be displayed here.</p>
-        </ng-template>
-      </mat-tab>
-      
-      <mat-tab label="Importance">
-        <div *ngIf="modelingLoading" style="margin-top: 16px; display:flex; gap:12px; align-items:center;">
-          <mat-spinner diameter="24"></mat-spinner>
-          <span style="font-size:12px; color:#555;">Loading importance data…</span>
-        </div>
-
-        <div *ngIf="preModelingMode" 
-             style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
-          <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
-            <strong>ℹ Importance data is not yet available.</strong><br/>
-            Feature importance scores will be computed in the <strong>Modeling</strong> step when a model is trained. Please proceed to the Modeling phase first.
-          </p>
-        </div>
-
-        <div *ngIf="!preModelingMode && !modelingLoading && !(importanceGain?.length || importanceShap?.length)" 
-             style="margin-top: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
-          <p style="font-size: 13px; color: #1565c0; margin: 0;">
-            <strong>ℹ No importance data available.</strong> Run modeling from the Modeling page first.
-          </p>
-        </div>
-
-        <div *ngIf="modelingError" style="color:#b71c1c; font-size:12px; margin-top: 8px;">{{ modelingError }}</div>
-
-        <!-- SFS context dropdown (Final Model Fit / Feature Added Step) -->
-        <div *ngIf="hasSfsContexts && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
-             style="margin-top: 14px; margin-bottom: -4px; display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
-          <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
-            <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
-              <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
-                {{ ctx.label }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-        </div>
-
-        <!-- Importance context badge (non-SFS or legacy) -->
-        <div *ngIf="!hasSfsContexts && importanceContext && !modelingLoading && (importanceGain?.length || importanceShap?.length)"
-             style="margin-top: 14px; margin-bottom: -4px;">
-          <span style="display: inline-block; padding: 4px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 12px; font-size: 11px; font-weight: 600;">
-            {{ importanceContext }}
-          </span>
-        </div>
-
-        <!-- Feature-specific importance summary -->
-        <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" 
-             style="margin-top: 16px; display: flex; gap: 16px; flex-wrap: wrap;">
-          <div *ngIf="getFeatureImportanceRank('gain') as gainRank"
-               style="flex: 1; min-width: 200px; padding: 14px 18px; background: #f8f9fa; border-left: 4px solid #C02942; border-radius: 4px;">
-            <div style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">XGBoost Gain</div>
-            <div style="font-size: 22px; font-weight: 700; color: #C02942;">{{ gainRank.score | number:'1.4-4' }}</div>
-            <div style="font-size: 12px; color: #555; margin-top: 2px;">Rank <strong>{{ gainRank.rank }}</strong> of {{ gainRank.total }} features</div>
-          </div>
-          <div *ngIf="getFeatureImportanceRank('shap') as shapRank"
-               style="flex: 1; min-width: 200px; padding: 14px 18px; background: #f8f9fa; border-left: 4px solid #4E79A7; border-radius: 4px;">
-            <div style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">SHAP Mean |Impact|</div>
-            <div style="font-size: 22px; font-weight: 700; color: #4E79A7;">{{ shapRank.score | number:'1.6-6' }}</div>
-            <div style="font-size: 12px; color: #555; margin-top: 2px;">Rank <strong>{{ shapRank.rank }}</strong> of {{ shapRank.total }} features</div>
-          </div>
-        </div>
-
-        <div *ngIf="!modelingLoading && (importanceGain?.length || importanceShap?.length)" style="margin-top: 12px; display:flex; align-items:center; gap:16px; flex-wrap: wrap;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:12px; color:#555;">Importance</span>
-            <mat-form-field appearance="outline" style="width: 180px; margin-bottom:0;">
-              <mat-select [(value)]="selectedImportanceType" (selectionChange)="onImportanceTypeChange($event.value)">
-                <mat-option value="shap">SHAP mean |impact|</mat-option>
-                <mat-option value="gain">XGBoost gain</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:12px; color:#555;">Top</span>
-            <mat-form-field appearance="outline" style="width: 100px; margin-bottom:0;">
-              <input matInput type="number" min="5" max="100" [(ngModel)]="importanceLimit" (ngModelChange)="drawImportancePlot()">
-            </mat-form-field>
-          </div>
-          <span style="font-size: 11px; color: #888; font-style: italic;">Selected feature highlighted in red.</span>
-        </div>
-
-        <div id="importance-plot" style="width:100%; height: 520px; margin-top: 8px;"></div>
-      </mat-tab>
-      
-      <mat-tab label="Explainability">
-        <div style="margin-top: 16px;">
-          <!-- SFS context dropdown (same as Importance tab) -->
-          <div *ngIf="hasSfsContexts"
-               style="margin-bottom: 14px; display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 12px; color: #555; font-weight: 500;">Model Context</span>
-            <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0;">
-              <mat-select [value]="sfsViewMode" (selectionChange)="onSfsViewModeChange($event.value)">
-                <mat-option *ngFor="let ctx of sfsContexts; let i = index" [value]="i">
-                  {{ ctx.label }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-
-          <div *ngIf="preModelingMode" 
-               style="margin-bottom: 16px; padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
-            <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6;">
-              <strong>ℹ Explainability data is not yet available.</strong><br/>
-              SHAP explainability analysis will be available after a model is trained in the <strong>Modeling</strong> step. Please proceed to the Modeling phase first.
-            </p>
-          </div>
-
-          <div *ngIf="!preModelingMode && explainabilityLoading" style="display:flex; gap:12px; align-items:center; margin-bottom: 12px;">
-            <mat-spinner diameter="24"></mat-spinner>
-            <span style="font-size:12px; color:#555;">Loading explainability data…</span>
-          </div>
-          
-          <div *ngIf="explainabilityError && explainabilityFetched" style="margin-bottom: 16px;">
-            <!-- Info message for features not in model (expected behavior) -->
-            <div style="padding: 16px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3;">
-              <p style="font-size: 13px; color: #1565c0; margin: 0; margin-bottom: 8px;">
-                <strong>ℹ Feature Not Included in Model</strong>
-              </p>
-              <p style="font-size: 12px; color: #1976d2; margin: 0; line-height: 1.5;">
-                {{ explainabilityError }}
-              </p>
-              <p style="font-size: 11px; color: #1976d2; margin: 8px 0 0 0; font-style: italic;">
-                💡 Tip: Only features with measurable predictive impact are included in the model. You can view feature importance in the "Importance" tab to see which features were selected.
-              </p>
-            </div>
-          </div>
-          
-          <div *ngIf="explainabilityError && !explainabilityFetched" style="margin-bottom: 16px;">
-            <!-- Error message for actual errors (allow retry) -->
-            <div style="padding: 12px; border-radius: 4px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
-              <p style="font-size: 13px; color: #856404; margin: 0; margin-bottom: 8px;">
-                <strong>⚠ Error Loading Explainability Data</strong>
-              </p>
-              <p style="font-size: 12px; color: #856404; margin: 0;">
-                {{ explainabilityError }}
-              </p>
-              <button mat-stroked-button color="primary" (click)="fetchFeatureExplainability()" 
-                      style="margin-top: 10px; font-size: 11px;">
-                Retry
-              </button>
-            </div>
-          </div>
-          
-          <div *ngIf="!explainabilityLoading && !explainabilityError && !explainabilityData && !explainabilityFetched" 
-               style="padding: 12px; border-radius: 4px; background-color: #e3f2fd; border-left: 4px solid #2196f3; margin-bottom: 16px;">
-            <p style="font-size: 12px; color: #1976d2; margin: 0;">
-              <strong>ℹ Info:</strong> Explainability data will load automatically when you visit this tab, or you can click below to load now.
-            </p>
-            <button mat-stroked-button color="primary" (click)="fetchFeatureExplainability()" style="margin-top: 10px; font-size: 11px;">
-              Load Explainability Data
-            </button>
-          </div>
-
-          <div *ngIf="sequentialCandidates?.length" style="margin-bottom: 16px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fafafa;">
-            <p style="font-size: 13px; margin: 0 0 6px;"><strong>Sequential / near-duplicate flags (MVP)</strong></p>
-            <p style="font-size: 11px; color: #666; margin: 0 0 8px;">Candidates where consecutive rows differ in few features only.</p>
-            <ul style="margin: 0; padding-left: 16px; font-size: 11px;">
-              <li *ngFor="let c of sequentialCandidates | slice:0:8">
-                {{ (c.changed_features || []).join(', ') }} (n_diff={{ c.n_diff }})
-              </li>
-            </ul>
-          </div>
-          <button *ngIf="!sequentialCandidates?.length" mat-stroked-button color="primary"
-                  (click)="loadSequentialPatterns()" [disabled]="sequentialLoading"
-                  style="margin-bottom: 12px; font-size: 11px;">
-            {{ sequentialLoading ? 'Scanning…' : 'Load sequential pattern candidates' }}
-          </button>
-
-          <div *ngIf="explainabilityData">
-            <p style="font-size: 14px; margin-top: 8px;"><strong>SHAP Beeswarm (Single Feature)</strong></p>
-            <p style="font-size: 12px; color:#666; margin-bottom: 8px;">Each point represents a sample. Color indicates feature value (blue=low, red=high). Position on x-axis shows SHAP impact on model output.</p>
-            <div style="display:flex; align-items:center; gap:12px; margin: 6px 0 10px 0;">
-              <label style="font-size: 13px; color:#444; display:flex; align-items:center; gap:6px;">
-                <input type="checkbox" [(ngModel)]="showNullsBeeswarm" (ngModelChange)="drawShapBeeswarmSingle()" />
-                Show null values <span style="color:#666;">({{ (beeswarmMissingRatio * 100) | number:'1.1-1' }}%)</span>
-              </label>
-            </div>
-            <div id="explainability-beeswarm" style="width:100%; height: 360px;"></div>
-
-            <p style="font-size: 14px; margin-top: 24px;"><strong>Partial Dependence Plot (PDP) - Interactive</strong></p>
-            <p style="font-size: 12px; color:#666; margin-bottom: 8px;">Shows the expected model output E[f(X) | feature] as feature varies. Grey dashed lines are reference lines E[f(X)] and E[feature]. Light grey bars show feature distribution. ICE curves (individual samples) shown transparently; blue line is the PDP (average). Y-axis is in logit space for binary classification.</p>
-            <div id="explainability-pdp" style="width:100%; height: 420px;"></div>
-
-            <div *ngIf="getShapStaticImage()" style="margin-top: 16px; display: flex; justify-content: flex-start;">
-              <button mat-stroked-button color="primary" (click)="downloadShapPdpImage()" style="font-size: 12px;">
-                <mat-icon style="font-size: 18px; height: 18px; width: 18px; margin-right: 4px;">download</mat-icon>
-                Download SHAP Reference PDP
-              </button>
-              <span style="font-size: 11px; color:#666; margin-left: 12px; align-self: center;">
-                (Static plot from SHAP library for comparison)
+          }
+          <!-- Importance context badge (non-SFS or legacy) -->
+          @if (
+            !hasSfsContexts &&
+            importanceContext &&
+            !modelingLoading &&
+            (importanceGain?.length || importanceShap?.length)
+          ) {
+            <div style="margin-top: 14px; margin-bottom: -4px">
+              <span
+                style="
+                  display: inline-block;
+                  padding: 4px 12px;
+                  background: #e8f5e9;
+                  color: #2e7d32;
+                  border-radius: 12px;
+                  font-size: 11px;
+                  font-weight: 600;
+                "
+              >
+                {{ importanceContext }}
               </span>
             </div>
+          }
+          <!-- Feature-specific importance summary -->
+          @if (!modelingLoading && (importanceGain?.length || importanceShap?.length)) {
+            <div style="margin-top: 16px; display: flex; gap: 16px; flex-wrap: wrap">
+              @if (getFeatureImportanceRank('gain'); as gainRank) {
+                <div
+                  style="
+                    flex: 1;
+                    min-width: 200px;
+                    padding: 14px 18px;
+                    background: #f8f9fa;
+                    border-left: 4px solid #c02942;
+                    border-radius: 4px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: #888;
+                      text-transform: uppercase;
+                      letter-spacing: 0.5px;
+                      margin-bottom: 4px;
+                    "
+                  >
+                    XGBoost Gain
+                  </div>
+                  <div style="font-size: 22px; font-weight: 700; color: #c02942">
+                    {{ gainRank.score | number: '1.4-4' }}
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-top: 2px">
+                    Rank <strong>{{ gainRank.rank }}</strong> of {{ gainRank.total }} features
+                  </div>
+                </div>
+              }
+              @if (getFeatureImportanceRank('shap'); as shapRank) {
+                <div
+                  style="
+                    flex: 1;
+                    min-width: 200px;
+                    padding: 14px 18px;
+                    background: #f8f9fa;
+                    border-left: 4px solid #4e79a7;
+                    border-radius: 4px;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: #888;
+                      text-transform: uppercase;
+                      letter-spacing: 0.5px;
+                      margin-bottom: 4px;
+                    "
+                  >
+                    SHAP Mean |Impact|
+                  </div>
+                  <div style="font-size: 22px; font-weight: 700; color: #4e79a7">
+                    {{ shapRank.score | number: '1.6-6' }}
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-top: 2px">
+                    Rank <strong>{{ shapRank.rank }}</strong> of {{ shapRank.total }} features
+                  </div>
+                </div>
+              }
+            </div>
+          }
+          @if (!modelingLoading && (importanceGain?.length || importanceShap?.length)) {
+            <div
+              style="
+                margin-top: 12px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+              "
+            >
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 12px; color: #555">Importance</span>
+                <mat-form-field appearance="outline" style="width: 180px; margin-bottom: 0">
+                  <mat-select
+                    [(value)]="selectedImportanceType"
+                    (selectionChange)="onImportanceTypeChange($event.value)"
+                  >
+                    <mat-option value="shap">SHAP mean |impact|</mat-option>
+                    <mat-option value="gain">XGBoost gain</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 12px; color: #555">Top</span>
+                <mat-form-field appearance="outline" style="width: 100px; margin-bottom: 0">
+                  <input
+                    matInput
+                    type="number"
+                    min="5"
+                    max="100"
+                    [(ngModel)]="importanceLimit"
+                    (ngModelChange)="drawImportancePlot()"
+                  />
+                </mat-form-field>
+              </div>
+              <span style="font-size: 11px; color: #888; font-style: italic"
+                >Selected feature highlighted in red.</span
+              >
+            </div>
+          }
+          <div id="importance-plot" style="width: 100%; height: 520px; margin-top: 8px"></div>
+        </mat-tab>
+        <mat-tab label="Explainability">
+          <div style="margin-top: 16px">
+            <!-- SFS context dropdown (same as Importance tab) -->
+            @if (hasSfsContexts) {
+              <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 10px">
+                <span style="font-size: 12px; color: #555; font-weight: 500">Model Context</span>
+                <mat-form-field appearance="outline" style="width: 320px; margin-bottom: 0">
+                  <mat-select
+                    [value]="sfsViewMode"
+                    (selectionChange)="onSfsViewModeChange($event.value)"
+                  >
+                    @for (ctx of sfsContexts; track ctx; let i = $index) {
+                      <mat-option [value]="i">
+                        {{ ctx.label }}
+                      </mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+            }
+            @if (preModelingMode) {
+              <div
+                style="
+                  margin-bottom: 16px;
+                  padding: 16px;
+                  border-radius: 4px;
+                  background-color: #e3f2fd;
+                  border-left: 4px solid #2196f3;
+                "
+              >
+                <p style="font-size: 13px; color: #1565c0; margin: 0; line-height: 1.6">
+                  <strong>ℹ Explainability data is not yet available.</strong><br />
+                  SHAP explainability analysis will be available after a model is trained in the
+                  <strong>Modeling</strong> step. Please proceed to the Modeling phase first.
+                </p>
+              </div>
+            }
+            @if (!preModelingMode && explainabilityLoading) {
+              <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px">
+                <mat-spinner diameter="24"></mat-spinner>
+                <span style="font-size: 12px; color: #555">Loading explainability data…</span>
+              </div>
+            }
+            @if (explainabilityError && explainabilityFetched) {
+              <div style="margin-bottom: 16px">
+                <!-- Info message for features not in model (expected behavior) -->
+                <div
+                  style="
+                    padding: 16px;
+                    border-radius: 4px;
+                    background-color: #e3f2fd;
+                    border-left: 4px solid #2196f3;
+                  "
+                >
+                  <p style="font-size: 13px; color: #1565c0; margin: 0; margin-bottom: 8px">
+                    <strong>ℹ Feature Not Included in Model</strong>
+                  </p>
+                  <p style="font-size: 12px; color: #1976d2; margin: 0; line-height: 1.5">
+                    {{ explainabilityError }}
+                  </p>
+                  <p style="font-size: 11px; color: #1976d2; margin: 8px 0 0 0; font-style: italic">
+                    💡 Tip: Only features with measurable predictive impact are included in the
+                    model. You can view feature importance in the "Importance" tab to see which
+                    features were selected.
+                  </p>
+                </div>
+              </div>
+            }
+            @if (explainabilityError && !explainabilityFetched) {
+              <div style="margin-bottom: 16px">
+                <!-- Error message for actual errors (allow retry) -->
+                <div
+                  style="
+                    padding: 12px;
+                    border-radius: 4px;
+                    background-color: #fff3cd;
+                    border-left: 4px solid #ffc107;
+                  "
+                >
+                  <p style="font-size: 13px; color: #856404; margin: 0; margin-bottom: 8px">
+                    <strong>⚠ Error Loading Explainability Data</strong>
+                  </p>
+                  <p style="font-size: 12px; color: #856404; margin: 0">
+                    {{ explainabilityError }}
+                  </p>
+                  <button
+                    mat-stroked-button
+                    color="primary"
+                    (click)="fetchFeatureExplainability()"
+                    style="margin-top: 10px; font-size: 11px"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            }
+            @if (
+              !explainabilityLoading &&
+              !explainabilityError &&
+              !explainabilityData &&
+              !explainabilityFetched
+            ) {
+              <div
+                style="
+                  padding: 12px;
+                  border-radius: 4px;
+                  background-color: #e3f2fd;
+                  border-left: 4px solid #2196f3;
+                  margin-bottom: 16px;
+                "
+              >
+                <p style="font-size: 12px; color: #1976d2; margin: 0">
+                  <strong>ℹ Info:</strong> Explainability data will load automatically when you
+                  visit this tab, or you can click below to load now.
+                </p>
+                <button
+                  mat-stroked-button
+                  color="primary"
+                  (click)="fetchFeatureExplainability()"
+                  style="margin-top: 10px; font-size: 11px"
+                >
+                  Load Explainability Data
+                </button>
+              </div>
+            }
+            @if (sequentialCandidates?.length) {
+              <div
+                style="
+                  margin-bottom: 16px;
+                  padding: 10px;
+                  border: 1px solid #e0e0e0;
+                  border-radius: 4px;
+                  background: #fafafa;
+                "
+              >
+                <p style="font-size: 13px; margin: 0 0 6px">
+                  <strong>Sequential / near-duplicate flags (MVP)</strong>
+                </p>
+                <p style="font-size: 11px; color: #666; margin: 0 0 8px">
+                  Candidates where consecutive rows differ in few features only.
+                </p>
+                <ul style="margin: 0; padding-left: 16px; font-size: 11px">
+                  @for (c of sequentialCandidates | slice: 0 : 8; track c) {
+                    <li>{{ (c.changed_features || []).join(', ') }} (n_diff={{ c.n_diff }})</li>
+                  }
+                </ul>
+              </div>
+            }
+            @if (!sequentialCandidates?.length) {
+              <button
+                mat-stroked-button
+                color="primary"
+                (click)="loadSequentialPatterns()"
+                [disabled]="sequentialLoading"
+                style="margin-bottom: 12px; font-size: 11px"
+              >
+                {{ sequentialLoading ? 'Scanning…' : 'Load sequential pattern candidates' }}
+              </button>
+            }
+            @if (explainabilityData) {
+              <div>
+                <p style="font-size: 14px; margin-top: 8px">
+                  <strong>SHAP Beeswarm (Single Feature)</strong>
+                </p>
+                <p style="font-size: 12px; color: #666; margin-bottom: 8px">
+                  Each point represents a sample. Color indicates feature value (blue=low,
+                  red=high). Position on x-axis shows SHAP impact on model output.
+                </p>
+                <div style="display: flex; align-items: center; gap: 12px; margin: 6px 0 10px 0">
+                  <label
+                    style="
+                      font-size: 13px;
+                      color: #444;
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                    "
+                  >
+                    <input
+                      type="checkbox"
+                      [(ngModel)]="showNullsBeeswarm"
+                      (ngModelChange)="drawShapBeeswarmSingle()"
+                    />
+                    Show null values
+                    <span style="color: #666"
+                      >({{ beeswarmMissingRatio * 100 | number: '1.1-1' }}%)</span
+                    >
+                  </label>
+                </div>
+                <div id="explainability-beeswarm" style="width: 100%; height: 360px"></div>
+                <p style="font-size: 14px; margin-top: 24px">
+                  <strong>Partial Dependence Plot (PDP) - Interactive</strong>
+                </p>
+                <p style="font-size: 12px; color: #666; margin-bottom: 8px">
+                  Shows the expected model output E[f(X) | feature] as feature varies. Grey dashed
+                  lines are reference lines E[f(X)] and E[feature]. Light grey bars show feature
+                  distribution. ICE curves (individual samples) shown transparently; blue line is
+                  the PDP (average). Y-axis is in logit space for binary classification.
+                </p>
+                <div id="explainability-pdp" style="width: 100%; height: 420px"></div>
+                @if (getShapStaticImage()) {
+                  <div style="margin-top: 16px; display: flex; justify-content: flex-start">
+                    <button
+                      mat-stroked-button
+                      color="primary"
+                      (click)="downloadShapPdpImage()"
+                      style="font-size: 12px"
+                    >
+                      <mat-icon
+                        style="font-size: 18px; height: 18px; width: 18px; margin-right: 4px"
+                        >download</mat-icon
+                      >
+                      Download SHAP Reference PDP
+                    </button>
+                    <span
+                      style="font-size: 11px; color: #666; margin-left: 12px; align-self: center"
+                    >
+                      (Static plot from SHAP library for comparison)
+                    </span>
+                  </div>
+                }
+              </div>
+            }
           </div>
-        </div>
-      </mat-tab>
-    
-    </mat-tab-group>
-
-  </mat-dialog-content>
+        </mat-tab>
+      </mat-tab-group>
+    </mat-dialog-content>
+  }
 
   <mat-dialog-actions align="end">
-    <button mat-button (click)="toggleFullScreen()">{{ isFullScreen ? 'Exit Full-Screen' : 'Full-Screen' }}</button>
+    <button mat-button (click)="toggleFullScreen()">
+      {{ isFullScreen ? 'Exit Full-Screen' : 'Full-Screen' }}
+    </button>
     <button mat-button mat-dialog-close>Close</button>
   </mat-dialog-actions>
-
 </div>

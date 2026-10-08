@@ -151,7 +151,7 @@ class XGBoostAdapter(BoosterAdapter):
             early_stopping_rounds=early_stopping_rounds if early_stopping_rounds else None,
             verbose_eval=False,
         )
-        self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round) or num_boost_round)
+        self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round - 1))
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -161,15 +161,12 @@ class XGBoostAdapter(BoosterAdapter):
             feature_names=self.feature_names or list(map(str, X.columns)),
             enable_categorical=self.enable_categorical,
         )
-        try:
-            if self.best_iteration is not None and self.best_iteration >= 0:
-                return np.asarray(
-                    self.model.predict(dmat, iteration_range=(0, int(self.best_iteration) + 1)),
-                    dtype=float,
-                ).ravel()
-        except Exception:
-            pass
-        return np.asarray(self.model.predict(dmat), dtype=float).ravel()
+        if self.best_iteration is not None and self.best_iteration >= 0:
+            return np.asarray(
+                self.model.predict(dmat, iteration_range=(0, int(self.best_iteration) + 1)),
+                dtype=float,
+            )
+        return np.asarray(self.model.predict(dmat), dtype=float)
 
     def save(self, path: str) -> str:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
@@ -187,9 +184,10 @@ class XGBoostAdapter(BoosterAdapter):
         obj.enable_categorical = bool(obj.cat_features)
         obj.task = 'regression' if 'regressor' in os.path.basename(path).lower() else 'classification'
         try:
-            obj.best_iteration = int(getattr(obj.model, 'best_iteration', 0) or 0)
+            saved_iteration = getattr(obj.model, 'best_iteration', None)
+            obj.best_iteration = int(saved_iteration) if saved_iteration is not None else None
         except Exception:
-            obj.best_iteration = 0
+            obj.best_iteration = None
         return obj
 
     def gain_importance(self) -> List[Dict[str, Any]]:
@@ -275,7 +273,7 @@ class LightGBMAdapter(BoosterAdapter):
             if c in Xc.columns:
                 Xc[c] = Xc[c].astype('category')
         ntree = self.best_iteration if self.best_iteration and self.best_iteration > 0 else None
-        return np.asarray(self.model.predict(Xc, num_iteration=ntree), dtype=float).ravel()
+        return np.asarray(self.model.predict(Xc, num_iteration=ntree), dtype=float)
 
     def save(self, path: str) -> str:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
@@ -347,6 +345,10 @@ class CatBoostAdapter(BoosterAdapter):
             loss = 'MultiClass' if 'num_class' in params else 'Logloss'
             cb_kwargs['loss_function'] = loss
             cb_kwargs['eval_metric'] = 'AUC' if loss == 'Logloss' else 'MultiClass'
+            if loss == 'MultiClass':
+                # CatBoost's default multiclass Bayesian bootstrap rejects
+                # the shared subsample setting. Bernoulli supports that setting.
+                cb_kwargs['bootstrap_type'] = 'Bernoulli'
             if 'scale_pos_weight' in params and params['scale_pos_weight'] is not None:
                 cb_kwargs['scale_pos_weight'] = float(params['scale_pos_weight'])
             self.model = CatBoostClassifier(**cb_kwargs)
@@ -373,7 +375,9 @@ class CatBoostAdapter(BoosterAdapter):
             return np.asarray(self.model.predict(pool), dtype=float).ravel()
         proba = self.model.predict_proba(pool)
         proba = np.asarray(proba)
-        if proba.ndim == 2 and proba.shape[1] >= 2:
+        if proba.ndim == 2 and proba.shape[1] > 2:
+            return proba.astype(float)
+        if proba.ndim == 2 and proba.shape[1] == 2:
             return proba[:, 1].astype(float)
         return proba.ravel().astype(float)
 

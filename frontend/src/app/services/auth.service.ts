@@ -1,24 +1,64 @@
-// auth.service.ts
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
-@Injectable({
-  providedIn: 'root'
-})
+interface SessionResponse {
+  authenticated: boolean;
+  csrf_token: string;
+  user: { id: number; username: string } | null;
+}
+
+@Injectable({ providedIn: 'root' })
 export class AuthService {
-  private isLoggedInSubject = new BehaviorSubject<boolean>(false);
-  isLoggedIn$ = this.isLoggedInSubject.asObservable();
+  private readonly status = new BehaviorSubject<boolean>(false);
+  readonly isLoggedIn$ = this.status.asObservable();
+  csrfToken = '';
+  user: SessionResponse['user'] = null;
+  readonly apiRoot = environment.apiBaseUrl.replace(/\/?$/, '/');
 
-  login(username: string, password: string): boolean {
-    if (username === 'caglarsubas@gmail.com' && password === 'con3e7ne') {
-      this.isLoggedInSubject.next(true);
-      return true;
-    }
-    return false;
+  constructor(private http: HttpClient) {}
+
+  private accept(session: SessionResponse): boolean {
+    this.csrfToken = session.csrf_token;
+    this.user = session.user;
+    this.status.next(session.authenticated);
+    return session.authenticated;
   }
 
-  logout() {
-    this.isLoggedInSubject.next(false);
-    // You can add any additional logout logic here, such as clearing local storage
+  invalidate(): void {
+    this.user = null;
+    this.status.next(false);
+  }
+
+  refresh(): Observable<boolean> {
+    // Identity responses are private and must always reflect the current session.
+    return this.http.get<SessionResponse>(`${this.apiRoot}auth/session/`, {
+      withCredentials: true, transferCache: false,
+    }).pipe(
+      map(session => this.accept(session)),
+      catchError(() => { this.invalidate(); return of(false); }),
+    );
+  }
+
+  login(username: string, password: string): Observable<boolean> {
+    return this.refresh().pipe(
+      switchMap(() => this.http.post<SessionResponse>(`${this.apiRoot}auth/login/`, { username, password }, {
+        withCredentials: true, headers: { 'X-CSRFToken': this.csrfToken },
+      })),
+      map(session => this.accept(session)),
+      catchError(() => { this.invalidate(); return of(false); }),
+    );
+  }
+
+  logout(): Observable<boolean> {
+    return this.http.post<SessionResponse>(`${this.apiRoot}auth/logout/`, {}, {
+      withCredentials: true, headers: { 'X-CSRFToken': this.csrfToken },
+    }).pipe(
+      tap(session => this.accept(session)),
+      map(() => true),
+      catchError(() => of(false)),
+    );
   }
 }

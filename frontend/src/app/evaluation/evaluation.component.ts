@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
@@ -6,7 +6,9 @@ import { SharedService } from '../services/shared.service';
 @Component({
   selector: 'app-evaluation',
   templateUrl: './evaluation.component.html',
-  styleUrl: './evaluation.component.css'
+  styleUrl: './evaluation.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  standalone: false,
 })
 export class EvaluationComponent implements OnInit, OnDestroy {
   currentFileId: number | null = null;
@@ -65,7 +67,9 @@ export class EvaluationComponent implements OnInit, OnDestroy {
         this.initGovernanceChecks();
         this.isRunning = false;
         this.sharedService.setEvaluationCompleted(true);
-        try { this.sharedService.triggerCheckpoint('evaluation_completed'); } catch {}
+        try {
+          this.sharedService.triggerCheckpoint('evaluation_completed');
+        } catch {}
       },
       error: (err) => {
         this.error = err?.message || 'Evaluation failed';
@@ -106,9 +110,13 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     this.dataService.saveGovernanceChecks(this.currentFileId, this.governanceChecked).subscribe({
       next: () => {
         this.governanceSaving = false;
-        try { this.sharedService.triggerCheckpoint('evaluation_governance_updated'); } catch {}
+        try {
+          this.sharedService.triggerCheckpoint('evaluation_governance_updated');
+        } catch {}
       },
-      error: () => { this.governanceSaving = false; },
+      error: () => {
+        this.governanceSaving = false;
+      },
     });
   }
 
@@ -121,9 +129,11 @@ export class EvaluationComponent implements OnInit, OnDestroy {
   }
 
   get successCriteriaResult(): any {
-    return this.result?.success_criteria_result
-      ?? this.result?.evaluation?.success_criteria_result
-      ?? null;
+    return (
+      this.result?.success_criteria_result ??
+      this.result?.evaluation?.success_criteria_result ??
+      null
+    );
   }
 
   get deployReadiness(): any {
@@ -158,8 +168,18 @@ export class EvaluationComponent implements OnInit, OnDestroy {
       return ['r2', 'rmse', 'mae', 'mean_residual', 'residual_std', 'y_true_mean', 'y_pred_mean'];
     }
     return [
-      'roc_auc', 'pr_auc', 'ks', 'gini', 'f1', 'f2', 'precision', 'recall',
-      'accuracy', 'mcc', 'brier', 'log_loss',
+      'roc_auc',
+      'pr_auc',
+      'ks',
+      'gini',
+      'f1',
+      'f2',
+      'precision',
+      'recall',
+      'accuracy',
+      'mcc',
+      'brier',
+      'log_loss',
     ];
   }
 

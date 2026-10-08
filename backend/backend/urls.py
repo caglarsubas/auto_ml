@@ -14,14 +14,17 @@ from evaluation.views import EvaluationRunView, EvaluationStatusView, Evaluation
 from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
-from django.conf import settings
-from django.conf.urls.static import static
+from backend.auth_views import session_status, session_login, session_logout, protected_media
 
 router = DefaultRouter()
 router.register(r'declaration', DeclarationViewSet)
 router.register(r'feature-card', FeatureCardViewSet, basename='feature-card')
 
 urlpatterns = [
+    path('api/auth/session/', session_status, name='auth-session'),
+    path('api/auth/login/', session_login, name='auth-login'),
+    path('api/auth/logout/', session_logout, name='auth-logout'),
+    path('media/<path:path>', protected_media, name='protected-media'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/feature-card/<int:pk>/get_stacked_feature_data/', FeatureCardViewSet.as_view({'get': 'get_stacked_feature_data'}), name='get-stacked-feature-data'),
@@ -72,7 +75,3 @@ urlpatterns = [
     path('api/ai-assistant/cache/', AICachePushView.as_view(), name='ai-assistant-cache'),
     path('api/ai-assistant/models/', AIModelListView.as_view(), name='ai-assistant-models'),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    

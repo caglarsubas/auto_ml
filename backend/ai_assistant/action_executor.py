@@ -189,63 +189,6 @@ def _pick_exploratory_preview(sandbox: dict, df_before: pd.DataFrame) -> Optiona
     return _build_preview(df_before)
 
 
-def _run_exploratory(file_id: int, code: str, description: str) -> dict:
-    """Execute code against a DataFrame copy without mutating the dataset on disk."""
-    set_span_attr('declarai.execute_code.mode', 'exploratory')
-    df, _data_file, _file_path = _load_dataframe(file_id)
-    code = _strip_import_lines(code)
-
-    stdout_buf = io.StringIO()
-    sandbox = {
-        '__builtins__': _SAFE_BUILTINS,
-        'pd': pd,
-        'np': np,
-        'df': df.copy(),
-    }
-
-    # Optional matplotlib for charts in exploratory mode
-    try:
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        plt.close('all')
-        sandbox['plt'] = plt
-    except Exception:
-        pass
-
-    old_stdout = sys.stdout
-    try:
-        sys.stdout = stdout_buf
-        exec(code, sandbox)
-    except Exception as e:
-        return {
-            'status': 'error',
-            'mode': 'exploratory',
-            'error': f'Code execution failed: {str(e)}',
-            'traceback': traceback.format_exc(),
-            'stdout': stdout_buf.getvalue(),
-            'preview': None,
-            'images': [],
-            'changes': None,
-        }
-    finally:
-        sys.stdout = old_stdout
-
-    images = _capture_matplotlib_images()
-    preview = _pick_exploratory_preview(sandbox, df)
-
-    return {
-        'status': 'success',
-        'action_type': 'execute_code',
-        'mode': 'exploratory',
-        'description': description,
-        'stdout': stdout_buf.getvalue(),
-        'preview': preview,
-        'images': images,
-        'changes': None,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Feature description generator
 # ---------------------------------------------------------------------------
@@ -456,149 +399,24 @@ def _generate_feature_description(col_name: str, data_file) -> str:
 
 @tool(name="execute-code")
 def execute_code(file_id: int, payload: dict) -> dict:
-    """
-    Run user/AI-authored pandas code on the dataset in a safe sandbox.
+    """Fail closed until the approved Linux expert execution service is available.
 
-    payload: {
-        "code": "df['New_Col'] = df['A'] / df['B']\\ndf.drop(columns=['C'], inplace=True)",
-        "description": "Human-readable summary of what the code does",
-        "mode": "apply" | "exploratory"   # default: apply
-    }
-
-    - apply (default): mutates the dataset on disk (existing behavior).
-    - exploratory: runs on a copy, captures stdout/preview/images, never saves.
+    Pandas, stripped imports and restricted builtins do not provide isolation.
+    Neither browser nor MCP actions may run expert code in the API process.
     """
     _stamp_action_mcp_marker('execute_code')
-    code = payload.get('code', '').strip()
-    description = payload.get('description', '')
-    mode = (payload.get('mode') or 'apply').strip().lower()
-    if mode not in ('apply', 'exploratory'):
-        mode = 'apply'
+    code = payload.get('code')
+    mode = payload.get('mode') or 'apply'
     set_span_attr('declarai.execute_code.mode', mode)
-    if not code:
+    if not isinstance(code, str) or not code.strip():
         return {'status': 'error', 'error': 'No code provided', 'mode': mode}
-
-    if mode == 'exploratory':
-        return _run_exploratory(file_id, code, description)
-
-    # Strip import lines — np and pd are already in the sandbox
-    code = _strip_import_lines(code)
-
-    df, data_file, file_path = _load_dataframe(file_id)
-    cols_before = list(df.columns)
-    cols_before_set = set(cols_before)
-    rows_before = len(df)
-
-    # Create backup before execution so we can rollback on corruption
-    backup_path = file_path + '.bak'
-    shutil.copy2(file_path, backup_path)
-
-    # Build a single namespace so nested functions (closures) can see `df`.
-    # When exec() receives separate globals / locals, closures only close
-    # over globals — putting df only in locals made it invisible inside
-    # helper functions like safe_ratio().
-    sandbox = {
-        '__builtins__': _SAFE_BUILTINS,
-        'pd': pd,
-        'np': np,
-        'df': df.copy(),
-    }
-
-    try:
-        exec(code, sandbox)
-    except Exception as e:
-        _remove_backup(backup_path)
-        return {
-            'status': 'error',
-            'mode': 'apply',
-            'error': f'Code execution failed: {str(e)}',
-            'traceback': traceback.format_exc(),
-        }
-
-    df_result = sandbox.get('df', df)
-    if not isinstance(df_result, pd.DataFrame):
-        _remove_backup(backup_path)
-        return {'status': 'error', 'mode': 'apply', 'error': 'Result is not a DataFrame — did you reassign `df`?'}
-
-    # --- Structural validation: original columns must survive ---
-    cols_after = set(df_result.columns)
-    missing_original = cols_before_set - cols_after
-    # Allow intentional drops (up to 30% of originals), but flag total corruption
-    if missing_original and len(missing_original) > len(cols_before) * 0.3:
-        _restore_backup(backup_path, file_path)
-        return {
-            'status': 'error',
-            'mode': 'apply',
-            'error': (
-                f'Code execution corrupted the DataFrame — '
-                f'{len(missing_original)} of {len(cols_before)} original columns disappeared. '
-                f'Dataset has been restored from backup.'
-            ),
-        }
-
-    # Verify column names are plausible (not auto-generated ints from lost headers)
-    sample_cols = list(df_result.columns)[:10]
-    int_like_count = sum(1 for c in sample_cols if isinstance(c, int) or (isinstance(c, str) and c.isdigit() and len(c) <= 3))
-    if int_like_count > len(sample_cols) * 0.5 and not any(isinstance(c, int) or (isinstance(c, str) and c.isdigit() and len(c) <= 3) for c in cols_before[:10]):
-        _restore_backup(backup_path, file_path)
-        return {
-            'status': 'error',
-            'mode': 'apply',
-            'error': (
-                'Code execution corrupted column headers (got auto-generated integer names). '
-                'Dataset has been restored from backup.'
-            ),
-        }
-
-    # Compute what changed
-    added = sorted(cols_after - cols_before_set)
-    removed = sorted(cols_before_set - cols_after)
-    rows_after = len(df_result)
-
-    # Save
-    _save_dataframe(df_result, data_file, file_path)
-
-    # Verify the saved file can be re-read with correct structure
-    try:
-        df_verify = pd.read_csv(file_path) if not file_path.lower().endswith(('.xls', '.xlsx')) else df_result
-        if set(df_verify.columns) != cols_after:
-            raise ValueError("Column mismatch after save/reload")
-    except Exception:
-        _restore_backup(backup_path, file_path)
-        return {
-            'status': 'error',
-            'mode': 'apply',
-            'error': 'File save verification failed — columns corrupted during write. Dataset restored from backup.',
-        }
-
-    _remove_backup(backup_path)
-
-    # Update DataDictionary for new columns with feature-specific descriptions
-    for col_name in added:
-        feat_desc = _generate_feature_description(col_name, data_file)
-        DataDictionary.objects.update_or_create(
-            data_file=data_file,
-            column_name=col_name,
-            defaults={'description': feat_desc}
-        )
-    # Remove DataDictionary entries for dropped columns
-    if removed:
-        DataDictionary.objects.filter(data_file=data_file, column_name__in=removed).delete()
-
+    if mode not in ('apply', 'exploratory'):
+        return {'status': 'error', 'error': 'Unknown expert execution mode.', 'mode': mode}
     return {
-        'status': 'success',
-        'action_type': 'execute_code',
-        'mode': 'apply',
-        'description': description,
-        'stdout': '',
-        'images': [],
-        'changes': {
-            'columns_added': added,
-            'columns_removed': removed,
-            'rows_before': rows_before,
-            'rows_after': rows_after,
-        },
-        'preview': _build_preview(df_result),
+        'status': 'error', 'action_type': 'execute_code', 'mode': mode,
+        'error_code': 'expert_isolation_unavailable',
+        'error': 'Sandboxed Python is unavailable. A qualified Linux isolation service and approval bound to the exact code, inputs and environment are required. In-process execution is disabled.',
+        'changes': None, 'preview': None, 'images': [],
     }
 
 
