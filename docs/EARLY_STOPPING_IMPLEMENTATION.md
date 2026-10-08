@@ -22,7 +22,7 @@ Qualification is recorded in [P09 source qualification](evidence/p09-qualificati
 
 | Local check | Result |
 | --- | --- |
-| Full CI-marked backend suite | 1,541 passed; six explicit skips; 67.94% coverage against the unchanged 50% gate |
+| Full CI-marked backend suite | 1,543 passed; six explicit skips; 67.96% coverage against the unchanged 50% gate |
 | Frontend unit suite | 531 passed |
 | Governed Chromium/authenticated API suite | 19 passed, no skips |
 | Lint, migration drift, dependency consistency, skip budget, build, scoped formatting and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
