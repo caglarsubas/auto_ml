@@ -87,9 +87,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
+        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships; fold-local encoding/imputation is implemented. Upstream learned purifier replay and legacy paths remain unqualified. Constrained target encoding is blocked."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked."
     },
     {
       "id": "D03",
@@ -132,9 +134,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
+        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. Fitted encoding/calibration replay, multiclass matrices, XGBoost iteration-zero replay and anomaly batch invariance have regression coverage. Upstream transforms, all stage receipts and concurrency/recovery qualification remain open."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open."
     },
     {
       "id": "D05",
@@ -499,6 +503,21 @@
       "date": "2026-10-08",
       "packet": "P02",
       "event": "Local qualification passed: 1,216 core backend tests, six explicit skips, 60.03% coverage and 17 real-session browser/API checks. Clean core installation and optional SDK compatibility are distinct evidence; production and customer gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P02",
+      "event": "PR #92 merged as d8843df8; its five PR CI jobs and the five main CI jobs at that exact merge revision passed (main run 37725991997). Production and customer qualification remain separate."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P03",
+      "event": "Continue M1 with immutable raw-input purifier recipes, partition-fitted feature transformations and raw scoring replay. Existing historical inputs remain explicitly unverified."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P03",
+      "event": "Local bounded source qualification passed: 1,246 core backend tests, six skips, 64.39% coverage, 521 frontend unit checks and 18 real-session browser/API checks. Raw/fold purifier and bundle replay evidence is recorded; M1 and release/customer gates remain open."
     }
   ],
   "implementation_packets": [
@@ -541,6 +560,21 @@
         "[Local source qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
       "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1\u2013M3 gates remain open."
+    },
+    {
+      "id": "P03",
+      "title": "Partition-fitted purifier and raw scoring replay",
+      "status": "tested",
+      "items": [
+        "D02",
+        "D04"
+      ],
+      "description": "Bind raw eligible input, declaration recipe and outer split to each processed version; refit learned purifier decisions inside model training/CV and replay fitted decisions from the immutable scoring bundle.",
+      "evidence": [
+        "[Implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
+        "[Local source qualification](evidence/p03-qualification-2026-10-08.json)"
+      ],
+      "remaining": "Other M1 scientific paths, complete stage/job contracts, independent reproduction, operational/security and customer acceptance gates remain open."
     }
   ],
   "release_qualification": {

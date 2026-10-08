@@ -243,15 +243,26 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
 
     freeze_stamp = datetime.now(timezone.utc).isoformat()
     lineage_hash = (lineage or {}).get('lineage_id') or model.get('lineage_id')
+    purifier = td.get('purifier_state') if os.path.exists(train_pkl) else None
+    if model.get('purifier_path') and not purifier:
+        raise ValueError('Required fitted purifier is missing; package publication is blocked.')
+    if purifier:
+        from preprocessing.replay import subset_purifier
+        purifier = subset_purifier(purifier, feature_names, td.get('encoding_report') or [])
+        with open(os.path.join(out, 'purifier.json'), 'x', encoding='utf-8') as stream:
+            json.dump(purifier, stream, indent=2, allow_nan=False)
     manifest = {
-        'schema_version': 3,
-        'scoring_schema_version': 3,
+        'schema_version': 4 if purifier else 3,
+        'scoring_schema_version': 4 if purifier else 3,
         'bundle_id': bundle_id,
         'execution_id': modeling.get('execution_id'),
         'prediction_contract': contract,
         'task': model.get('task') or 'classification',
         'encoding_report': td.get('encoding_report', []) if os.path.exists(train_pkl) else [],
-        'input_stage': 'processed_unencoded' if contract else 'legacy_model_features',
+        'input_stage': 'raw_unencoded' if purifier else ('processed_unencoded' if contract else 'legacy_model_features'),
+        'purifier_file': 'purifier.json' if purifier else None,
+        'purifier_provenance': 'partition_fitted' if purifier else 'legacy_unverified',
+        'input_features': purifier['retained_columns'] if purifier else None,
         'file_id': int(file_id),
         'created_at': freeze_stamp,
         'immutable_freeze_at': freeze_stamp,
@@ -362,7 +373,13 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
         path = (Path(out) / name).resolve()
         if not path.is_relative_to(Path(out).resolve()) or not path.is_file() or digest_file(path) != recorded['sha256']:
             raise ValueError(f'Scoring artifact failed integrity verification: {name}')
-    if manifest.get('input_stage') == 'processed_unencoded':
+    if manifest.get('input_stage') == 'raw_unencoded':
+        from preprocessing.replay import apply_purifier
+        if manifest.get('purifier_file') != 'purifier.json' or 'purifier.json' not in (manifest.get('artifact_integrity') or {}):
+            raise ValueError('Required fitted purifier is missing from the scoring bundle.')
+        with open(os.path.join(out, 'purifier.json'), encoding='utf-8') as stream:
+            df = apply_purifier(df, json.load(stream))
+    if manifest.get('input_stage') in ('processed_unencoded', 'raw_unencoded'):
         df = apply_fitted_encoding(df, manifest.get('encoding_report') or [])
     model_file = manifest.get('model_file') or 'model.json'
     model_path = os.path.join(out, model_file)
@@ -453,6 +470,7 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
         'class_mapping': (manifest.get('prediction_contract') or {}).get('class_mapping'),
         'score_semantics': 'class probabilities' if multiclass else ('anomaly ranking; not a probability' if manifest.get('task') == 'anomaly' else manifest.get('task')),
         'bundle_id': manifest.get('bundle_id'),
+        'input_stage': manifest.get('input_stage'),
         'scores_calibrated': scores_calibrated,
         'feature_count': len(feature_names),
         'algorithm': manifest.get('algorithm'),

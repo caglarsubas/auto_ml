@@ -154,8 +154,22 @@ class ModelingStartView(APIView):
         # do quick metrics and modeling pass (XGBoost classification preferred)
         model_info = {}
         encoded_file_rel = None
+        purifier_recipe = purifier_state = None
         try:
             df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+            from preprocessing.replay import load_recipe_input, fit_purifier, apply_purifier
+            _, purifier_recipe = load_recipe_input(original_path, file_id)
+            if purifier_recipe:
+                import shutil
+                from modeling.execution_artifacts import digest_file
+                if digest_file(snapshot_path) != purifier_recipe['processed_input']['sha256']:
+                    raise PredictionContractError('Processed input changed while snapshotting the execution. Retry from a complete preprocessing version.')
+                raw_snapshot = execution_dir / 'raw_input.csv'
+                shutil.copyfile(Path(settings.MEDIA_ROOT) / purifier_recipe['raw_input']['path'], raw_snapshot)
+                if digest_file(raw_snapshot) != purifier_recipe['raw_input']['sha256']:
+                    raise PredictionContractError('Raw input changed while snapshotting the execution. Retry from a complete preprocessing version.')
+                df = pd.read_csv(raw_snapshot)
+                (execution_dir / 'purifier_recipe.json').write_text(json.dumps(purifier_recipe, indent=2, allow_nan=False))
 
             # ── Parse encoding plan (if provided by frontend) ──
             encoding_plan = []
@@ -256,6 +270,7 @@ class ModelingStartView(APIView):
                 # even when excluded from model features.
                 train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
                     df, encoded_target, file_id=int(file_id), task=prediction_contract['task'],
+                    split_artifact=purifier_recipe['outer_split'] if purifier_recipe else None,
                 )
 
                 split_columns = [value for key, value in (split_meta.get('split_config') or {}).items() if key in ('date_column', 'group_column', 'label_end_column') and value in X_raw.columns]
@@ -266,7 +281,13 @@ class ModelingStartView(APIView):
                     'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
                     'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
                     'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
+                    'purifier_recipe': purifier_recipe,
                 }
+                if purifier_recipe:
+                    purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx)
+                    X_raw = apply_purifier(X_raw, purifier_state)
+                    cat_cols = [column for column in X_raw if not pd.api.types.is_numeric_dtype(X_raw[column])]
+                    (execution_dir / 'purifier.json').write_text(json.dumps(purifier_state, indent=2, allow_nan=False))
                 target_encoding = not use_native and any(
                     (entry.get('encoding_method') or entry.get('fallback_strategy')) == 'target_encoding'
                     for entry in encoding_plan)
@@ -329,7 +350,7 @@ class ModelingStartView(APIView):
                 print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
                 print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
                 # Drop columns with all NaNs
-                X_raw = X_raw.dropna(axis=1, how='all')
+                X_raw = X_raw.drop(columns=X_raw.columns[X_raw.loc[train_idx].isna().all()])
 
                 # If no features remain, skip training
                 if X_raw.shape[1] >= 1 and len(y) >= 5:
@@ -857,7 +878,7 @@ class ModelingStartView(APIView):
                             group_col = (split_meta.get('split_config') or {}).get('group_column')
                             cv_strategy = 'time_series' if split_meta.get('strategy') == 'oot' else ('group' if group_col else 'random')
                             fold_provenance = []
-                            for X_tr, y_tr, X_va, y_va, provenance in prepared_folds(validation_context, X_cv, y_cv, 5):
+                            for X_tr, y_tr, X_va, y_va, provenance in prepared_folds(validation_context, X_cv, y_cv, 5, all_declared_features=True):
                                 fold_provenance.append(provenance)
                                 if is_alt:
                                     from modeling.alt_pipelines import get_alt_adapter
@@ -983,10 +1004,12 @@ class ModelingStartView(APIView):
                                 'cv_strategy': cv_strategy,
                                 'group_column': group_col,
                                 'fold_provenance': fold_provenance,
-                                'qualification': 'development; upstream purifier replay not yet qualified',
+                                'qualification': 'development; partition-fitted purifier replay' if purifier_recipe else 'development; legacy upstream purifier provenance unverified',
                                 'metric_semantics': 'weighted one-vs-rest multiclass AUC; binary curves unavailable' if num_classes > 2 else 'binary ranking metrics',
                             }
-                        except Exception:
+                        except Exception as cv_error:
+                            if purifier_recipe and prediction_contract['task'] == 'classification':
+                                raise PredictionContractError(f"Declared development validation failed: {str(cv_error).rstrip('.')}. Revise the split, purifier or feature configuration.") from cv_error
                             cv_summary = None
 
                         # Save model via adapter
@@ -1289,7 +1312,9 @@ class ModelingStartView(APIView):
             lineage['prediction_contract'] = prediction_contract
             lineage['execution_id'] = execution_id
             lineage['encoding_report'] = encoding_report
-            lineage['provenance_qualification'] = 'Input snapshot and fold membership recorded; upstream purifier replay not yet qualified.'
+            lineage['purifier'] = purifier_state
+            lineage['provenance_qualification'] = ('Partition-fitted purifier, encoding and imputation recorded; assessment remains exploratory.'
+                if purifier_state else 'Input snapshot and fold membership recorded; legacy upstream purifier provenance unverified.')
             lineage_path = execution_dir / 'lineage.json'
             with lineage_path.open('x', encoding='utf-8') as stream:
                 json.dump(lineage, stream, indent=2, default=str)
@@ -1298,6 +1323,9 @@ class ModelingStartView(APIView):
             replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
         if 'prediction_contract' in locals():
             model_info['prediction_contract'] = prediction_contract
+            model_info['input_stage'] = 'raw_unencoded' if purifier_state else 'processed_unencoded'
+            model_info['purifier_provenance'] = ('partition_fitted' if purifier_state else 'legacy_unverified')
+            model_info['purifier_path'] = os.path.relpath(execution_dir / 'purifier.json', settings.MEDIA_ROOT) if purifier_state else None
             model_info['diagnostic_limitations'] = DIAGNOSTIC_LIMITATIONS
             model_info['holdout_status'] = 'uninspected_by_training'
         if 'train_data_path' in locals():
@@ -1308,6 +1336,7 @@ class ModelingStartView(APIView):
             with holdout_path.open('xb') as stream:
                 pickle.dump(final_data, stream)
             development_data['encoding_report'] = encoding_report
+            development_data['purifier_state'] = purifier_state
             development_data['execution_id'] = execution_id
             development_data['holdout_path'] = os.path.relpath(holdout_path, settings.MEDIA_ROOT)
             with open(train_data_path, 'wb') as stream:

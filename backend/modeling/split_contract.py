@@ -114,6 +114,7 @@ def resolve_modeling_splits(
     valid_size: float = 0.2,
     random_state: int = 42,
     task: str = 'classification',
+    split_artifact: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.Index, pd.Index, pd.Index, Dict[str, Any]]:
     """Return (train_idx, valid_idx, test_idx, meta).
 
@@ -127,7 +128,7 @@ def resolve_modeling_splits(
         'warnings': [],
     }
 
-    artifact = load_split_artifact(file_id) if file_id is not None else None
+    artifact = split_artifact if split_artifact is not None else (load_split_artifact(file_id) if file_id is not None else None)
     outer_train = pd.Index([])
     outer_test = pd.Index([])
 
@@ -165,7 +166,8 @@ def resolve_modeling_splits(
         if date_column:
             if date_column not in df:
                 raise ValueError('Declared date_column is absent from the split frame.')
-            dates = pd.to_datetime(df[date_column], errors='coerce', utc=True)
+            from preprocessing.purifier_contract import parse_split_dates
+            dates = parse_split_dates(df[date_column])
             if dates.isna().any():
                 raise ValueError('Temporal validation requires a valid date for every row.')
             outer_train = dates.loc[outer_train].sort_values(kind='mergesort').index
@@ -179,7 +181,7 @@ def resolve_modeling_splits(
             if end_column:
                 if end_column not in df:
                     raise ValueError('Declared label_end_column is absent.')
-                ends = pd.to_datetime(df[end_column], errors='coerce', utc=True)
+                ends = parse_split_dates(df[end_column])
                 if ends.isna().any() or (ends < dates).any():
                     raise ValueError('Label windows require valid ends at or after prediction time.')
                 train_idx = train_idx[ends.loc[train_idx] < boundary]
