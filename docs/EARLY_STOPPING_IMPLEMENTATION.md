@@ -22,11 +22,11 @@ Qualification is recorded in [P09 source qualification](evidence/p09-qualificati
 
 | Local check | Result |
 | --- | --- |
-| Full CI-marked backend suite | 1,543 passed; six explicit skips; 67.96% coverage against the unchanged 50% gate |
-| Targeted 65-class assessment/scoring timeout reproduction with two CPU affinities | One passed in 16.29s, unchanged 120-second timeout and chunk/replay assertions |
+| Full CI-marked backend suite | 1,544 passed; six explicit skips; 67.96% coverage against the unchanged 50% gate |
+| 65-class assessment/scoring in the final full two-CPU/native-pool run | Passed in 38.49s, unchanged 120-second timeout and chunk/replay assertions |
 | Frontend unit suite | 531 passed |
 | Governed Chromium/authenticated API suite | 19 passed, no skips |
 | Lint, migration drift, dependency consistency, skip budget, build, scoped formatting and browser TypeScript | Passed; existing build warnings and 158 lint warnings remain |
 | Primary checkout and cleanup | All 11 starting hashes unchanged; disposable services and credentials removed |
 
-PR CI at `8edf8122` passed four jobs but timed out during repeated XGBoost model loading in the existing 65-class chunk-scoring test. Earlier source-equivalent PR heads passed, and the unchanged final-source test passes in the local two-CPU check above. The observation and logs are retained in the qualification record; workload/runner capacity remains unqualified. New exact-head CI must pass before review readiness.
+Earlier PR CI heads `8edf8122` and `099983be` each passed four jobs but timed out in the existing 65-class test, during repeated XGBoost model loading or fold fitting. CI now bounds OpenMP and BLAS pools to two threads; all data sizes, round budgets, assertions and timeout/skip/coverage gates are unchanged. The final full local suite uses those pool settings and two CPU affinities. Failures and the earlier standalone reproduction are retained in the qualification record; deployment capacity remains unqualified. Fresh exact-head CI must pass before review readiness.
