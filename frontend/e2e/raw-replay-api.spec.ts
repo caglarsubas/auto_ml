@@ -146,6 +146,50 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(replay.status()).toBe(200);
       expect((await replay.json()).scores).toEqual(fullScores);
+      for (const incomplete of [{ features: ['x'] }, { execution_id: run.execution_id }]) {
+        const blocked = await api.post('modeling/champion/', {
+          data: { file_id: fileId, ...incomplete },
+        });
+        expect(blocked.status()).toBe(409);
+      }
+      const parentStatus = new URL(
+        `/media/execution_runs/${run.execution_id}/modeling_status.json`,
+        API_BASE_URL,
+      );
+      const parentResponse = await api.get(parentStatus.href);
+      expect(parentResponse.status()).toBe(200);
+      const parentBytes = await parentResponse.body();
+      const accepted = await api.post('modeling/champion/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          features: ['x'],
+          hyperparam: { n_estimators: 10, max_depth: 2 },
+        },
+      });
+      expect(accepted.status()).toBe(200);
+      const child = await accepted.json();
+      expect(child.execution_id).not.toBe(run.execution_id);
+      expect(child.model.fit_receipt.train.features).toEqual(['x']);
+      expect(child.model.fit_receipt.num_boost_round).toBe(10);
+      expect(child.model.cv.configuration).toMatchObject({
+        feature_scope: 'selected',
+        features: ['x'],
+        num_boost_round: 10,
+      });
+      expect(child.model.cv.evidence_scope).toContain('Post-selection');
+      expect(child.model.test_auc).toBeNull();
+      expect(child.champion.production_use_approved).toBe(false);
+      expect(await (await api.get(parentStatus.href)).body()).toEqual(parentBytes);
+      const stale = await api.post('modeling/champion/', {
+        data: { file_id: fileId, execution_id: run.execution_id, features: ['x'] },
+      });
+      expect(stale.status()).toBe(409);
+      const oldReplay = await api.post('deployment/score/', {
+        data: { file_id: fileId, bundle_id: bundle.manifest.bundle_id, rows: scoreRows },
+      });
+      expect(oldReplay.status()).toBe(200);
+      expect((await oldReplay.json()).scores).toEqual(fullScores);
     } finally {
       expect((await api.delete(`declaration/${fileId}/`)).status()).toBe(204);
     }

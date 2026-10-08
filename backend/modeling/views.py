@@ -1165,6 +1165,7 @@ class ModelingStartView(APIView):
                     split_meta=split_meta, feature_names=list(X_train.columns), excluded_variables=excluded_cols_for_modeling,
                     model_params=params, model_path=model_info['model_path'], impute_means=impute_means,
                     n_train=len(X_train), n_valid=len(X_valid), n_test=len(X_test))
+            lineage['fit_receipt'] = adapter.fit_receipt
             lineage['prediction_contract'] = prediction_contract
             lineage['execution_id'] = execution_id
             lineage['encoding_report'] = encoding_report
@@ -1176,6 +1177,7 @@ class ModelingStartView(APIView):
                 json.dump(lineage, stream, indent=2, default=str)
             model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
             model_info['lineage_id'] = lineage['lineage_id']
+            model_info['fit_receipt'] = adapter.fit_receipt
             replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
         if 'prediction_contract' in locals():
             model_info['prediction_contract'] = prediction_contract
@@ -1191,6 +1193,7 @@ class ModelingStartView(APIView):
             final_data = {key: development_data.pop(key, None) for key in ('X_test', 'y_test', 'X_test_raw')}
             with holdout_path.open('xb') as stream:
                 pickle.dump(final_data, stream)
+            development_data['fit_receipt'] = adapter.fit_receipt
             development_data['encoding_report'] = encoding_report
             development_data['purifier_state'] = purifier_state
             development_data['execution_id'] = execution_id
@@ -2014,6 +2017,7 @@ class SFSStartView(APIView):
                                         adapter.save(sfs_model_path)
                                         sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
                                 except Exception as model_err:
+                                    sfs_data[f'{direction_key}_refit_error'] = str(model_err)
                                     print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
 
                     # Persist resume_state if stopped (for continue later)
@@ -2933,6 +2937,8 @@ class ChampionPromoteView(APIView):
 
     def post(self, request, *args, **kwargs):
         data = request.data or {}
+        if not isinstance(data, dict):
+            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
         file_id = data.get('file_id')
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2944,36 +2950,12 @@ class ChampionPromoteView(APIView):
         features = data.get('features') or []
         hyperparam = data.get('hyperparam') or data.get('hp') or {}
         algorithm = data.get('algorithm')
-        sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
-        hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
-
-        if not features and os.path.exists(hp_path):
-            try:
-                with open(hp_path, 'r', encoding='utf-8') as f:
-                    hp = json.load(f)
-                features = hp.get('features') or features
-                if not hyperparam:
-                    hyperparam = hp.get('best_params') or hp
-                algorithm = algorithm or hp.get('algorithm')
-            except Exception:
-                pass
-        if not features and os.path.exists(sfs_path):
-            try:
-                with open(sfs_path, 'r', encoding='utf-8') as f:
-                    sfs = json.load(f)
-                fwd = sfs.get('forward_from_backward') or sfs.get('forward') or []
-                bwd = sfs.get('backward') or []
-                last = (fwd or bwd or [None])[-1]
-                if last:
-                    features = last.get('selected_features') or features
-                # Archive completed SFS into run history on promote
-                _archive_sfs_run(file_id, sfs)
-            except Exception:
-                pass
+        if not data.get('execution_id'):
+            return Response({'error': 'Select an exact execution_id before accepting a candidate; latest-file fallback is prohibited.'}, status=status.HTTP_409_CONFLICT)
 
         if not features:
             return Response({
-                'error': 'No accepted feature set found. Complete SFS/HP first.',
+                'error': 'Send the exact accepted feature list; historical per-file search results are not an acceptance declaration.',
             }, status=status.HTTP_409_CONFLICT)
 
         try:
@@ -3055,6 +3037,8 @@ class ChampionPromoteView(APIView):
             'status': 'ok',
             'file_id': file_id,
             'champion': champion,
+            'execution_id': published['execution_id'],
+            'model': published['model'],
             'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
         })
 

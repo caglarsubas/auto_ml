@@ -41,6 +41,85 @@ describe('ModelingComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('keeps native fit details expandable and explains post-selection evidence', () => {
+    component.modelingStatus = {
+      status: 'ok',
+      model: {
+        fit_receipt: {
+          algorithm: 'xgboost',
+          task: 'regression',
+          train: { n_rows: 120, features: ['x'], sha256: 'train-hash' },
+          valid: { n_rows: 60, sha256: 'valid-hash' },
+          num_boost_round: 10,
+          early_stopping_rounds: 3,
+          validation_role: 'early_stopping',
+          qualification: 'Native controller record; not independent reproduction.',
+          sha256: 'receipt-hash',
+        },
+        cv: { metric_coverage: {}, evidence_scope: 'Post-selection development CV; exploratory.' },
+      },
+    };
+    fixture.detectChanges();
+    const details = fixture.nativeElement.querySelector(
+      '[aria-label="Training evidence"]',
+    ) as HTMLDetailsElement;
+    expect(details.open).toBeFalse();
+    expect(details.textContent).toContain('Maximum boosting rounds: 10');
+    expect(details.textContent).toContain('train-hash');
+    expect(fixture.nativeElement.textContent).toContain('Post-selection development CV');
+  });
+
+  it('requires versioned tuning evidence before candidate acceptance', () => {
+    component.currentFileId = 17;
+    (component as any)._currentSubstep = 'sfs_completed';
+    component.sfsForwardResults = [{ selected_features: ['x'] }];
+    component.hpResults = { best_points: { roc_auc: { params: { max_depth: 2 } } } };
+    component.modelingStatus = { execution_id: 'latest-mutable-projection' };
+    expect(component.canPromoteChampion()).toBeFalse();
+    component.hpResults.execution_id = 'recorded-candidate';
+    expect(component.canPromoteChampion()).toBeTrue();
+  });
+
+  it('accepts the recorded primary-metric configuration and shows the new version', () => {
+    component.currentFileId = 17;
+    (component as any)._currentSubstep = 'sfs_completed';
+    component.sfsForwardResults = [{ selected_features: ['unused'] }];
+    component.hpResults = {
+      execution_id: 'candidate-parent',
+      primary_metric: 'rmse',
+      features: ['x'],
+      best_points: {
+        rmse: { params: { max_depth: 2, n_estimators: 10 } },
+        roc_auc: { params: { max_depth: 9 } },
+      },
+    };
+    const response = {
+      status: 'ok',
+      execution_id: 'adopted-child',
+      model: {
+        task: 'regression',
+        selected_features: ['x'],
+        importances: { gain: [{ feature: 'x', score: 4 }] },
+      },
+    };
+    component.sortedSelectedFeatures = [{ feature: 'unused', shap_impact: 0.99 }];
+    const promote = spyOn(TestBed.inject(DataService), 'promoteChampion').and.returnValue(
+      of(response),
+    );
+    component.acceptChampionAndPromote();
+    expect(promote.calls.mostRecent().args).toEqual([
+      17,
+      jasmine.objectContaining({
+        execution_id: 'candidate-parent',
+        features: ['x'],
+        hyperparam: { max_depth: 2, n_estimators: 10 },
+      }),
+    ]);
+    expect(component.modelingStatus).toBe(response);
+    expect(component.hpResults.execution_id).toBe('adopted-child');
+    expect(component.sortedSelectedFeatures).toEqual([{ feature: 'x', gain: 4 }]);
+  });
+
   it('renders regression CV errors and expandable fold evidence without probability curves', () => {
     component.modelingStatus = {
       status: 'ok',

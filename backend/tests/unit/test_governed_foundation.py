@@ -280,6 +280,10 @@ def test_real_training_and_assessment_preserve_exact_execution(_use_tmp_media, s
     stale = ChampionPromoteView.as_view()(factory.post('/modeling/champion/',
         {'file_id': file.pk, 'execution_id': first['execution_id'], 'features': ['x']}, format='json'))
     assert stale.status_code == 409
+    for incomplete in ({'features': ['x']}, {'execution_id': second['execution_id']}):
+        blocked = ChampionPromoteView.as_view()(factory.post('/modeling/champion/',
+            {'file_id': file.pk, **incomplete}, format='json'))
+        assert blocked.status_code == 409
     adopted = ChampionPromoteView.as_view()(factory.post('/modeling/champion/',
         {'file_id': file.pk, 'execution_id': second['execution_id'], 'features': ['x']}, format='json'))
     assert adopted.status_code == 200, adopted.data

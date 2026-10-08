@@ -241,12 +241,16 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
                             development['X_valid'][['x']], development['y_valid'],
                             {'objective': 'reg:squarederror' if task == 'regression' else 'binary:logistic'}, num_boost_round=10)
     candidate = publish_candidate(trained.data['execution_id'], file.pk, candidate_adapter, ['x'], {}, 'replay-test')
+    assert candidate['model']['fit_receipt']['num_boost_round'] == 10
+    assert candidate['model']['cv']['configuration']['features'] == ['x']
+    assert candidate['model']['cv']['configuration']['num_boost_round'] == 10
     assert candidate['model']['purifier_path'] != model['purifier_path']
     assessed = EvaluationRunView.as_view()(factory.post('/evaluation/run/', {
         'file_id': file.pk, 'execution_id': candidate['execution_id'],
     }, format='json'))
     assert assessed.status_code == 200, assessed.data
     child_bundle = build_score_bundle(file.pk)
+    assert child_bundle['manifest']['fit_receipt'] == candidate['model']['fit_receipt']
     assert child_bundle['manifest']['input_features'] == ['x']
     assert score_frame(file.pk, raw[['x']])['n_scored'] == len(raw)
     path = Path(settings.MEDIA_ROOT)/child_bundle['bundle_path']/'purifier.json'

@@ -156,81 +156,125 @@ def load_development_data(file_id, execution_id=None):
 
 
 def publish_candidate(parent_id, file_id, adapter, features, params, source, adopt=True):
-    """Publish a trusted native-model candidate without opening final outcomes.
-
-    Expert models must use the separate isolation service; this native adapter
-    path is never allowed to import expert code or deserialize expert state.
-    """
+    """Publish fresh, input-bound native evidence without inspecting final labels."""
     import pickle
+    import pandas as pd
     from modeling.calibration_utils import fit_calibrator, save_calibrator
+    from modeling.development_assessment import development_metrics, run_development_cv
+    from modeling.fit_receipts import verify_candidate_fit
     from modeling.lineage import build_lineage
+    # Reject expert implementations before loading customer development inputs.
+    from modeling.booster_adapters import XGBoostAdapter, LightGBMAdapter, CatBoostAdapter
+    from modeling.alt_pipelines import SklearnModelAdapter, evaluate_anomaly_scores
+    if type(adapter) not in (XGBoostAdapter, LightGBMAdapter, CatBoostAdapter, SklearnModelAdapter):
+        raise ValueError('Candidate publication supports registered native adapters only; expert execution requires isolation.')
+    if not isinstance(features, list) or not features or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
+        raise ValueError('Candidate features must be a nonempty, unique ordered list of column names.')
     parent, manifest = load_execution(parent_id, file_id)
     parent_root = execution_root(parent_id)
+    with open(Path(settings.MEDIA_ROOT) / parent['model']['train_data_path'], 'rb') as stream:
+        data = pickle.load(stream)
+    fit_receipt = verify_candidate_fit(adapter, data, features)
+    for name in ('X_train', 'X_valid', 'X_train_raw', 'X_valid_raw'):
+        if name in data:
+            data[name] = data[name].loc[:, features]
+    algorithm = fit_receipt['algorithm']
+    task = data['task']
+    contract = data['prediction_contract']
+    costs = (contract.get('objective') or {}).get('cost_matrix')
+    class_count = len(contract.get('class_mapping') or [])
+    metrics = {}
+    for partition in ('train', 'valid'):
+        X, y = data['X_' + partition], data['y_' + partition]
+        predictions = adapter.predict(X) if task == 'regression' else adapter.predict_proba(X)
+        if task == 'anomaly':
+            import numpy as np
+            if np.asarray(predictions).shape != (len(y),) or not np.isfinite(predictions).all():
+                raise ValueError('Candidate rankings must preserve every row and be finite.')
+            metrics[partition] = evaluate_anomaly_scores(y, predictions)
+        else:
+            metrics[partition] = development_metrics(y, predictions, task, class_count, costs)
+    context = data.get('validation_context')
+    if context:
+        # Candidate parameters are frozen after selection, including any selected weight.
+        # Initial automatic fold-local weighting remains a separate policy.
+        candidate_context = {**context, 'class_weight_policy': None}
+        cv = run_development_cv(candidate_context, pd.concat([data['X_train'], data['X_valid']]),
+            pd.concat([data['y_train'], data['y_valid']]), algorithm, fit_receipt['requested_params'],
+            num_boost_round=fit_receipt['num_boost_round'] if fit_receipt['num_boost_round'] is not None else 500,
+            early_stopping_rounds=fit_receipt['early_stopping_rounds'] or 0, all_declared_features=False)
+        cv['evidence_scope'] = 'Post-selection development CV; selection already used these data. Exploratory, not independent assessment.'
+        cv['class_weight_policy'] = 'Fixed candidate fitter parameters; not re-estimated from CV labels.'
+    else:
+        cv = {'schema_version': 2, 'task': task, 'status': 'unavailable',
+              'limitations': ['Historical execution lacks a recorded development validation context; parent CV is not inherited.']}
+    # All fit/metric/CV checks precede staging or adoption. No failed candidate is published.
     dataset_name = next(name for name in manifest['files'] if name.startswith('dataset.'))
     execution_id, root, _ = begin_execution(parent_root / dataset_name)
     for name in ('raw_input.csv', 'purifier_recipe.json', 'purifier.json'):
         if name in manifest['files']:
             shutil.copyfile(parent_root / name, root / name)
-    with open(Path(settings.MEDIA_ROOT) / parent['model']['train_data_path'], 'rb') as stream:
-        data = pickle.load(stream)
-    for name in ('X_train', 'X_valid', 'X_train_raw', 'X_valid_raw'):
-        if name in data:
-            data[name] = data[name].loc[:, features]
-    data['feature_names'] = list(features)
-    data['execution_id'] = execution_id
+    data['feature_names'], data['execution_id'], data['fit_receipt'] = list(features), execution_id, fit_receipt
     data['impute_means'] = {key: value for key, value in data.get('impute_means', {}).items() if key in features}
     data['encoding_report'] = [report for report in data.get('encoding_report', [])
         if report['feature'] in features or set((report.get('mapping') or {}).get('columns') or []).intersection(features)]
+    # Byte-copy the protected assessment input; candidate development never deserializes it.
     shutil.copyfile(Path(settings.MEDIA_ROOT) / data['holdout_path'], root / 'final_holdout.pkl')
     data['holdout_path'] = str((root / 'final_holdout.pkl').relative_to(Path(settings.MEDIA_ROOT)))
     model_path = root / 'models' / adapter.model_filename(file_id)
     adapter.save(str(model_path))
-    model = dict(parent['model'])
     calibration = {'fitted': False}
     calibrator_path = None
-    if model.get('task') == 'classification' and len(data['prediction_contract']['class_mapping']) == 2:
+    if task == 'classification' and class_count == 2:
         calibrator, calibration = fit_calibrator(data['y_valid'], adapter.predict_proba(data['X_valid']))
         if calibrator is not None:
-            calibrator_path = save_calibrator(file_id, calibrator, str(root))
-            calibrator_path = str((root / calibrator_path).relative_to(Path(settings.MEDIA_ROOT)))
-    data['calibration'], data['calibrator_path'] = calibration, calibrator_path
-    data['algorithm'] = adapter.name if adapter.name != 'sklearn' else adapter.algorithm
-    from evaluation.eval_utils import evaluate_binary, evaluate_multiclass, evaluate_regression
-    if model.get('task') == 'regression':
-        validation_metrics = evaluate_regression(data['y_valid'], adapter.predict(data['X_valid']))['metrics']
-    elif len(data['prediction_contract']['class_mapping']) > 2:
-        validation_metrics = evaluate_multiclass(data['y_valid'], adapter.predict_proba(data['X_valid']))['metrics']
-    else:
-        validation_metrics = evaluate_binary(data['y_valid'], adapter.predict_proba(data['X_valid']))['metrics']
+            calibrator_path = str((root / save_calibrator(file_id, calibrator, str(root))).relative_to(Path(settings.MEDIA_ROOT)))
+    data['calibration'], data['calibrator_path'], data['algorithm'] = calibration, calibrator_path, algorithm
+    data['scale_pos_weight'] = fit_receipt['requested_params'].get('scale_pos_weight')
     data_path = root / 'train_data.pkl'
     with data_path.open('xb') as stream:
         pickle.dump(data, stream)
     relative_model = str(model_path.relative_to(Path(settings.MEDIA_ROOT)))
-    lineage = build_lineage(file_id, algorithm=data['algorithm'], model_path=relative_model,
-        split_meta=data['split_meta'], feature_names=features, impute_means=data['impute_means'], model_params=params)
+    lineage = build_lineage(file_id, algorithm=algorithm, model_path=relative_model,
+        split_meta=data['split_meta'], feature_names=features, impute_means=data['impute_means'],
+        model_params=fit_receipt['effective_params'], metrics=metrics,
+        n_train=len(data['y_train']), n_valid=len(data['y_valid']))
     lineage.update(execution_id=execution_id, parent_execution_id=parent_id, source=source,
-                   prediction_contract=data['prediction_contract'], encoding_report=data.get('encoding_report', []),
-                   purifier=data.get('purifier_state'))
+                   prediction_contract=contract, encoding_report=data.get('encoding_report', []),
+                   purifier=data.get('purifier_state'), fit_receipt=fit_receipt, cv=cv)
     lineage_path = root / 'lineage.json'
-    lineage_path.write_text(json.dumps(lineage, indent=2, default=str), encoding='utf-8')
-    model.update(model_path=relative_model, train_data_path=str(data_path.relative_to(Path(settings.MEDIA_ROOT))),
-        holdout_path=data['holdout_path'], feature_count=len(features), selected_features=features,
+    lineage_path.write_text(json.dumps(lineage, indent=2, allow_nan=False), encoding='utf-8')
+    # Only invariant declarations and input provenance can cross a model change.
+    invariant = ('prediction_contract', 'input_stage', 'purifier_provenance', 'diagnostic_limitations',
+                 'impute_fit_on_train_only')
+    model = {key: parent['model'][key] for key in invariant if key in parent['model']}
+    model.update(model_type=f'{algorithm}_{"regressor" if task == "regression" else "anomaly" if task == "anomaly" else "classifier"}',
+        task=task, pipeline_family='alternate' if type(adapter) is SklearnModelAdapter else 'boosting',
+        model_path=relative_model, train_data_path=str(data_path.relative_to(Path(settings.MEDIA_ROOT))),
+        holdout_path=data['holdout_path'], feature_count=len(features), selected_features=list(features),
         purifier_path=str((root / 'purifier.json').relative_to(Path(settings.MEDIA_ROOT))) if data.get('purifier_state') else None,
-        encoding_report=data['encoding_report'],
-        categorical_features_used=[name for name in model.get('categorical_features_used', []) if name in features],
-        calibration=calibration, calibrator_path=calibrator_path, algorithm=data['algorithm'],
+        encoding_report=data['encoding_report'], categorical_features_used=list(adapter.cat_features),
+        enable_categorical=bool(adapter.enable_categorical),
+        calibration=calibration, calibrator_path=calibrator_path, algorithm=algorithm, fit_receipt=fit_receipt,
+        scale_pos_weight=fit_receipt['requested_params'].get('scale_pos_weight'),
         lineage_path=str(lineage_path.relative_to(Path(settings.MEDIA_ROOT))), lineage_id=lineage['lineage_id'],
+        split={**data['split_meta'], 'n_train': len(data['y_train']), 'n_valid': len(data['y_valid']),
+               'n_test': (parent['model'].get('split') or {}).get('n_test')},
+        sfs_ready=task != 'anomaly' and type(adapter) is not SklearnModelAdapter and class_count <= 2,
         test_auc=None, test_auc_calibrated=None, test_r2=None, test_rmse=None, test_mae=None,
-        candidate_source=source, candidate_params=params, holdout_status='uninspected_by_candidate')
-    # Parent diagnostics cannot describe a newly fitted candidate.
-    for key in ('valid_auc', 'valid_r2', 'valid_rmse', 'valid_mae', 'train_auc', 'train_r2',
-                'cv', 'importances', 'shap_beeswarm', 'beeswarm_png', 'iv_table', 'score_points', 'woe_maps'):
-        model.pop(key, None)
-    model['development_validation_metrics'] = validation_metrics
-    model['valid_auc'] = validation_metrics.get('roc_auc')
-    model['valid_r2'] = validation_metrics.get('r2')
-    model['best_iteration'] = int(getattr(adapter, 'best_iteration', 0) or 0)
-    payload = {**parent, 'execution_id': execution_id, 'parent_execution_id': parent_id, 'model': model, 'algorithm': data['algorithm']}
+        candidate_source=source, candidate_params=params, holdout_status='uninspected_by_candidate',
+        development_train_metrics=metrics['train'], development_validation_metrics=metrics['valid'],
+        valid_auc=metrics['valid'].get('roc_auc'), valid_r2=metrics['valid'].get('r2'),
+        valid_rmse=metrics['valid'].get('rmse'), valid_mae=metrics['valid'].get('mae'),
+        train_auc=metrics['train'].get('roc_auc'), train_r2=metrics['train'].get('r2'),
+        cv=cv, importances={'gain': adapter.gain_importance()},
+        explanation_limitation='Candidate SHAP/leakage diagnostics have not been recomputed; parent diagnostics are not inherited.',
+        best_iteration=int(getattr(adapter, 'best_iteration', 0) or 0))
+    if type(adapter) is SklearnModelAdapter and algorithm == 'scorecard':
+        model.update(iv_table=adapter.iv_table, score_points=adapter.score_points, woe_maps=adapter.woe_maps)
+    payload = {'status': 'ok', 'job_status': 'completed', 'file_id': file_id,
+               'execution_id': execution_id, 'parent_execution_id': parent_id, 'model': model,
+               'algorithm': algorithm, 'metrics': {'qualification': 'Candidate-specific development evidence; exploratory.'}}
     with projection_lock(file_id):
         current_path = Path(settings.MEDIA_ROOT) / 'modeling' / f'{file_id}_status.json'
         with current_path.open(encoding='utf-8') as stream:

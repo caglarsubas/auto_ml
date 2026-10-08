@@ -94,14 +94,14 @@ def _binary_curves(labels, predictions):
 
 
 def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
-                          num_boost_round=500, early_stopping_rounds=50):
+                          num_boost_round=500, early_stopping_rounds=50, all_declared_features=True):
     task = context['task']
     contract = context.get('prediction_contract') or {}
     objective = contract.get('objective') or {}
     class_count = len(contract.get('class_mapping') or []) or int(context['labels'].nunique())
     rows, receipts, fold_labels, fold_predictions = [], [], [], []
     for fold, (X_tr, y_tr, X_va, y_va, receipt) in enumerate(
-            prepared_folds(context, X, y, n_splits, all_declared_features=True), 1):
+            prepared_folds(context, X, y, n_splits, all_declared_features=all_declared_features), 1):
         if task == 'classification' and set(y_tr.unique()) != set(range(class_count)):
             raise ValueError(f'Development fold {fold} training population lacks a declared class; revise the split or population.')
         from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
@@ -122,6 +122,7 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
         metrics = development_metrics(y_va, predictions, task, class_count, objective.get('cost_matrix'))
         rows.append({**metrics, 'training_eval_metric': getattr(adapter, 'training_eval_metric', None), 'fold': fold, 'n_train': len(y_tr), 'n_valid': len(y_va),
                      'best_iteration': int(getattr(adapter, 'best_iteration', 0) or 0)})
+        receipt['native_fit'] = adapter.fit_receipt
         receipts.append(receipt)
         fold_labels.append(np.asarray(y_va))
         fold_predictions.append(np.asarray(predictions))
@@ -141,6 +142,9 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
                'cv_strategy': 'time_series' if strategy == 'oot' else ('group' if group else 'random'),
                'group_column': group, 'primary_metric': primary, 'training_eval_metric': rows[0]['training_eval_metric'],
                'requested_training_eval_metric': params.get('eval_metric'),
+               'configuration': {'algorithm': algorithm, 'feature_scope': 'all_declared' if all_declared_features else 'selected',
+                                 'features': list(X.columns), 'num_boost_round': num_boost_round,
+                                 'early_stopping_rounds': early_stopping_rounds},
                'qualification': 'development; partition-fitted purifier replay' if context.get('purifier_recipe') else 'development; legacy upstream purifier provenance unverified',
                'aggregation': 'Unweighted fold mean; unavailable folds are never silently omitted.',
                'uncertainty': 'Fold standard deviations describe fold spread; dependent folds do not form a confidence interval.',
@@ -155,12 +159,12 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
     return summary
 
 
-def run_development_cv(context, X, y, algorithm, params):
+def run_development_cv(context, X, y, algorithm, params, **options):
     try:
         if context['task'] == 'anomaly':
             return {'schema_version': 2, 'status': 'not_applicable', 'task': 'anomaly',
                     'limitations': ['Supervised probability/error CV is unavailable for anomaly rankings.']}
-        return assess_development_cv(context, X, y, algorithm, params)
+        return assess_development_cv(context, X, y, algorithm, params, **options)
     except Exception as error:
         if context.get('purifier_recipe'):
             from modeling.prediction_contract import PredictionContractError

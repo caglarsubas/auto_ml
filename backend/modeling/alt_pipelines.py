@@ -288,12 +288,17 @@ class SklearnModelAdapter:
         params: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> 'SklearnModelAdapter':
+        self.fit_receipt = None
         params = params or {}
         if self.algorithm == 'isolation_forest':
-            return self._train_iforest(X_train, y_train, X_valid, y_valid, params)
-        if self.algorithm == 'scorecard':
-            return self._train_scorecard(X_train, y_train, X_valid, y_valid, params)
-        return self._train_logit(X_train, y_train, X_valid, y_valid, params)
+            self._train_iforest(X_train, y_train, X_valid, y_valid, params)
+        elif self.algorithm == 'scorecard':
+            self._train_scorecard(X_train, y_train, X_valid, y_valid, params)
+        else:
+            self._train_logit(X_train, y_train, X_valid, y_valid, params)
+        from modeling.fit_receipts import record_native_fit
+        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, self.model.get_params())
+        return self
 
     def _train_logit(self, X_train, y_train, X_valid, y_valid, params):
         self.design = DesignMatrix().fit(X_train)

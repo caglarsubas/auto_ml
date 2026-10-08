@@ -498,13 +498,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const feats = this.modelingStatus?.model?.selected_features;
     if (!feats) return {};
     return {
-      features: feats
-        .slice(0, 20)
-        .map((f: any) => ({
-          feature: f.feature,
-          impact: f.shap_impact,
-          signed_impact: f.signed_shap_impact,
-        })),
+      features: feats.slice(0, 20).map((f: any) => ({
+        feature: f.feature,
+        impact: f.shap_impact,
+        signed_impact: f.signed_shap_impact,
+      })),
     };
   }
 
@@ -1272,20 +1270,31 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     const col = this.sfSortColumn;
     const dir = this.sfSortDirection === 'asc' ? 1 : -1;
-    this.sortedSelectedFeatures = [...features].sort((a: any, b: any) => {
-      const va = a[col];
-      const vb = b[col];
-      // Handle nulls — push them to the end
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      // String comparison for text columns
-      if (typeof va === 'string' && typeof vb === 'string') {
-        return dir * va.localeCompare(vb);
-      }
-      // Numeric comparison
-      return dir * (va > vb ? 1 : va < vb ? -1 : 0);
-    });
+    this.sortedSelectedFeatures = features
+      .map((feature: any) =>
+        typeof feature === 'string'
+          ? {
+              feature,
+              gain: this.modelingStatus?.model?.importances?.gain?.find(
+                (row: any) => row.feature === feature,
+              )?.score,
+            }
+          : feature,
+      )
+      .sort((a: any, b: any) => {
+        const va = a[col];
+        const vb = b[col];
+        // Handle nulls — push them to the end
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        // String comparison for text columns
+        if (typeof va === 'string' && typeof vb === 'string') {
+          return dir * va.localeCompare(vb);
+        }
+        // Numeric comparison
+        return dir * (va > vb ? 1 : va < vb ? -1 : 0);
+      });
   }
 
   getSfSortIcon(column: string): string {
@@ -5124,22 +5133,46 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         'sfs_stopped',
       ].includes(this._currentSubstep);
     const hpDone = !!this.hpResults || this._currentSubstep === 'hyperparam_completed';
-    return !!this.currentFileId && sfsDone && hpDone && !this.championPromoting;
+    return (
+      !!this.currentFileId &&
+      sfsDone &&
+      hpDone &&
+      !this.championPromoting &&
+      !!this.hpResults?.execution_id &&
+      (this.hpResults?.features || this.getFinalSelectedFeatures()).length > 0 &&
+      !!this.championParameters()
+    );
+  }
+
+  private championParameters(): any {
+    const metric = this.hpResults?.primary_metric || this.hpPrimaryMetric;
+    return (
+      this.hpResults?.best_points?.[metric]?.params ||
+      this.hpResults?.refit_params ||
+      this.hpResults?.best_params ||
+      this.hpResults?.best_point?.params
+    );
   }
 
   acceptChampionAndPromote(): void {
     if (!this.canPromoteChampion() || !this.currentFileId) return;
     this.championPromoting = true;
     const payload = {
-      execution_id: this.hpResults?.execution_id || (this.modelingStatus as any)?.execution_id,
-      features: this.getFinalSelectedFeatures(),
-      hyperparam: this.hpResults?.best_params || this.hpResults?.best_point?.params,
+      execution_id: this.hpResults.execution_id,
+      features: this.hpResults?.features || this.getFinalSelectedFeatures(),
+      hyperparam: this.championParameters(),
       search_method: this.hpResults?.search_method,
       sfs_substep: this._currentSubstep,
     };
     this.dataService.promoteChampion(this.currentFileId, payload).subscribe({
-      next: () => {
+      next: (response) => {
         this.championPromoting = false;
+        this.modelingStatus = response;
+        this.applySfSort();
+        this.buildCatLabelLookup(response.model?.encoding_report);
+        this.chartsDrawn = false;
+        setTimeout(() => this.tryDrawChartsIfReady(), 0);
+        this.hpResults = { ...this.hpResults, execution_id: response.execution_id };
         try {
           this.sharedService.triggerCheckpoint('champion_promoted');
         } catch {}
