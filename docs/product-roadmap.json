@@ -89,9 +89,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
-        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)"
+        "[P03 qualification](evidence/p03-qualification-2026-10-08.json)",
+        "[P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md)",
+        "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open."
     },
     {
       "id": "D03",
@@ -158,9 +160,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md)",
+        "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open."
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations."
     },
     {
       "id": "D06",
@@ -518,6 +522,21 @@
       "date": "2026-10-08",
       "packet": "P03",
       "event": "Local bounded source qualification passed: 1,246 core backend tests, six skips, 64.39% coverage, 521 frontend unit checks and 18 real-session browser/API checks. Raw/fold purifier and bundle replay evidence is recorded; M1 and release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P03",
+      "event": "PR #93 merged as c32e6069; all five main CI jobs at that exact merge passed (run 37730653637). Production and customer acceptance remain separate."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P04",
+      "event": "Continue M1 with task-specific auditable development CV, complete fold-metric coverage, undefined R\u00b2 handling and explicit validation limitations. Full objective/search consistency and milestone gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P04",
+      "event": "Bounded local qualification passed: 1,283 backend tests, six skips, 65.01% coverage, 523 frontend unit tests and 19 real-session browser/API checks. Exact source/environment evidence is recorded; milestone/release/customer gates remain open."
     }
   ],
   "implementation_packets": [
@@ -575,6 +594,21 @@
         "[Local source qualification](evidence/p03-qualification-2026-10-08.json)"
       ],
       "remaining": "Other M1 scientific paths, complete stage/job contracts, independent reproduction, operational/security and customer acceptance gates remain open."
+    },
+    {
+      "id": "P04",
+      "title": "Auditable development validation and metric coverage",
+      "status": "tested",
+      "items": [
+        "D02",
+        "D05"
+      ],
+      "description": "Shared development assessment for classification/regression records exact fold membership, fitted-transform evidence and complete metric coverage. Missing/undefined fold metrics do not silently enter governed averages.",
+      "evidence": [
+        "[P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md)",
+        "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)"
+      ],
+      "remaining": "Full scientific path and objective/early-stopping consistency, independent reproduction/review, security/operations, expert isolation and customer acceptance remain open."
     }
   ],
   "release_qualification": {
