@@ -176,9 +176,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
+        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
-      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open."
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions."
     },
     {
       "id": "D07",
@@ -198,9 +200,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
+        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
-      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified."
+      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open."
     },
     {
       "id": "D08",
@@ -316,9 +320,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
+        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
-      "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open."
+      "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open. P02 makes the bounded keyboard/session/reload and authenticated API checks mandatory in CI; all legacy journeys and screen-reader review remain unqualified."
     },
     {
       "id": "D13",
@@ -488,6 +494,11 @@
       "date": "2026-10-08",
       "packet": "P02",
       "event": "Prioritize portable core installation and authenticated CI/browser qualification (D07/D06) to remove the verified SDK-install blocker before further M1 qualification."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P02",
+      "event": "Local qualification passed: 1,216 core backend tests, six explicit skips, 60.03% coverage and 17 real-session browser/API checks. Clean core installation and optional SDK compatibility are distinct evidence; production and customer gates remain open."
     }
   ],
   "implementation_packets": [
@@ -518,14 +529,17 @@
     {
       "id": "P02",
       "title": "Portable core installation and authenticated CI",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D06",
         "D07",
         "D12"
       ],
-      "description": "Make the core backend independent of the optional private telemetry SDK; exercise real session/CSRF browser and API checks against clean CI installations. Preserve optional SDK support without publishing private source.",
-      "evidence": [],
+      "description": "Core backend installs without the optional private telemetry SDK. Real session/CSRF browser and API qualification now runs in CI, and four session-incompatible payload handlers are repaired. This is partial delivery; no milestone or release gate is closed.",
+      "evidence": [
+        "[Implementation and limits](PORTABLE_CORE_IMPLEMENTATION.md)",
+        "[Local source qualification](evidence/p02-qualification-2026-10-08.json)"
+      ],
       "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1\u2013M3 gates remain open."
     }
   ],

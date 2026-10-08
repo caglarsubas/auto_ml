@@ -611,6 +611,10 @@ The entries below preserve the earlier capability history. The ledger defines cu
 
 The [foundation implementation record](docs/FOUNDATION_IMPLEMENTATION.md) describes the current code, verification, migration steps and outstanding release gates. No roadmap milestone is qualified as released yet.
 
+The [P02 implementation and qualification record](docs/PORTABLE_CORE_IMPLEMENTATION.md)
+covers portable core installation, real session/CSRF CI, and repaired pipeline/SFS/HPO
+requests. Production deployment and independent-review release gates remain open.
+
 - ~~**Feature sorter**~~ — Done (v3.1): combined SHAP%×Gain% order (+ optional top-K) as SFS candidate pool
 - ~~**Export results**~~ — Done (v2.59+): SFS CSV export, CRISP/evaluation/deployment packs
 - ~~**Stopping criteria**~~ — Done: %-change metrics and min/max feature count in SFS UI + backend

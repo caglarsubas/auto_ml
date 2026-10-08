@@ -30,11 +30,11 @@ Local native-execution, assessment/scoring, identity and framework foundation. T
 
 ### P02 — Portable core installation and authenticated CI
 
-**Packet status:** in_progress. **Mapped outcomes:** D06, D07, D12.
+**Packet status:** tested. **Mapped outcomes:** D06, D07, D12.
 
-Make the core backend independent of the optional private telemetry SDK; exercise real session/CSRF browser and API checks against clean CI installations. Preserve optional SDK support without publishing private source.
+Core backend installs without the optional private telemetry SDK. Real session/CSRF browser and API qualification now runs in CI, and four session-incompatible payload handlers are repaired. This is partial delivery; no milestone or release gate is closed.
 
-**Evidence:** Qualification pending.
+**Evidence:** [Implementation and limits](PORTABLE_CORE_IMPLEMENTATION.md); [Local source qualification](evidence/p02-qualification-2026-10-08.json)
 
 **Remaining:** Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1–M3 gates remain open.
 
@@ -132,9 +132,9 @@ Server-side identity, project authorization, developer/reviewer/admin roles, aud
 
 **Source mapping:** Claude CC-4/RM-2; GPT P04; Gemini C5.
 
-**Progress:** Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open.
+**Progress:** Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md); [P02 local qualification](evidence/p02-qualification-2026-10-08.json)
 
 ### D07 Durable execution and production packaging
 
@@ -144,9 +144,9 @@ PostgreSQL, dedicated Celery/Redis jobs, bounded concurrency, cancellation, reco
 
 **Source mapping:** Claude RM-2; GPT P04 and operations gaps; Repository development topology.
 
-**Progress:** Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified.
+**Progress:** Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md); [P02 local qualification](evidence/p02-qualification-2026-10-08.json)
 
 ### D08 Governed assistant and sandboxed expert Python
 
@@ -209,9 +209,9 @@ Improve onboarding, actionable blocked states, experiment navigation, progress/c
 
 **Source mapping:** Claude RM-3 and usability studies; GPT usability gaps; Existing DESIGN.md.
 
-**Progress:** Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open.
+**Progress:** Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open. P02 makes the bounded keyboard/session/reload and authenticated API checks mandatory in CI; all legacy journeys and screen-reader review remain unqualified.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md); [P02 local qualification](evidence/p02-qualification-2026-10-08.json)
 
 **Milestone gate:** Technical pilot requires M1–M3 including expert isolation, clean reproduction and accessibility. Broader rollout requires two partner workflows and proposed >=30% evidence/reproduction effort reduction or one fewer review iteration without increased defects.
 
