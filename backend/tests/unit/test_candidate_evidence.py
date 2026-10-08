@@ -204,17 +204,25 @@ def test_mismatched_candidate_never_stages_or_adopts(parent, mismatch):
     assert set(root.parent.iterdir()) == directories
 
 
-@pytest.mark.parametrize('criterion', ['missing', 'changed'])
-def test_candidate_with_unbound_or_changed_fit_metric_cannot_publish(parent, criterion):
+@pytest.mark.parametrize('criterion', ['missing', 'changed', 'metric_runtime', 'metric_definitions'])
+def test_candidate_with_unbound_or_changed_fit_metric_cannot_publish(parent, criterion, monkeypatch):
     from modeling.declared_metric import bind_declared_metric
     execution_id, data, root, current = parent
     params = {'objective': 'binary:logistic', 'eval_metric': 'auc', 'nthread': 1, 'max_depth': 2}
     if criterion == 'changed':
         contract = {**data['prediction_contract'], 'objective': {'primary_metric': 'brier'}}
         params = bind_declared_metric(params, contract)
+    elif criterion in {'metric_runtime', 'metric_definitions'}:
+        params = bind_declared_metric(params, data['prediction_contract'])
     adapter = get_adapter('xgboost').train(data['X_train'][['x']], data['y_train'],
         data['X_valid'][['x']], data['y_valid'], params, num_boost_round=5, early_stopping_rounds=2)
     before, directories = current.read_bytes(), set(root.parent.iterdir())
+    if criterion == 'metric_runtime':
+        monkeypatch.setattr('modeling.declared_metric.version', lambda package: 'changed-runtime')
+    elif criterion == 'metric_definitions':
+        original = Path.read_bytes
+        monkeypatch.setattr(Path, 'read_bytes', lambda path: original(path) + b'changed metric definitions'
+                            if path.name == 'development_assessment.py' else original(path))
     with pytest.raises(ValueError, match='accepted metric contract'):
         publish_candidate(execution_id, 1, adapter, ['x'], {}, 'wrong_criterion')
     assert current.read_bytes() == before and set(root.parent.iterdir()) == directories

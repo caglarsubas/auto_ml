@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
@@ -33,10 +34,15 @@ def metric_spec(contract):
             raise ValueError()
     except (TypeError, ValueError) as error:
         raise PredictionContractError('Business costs must be finite and nonnegative.') from error
+    metric_runtime = {package: version(package) for package in ('numpy', 'scipy', 'scikit-learn')}
+    implementation = hashlib.sha256()
+    for name in ('declared_metric.py', 'development_assessment.py'):
+        implementation.update(name.encode())
+        implementation.update((Path(__file__).parent / name).read_bytes())
     return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
             'direction': direction(primary), 'cost_matrix': costs, 'threshold': .5,
             'contract_sha256': contract.get('sha256'),
-            'implementation_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'implementation_sha256': implementation.hexdigest(), 'metric_runtime': metric_runtime,
             'weighting': 'Unweighted observations; training class weights do not weight validation metrics.',
             'semantics': 'Weighted one-vs-rest ROC-AUC / weighted F1 across declared classes' if classes > 2 else
                          ('Regression prediction errors' if task == 'regression' else
