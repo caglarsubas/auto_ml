@@ -7,7 +7,7 @@ hyperparameter space plus per-hyperparameter *validation curves*
 params at the best configuration — the classic ``validation_curve``
 shape).  It mirrors the architecture of ``sfs_utils.py``:
 
-    * StratifiedKFold cross-validation via shared booster adapters.
+    * Declared partition-aware CV and shared native booster fit receipts.
     * ``ThreadPoolExecutor(n_jobs)`` parallelism (booster pinned to a
       single thread per worker to avoid oversubscription).
     * A ``status_callback`` for progress polling and a ``stop_flag``
@@ -35,13 +35,15 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from modeling.development_validation import iter_validation_folds
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import (
-    roc_auc_score, average_precision_score, f1_score, fbeta_score,
-    precision_score, recall_score, accuracy_score, matthews_corrcoef,
-    log_loss, brier_score_loss, mean_absolute_error, mean_squared_error, r2_score,
+    fbeta_score, matthews_corrcoef,
 )
 from scipy.stats import spearmanr
 
-from modeling.booster_adapters import fit_booster, config_to_booster_params
+from modeling.booster_adapters import config_to_booster_params
+from modeling.development_assessment import development_metrics, metric_coverage
+from modeling.tuning_evidence import resolve_tuning_objective, validate_features, fit_for_tuning, tuning_basis
+from modeling.sfs_objective import json_record
+from modeling.fit_receipts import receipt_digest
 
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
 
@@ -112,14 +114,14 @@ DEFAULT_FIXED_PARAMS: Dict[str, Any] = {
 METRIC_DIRECTION: Dict[str, int] = {
     'roc_auc': 1, 'pr_auc': 1, 'f1': 1, 'f2': 1, 'precision': 1,
     'recall': 1, 'accuracy': 1, 'mcc': 1, 'log_loss': -1, 'brier': -1,
-    'r2': 1, 'rmse': -1, 'mae': -1,
+    'ks': 1, 'expected_cost': -1, 'r2': 1, 'rmse': -1, 'mae': -1, 'mse': -1,
 }
 METRIC_NAMES: List[str] = list(METRIC_DIRECTION.keys())
 CLASSIFICATION_METRICS: List[str] = [
     'roc_auc', 'pr_auc', 'f1', 'f2', 'precision', 'recall',
-    'accuracy', 'mcc', 'log_loss', 'brier',
+    'accuracy', 'mcc', 'log_loss', 'brier', 'ks', 'expected_cost',
 ]
-REGRESSION_METRICS: List[str] = ['r2', 'rmse', 'mae']
+REGRESSION_METRICS: List[str] = ['r2', 'rmse', 'mae', 'mse']
 
 
 def _normalize_task(task: Optional[str]) -> str:
@@ -175,6 +177,8 @@ def validate_param_space(space: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any
                 except (TypeError, ValueError):
                     warnings_out.append(f"{name}: non-numeric min/max ignored")
                     lo, hi = spec['min'], spec['max']
+                if not np.isfinite(lo) or not np.isfinite(hi):
+                    raise ValueError(f'{name}: tuning bounds must be finite.')
                 if lo > hi:
                     warnings_out.append(f"{name}: min>max swapped")
                     lo, hi = hi, lo
@@ -209,64 +213,18 @@ def _nan_metric_map() -> Dict[str, float]:
 
 
 def _compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
-    y_true = np.asarray(y_true, dtype=float).ravel()
-    y_pred = np.asarray(y_pred, dtype=float).ravel()
+    return _compute_metrics(y_true, y_pred, task='regression')
+
+
+def _compute_metrics(y_true, y_proba, threshold=.5, task='classification', costs=None):
+    """Shared trusted metrics. Internal NaN compatibility; public evidence uses null."""
+    metrics = development_metrics(y_true, y_proba, task, costs=costs, threshold=threshold)
     out = _nan_metric_map()
-    try:
-        out['r2'] = float(r2_score(y_true, y_pred, force_finite=False)) if len(y_true) >= 2 and np.var(y_true) > 0 else float('nan')
-    except Exception:
-        out['r2'] = float('nan')
-    try:
-        out['rmse'] = float(np.sqrt(mean_squared_error(y_true, y_pred))) if len(y_true) else float('nan')
-    except Exception:
-        out['rmse'] = float('nan')
-    try:
-        out['mae'] = float(mean_absolute_error(y_true, y_pred)) if len(y_true) else float('nan')
-    except Exception:
-        out['mae'] = float('nan')
-    return out
-
-
-def _compute_metrics(
-    y_true: np.ndarray,
-    y_proba: np.ndarray,
-    threshold: float = 0.5,
-    task: str = 'classification',
-) -> Dict[str, float]:
-    """Boosting metrics for classification (proba+threshold) or regression (raw preds)."""
-    if _normalize_task(task) == 'regression':
-        return _compute_regression_metrics(y_true, y_proba)
-
-    y_true = np.asarray(y_true).astype(int)
-    y_proba = np.asarray(y_proba, dtype=float)
-    y_pred = (y_proba >= threshold).astype(int)
-    single_class = len(np.unique(y_true)) < 2
-    out = _nan_metric_map()
-    try:
-        out['roc_auc'] = float('nan') if single_class else float(roc_auc_score(y_true, y_proba))
-    except Exception:
-        out['roc_auc'] = float('nan')
-    try:
-        out['pr_auc'] = float(average_precision_score(y_true, y_proba)) if not single_class else float('nan')
-    except Exception:
-        out['pr_auc'] = float('nan')
-    out['f1'] = float(f1_score(y_true, y_pred, zero_division=0))
-    out['f2'] = float(fbeta_score(y_true, y_pred, beta=2, zero_division=0))
-    out['precision'] = float(precision_score(y_true, y_pred, zero_division=0))
-    out['recall'] = float(recall_score(y_true, y_pred, zero_division=0))
-    out['accuracy'] = float(accuracy_score(y_true, y_pred))
-    try:
-        out['mcc'] = float(matthews_corrcoef(y_true, y_pred))
-    except Exception:
-        out['mcc'] = 0.0
-    try:
-        out['log_loss'] = float(log_loss(y_true, np.clip(y_proba, 1e-7, 1 - 1e-7), labels=[0, 1]))
-    except Exception:
-        out['log_loss'] = float('nan')
-    try:
-        out['brier'] = float(brier_score_loss(y_true, y_proba))
-    except Exception:
-        out['brier'] = float('nan')
+    out.update({key: float(value) if value is not None else float('nan') for key, value in metrics.items()})
+    if task == 'classification':
+        pred = (np.asarray(y_proba) >= threshold).astype(int)
+        out['f2'] = float(fbeta_score(y_true, pred, beta=2, zero_division=0))
+        out['mcc'] = float(matthews_corrcoef(y_true, pred))
     return out
 
 
@@ -460,36 +418,37 @@ def _evaluate_config(
     task = _normalize_task(task)
     t0 = time.time()
 
+    costs = (((validation_context or {}).get('prediction_contract') or {}).get('objective') or {}).get('cost_matrix')
     fold_metrics: List[Dict[str, float]] = []
     provenance = []
     for X_tr, y_tr, X_va, y_va, fold_receipt in iter_validation_folds(validation_context, X_train, y_train, cv_folds, task):
         provenance.append(fold_receipt)
-        adapter = fit_booster(
+        adapter = fit_for_tuning(
             algorithm,
             X_tr, y_tr,
             X_va, y_va,
             config, task=task, nthread=nthread,
             scale_pos_weight=scale_pos_weight,
-            early_stopping_rounds=early_stopping_rounds,
+            early_stopping_rounds=early_stopping_rounds, context=validation_context,
         )
-        proba = adapter.predict_proba(X_va)
-        fold_metrics.append(_compute_metrics(y_va.values, proba, threshold, task=task))
+        fold_receipt['fit_receipt'] = adapter.fit_receipt
+        proba = adapter.predict(X_va)
+        fold_metrics.append(_compute_metrics(y_va.values, proba, threshold, task=task, costs=costs))
 
     cv: Dict[str, Dict[str, float]] = {}
-    from modeling.development_assessment import metric_coverage
     for m in METRIC_NAMES:
-        coverage = metric_coverage([fm[m] for fm in fold_metrics], complete_only=validation_context is not None)
+        coverage = metric_coverage([fm[m] for fm in fold_metrics], complete_only=True)
         cv[m] = {**coverage, 'mean': coverage['mean'] if coverage['mean'] is not None else float('nan'),
                  'std': coverage['std'] if coverage['std'] is not None else float('nan')}
 
     # Full-fit on train with early stopping on the modeling validation holdout.
-    full = fit_booster(
+    full = fit_for_tuning(
         algorithm, X_train, y_train, X_test, y_test, config,
         task=task, nthread=nthread, scale_pos_weight=scale_pos_weight,
-        early_stopping_rounds=early_stopping_rounds,
+        early_stopping_rounds=early_stopping_rounds, context=validation_context,
     )
-    train_metrics = _compute_metrics(y_train.values, full.predict_proba(X_train), threshold, task=task)
-    test_metrics = _compute_metrics(y_test.values, full.predict_proba(X_test), threshold, task=task)
+    train_metrics = _compute_metrics(y_train.values, full.predict_proba(X_train), threshold, task=task, costs=costs)
+    test_metrics = _compute_metrics(y_test.values, full.predict_proba(X_test), threshold, task=task, costs=costs)
 
     return {
         'params': config,
@@ -500,6 +459,8 @@ def _evaluate_config(
         'fit_time': round(time.time() - t0, 3),
         'algorithm': algorithm,
         'validation_provenance': provenance,
+        'fold_metrics': fold_metrics,
+        'fit_receipt': full.fit_receipt,
     }
 
 
@@ -512,53 +473,56 @@ def _evaluate_cv_only(
     task: str = 'classification',
     algorithm: str = 'xgboost',
     validation_context=None,
+    return_evidence=False,
 ) -> Tuple[float, float, float, float]:
     """Lightweight CV used for validation curves: returns
     (train_mean, train_std, cv_mean, cv_std) for a single ``metric``."""
     task = _normalize_task(task)
+    costs = (((validation_context or {}).get('prediction_contract') or {}).get('objective') or {}).get('cost_matrix')
     tr_scores, cv_scores = [], []
     provenance = []
     for X_tr, y_tr, X_va, y_va, fold_receipt in iter_validation_folds(validation_context, X_train, y_train, cv_folds, task):
         provenance.append(fold_receipt)
-        adapter = fit_booster(
+        adapter = fit_for_tuning(
             algorithm,
             X_tr, y_tr,
             X_va, y_va,
             config, task=task, nthread=nthread,
             scale_pos_weight=scale_pos_weight,
-            early_stopping_rounds=early_stopping_rounds,
+            early_stopping_rounds=early_stopping_rounds, context=validation_context,
         )
+        fold_receipt['fit_receipt'] = adapter.fit_receipt
         tr_scores.append(
             _compute_metrics(
                 y_tr.values, adapter.predict_proba(X_tr),
-                threshold, task=task,
+                threshold, task=task, costs=costs,
             )[metric]
         )
         cv_scores.append(
             _compute_metrics(
                 y_va.values, adapter.predict_proba(X_va),
-                threshold, task=task,
+                threshold, task=task, costs=costs,
             )[metric]
         )
-    from modeling.development_assessment import metric_coverage
     coverage = metric_coverage(cv_scores)
-    if validation_context is not None and coverage['status'] != 'complete':
+    if coverage['status'] != 'complete':
         raise ValueError(f'Requested validation-curve metric {metric} is available in {coverage["n_valid"]} of {coverage["n_total"]} folds; partial-fold averaging is prohibited.')
-    tr_scores = np.array([s for s in tr_scores if np.isfinite(s)], dtype=float)
-    cv_scores = np.array([s for s in cv_scores if np.isfinite(s)], dtype=float)
-    return (
-        float(np.mean(tr_scores)) if len(tr_scores) else float('nan'),
-        float(np.std(tr_scores)) if len(tr_scores) else 0.0,
-        float(np.mean(cv_scores)) if len(cv_scores) else float('nan'),
-        float(np.std(cv_scores)) if len(cv_scores) else 0.0,
-    )
+    train_coverage = metric_coverage(tr_scores)
+    evidence = {'status': 'complete', 'train': train_coverage, 'cv': coverage,
+                'train_scores': tr_scores, 'cv_scores': cv_scores, 'validation_provenance': provenance}
+    if return_evidence:
+        return evidence
+    return (train_coverage['mean'], train_coverage['std'], coverage['mean'], coverage['std'])
 
 
 def _best_trial_for_metric(trials: List[Dict[str, Any]], metric: str) -> Optional[Dict[str, Any]]:
     direction = METRIC_DIRECTION.get(metric, 1)
     best, best_val = None, None
     for t in trials:
-        v = t['cv'].get(metric, {}).get('mean')
+        evidence = t['cv'].get(metric, {})
+        if evidence.get('status', 'complete') != 'complete':
+            continue
+        v = evidence.get('mean')
         if v is None or not np.isfinite(v):
             continue
         if best_val is None or (direction * v) > (direction * best_val):
@@ -622,7 +586,7 @@ def _build_guidance(validation_curves: List[Dict[str, Any]], primary_metric: str
         cv_mean = np.asarray(curve.get('cv_mean', []), dtype=float)
         if curve.get('type') == 'categorical' or len(vals) < 3 or not np.any(np.isfinite(cv_mean)):
             continue
-        scores = direction * np.where(np.isfinite(cv_mean), cv_mean, -np.inf)
+        scores = np.where(np.isfinite(cv_mean), direction * cv_mean, -np.inf)
         best_i = int(np.argmax(scores))
         n = len(vals)
         gap = None
@@ -652,9 +616,8 @@ def _build_guidance(validation_curves: List[Dict[str, Any]], primary_metric: str
         else:
             lo, hi = vals[best_i - 1], vals[best_i + 1]
             extra = ''
-            if gap is not None and gap > 0.05:
-                extra = (f" Train-CV gap is large (~{gap:.3f}); the higher end overfits, "
-                         f"so narrowing here also reduces variance.")
+            if gap is not None:
+                extra = f' Observed directional train-CV gap: {gap:.3f}; this is descriptive development evidence.'
             guidance.append({
                 'param': param, 'type': 'zoom_in',
                 'suggested_range': [round(lo, 6), round(hi, 6)],
@@ -672,7 +635,7 @@ def run_hyperparam_search_with_progress(
     n_iter: int = 40,
     cv_folds: int = 5,
     n_jobs: int = 1,
-    primary_metric: str = 'roc_auc',
+    primary_metric: Optional[str] = None,
     threshold: float = 0.5,
     validation_curve_points: int = 8,
     random_state: int = 42,
@@ -687,6 +650,7 @@ def run_hyperparam_search_with_progress(
     task: str = 'classification',
     algorithm: str = 'xgboost',
     validation_context=None,
+    execution_id=None,
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -702,22 +666,16 @@ def run_hyperparam_search_with_progress(
 
     Returns a JSON-serializable dict (see module docstring for the shape).
     """
-    task = _normalize_task(task)
+    objective = resolve_tuning_objective(task, validation_context, primary_metric, threshold)
+    primary_metric = objective['primary_metric']
     algorithm = (algorithm or 'xgboost').strip().lower()
     space, space_warnings = validate_param_space(param_space)
     fixed = {**DEFAULT_FIXED_PARAMS, **(fixed_params or {})}
-    if primary_metric not in METRIC_DIRECTION:
-        primary_metric = 'r2' if task == 'regression' else 'roc_auc'
-    elif task == 'regression' and primary_metric not in REGRESSION_METRICS:
-        primary_metric = 'r2'
-    elif task != 'regression' and primary_metric in REGRESSION_METRICS:
-        primary_metric = 'roc_auc'
-
-    # Restrict to the SFS-selected features when supplied.
-    if features:
-        valid = [f for f in features if f in X_train.columns]
-        if valid:
-            X_train, X_test = X_train[valid], X_test[valid]
+    for name, value in fixed.items():
+        if name not in _PARAM_BOUNDS or not np.isfinite(float(value)) or not _PARAM_BOUNDS[name][0] <= float(value) <= _PARAM_BOUNDS[name][1]:
+            raise ValueError(f'Fixed tuning parameter {name!r} is unsupported or outside its finite bounds.')
+    selected = validate_features(features, X_train, X_test)
+    X_train, X_test = X_train[selected], X_test[selected]
 
     has_cat = _has_categorical(X_train)
     nthread = 1 if n_jobs and n_jobs > 1 else 0
@@ -771,6 +729,7 @@ def run_hyperparam_search_with_progress(
         'task': task,
         'algorithm': algorithm,
         'primary_metric': primary_metric,
+        'selection_objective': objective,
         'active_metrics': _active_metrics(task),
         'search_method': method,
         'search_method_requested': requested,
@@ -785,10 +744,15 @@ def run_hyperparam_search_with_progress(
         'cv_folds': cv_folds,
         'scale_pos_weight': results_scale_pos_weight,
         'early_stopping_rounds': early_stopping_rounds,
-        'holdout_role': 'validation',  # X_test arg is modeling valid, not locked outer test
+        'holdout_role': 'development_validation',
+        'class_weight_policy': (validation_context or {}).get('class_weight_policy') or 'Fixed development-training weight',  # X_test arg is modeling valid, not locked outer test
         'feature_count': int(X_train.shape[1]),
         'features': list(X_train.columns),
         'trials': [],
+        'trial_attempts': [],
+        'limitations': [objective['qualification'], objective['training_policy'],
+                         'Search projections and cancellation are in-process; durable immutable jobs remain open.',
+                         'Surrogate importance and range suggestions are ranking heuristics, not causal effects.'],
         'best_points': {},
         'validation_curves': [],
         'param_importance': {},
@@ -815,6 +779,13 @@ def run_hyperparam_search_with_progress(
         n_search = int(n_iter)
     results['n_search_evals'] = n_search
     results['grid_truncated'] = grid_truncated
+    results['search_basis'] = tuning_basis(X_train, y_train, X_test, y_test, validation_context, execution_id,
+        algorithm, objective, {'param_space': space, 'fixed_params': fixed, 'n_iter': n_iter,
+        'cv_folds': cv_folds, 'n_jobs': n_jobs, 'nthread': nthread, 'random_state': random_state,
+        'search_method_requested': requested, 'search_method_resolved': method, 'n_search_evals': n_search,
+        'grid_points_per_param': grid_points_per_param, 'grid_points_per_param_map': points_map,
+        'validation_curve_points': validation_curve_points, 'scale_pos_weight': scale_pos_weight,
+        'early_stopping_rounds': early_stopping_rounds})
 
     total_units = max(1, n_search + len(enabled_params) * max(2, validation_curve_points))
     done_units = [0]
@@ -832,6 +803,20 @@ def run_hyperparam_search_with_progress(
         status_callback(payload)
 
     trials: List[Dict[str, Any]] = []
+    results['trials'] = trials
+
+    def record_attempt(index, config, result=None, error=None, state=None):
+        coverage = (result or {}).get('cv', {}).get(primary_metric, {})
+        usable = coverage.get('status') == 'complete' and coverage.get('mean') is not None and np.isfinite(coverage['mean'])
+        attempt = {'trial_index': index, 'params': dict(config),
+                   'status': state or ('failed' if error else 'completed' if usable else 'objective_unavailable'),
+                   'primary_coverage': coverage, 'error': str(error) if error else None,
+                   'search_basis_sha256': results['search_basis']['sha256']}
+        results['trial_attempts'].append(attempt)
+        if result is not None:
+            result.update({'trial_index': index, 'selection_usable': usable,
+                           'search_basis_sha256': results['search_basis']['sha256']})
+        return usable
 
     def evaluate_batch(cfgs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Cross-validate a batch of configs in parallel; updates progress."""
@@ -846,15 +831,21 @@ def run_hyperparam_search_with_progress(
                 for i, cfg in enumerate(cfgs)
             }
             for fut in as_completed(futures):
+                idx = futures[fut]
                 if is_stop():
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    break
-                try:
-                    out.append(fut.result())
-                except Exception as trial_err:
-                    print(f"[Hyperparam] trial failed: {trial_err}")
+                    for pending in futures:
+                        pending.cancel()
+                if fut.cancelled():
+                    record_attempt(idx, cfgs[idx], state='cancelled')
+                else:
+                    try:
+                        result = fut.result()
+                        record_attempt(idx, cfgs[idx], result=result)
+                        out.append(result)
+                    except Exception as trial_err:
+                        record_attempt(idx, cfgs[idx], error=trial_err)
                 done_units[0] += 1
-                done = len(trials) + len(out)
+                done = len(results['trial_attempts'])
                 step = max(1, n_search // 20)
                 if done % step == 0 or done >= n_search:
                     best = _best_trial_for_metric(trials + out, primary_metric)
@@ -862,7 +853,7 @@ def run_hyperparam_search_with_progress(
                     emit(f'{method.capitalize()} search: {done}/{n_search} configs evaluated',
                          {'completed_trials': done,
                           'current_best': {'metric': primary_metric, 'cv_mean': cur}})
-        return out
+        return sorted(out, key=lambda row: row['trial_index'])
 
     def run_optuna_tpe(label: str) -> bool:
         """Run Optuna TPE into ``trials``. Returns True on success."""
@@ -908,11 +899,17 @@ def run_hyperparam_search_with_progress(
             if is_stop():
                 raise optuna.TrialPruned()
             cfg = _suggest_config(trial)
-            result = _evaluate_config(
-                X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
-                nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
-                algorithm, validation_context,
-            )
+            try:
+                result = _evaluate_config(
+                    X_train, y_train, X_test, y_test, cfg, cv_folds, has_cat,
+                    nthread, threshold, scale_pos_weight, early_stopping_rounds, task,
+                    algorithm, validation_context,
+                )
+            except Exception as error:
+                record_attempt(trial.number, cfg, error=error)
+                done_units[0] += 1
+                raise
+            usable = record_attempt(trial.number, cfg, result=result)
             trials.append(result)
             done_units[0] += 1
             mean = result['cv'].get(primary_metric, {}).get('mean')
@@ -921,11 +918,14 @@ def run_hyperparam_search_with_progress(
                 {'completed_trials': len(trials),
                  'current_best': {'metric': primary_metric, 'cv_mean': mean}},
             )
-            if mean is None or not np.isfinite(mean):
-                return float('-inf') if direction > 0 else float('inf')
+            if not usable:
+                raise optuna.TrialPruned('Declared objective is unavailable in every required fold.')
             return float(mean)
 
-        study.optimize(_objective, n_trials=int(n_iter), n_jobs=1, catch=(Exception,))
+        def stop_study(study, trial):
+            if is_stop():
+                study.stop()
+        study.optimize(_objective, n_trials=int(n_iter), n_jobs=1, catch=(Exception,), callbacks=[stop_study])
         results['search_backend'] = 'optuna_tpe'
         try:
             results['optuna_best_value'] = study.best_value if study.trials else None
@@ -942,6 +942,8 @@ def run_hyperparam_search_with_progress(
             if not run_optuna_tpe(label):
                 method = 'random'
                 results['search_method'] = method
+                results['search_basis']['configuration']['search_method_resolved'] = method
+                results['search_basis']['sha256'] = receipt_digest({key: value for key, value in results['search_basis'].items() if key != 'sha256'})
                 search_configs = [_sample_config(space, fixed, rng) for _ in range(n_iter)]
                 n_search = int(n_iter)
                 results['n_search_evals'] = n_search
@@ -954,12 +956,19 @@ def run_hyperparam_search_with_progress(
 
         results['trials'] = trials
         results['n_trials'] = len(trials)
+        results['trial_attempts'].sort(key=lambda row: row['trial_index'])
+        results['n_attempted'] = len(results['trial_attempts'])
+        results['n_failed'] = sum(row['status'] != 'completed' for row in results['trial_attempts'])
 
         if not trials:
             results['status'] = 'stopped' if is_stop() else 'error'
             if results['status'] == 'error':
                 results['error'] = 'No trials completed successfully'
-            return results
+            return json_record(results)
+
+        if _best_trial_for_metric(trials, primary_metric) is None:
+            results.update(status='stopped' if is_stop() else 'error', error='No configuration has a complete finite declared objective across all required folds.')
+            return json_record(results)
 
         # ---------- Best metric "space points" ----------
         for m in METRIC_NAMES:
@@ -967,6 +976,8 @@ def run_hyperparam_search_with_progress(
             if bt:
                 results['best_points'][m] = {
                     'params': bt['params'],
+                    'trial_index': bt['trial_index'],
+                    'metric_coverage': bt['cv'][m],
                     'cv_mean': bt['cv'][m]['mean'],
                     'cv_std': bt['cv'][m]['std'],
                     'test': bt['test'].get(m),
@@ -1008,7 +1019,9 @@ def run_hyperparam_search_with_progress(
 
         # ---------- Phase B: per-hyperparameter validation curves ----------
         best_trial = _best_trial_for_metric(trials, primary_metric)
-        base_config = dict(best_trial['params']) if best_trial else dict(fixed)
+        base_config = dict(best_trial['params'])
+        results['selected_trial_index'] = best_trial['trial_index']
+        results['selected_params'] = dict(base_config)
         curves: List[Dict[str, Any]] = []
 
         for param in enabled_params:
@@ -1030,7 +1043,7 @@ def run_hyperparam_search_with_progress(
                     pool.submit(
                         _evaluate_cv_only, X_train, y_train, cfg, cv_folds,
                         has_cat, nthread, threshold, primary_metric,
-                        scale_pos_weight, early_stopping_rounds, task, algorithm, validation_context,
+                        scale_pos_weight, early_stopping_rounds, task, algorithm, validation_context, True,
                     ): idx
                     for idx, cfg in enumerate(point_configs)
                 }
@@ -1040,16 +1053,17 @@ def run_hyperparam_search_with_progress(
                         point_results[idx] = fut.result()
                     except Exception as cv_err:
                         print(f"[Hyperparam] curve point failed ({param}): {cv_err}")
-                        point_results[idx] = (float('nan'), 0.0, float('nan'), 0.0)
+                        point_results[idx] = {'status': 'failed', 'error': str(cv_err),
+                            'train': {'mean': None, 'std': None}, 'cv': {'mean': None, 'std': None}}
                     done_units[0] += 1
 
             ordered = [point_results[i] for i in range(len(grid))]
-            tr_mean = [r[0] for r in ordered]
-            tr_std = [r[1] for r in ordered]
-            cv_mean = [r[2] for r in ordered]
-            cv_std = [r[3] for r in ordered]
+            tr_mean = [r['train']['mean'] for r in ordered]
+            tr_std = [r['train']['std'] for r in ordered]
+            cv_mean = [r['cv']['mean'] for r in ordered]
+            cv_std = [r['cv']['std'] for r in ordered]
             direction = METRIC_DIRECTION.get(primary_metric, 1)
-            finite_cv = [(i, c) for i, c in enumerate(cv_mean) if np.isfinite(c)]
+            finite_cv = [(i, c) for i, c in enumerate(cv_mean) if c is not None and np.isfinite(c)]
             best_value = None
             if finite_cv:
                 best_idx = max(finite_cv, key=lambda ic: direction * ic[1])[0]
@@ -1063,16 +1077,20 @@ def run_hyperparam_search_with_progress(
                 'train_mean': tr_mean, 'train_std': tr_std,
                 'cv_mean': cv_mean, 'cv_std': cv_std,
                 'best_value': best_value,
+                'base_params': base_config,
+                'points': [{'params': cfg, **point, 'search_basis_sha256': results['search_basis']['sha256']}
+                           for cfg, point in zip(point_configs, ordered)],
             })
             emit(f'{param} curve complete')
 
         results['validation_curves'] = curves
         results['guidance'] = _build_guidance(curves, primary_metric)
+        results['n_failed_curve_points'] = sum(point['status'] != 'complete' for curve in curves for point in curve['points'])
 
         results['status'] = 'stopped' if is_stop() else 'completed'
         emit('Hyperparameter tuning stopped by user' if is_stop()
              else 'Hyperparameter tuning completed')
-        return results
+        return json_record(results)
 
     except Exception as e:
         results['status'] = 'error'
@@ -1083,4 +1101,4 @@ def run_hyperparam_search_with_progress(
         print(f"[Hyperparam] Error: {e}")
         import traceback
         traceback.print_exc()
-        return results
+        return json_record(results)

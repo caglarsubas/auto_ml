@@ -21,7 +21,7 @@ def metric_coverage(values, *, complete_only=True):
             'status': 'complete' if complete else ('partial' if usable else 'unavailable')}
 
 
-def development_metrics(labels, predictions, task, class_count=2, costs=None):
+def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
         raise ValueError('Development predictions must be finite and preserve every validation row.')
@@ -47,7 +47,7 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None):
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')
     both = len(np.unique(y)) == 2
-    pred = (p >= .5).astype(int)
+    pred = (p >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
     costs = costs or {}
     ks = None

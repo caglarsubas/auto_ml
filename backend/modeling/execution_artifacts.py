@@ -155,7 +155,7 @@ def load_development_data(file_id, execution_id=None):
         return pickle.load(stream)
 
 
-def publish_candidate(parent_id, file_id, adapter, features, params, source, adopt=True):
+def publish_candidate(parent_id, file_id, adapter, features, params, source, adopt=True, selection_evidence=None):
     """Publish fresh, input-bound native evidence without inspecting final labels."""
     import pickle
     import pandas as pd
@@ -208,12 +208,21 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     else:
         cv = {'schema_version': 2, 'task': task, 'status': 'unavailable',
               'limitations': ['Historical execution lacks a recorded development validation context; parent CV is not inherited.']}
+    if selection_evidence is not None:
+        from modeling.fit_receipts import receipt_digest
+        basis = selection_evidence.get('search_basis') or {}
+        if (selection_evidence.get('status') != 'completed' or selection_evidence.get('selected_params') != params
+                or basis.get('execution_id') != parent_id
+                or basis.get('sha256') != receipt_digest({key: value for key, value in basis.items() if key != 'sha256'})):
+            raise ValueError('Tuning evidence does not match the selected execution/configuration.')
     # All fit/metric/CV checks precede staging or adoption. No failed candidate is published.
     dataset_name = next(name for name in manifest['files'] if name.startswith('dataset.'))
     execution_id, root, _ = begin_execution(parent_root / dataset_name)
     for name in ('raw_input.csv', 'purifier_recipe.json', 'purifier.json'):
         if name in manifest['files']:
             shutil.copyfile(parent_root / name, root / name)
+    if selection_evidence is not None:
+        (root / 'tuning_selection.json').write_text(json.dumps(selection_evidence, indent=2, allow_nan=False), encoding='utf-8')
     data['feature_names'], data['execution_id'], data['fit_receipt'] = list(features), execution_id, fit_receipt
     data['impute_means'] = {key: value for key, value in data.get('impute_means', {}).items() if key in features}
     data['encoding_report'] = [report for report in data.get('encoding_report', [])
@@ -270,6 +279,9 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
         cv=cv, importances={'gain': adapter.gain_importance()},
         explanation_limitation='Candidate SHAP/leakage diagnostics have not been recomputed; parent diagnostics are not inherited.',
         best_iteration=int(getattr(adapter, 'best_iteration', 0) or 0))
+    if selection_evidence is not None:
+        model['tuning_evidence_path'] = str((root / 'tuning_selection.json').relative_to(Path(settings.MEDIA_ROOT)))
+        model['tuning_basis_sha256'] = selection_evidence['search_basis']['sha256']
     if type(adapter) is SklearnModelAdapter and algorithm == 'scorecard':
         model.update(iv_table=adapter.iv_table, score_points=adapter.score_points, woe_maps=adapter.woe_maps)
     payload = {'status': 'ok', 'job_status': 'completed', 'file_id': file_id,

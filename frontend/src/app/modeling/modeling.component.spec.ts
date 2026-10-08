@@ -144,7 +144,18 @@ describe('ModelingComponent', () => {
     component.modelingStatus = { execution_id: 'latest-mutable-projection' };
     expect(component.canPromoteChampion()).toBeFalse();
     component.hpResults.execution_id = 'recorded-candidate';
+    component.hpResults.status = 'completed';
     expect(component.canPromoteChampion()).toBeTrue();
+  });
+
+  it('cannot promote stopped or failed tuning with a leftover candidate id', () => {
+    component.currentFileId = 17;
+    (component as any)._currentSubstep = 'sfs_completed';
+    component.sfsForwardResults = [{ selected_features: ['x'] }];
+    for (const status of ['error', 'stopped', 'interrupted']) {
+      component.hpResults = { status, execution_id: 'old-candidate', features: ['x'], refit_params: { max_depth: 2 } };
+      expect(component.canPromoteChampion()).toBeFalse();
+    }
   });
 
   it('accepts the recorded primary-metric configuration and shows the new version', () => {
@@ -152,6 +163,7 @@ describe('ModelingComponent', () => {
     (component as any)._currentSubstep = 'sfs_completed';
     component.sfsForwardResults = [{ selected_features: ['unused'] }];
     component.hpResults = {
+      status: 'completed',
       execution_id: 'candidate-parent',
       primary_metric: 'rmse',
       features: ['x'],
@@ -1504,11 +1516,13 @@ describe('ModelingComponent', () => {
 
       component.hpNIter = 25; component.hpNJobs = 4; component.hpPrimaryMetric = 'f1';
       component.hpSearchMethod = 'bayesian'; component.hpDefaultPieces = 5;
+      component.modelingStatus = { execution_id: 'displayed-version' };
       component.startHyperparam();
 
       expect(spy).toHaveBeenCalledTimes(1);
       const [fileId, opts] = spy.calls.mostRecent().args as any[];
       expect(fileId).toBe(1);
+      expect(opts.executionId).toBe('displayed-version');
       expect(opts.nIter).toBe(25);
       expect(opts.nJobs).toBe(4);
       expect(opts.primaryMetric).toBe('f1');
@@ -1518,6 +1532,22 @@ describe('ModelingComponent', () => {
       expect(opts.paramSpace['max_depth']).toBeTruthy();
       expect(component.hpRunning).toBeTrue();
       expect(procSpy).toHaveBeenCalledWith({ type: 'hyperparam', file_id: 1 });
+    });
+
+    it('retains failed evidence without sending a completed checkpoint', () => {
+      spyOn(dataService, 'getHyperparamResults').and.returnValue(of({ status: 'error', error: 'No valid winner', n_failed: 2 }));
+      const checkpoint = spyOn(component as any, 'pushModelingCheckpoint');
+      spyOn(component as any, 'drawHyperparamCurves');
+      component.modelingStatus = { status: 'ok', model: { task: 'regression' } };
+      component.fetchHyperparamResults();
+      expect(component.hpMessage).toBe('No valid winner');
+      expect(component.hpResults.status).toBe('error');
+      expect(checkpoint).toHaveBeenCalledWith('hyperparam_stopped');
+      expect(checkpoint).not.toHaveBeenCalledWith('hyperparam_completed');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Failed/unusable trials: 2');
+      const details = Array.from(fixture.nativeElement.querySelectorAll('details summary')) as HTMLElement[];
+      expect(details.some(item => item.textContent?.includes('Details: tuning objective'))).toBeTrue();
     });
 
     // ── Search-method recommendation (mirrors backend thresholds) ──

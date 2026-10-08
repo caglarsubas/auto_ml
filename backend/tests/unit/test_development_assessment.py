@@ -137,15 +137,18 @@ def test_hpo_cannot_hide_single_class_validation_folds():
     config['labels'] = pd.Series([0] * 60 + [1] * 60 + [0, 1] * 30)
     X, y = config['frame'][['x']], config['labels']
     params = {'max_depth': 2, 'n_estimators': 5}
+    with pytest.raises(ValueError, match='both declared classes'):
+        _evaluate_config(X, y, X.iloc[-30:], y.iloc[-30:], params, 3, False, 1, .5,
+                         early_stopping_rounds=2, validation_context=config)
     result = _evaluate_config(X, y, X.iloc[-30:], y.iloc[-30:], params, 3, False, 1, .5,
-                              early_stopping_rounds=2, validation_context=config)
+                              early_stopping_rounds=0, validation_context=config)
     assert result['cv']['roc_auc']['n_valid'] == 1
     assert result['cv']['roc_auc']['n_total'] == 3
     assert result['cv']['roc_auc']['status'] == 'partial'
     assert np.isnan(result['cv']['roc_auc']['mean'])
     assert result['cv']['log_loss']['status'] == 'complete'
     with pytest.raises(ValueError, match='partial-fold averaging is prohibited'):
-        _evaluate_cv_only(X, y, params, 3, False, 1, .5, 'roc_auc', early_stopping_rounds=2, validation_context=config)
+        _evaluate_cv_only(X, y, params, 3, False, 1, .5, 'roc_auc', early_stopping_rounds=0, validation_context=config)
 
 
 def test_constant_target_r2_semantics_agree_in_hpo_and_final_assessment():

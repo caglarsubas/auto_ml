@@ -67,9 +67,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
-        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)"
+        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
+        "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Complete objective/early-stopping consistency and unsupported-channel handling remain open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open."
+      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Complete objective/early-stopping consistency and unsupported-channel handling remain open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fixed native fitter criteria remain open."
     },
     {
       "id": "D02",
@@ -97,9 +99,11 @@
         "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
         "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)",
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
-        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)"
+        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
+        "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory."
     },
     {
       "id": "D03",
@@ -146,9 +150,11 @@
         "[P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md)",
         "[P03 qualification](evidence/p03-qualification-2026-10-08.json)",
         "[P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md)",
-        "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)"
+        "[P05 source qualification](evidence/p05-qualification-2026-10-08.json)",
+        "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable."
     },
     {
       "id": "D05",
@@ -172,9 +178,11 @@
         "[P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md)",
         "[P04 source qualification](evidence/p04-qualification-2026-10-08.json)",
         "[P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md)",
-        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)"
+        "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)",
+        "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open."
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; legacy paths and full fitter/tuning alignment remain open. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal."
     },
     {
       "id": "D06",
@@ -577,6 +585,21 @@
       "date": "2026-10-08",
       "packet": "P06",
       "event": "Bounded local qualification passed: 1,347 backend tests, six skips, 67.06% coverage, 529 frontend tests and 19 authenticated browser/API checks. Declared selection objectives and search/resume evidence are recorded; milestone/release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P06",
+      "event": "PR #96 merged as 0ca9adca; all five main CI jobs at that exact merge passed (run 37773696193). Production and customer acceptance remain separate."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P07",
+      "event": "Continue M1 with declared tuning objectives, complete fold availability, trial/curve failure evidence and exact winner publication. Native fitter alignment and durable job/release gates remain open."
+    },
+    {
+      "date": "2026-10-08",
+      "packet": "P07",
+      "event": "Bounded local qualification passed: 1,386 backend tests, six skips, 67.61% coverage, 531 frontend tests and 19 authenticated browser/API checks. Exact tuning/winner evidence is recorded; milestone/release/customer gates remain open."
     }
   ],
   "implementation_packets": [
@@ -680,6 +703,23 @@
         "[P06 source qualification](evidence/p06-qualification-2026-10-08.json)"
       ],
       "remaining": "Full objective/early-stopping and tuning alignment, independent reproduction/paired comparisons, complete immutable durable jobs, security/operations, expert isolation and customer acceptance remain open."
+    },
+    {
+      "id": "P07",
+      "title": "Declared tuning objectives and winner evidence",
+      "status": "tested",
+      "items": [
+        "D01",
+        "D02",
+        "D04",
+        "D05"
+      ],
+      "description": "Resolve native tuning from the accepted objective; retain fold/fit and failed-attempt evidence, publish only the exact valid winner, and preserve tuning selection with immutable native candidates.",
+      "evidence": [
+        "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
+        "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)"
+      ],
+      "remaining": "Full training/early-stopping objective alignment, immutable durable search jobs, independent reproduction/paired comparison, security/operations, expert isolation and customer acceptance remain open."
     }
   ],
   "release_qualification": {

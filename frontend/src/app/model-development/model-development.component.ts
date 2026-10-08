@@ -3853,7 +3853,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           return 'in_progress';
         return 'pending';
       case '2d': // Hyperparameter Tuning
-        if (mc && (mc.substep === 'hyperparam_completed' || mc.hpResults)) return 'completed';
+        if (mc?.hpResults?.status === 'completed' || (mc?.substep === 'hyperparam_completed' && !mc.hpResults)) return 'completed';
         if (mc && (mc.substep === 'hyperparam_running' || mc.substep === 'hyperparam_stopped'))
           return 'in_progress';
         if (

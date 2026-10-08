@@ -20,6 +20,37 @@ def test_parameter_digest_survives_json_integer_key_conversion():
     assert receipt_digest(receipt) == receipt_digest(json.loads(json.dumps(receipt)))
 
 
+@pytest.mark.parametrize('tampered', [False, True])
+def test_native_tuning_selection_is_bound_to_candidate_manifest(parent, tampered):
+    from tests.unit.test_tuning_evidence import run
+    from modeling.tuning_evidence import fit_for_tuning
+    execution_id, data, root, current = parent
+    parts = (data['X_train'], data['y_train'], data['X_valid'], data['y_valid'], data['validation_context'])
+    evidence = run(parts, execution_id=execution_id)
+    assert evidence['status'] == 'completed'
+    params = evidence['selected_params']
+    adapter = fit_for_tuning('xgboost', data['X_train'][['x']], data['y_train'],
+                            data['X_valid'][['x']], data['y_valid'], params, task='classification',
+                            nthread=1, scale_pos_weight=evidence['scale_pos_weight'], early_stopping_rounds=2,
+                            context=data['validation_context'])
+    if tampered:
+        evidence['search_basis']['configuration']['cv_folds'] = 9
+        before = current.read_bytes()
+        with pytest.raises(ValueError, match='Tuning evidence does not match'):
+            publish_candidate(execution_id, 1, adapter, ['x'], params, 'hyperparameter_search', selection_evidence=evidence)
+        assert current.read_bytes() == before
+        return
+    published = publish_candidate(execution_id, 1, adapter, ['x'], params, 'hyperparameter_search', selection_evidence=evidence)
+    status, manifest = load_execution(published['execution_id'], 1)
+    assert 'tuning_selection.json' in manifest['files']
+    from django.conf import settings
+    snapshot = Path(settings.MEDIA_ROOT) / status['model']['tuning_evidence_path']
+    assert json.loads(snapshot.read_text()) == evidence
+    snapshot.write_text('{}')
+    with pytest.raises(ValueError, match='integrity'):
+        load_execution(published['execution_id'], 1)
+
+
 def development(task='classification'):
     rng = np.random.default_rng(23)
     X = pd.DataFrame({'x': rng.normal(size=180), 'unused': rng.normal(size=180)})
