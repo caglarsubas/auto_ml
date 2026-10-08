@@ -1,0 +1,30 @@
+# P03 — Partition-fitted purifier and raw scoring replay
+
+Updated 8 October 2026. This packet follows [PR #92](https://github.com/caglarsubas/auto_ml/pull/92), merged as `d8843df8`, and partially advances D02/D04. Its exact main revision passed all five [CI jobs](https://github.com/caglarsubas/auto_ml/actions/runs/37725991997). Milestone and release gates remain open in the [roadmap ledger](product-roadmap.json).
+
+Previously, development folds started from a processed CSV. Even when encoding and imputation were fitted within a fold, its column choices, clipping bounds and rare-category decisions could have inherited statistics from outside that fold. Scoring also required already processed input, rather than replaying the entire fitted transformation chain.
+
+Each new preprocessing version now has a UUID filename, an eligible raw CSV and a versioned purifier recipe. The recipe binds the selected catalog options, data dictionary, protected columns, source-row correspondence, outer split and raw/processed hashes. Exact row deduplication is an explicit population operation before partitioning. Scoring never deduplicates a batch.
+
+Modeling snapshots the raw input and recipe into the execution package. It uses that version's frozen outer partition instead of the current per-file split projection. Learned purifier rules are fitted on the initial training partition, then replayed on validation/holdout features before encoding and imputation. Development CV and the shared SFS/HPO fold preparer start from raw development rows and refit those rules within each fold. Full model CV evaluates all declared features; candidate searches retain their requested feature subset and disclose fold-local drops. A new governed classification run fails if its development folds cannot be evaluated; legacy inputs retain their existing behavior and unverified qualification.
+
+Fitted state records exact fit-row membership, retained columns, clipping bounds and typed nominal/ordinal replacement entries. Ordinal neighbors are learned from permitted training categories. Duplicate-column handling preserves protected columns and numeric types. Preprocessing, modeling and fold validation now share a date parser that preserves ISO year-first dates while supporting legacy day-first dates.
+
+New schema-4 bundles accept raw columns and apply the frozen purifier, fitted encoder, numeric imputer, model and optional calibrator. The manifest lists the required raw columns. Candidate packages retain their raw snapshot, recipe and fitted state; a feature subset's bundle requires only its raw dependencies. Missing raw features, missing required transformations and artifact hash mismatches fail explicitly. Row order and duplicate input rows are preserved. The deployment panel explains each bundle's input stage, puts required columns inside expandable details, and shows the server's scoring error.
+
+Historical processed inputs remain inspectable with their original scoring semantics and explicit unverified preprocessing provenance. A new UUID version missing its recipe cannot silently fall back to legacy behavior. Final assessment now carries the fitted purifier provenance; its evidence status remains exploratory. Hashes detect corruption against the recorded manifest and do not authenticate an actor or replace storage authorization.
+
+The [qualification record](evidence/p03-qualification-2026-10-08.json) records the executable source revision, environments, commands and source hashes. It includes deliberate held-out-value changes across nine rule families, temporal/group/outcome-window fold membership, typed ordinal merges, immutable preprocessing/split versions, actual classification/regression training and assessment, rare-category/OHE replay, calibration parity, feature-subset candidates, missing/unseen categories, repeated rows, reordered input columns and chunk invariance. The authenticated browser/API suite also performs a real upload → preprocessing → training → assessment → raw scoring journey and replays the same bundle after another preprocessing version.
+
+| Local check | Result |
+| --- | --- |
+| Full CI-marked backend suite | 1,246 passed, 6 explicit skips; 64.39% coverage against the unchanged 50% gate |
+| Frontend unit suite, including rendered deployment input/error checks | 521 passed; local run preceded Prettier-only formatting |
+| Governed Chromium/authenticated API suite on refreshed final assets | 18 passed, no skips |
+| Backend lint, migration drift, package consistency and skip budget | Passed |
+| Final frontend build, lint, changed-file formatting and browser TypeScript | Passed; build warnings and 158 lint warnings remain |
+| Original checkout preservation | All 11 pre-existing modified files retain their starting hashes |
+
+Four backend skips require the optional SDK; the other two require a live model engine and a local `.env`. The final backend run executed alone with the existing per-test timeout unchanged; an overlapping earlier run had timed out on the existing 65-class fixture. GitHub CI is observed separately from local qualification. Ignored local reports remain under the worktree's `test-reports/p03`; the qualification JSON retains their hashes.
+
+This is bounded source qualification. The new end-to-end model fixtures use XGBoost classification/regression; the core suite retains existing algorithm coverage. Full alternate-pipeline, supervised-binning/target-encoding and every SFS mode qualification remain open. Constrained target encoding stays blocked. Preview diagnostics remain exploratory outer-train summaries; they are not the fitted model transformations. Independent reproduction/review, all immutable stage/job contracts, large-workload/concurrency/recovery qualification, project roles/egress, production operations, expert isolation and customer/value acceptance remain open. Expert Python remains unavailable until its isolation boundary is qualified. No milestone is marked released or customer accepted.

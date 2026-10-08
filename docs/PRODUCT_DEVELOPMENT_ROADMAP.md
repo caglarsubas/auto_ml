@@ -38,6 +38,16 @@ Core backend installs without the optional private telemetry SDK. Real session/C
 
 **Remaining:** Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1–M3 gates remain open.
 
+### P03 — Partition-fitted purifier and raw scoring replay
+
+**Packet status:** tested. **Mapped outcomes:** D02, D04.
+
+Bind raw eligible input, declaration recipe and outer split to each processed version; refit learned purifier decisions inside model training/CV and replay fitted decisions from the immutable scoring bundle.
+
+**Evidence:** [Implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [Local source qualification](evidence/p03-qualification-2026-10-08.json)
+
+**Remaining:** Other M1 scientific paths, complete stage/job contracts, independent reproduction, operational/security and customer acceptance gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 ## M1 — Scientifically reliable execution
@@ -72,9 +82,9 @@ Preserve time, entity, and outcome-window constraints through early stopping, en
 
 **Source mapping:** Claude CC-1/CC-5; GPT P02/P03; Gemini C2/C3.
 
-**Progress:** Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships; fold-local encoding/imputation is implemented. Upstream learned purifier replay and legacy paths remain unqualified. Constrained target encoding is blocked.
+**Progress:** Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json)
 
 ### D03 Protected final assessment
 
@@ -96,9 +106,9 @@ Version dataset, contract, transforms, models, evaluations and bundles by run. P
 
 **Source mapping:** Claude CC-7/RM-7; GPT P06; Repository artifact and scoring inspection.
 
-**Progress:** Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. Fitted encoding/calibration replay, multiclass matrices, XGBoost iteration-zero replay and anomaly batch invariance have regression coverage. Upstream transforms, all stage receipts and concurrency/recovery qualification remain open.
+**Progress:** Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json)
 
 ### D05 Trustworthy diagnostics
 
