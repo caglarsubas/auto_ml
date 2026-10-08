@@ -703,6 +703,29 @@
               </div>
             </div>
           }
+          @if (modelingStatus.model?.fit_receipt; as fit) {
+            <details style="margin-top: 16px" aria-label="Training evidence">
+              <summary>Training evidence details</summary>
+              <p>Algorithm: {{ fit.algorithm }}. Task: {{ fit.task }}.</p>
+              <p>Training rows: {{ fit.train.n_rows }}. Validation rows: {{ fit.valid.n_rows }}.</p>
+              <p>Features: {{ fit.train.features.join(', ') }}.</p>
+              <p>Validation use during fit: {{ fit.validation_role }}.</p>
+              @if (fit.num_boost_round !== null && fit.num_boost_round !== undefined) {
+                <p>
+                  Maximum boosting rounds: {{ fit.num_boost_round }}. Early stopping rounds:
+                  {{ fit.early_stopping_rounds }}.
+                </p>
+              }
+              <p>{{ fit.qualification }}</p>
+              <p style="overflow-wrap: anywhere">
+                Training input fingerprint: {{ fit.train.sha256 }}.
+              </p>
+              <p style="overflow-wrap: anywhere">
+                Validation input fingerprint: {{ fit.valid.sha256 }}.
+              </p>
+              <p style="overflow-wrap: anywhere">Fit receipt fingerprint: {{ fit.sha256 }}.</p>
+            </details>
+          }
           <!-- Cross-Validation summary -->
           @if (modelingStatus.model?.cv) {
             <div style="margin-top: 16px">
@@ -771,6 +794,7 @@
               @if (modelingStatus.model.cv?.metric_coverage) {
                 <details>
                   <summary>Validation evidence details</summary>
+                  <p>{{ modelingStatus.model.cv.evidence_scope }}</p>
                   <p>{{ modelingStatus.model.cv.aggregation }}</p>
                   <p>{{ modelingStatus.model.cv.uncertainty }}</p>
                   <p>{{ modelingStatus.model.cv.metric_semantics }}</p>
@@ -930,7 +954,14 @@
           <!-- Selected features table (sorted by SHAP |impact|) -->
           @if (modelingStatus.model?.selected_features?.length) {
             <div style="margin-top: 16px">
-              <h4>Selected Features (ranked by importance heuristic)</h4>
+              <h4>
+                Selected Features{{
+                  modelingStatus.model.candidate_source ? '' : ' (ranked by importance heuristic)'
+                }}
+              </h4>
+              @if (modelingStatus.model.explanation_limitation) {
+                <p>{{ modelingStatus.model.explanation_limitation }}</p>
+              }
               <div style="font-size: 12px; color: #666; margin-bottom: 6px">
                 Total: {{ modelingStatus.model.selected_features.length }}
               </div>

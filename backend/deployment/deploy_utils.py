@@ -257,6 +257,7 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'bundle_id': bundle_id,
         'execution_id': modeling.get('execution_id'),
         'prediction_contract': contract,
+        'fit_receipt': model.get('fit_receipt'),
         'task': model.get('task') or 'classification',
         'encoding_report': td.get('encoding_report', []) if os.path.exists(train_pkl) else [],
         'input_stage': 'raw_unencoded' if purifier else ('processed_unencoded' if contract else 'legacy_model_features'),

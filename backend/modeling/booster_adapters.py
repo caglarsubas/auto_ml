@@ -61,6 +61,7 @@ class BoosterAdapter(ABC):
         self.enable_categorical: bool = False
         self.task: str = 'classification'
         self.training_eval_metric: Optional[str] = None
+        self.fit_receipt = None
 
     @abstractmethod
     def train(
@@ -111,6 +112,7 @@ class XGBoostAdapter(BoosterAdapter):
 
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
+        self.fit_receipt = None
         import xgboost as xgb
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
@@ -154,6 +156,8 @@ class XGBoostAdapter(BoosterAdapter):
             verbose_eval=False,
         )
         self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round - 1))
+        from modeling.fit_receipts import record_native_fit
+        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, p, num_boost_round, early_stopping_rounds)
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -219,6 +223,7 @@ class LightGBMAdapter(BoosterAdapter):
 
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
+        self.fit_receipt = None
         import lightgbm as lgb
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
@@ -268,6 +273,8 @@ class LightGBMAdapter(BoosterAdapter):
             callbacks=callbacks,
         )
         self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round) or num_boost_round)
+        from modeling.fit_receipts import record_native_fit
+        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, p, num_boost_round, early_stopping_rounds)
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -314,6 +321,7 @@ class CatBoostAdapter(BoosterAdapter):
 
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
+        self.fit_receipt = None
         from catboost import CatBoostClassifier, CatBoostRegressor, Pool
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
@@ -365,6 +373,8 @@ class CatBoostAdapter(BoosterAdapter):
             self.best_iteration = int(self.model.get_best_iteration() or num_boost_round)
         except Exception:
             self.best_iteration = int(num_boost_round)
+        from modeling.fit_receipts import record_native_fit
+        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, self.model.get_all_params(), num_boost_round, early_stopping_rounds)
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:

@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "packet": "P05",
+  "branch": "codex/candidate-fit-evidence",
+  "base_commit": "ddca8239db92a57749795120666a4609a5417301",
+  "qualified_source_commit": "ece5b39b938a4ef53eeedaecd18dc78520c7df2f",
+  "scope": "Bounded local source qualification; subsequent commits contain documentation/ledger/evidence only. D02/D04 remain partial; no milestone, production or customer gate is closed.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/94",
+    "state": "MERGED",
+    "merged_at": "2026-10-08T06:11:38Z",
+    "merge_commit": "ddca8239db92a57749795120666a4609a5417301",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37736276269",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "backend_environment": {
+    "image": "declarai-core-p05:local",
+    "image_id": "sha256:5c1a9f34fb6bf7209e24d1152f292426774c58e9ddd60f85c7379b91df375b11",
+    "platform": "linux/arm64",
+    "python": "3.12.15",
+    "packages": {
+      "Django": "5.2.18",
+      "djangorestframework": "3.16.1",
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "scikit-learn": "1.9.1",
+      "xgboost": "2.1.4",
+      "lightgbm": "4.7.0",
+      "catboost": "1.2.10",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10"
+    },
+    "origin": "Unchanged cached public core dependencies, no optional private SDK. Full backend checks mounted the exact repository at /app using the P04 dependency image; authenticated API qualification used the refreshed stock P05 image with final source.",
+    "network": "Internal Redis/test network. Telemetry disabled, provider key blank and model endpoint unreachable. Disposable API also uses a bridge for loopback publication; this is not a complete offline-installation qualification.",
+    "cpu_allocation": "Final full suite and API use --cpuset-cpus=0-3. Timeout, skip and coverage gates unchanged. No workload/capacity claim."
+  },
+  "frontend_environment": {
+    "node": "24.16.0",
+    "npm": "11.13.0",
+    "angular": "22.2.1",
+    "typescript": "6.0.3",
+    "dependencies": "Unchanged package-lock.json; locked installed dependencies linked from primary checkout. Final production assets served by loopback preview helper."
+  },
+  "checks": [
+    {
+      "name": "Full CI-marked backend suite",
+      "status": "passed",
+      "command": "python -m pytest -m 'unit or functional or regression or integration or uat' --tb=short --junitxml=../test-reports/p05-backend.xml --cov --cov-report=xml:../test-reports/p05-backend-coverage.xml --cov-report=term-missing --cov-fail-under=50",
+      "passed": 1305,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 135,
+      "duration_seconds": 76.38,
+      "coverage_percent": 65.27,
+      "coverage_gate_percent": 50,
+      "log": "backend-full.log"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "command": "python3 .github/scripts/check_skip_budget.py test-reports/p05-backend.xml --max-skips 15",
+      "skipped": 6,
+      "maximum": 15,
+      "reasons": [
+        "Four optional SDK checks",
+        "One unavailable live model-engine check",
+        "One absent local .env check"
+      ],
+      "log": "skip-budget.log"
+    },
+    {
+      "name": "Governed Chromium and authenticated API suite",
+      "status": "passed",
+      "command": "npm run test:e2e:governed",
+      "passed": 19,
+      "skipped": 0,
+      "duration_seconds": 11.9,
+      "log": "governed-browser.log",
+      "credentials": "Generated disposable non-admin account, real session/CSRF; credential file removed after qualification.",
+      "scope": "Actual class/reg upload, preprocessing, training, candidate acceptance, stale/missing version/feature rejection, preserved parent status and older-bundle scoring after adoption, plus existing session and browser flows. Full review/accessibility acceptance is not claimed."
+    },
+    {
+      "name": "Frontend unit and rendered candidate evidence checks",
+      "status": "passed",
+      "command": "npm run test:ci",
+      "passed": 526,
+      "log": "frontend-unit.log",
+      "scope": "Final template; expandable fit details, post-selection scope, versioned primary-metric acceptance and removal of stale displayed feature evidence."
+    },
+    {
+      "name": "Backend lint, migration drift and package consistency",
+      "status": "passed",
+      "command": "ruff check .; python manage.py makemigrations --check --dry-run; python -m pip check",
+      "log": "backend-static.log"
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "command": "npm run build",
+      "log": "frontend-build.log",
+      "note": "Existing bundle/style-budget and CommonJS warnings remain."
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "command": "npm run lint",
+      "errors": 0,
+      "warnings": 158,
+      "log": "frontend-lint.log"
+    },
+    {
+      "name": "Changed HTML/browser formatting and browser TypeScript",
+      "status": "passed",
+      "command": "prettier --check src/app/modeling/modeling.component.html e2e/raw-replay-api.spec.ts; tsc --ignoreConfig --noEmit --module nodenext --moduleResolution nodenext --target es2022 --types node --skipLibCheck e2e/raw-replay-api.spec.ts",
+      "note": "New TypeScript/spec blocks formatted by range; legacy whole-tree formatting remains advisory."
+    },
+    {
+      "name": "Original checkout preservation and disposable resource cleanup",
+      "status": "passed",
+      "files": 11,
+      "note": "Starting SHA256 values are unchanged. Task API/Redis/network/preview and credential file removed; primary services untouched."
+    }
+  ],
+  "regression_scope": [
+    "Actual three-booster classification/regression native fit receipts and effective budgets",
+    "Actual binary logistic/scorecard and anomaly fit receipts; actual scorecard candidate CV",
+    "Row order, feature order, label/value/schema/category semantics and JSON integer-key digest stability",
+    "Receipt mutation, missing fit, failed refit, malformed candidate fit and expert subclass rejection before customer input loading",
+    "Selected-feature candidate CV with fixed fitter parameters and unchanged zero/ten-round budgets; failed CV cannot publish/adopt",
+    "Parent model diagnostics discarded, protected holdout byte copy, immutable prior artifacts and stale adoption conflicts",
+    "Actual raw-recipe class/reg candidate assessment, receipt export and scoring replay",
+    "Rendered candidate evidence and exact primary-metric acceptance; real-session/API version boundaries"
+  ],
+  "qualification_notes": [
+    "Earlier passing full suites were repeated after fixed candidate weighting, JSON digest and zero-budget refinements. Only the final backend-full.log/XML and final browser/source checks qualify the recorded commit. Preliminary passing reports are retained separately.",
+    "Candidate CV is post-selection development evidence. It cannot establish independent or confirmatory performance; fixed candidate class weights are disclosed separately from initial fold-local automatic weights.",
+    "Receipts are native controller records and corruption checks, not signatures or authorization. Recorded XGBoost/LightGBM effective parameters are supplied fitter parameters, not a resolution of every library default."
+  ],
+  "open_gates": [
+    "Full paired change analysis and objective/early-stopping/SFS/search consistency",
+    "Full supervised-encoding/alternate/search and legacy scientific qualification",
+    "Independent reproduction/review and complete immutable durable jobs/recovery",
+    "Project roles, audit/retention/egress and production private operation",
+    "Qualified mandatory expert isolation; expert execution remains unavailable",
+    "Design-partner, credit, monitoring-cycle and value acceptance"
+  ],
+  "commit_hook": {
+    "note": "Shared hooks target the primary checkout's active auto-ml containers. Equivalent full backend/static checks and final frontend build ran in isolated profiles; hooks bypassed per commit/push command only, without persistent configuration changes."
+  },
+  "ci_at_record_creation": "Forthcoming PR not yet observed. Local qualification is separate from GitHub CI.",
+  "retained_local_directory": "/Users/caglarsubasi/.codex/worktrees/foundation-packaging/auto-ml/test-reports/p05",
+  "qualified_source_sha256": {
+    "backend/deployment/deploy_utils.py": "6d0421fd726eafc2a5bb9e0d149bc1eb7546f593b394cfb4476ce06e7fd38514",
+    "backend/modeling/alt_pipelines.py": "b06b602d9425f24a2566a01077f552119999a22a413c6c54f39b42ddd42772c6",
+    "backend/modeling/booster_adapters.py": "b1004690fb4bd6a600d9d19c78b200da1e1d6cb649fc49d99e93831bb779aeb7",
+    "backend/modeling/development_assessment.py": "549fb67e82e5a0c067fb85af165810538883600115fce428e0296b6cb86925b1",
+    "backend/modeling/execution_artifacts.py": "02bdadb55d014d55044a7c867e151ced143023dc7292320a32c30d754096d242",
+    "backend/modeling/fit_receipts.py": "5d0ff63d435cbbf536c525f115cd4593d369d337f8ea3ca22ae8901e32a1b294",
+    "backend/modeling/views.py": "78655d13b4e0276587f48b3abd07509781f819d97d224a26a1b39ec57f823ac5",
+    "backend/tests/unit/test_candidate_evidence.py": "56816531f2949a82ffd43b8389cd5eb689910c6c939b3a20964d094cabdd52af",
+    "backend/tests/unit/test_governed_foundation.py": "01caa5328d9229aa7fe8b488812dd01d1b85dec7ce857bad9b60026c8c606320",
+    "backend/tests/unit/test_purifier_replay.py": "b97d3d2ba2404407215503c27a56f9ee44c44318ff935413589fd2a6e219dac9",
+    "frontend/e2e/raw-replay-api.spec.ts": "9d01ce70b7db31d06c286c4aea79d9a91e56a1a4c59a3686dbb299de2c6d514e",
+    "frontend/src/app/modeling/modeling.component.html": "8d760620ca7af539823ae575c82804a6c54540689408aa0be9275a9ae9e4d6fb",
+    "frontend/src/app/modeling/modeling.component.spec.ts": "d1e8c92d23b92415364dc4ccef0d36f86fb46810d161629c0139e55a416abcf5",
+    "frontend/src/app/modeling/modeling.component.ts": "55779b9c10d947754462fb1c9099e61811a61f1c2392f91300911e492c87e154",
+    "backend/requirements.txt": "4bcc97120e0e79e1423bb2b2ee49102655b277a0bd50cba9d1ad968268b11288",
+    "backend/pytest.ini": "dd7d952c34ced2462b98e2756b5407dd5023eca15ef763fb4f6106825d0e6133",
+    "frontend/package-lock.json": "dd213fdb3d7338e28e15e1e2f7d8808b95eea49a5e353fdec4ebd709b69cd59e",
+    "frontend/package.json": "34a4a95c2ad9e77868eb85cc5de7a3a6101212732b2745da10b43cd1e12d8cf2",
+    ".github/workflows/ci.yml": "3ade25fada41a0d496e5f28485efed05333cdfb01a3ba970a5982dfba6607241",
+    "docker/backend.Dockerfile": "46be6dd1a057adc0bb0154b686b65b5701d507543223b98c5ff739181f66989b"
+  },
+  "evidence_sha256": {
+    "api.log": "beb6c834eb1d29d7a2755637b6690b73d85ec3850363da1cb4ca3742fdf9cc0b",
+    "backend-before-json-coverage.xml": "2764da722d45b239bc5b9de90b26a04613e61e230bef041e5b820de91ac953c2",
+    "backend-before-json.log": "1c9c92dc265e86e13f0365f6d8a3a719a5dcc9fdad6f147b35a4cfacd7a7d31b",
+    "backend-before-json.xml": "9ad131775295b187867aa2d9d254d8946b49c1521aa7166fcf6d4234e867f38b",
+    "backend-before-zero-budget-coverage.xml": "63097da76c2c380610bb0e07d53c20d9ab246e0ca1aa861d1f8595089bfb197c",
+    "backend-before-zero-budget.log": "d790815cf65799cabbc104b9c224ca0366a8846ab975ffc9e6975fdcaf0f5ae9",
+    "backend-before-zero-budget.xml": "859d35feb88c578854cb34b4acfd17115c796761d66bb562c87d647a168556a9",
+    "backend-coverage.xml": "764959aebecfcdcc4c7b6cc77f141ace86ced25090479df275bb2bbe87658d40",
+    "backend-full.log": "fdc634396dcec675564f284944a044914072bdd05b84814cdc6b1dfbc53b4bd9",
+    "backend-preliminary-coverage.xml": "5e3d602da9b7a2d3a998978f677007eb357da189db9fbd8a2217b906fbb2b36e",
+    "backend-preliminary.log": "f3bd3344e47d2fee8af7b7f2023720c9e6cc333f5b7c6b3de5358dadd40440ec",
+    "backend-preliminary.xml": "8c3434615edbe822f237eccc080f5e25b988f135a9d525c85c7f06403a10407b",
+    "backend-static.log": "6ce8867c7b414c78e2cf0d7fa85838ed4591d625346a953de715024740123fe4",
+    "backend.xml": "37d03e87f0bfd19341e7d1d10a4e32c86e8e297d5e6db1738dcabc5a48550821",
+    "browser-ts.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "format-check.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+    "format.log": "9cde4a7a47402fa1a403b8c609cf62e2bc2b059c262b7a141b5f2633145c8776",
+    "frontend-build.log": "d2fb9fe7cf0064e96b054180f980ecefa86cc194377ad8b8537fbd3a3efe6879",
+    "frontend-lint.log": "7aa58f92c661da3986a08c1583a57ced8ccf8b752bfbb8082de781eb726d6eb0",
+    "frontend-unit.log": "3b3dcac92e7f5a497fdc74b70206c6a8c230ce21b3426e1076525b4c46d2c00c",
+    "governed-browser.log": "fd29b9042346b9d12a49be680d304a5b2b8376b6d459b71f4993fb422f9d0364",
+    "image-refresh.log": "75cf4b463c0b884fe389e8f06e3266a16ac2c13bc2b3a3cc8def9efea69982a1",
+    "preview.log": "ba44f75551695bd623c2ba6cd7d482f7038ca4be75351a2c19842be64acd3ad2",
+    "skip-budget.log": "e0373af314034b4ec180eb569eb3543d2d51fcfa77f7d04baadcb8343787d1bd",
+    "targeted.log": "bd2ff53b55d8bed8c2063f2c266a07e839444f0a43946e31b5413647140c1a39"
+  }
+}

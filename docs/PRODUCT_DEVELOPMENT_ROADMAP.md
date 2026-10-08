@@ -58,6 +58,16 @@ Shared development assessment for classification/regression records exact fold m
 
 **Remaining:** Full scientific path and objective/early-stopping consistency, independent reproduction/review, security/operations, expert isolation and customer acceptance remain open.
 
+### P05 — Candidate fit evidence and exact-version acceptance
+
+**Packet status:** tested. **Mapped outcomes:** D02, D04.
+
+Bind native candidate fits to exact development inputs and training configuration, recompute candidate metrics/CV on selected features, discard parent model diagnostics and require explicit version/feature acceptance.
+
+**Evidence:** [P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md); [P05 source qualification](evidence/p05-qualification-2026-10-08.json)
+
+**Remaining:** Full paired change analysis, objective/search consistency, independently reproducible artifacts, immutable durable jobs, security/operations, expert isolation and customer acceptance remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 ## M1 — Scientifically reliable execution
@@ -92,9 +102,9 @@ Preserve time, entity, and outcome-window constraints through early stopping, en
 
 **Source mapping:** Claude CC-1/CC-5; GPT P02/P03; Gemini C2/C3.
 
-**Progress:** Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open.
+**Progress:** Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json); [P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md); [P04 source qualification](evidence/p04-qualification-2026-10-08.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json); [P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md); [P04 source qualification](evidence/p04-qualification-2026-10-08.json); [P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md); [P05 source qualification](evidence/p05-qualification-2026-10-08.json)
 
 ### D03 Protected final assessment
 
@@ -116,9 +126,9 @@ Version dataset, contract, transforms, models, evaluations and bundles by run. P
 
 **Source mapping:** Claude CC-7/RM-7; GPT P06; Repository artifact and scoring inspection.
 
-**Progress:** Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open.
+**Progress:** Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P03 implementation and limits](PURIFIER_REPLAY_IMPLEMENTATION.md); [P03 qualification](evidence/p03-qualification-2026-10-08.json); [P05 candidate evidence and limits](CANDIDATE_EVIDENCE_IMPLEMENTATION.md); [P05 source qualification](evidence/p05-qualification-2026-10-08.json)
 
 ### D05 Trustworthy diagnostics
 
