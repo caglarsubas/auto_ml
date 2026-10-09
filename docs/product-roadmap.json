@@ -1026,6 +1026,11 @@
       "date": "2026-10-09",
       "packet": "P17",
       "event": "Local qualification passed 1870 marked tests on SQLite and PostgreSQL, six explicit skips each, with unchanged coverage/skip budgets. Five independent PostgreSQL processes share source/principal admission; concurrent same-request revocation commits once and replays four times. Authentication receipt/revision survives restart and quiescent fixture restore. Development Chromium verifies two revoked browser sessions, unaffected-user access and fresh-login retry. P01-P16, outcome states, D18-D26, queue and release/customer gates remain unchanged; D06 progresses only."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P17",
+      "event": "Final source qualifies ordered authentication timestamps with explicit regression assertions, repeat 1870-test suites on both databases, private process/restore checks and repeat real-browser revocation/retry. Development Compose forwards declared admission controls. Outcome statuses, prior packets, canonical queue and release/customer gates remain unchanged."
     }
   ],
   "implementation_packets": [
