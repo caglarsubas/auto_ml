@@ -68,7 +68,7 @@ test('multiple projects require choice; keyboard selection pins pipeline creatio
     `${API_BASE_URL}pipeline/${(await created.json()).id}/?project_id=${other.id}`,
   );
   expect(mismatch.status()).toBe(403);
-  await page.screenshot({ path: testInfo.outputPath('workspace-developer.png') });
+  await page.screenshot({ path: testInfo.outputPath('workspace-developer.png'), animations: 'disabled' });
   expect(errors).toEqual([]);
 });
 
@@ -97,6 +97,7 @@ for (const [name, role] of [
     expect((await download).suggestedFilename()).toMatch(/^pipeline-\d+-report.html$/);
     await page.goto('/model-development?project_id=' + id);
     await expect(page).toHaveURL(/\/home\?project_id=/);
+    await expect(picker).toHaveValue(id);
     await expect(page.locator('#workspace-role')).toContainText(`Your role: ${role}`);
     const denied = await page.request.post(API_BASE_URL + 'pipeline/create/', {
       data: { name: 'forbidden', project_id: id },
@@ -106,7 +107,7 @@ for (const [name, role] of [
       },
     });
     expect(denied.status()).toBe(403);
-    await page.screenshot({ path: testInfo.outputPath(`workspace-${role}.png`) });
+    await page.screenshot({ path: testInfo.outputPath(`workspace-${role}.png`), animations: 'disabled' });
     // The redirected home URL still names the read-only project. A manual
     // selection must remain the refresh preference instead of resetting to it.
     await picker.selectOption({ label: 'Workspace B — developer' });

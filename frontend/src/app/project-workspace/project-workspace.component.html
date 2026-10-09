@@ -21,8 +21,8 @@
     <label for="workspace-project">Current project</label>
     <select
       id="workspace-project"
-      [value]="workspace.projectId || ''"
-      (change)="select($event)"
+      [ngModel]="workspace.projectId || ''"
+      (ngModelChange)="select($event)"
       aria-describedby="workspace-role"
     >
       <option value="">Select a project</option>

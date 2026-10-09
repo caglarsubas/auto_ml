@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { forkJoin, of, Subscription } from 'rxjs';
@@ -9,7 +10,7 @@ import { ProjectWorkspaceService } from '../services/project-workspace.service';
 @Component({
   selector: 'app-project-workspace',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './project-workspace.component.html',
   styleUrl: './project-workspace.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -65,8 +66,8 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   refresh(): void {
     this.subscriptions.add(this.workspace.refresh(this.preferredProject).subscribe());
   }
-  select(event: Event): void {
-    this.preferredProject = (event.target as HTMLSelectElement).value;
+  select(projectId: string): void {
+    this.preferredProject = projectId;
     this.workspace.select(this.preferredProject);
   }
   report(run: any): void {
