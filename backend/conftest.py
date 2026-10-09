@@ -87,3 +87,16 @@ def authenticated_api_client(db, django_user_model):
     client = APIClient()
     client.force_authenticate(user=user)
     return client
+
+
+@pytest.fixture
+def mcp_identity(django_user_model, monkeypatch):
+    """Real installation actor/grant for MCP handler tests; no runtime bypass."""
+    from access_control.models import MCPDatasetGrant
+    from declaration.models import Declaration
+    actor = django_user_model.objects.create_user(username='mcp-handler-test', password=None)
+    dataset = Declaration.objects.create(pk=42, name='mcp-fixture', original_name='mcp.csv', file='data_files/mcp.csv')
+    grant = MCPDatasetGrant.objects.create(actor=actor, dataset=dataset, role='prepare')
+    monkeypatch.setenv('DECLARAI_MCP_ACTOR_USER_ID', str(actor.pk))
+    monkeypatch.delenv('DECLARAI_MCP_SCOPES', raising=False)
+    return actor, dataset, grant

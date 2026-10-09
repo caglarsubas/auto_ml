@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from ai_assistant.mcp_server import auth
+from access_control.authority import authorized_access
 from ai_assistant.mcp_server.observability import (
     stamp_mcp_context,
     span_timer,
@@ -38,24 +39,28 @@ def prepare_action(
             destructive=False,
         )
         try:
-            auth.require_scope(auth.SCOPE_ACTION_PREPARE)
-            if spec is None:
-                raise ValueError(f"Unknown DeclarAI action type: {action_type}")
-            payload = _coerce_payload(payload)
-            action_block = _format_action_block(action_type, payload)
-            out: dict[str, Any] = {
-                "status": "prepared",
-                "file_id": file_id,
-                "action_type": action_type,
-                "payload": payload,
-                "risk": spec.risk,
-                "requires_approval": True,
-                "side_effects": False,
-                "direct_tool": spec.direct_name,
-                "action_block": action_block,
-            }
-            if parent_span_id:
-                out["parent_span_id"] = parent_span_id
+            with authorized_access(file_id, 'prepare_action', spec.prepare_name if spec else str(action_type)[:200],
+                    auth.SCOPE_ACTION_PREPARE, payload) as receipt:
+                if spec is None:
+                    raise ValueError(f"Unknown DeclarAI action type: {action_type}")
+                payload = _coerce_payload(payload)
+                action_block = _format_action_block(action_type, payload)
+                out: dict[str, Any] = {
+                    "status": "prepared",
+                    "file_id": file_id,
+                    "action_type": action_type,
+                    "payload": payload,
+                    "risk": spec.risk,
+                    "requires_approval": True,
+                    "side_effects": False,
+                    "direct_tool": spec.direct_name,
+                    "action_block": action_block,
+                }
+                if parent_span_id:
+                    out["parent_span_id"] = parent_span_id
+                out['access_receipt'] = receipt
+                out['execution_available'] = False
+                out['execution_blocker'] = 'mcp_exact_approval_unavailable'
             stamp_mcp_context(
                 operation="prepare_action",
                 ok=True,
@@ -80,7 +85,7 @@ def execute_direct_action(
     approval_id: str | None,
     parent_span_id: str | None = None,
 ) -> dict[str, Any]:
-    """Execute a side-effecting DeclarAI action through the existing dispatcher."""
+    """Reject direct execution until exact action approval authority is available."""
     spec = get_action_spec(action_type)
     with span_timer("declarai.mcp"):
         stamp_mcp_context(
@@ -95,28 +100,9 @@ def execute_direct_action(
             approval_id=approval_id,
         )
         try:
-            auth.require_direct_actions_enabled()
-            if spec is None:
-                raise ValueError(f"Unknown DeclarAI action type: {action_type}")
-            auth.require_scope(spec.scope)
-            auth.require_approval(action_type, approval_id)
-            payload = _coerce_payload(payload)
-            result = _dispatch_action(file_id, action_type, payload, parent_span_id)
-            out = {
-                "status": "executed",
-                "file_id": file_id,
-                "action_type": action_type,
-                "approval_id": approval_id,
-                "risk": spec.risk,
-                "side_effects": True,
-                "result": result,
-            }
-            stamp_mcp_context(
-                operation="direct_action",
-                ok=True,
-                result_chars=len(str(result)),
-            )
-            return out
+            with authorized_access(file_id, 'direct_action', spec.direct_name if spec else str(action_type)[:200],
+                    spec.scope if spec else auth.SCOPE_ACTION_PREPARE, payload):
+                auth.require_direct_actions_enabled()
         except Exception as exc:
             stamp_mcp_context(
                 operation="direct_action",
@@ -124,23 +110,6 @@ def execute_direct_action(
                 error=str(exc),
             )
             raise
-
-
-def _dispatch_action(
-    file_id: int,
-    action_type: str,
-    payload: dict[str, Any],
-    parent_span_id: str | None,
-) -> dict[str, Any]:
-    """Import lazily so helper tests do not need Django model imports up front."""
-    from ai_assistant.action_executor import dispatch_action
-
-    return dispatch_action(
-        file_id,
-        action_type,
-        payload,
-        parent_span_id=parent_span_id,
-    )
 
 
 def _coerce_payload(payload: dict[str, Any] | None) -> dict[str, Any]:

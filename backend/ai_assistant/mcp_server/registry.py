@@ -21,7 +21,7 @@ READ_TOOL_PREFIX = "declarai."
 PREPARE_ACTION_PREFIX = "declarai.prepare."
 DIRECT_ACTION_PREFIX = "declarai.action."
 CATALOG_TOOL_NAME = "declarai.get_mcp_tool_catalog"
-TOOL_METADATA_VERSION = "declarai-mcp-tools-v1"
+TOOL_METADATA_VERSION = "declarai-mcp-tools-v2"
 
 
 @dataclass(frozen=True)
@@ -210,6 +210,8 @@ def build_tool_meta(
     meta: dict[str, Any] = {
         "declarai.tool_metadata_version": TOOL_METADATA_VERSION,
         "declarai.category": category,
+        "declarai.actor_identity_required": True,
+        "declarai.dataset_grant_required": category in ("read", "read_tool", "prepare", "prepare_action"),
         "declarai.required_scopes": required_scopes,
         "declarai.risk": risk,
         "declarai.side_effects": side_effects,
@@ -236,6 +238,7 @@ def build_tool_catalog(*, include_direct_actions: bool = False) -> dict[str, Any
     still ignore custom metadata, so DeclarAI also exposes this explicit catalog
     for scope binding and deployment review.
     """
+    include_direct_actions = False  # No verified approval authority exists yet.
     tools: list[dict[str, Any]] = []
     tools.append(
         _catalog_entry(
@@ -306,6 +309,12 @@ def build_tool_catalog(*, include_direct_actions: bool = False) -> dict[str, Any
         "default_scopes": sorted(auth.DEFAULT_SCOPES),
         "direct_actions_registered": include_direct_actions,
         "scope_env": "DECLARAI_MCP_SCOPES",
+        "actor_env": "DECLARAI_MCP_ACTOR_USER_ID",
+        "dataset_grants_required": True,
+        "supported_transport": "stdio",
+        "network_transport_available": False,
+        "direct_execution_available": False,
+        "execution_blocker": "mcp_exact_approval_unavailable",
         "tools": tools,
     }
 
@@ -352,6 +361,8 @@ def _catalog_entry(
         "name": name,
         "title": title,
         "category": category,
+        "actor_identity_required": True,
+        "dataset_grant_required": category in {"read", "read_tool", "prepare", "prepare_action"},
         "required_scopes": required_scopes,
         "risk": risk,
         "read_only": read_only,

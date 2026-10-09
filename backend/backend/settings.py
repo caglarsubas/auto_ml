@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'modeling',
     'preprocessing',
     'ai_assistant',
+    'access_control',
 ]
 
 MIDDLEWARE = [

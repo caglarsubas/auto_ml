@@ -46,8 +46,9 @@ class TestMcpDirectActionsGate:
     def test_direct_actions_enabled_via_env(self, monkeypatch):
         from ai_assistant.mcp_server import auth
         monkeypatch.setenv('DECLARAI_MCP_ENABLE_DIRECT_ACTIONS', 'true')
-        assert auth.direct_actions_enabled() is True
-        assert auth.require_direct_actions_enabled() is None
+        assert auth.direct_actions_enabled() is False
+        with pytest.raises(PermissionError, match='mcp_exact_approval_unavailable'):
+            auth.require_direct_actions_enabled()
 
 
 @pytest.mark.unit
@@ -62,13 +63,15 @@ class TestMcpApprovalGate:
     def test_approval_passes_with_id(self, monkeypatch):
         from ai_assistant.mcp_server import auth
         monkeypatch.setenv('DECLARAI_MCP_REQUIRE_APPROVAL', 'true')
-        assert auth.require_approval('apply_config', approval_id='appr-123') is None
+        with pytest.raises(PermissionError, match='mcp_exact_approval_unavailable'):
+            auth.require_approval('apply_config', approval_id='appr-123')
 
     def test_approval_disabled_via_env(self, monkeypatch):
         from ai_assistant.mcp_server import auth
         monkeypatch.setenv('DECLARAI_MCP_REQUIRE_APPROVAL', 'false')
-        assert auth.approval_required() is False
-        assert auth.require_approval('apply_config', approval_id=None) is None
+        assert auth.approval_required() is True
+        with pytest.raises(PermissionError, match='mcp_exact_approval_unavailable'):
+            auth.require_approval('apply_config', approval_id=None)
 
 
 @pytest.mark.unit
@@ -82,6 +85,7 @@ class TestFixFilePathsCommand:
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mcp_identity")
 class TestRunMcpServerCommand:
     def test_wires_arguments_into_server(self, monkeypatch):
         from django.core.management import call_command
