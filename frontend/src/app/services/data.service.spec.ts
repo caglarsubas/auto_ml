@@ -37,12 +37,10 @@ describe('DataService', () => {
         getReader: () => {
           let i = 0;
           return {
-            read: () =>
-              Promise.resolve(
-                i < chunks.length
-                  ? { value: new TextEncoder().encode(chunks[i++]), done: false }
-                  : { value: undefined, done: true },
-              ),
+            read: () => Promise.resolve(
+              i < chunks.length
+                ? { value: new TextEncoder().encode(chunks[i++]), done: false }
+                : { value: undefined, done: true }),
           };
         },
       },
@@ -50,30 +48,16 @@ describe('DataService', () => {
 
     it('should report each step and emit only the final result', async () => {
       const steps: any[] = [];
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            '{"type":"step","id":"intent","label":"Reading your question","state":"running","elapsed_ms":5}\n',
-            '{"type":"step","id":"intent","label":"Reading your question","state":"done","elapsed_ms":40}\n',
-            '{"type":"result","data":{"message":"here you go"}}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading your question","state":"running","elapsed_ms":5}\n',
+        '{"type":"step","id":"intent","label":"Reading your question","state":"done","elapsed_ms":40}\n',
+        '{"type":"result","data":{"message":"here you go"}}\n',
+      ])) as any);
 
       const result = await new Promise<any>((resolve, reject) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: (s) => steps.push(s) },
-          )
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
           .subscribe({ next: resolve, error: reject });
       });
 
@@ -87,14 +71,11 @@ describe('DataService', () => {
 
     it('should send stream:true so the backend opens the channel', async () => {
       const fetchSpy = spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(streamingResponse(['{"type":"result","data":{}}\n'])) as any,
-      );
+        Promise.resolve(streamingResponse(['{"type":"result","data":{}}\n'])) as any);
 
-      await new Promise<any>((resolve) => {
-        service
-          .sendAiChat('hi', {}, 'general', [], 7, 'gpt-5.5', undefined, undefined, undefined, {
-            onStep: () => {},
-          })
+      await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], 7, 'gpt-5.5',
+                           undefined, undefined, undefined, { onStep: () => {} })
           .subscribe({ next: resolve });
       });
 
@@ -106,29 +87,15 @@ describe('DataService', () => {
 
     it('should reassemble a JSON line split across chunks', async () => {
       const steps: any[] = [];
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            '{"type":"step","id":"llm:0","label":"Thin',
-            'king","state":"running","elapsed_ms":9}\n{"type":"result","data":{"message":"ok"}}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"llm:0","label":"Thin',
+        'king","state":"running","elapsed_ms":9}\n{"type":"result","data":{"message":"ok"}}\n',
+      ])) as any);
 
-      const result = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: (s) => steps.push(s) },
-          )
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
           .subscribe({ next: resolve });
       });
 
@@ -138,29 +105,14 @@ describe('DataService', () => {
     });
 
     it('should surface a terminal error line as an observable error', async () => {
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            '{"type":"step","id":"intent","label":"Reading","state":"done","elapsed_ms":3}\n',
-            '{"type":"error","error":"engine unreachable","status":503}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading","state":"done","elapsed_ms":3}\n',
+        '{"type":"error","error":"engine unreachable","status":503}\n',
+      ])) as any);
 
-      const err = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: () => {} },
-          )
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
           .subscribe({ next: () => resolve('unexpected next'), error: resolve });
       });
 
@@ -169,28 +121,13 @@ describe('DataService', () => {
     });
 
     it('should error when the stream ends without a terminal line', async () => {
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            '{"type":"step","id":"intent","label":"Reading","state":"running","elapsed_ms":1}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"step","id":"intent","label":"Reading","state":"running","elapsed_ms":1}\n',
+      ])) as any);
 
-      const err = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: () => {} },
-          )
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
           .subscribe({ next: () => resolve('unexpected next'), error: resolve });
       });
 
@@ -199,30 +136,16 @@ describe('DataService', () => {
 
     it('should ignore keep-alive pings', async () => {
       const steps: any[] = [];
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            '{"type":"ping"}\n',
-            '{"type":"ping"}\n',
-            '{"type":"result","data":{"message":"finally"}}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        '{"type":"ping"}\n',
+        '{"type":"ping"}\n',
+        '{"type":"result","data":{"message":"finally"}}\n',
+      ])) as any);
 
-      const result = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: (s) => steps.push(s) },
-          )
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
           .subscribe({ next: resolve });
       });
 
@@ -233,29 +156,15 @@ describe('DataService', () => {
     it('should skip a malformed line rather than abandoning the turn', async () => {
       const steps: any[] = [];
       spyOn(console, 'warn');
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve(
-          streamingResponse([
-            'not json at all\n',
-            '{"type":"result","data":{"message":"survived"}}\n',
-          ]),
-        ) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve(streamingResponse([
+        'not json at all\n',
+        '{"type":"result","data":{"message":"survived"}}\n',
+      ])) as any);
 
-      const result = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            'hi',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: (s) => steps.push(s) },
-          )
+      const result = await new Promise<any>(resolve => {
+        service.sendAiChat('hi', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined,
+                           { onStep: s => steps.push(s) })
           .subscribe({ next: resolve });
       });
 
@@ -263,29 +172,16 @@ describe('DataService', () => {
     });
 
     it('should surface a non-200 as an error without reading a body stream', async () => {
-      spyOn(window, 'fetch').and.returnValue(
-        Promise.resolve({
-          ok: false,
-          status: 400,
-          body: null,
-          json: () => Promise.resolve({ error: 'Message is required' }),
-        }) as any,
-      );
+      spyOn(window, 'fetch').and.returnValue(Promise.resolve({
+        ok: false,
+        status: 400,
+        body: null,
+        json: () => Promise.resolve({ error: 'Message is required' }),
+      }) as any);
 
-      const err = await new Promise<any>((resolve) => {
-        service
-          .sendAiChat(
-            '',
-            {},
-            'general',
-            [],
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { onStep: () => {} },
-          )
+      const err = await new Promise<any>(resolve => {
+        service.sendAiChat('', {}, 'general', [], undefined, undefined,
+                           undefined, undefined, undefined, { onStep: () => {} })
           .subscribe({ next: () => resolve('unexpected next'), error: resolve });
       });
 
@@ -307,7 +203,7 @@ describe('DataService', () => {
   describe('uploadFile', () => {
     it('should POST FormData to declaration/', () => {
       const file = new File(['a,b\n1,2'], 'test.csv', { type: 'text/csv' });
-      service.uploadFile(file).subscribe((res) => {
+      service.uploadFile(file).subscribe(res => {
         expect(res.id).toBe(1);
       });
       const req = httpMock.expectOne(`${apiUrl}declaration/`);
@@ -320,7 +216,7 @@ describe('DataService', () => {
   // ── getDataPreview ──────────────────────────────────────────────────
   describe('getDataPreview', () => {
     it('should GET preview', () => {
-      service.getDataPreview('5').subscribe((res) => {
+      service.getDataPreview('5').subscribe(res => {
         expect(res.columns).toEqual(['A', 'B']);
       });
       const req = httpMock.expectOne(`${apiUrl}declaration/5/preview/`);
@@ -332,7 +228,7 @@ describe('DataService', () => {
   // ── getDataDictionary ───────────────────────────────────────────────
   describe('getDataDictionary', () => {
     it('should GET data dictionary', () => {
-      service.getDataDictionary('3').subscribe((res) => {
+      service.getDataDictionary('3').subscribe(res => {
         expect(res.length).toBe(2);
       });
       const req = httpMock.expectOne(`${apiUrl}declaration/3/data_dictionary/`);
@@ -344,7 +240,7 @@ describe('DataService', () => {
   // ── getFeatureCard ──────────────────────────────────────────────────
   describe('getFeatureCard', () => {
     it('should GET feature info with column param', () => {
-      service.getFeatureCard('1', 'Age').subscribe((res) => {
+      service.getFeatureCard('1', 'Age').subscribe(res => {
         expect(res.Feature_Name).toBe('Age');
       });
       const req = httpMock.expectOne(`${apiUrl}feature-card/1/get_feature_info/?column=Age`);
@@ -355,7 +251,7 @@ describe('DataService', () => {
     it('should include file_override when provided', () => {
       service.getFeatureCard('1', 'Age', 'processed/v2.csv').subscribe();
       const req = httpMock.expectOne(
-        `${apiUrl}feature-card/1/get_feature_info/?column=Age&file_override=processed%2Fv2.csv`,
+        `${apiUrl}feature-card/1/get_feature_info/?column=Age&file_override=processed%2Fv2.csv`
       );
       expect(req.request.method).toBe('GET');
       req.flush({});
@@ -365,23 +261,19 @@ describe('DataService', () => {
   // ── getStackedFeatureData ───────────────────────────────────────────
   describe('getStackedFeatureData', () => {
     it('should GET stacked data and preprocess it', () => {
-      service.getStackedFeatureData('2', 'Region').subscribe((res) => {
+      service.getStackedFeatureData('2', 'Region').subscribe(res => {
         expect(res.stacked_data).toBeTruthy();
         expect(res.target_averages).toEqual([]);
       });
-      const req = httpMock.expectOne(
-        `${apiUrl}feature-card/2/get_stacked_feature_data/?column=Region`,
-      );
+      const req = httpMock.expectOne(`${apiUrl}feature-card/2/get_stacked_feature_data/?column=Region`);
       req.flush({ stacked_data: { '0': { A: 10 }, '1': { A: 20 } }, target_averages: [] });
     });
 
     it('should handle null target_averages', () => {
-      service.getStackedFeatureData('2', 'Score').subscribe((res) => {
+      service.getStackedFeatureData('2', 'Score').subscribe(res => {
         expect(res.target_averages).toBeNull();
       });
-      const req = httpMock.expectOne(
-        `${apiUrl}feature-card/2/get_stacked_feature_data/?column=Score`,
-      );
+      const req = httpMock.expectOne(`${apiUrl}feature-card/2/get_stacked_feature_data/?column=Score`);
       req.flush({ stacked_data: { '0': [1, 2] }, target_averages: null });
     });
   });
@@ -409,15 +301,7 @@ describe('DataService', () => {
     });
 
     it('should include optional parameters', () => {
-      service
-        .runPreprocessing(
-          5,
-          [1, 2],
-          { strategy: 'oot', date_column: 'D' },
-          ['X'],
-          [{ Feature_Name: 'A' }],
-        )
-        .subscribe();
+      service.runPreprocessing(5, [1, 2], { strategy: 'oot', date_column: 'D' }, ['X'], [{ Feature_Name: 'A' }]).subscribe();
       const req = httpMock.expectOne(`${apiUrl}preprocessing/run/`);
       expect(req.request.body.options).toEqual([1, 2]);
       expect(req.request.body.split.strategy).toBe('oot');
@@ -430,7 +314,7 @@ describe('DataService', () => {
   // ── getPreprocessingStatus ──────────────────────────────────────────
   describe('getPreprocessingStatus', () => {
     it('should GET status', () => {
-      service.getPreprocessingStatus(10).subscribe((res) => {
+      service.getPreprocessingStatus(10).subscribe(res => {
         expect(res.status).toBe('completed');
       });
       const req = httpMock.expectOne(`${apiUrl}preprocessing/status/10/`);
@@ -442,7 +326,7 @@ describe('DataService', () => {
   // ── getDatqSummaryRow ───────────────────────────────────────────────
   describe('getDatqSummaryRow', () => {
     it('should GET with column param', () => {
-      service.getDatqSummaryRow(7, 'Age').subscribe((res) => {
+      service.getDatqSummaryRow(7, 'Age').subscribe(res => {
         expect(res.row).toBeTruthy();
       });
       const req = httpMock.expectOne(`${apiUrl}preprocessing/datq_summary_row/7/?column=Age`);
@@ -507,7 +391,7 @@ describe('DataService', () => {
   // ── getModelingStatus ───────────────────────────────────────────────
   describe('getModelingStatus', () => {
     it('should GET status for file', () => {
-      service.getModelingStatus(3).subscribe((res) => {
+      service.getModelingStatus(3).subscribe(res => {
         expect(res.status).toBe('completed');
       });
       const req = httpMock.expectOne(`${apiUrl}modeling/status/3/`);
@@ -555,7 +439,7 @@ describe('DataService', () => {
     });
 
     it('getSfsResults should GET results', () => {
-      service.getSfsResults(5).subscribe((res) => {
+      service.getSfsResults(5).subscribe(res => {
         expect(res.forward).toBeTruthy();
       });
       const req = httpMock.expectOne(`${apiUrl}modeling/sfs/5/`);
@@ -599,7 +483,7 @@ describe('DataService', () => {
   // ── Pipeline CRUD ───────────────────────────────────────────────────
   describe('Pipeline CRUD', () => {
     it('listPipelineRuns should GET list', () => {
-      service.listPipelineRuns().subscribe((res) => {
+      service.listPipelineRuns().subscribe(res => {
         expect(res.length).toBe(2);
       });
       const req = httpMock.expectOne(`${apiUrl}pipeline/`);
@@ -607,7 +491,7 @@ describe('DataService', () => {
     });
 
     it('createPipelineRun should POST', () => {
-      service.createPipelineRun({ name: 'Test', pipeline_type: 'boosting' }).subscribe((res) => {
+      service.createPipelineRun({ name: 'Test', pipeline_type: 'boosting' }).subscribe(res => {
         expect(res.id).toBe(1);
       });
       const req = httpMock.expectOne(`${apiUrl}pipeline/create/`);
@@ -616,7 +500,7 @@ describe('DataService', () => {
     });
 
     it('getPipelineRun should GET by id', () => {
-      service.getPipelineRun(3).subscribe((res) => {
+      service.getPipelineRun(3).subscribe(res => {
         expect(res.name).toBe('MyPipeline');
       });
       const req = httpMock.expectOne(`${apiUrl}pipeline/3/`);
@@ -639,13 +523,11 @@ describe('DataService', () => {
 
     it('getPipelineReportUrl should build correct URL', () => {
       expect(service.getPipelineReportUrl(5)).toBe(`${apiUrl}pipeline/5/report/?output=html`);
-      expect(service.getPipelineReportUrl(5, 'print')).toBe(
-        `${apiUrl}pipeline/5/report/?output=print`,
-      );
+      expect(service.getPipelineReportUrl(5, 'print')).toBe(`${apiUrl}pipeline/5/report/?output=print`);
     });
 
     it('downloadPipelineReport should GET blob', () => {
-      service.downloadPipelineReport(5).subscribe((res) => {
+      service.downloadPipelineReport(5).subscribe(res => {
         expect(res instanceof Blob).toBeTrue();
       });
       const req = httpMock.expectOne(`${apiUrl}pipeline/5/report/?output=html`);
@@ -656,7 +538,7 @@ describe('DataService', () => {
   // ── AI endpoints ────────────────────────────────────────────────────
   describe('AI endpoints', () => {
     it('executeAiAction should POST', () => {
-      service.executeAiAction(1, 'update_notes', { content: 'test' }).subscribe((res) => {
+      service.executeAiAction(1, 'update_notes', { content: 'test' }).subscribe(res => {
         expect(res.status).toBe('success');
       });
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
@@ -667,7 +549,8 @@ describe('DataService', () => {
 
     // ── v2.38.0: cross-trace link forwarding (parent_span_id) ────────────
     it('executeAiAction should include parent_span_id when provided (v2.38.0)', () => {
-      service.executeAiAction(7, 'update_config', { foo: 'bar' }, 'chat-span-deadbeef').subscribe();
+      service.executeAiAction(7, 'update_config', { foo: 'bar' }, 'chat-span-deadbeef')
+        .subscribe();
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
       expect(req.request.body.parent_span_id).toBe('chat-span-deadbeef');
       req.flush({ status: 'success' });
@@ -692,15 +575,13 @@ describe('DataService', () => {
     });
 
     it('executeAiAction should include source=codeline when provided', () => {
-      service
-        .executeAiAction(
-          7,
-          'execute_code',
-          { code: "df['x']=1", mode: 'exploratory' },
-          undefined,
-          'codeline',
-        )
-        .subscribe();
+      service.executeAiAction(
+        7,
+        'execute_code',
+        { code: "df['x']=1", mode: 'exploratory' },
+        undefined,
+        'codeline',
+      ).subscribe();
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
       expect(req.request.body.source).toBe('codeline');
       expect(req.request.body.action_type).toBe('execute_code');
@@ -741,7 +622,7 @@ describe('DataService', () => {
     });
 
     it('sendAiChat should POST message with context', () => {
-      service.sendAiChat('Hello', { summary: [] }, 'data_quality', []).subscribe((res) => {
+      service.sendAiChat('Hello', { summary: [] }, 'data_quality', []).subscribe(res => {
         expect(res.message).toBeTruthy();
       });
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
@@ -758,21 +639,19 @@ describe('DataService', () => {
     });
 
     it('submitAiFeedback should POST feedback payload with target ids', () => {
-      service
-        .submitAiFeedback({
-          liked: true,
-          rating: 5,
-          comment: 'Helpful answer',
-          source: 'declarai-ai-chat-panel',
-          feedback_id: 'feedback-1',
-          target_trace_id: 'trace-1',
-          target_span_id: 'span-1',
-          target_session_id: 'declarai-file-42',
-          submitted_at: '2026-06-05T01:02:03.000Z',
-        })
-        .subscribe((res) => {
-          expect(res.status).toBe('success');
-        });
+      service.submitAiFeedback({
+        liked: true,
+        rating: 5,
+        comment: 'Helpful answer',
+        source: 'declarai-ai-chat-panel',
+        feedback_id: 'feedback-1',
+        target_trace_id: 'trace-1',
+        target_span_id: 'span-1',
+        target_session_id: 'declarai-file-42',
+        submitted_at: '2026-06-05T01:02:03.000Z',
+      }).subscribe(res => {
+        expect(res.status).toBe('success');
+      });
 
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/feedback/`);
       expect(req.request.method).toBe('POST');
@@ -785,18 +664,16 @@ describe('DataService', () => {
     });
 
     it('sendAiChat should include preclassified intent labels when provided', () => {
-      service
-        .sendAiChat(
-          'Analyze the current summary',
-          {},
-          'data_quality',
-          [],
-          42,
-          'gpt-5.5',
-          ['C'],
-          'get_ai_support_button',
-        )
-        .subscribe();
+      service.sendAiChat(
+        'Analyze the current summary',
+        {},
+        'data_quality',
+        [],
+        42,
+        'gpt-5.5',
+        ['C'],
+        'get_ai_support_button',
+      ).subscribe();
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
       expect(req.request.body.intent_labels).toEqual(['C']);
       expect(req.request.body.intent_source).toBe('get_ai_support_button');
@@ -804,19 +681,17 @@ describe('DataService', () => {
     });
 
     it('sendAiChat should include source=codeline when provided', () => {
-      service
-        .sendAiChat(
-          'Create a ratio feature',
-          { codeline_position: 'after_data_preview' },
-          'codeline_after_data_preview',
-          [],
-          42,
-          undefined,
-          undefined,
-          undefined,
-          'codeline',
-        )
-        .subscribe();
+      service.sendAiChat(
+        'Create a ratio feature',
+        { codeline_position: 'after_data_preview' },
+        'codeline_after_data_preview',
+        [],
+        42,
+        undefined,
+        undefined,
+        undefined,
+        'codeline',
+      ).subscribe();
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/chat/`);
       expect(req.request.body.source).toBe('codeline');
       expect(req.request.body.section).toBe('codeline_after_data_preview');
@@ -824,7 +699,7 @@ describe('DataService', () => {
     });
 
     it('pushAiCache should POST artifacts with file_id', () => {
-      service.pushAiCache(1, { split_validation: { splits: [] } }).subscribe((res) => {
+      service.pushAiCache(1, { split_validation: { splits: [] } }).subscribe(res => {
         expect(res.status).toBe('success');
       });
       const req = httpMock.expectOne(`${apiUrl}ai-assistant/cache/`);
@@ -853,7 +728,7 @@ describe('DataService', () => {
         error: (err) => {
           expect(err).toBeTruthy();
           done();
-        },
+        }
       });
       const req = httpMock.expectOne(`${apiUrl}declaration/999/preview/`);
       req.flush('Not Found', { status: 404, statusText: 'Not Found' });
@@ -864,7 +739,7 @@ describe('DataService', () => {
         error: (err) => {
           expect(err).toBeTruthy();
           done();
-        },
+        }
       });
       const req = httpMock.expectOne(`${apiUrl}preprocessing/apply/`);
       req.flush('Error', { status: 500, statusText: 'Server Error' });
@@ -874,9 +749,7 @@ describe('DataService', () => {
   // ── getFeatureExplainability ────────────────────────────────────────
   describe('getFeatureExplainability', () => {
     it('should POST with required and optional params', () => {
-      service
-        .getFeatureExplainability(1, 'Income', 'proc.csv', 100, 'model.pkl', ['A', 'B'])
-        .subscribe();
+      service.getFeatureExplainability(1, 'Income', 'proc.csv', 100, 'model.pkl', ['A', 'B']).subscribe();
       const req = httpMock.expectOne(`${apiUrl}modeling/feature-explainability/`);
       expect(req.request.body.file_id).toBe(1);
       expect(req.request.body.feature_name).toBe('Income');

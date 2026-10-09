@@ -7,15 +7,12 @@ import { AssistantStep } from './ai-assistant.service';
 import { AuthService } from './auth.service';
 
 @Injectable({
-  providedIn: 'root',
+  providedIn: 'root'
 })
 export class DataService {
   private apiUrl = environment.apiBaseUrl;
 
-  constructor(
-    private http: HttpClient,
-    private auth: AuthService,
-  ) {}
+  constructor(private http: HttpClient, private auth: AuthService) { }
 
   uploadFile(file: File): Observable<any> {
     const formData = new FormData();
@@ -37,11 +34,7 @@ export class DataService {
     return this.http.get(url);
   }
 
-  getStackedFeatureData(
-    fileId: string,
-    columnName: string,
-    fileOverride?: string,
-  ): Observable<any> {
+  getStackedFeatureData(fileId: string, columnName: string, fileOverride?: string): Observable<any> {
     let url = `${this.apiUrl}feature-card/${fileId}/get_stacked_feature_data/?column=${encodeURIComponent(columnName)}`;
     if (fileOverride) url += `&file_override=${encodeURIComponent(fileOverride)}`;
     console.log('Requesting URL:', url);
@@ -50,10 +43,7 @@ export class DataService {
       map((data: any) => {
         // Backend now returns { stacked_data, target_averages }
         const raw = data?.stacked_data ?? data;
-        return {
-          stacked_data: this.preprocessStackedData(raw),
-          target_averages: data?.target_averages ?? null,
-        };
+        return { stacked_data: this.preprocessStackedData(raw), target_averages: data?.target_averages ?? null };
       }),
       catchError((error: any) => {
         console.error('Error in getStackedFeatureData:', error);
@@ -61,7 +51,7 @@ export class DataService {
           console.error('JSON parsing error:', error.message);
         }
         return throwError(() => new Error(error.message || 'An unknown error occurred'));
-      }),
+      })
     );
   }
 
@@ -72,31 +62,24 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error applying preprocessing:', error);
         return throwError(() => new Error(error.message || 'Failed to apply preprocessing'));
-      }),
+      })
     );
   }
 
   // Run preprocessing. If options omitted, backend uses previously saved config.
   // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  runPreprocessing(
-    fileId: number,
-    options?: number[],
-    split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number },
-    excludedVariables?: string[],
-    dataDictionary?: any[],
-  ): Observable<any> {
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[], dataDictionary?: any[]): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options) payload.options = options;
     if (split) payload.split = split;
-    if (excludedVariables && excludedVariables.length > 0)
-      payload.excluded_variables = excludedVariables;
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     if (dataDictionary && dataDictionary.length > 0) payload.data_dictionary = dataDictionary;
     return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running preprocessing:', error);
         return throwError(() => new Error(error.message || 'Failed to run preprocessing'));
-      }),
+      })
     );
   }
 
@@ -106,36 +89,29 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting preprocessing status:', error);
         return throwError(() => new Error(error.message || 'Failed to get preprocessing status'));
-      }),
+      })
     );
   }
 
   // Get quality summary row for a specific variable from saved datq_summary JSON
   getDatqSummaryRow(fileId: number, column: string): Observable<any> {
-    return this.http
-      .get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params: { column } })
-      .pipe(
-        catchError((error: any) => {
-          console.error('Error getting datq summary row:', error);
-          return throwError(() => new Error(error.message || 'Failed to get quality summary'));
-        }),
-      );
+    return this.http.get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params: { column } }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting datq summary row:', error);
+        return throwError(() => new Error(error.message || 'Failed to get quality summary'));
+      })
+    );
   }
 
   // Get detailed PSI report for a specific variable from processed file
-  getDatqDetail(
-    fileId: number,
-    processedFile: string,
-    column: string,
-    split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number },
-  ): Observable<any> {
+  getDatqDetail(fileId: number, processedFile: string, column: string, split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile, column };
     if (split) payload.split = split;
     return this.http.post(`${this.apiUrl}preprocessing/datq_detail/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error getting datq detail:', error);
         return throwError(() => new Error(error.message || 'Failed to get data quality detail'));
-      }),
+      })
     );
   }
 
@@ -148,44 +124,26 @@ export class DataService {
     metric: 'psi' | 'csi' | 'ks' | 'jsd' | 'wd' = 'psi',
     windows?: number[],
     minBinShareAllowed?: number,
-    split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number },
+    split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }
   ): Observable<any> {
-    const payload: any = {
-      file_id: fileId,
-      processed_file: processedFile,
-      column,
-      date_column: dateColumn,
-      metric,
-    };
+    const payload: any = { file_id: fileId, processed_file: processedFile, column, date_column: dateColumn, metric };
     if (windows && windows.length) payload.windows = windows;
     if (minBinShareAllowed != null) payload.min_bin_share_allowed = minBinShareAllowed;
     if (split) payload.split = split;
     return this.http.post(`${this.apiUrl}preprocessing/datq_timeseries/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error getting datq timeseries:', error);
-        return throwError(
-          () => new Error(error.message || 'Failed to get data quality timeseries'),
-        );
-      }),
+        return throwError(() => new Error(error.message || 'Failed to get data quality timeseries'));
+      })
     );
   }
 
   // Start modeling with the processed file path and optional algorithm
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  startModeling(
-    fileId: number,
-    processedFile: string,
-    algorithm?: string,
-    excludedVariables?: string[],
-    encodingPlan?: any[],
-    encodingUseNative?: boolean,
-    businessUnderstanding?: any,
-    pipelineRunId?: number,
-  ): Observable<any> {
+  startModeling(fileId: number, processedFile: string, algorithm?: string, excludedVariables?: string[], encodingPlan?: any[], encodingUseNative?: boolean, businessUnderstanding?: any, pipelineRunId?: number): Observable<any> {
     const payload: any = { file_id: fileId, processed_file: processedFile };
     if (algorithm) payload.algorithm = algorithm;
-    if (excludedVariables && excludedVariables.length > 0)
-      payload.excluded_variables = excludedVariables;
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     if (encodingPlan && encodingPlan.length > 0) payload.encoding_plan = encodingPlan;
     if (encodingUseNative !== undefined) payload.encoding_use_native = encodingUseNative;
     if (businessUnderstanding) payload.business_understanding = businessUnderstanding;
@@ -193,16 +151,8 @@ export class DataService {
     return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting modeling:', error);
-        return throwError(
-          () =>
-            new Error(
-              error.error?.model?.error ||
-                error.error?.error ||
-                error.message ||
-                'Failed to start modeling',
-            ),
-        );
-      }),
+        return throwError(() => new Error(error.error?.model?.error || error.error?.error || error.message || 'Failed to start modeling'));
+      })
     );
   }
 
@@ -212,7 +162,7 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting modeling status:', error);
         return throwError(() => new Error(error.message || 'Failed to get modeling status'));
-      }),
+      })
     );
   }
 
@@ -357,25 +307,22 @@ export class DataService {
   // status, stop it gracefully, and fetch persisted results.
 
   // Start hyperparameter tuning with an editable param space + compute config.
-  startHyperparam(
-    fileId: number,
-    options: {
-      executionId?: string;
-      paramSpace?: any;
-      fixedParams?: any;
-      features?: string[];
-      nIter?: number;
-      cvFolds?: number;
-      nJobs?: number;
-      primaryMetric?: string;
-      threshold?: number;
-      validationCurvePoints?: number;
-      searchMethod?: string;
-      gridPointsPerParam?: number;
-      gridPointsPerParamMap?: { [param: string]: number };
-      algorithm?: string;
-    } = {},
-  ): Observable<any> {
+  startHyperparam(fileId: number, options: {
+    executionId?: string;
+    paramSpace?: any;
+    fixedParams?: any;
+    features?: string[];
+    nIter?: number;
+    cvFolds?: number;
+    nJobs?: number;
+    primaryMetric?: string;
+    threshold?: number;
+    validationCurvePoints?: number;
+    searchMethod?: string;
+    gridPointsPerParam?: number;
+    gridPointsPerParamMap?: { [param: string]: number };
+    algorithm?: string;
+  } = {}): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options.executionId) payload.execution_id = options.executionId;
     if (options.paramSpace) payload.param_space = options.paramSpace;
@@ -386,19 +333,16 @@ export class DataService {
     if (typeof options.nJobs === 'number') payload.n_jobs = options.nJobs;
     if (options.primaryMetric) payload.primary_metric = options.primaryMetric;
     if (typeof options.threshold === 'number') payload.threshold = options.threshold;
-    if (typeof options.validationCurvePoints === 'number')
-      payload.validation_curve_points = options.validationCurvePoints;
+    if (typeof options.validationCurvePoints === 'number') payload.validation_curve_points = options.validationCurvePoints;
     if (options.searchMethod) payload.search_method = options.searchMethod;
-    if (typeof options.gridPointsPerParam === 'number')
-      payload.grid_points_per_param = options.gridPointsPerParam;
-    if (options.gridPointsPerParamMap)
-      payload.grid_points_per_param_map = options.gridPointsPerParamMap;
+    if (typeof options.gridPointsPerParam === 'number') payload.grid_points_per_param = options.gridPointsPerParam;
+    if (options.gridPointsPerParamMap) payload.grid_points_per_param_map = options.gridPointsPerParamMap;
     if (options.algorithm) payload.algorithm = options.algorithm;
     return this.http.post(`${this.apiUrl}modeling/hyperparam/start/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error starting hyperparameter tuning:', error);
         return throwError(() => error);
-      }),
+      })
     );
   }
 
@@ -408,7 +352,7 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting hyperparameter status:', error);
         return throwError(() => new Error(error.message || 'Failed to get hyperparameter status'));
-      }),
+      })
     );
   }
 
@@ -418,7 +362,7 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error stopping hyperparameter tuning:', error);
         return throwError(() => new Error(error.message || 'Failed to stop hyperparameter tuning'));
-      }),
+      })
     );
   }
 
@@ -428,19 +372,12 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting hyperparameter results:', error);
         return throwError(() => new Error(error.message || 'Failed to get hyperparameter results'));
-      }),
+      })
     );
   }
 
   // Get feature explainability data (SHAP beeswarm + partial dependence)
-  getFeatureExplainability(
-    fileId: number,
-    featureName: string,
-    processedFile?: string,
-    nSamples?: number,
-    modelPath?: string,
-    selectedFeatures?: string[],
-  ): Observable<any> {
+  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[]): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };
     if (processedFile) payload.processed_file = processedFile;
     if (nSamples) payload.n_samples = nSamples;
@@ -451,45 +388,30 @@ export class DataService {
         console.error('Error getting feature explainability:', error);
         // Preserve the full error structure so components can access error.error.reason, etc.
         return throwError(() => error);
-      }),
+      })
     );
   }
-
+  
   // Analyze categorical features and return encoding plan
-  analyzeEncoding(
-    fileId: number,
-    processedFile: string,
-    dataDictionary: any[],
-    excludedVariables?: string[],
-  ): Observable<any> {
-    const payload: any = {
-      file_id: fileId,
-      processed_file: processedFile,
-      data_dictionary: dataDictionary,
-    };
-    if (excludedVariables && excludedVariables.length > 0)
-      payload.excluded_variables = excludedVariables;
+  analyzeEncoding(fileId: number, processedFile: string, dataDictionary: any[], excludedVariables?: string[]): Observable<any> {
+    const payload: any = { file_id: fileId, processed_file: processedFile, data_dictionary: dataDictionary };
+    if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     return this.http.post(`${this.apiUrl}encoding/analyze/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error analyzing encoding:', error);
         return throwError(() => new Error(error.message || 'Failed to analyze encoding'));
-      }),
+      })
     );
   }
 
   // Apply encoding based on user-adjusted plan
-  applyEncoding(
-    fileId: number,
-    processedFile: string,
-    plan: any[],
-    useNative: boolean = true,
-  ): Observable<any> {
+  applyEncoding(fileId: number, processedFile: string, plan: any[], useNative: boolean = true): Observable<any> {
     const payload = { file_id: fileId, processed_file: processedFile, plan, use_native: useNative };
     return this.http.post(`${this.apiUrl}encoding/apply/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error applying encoding:', error);
         return throwError(() => new Error(error.message || 'Failed to apply encoding'));
-      }),
+      })
     );
   }
 
@@ -507,13 +429,10 @@ export class DataService {
   private preprocessStackedData(data: any): any {
     return Object.keys(data).reduce((acc: any, key: string) => {
       if (typeof data[key] === 'object' && data[key] !== null) {
-        acc[key] = Object.entries(data[key]).reduce(
-          (innerAcc: any, [innerKey, innerValue]: [string, any]) => {
-            innerAcc[innerKey] = innerValue === null ? 'NaN' : innerValue;
-            return innerAcc;
-          },
-          {} as { [key: string]: any },
-        );
+        acc[key] = Object.entries(data[key]).reduce((innerAcc: any, [innerKey, innerValue]: [string, any]) => {
+          innerAcc[innerKey] = innerValue === null ? 'NaN' : innerValue;
+          return innerAcc;
+        }, {} as {[key: string]: any});
       } else {
         acc[key] = data[key];
       }
@@ -523,18 +442,12 @@ export class DataService {
 
   // Get VIF decomposition detail for a specific feature
   getVifDetail(fileId: number, feature: string, executionId?: string): Observable<any> {
-    return this.http
-      .post(`${this.apiUrl}modeling/vif-detail/`, {
-        file_id: fileId,
-        feature,
-        execution_id: executionId,
+    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting VIF detail:', error);
+        return throwError(() => error);
       })
-      .pipe(
-        catchError((error: any) => {
-          console.error('Error getting VIF detail:', error);
-          return throwError(() => error);
-        }),
-      );
+    );
   }
 
   // ===== Pipeline Run CRUD =====
@@ -544,7 +457,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error listing pipeline runs:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -553,7 +466,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error creating pipeline run:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -562,7 +475,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error getting pipeline run:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -571,7 +484,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error updating pipeline run:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -580,7 +493,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error deleting pipeline run:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -589,26 +502,20 @@ export class DataService {
   }
 
   downloadPipelineReport(id: number): Observable<Blob> {
-    return this.http
-      .get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob' })
-      .pipe(
-        catchError((err: any) => {
-          console.error('Error downloading pipeline report:', err);
-          return throwError(() => err);
-        }),
-      );
+    return this.http.get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading pipeline report:', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   // ===== AI Action Execution (general-purpose) =====
 
-  executeAiAction(
-    fileId: number,
-    actionType: string,
-    payload: any,
-    parentSpanId?: string,
-    source?: 'codeline' | 'panel',
-    approval?: { approval_id: string; proposal_sha256: string },
-  ): Observable<any> {
+  executeAiAction(fileId: number, actionType: string, payload: any,
+                  parentSpanId?: string,
+                  source?: 'codeline' | 'panel',
+                  approval?: { approval_id: string; proposal_sha256: string }): Observable<any> {
     const body: any = {
       file_id: fileId,
       action_type: actionType,
@@ -627,22 +534,13 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error executing AI action:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
-  prepareAiAction(
-    fileId: number,
-    actionType: string,
-    payload: any,
-    parentSpanId?: string,
-  ): Observable<any> {
+  prepareAiAction(fileId: number, actionType: string, payload: any, parentSpanId?: string): Observable<any> {
     return this.http.post(`${this.apiUrl}ai-assistant/prepare-action/`, {
-      file_id: fileId,
-      action_type: actionType,
-      payload,
-      parent_span_id: parentSpanId,
-      source: 'panel',
+      file_id: fileId, action_type: actionType, payload, parent_span_id: parentSpanId, source: 'panel',
     });
   }
 
@@ -675,18 +573,13 @@ export class DataService {
    * test keeps working, and a turn that streams is indistinguishable from
    * one that doesn't as far as the result is concerned.
    */
-  sendAiChat(
-    message: string,
-    context: any,
-    section: string,
-    history: Array<{ role: string; content: string }>,
-    fileId?: number,
-    model?: string,
-    intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'R'>,
-    intentSource?: string,
-    source?: 'codeline' | 'panel',
-    opts?: { onStep?: (step: AssistantStep) => void },
-  ): Observable<any> {
+  sendAiChat(message: string, context: any, section: string,
+             history: Array<{role: string; content: string}>,
+             fileId?: number, model?: string,
+             intentLabels?: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'R'>,
+             intentSource?: string,
+             source?: 'codeline' | 'panel',
+             opts?: { onStep?: (step: AssistantStep) => void }): Observable<any> {
     const body: any = { message, context, section, history };
     if (fileId != null) {
       body.file_id = fileId;
@@ -710,7 +603,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error in AI assistant chat:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -727,7 +620,7 @@ export class DataService {
    * mid-turn doesn't leave a socket open.
    */
   private streamAiChat(body: any, onStep: (step: AssistantStep) => void): Observable<any> {
-    return new Observable<any>((subscriber) => {
+    return new Observable<any>(subscriber => {
       const controller = new AbortController();
       let settled = false;
 
@@ -764,65 +657,63 @@ export class DataService {
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.auth.csrfToken },
         body: JSON.stringify({ ...body, stream: true }),
         signal: controller.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok || !response.body) {
-            // A non-200 means the turn never started (validation, 503, proxy
-            // error) — the body is the ordinary DRF error payload, not NDJSON.
-            let payload: any = null;
-            try {
-              payload = await response.json();
-            } catch {
-              payload = null;
-            }
-            throw {
-              status: response.status,
-              error: payload,
-              message: payload?.error || `Request failed (${response.status})`,
-            };
+      }).then(async response => {
+        if (!response.ok || !response.body) {
+          // A non-200 means the turn never started (validation, 503, proxy
+          // error) — the body is the ordinary DRF error payload, not NDJSON.
+          let payload: any = null;
+          try {
+            payload = await response.json();
+          } catch {
+            payload = null;
           }
+          throw {
+            status: response.status,
+            error: payload,
+            message: payload?.error || `Request failed (${response.status})`,
+          };
+        }
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-          for (;;) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            // Keep the trailing fragment — a chunk can split a line in half.
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              try {
-                handle(JSON.parse(line));
-              } catch {
-                console.warn('Skipping malformed progress line:', line);
-              }
-            }
-          }
-          if (buffer.trim()) {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          // Keep the trailing fragment — a chunk can split a line in half.
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
             try {
-              handle(JSON.parse(buffer));
+              handle(JSON.parse(line));
             } catch {
-              console.warn('Skipping malformed trailing progress line:', buffer);
+              console.warn('Skipping malformed progress line:', line);
             }
           }
-          if (!settled) {
-            // Connection closed before a terminal line — treat as a failure
-            // rather than silently completing with no answer.
-            throw {
-              status: 0,
-              message: 'The assistant connection closed before the answer arrived.',
-            };
+        }
+        if (buffer.trim()) {
+          try {
+            handle(JSON.parse(buffer));
+          } catch {
+            console.warn('Skipping malformed trailing progress line:', buffer);
           }
-        })
-        .catch((err) => {
-          if (settled || controller.signal.aborted) return;
-          console.error('Error in AI assistant chat:', err);
-          subscriber.error(err);
-        });
+        }
+        if (!settled) {
+          // Connection closed before a terminal line — treat as a failure
+          // rather than silently completing with no answer.
+          throw {
+            status: 0,
+            message: 'The assistant connection closed before the answer arrived.',
+          };
+        }
+      }).catch(err => {
+        if (settled || controller.signal.aborted) return;
+        console.error('Error in AI assistant chat:', err);
+        subscriber.error(err);
+      });
 
       return () => controller.abort();
     });
@@ -845,7 +736,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error submitting AI feedback:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -854,40 +745,31 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error fetching AI models:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
   pushAiCache(fileId: number, artifacts: { [key: string]: any }): Observable<any> {
-    return this.http
-      .post(`${this.apiUrl}ai-assistant/cache/`, {
-        file_id: fileId,
-        artifacts,
+    return this.http.post(`${this.apiUrl}ai-assistant/cache/`, {
+      file_id: fileId,
+      artifacts,
+    }).pipe(
+      catchError((err: any) => {
+        console.error('Error pushing AI cache:', err);
+        return throwError(() => err);
       })
-      .pipe(
-        catchError((err: any) => {
-          console.error('Error pushing AI cache:', err);
-          return throwError(() => err);
-        }),
-      );
+    );
   }
 
-  runEvaluation(
-    fileId: number,
-    threshold: number = 0.5,
-    features?: string[],
-    executionId?: string,
-  ): Observable<any> {
+  runEvaluation(fileId: number, threshold: number = 0.5, features?: string[], executionId?: string): Observable<any> {
     const payload: any = { file_id: fileId, threshold };
     if (features && features.length) payload.features = features;
     if (executionId) payload.execution_id = executionId;
     return this.http.post(`${this.apiUrl}evaluation/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running evaluation:', error);
-        return throwError(
-          () => new Error(error?.error?.error || error.message || 'Failed to run evaluation'),
-        );
-      }),
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to run evaluation'));
+      })
     );
   }
 
@@ -896,7 +778,7 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting evaluation status:', error);
         return throwError(() => new Error(error.message || 'Failed to get evaluation status'));
-      }),
+      })
     );
   }
 
@@ -914,41 +796,27 @@ export class DataService {
       catchError((error: any) => {
         console.error('Error getting deploy readiness:', error);
         return throwError(() => error);
-      }),
+      })
     );
   }
 
-  createDeploymentBundle(
-    fileId: number,
-    executionId?: string,
-    assessmentId?: string,
-  ): Observable<any> {
-    return this.http
-      .post(`${this.apiUrl}deployment/bundle/`, {
-        file_id: fileId,
-        execution_id: executionId,
-        assessment_id: assessmentId,
+  createDeploymentBundle(fileId: number, executionId?: string, assessmentId?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId }).pipe(
+      catchError((error: any) => {
+        console.error('Error creating deployment bundle:', error);
+        // Preserve structured 409 readiness payload for the deployment UI.
+        return throwError(() => error);
       })
-      .pipe(
-        catchError((error: any) => {
-          console.error('Error creating deployment bundle:', error);
-          // Preserve structured 409 readiness payload for the deployment UI.
-          return throwError(() => error);
-        }),
-      );
+    );
   }
 
   getDeploymentStatus(fileId: number, bundleId?: string): Observable<any> {
-    return this.http
-      .get(`${this.apiUrl}deployment/status/${fileId}/`, {
-        params: bundleId ? { bundle_id: bundleId } : {},
+    return this.http.get(`${this.apiUrl}deployment/status/${fileId}/`, { params: bundleId ? { bundle_id: bundleId } : {} }).pipe(
+      catchError((error: any) => {
+        console.error('Error getting deployment status:', error);
+        return throwError(() => new Error(error.message || 'Failed to get deployment status'));
       })
-      .pipe(
-        catchError((error: any) => {
-          console.error('Error getting deployment status:', error);
-          return throwError(() => new Error(error.message || 'Failed to get deployment status'));
-        }),
-      );
+    );
   }
 
   scoreDeployment(fileId: number, file: File, bundleId?: string): Observable<any> {
@@ -959,10 +827,8 @@ export class DataService {
     return this.http.post(`${this.apiUrl}deployment/score/`, form).pipe(
       catchError((error: any) => {
         console.error('Error scoring deployment batch:', error);
-        return throwError(
-          () => new Error(error?.error?.error || error.message || 'Failed to score batch'),
-        );
-      }),
+        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to score batch'));
+      })
     );
   }
 
@@ -976,16 +842,11 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error downloading CRISP export pack:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
-  runMonitoring(
-    fileId: number,
-    file: File,
-    scoreCol?: string,
-    targetCol?: string,
-  ): Observable<any> {
+  runMonitoring(fileId: number, file: File, scoreCol?: string, targetCol?: string): Observable<any> {
     const form = new FormData();
     form.append('file_id', String(fileId));
     form.append('file', file, file.name);
@@ -994,22 +855,18 @@ export class DataService {
     return this.http.post(`${this.apiUrl}crisp/monitoring/`, form).pipe(
       catchError((err: any) => {
         console.error('Error running monitoring:', err);
-        return throwError(
-          () => new Error(err?.error?.error || err.message || 'Failed to run monitoring'),
-        );
-      }),
+        return throwError(() => new Error(err?.error?.error || err.message || 'Failed to run monitoring'));
+      })
     );
   }
 
   clonePipelineIteration(pipelineRunId: number): Observable<any> {
-    return this.http
-      .post(`${this.apiUrl}crisp/iteration/clone/`, { pipeline_run_id: pipelineRunId })
-      .pipe(
-        catchError((err: any) => {
-          console.error('Error cloning pipeline iteration:', err);
-          return throwError(() => err);
-        }),
-      );
+    return this.http.post(`${this.apiUrl}crisp/iteration/clone/`, { pipeline_run_id: pipelineRunId }).pipe(
+      catchError((err: any) => {
+        console.error('Error cloning pipeline iteration:', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   getSequentialPatterns(fileId: number, timeCol?: string): Observable<any> {
@@ -1019,7 +876,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error fetching sequential patterns:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -1028,38 +885,26 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error fetching enriched DATQ:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
   downloadEvalPack(fileId: number, executionId?: string, assessmentId?: string): Observable<Blob> {
-    return this.http
-      .post(
-        `${this.apiUrl}evaluation/pack/`,
-        { file_id: fileId, execution_id: executionId, assessment_id: assessmentId },
-        { responseType: 'blob' },
-      )
-      .pipe(
-        catchError((err: any) => {
-          console.error('Error downloading evaluation pack:', err);
-          return throwError(() => err);
-        }),
-      );
+    return this.http.post(`${this.apiUrl}evaluation/pack/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId }, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading evaluation pack:', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   downloadDeploymentPack(fileId: number, bundleId?: string): Observable<Blob> {
-    return this.http
-      .post(
-        `${this.apiUrl}deployment/pack/`,
-        { file_id: fileId, bundle_id: bundleId },
-        { responseType: 'blob' },
-      )
-      .pipe(
-        catchError((err: any) => {
-          console.error('Error downloading deployment pack:', err);
-          return throwError(() => err);
-        }),
-      );
+    return this.http.post(`${this.apiUrl}deployment/pack/`, { file_id: fileId, bundle_id: bundleId }, { responseType: 'blob' }).pipe(
+      catchError((err: any) => {
+        console.error('Error downloading deployment pack:', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   promoteChampion(fileId: number, payload: any): Observable<any> {
@@ -1067,7 +912,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error promoting champion:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -1076,7 +921,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error fetching SFS history:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -1085,7 +930,7 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error saving governance checks:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
 
@@ -1098,7 +943,8 @@ export class DataService {
       catchError((err: any) => {
         console.error('Error comparing models:', err);
         return throwError(() => err);
-      }),
+      })
     );
   }
+
 }

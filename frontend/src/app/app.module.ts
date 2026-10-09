@@ -13,8 +13,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { A11yModule } from '@angular/cdk/a11y';
 import { MatDialogModule } from '@angular/material/dialog';
-import { FormsModule } from '@angular/forms'; // Import FormsModule
-import { MatCheckboxModule } from '@angular/material/checkbox'; // Ensure you have this for MatCheckbox
+import { FormsModule } from '@angular/forms';  // Import FormsModule
+import { MatCheckboxModule } from '@angular/material/checkbox';  // Ensure you have this for MatCheckbox
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
@@ -53,7 +53,7 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
     HomeComponent,
     LoginComponent,
     AiChatPanelComponent,
-    PipelineCodelineComponent,
+    PipelineCodelineComponent
   ],
   imports: [
     BrowserModule,
@@ -86,6 +86,6 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
     SharedService,
     AiAssistantService,
   ],
-  bootstrap: [AppComponent],
+  bootstrap: [AppComponent]
 })
-export class AppModule {}
+export class AppModule { }

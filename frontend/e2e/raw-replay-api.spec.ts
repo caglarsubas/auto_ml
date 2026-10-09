@@ -510,3 +510,127 @@ for (const task of ['classification', 'regression'] as const) {
     }
   });
 }
+
+test('real-session numeric diagnostics retain singular and excluded states through keyboard review', async ({
+  authenticatedApi: api,
+  page,
+}, testInfo) => {
+  const csv = [
+    'x,duplicate,category,outcome',
+    ...Array.from(
+      { length: 200 },
+      (_, i) => `${i % 23},${2 * (i % 23) + 100},${i % 3 ? 'a' : 'b'},${i % 2}`,
+    ),
+  ].join('\n');
+  const uploaded = await api.post('declaration/', {
+    multipart: {
+      file: { name: 'numeric-states.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) },
+      column_separator: 'comma',
+    },
+  });
+  expect(uploaded.status()).toBe(201);
+  const fileId = (await uploaded.json()).id;
+  let pipelineId: number | undefined;
+  try {
+    const prepared = await api.post('preprocessing/run/', {
+      data: { file_id: fileId, options: [], target_column: 'outcome' },
+    });
+    expect(prepared.status()).toBe(200);
+    const trained = await api.post('modeling/start/', {
+      data: {
+        file_id: fileId,
+        processed_file: (await prepared.json()).processed_file,
+        algorithm: 'xgboost',
+        business_understanding: {
+          problem_type: 'classification',
+          objective: 'Synthetic numeric dependence',
+          population: 'Synthetic applicants',
+          prediction_horizon: '12 months',
+          feature_availability: { default: 'available_at_prediction' },
+          target_contract: {
+            target_column: 'outcome',
+            positive_class: 1,
+            event_definition: 'Synthetic event',
+            label_maturity: 'Complete',
+          },
+          success_criteria: { primary_metric: 'roc_auc' },
+        },
+        encoding_plan: [
+          {
+            feature: 'category',
+            user_lom: 'nominal',
+            nunique: 2,
+            encoding_method: 'one_hot_encoding',
+          },
+        ],
+        encoding_use_native: false,
+      },
+    });
+    expect(trained.status()).toBe(200);
+    const run = await trained.json();
+    expect(run.model.collinearity.features.x).toMatchObject({ vif: null, vif_status: 'unbounded' });
+    const excluded = Object.entries(run.model.collinearity.features).find(
+      ([, record]) => (record as { vif_status: string }).vif_status === 'excluded_categorical',
+    )?.[0];
+    expect(excluded).toBeTruthy();
+    const exclusion = await api.post('modeling/vif-detail/', {
+      data: { file_id: fileId, execution_id: run.execution_id, feature: excluded },
+    });
+    expect(exclusion.status()).toBe(200);
+    expect((await exclusion.json()).vif_status).toBe('excluded_categorical');
+    const name = `numeric-review-${fileId}`;
+    const pipeline = await api.post('pipeline/create/', {
+      data: {
+        name,
+        file_id: fileId,
+        current_step: 'modeling',
+        state: {
+          file_id: fileId,
+          pipeline_type: 'boosting',
+          flags: { is_started: true, preprocessing_available: true, modeling_available: true },
+          modeling: { substep: 'modeling_completed', modelingStatus: run },
+        },
+      },
+    });
+    expect(pipeline.status()).toBe(201);
+    pipelineId = (await pipeline.json()).id;
+    await page.context().addCookies((await api.storageState()).cookies);
+    await page.goto('/model-development');
+    await page.getByRole('button', { name: /Saved Pipelines/ }).click();
+    await page
+      .getByTitle(name, { exact: true })
+      .locator('..')
+      .locator('..')
+      .getByRole('button', { name: 'Load', exact: true })
+      .click();
+    const numeric = page.getByTestId('numeric-diagnostics');
+    await numeric.locator('summary').focus();
+    await numeric.locator('summary').press('Space');
+    await expect(numeric).toContainText('Unbounded');
+    await expect(numeric).toContainText('Category excluded');
+    await numeric.getByRole('button', { name: 'Inspect collinearity for x', exact: true }).focus();
+    await numeric
+      .getByRole('button', { name: 'Inspect collinearity for x', exact: true })
+      .press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'VIF Decomposition: x' });
+    await expect(dialog).toContainText('Overall VIF: Unbounded');
+    await expect(dialog).toContainText(run.execution_id);
+    await expect(dialog).toContainText('indistinguishable');
+    await dialog.screenshot({ path: testInfo.outputPath('unbounded-collinearity.png') });
+    await dialog.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    const inspect = numeric.getByRole('button', {
+      name: `Inspect collinearity for ${excluded}`,
+      exact: true,
+    });
+    await inspect.focus();
+    await inspect.press('Enter');
+    const categoryDialog = page.getByRole('dialog', { name: `VIF Decomposition: ${excluded}` });
+    await expect(categoryDialog).toContainText('Overall VIF: Category excluded');
+    await categoryDialog.press('Escape');
+    await expect(inspect).toBeFocused();
+  } finally {
+    if (pipelineId) expect((await api.delete(`pipeline/${pipelineId}/`)).status()).toBe(200);
+    expect((await api.delete(`declaration/${fileId}/`)).status()).toBe(204);
+  }
+});
