@@ -204,7 +204,9 @@ class TestDeclarationSerializer:
             original_name='test.csv',
         )
         s = DeclarationSerializer(decl)
-        assert set(s.data.keys()) == {'id', 'file', 'name', 'original_name', 'uploaded_at', 'has_header'}
+        assert set(s.data.keys()) == {'id', 'file', 'name', 'original_name', 'uploaded_at', 'has_header', 'project_id'}
+        assert s.data['project_id'] is None
+        assert s.fields['project_id'].read_only is True
 
     def test_serializer_read_only_id(self):
         """The id field is read-only."""

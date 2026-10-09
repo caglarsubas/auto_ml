@@ -24,6 +24,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatRippleModule } from '@angular/material/core';
 import { MatIconModule } from '@angular/material/icon';
 
+import { ProjectWorkspaceComponent } from './project-workspace/project-workspace.component';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { DeclarationComponent } from './declaration/declaration.component';
@@ -57,6 +58,7 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
   ],
   imports: [
     BrowserModule,
+    ProjectWorkspaceComponent,
     AppRoutingModule,
     HttpClientModule,
     BrowserAnimationsModule,

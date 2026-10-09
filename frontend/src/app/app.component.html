@@ -72,6 +72,12 @@
 
   </mat-toolbar>
 
+@if (!isLoginPage && !isHomePage && workspace.state.selected; as project) {
+  <div class="workspace-context" role="status">
+    Project: <strong>{{ project.name }}</strong> · {{ project.role }}
+    <a routerLink="/home">Change project at home</a>
+  </div>
+}
 <div class="content-container">
   <router-outlet></router-outlet>
 </div>

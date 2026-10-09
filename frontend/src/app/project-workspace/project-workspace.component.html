@@ -1,0 +1,102 @@
+<section class="workspace" aria-labelledby="workspace-title">
+  <div class="workspace-heading">
+    <h2 id="workspace-title">Project workspace</h2>
+    <button type="button" (click)="refresh()" [disabled]="workspace.state.loading">
+      Refresh access
+    </button>
+  </div>
+  @if (workspace.state.loading) {
+    <p role="status">Checking project access…</p>
+  }
+  @if (workspace.state.error) {
+    <p role="alert">{{ workspace.state.error }}</p>
+  }
+  @if (workspace.state.ready && !workspace.state.governed) {
+    <p>
+      Organization-wide development workspace. Ask an installation operator to enable project
+      governance before using private customer data.
+    </p>
+  }
+  @if (workspace.state.ready && workspace.state.governed) {
+    <label for="workspace-project">Current project</label>
+    <select
+      id="workspace-project"
+      [value]="workspace.projectId || ''"
+      (change)="select($event)"
+      aria-describedby="workspace-role"
+    >
+      <option value="">Select a project</option>
+      @for (project of workspace.state.projects; track project.id) {
+        <option [value]="project.id">{{ project.name }} — {{ project.role }}</option>
+      }
+    </select>
+    <p id="workspace-role" role="status">
+      @if (workspace.state.selected; as project) {
+        Your role: {{ project.role }}.
+        @if (project.role === 'developer') {
+          You can develop models in this project.
+        } @else {
+          You can browse records and download reports. Model development requires a developer role.
+        }
+      } @else if (!workspace.state.projects.length) {
+        No active project memberships. Ask a project administrator to grant access.
+      } @else {
+        Choose the project you want to work in.
+      }
+    </p>
+    @if (workspace.state.selected; as project) {
+      @if (project.role === 'developer') {
+        <a class="workspace-open" [href]="'/model-development?project_id=' + project.id"
+          >Open development workspace</a
+        >
+      }
+      @if (loading) {
+        <p role="status">Loading project records…</p>
+      }
+      @if (recordsError) {
+        <p role="alert">{{ recordsError }}</p>
+      }
+      @if (!loading && !recordsError) {
+        <div class="workspace-records">
+          <div>
+            <h3>Datasets</h3>
+            @if (!datasets.length) {
+              <p>No datasets in this project.</p>
+            }
+            <ul aria-label="Project datasets">
+              @for (dataset of datasets; track dataset.id) {
+                <li>
+                  {{ dataset.original_name || dataset.name }} <span>Dataset {{ dataset.id }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+          <div>
+            <h3>Pipeline records</h3>
+            @if (!pipelines.length) {
+              <p>No pipeline records in this project.</p>
+            }
+            <ul aria-label="Project pipelines">
+              @for (pipeline of pipelines; track pipeline.id) {
+                <li>
+                  <strong>{{ pipeline.name }}</strong
+                  ><span>{{ pipeline.current_step }} · {{ pipeline.status }}</span>
+                  <button
+                    type="button"
+                    (click)="report(pipeline)"
+                    [attr.aria-label]="'Download report for ' + pipeline.name"
+                  >
+                    Download report
+                  </button>
+                </li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+      @if (reportError) {
+        <p role="alert">{{ reportError }}</p>
+      }
+    }
+  }
+</section>

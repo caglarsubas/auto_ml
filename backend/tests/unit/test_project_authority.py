@@ -449,3 +449,62 @@ def test_revocation_during_export_inspection_withholds_the_final_response(world,
     monkeypatch.setattr(ProjectResponseMiddleware, "check_evidence", staticmethod(changed))
     response = clients["developer"].get("/api/projects/")
     assert response.status_code == 403 and b'"name"' not in response.content
+
+
+@pytest.mark.parametrize('role', ['developer', 'reviewer', 'admin'])
+def test_workspace_filter_only_returns_selected_project(world, role):
+    a, b, users, clients, files, pipeline = world
+    ProjectMembership.objects.create(project=b, actor=users[role], role=role)
+    other = PipelineRun.objects.create(name='B record', state={})
+    projects.bind_pipeline(other, b.pk)
+    for project, dataset, run in [(a, files[0], pipeline), (b, files[1], other)]:
+        response = clients[role].get('/api/declaration/', {'project_id': str(project.pk)})
+        assert response.status_code == 200
+        assert [(row['id'], row['project_id']) for row in response.json()] == [(dataset.pk, str(project.pk))]
+        response = clients[role].get('/api/pipeline/', {'project_id': str(project.pk)})
+        assert response.status_code == 200
+        assert [(row['id'], row['project_id']) for row in response.json()] == [(run.pk, str(project.pk))]
+    assert len(clients[role].get('/api/declaration/').json()) == 2
+
+
+@pytest.mark.parametrize('route', ['/api/declaration/', '/api/pipeline/'])
+@pytest.mark.parametrize('selector', ['unavailable', 'invalid', 'empty', 'duplicate'])
+def test_workspace_filter_does_not_fall_back_to_all_records(world, route, selector):
+    a, b, _, clients, _, _ = world
+    query = {
+        'unavailable': f'project_id={b.pk}', 'invalid': 'project_id=malformed',
+        'empty': 'project_id=', 'duplicate': f'project_id={a.pk}&project_id={b.pk}',
+    }[selector]
+    response = clients['developer'].get(route + '?' + query)
+    assert response.status_code == 403
+    assert response.json()['error_code'] in ['project_access_denied', 'project_reference_invalid']
+
+
+@pytest.mark.parametrize('method,route', [
+    ('get', '/api/pipeline/{pipeline}/'), ('get', '/api/pipeline/{pipeline}/report/'),
+    ('get', '/api/declaration/{dataset}/'), ('put', '/api/pipeline/{pipeline}/'),
+    ('delete', '/api/pipeline/{pipeline}/'),
+])
+def test_workspace_filter_cannot_relabel_a_resource(world, method, route):
+    _, b, users, clients, files, pipeline = world
+    ProjectMembership.objects.create(project=b, actor=users['developer'], role='developer')
+    url = route.format(pipeline=pipeline.pk, dataset=files[0].pk) + f'?project_id={b.pk}'
+    response = (getattr(clients['developer'], method)(url, '{}', content_type='application/json')
+                if method in {'put', 'delete'} else clients['developer'].get(url))
+    assert response.status_code == 403
+    assert PipelineRun.objects.filter(pk=pipeline.pk).exists()
+    assert Declaration.objects.filter(pk=files[0].pk).exists()
+
+
+def test_workspace_explicit_creation_with_multiple_developer_projects(world):
+    a, b, users, clients, _, _ = world
+    ProjectMembership.objects.create(project=b, actor=users['developer'], role='developer')
+    missing = post(clients['developer'], '/api/pipeline/create/', {'name': 'ambiguous'})
+    assert missing.status_code == 403
+    assert missing.json()['error_code'] == 'project_selection_required'
+    for project in [a, b]:
+        response = post(clients['developer'], '/api/pipeline/create/', {'name': 'explicit', 'project_id': str(project.pk)})
+        assert response.status_code == 201
+        assert ProjectPipeline.objects.get(pipeline_id=response.json()['id']).project_id == project.pk
+    conflict = post(clients['developer'], f'/api/pipeline/create/?project_id={b.pk}', {'project_id': str(a.pk)})
+    assert conflict.status_code == 403

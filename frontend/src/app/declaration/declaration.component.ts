@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import * as XLSX from 'xlsx';
 import { SharedService } from '../services/shared.service';
+import { ProjectWorkspaceService } from '../services/project-workspace.service';
 import { DataService } from '../services/data.service';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -63,6 +64,7 @@ export class DeclarationComponent implements OnInit, OnDestroy {
     private sharedService: SharedService,
     private router: Router,
     private dataService: DataService,
+    private workspace: ProjectWorkspaceService,
   ) {}
 
   ngOnInit() {
@@ -452,6 +454,8 @@ export class DeclarationComponent implements OnInit, OnDestroy {
       formData.append('first_sheet_has_not_dataset', this.firstSheetHasNotDataset.toString());
       formData.append('merge_column_wise', this.mergeColumnWise.toString());
 
+      try { this.workspace.appendProject(formData); }
+      catch (error) { this.errorMessage = (error as Error).message; return; }
       this.http.post(`${this.apiBase}declaration/`, formData).subscribe(
         (response: any) => {
           console.log('File uploaded successfully', response);
