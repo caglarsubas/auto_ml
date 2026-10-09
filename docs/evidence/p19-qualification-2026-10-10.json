@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "packet": "P19",
+  "branch": "codex/project-workspace-context",
+  "base_commit": "384a6b980ea6f45fbbab6894ac2af5bb13b36c2a",
+  "qualified_application_source_commit": "8f904d802adc3cd7c1dd1e6eb1c91787f8888575",
+  "full_backend_matrix_source_commit": "08f4bd6e460275789f73bb41f8a38740180efc98",
+  "source_binding": "Later application commits change frontend/implementation documentation only. Backend code/tests in the full matrices are identical. Final tests additionally format screenshots without changing assertions or application code. All 164 tracked non-test backend Python files in the browser API match final source by SHA256.",
+  "baseline_verification": {
+    "pull_request": 108,
+    "merged_at": "2026-10-09T17:57:28Z",
+    "merge_main_ci_run": 37969920826,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D06/D12: project directory, explicit browser development context, selected-project native records and read-only report handoff. No full review/reproduction or release claim.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker runners",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "psycopg": "3.3.6",
+    "node": "24.16.0",
+    "angular": "22.2.1",
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "postgresql": "17.11",
+    "postgresql_image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+    "resources": "Two CPUs per backend runner; native threads bounded at two. Provider keys blank, engine unavailable, telemetry disabled; optional SDK absent. Primary installation untouched.",
+    "browser_image": "declarai-p19-api:local",
+    "browser_image_id": "sha256:654c4f5b30d292a16a283b3e892639ecf437621d20cc6987aa8109d40ad4d1c0",
+    "browser_api_application_hashes": "test-reports/p19/api-source-hashes.json"
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "report": "test-reports/p19/backend-final.log",
+      "passed": 1916,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 219.09,
+      "coverage_percent": 69.65,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "report": "test-reports/p19/postgresql-final/postgresql.log",
+      "passed": 1916,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 231.14,
+      "coverage_percent": 69.65,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15
+    },
+    {
+      "name": "Project authority focused regressions",
+      "status": "passed",
+      "report": "test-reports/p19/project-authority-final.log",
+      "passed": 46,
+      "new_selector_cases": 17
+    },
+    {
+      "name": "Private TLS, authority, process, restart and quiescent restore fixtures",
+      "status": "passed",
+      "report": "test-reports/p19/postgresql-final/postgresql-summary.json",
+      "concurrent_processes": 5,
+      "role_change_commits": 1,
+      "exact_replays": 4,
+      "production_recovery_qualified": false
+    },
+    {
+      "name": "Actual MCP SDK stdio",
+      "status": "passed",
+      "report": "test-reports/p19/mcp-stdio.log",
+      "tools_registered": 29,
+      "access_events": 14,
+      "completed": 8,
+      "denied": 6,
+      "fixture_cleanup": "removed with audit retained"
+    },
+    {
+      "name": "Frontend units and existing coverage gates",
+      "status": "passed",
+      "report": "test-reports/p19/frontend-unit-final-qualified.log",
+      "passed": 568,
+      "statement_coverage_percent": 37.86,
+      "branch_coverage_percent": 31.22
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "report": "test-reports/p19/frontend-build-final-qualified.log",
+      "legacy_commonjs_warnings": "retained"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "report": "test-reports/p19/frontend-lint-final-qualified.log",
+      "errors": 0,
+      "warnings": 164
+    },
+    {
+      "name": "Governed Chromium browser/API matrix",
+      "status": "passed",
+      "report": "test-reports/p19/browser-governed-final-qualified.log",
+      "passed": 33,
+      "duration_seconds": 39.1
+    },
+    {
+      "name": "Settled visual/keyboard project workflows",
+      "status": "passed",
+      "report": "test-reports/p19/browser-visual-final.log",
+      "passed": 4,
+      "duration_seconds": 10.6,
+      "visual_review": "Selected reviewer option, role, records and report access agree; inspected settled screenshot."
+    },
+    {
+      "name": "Backend Ruff",
+      "status": "passed",
+      "report": "test-reports/p19/backend-lint-final.log"
+    },
+    {
+      "name": "No migration drift",
+      "status": "passed",
+      "report": "test-reports/p19/migrations.log"
+    },
+    {
+      "name": "Primary user changes preserved",
+      "status": "passed",
+      "report": "test-reports/p19/primary-preservation.json",
+      "tracked_user_edits": 11,
+      "method": "SHA256 comparison against pre-work snapshot"
+    }
+  ],
+  "qualification_repairs": [
+    "Initial full matrices retained one legacy exact-field-set failure. The additive read-only project_id expectation and null legacy assertion were corrected; both complete matrices reran successfully without relaxed scientific assertions or budgets.",
+    "Initial preview process exited before browser navigation; qualification uses an owned live preview session.",
+    "Native headless macOS popup keys did not emit selection changes. Keyboard type-ahead emits actual native events and retains an exact intended-project assertion.",
+    "Visual inspection exposed a stale rendered picker after options were rebuilt. Angular Forms binding and a redirect-selection browser assertion fix and qualify the behavior.",
+    "A manual selection now overrides an earlier home deep-link on refresh; reviewer/admin browser cases verify it."
+  ],
+  "limits": [
+    "Read-only project directory and existing HTML reports do not implement findings, responses, approvals or clean model reproduction.",
+    "Keyboard/browser and visual checks do not constitute full screen-reader/accessibility qualification.",
+    "Member/enrollment UI, SSO/MFA, egress/retention and tamper-proof audit remain open.",
+    "Durable job authority/recovery, gVisor expert isolation, production packaging/recovery and all release/customer gates remain open.",
+    "Unactivated development remains an unqualified organization-wide compatibility profile; loading the UI never activates it.",
+    "Private runtime restore is a quiescent synthetic fixture, not production recovery."
+  ]
+}
