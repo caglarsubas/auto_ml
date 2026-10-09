@@ -56,6 +56,7 @@ def test_login_and_logout_have_bound_attributable_receipts_without_credentials(a
     logout = client.post("/api/auth/logout/", {}, format="json", HTTP_X_CSRFTOKEN=result.json()["csrf_token"])
     assert logout.status_code == 200 and logout.json()["authenticated"] is False
     assert AuthenticationEvent.objects.get(event_type="logout").actor_id == actor.pk
+    assert all(e.finished_at >= e.started_at for e in AuthenticationEvent.objects.all())
 
 
 def test_unknown_identity_is_hashed_and_inactive_credentials_are_indistinguishable(actor):
@@ -80,6 +81,8 @@ def test_throttle_persists_across_clients_and_ignores_forwarded_source_headers(s
     assert blocked.status_code == 429 and blocked["Retry-After"] == "60"
     assert signin(first, "unknown").status_code == 429
     assert AuthenticationEvent.objects.filter(reason_code="login_principal_rate_limited").count() == 1
+    event = AuthenticationEvent.objects.get(reason_code="login_principal_rate_limited")
+    assert event.finished_at >= event.started_at
     assert LoginThrottleBucket.objects.filter(blocked_attempts=2).count() == 1
 
 
@@ -169,6 +172,7 @@ def test_revoke_all_sessions_but_preserve_other_users_and_allow_fresh_signin(act
     assert signin(clients[0], actor.username).status_code == 200
     assert clients[0].get("/api/declaration/").status_code == 200
     assert AuthenticationEvent.objects.filter(event_type="session_rejected").count() == 2
+    assert all(e.finished_at >= e.started_at for e in AuthenticationEvent.objects.all())
 
 
 def test_revocation_command_replays_same_receipt_without_invalidating_new_session(actor):

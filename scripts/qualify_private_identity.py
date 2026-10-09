@@ -34,6 +34,7 @@ def main():
     from django.contrib.auth import get_user_model
     from django.core.management import call_command
     from django.db import connection
+    from django.db.models import F
     from django.test import Client, RequestFactory
 
     assert settings.DECLARAI_RUNTIME_PROFILE == "private" and not settings.DEBUG
@@ -168,6 +169,7 @@ def main():
     assert json.loads(output.getvalue())["replayed_receipt"] is True
     assert str(SessionAuthority.objects.get(user=actor).revision) == revision
     assert fresh.get("/api/declaration/", **request).status_code == 200
+    assert not AuthenticationEvent.objects.filter(finished_at__lt=F("started_at")).exists()
     print(
         json.dumps(
             {

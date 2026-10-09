@@ -24,6 +24,7 @@ def authority_for(user):
 
 def bind_login_session(sender, request, user, **kwargs):
     """Django login (including admin) binds new sessions; legacy sessions are not adopted."""
+    started = timezone.now()
     with transaction.atomic():
         current = get_user_model().objects.select_for_update().get(pk=user.pk)
         if not current.is_active:
@@ -38,6 +39,7 @@ def bind_login_session(sender, request, user, **kwargs):
                 event_type="session_bound",
                 outcome="completed",
                 session_revision=authority.revision,
+                started_at=started,
                 finished_at=timezone.now(),
             )
 
@@ -84,9 +86,10 @@ def reserve_login(request, username, *, authority_source="browser_password"):
                 event_type="login",
                 source_key=source_key,
                 principal_key=principal_key,
+                started_at=now,
                 outcome="pending" if admitted else "denied",
                 reason_code="" if admitted else reason,
-                finished_at=None if admitted else now,
+                finished_at=None if admitted else timezone.now(),
             )
     return admitted, event
 
@@ -130,6 +133,7 @@ def complete_login(request, actor, event):
 
 
 def recorded_logout(request, reason="user_logout", *, event_type="logout"):
+    started = timezone.now()
     user = request.user if request.user.is_authenticated else None
     previous_id = request.session.get("_auth_user_id")
     subject = (
@@ -146,6 +150,7 @@ def recorded_logout(request, reason="user_logout", *, event_type="logout"):
             event_type=event_type,
             outcome="completed",
             reason_code=reason,
+            started_at=started,
             finished_at=timezone.now(),
         )
         logout(request)
@@ -153,6 +158,7 @@ def recorded_logout(request, reason="user_logout", *, event_type="logout"):
 
 def revoke_sessions(user, *, request_id, operator_label, deactivate=False):
     """Installation-operator action. An asserted label is not an authenticated human actor."""
+    started = timezone.now()
     identifier = uuid.UUID(str(request_id))
     specification = {"user_id": user.pk, "operator_label": operator_label, "deactivate": deactivate}
     fingerprint = hashlib.sha256(json.dumps(specification, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -187,6 +193,7 @@ def revoke_sessions(user, *, request_id, operator_label, deactivate=False):
                 request_sha256=fingerprint,
                 session_revision=authority.revision,
                 details={"deactivated": deactivate, "cancelled_actions": cancelled},
+                started_at=started,
                 finished_at=timezone.now(),
             )
             return event, False
