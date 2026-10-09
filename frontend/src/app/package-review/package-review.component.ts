@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -11,6 +11,7 @@ import { AuthService } from '../services/auth.service';
   imports: [CommonModule, FormsModule],
   templateUrl: './package-review.component.html',
   styleUrl: './package-review.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class PackageReviewComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) fileId!: number;
