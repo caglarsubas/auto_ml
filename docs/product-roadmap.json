@@ -167,7 +167,8 @@
         "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)",
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
         "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
-        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)"
+        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)",
+        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
       ],
       "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open."
     },
@@ -299,7 +300,8 @@
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
         "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
-        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)"
+        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)",
+        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
       ],
       "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. Reviewer findings/responses/approvals and clean-environment reproduction runner are not implemented. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open."
     },
@@ -371,7 +373,8 @@
         "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)",
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
         "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
-        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)"
+        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)",
+        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
       ],
       "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open. P02 makes the bounded keyboard/session/reload and authenticated API checks mandatory in CI; all legacy journeys and screen-reader review remain unqualified. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open."
     },
@@ -923,6 +926,11 @@
       "date": "2026-10-09",
       "packet": "P11",
       "event": "Scoped bounded exact package/scoring handoff in the shared-foundation queue after PR100; prior packets, outcome states and planned D18-D26 are preserved."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P11",
+      "event": "Bounded local qualification passed 1589 backend tests with six explicit skips and 68.84% combined coverage, 540 frontend tests and 19 authenticated browser/API checks including keyboard access and exact historical download. Original assessment bytes, corrupt projections, changed-current publication, staging failure, incomplete/tampered packages and versioned scoring receipts are covered. Shared foundations stay first; prior packets, planned agentic outcomes and release/customer gates are preserved."
     }
   ],
   "implementation_packets": [
@@ -1112,7 +1120,7 @@
       "title": "Exact package and scoring handoff",
       "kind": "product_implementation",
       "owner": "Backend/ML/Frontend",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D04",
         "D09",
@@ -1120,7 +1128,8 @@
       ],
       "description": "Bind readiness, immutable packages, verified downloads and batch scoring to exact execution/assessment versions; prevent mutable projections from substituting another model or evidence.",
       "evidence": [
-        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)"
+        "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)",
+        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
       ],
       "remaining": "Complete immutable stages/jobs, independent reproduction/review, expert isolation, production approval and release/customer gates remain open."
     }
