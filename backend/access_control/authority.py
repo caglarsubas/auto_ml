@@ -66,7 +66,9 @@ def _finish(event, outcome, reason=''):
 def authorized_access(file_id, operation, tool_name, scope, arguments=None):
     """No data access before reservation; recheck authority before returning output."""
     from ai_assistant.mcp_server.auth import require_scope
+    from access_control import projects
     actor, grant, failure, arguments_digest = None, None, None, ''
+    project_scope = None
     valid_id = type(file_id) is int and 0 < file_id <= 2**63 - 1
     try:
         actor = configured_actor()
@@ -75,8 +77,14 @@ def authorized_access(file_id, operation, tool_name, scope, arguments=None):
             if not valid_id:
                 raise AccessDenied('mcp_dataset_identifier_invalid')
             grant = _grant(actor, file_id, operation)
+            if projects.governed():
+                permission = 'write' if operation in ('prepare_action', 'direct_action') else 'read'
+                project_scope = projects.dataset_authority(actor.pk, file_id, permission)
+                projects.validate_paths(actor.pk, file_id, arguments or {}, permission)
         arguments_digest = hashlib.sha256(json.dumps(arguments or {}, sort_keys=True,
             separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+    except projects.ProjectDenied as exc:
+        failure = AccessDenied(exc.code, grant=grant, actor=actor)
     except AccessDenied as exc:
         failure = exc
         grant = exc.grant
@@ -89,7 +97,7 @@ def authorized_access(file_id, operation, tool_name, scope, arguments=None):
         raise AccessDenied('mcp_authority_unavailable') from exc
     try:
         event = MCPAccessEvent.objects.create(actor=actor, grant=grant,
-            actor_snapshot=actor_snapshot(actor), grant_snapshot=grant_snapshot(grant),
+            actor_snapshot=actor_snapshot(actor), grant_snapshot={**grant_snapshot(grant), **({'project_authority': project_scope} if project_scope else {})},
             file_id=file_id if valid_id else None, operation=operation, tool_name=tool_name,
             required_scope=scope, arguments_sha256=arguments_digest,
             outcome='denied' if failure else 'started',
@@ -100,22 +108,28 @@ def authorized_access(file_id, operation, tool_name, scope, arguments=None):
         raise failure
     receipt = {'access_event_id': str(event.pk), 'actor': actor_snapshot(actor),
         'file_id': file_id, 'grant': grant_snapshot(grant),
-        'authority_source': 'stdio_installation_actor'}
+        'authority_source': 'stdio_installation_actor', **({'project_authority': project_scope} if project_scope else {})}
+    token = projects.current_actor.set(actor.pk)
     try:
-        yield receipt
-    except Exception as exc:
-        _finish(event, 'failed', exc.code if isinstance(exc, AccessDenied) else 'mcp_tool_failed')
-        raise
-    try:
-        current_actor = configured_actor()
-        require_scope(scope)
-        if current_actor.pk != actor.pk:
-            raise AccessDenied('mcp_authority_changed_during_access')
-        if grant:
-            current = _grant(current_actor, file_id, operation)
-            if current.revision != grant.revision:
+        try:
+            yield receipt
+        except Exception as exc:
+            _finish(event, 'failed', exc.code if isinstance(exc, AccessDenied) else 'mcp_tool_failed')
+            raise
+        try:
+            current_actor = configured_actor()
+            require_scope(scope)
+            if current_actor.pk != actor.pk:
                 raise AccessDenied('mcp_authority_changed_during_access')
-    except Exception as exc:
-        _finish(event, 'withheld', 'mcp_authority_changed_during_access')
-        raise AccessDenied('mcp_authority_changed_during_access') from exc
-    _finish(event, 'completed')
+            if project_scope:
+                projects.recheck(project_scope)
+            if grant:
+                current = _grant(current_actor, file_id, operation)
+                if current.revision != grant.revision:
+                    raise AccessDenied('mcp_authority_changed_during_access')
+        except Exception as exc:
+            _finish(event, 'withheld', 'mcp_authority_changed_during_access')
+            raise AccessDenied('mcp_authority_changed_during_access') from exc
+        _finish(event, 'completed')
+    finally:
+        projects.current_actor.reset(token)

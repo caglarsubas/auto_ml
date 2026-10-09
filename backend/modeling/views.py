@@ -330,6 +330,8 @@ class ModelingStartView(APIView):
                             if col in encoded_save_df.columns:
                                 encoded_save_df[col] = X_raw[col].values
                         encoded_save_df.to_csv(encoded_abs, index=False, mode='x')
+                        from access_control.projects import register_artifact
+                        register_artifact(encoded_abs, file_id=int(file_id))
                         encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
                         print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
                     except Exception as enc_save_err:
@@ -2628,6 +2630,9 @@ class PipelineRunListView(APIView):
 
     def get(self, request, *args, **kwargs):
         runs = PipelineRun.objects.all()
+        from access_control.projects import governed, allowed_projects
+        if governed():
+            runs = runs.filter(project_binding__project_id__in=allowed_projects(request.user.pk))
         data = []
         for run in runs:
             state = run.state or {}
@@ -2697,14 +2702,19 @@ class PipelineRunCreateView(APIView):
                 from datetime import datetime
                 name = f"{pipeline_type}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
-            run = PipelineRun.objects.create(
-                name=name,
-                pipeline_type=pipeline_type,
-                file_id=file_id,
-                current_step=current_step,
-                status='active',
-                state=state,
-            )
+            from django.db import transaction
+            with transaction.atomic():
+                run = PipelineRun.objects.create(
+                    name=name,
+                    pipeline_type=pipeline_type,
+                    file_id=file_id,
+                    current_step=current_step,
+                    status='active',
+                    state=state,
+                )
+                from access_control.projects import governed, bind_pipeline
+                if governed():
+                    bind_pipeline(run, request._request._project_scopes[0]['project_id'], request.user)
             return Response({
                 'id': run.id,
                 'name': run.name,

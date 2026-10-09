@@ -114,3 +114,7 @@ ingress, project roles, SSO/MFA enrollment, egress/retention, adversarial full
 deployment security, encrypted/offline packaging, coordinated online recovery,
 expert-code isolation, independent reproduction or customer acceptance. All
 technical release and customer gates remain open.
+
+P18 adds a separate [project authorization boundary](PROJECT_AUTHORIZATION_IMPLEMENTATION.md).
+Authentication receipts remain distinct from project membership, organizational
+review, production approval and release qualification.

@@ -215,9 +215,18 @@ def receipt(record, *, replay=False):
     }
 
 
+def project_snapshot(actor_id, file_id):
+    from access_control import projects
+    try:
+        return projects.dataset_authority(actor_id, file_id, 'write') if projects.governed() else None
+    except projects.ProjectDenied as exc:
+        raise ApprovalError(exc.code, str(exc), 403) from None
+
+
 def prepare(actor, data):
     _actor(actor)
     requested = action_request(data)
+    project_scope = project_snapshot(actor.pk, requested["file_id"])
     with projection_lock(requested["file_id"]):
         revision = SessionAuthority.objects.get_or_create(user_id=actor.pk)[0].revision
         if AssistantActionApproval.objects.filter(file_id=requested["file_id"], state="dispatching").exists():
@@ -227,7 +236,7 @@ def prepare(actor, data):
             )
         record = AssistantActionApproval(
             actor=actor,
-            actor_snapshot={**actor_snapshot(actor), 'session_revision': getattr(actor, '_declarai_session_revision', str(revision))},
+            actor_snapshot={**actor_snapshot(actor), **({'project_authority': project_scope} if project_scope else {}), 'session_revision': getattr(actor, '_declarai_session_revision', str(revision))},
             **requested,
             context=recorded_context(requested["file_id"], requested["action_type"]),
             environment=environment(),
@@ -235,6 +244,8 @@ def prepare(actor, data):
             expires_at=timezone.now() + timedelta(minutes=5),
         )
         _actor(actor)
+        if project_snapshot(actor.pk, requested["file_id"]) != project_scope:
+            raise ApprovalError("project_authority_changed", "Project authority changed. Prepare the action again.", 403)
         record.proposal_sha256 = digest(envelope(record))
         record.save(force_insert=True)
     return {
@@ -263,7 +274,13 @@ def _load(actor, data):
 
 def _fresh(record):
     code = None
-    if record.expires_at <= timezone.now():
+    try:
+        project_scope = project_snapshot(record.actor_id, record.file_id)
+    except ApprovalError:
+        project_scope = {"unavailable": True}
+    if project_scope != record.actor_snapshot.get("project_authority"):
+        code = "project_authority_changed"
+    elif record.expires_at <= timezone.now():
         code = "action_approval_expired"
     elif record.actor_snapshot.get('session_revision') != str(SessionAuthority.objects.filter(
         user_id=record.actor_id).values_list('revision', flat=True).first()):

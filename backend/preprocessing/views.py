@@ -679,6 +679,8 @@ class PreprocessingRunView(APIView):
             os.makedirs(os.path.dirname(out_full), exist_ok=True)
             t_save_start = time.monotonic()
             df_processed.to_csv(out_full, index=False)
+            from access_control.projects import register_artifact
+            register_artifact(out_full, file_id=int(file_id))
             recipe = save_recipe(out_full, file_id, eligible_raw, options, data_dictionary_payload, preserve_cols,
                 {'strategy': split_meta_built['strategy'], 'split_config': split or {'strategy': 'random'},
                  'train_idx': train_idx_sv.tolist(), 'test_idx': test_idx_sv.tolist()}, eligible_source_rows)

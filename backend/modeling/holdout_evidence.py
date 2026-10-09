@@ -75,6 +75,11 @@ def holdout_history(spec, file_id, *, exclude_id=None, limit=50, offset=0):
     if spec:
         query |= Q(dataset_sha256=spec['source_sha256'])
     records = HoldoutAccess.objects.filter(query).exclude(pk=exclude_id).order_by('accessed_at', 'id')
+    from access_control import projects
+    from access_control.models import ProjectDataset
+    private = projects.governed()
+    project_id = ProjectDataset.objects.filter(dataset_id=file_id).values_list('project_id', flat=True).first() if private else None
+    same_project = set(ProjectDataset.objects.filter(project_id=project_id).values_list('dataset_id', flat=True)) if project_id else {file_id}
     matches, exact, overlap, unknown = [], 0, 0, 0
     rows = set(spec['rows']) if spec else set()
     for receipt in records:
@@ -97,6 +102,11 @@ def holdout_history(spec, file_id, *, exclude_id=None, limit=50, offset=0):
             else:
                 relation = 'overlapping_final_rows'
                 overlap += 1
+        if private and receipt.file_id not in same_project:
+            matches.append({'relation': relation, 'overlap_rows': n_overlap,
+                'visibility': 'outside_project', 'evidence_status': 'exploratory',
+                'limitation': 'Related outcome access exists outside this project; identifiers and parameters are withheld.'})
+            continue
         matches.append({'access_id': str(receipt.pk),
             'execution_id': str(receipt.execution_id) if receipt.execution_id else None,
             'file_id': receipt.file_id, 'accessed_at': receipt.accessed_at.isoformat(),
