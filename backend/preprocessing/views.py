@@ -1,3 +1,4 @@
+from access_control.storage import managed_path
 import json
 import math
 import os
@@ -180,9 +181,7 @@ class PreprocessingDatqTimeseriesView(APIView):
                 return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
             # Resolve file path (allow either relative under MEDIA_ROOT or absolute)
-            full_path = processed_file
-            if not os.path.isabs(full_path):
-                full_path = os.path.join(settings.MEDIA_ROOT, processed_file)
+            full_path = managed_path(processed_file, table=True)
             if not os.path.exists(full_path):
                 return Response({'error': f'processed_file not found at {full_path}'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1682,9 +1681,7 @@ class PreprocessingDatqDetailView(APIView):
                 return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
             # Resolve file path (allow either relative under MEDIA_ROOT or absolute)
-            full_path = processed_file
-            if not os.path.isabs(full_path):
-                full_path = os.path.join(settings.MEDIA_ROOT, processed_file)
+            full_path = managed_path(processed_file, table=True)
             if not os.path.exists(full_path):
                 return Response({'error': f'processed_file not found at {full_path}'}, status=status.HTTP_404_NOT_FOUND)
 

@@ -1,6 +1,7 @@
 from django.db import models
 import os
 from django.conf import settings
+from access_control.storage import managed_path
 
 class Declaration(models.Model):
     file = models.FileField(upload_to='data_files/')
@@ -13,15 +14,17 @@ class Declaration(models.Model):
         return self.name
 
     def get_file_path(self):
-        if os.path.exists(self.file.path):
-            return self.file.path
-        
+        file_path = managed_path(self.file.name, table=True)
+        if os.path.isfile(file_path):
+            return file_path
+        # Legacy fallback must be unique; never choose another dataset arbitrarily.
         data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
-        for filename in os.listdir(data_files_dir):
-            if filename.startswith('processed_') and filename.endswith(self.original_name):
-                return os.path.join(data_files_dir, filename)
-
-        return None
+        if not os.path.isdir(data_files_dir):
+            return None
+        matches = [managed_path(os.path.join('data_files', name), table=True)
+            for name in os.listdir(data_files_dir)
+            if name.startswith('processed_') and name.endswith(self.original_name) and name.endswith('.csv')]
+        return matches[0] if len(matches) == 1 and os.path.isfile(matches[0]) else None
 
 class DataDictionary(models.Model):
     data_file = models.ForeignKey(Declaration, on_delete=models.CASCADE, related_name='data_dictionary')

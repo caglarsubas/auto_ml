@@ -1,3 +1,5 @@
+from access_control.storage import managed_path
+import uuid
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
@@ -124,7 +126,7 @@ class ModelingStartView(APIView):
             return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
         # Validate processed file exists under MEDIA_ROOT
-        full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+        full_path = managed_path(processed_file, table=True)
         if not os.path.exists(full_path):
             return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
         media_root = os.path.realpath(settings.MEDIA_ROOT)
@@ -319,16 +321,15 @@ class ModelingStartView(APIView):
                     # Save encoded CSV to disk so Feature Card can display the encoded data version
                     # Use the full processed DataFrame and overlay encoded columns so ALL features are preserved
                     try:
-                        from datetime import datetime as _dt
                         encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
                         os.makedirs(encoded_dir, exist_ok=True)
-                        encoded_filename = f'encoded_{file_id}_{_dt.now().strftime("%Y%m%d%H%M%S")}.csv'
-                        encoded_abs = os.path.join(encoded_dir, encoded_filename)
+                        encoded_filename = f'encoded_{file_id}_{uuid.uuid4().hex}.csv'
+                        encoded_abs = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
                         encoded_save_df = df.copy()
                         for col in X_raw.columns:
                             if col in encoded_save_df.columns:
                                 encoded_save_df[col] = X_raw[col].values
-                        encoded_save_df.to_csv(encoded_abs, index=False)
+                        encoded_save_df.to_csv(encoded_abs, index=False, mode='x')
                         encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
                         print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
                     except Exception as enc_save_err:
@@ -1295,14 +1296,17 @@ class FeatureExplainabilityView(APIView):
             if active_path.is_file():
                 active_status = json.loads(active_path.read_text())
             execution_id = request.data.get('execution_id') or active_status.get('execution_id')
+            if custom_model_path:
+                absolute_model = Path(managed_path(custom_model_path))
+                relative = absolute_model.relative_to(Path(settings.MEDIA_ROOT).resolve())
+                if len(relative.parts) < 3 or relative.parts[0] != 'execution_runs':
+                    return Response({'error': 'Select a verified immutable execution for model overrides.',
+                        'error_code': 'unverified_model_override'}, status=status.HTTP_409_CONFLICT)
+                if request.data.get('execution_id') and str(request.data['execution_id']) != relative.parts[1]:
+                    return Response({'error': 'Model path and execution_id must agree.',
+                        'error_code': 'unverified_model_override'}, status=status.HTTP_409_CONFLICT)
+                execution_id = relative.parts[1]
             if execution_id:
-                if custom_model_path:
-                    relative = Path(custom_model_path)
-                    if relative.is_absolute():
-                        relative = relative.relative_to(Path(settings.MEDIA_ROOT))
-                    if len(relative.parts) < 3 or relative.parts[0] != 'execution_runs':
-                        return Response({'error': 'Select an immutable candidate execution for explainability.'}, status=status.HTTP_409_CONFLICT)
-                    execution_id = relative.parts[1]
                 active_status, _ = load_execution(execution_id, int(file_id))
                 governed_data = load_development_data(int(file_id), execution_id)
                 if governed_data['algorithm'] != 'xgboost' or len(governed_data['prediction_contract']['class_mapping']) > 2:
@@ -1346,9 +1350,9 @@ class FeatureExplainabilityView(APIView):
             if booster is None:
                 models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
                 if custom_model_path:
-                    model_path = os.path.join(settings.MEDIA_ROOT, custom_model_path) if not os.path.isabs(custom_model_path) else custom_model_path
+                    model_path = managed_path(custom_model_path)
                 else:
-                    model_path = os.path.join(settings.MEDIA_ROOT, active_status.get('model', {}).get('model_path') or f'models/{file_id}_xgb_classifier.json')
+                    model_path = managed_path(active_status.get('model', {}).get('model_path') or f'models/{file_id}_xgb_classifier.json')
                 if not os.path.exists(model_path):
                     return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
                 
@@ -1367,7 +1371,7 @@ class FeatureExplainabilityView(APIView):
             else:
                 # Load processed data
                 if processed_file:
-                    full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+                    full_path = managed_path(processed_file, table=True)
                 else:
                     # Try to find from status
                     modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
@@ -1377,7 +1381,7 @@ class FeatureExplainabilityView(APIView):
                             status_data = json.load(f)
                         processed_file = status_data.get('processed_file')
                         if processed_file:
-                            full_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+                            full_path = managed_path(processed_file, table=True)
                         else:
                             return Response({'error': 'processed_file not found in modeling status'}, status=status.HTTP_404_NOT_FOUND)
                     else:

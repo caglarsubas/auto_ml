@@ -1,3 +1,5 @@
+import uuid
+from access_control.storage import managed_path
 # data_collection/views.py
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -273,14 +275,14 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 merged_df = dataframes[0]
 
             # Save merged DataFrame
-            merged_file_name = f'merged_data_{timezone.now().strftime("%Y%m%d%H%M%S")}.csv'
+            merged_file_name = f'merged_data_{uuid.uuid4().hex}.csv'
             merged_file_path = os.path.join('data_files', merged_file_name)
-            full_merged_path = os.path.join(settings.MEDIA_ROOT, merged_file_path)
+            full_merged_path = managed_path(merged_file_path, table=True)
             
             # Ensure the directory exists
             os.makedirs(os.path.dirname(full_merged_path), exist_ok=True)
             
-            merged_df.to_csv(full_merged_path, index=False)
+            merged_df.to_csv(full_merged_path, index=False, mode='x')
 
             # Create Declaration instance
             declaration = Declaration.objects.create(
@@ -301,6 +303,11 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             headers = self.get_success_headers(serializer.data)
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
+        except ValidationError:
+            raise
+        except FileExistsError:
+            return Response({'error': 'A new file could not be published. Retry.',
+                'error_code': 'file_publication_conflict'}, status=409)
         except Exception as e:
             import traceback
             print(traceback.format_exc())  # This will print the full traceback

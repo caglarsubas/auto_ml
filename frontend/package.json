@@ -14,7 +14,7 @@
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
     "serve:preview": "ng serve --configuration production",
-    "test:e2e:governed": "playwright test e2e/governed-session.spec.ts e2e/hyperparameter-api.spec.ts e2e/preprocessing-options-api.spec.ts e2e/session-boundary-api.spec.ts e2e/raw-replay-api.spec.ts"
+    "test:e2e:governed": "playwright test e2e/governed-session.spec.ts e2e/hyperparameter-api.spec.ts e2e/preprocessing-options-api.spec.ts e2e/session-boundary-api.spec.ts e2e/raw-replay-api.spec.ts e2e/managed-storage-api.spec.ts"
   },
   "private": true,
   "dependencies": {

@@ -168,9 +168,11 @@
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
         "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
         "[P11 package handoff and limits](PACKAGE_HANDOFF_IMPLEMENTATION.md)",
-        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
+        "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)",
+        "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
+        "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open."
     },
     {
       "id": "D05",
@@ -224,9 +226,11 @@
         "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
         "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)",
         "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
-        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
+        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)",
+        "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
+        "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)"
       ],
-      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open."
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 validates native REST file identifiers and confines table selectors/generated files to managed storage before reads, including traversal, hidden, symlink and nonregular-file rejection. This is a root boundary, not REST project/dataset authorization; roles, egress/retention and release threat-model qualification remain open."
     },
     {
       "id": "D07",
@@ -277,9 +281,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
-        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
+        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)",
+        "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
+        "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)"
       ],
-      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open."
+      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 requires client-selected XGBoost explanation models to belong to a hash-verified immutable execution and matching dataset; development-only diagnostics support legitimate native overrides. Exact action approvals and isolated expert execution/replay/scoring remain unimplemented and mandatory."
     },
     {
       "id": "D09",
@@ -950,6 +956,16 @@
       "date": "2026-10-09",
       "packet": "P12",
       "event": "Bounded final source qualification passed 1624 backend tests, six explicit skips, 68.8% combined coverage, 540 frontend tests and 19 authenticated browser/API checks. Actual MCP stdio exercised 29 tools and ten attributable audit events; administrator permissions, authority changes and audit failure boundaries are covered. D06/D08 remain partial; prior packets, outcome states, planned D18-D26, canonical queue and release/customer gates are preserved."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P13",
+      "event": "PR102 merge and all five merge-main CI checks verified. Scope native filesystem-input and model-override boundaries plus collision-safe uploads/encoding in the shared-foundation queue; preserve all prior evidence, statuses and agentic plans."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P13",
+      "event": "Bounded source qualification passed 1692 backend tests, six explicit skips, 68.92% combined coverage, 540 frontend tests and 23 governed browser/API checks. Actual MCP stdio retained 29 tools and ten attributable events. Managed input, model-override and file-preservation boundaries are partial D04/D06/D08 work; prior packets, outcome statuses, planned D18-D26, queue and release/customer gates are preserved."
     }
   ],
   "implementation_packets": [
@@ -1168,6 +1184,24 @@
         "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
       ],
       "remaining": "REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, isolated expert Python, full egress/retention, distributed audit/recovery and release/customer qualification remain open."
+    },
+    {
+      "id": "P13",
+      "title": "Managed native input paths and collision-safe files",
+      "kind": "product_implementation",
+      "owner": "Security/Backend",
+      "status": "tested",
+      "items": [
+        "D04",
+        "D06",
+        "D08"
+      ],
+      "description": "Constrain native request-supplied table paths and file identifiers, require verified immutable executions for XGBoost explanation overrides, and preserve repeated uploads/encodings through UUID names and exclusive creation. Preserve historical files and disclose remaining authorization gaps.",
+      "evidence": [
+        "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
+        "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)"
+      ],
+      "remaining": "Project roles, exact approvals, expert isolation, egress/retention, immutable legacy stages, distributed recovery and release/customer qualification remain open."
     }
   ],
   "release_qualification": {

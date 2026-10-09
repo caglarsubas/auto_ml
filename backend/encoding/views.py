@@ -5,15 +5,18 @@ POST /api/encoding/analyze/  – identify categorical features & return encoding
 POST /api/encoding/apply/    – apply encoding, save encoded file, return report
 """
 
+from access_control.storage import managed_path
+
 import json
 import logging
 import os
-from datetime import datetime
+import uuid
 
 import pandas as pd
 from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from .encoding_utils import analyze_categorical_features, apply_encoding
 
@@ -34,7 +37,7 @@ class EncodingAnalyzeView(APIView):
                 return Response({'error': 'processed_file is required'}, status=400)
 
             # Resolve path
-            csv_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+            csv_path = managed_path(processed_file, table=True)
             if not os.path.exists(csv_path):
                 return Response({'error': f'Processed file not found: {processed_file}'}, status=404)
 
@@ -63,6 +66,8 @@ class EncodingAnalyzeView(APIView):
                 'numeric_count': len(df.columns) - len(plan) - 1,  # minus Target
             })
 
+        except ValidationError:
+            raise
         except Exception as exc:
             logger.exception('EncodingAnalyzeView error')
             return Response({'error': str(exc)}, status=500)
@@ -81,7 +86,7 @@ class EncodingApplyView(APIView):
             if not processed_file:
                 return Response({'error': 'processed_file is required'}, status=400)
 
-            csv_path = os.path.join(settings.MEDIA_ROOT, processed_file) if not os.path.isabs(processed_file) else processed_file
+            csv_path = managed_path(processed_file, table=True)
             if not os.path.exists(csv_path):
                 return Response({'error': f'Processed file not found: {processed_file}'}, status=404)
 
@@ -99,12 +104,12 @@ class EncodingApplyView(APIView):
             encoded_df, report = apply_encoding(df, plan, target_col='Target', use_native=use_native)
 
             # Save encoded CSV
-            ts = datetime.now().strftime('%Y%m%d%H%M%S')
+            ts = uuid.uuid4().hex
             encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
             os.makedirs(encoded_dir, exist_ok=True)
             encoded_filename = f'encoded_{file_id}_{ts}.csv'
-            encoded_path = os.path.join(encoded_dir, encoded_filename)
-            encoded_df.to_csv(encoded_path, index=False)
+            encoded_path = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
+            encoded_df.to_csv(encoded_path, index=False, mode='x')
             encoded_rel = os.path.relpath(encoded_path, settings.MEDIA_ROOT)
 
             # Save sidecar metadata so the modeling step knows which columns
@@ -118,11 +123,12 @@ class EncodingApplyView(APIView):
                 })
             meta_path = encoded_path.replace('.csv', '.meta.json')
             try:
-                with open(meta_path, 'w', encoding='utf-8') as mf:
+                with open(meta_path, 'x', encoding='utf-8') as mf:
                     json.dump({'categorical_columns': cat_meta}, mf)
                 logger.info('Saved encoding metadata to %s (%d categorical cols)', meta_path, len(cat_meta))
-            except Exception as me:
-                logger.warning('Failed to save encoding metadata: %s', me)
+            except Exception:
+                os.remove(encoded_path)  # Only this request's exclusively created CSV.
+                raise
 
             # Build summary
             strategy_counts = {}
@@ -141,6 +147,11 @@ class EncodingApplyView(APIView):
                 },
             })
 
+        except FileExistsError:
+            return Response({'error': 'A new file could not be published. Retry.',
+                'error_code': 'file_publication_conflict'}, status=409)
+        except ValidationError:
+            raise
         except Exception as exc:
             logger.exception('EncodingApplyView error')
             return Response({'error': str(exc)}, status=500)
