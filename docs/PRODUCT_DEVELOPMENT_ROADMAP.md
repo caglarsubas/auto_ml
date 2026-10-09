@@ -174,7 +174,7 @@ Require a named active installation actor and explicit dataset grants for MCP re
 
 **Evidence:** [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json)
 
-**Remaining:** REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, full egress/retention, distributed audit/recovery and release/customer qualification remain open.
+**Remaining:** REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, isolated expert Python, full egress/retention, distributed audit/recovery and release/customer qualification remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

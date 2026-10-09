@@ -4,7 +4,7 @@
   "packet": "P12",
   "branch": "codex/mcp-scoped-identity",
   "base_commit": "b854e8324b149cf0d149ee9e8b4494c13aeae7d3",
-  "qualified_source_commit": "af5f2c0cd491790432da055c7ed450d0ace0a6e3",
+  "qualified_source_commit": "cbf710d6639bfaba9ad559055f4892ab81f04314",
   "scope": "Bounded local source qualification for MCP installation actor identity, explicit dataset grants, access evidence and blocked direct/network execution. Later commits are documentation/ledger/evidence only. D06/D08 and all release/customer gates remain partial/open.",
   "preceding_pr": {
     "url": "https://github.com/caglarsubas/auto_ml/pull/101",
@@ -18,7 +18,7 @@
     "backend_base_image": "declarai-core-p07:local",
     "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
     "api_image": "declarai-core-p12:qualified",
-    "api_image_id": "sha256:fd7860e2f1eded6dac573c4c4d7a03eef14433942470a36d9f386ec3cf2ceca1",
+    "api_image_id": "sha256:7944e85012db9a84111953dc6ed503500ac1e915223b5ab2b12d3133848e74fb",
     "full_suite_cpu_affinities": [
       0,
       1
@@ -48,20 +48,21 @@
     {
       "name": "Full marked backend suite, Ruff, migration drift and pip check",
       "status": "passed",
-      "report": "test-reports/p12/backend-final.log",
+      "report": "test-reports/p12/backend-targets.log",
       "passed": 1624,
       "skipped": 6,
       "deselected": 62,
-      "warnings": 230,
-      "duration_seconds": 144.72,
-      "combined_statement_branch_coverage_percent": 68.8
+      "warnings": 231,
+      "duration_seconds": 139.94,
+      "combined_statement_branch_coverage_percent": 68.8,
+      "qualified_source_commit": "cbf710d6639bfaba9ad559055f4892ab81f04314"
     },
     {
       "name": "Skip budget",
       "status": "passed",
       "skipped": 6,
       "budget": 15,
-      "report": "test-reports/p12/skip-budget.log"
+      "report": "test-reports/p12/skip-budget-targets.log"
     },
     {
       "name": "Frontend unit suite",
@@ -91,12 +92,15 @@
       "status": "passed",
       "passed": 19,
       "duration_seconds": 15.0,
-      "report": "test-reports/p12/browser.log"
+      "report": "test-reports/p12/browser.log",
+      "qualified_source_commit": "af5f2c0cd491790432da055c7ed450d0ace0a6e3",
+      "api_image_id": "sha256:fd7860e2f1eded6dac573c4c4d7a03eef14433942470a36d9f386ec3cf2ceca1",
+      "scope": "Local browser checks precede the additive grant-target snapshot fields. Frontend and browser/API entrypoints are unchanged; PR CI reruns the browser checks on the final head."
     },
     {
       "name": "Actual MCP SDK stdio operator workflow",
       "status": "passed",
-      "report": "test-reports/p12/mcp-stdio-final.log",
+      "report": "test-reports/p12/mcp-stdio-targets.log",
       "tools_registered": 29,
       "access_events": 10,
       "completed_events": 6,
@@ -111,13 +115,14 @@
         "deny deactivated actor with retained identity",
         "block network/direct startup despite legacy flags",
         "remove synthetic fixtures and retain actor/grant snapshots"
-      ]
+      ],
+      "qualified_source_commit": "cbf710d6639bfaba9ad559055f4892ab81f04314"
     },
     {
       "name": "Canonical ledger invariants/projection and prior-state preservation",
       "status": "passed",
       "passed": 49,
-      "report": "test-reports/p12/ledger.log"
+      "report": "test-reports/p12/ledger-targets.log"
     }
   ],
   "source_sha256": {
@@ -125,7 +130,7 @@
     "backend/access_control/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "backend/access_control/admin.py": "cc6f51a214c16b55ecbd7a0904befd95e7f35be0b89ea13e1bcaca6c03cd77d8",
     "backend/access_control/apps.py": "3c1eb40d241966349715301c73f65b726feefa647755966ab703ac66b7d88e34",
-    "backend/access_control/authority.py": "9bec62f92bd162cce3c76211f7a563918f594880e6469d6aa35085da3e92e32f",
+    "backend/access_control/authority.py": "5ab93233ae3bee950b1b5dea4cf382c2a62fa95f3adb178f61970b05a42ed38f",
     "backend/access_control/management/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "backend/access_control/management/commands/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "backend/access_control/management/commands/mcp_dataset_grant.py": "3538c939da043c4746b19d8c5dec3e3a912ba4c9e8ab243b256038e3ff216db0",
@@ -141,7 +146,7 @@
     "backend/conftest.py": "eb8072430a1b8ca6ff47d2707488c1ba7ff0452bbfc58df781abb05dab290140",
     "backend/tests/test_mcp_server.py": "1e561023372e8bd30f06463046d1061fc2b90d82fa20cea1dc3734a51b5e5b81",
     "backend/tests/test_prometa_bundle_runner.py": "804197cc02af8b55245dcabf7b9fa6dbc7e3efa62eecd68d5dea855a63655554",
-    "backend/tests/unit/test_mcp_access_boundary.py": "200fce934aca18c5ac4b76b95d2d36da4c505359fbb285fa5e830655b780b409",
+    "backend/tests/unit/test_mcp_access_boundary.py": "bd1abd6e74b0d5d76ec7bc5dda7f36b5f67955073d072da790ea7584b2e75742",
     "backend/tests/unit/test_mcp_auth_and_commands.py": "bc2936abd5d0790f290f8efc2707ef46b8718fce5b871863b6c8b8e95c145ec0",
     "scripts/qualify_mcp_stdio.py": "3e9920529504c2f98fec0989e7f791905cb007e9b94408b98ca0c69b51621bc7"
   },
@@ -158,13 +163,21 @@
     "test-reports/p12/api-build-final.log": "03fdadff82d32ceac8b31f158970ee879cce19c357ab0fbca2c4b153015ca5d4",
     "test-reports/p12/api-qualified.log": "a38e4c03a1cea95949b8ca8435f18f15845801ff4091b74172d70711a60af60b",
     "test-reports/p12/skip-budget.log": "24aa938076fed8419b4e52b35f47d7707a1ae365b69109c2b78d66818192195d",
-    "test-reports/p12/ledger.log": "77503a4821e5f3fc5819ea78bbb7bc90f809705e794031ef03391fced51cbf43"
+    "test-reports/p12/ledger.log": "77503a4821e5f3fc5819ea78bbb7bc90f809705e794031ef03391fced51cbf43",
+    "test-reports/p12/backend-targets.log": "109aec779af92fe2d118788f154268fe4aae6aa8188c94b59770c6a27c6d6d75",
+    "test-reports/p12/backend-targets.xml": "db0cf86940492b95be74e32c8b2d9347bd06f537007beac8274291396394d7ec",
+    "test-reports/p12/backend-coverage-targets.xml": "865dc455b0107abb0e92157c7093054626462b48a603d37fe7b216f89e2aee03",
+    "test-reports/p12/api-build-targets.log": "af4dfeda2d67d09a81a6ffceb5b12533a861ea2294b91fd86d4bdd55a0dce956",
+    "test-reports/p12/mcp-stdio-targets.log": "24aefe75aae59b58cf3194225008c62a382806291420f61205e891e402ecca10",
+    "test-reports/p12/skip-budget-targets.log": "24aa938076fed8419b4e52b35f47d7707a1ae365b69109c2b78d66818192195d",
+    "test-reports/p12/ledger-targets.log": "77503a4821e5f3fc5819ea78bbb7bc90f809705e794031ef03391fced51cbf43"
   },
   "qualification_observations": [
     "Initial focused SDK calls exposed synchronous Django ORM execution on the FastMCP async loop; handlers were moved to database threads without disabling async safety. Focused checks then passed 72 tests.",
     "The first full marked suite passed 1624 tests. The actual stdio workflow then found that a denied inactive actor call omitted its known identity; attribution was repaired and the final full suite and actual protocol workflow passed.",
     "Regression coverage includes grant/scope revocation during reads, audit reservation/completion failure, invalid identifiers, administrator HTTP permissions, atomic CLI/admin rollback, fabricated approvals and blocked SDK network constructors.",
-    "The real protocol qualification now runs in the existing disposable CI browser/API job. Native data, round, timeout, assertion, skip and coverage budgets were preserved."
+    "The real protocol qualification now runs in the existing disposable CI browser/API job. Native data, round, timeout, assertion, skip and coverage budgets were preserved.",
+    "Final review added target account/dataset IDs to grant snapshots so administrator changes remain attributable after target deletion. That exact backend source passed the full marked suite and actual stdio workflow; frontend and browser/API behavior is unchanged."
   ],
   "limits": [
     "Installation-controlled stdio identity is not authenticated per-client remote identity; shared local hosts share the configured actor. HTTP/SSE transports are blocked.",

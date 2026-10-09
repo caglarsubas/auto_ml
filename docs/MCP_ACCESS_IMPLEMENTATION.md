@@ -34,7 +34,7 @@ Discover `declarai.get_mcp_tool_catalog`; call `declarai.get_data_dictionary` wi
 
 ## Access evidence and failure behavior
 
-The additive `access_control` app stores `MCPDatasetGrant` and `MCPAccessEvent`. A reservation is required before each read, catalog request or preparation. The event records the actor, actor snapshot, grant snapshot/revision, dataset ID, tool, scope, argument digest, authority source, timestamps, outcome and reason code. It stores neither customer outputs nor raw action payloads. Grant snapshots and actor identity survive account, grant and dataset deletion. Argument hashes are correlation evidence, not encryption or proof of action approval; retention and privacy policy still require deployment-specific qualification.
+The additive `access_control` app stores `MCPDatasetGrant` and `MCPAccessEvent`. A reservation is required before each read, catalog request or preparation. The event records the actor, actor snapshot, grant snapshot/revision, dataset ID, tool, scope, argument digest, authority source, timestamps, outcome and reason code. It stores neither customer outputs nor raw action payloads. Grant snapshots retain the target account and dataset IDs separately from the administrator making a change; these identifiers and actor snapshots survive account, grant and dataset deletion. Argument hashes are correlation evidence, not encryption or proof of action approval; retention and privacy policy still require deployment-specific qualification.
 
 | Outcome | Meaning |
 | --- | --- |

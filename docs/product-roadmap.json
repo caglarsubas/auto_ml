@@ -1167,7 +1167,7 @@
         "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
         "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
       ],
-      "remaining": "REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, full egress/retention, distributed audit/recovery and release/customer qualification remain open."
+      "remaining": "REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, isolated expert Python, full egress/retention, distributed audit/recovery and release/customer qualification remain open."
     }
   ],
   "release_qualification": {
