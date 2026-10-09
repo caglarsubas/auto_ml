@@ -1385,6 +1385,17 @@ describe('AiChatPanelComponent', () => {
       expect(execute).not.toHaveBeenCalled();
     });
 
+    it('shows uncertainty when cancellation cannot be recorded', () => {
+      const { action, index } = preparedNote();
+      spyOn(dataService, 'cancelAiAction').and.returnValue(throwError(() => new Error('unavailable')));
+      const execute = spyOn(dataService, 'executeAiAction');
+      component.applyAction(index, 0, action);
+      component.cancelPreparedAction();
+      expect(component.actionReceipt.state).toBe('cancellation_unconfirmed');
+      expect(component.actionError).toContain('Cancellation could not be confirmed');
+      expect(execute).not.toHaveBeenCalled();
+    });
+
     it('requires fresh review after a payload edit', () => {
       const { action, index } = preparedNote();
       spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
@@ -1421,6 +1432,40 @@ describe('AiChatPanelComponent', () => {
         approval_id: record.approval_id,
         proposal_sha256: record.proposal_sha256,
       });
+      expect(component.actionApplying).toBeFalse();
+    });
+
+    it('keeps the newer review busy when an older prepared response arrives', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const oldResponse = new Subject<any>();
+      const freshResponse = new Subject<any>();
+      prepareSpy.and.returnValues(oldResponse, freshResponse);
+      spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      component.cancelPreparedAction();
+      component.applyAction(index, 0, action);
+      oldResponse.next(record);
+      oldResponse.complete();
+      expect(component.actionApplying).toBeTrue();
+      expect(component.preparedAction).toBeNull();
+      freshResponse.next({ ...record, approval_id: 'fresh-proposal' });
+      freshResponse.complete();
+      expect(component.actionApplying).toBeFalse();
+      expect(component.preparedAction?.record.approval_id).toBe('fresh-proposal');
+    });
+
+    it('cancels pending preparation even if the dataset returns to its earlier selection', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const response = new Subject<any>();
+      prepareSpy.and.returnValue(response);
+      const cancel = spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      sharedService.setCurrentFileId(2);
+      sharedService.setCurrentFileId(1);
+      response.next(record);
+      response.complete();
+      expect(component.preparedAction).toBeNull();
+      expect(cancel).toHaveBeenCalled();
       expect(component.actionApplying).toBeFalse();
     });
 

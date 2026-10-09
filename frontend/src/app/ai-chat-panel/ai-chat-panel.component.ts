@@ -85,10 +85,13 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   ) {}
 
   ngOnInit(): void {
+    let selectedFile = this.sharedService.getCurrentFileId();
     this.subscriptions.add(
       this.sharedService.currentFileId$.subscribe((fileId) => {
-        if (this.preparedAction && this.preparedAction.record.file_id !== fileId)
+        if (selectedFile !== fileId) {
+          selectedFile = fileId;
           this.cancelPreparedAction();
+        }
         this.actionReceipt = null;
       }),
     );
@@ -380,7 +383,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           this.dataService
             .cancelAiAction(this.approvalSelector(record))
             .subscribe({ error: () => {} });
-          this.actionApplying = false;
+          if (sequence === this.approvalSequence) this.actionApplying = false;
           return;
         }
         this.preparedAction = { record, action, messageIndex, actionIndex };
@@ -400,12 +403,26 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   cancelPreparedAction(): void {
     this.approvalSequence++;
+    const sequence = this.approvalSequence;
+    this.actionApplying = false;
     const pending = this.preparedAction;
     this.preparedAction = null;
     if (pending)
-      this.dataService
-        .cancelAiAction(this.approvalSelector(pending.record))
-        .subscribe({ error: () => {} });
+      this.dataService.cancelAiAction(this.approvalSelector(pending.record)).subscribe({
+        error: () => {
+          if (
+            sequence !== this.approvalSequence ||
+            this.sharedService.getCurrentFileId() !== pending.record.file_id
+          )
+            return;
+          this.actionError =
+            'Cancellation could not be confirmed. Inspect the action receipt before continuing.';
+          this.actionReceipt = {
+            ...this.approvalSelector(pending.record),
+            state: 'cancellation_unconfirmed',
+          };
+        },
+      });
   }
 
   approvePreparedAction(): void {
@@ -431,7 +448,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
             sequence !== this.approvalSequence ||
             this.sharedService.getCurrentFileId() !== record.file_id
           ) {
-            this.actionApplying = false;
             return EMPTY;
           }
           return this.dataService.executeAiAction(
@@ -446,12 +462,12 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       )
       .subscribe({
         next: (resp: any) => {
-          this.actionApplying = false;
           if (
             sequence !== this.approvalSequence ||
             this.sharedService.getCurrentFileId() !== record.file_id
           )
             return;
+          this.actionApplying = false;
           this.preparedAction = null;
           this.actionReceipt = resp.approval_receipt;
           action.editing = false;
@@ -459,8 +475,8 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           this._handleActionResult(record.action_type, resp);
         },
         error: (err: any) => {
-          this.actionApplying = false;
           if (sequence !== this.approvalSequence) return;
+          this.actionApplying = false;
           this.cancelPreparedAction();
           this.actionError =
             err?.error?.error ||
