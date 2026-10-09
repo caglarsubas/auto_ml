@@ -188,6 +188,15 @@ class DeclarationViewSet(viewsets.ModelViewSet):
     queryset = Declaration.objects.all()
     serializer_class = DeclarationSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        from django.db.models.deletion import ProtectedError
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response({'error_code': 'dataset_retained_for_review',
+                             'error': 'This dataset has retained review evidence. Deletion requires a governed retention procedure.'},
+                            status=409)
+
     def get_queryset(self):
         from access_control.projects import governed, allowed_datasets
         if governed():

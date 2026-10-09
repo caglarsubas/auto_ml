@@ -67,6 +67,15 @@
               @for (dataset of datasets; track dataset.id) {
                 <li>
                   {{ dataset.original_name || dataset.name }} <span>Dataset {{ dataset.id }}</span>
+                  <button
+                    type="button"
+                    (click)="reviewDataset = dataset.id"
+                    [attr.aria-label]="
+                      'Review package for ' + (dataset.original_name || dataset.name)
+                    "
+                  >
+                    Review package
+                  </button>
                 </li>
               }
             </ul>
@@ -96,6 +105,14 @@
       }
       @if (reportError) {
         <p role="alert">{{ reportError }}</p>
+      }
+      @if (reviewDataset !== null && !loading && !recordsError) {
+        <button type="button" (click)="reviewDataset = null">Close review panel</button>
+        <app-package-review
+          [fileId]="reviewDataset"
+          [projectId]="project.id"
+          [role]="project.role"
+        />
       }
     }
   }

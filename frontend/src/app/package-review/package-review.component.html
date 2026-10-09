@@ -1,0 +1,170 @@
+<section class="review" aria-labelledby="review-title">
+  <h3 id="review-title">Package review · Dataset {{ fileId }}</h3>
+  <p>
+    Record findings, developer responses and reviewer dispositions for an exact package. Closing
+    findings does not approve the model or its use. Reproduction and organizational approval require
+    separate evidence.
+  </p>
+  <button type="button" (click)="refresh()" [disabled]="busy">Refresh review</button>
+  @if (busy) {
+    <p role="status">Checking review evidence…</p>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+  @if (pending && !busy) {
+    <button type="button" (click)="retry()">Retry pending action</button>
+  }
+  @if (directory) {
+    @if (directory.current_package; as packageInfo) {
+      <p>
+        Current frozen package: <code>{{ packageInfo.bundle_id }}</code>
+      </p>
+      @if (role === 'reviewer') {
+        <button type="button" (click)="start()" [disabled]="busy || !!pending || hasCurrentReview">
+          Start package review
+        </button>
+      }
+    } @else {
+      <p>
+        No verified package is available. A developer must freeze an execution with its assessment
+        before review can begin.
+      </p>
+    }
+    <ul aria-label="Package reviews">
+      @for (case of directory.reviews; track case.id) {
+        <li>
+          <button type="button" (click)="open(case.id)" [disabled]="busy || !!pending">
+            Open review {{ case.id }}
+          </button>
+          · {{ case.freshness }}
+        </li>
+      }
+    </ul>
+    @if (directory.next_offset !== null) {
+      <p>Showing {{ directory.reviews.length }} of {{ directory.total }} reviews.</p>
+      <button type="button" (click)="older()" [disabled]="busy || !!pending">
+        Load older reviews
+      </button>
+    }
+  }
+  @if (review; as case) {
+    <h4>Discussion revision {{ case.revision }}</h4>
+    <dl>
+      <dt>Package</dt>
+      <dd>
+        <code>{{ case.bundle_id }}</code>
+      </dd>
+      <dt>Manifest SHA-256</dt>
+      <dd>
+        <code>{{ case.manifest_sha256 }}</code>
+      </dd>
+      <dt>Evidence status</dt>
+      <dd>{{ case.freshness }}</dd>
+    </dl>
+    <button type="button" (click)="download('package')" [disabled]="busy">
+      Download exact package
+    </button>
+    <button type="button" (click)="download('discussion')" [disabled]="busy">
+      Download discussion evidence
+    </button>
+    @if (case.freshness !== 'current') {
+      <p role="status">
+        This review is historical or its integrity cannot be verified. Its history is retained;
+        further edits require a review of a current verified package.
+      </p>
+    }
+    <ul aria-label="Review findings">
+      @for (finding of case.findings; track finding.id) {
+        <li>
+          <strong>{{ finding.severity }} · {{ finding.state }}</strong>
+          <p>{{ finding.text }}</p>
+          <small>{{ finding.responses }} developer responses · {{ finding.id }}</small>
+        </li>
+      } @empty {
+        <li>No findings recorded.</li>
+      }
+    </ul>
+    <details>
+      <summary>Attributable event history</summary>
+      <ol aria-label="Review events">
+        @for (event of case.events; track event.id) {
+          <li>
+            <strong
+              >{{ event.event_type }} · {{ event.actor.username }} ·
+              {{ event.authority.role }}</strong
+            >
+            · {{ event.created_at }}
+            <p>{{ event.text }}</p>
+            <small>Receipt {{ event.id }} · revision {{ event.revision }}</small>
+          </li>
+        }
+      </ol>
+    </details>
+    @if (case.freshness === 'current' && (role === 'developer' || role === 'reviewer')) {
+      <form (ngSubmit)="submit()">
+        <label for="review-action">Review action</label>
+        <select
+          id="review-action"
+          name="eventType"
+          [(ngModel)]="eventType"
+          [disabled]="busy || !!pending"
+        >
+          @if (role === 'reviewer') {
+            <option value="finding">Add finding</option>
+            <option value="resolve">Resolve finding</option>
+            <option value="reopen">Reopen finding</option>
+          }
+          @if (role === 'developer') {
+            <option value="response">Respond to finding</option>
+          }
+        </select>
+        @if (eventType === 'finding') {
+          <label for="review-severity">Finding severity</label
+          ><select
+            id="review-severity"
+            name="severity"
+            [(ngModel)]="severity"
+            [disabled]="busy || !!pending"
+          >
+            <option value="critical">Critical</option>
+            <option value="major">Major</option>
+            <option value="minor">Minor</option>
+            <option value="observation">Observation</option>
+          </select>
+        } @else {
+          <label for="review-finding">Finding</label
+          ><select
+            id="review-finding"
+            name="findingId"
+            [(ngModel)]="findingId"
+            [disabled]="busy || !!pending"
+            required
+          >
+            <option value="">Select a finding</option>
+            @for (finding of case.findings; track finding.id) {
+              @if ((eventType === 'reopen') === (finding.state === 'resolved')) {
+                <option [value]="finding.id">{{ finding.severity }} · {{ finding.text }}</option>
+              }
+            }
+          </select>
+        }
+        <label for="review-text">Finding, response or disposition</label
+        ><textarea
+          id="review-text"
+          name="text"
+          [(ngModel)]="text"
+          maxlength="10000"
+          required
+          [disabled]="busy || !!pending"
+        ></textarea>
+        <button
+          type="submit"
+          [disabled]="busy || !!pending || !text.trim() || (eventType !== 'finding' && !findingId)"
+        >
+          Record review action
+        </button>
+      </form>
+    }
+  }
+</section>
