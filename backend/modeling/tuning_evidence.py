@@ -34,7 +34,8 @@ def resolve_tuning_objective(task, context, requested=None, threshold=.5):
             'direction': direction(primary), 'cost_matrix': declared.get('cost_matrix') or {},
             'threshold': threshold,
             'qualification': 'Exploratory development selection; folds, early stopping and validation curves reuse development data. Fold spread is descriptive, not a confidence interval.',
-            'training_policy': 'Native fixed training/early-stopping criterion is recorded separately; full objective alignment remains open.'}
+            'training_policy': 'Accepted objectives govern native early stopping. The fitter surrogate loss and training weights are recorded separately; development data are reused.' if contract else
+                               'Historical input: native fixed criteria and upstream provenance remain unverified.'}
 
 
 def validate_features(features, X_train, X_valid):
@@ -48,11 +49,8 @@ def validate_features(features, X_train, X_valid):
 
 def fit_for_tuning(algorithm, X_train, y_train, X_valid, y_valid, config, *, task,
                    nthread, scale_pos_weight, early_stopping_rounds, context=None):
-    # The native classification early-stopping criterion is AUC, even when
-    # the selection objective is a loss. Do not use an undefined criterion.
-    if task == 'classification' and (context or {}).get('prediction_contract') and early_stopping_rounds:
-        if set(y_train.unique()) != {0, 1} or set(y_valid.unique()) != {0, 1}:
-            raise ValueError('Native AUC early stopping requires both declared classes in each training/validation partition; revise the split or population.')
+    from modeling.declared_metric import bind_declared_metric
+    config = bind_declared_metric(config, (context or {}).get('prediction_contract'))
     if task == 'classification' and (context or {}).get('class_weight_policy') == 'train_label_ratio':
         if not (y_train == 1).any():
             raise ValueError('Training partition lacks the declared positive class.')
@@ -82,6 +80,6 @@ def tuning_basis(X_train, y_train, X_valid, y_valid, context, execution_id, algo
              'runtime': {**runtime_versions(algorithm), 'validation': runtime_versions('sklearn'), 'search': search_runtime},
              'implementation_sha256': {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                                        for name in ('hyperparam_utils.py', 'tuning_evidence.py', 'sfs_objective.py',
-                                                    'development_validation.py', 'development_assessment.py', 'booster_adapters.py')}}
+                                                    'development_validation.py', 'development_assessment.py', 'booster_adapters.py', 'declared_metric.py')}}
     basis['sha256'] = receipt_digest(basis)
     return basis

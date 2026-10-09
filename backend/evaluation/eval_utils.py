@@ -34,7 +34,7 @@ def compute_ks_gini(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[Optional[f
         return None, None
 
 
-def evaluate_multiclass(y_true, probabilities):
+def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
     y = np.asarray(y_true, dtype=int)
     p = np.asarray(probabilities, dtype=float)
     if p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
@@ -47,20 +47,22 @@ def evaluate_multiclass(y_true, probabilities):
     p = p / p.sum(axis=1, keepdims=True)
     classes = np.arange(p.shape[1])
     pred = p.argmax(axis=1)
-    auc = None
-    if set(np.unique(y)) == set(classes):
-        auc = _safe_float(roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
+    values = {
+        'accuracy': lambda: _safe_float(accuracy_score(y, pred)),
+        'log_loss': lambda: _safe_float(log_loss(y, p, labels=classes)),
+        'f1_weighted': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
+        'f1': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
+        'roc_auc': lambda: _safe_float(roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
+                          if set(np.unique(y)) == set(classes) else None,
+        'n_samples': lambda: len(y)}
+    metrics = {name: values[name]() for name in (metric_names if metric_names is not None else values)}
     return {
         'task': 'classification', 'class_count': p.shape[1],
-        'metrics': {'accuracy': _safe_float(accuracy_score(y, pred)),
-                    'log_loss': _safe_float(log_loss(y, p, labels=classes)),
-                    'f1_weighted': _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
-                    'f1': _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
-                    'roc_auc': auc, 'n_samples': len(y)},
+        'metrics': metrics,
         'confusion_matrix': confusion_matrix(y, pred, labels=classes).tolist(),
         'threshold_table': [],
         'metric_semantics': {'roc_auc': 'weighted one-vs-rest', 'f1': 'weighted across declared classes'},
-        'limitations': ['Weighted multiclass AUC is unavailable when the assessment partition lacks a declared class.'] if auc is None else [],
+        'limitations': ['Weighted multiclass AUC is unavailable when the assessment partition lacks a declared class.'] if 'roc_auc' in metrics and metrics['roc_auc'] is None else [],
     }
 
 

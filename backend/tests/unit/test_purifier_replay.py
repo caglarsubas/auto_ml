@@ -237,9 +237,11 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
     load_execution(trained.data['execution_id'], file.pk)
     # Candidate adoption must retain fitted raw replay and avoid requiring an unused feature.
     candidate_adapter = load_model_adapter(str(Path(settings.MEDIA_ROOT)/model['model_path']), algorithm='xgboost')
+    from modeling.declared_metric import bind_declared_metric
     candidate_adapter.train(development['X_train'][['x']], development['y_train'],
                             development['X_valid'][['x']], development['y_valid'],
-                            {'objective': 'reg:squarederror' if task == 'regression' else 'binary:logistic'}, num_boost_round=10)
+                            bind_declared_metric({'objective': 'reg:squarederror' if task == 'regression' else 'binary:logistic'},
+                                                 development['prediction_contract']), num_boost_round=10)
     candidate = publish_candidate(trained.data['execution_id'], file.pk, candidate_adapter, ['x'], {}, 'replay-test')
     assert candidate['model']['fit_receipt']['num_boost_round'] == 10
     assert candidate['model']['cv']['configuration']['features'] == ['x']

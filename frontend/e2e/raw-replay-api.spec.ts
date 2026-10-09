@@ -5,6 +5,7 @@ for (const task of ['classification', 'regression'] as const) {
   test(`real-session ${task} raw input survives preprocessing versions and batch scoring`, async ({
     authenticatedApi: api,
   }) => {
+    const primary = task === 'regression' ? 'mse' : 'pr_auc';
     const rows = Array.from({ length: 300 }, (_, index) => ({
       x: index < 200 ? (index % 37) - 18 : 1e9,
       category: index < 200 ? (index % 3 ? 'common' : 'other') : 'unseen',
@@ -53,7 +54,7 @@ for (const task of ['classification', 'regression'] as const) {
               label_maturity: 'Complete follow-up',
             },
             success_criteria: {
-              primary_metric: task === 'regression' ? 'rmse' : 'roc_auc',
+              primary_metric: primary,
               cost_matrix: { fn_cost: 4, fp_cost: 1 },
             },
           },
@@ -74,7 +75,12 @@ for (const task of ['classification', 'regression'] as const) {
       expect(run.model.cv.task).toBe(task);
       expect(run.model.cv.status).toBe('completed');
       expect(run.model.cv.cv_strategy).toBe('time_series');
-      const primary = task === 'regression' ? 'rmse' : 'roc_auc';
+      expect(run.model.fit_receipt.training_eval_metric).toBe(primary);
+      expect(run.model.fit_receipt.stopping_evidence).toMatchObject({
+        mode: 'declared_metric',
+        metric_spec: { primary_metric: primary, cost_matrix: { fn_cost: 4, fp_cost: 1 } },
+      });
+      expect(run.model.fit_receipt.stopping_evidence.prediction_rounds).toBeGreaterThan(0);
       expect(run.model.cv.metric_coverage[primary]).toMatchObject({
         n_valid: 5,
         n_total: 5,
@@ -85,6 +91,7 @@ for (const task of ['classification', 'regression'] as const) {
         expect(fold.purifier.fit_rows).toEqual(fold.train_rows);
         expect(Math.max(...fold.train_rows)).toBeLessThan(Math.min(...fold.valid_rows));
         expect(Math.max(...fold.valid_rows)).toBeLessThan(200);
+        expect(fold.native_fit.training_eval_metric).toBe(primary);
       }
       if (task === 'regression') {
         expect(run.model.cv.rmse_mean).toBeGreaterThanOrEqual(0);
@@ -232,6 +239,7 @@ for (const task of ['classification', 'regression'] as const) {
       expect(child.execution_id).not.toBe(run.execution_id);
       expect(child.model.fit_receipt.train.features).toEqual(['x']);
       expect(child.model.fit_receipt.num_boost_round).toBe(10);
+      expect(child.model.fit_receipt.training_eval_metric).toBe(primary);
       expect(child.model.cv.configuration).toMatchObject({
         feature_scope: 'selected',
         features: ['x'],
@@ -292,8 +300,10 @@ for (const task of ['classification', 'regression'] as const) {
       expect(tuning.n_failed).toBe(0);
       expect(tuning.refit_params).toEqual(tuning.selected_params);
       expect(tuning.refit_receipt.num_boost_round).toBe(5);
+      expect(tuning.refit_receipt.training_eval_metric).toBe(primary);
       expect(tuning.execution_id).not.toBe(child.execution_id);
       for (const trial of tuning.trials) {
+        expect(trial.fit_receipt.training_eval_metric).toBe(primary);
         expect(trial.cv[primary]).toMatchObject({ status: 'complete', n_valid: 2, n_total: 2 });
         for (const fold of trial.validation_provenance) {
           expect(Math.max(...fold.train_rows)).toBeLessThan(Math.min(...fold.valid_rows));

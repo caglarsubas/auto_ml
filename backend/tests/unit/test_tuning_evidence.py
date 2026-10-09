@@ -76,10 +76,9 @@ def test_trial_values_match_independent_predictions(task, metric):
 @pytest.mark.parametrize('method', ['random', 'grid', 'optuna'])
 def test_unavailable_primary_never_selects_fallback_configuration(method):
     result = run(data(metric='r2', constant=True), search_method=method)
-    assert result['status'] == 'error' and 'complete finite declared objective' in result['error']
-    assert result['n_trials'] == 2 and result['n_failed'] == 2
-    assert all(row['status'] == 'objective_unavailable' for row in result['trial_attempts'])
-    assert result['trials'][0]['cv']['r2']['mean'] is None
+    assert result['status'] == 'error' and 'No trials completed successfully' in result['error']
+    assert result['n_trials'] == 0 and result['n_attempted'] == result['n_failed'] == 2
+    assert all(row['status'] == 'failed' and 'r2 is unavailable' in row['error'] for row in result['trial_attempts'])
     assert not result['best_points'] and 'selected_params' not in result
     json.dumps(result, allow_nan=False)
 
@@ -140,14 +139,19 @@ def test_features_cannot_silently_fall_back_to_all_columns(features):
         run(features=features)
 
 
-def test_accepted_loss_cannot_use_undefined_native_auc_early_stopping():
-    parts = data('classification', 'brier')
+@pytest.mark.parametrize('metric', ['brier', 'roc_auc'])
+def test_single_class_validation_obeys_the_declared_stopping_metric(metric):
+    parts = data('classification', metric)
     parts = list(parts)
     parts[3] = parts[3].copy()
     parts[3].iloc[:] = 1
     result = run(parts)
-    assert result['status'] == 'error'
-    assert all('both declared classes' in attempt['error'] for attempt in result['trial_attempts'])
+    if metric == 'brier':
+        assert result['status'] == 'completed', result.get('error')
+        assert all(trial['fit_receipt']['training_eval_metric'] == metric for trial in result['trials'])
+    else:
+        assert result['status'] == 'error'
+        assert all('roc_auc is unavailable' in attempt['error'] for attempt in result['trial_attempts'])
 
 
 def test_search_basis_binds_raw_inputs_and_budget_but_excludes_protected_rows():

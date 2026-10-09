@@ -64,8 +64,11 @@ def _sfs_fit(
     task: str = 'classification',
     num_boost_round: int = 100,
     early_stopping_rounds: int = 10,
+    context=None,
 ):
-    if task == 'classification' and early_stopping_rounds and (
+    from modeling.declared_metric import bind_declared_metric
+    params = bind_declared_metric(params, (context or {}).get('prediction_contract'))
+    if not params.get('_metric_spec') and task == 'classification' and early_stopping_rounds and (
         set(np.unique(y_tr)) != {0, 1} or set(np.unique(y_va)) != {0, 1}
     ):
         raise ValueError('Native selection uses AUC early stopping, which requires both encoded classes in training and validation. Revise the population or validation split; objective-aligned fitting remains open.')
@@ -650,7 +653,7 @@ def _selection_cv(X, y, task, algorithm, context, cv_folds, objective):
     for fold, (X_tr, y_tr, X_va, y_va, receipt) in enumerate(iter_validation_folds(context, X, y, cv_folds, task), 1):
         if task == "classification" and set(y_tr.unique()) != {0, 1}:
             raise ValueError(f"Feature-selection fold {fold} lacks a training class; revise the population or split.")
-        adapter = _sfs_fit(algorithm, X_tr, y_tr, X_va, y_va, _sfs_booster_params(task, 0), task=task)
+        adapter = _sfs_fit(algorithm, X_tr, y_tr, X_va, y_va, _sfs_booster_params(task, 0), task=task, context=context)
         predictions = adapter.predict(X_va) if task == "regression" else adapter.predict_proba(X_va)
         rows.append(development_metrics(y_va, predictions, task, 2, objective["cost_matrix"]))
         provenance.append({**receipt, "native_fit": adapter.fit_receipt})
@@ -705,7 +708,7 @@ def _run_selection_step(
 
     def screen(name):
         features = subset(name)
-        adapter = _sfs_fit(algorithm, X_train[features], y_train, X_valid[features], y_valid, params, task=task)
+        adapter = _sfs_fit(algorithm, X_train[features], y_train, X_valid[features], y_valid, params, task=task, context=context)
         predictions = (
             adapter.predict(X_valid[features]) if task == "regression" else adapter.predict_proba(X_valid[features])
         )
@@ -730,7 +733,7 @@ def _run_selection_step(
     winner = max(evidence, key=lambda name: sign * evidence[name]["metrics"][primary])
     features, cv = subset(winner), evidence[winner]
     adapter = _sfs_fit(
-        algorithm, X_train[features], y_train, X_valid[features], y_valid, _sfs_booster_params(task, 0), task=task
+        algorithm, X_train[features], y_train, X_valid[features], y_valid, _sfs_booster_params(task, 0), task=task, context=context
     )
     train_p = adapter.predict(X_train[features]) if task == "regression" else adapter.predict_proba(X_train[features])
     valid_p = adapter.predict(X_valid[features]) if task == "regression" else adapter.predict_proba(X_valid[features])

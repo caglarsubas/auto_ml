@@ -437,6 +437,8 @@ class ModelingStartView(APIView):
                             adapter.save(model_path)
                         else:
                             # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
+                            from modeling.declared_metric import bind_declared_metric
+                            params = bind_declared_metric(params, prediction_contract)
                             adapter = get_adapter(algorithm)
                             adapter.train(
                                 X_train, y_train, X_valid, y_valid, params,
@@ -1048,6 +1050,8 @@ class ModelingStartView(APIView):
                                 'colsample_bytree': 0.7,
                                 'seed': 42,
                             }
+                            from modeling.declared_metric import bind_declared_metric
+                            params = bind_declared_metric(params, prediction_contract)
                             adapter = get_adapter(algorithm)
                             adapter.train(
                                 X_train, y_train, X_valid, y_valid, params,
@@ -1318,22 +1322,18 @@ class FeatureExplainabilityView(APIView):
                 valid_sf = [f for f in selected_features if f in X_tr.columns]
                 if not valid_sf:
                     return Response({'error': 'None of the selected_features exist in training data.'}, status=status.HTTP_400_BAD_REQUEST)
-                _has_cat_sf = any(
-                    hasattr(X_tr[c], 'cat') or X_tr[c].dtype.name == 'category' or X_tr[c].dtype == 'object' or pd.api.types.is_string_dtype(X_tr[c])
-                    for c in valid_sf
-                )
-                dtrain_sf = xgb.DMatrix(X_tr[valid_sf], label=y_tr, enable_categorical=_has_cat_sf)
                 _params_sf = {
                     'objective': 'reg:squarederror' if train_data.get('task') == 'regression' else 'binary:logistic',
                     'eval_metric': 'rmse' if train_data.get('task') == 'regression' else 'auc',
                     'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
                     'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
                 }
-                booster = xgb.train(
-                    _params_sf, dtrain_sf, num_boost_round=100,
-                    evals=[(xgb.DMatrix(train_data['X_valid'][valid_sf], label=train_data['y_valid'], enable_categorical=_has_cat_sf), 'valid')], early_stopping_rounds=10,
-                    verbose_eval=False
-                )
+                from modeling.declared_metric import bind_declared_metric
+                _params_sf = bind_declared_metric(_params_sf, train_data.get('prediction_contract'))
+                diagnostic_adapter = get_adapter('xgboost').train(X_tr[valid_sf], y_tr,
+                    train_data['X_valid'][valid_sf], train_data['y_valid'], _params_sf,
+                    num_boost_round=100, early_stopping_rounds=10)
+                booster = diagnostic_adapter.shap_model()[:diagnostic_adapter.best_iteration + 1]
                 print(f"[FeatureExplainability] Trained on-demand model with {len(valid_sf)} features for step explainability")
 
             # Option 2: Load saved model (custom or default)
@@ -2024,7 +2024,7 @@ class SFSStartView(APIView):
                                     from modeling.sfs_utils import _sfs_fit, _sfs_booster_params
                                     fit_params = _sfs_booster_params(sfs_task, 0)
                                     adapter = _sfs_fit(sfs_algorithm, X_train[valid_features], y_train,
-                                        X_valid[valid_features], y_valid, fit_params, task=sfs_task)
+                                        X_valid[valid_features], y_valid, fit_params, task=sfs_task, context=train_data.get('validation_context'))
                                     parent_id = train_data.get('execution_id')
                                     if parent_id:
                                         candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
@@ -3027,6 +3027,8 @@ class ChampionPromoteView(APIView):
                     development['X_valid'][features], development['y_valid'], hyperparam)
             else:
                 from modeling.booster_adapters import fit_booster
+                from modeling.declared_metric import bind_declared_metric
+                hyperparam = bind_declared_metric(hyperparam, development['prediction_contract'])
                 adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
                     development['X_valid'][features], development['y_valid'], hyperparam,
                     task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))

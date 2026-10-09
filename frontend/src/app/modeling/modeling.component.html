@@ -710,6 +710,23 @@
               <p>Training rows: {{ fit.train.n_rows }}. Validation rows: {{ fit.valid.n_rows }}.</p>
               <p>Features: {{ fit.train.features.join(', ') }}.</p>
               <p>Validation use during fit: {{ fit.validation_role }}.</p>
+              @if (fit.stopping_evidence; as stopping) {
+                <p>
+                  Declared fit metric: {{ stopping.metric_spec.primary_metric }} ({{
+                    stopping.metric_spec.direction
+                  }}). Early stopping: {{ stopping.mode }}.
+                </p>
+                <p>
+                  Boosting rounds used for prediction: {{ stopping.prediction_rounds }}.
+                  @if (stopping.selected_validation_score !== null) {
+                    Selected validation score: {{ stopping.selected_validation_score }}.
+                  }
+                </p>
+                <p>Training loss: {{ stopping.training_loss.native_name }}.</p>
+                <p>{{ stopping.training_loss.role }}</p>
+                <p>{{ stopping.metric_spec.weighting }} {{ stopping.metric_spec.semantics }}.</p>
+                <p>{{ stopping.qualification }}</p>
+              }
               @if (fit.num_boost_round !== null && fit.num_boost_round !== undefined) {
                 <p>
                   Maximum boosting rounds: {{ fit.num_boost_round }}. Early stopping rounds:

@@ -87,7 +87,7 @@ def test_real_booster_development_cv_records_exact_fit_population(task, strategy
     result = assess_development_cv(config, config['frame'][['x']], config['labels'], algorithm, params,
                                    n_splits=3, num_boost_round=10, early_stopping_rounds=3)
     assert result['task'] == task and result['status'] == 'completed'
-    expected_training_metric = ('RMSE' if task == 'regression' else 'AUC') if algorithm == 'catboost' else ('rmse' if task == 'regression' else 'auc')
+    expected_training_metric = result['primary_metric']
     assert result['training_eval_metric'] == expected_training_metric
     assert all(fold['training_eval_metric'] == expected_training_metric for fold in result['folds'])
     assert result['metric_coverage'][result['primary_metric']]['n_valid'] == 3
@@ -114,7 +114,7 @@ def test_alternate_binary_cv_replays_raw_fitted_transforms(algorithm):
 def test_undefined_required_metric_blocks_new_run_but_legacy_failure_is_explicit():
     config = context(primary='r2')
     config['labels'][:] = 1.
-    with pytest.raises(PredictionContractError, match='r2 is available in 0 of 5'):
+    with pytest.raises(PredictionContractError, match='r2 is unavailable'):
         run_development_cv(config, config['frame'][['x']], config['labels'], 'xgboost',
                            {'task': 'regression', 'objective': 'reg:squarederror', 'eval_metric': 'rmse', 'nthread': 1})
     config.pop('purifier_recipe')
@@ -137,7 +137,7 @@ def test_hpo_cannot_hide_single_class_validation_folds():
     config['labels'] = pd.Series([0] * 60 + [1] * 60 + [0, 1] * 30)
     X, y = config['frame'][['x']], config['labels']
     params = {'max_depth': 2, 'n_estimators': 5}
-    with pytest.raises(ValueError, match='both declared classes'):
+    with pytest.raises(ValueError, match='roc_auc is unavailable'):
         _evaluate_config(X, y, X.iloc[-30:], y.iloc[-30:], params, 3, False, 1, .5,
                          early_stopping_rounds=2, validation_context=config)
     result = _evaluate_config(X, y, X.iloc[-30:], y.iloc[-30:], params, 3, False, 1, .5,

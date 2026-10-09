@@ -351,7 +351,7 @@ def test_screening_uses_cost_instead_of_auc_when_the_declaration_requires_it(mon
         return {"metrics": development_metrics(y, values.iloc[:, 0], "classification"), "fold_provenance": []}
 
     monkeypatch.setattr(sfs, "_selection_cv", cv)
-    contract = {"objective": {"primary_metric": metric}}
+    contract = {"task": "classification", "class_mapping": [{}, {}], "objective": {"primary_metric": metric}}
     result = sfs.run_sfs_with_progress(
         X,
         y,
@@ -384,7 +384,7 @@ def test_resume_rejects_changed_runtime_and_native_configuration(monkeypatch):
 
 
 @pytest.mark.parametrize('single_class', ['screening', 'fold'])
-def test_available_brier_objective_cannot_hide_unavailable_native_early_stopping(single_class):
+def test_available_brier_objective_does_not_require_native_auc(single_class):
     X, y, V, z, context = data('classification', 'brier')
     if single_class == 'screening':
         z = z * 0
@@ -397,6 +397,5 @@ def test_available_brier_objective_cannot_hide_unavailable_native_early_stopping
         context['frame']['date'] = pd.date_range('2025-01-01', periods=90)
         context['split_meta'] = {'strategy': 'oot', 'split_config': {'date_column': 'date'}}
     result = run((X, y, V, z, context))
-    assert result['status'] == 'error' and result['forward'] == []
-    assert 'AUC early stopping' in result['error']
-    assert 'both encoded classes' in result['error']
+    assert result['status'] == 'completed', result.get('error')
+    assert result['forward'][0]['fit_receipt']['training_eval_metric'] == 'brier'

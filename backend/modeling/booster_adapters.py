@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from modeling.declared_metric import CatBoostDeclaredMetric, metric_value, prepare_metric, record_stopping
+
 
 def _cat_cols(X: pd.DataFrame) -> List[str]:
     out = []
@@ -62,6 +64,8 @@ class BoosterAdapter(ABC):
         self.task: str = 'classification'
         self.training_eval_metric: Optional[str] = None
         self.fit_receipt = None
+        self.declared_metric_spec = None
+        self.stopping_evidence = None
 
     @abstractmethod
     def train(
@@ -118,7 +122,8 @@ class XGBoostAdapter(BoosterAdapter):
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
         self.task = 'regression' if _is_regression(params) else 'classification'
-        p = {k: v for k, v in dict(params).items() if k != 'task'}
+        spec = prepare_metric(self, params, y_train, y_valid, early_stopping_rounds, num_boost_round)
+        p = {k: v for k, v in dict(params).items() if k not in ('task', '_metric_spec')}
         # Normalize sklearn-style aliases to learning-API keys
         if 'learning_rate' in p and 'eta' not in p:
             p['eta'] = p.pop('learning_rate')
@@ -138,7 +143,15 @@ class XGBoostAdapter(BoosterAdapter):
             p.setdefault('eval_metric', 'rmse')
             p.pop('num_class', None)
             p.pop('scale_pos_weight', None)
-        self.training_eval_metric = p.get('eval_metric')
+        self.training_eval_metric = spec['primary_metric'] if spec and early_stopping_rounds else (None if spec else p.get('eval_metric'))
+        metric_options, evaluation = {}, {}
+        if spec:
+            p.pop('eval_metric', None)
+            p['disable_default_eval_metric'] = True
+            if early_stopping_rounds:
+                metric_options = {'custom_metric': lambda predictions, data: (
+                    spec['primary_metric'], metric_value(spec, data.get_label(), predictions)),
+                    'maximize': spec['direction'] == 'maximize'}
         if self.enable_categorical:
             p['enable_categorical'] = True
         dtrain = xgb.DMatrix(
@@ -151,11 +164,13 @@ class XGBoostAdapter(BoosterAdapter):
         )
         self.model = xgb.train(
             p, dtrain, num_boost_round=num_boost_round,
-            evals=[(dvalid, 'valid')],
+            evals=[(dvalid, 'valid')] if not spec or early_stopping_rounds else [],
             early_stopping_rounds=early_stopping_rounds if early_stopping_rounds else None,
-            verbose_eval=False,
+            verbose_eval=False, evals_result=evaluation, **metric_options,
         )
         self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round - 1))
+        record_stopping(self, evaluation.get('valid', {}).get(self.training_eval_metric, []),
+                        p.get('objective'), early_stopping_rounds, self.best_iteration + 1)
         from modeling.fit_receipts import record_native_fit
         record_native_fit(self, X_train, y_train, X_valid, y_valid, params, p, num_boost_round, early_stopping_rounds)
         return self
@@ -176,15 +191,24 @@ class XGBoostAdapter(BoosterAdapter):
 
     def save(self, path: str) -> str:
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-        self.model.save_model(path)
+        model = self.model
+        if self.best_iteration is not None and 0 <= self.best_iteration < model.num_boosted_rounds() - 1:
+            # Native predict defaults to all saved rounds. Publish precisely the
+            # evaluated model, excluding patience rounds after its selected round.
+            model = model[:self.best_iteration + 1]
+            model.set_attr(**self.model.attributes())
+        model.save_model(path)
         return path
 
     @classmethod
     def load(cls, path: str, feature_names=None, cat_features=None):
         import xgboost as xgb
         obj = cls()
-        obj.model = xgb.Booster()
+        # Model loading and small scoring batches must not create an all-core
+        # OpenMP team for every request. Training parallelism is independent.
+        obj.model = xgb.Booster(params={'nthread': 1})
         obj.model.load_model(path)
+        obj.model.set_param({'nthread': 1})
         obj.feature_names = list(feature_names or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)
@@ -229,6 +253,7 @@ class LightGBMAdapter(BoosterAdapter):
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
         self.task = 'regression' if _is_regression(params) else 'classification'
+        spec = prepare_metric(self, params, y_train, y_valid, early_stopping_rounds, num_boost_round)
         Xtr = X_train.copy()
         Xva = X_valid.copy()
         # LightGBM prefers category dtype for native cats
@@ -261,18 +286,27 @@ class LightGBMAdapter(BoosterAdapter):
             p['metric'] = 'multi_logloss'
         if 'scale_pos_weight' in params and self.task != 'regression':
             p['scale_pos_weight'] = float(params['scale_pos_weight'])
-        self.training_eval_metric = p['metric']
+        self.training_eval_metric = spec['primary_metric'] if spec and early_stopping_rounds else (None if spec else p['metric'])
+        metric_options, evaluation = {}, {}
+        if spec:
+            p['metric'] = 'None'
+            if early_stopping_rounds:
+                metric_options['feval'] = lambda predictions, data: (
+                    spec['primary_metric'], metric_value(spec, data.get_label(), predictions),
+                    spec['direction'] == 'maximize')
         dtrain = lgb.Dataset(Xtr, label=y_train, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
         dvalid = lgb.Dataset(Xva, label=y_valid, reference=dtrain, categorical_feature=self.cat_features or 'auto', free_raw_data=False)
-        callbacks = [lgb.log_evaluation(period=0)]
+        callbacks = [lgb.log_evaluation(period=0), lgb.record_evaluation(evaluation)]
         if early_stopping_rounds:
-            callbacks.append(lgb.early_stopping(early_stopping_rounds, verbose=False))
+            callbacks.append(lgb.early_stopping(early_stopping_rounds, verbose=False, first_metric_only=True))
         self.model = lgb.train(
             p, dtrain, num_boost_round=num_boost_round,
-            valid_sets=[dvalid], valid_names=['valid'],
-            callbacks=callbacks,
+            valid_sets=[dvalid] if not spec or early_stopping_rounds else [], valid_names=['valid'] if not spec or early_stopping_rounds else [],
+            callbacks=callbacks, **metric_options,
         )
-        self.best_iteration = int(getattr(self.model, 'best_iteration', num_boost_round) or num_boost_round)
+        self.best_iteration = int(self.model.best_iteration or self.model.current_iteration())
+        record_stopping(self, evaluation.get('valid', {}).get(self.training_eval_metric, []),
+                        p['objective'], early_stopping_rounds, self.best_iteration)
         from modeling.fit_receipts import record_native_fit
         record_native_fit(self, X_train, y_train, X_valid, y_valid, params, p, num_boost_round, early_stopping_rounds)
         return self
@@ -327,6 +361,7 @@ class CatBoostAdapter(BoosterAdapter):
         self.cat_features = _cat_cols(X_train)
         self.enable_categorical = len(self.cat_features) > 0
         self.task = 'regression' if _is_regression(params) else 'classification'
+        spec = prepare_metric(self, params, y_train, y_valid, early_stopping_rounds, num_boost_round)
         cat_idx = [self.feature_names.index(c) for c in self.cat_features if c in self.feature_names]
         Xtr = X_train.copy()
         Xva = X_valid.copy()
@@ -347,15 +382,16 @@ class CatBoostAdapter(BoosterAdapter):
             'thread_count': int(params.get('nthread', params.get('thread_count', -1)) or -1),
             'verbose': False,
             'allow_writing_files': False,
+            'use_best_model': bool(early_stopping_rounds),
         }
         if self.task == 'regression':
             cb_kwargs['loss_function'] = 'RMSE'
-            cb_kwargs['eval_metric'] = 'RMSE'
+            cb_kwargs['eval_metric'] = CatBoostDeclaredMetric(spec) if spec and early_stopping_rounds else 'RMSE'
             self.model = CatBoostRegressor(**cb_kwargs)
         else:
             loss = 'MultiClass' if 'num_class' in params else 'Logloss'
             cb_kwargs['loss_function'] = loss
-            cb_kwargs['eval_metric'] = 'AUC' if loss == 'Logloss' else 'MultiClass'
+            cb_kwargs['eval_metric'] = CatBoostDeclaredMetric(spec) if spec and early_stopping_rounds else ('AUC' if loss == 'Logloss' else 'MultiClass')
             if loss == 'MultiClass':
                 # CatBoost's default multiclass Bayesian bootstrap rejects
                 # the shared subsample setting. Bernoulli supports that setting.
@@ -363,16 +399,17 @@ class CatBoostAdapter(BoosterAdapter):
             if 'scale_pos_weight' in params and params['scale_pos_weight'] is not None:
                 cb_kwargs['scale_pos_weight'] = float(params['scale_pos_weight'])
             self.model = CatBoostClassifier(**cb_kwargs)
-        self.training_eval_metric = cb_kwargs['eval_metric']
+        self.training_eval_metric = spec['primary_metric'] if spec and early_stopping_rounds else (None if spec else cb_kwargs['eval_metric'])
         self.model.fit(
-            train_pool, eval_set=valid_pool,
+            train_pool, eval_set=valid_pool if not spec or early_stopping_rounds else None,
             early_stopping_rounds=early_stopping_rounds or None,
             verbose=False,
         )
-        try:
-            self.best_iteration = int(self.model.get_best_iteration() or num_boost_round)
-        except Exception:
-            self.best_iteration = int(num_boost_round)
+        best = self.model.get_best_iteration()
+        self.best_iteration = int(best if early_stopping_rounds and best >= 0 else self.model.tree_count_ - 1)
+        evaluation = self.model.get_evals_result().get('validation', {})
+        record_stopping(self, evaluation.get('CatBoostDeclaredMetric', []), cb_kwargs['loss_function'],
+                        early_stopping_rounds, self.model.tree_count_)
         from modeling.fit_receipts import record_native_fit
         record_native_fit(self, X_train, y_train, X_valid, y_valid, params, self.model.get_all_params(), num_boost_round, early_stopping_rounds)
         return self
@@ -501,6 +538,8 @@ def config_to_booster_params(
         params['eval_metric'] = 'auc'
         if scale_pos_weight is not None and np.isfinite(scale_pos_weight) and scale_pos_weight > 0:
             params['scale_pos_weight'] = float(scale_pos_weight)
+    if config.get('_metric_spec'):
+        params['_metric_spec'] = config['_metric_spec']
     return params, num_boost_round
 
 
