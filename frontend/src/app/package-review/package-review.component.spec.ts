@@ -84,6 +84,25 @@ describe('Package review receipts and context', () => {
     expect(component.pending).toBeNull();
     expect(component.error).toContain('review_revision_changed');
   });
+  it('retains a receipt when a final authority check withholds confirmation', () => {
+    component.review = review;
+    component.text = 'Finding before revocation';
+    component.submit();
+    const first = http.expectOne('/api/reviews/case/?project_id=project-a');
+    const payload = first.request.body;
+    first.flush(
+      { error_code: 'project_authority_changed' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    expect(component.pending?.body).toEqual(payload);
+    expect(component.review).toBeNull();
+    expect(component.directory).toBeNull();
+    component.retry();
+    const retry = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(retry.request.body).toEqual(payload);
+    retry.flush({ ...review, revision: 4, replayed: true });
+    expect(component.pending).toBeNull();
+  });
   it('never submits historical evidence', () => {
     component.review = { ...review, freshness: 'historical' };
     component.text = 'Finding';

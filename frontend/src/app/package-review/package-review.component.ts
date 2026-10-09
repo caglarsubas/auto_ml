@@ -189,11 +189,16 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
         error: (error) => {
           if (generation !== this.generation) return;
           this.busy = false;
-          if ([400, 403, 404, 409].includes(error.status)) {
+          // A final authority recheck may withhold a committed response with
+          // 403. Preserve that receipt just like a network/storage ambiguity.
+          if ([400, 404, 409].includes(error.status)) {
             this.pending = null;
             this.review = null;
             this.error = `Action was blocked (${error.error?.error_code || 'invalid request'}). Refresh the review before making another change.`;
           } else {
+            if (error.status === 403) {
+              this.review = this.directory = null;
+            }
             this.error =
               'The outcome could not be confirmed. Retry the pending action with the same receipt.';
           }
