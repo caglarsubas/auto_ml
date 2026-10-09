@@ -103,7 +103,8 @@
   ],
   "qualification_corrections": [
     "The first disposable harness seed failed because pathlib.Path.open does not accept opener; replaced with builtin open and reran the fixture.",
-    "First PostgreSQL full run exposed FileResponse.close/request_finished inside a test-wrapping atomic transaction. The existing session-boundary test now uses transaction=True, retaining all assertions and exercising real autocommit. Both final full suites pass."
+    "First PostgreSQL full run exposed FileResponse.close/request_finished inside a test-wrapping atomic transaction. The existing session-boundary test now uses transaction=True, retaining all assertions and exercising real autocommit. Both final full suites pass.",
+    "Initial host-runner CI reached private seed and both TLS rejection checks, then failed connecting after PostgreSQL restart. Docker ephemeral published ports can change on restart; the host runner now resolves the published port again. The core-image runner uses the stable internal port. Final host qualification remains an exact-head CI check."
   ],
   "ci": "Adds PostgreSQL runtime and metadata as a sixth job with private TLS, restart/restore and full PostgreSQL pytest at the existing skip/coverage gates. The existing five jobs remain. Exact-head checks are recorded by the PR, separately from local evidence.",
   "preservation": {
@@ -130,7 +131,7 @@
     "docker-compose.yml": "133e3a88da46b89072ee8f302e788118e330738204e5ac374a3cf72f6002895b",
     "docker/backend-entrypoint.sh": "2854cec1b5424477f2a91768e6d28aabf940fda103147c821e6b31b47a9895b2",
     "docs/private-runtime-configuration.md": "08350516737ee5ff982052e7f655607b300ac4a4a309d70e4bb6a1335e11bad3",
-    "scripts/qualify_postgres_fixture.py": "2f53613c43cd65c16e348739c4acd9cf3ee9930d4418cc9aa6688e952801c0db",
+    "scripts/qualify_postgres_fixture.py": "a85f78ee5bc187c5089c3bf2f3937abf1da70ca3f15e2342fa397f530fc6b177",
     "scripts/qualify_private_runtime.py": "2a39e8092f6bd9f0d42228e59c61765f09e7a7ec6d5b10aba9a51f7a0f7e87bd"
   },
   "limitations": [
@@ -139,6 +140,6 @@
     "Private deployment WSGI/ASGI/TLS/static/offline/encrypted packaging is not delivered or qualified.",
     "No Celery/durable-worker, interrupted-job recovery, cancellation, online coordinated restore or upgrade/rollback qualification.",
     "REST project authorization, egress/retention, expert gVisor isolation, independent reproduction and all release/customer gates remain open.",
-    "Final fixture-controller lint and owned-runner cleanup changes retain check semantics; the final host runner is independently exercised by the new exact-head CI job."
+    "Final fixture-controller lint/owned-runner cleanup and published-port refresh changes retain application/check semantics; the final host runner is independently exercised by exact-head CI."
   ]
 }

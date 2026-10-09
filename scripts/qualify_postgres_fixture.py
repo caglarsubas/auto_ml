@@ -415,6 +415,15 @@ def main():
                 if result.returncode == 0:
                     break
                 time.sleep(1)
+            if not args.runner_image:
+                # Docker may allocate a different ephemeral published port on restart.
+                # The core-image runner uses the stable internal service port instead.
+                env["DECLARAI_DB_PORT"] = (
+                    command(["docker", "port", db, "5432/tcp"])
+                    .decode()
+                    .strip()
+                    .rsplit(":", 1)[1]
+                )
             run_python(["scripts/qualify_private_runtime.py", "verify"])
             run_python(
                 ["scripts/qualify_private_runtime.py", "verify"],
