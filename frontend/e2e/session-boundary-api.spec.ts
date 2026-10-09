@@ -6,6 +6,8 @@ test('anonymous requests cannot read installation data or artifacts', async ({ r
   const artifact = new URL('/media/not-present.json', API_BASE_URL);
   expect((await request.get(artifact.href)).status()).toBe(403);
   expect((await request.post(`${API_BASE_URL}modeling/start/`, { data: {} })).status()).toBe(403);
+  const history = `${API_BASE_URL}evaluation/holdout-history/00000000-0000-0000-0000-000000000000/?file_id=1`;
+  expect((await request.get(history)).status()).toBe(403);
 });
 
 test('an authenticated mutation still requires CSRF', async ({ authenticatedApi: api, playwright }) => {

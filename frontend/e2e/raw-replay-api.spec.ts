@@ -1,19 +1,23 @@
 import { test, expect } from './fixtures/session';
 import { API_BASE_URL } from './fixtures/credentials';
+import { randomUUID } from 'node:crypto';
 
 for (const task of ['classification', 'regression'] as const) {
   test(`real-session ${task} raw input survives preprocessing versions and batch scoring`, async ({
     authenticatedApi: api,
-  }) => {
+    page,
+  }, testInfo) => {
     const primary = task === 'regression' ? 'mse' : 'pr_auc';
+    const fixtureId = randomUUID();
     const rows = Array.from({ length: 300 }, (_, index) => ({
       x: index < 200 ? (index % 37) - 18 : 1e9,
       category: index < 200 ? (index % 3 ? 'common' : 'other') : 'unseen',
       outcome: task === 'regression' ? ((index % 37) - 18) * 2 : index % 2 ? 'bad' : 'good',
       date: new Date(Date.UTC(2025, 0, 1 + index)).toISOString().slice(0, 10),
+      fixture_id: fixtureId,
     }));
     const csv = [
-      'x,category,outcome,date',
+      'x,category,outcome,date,fixture_id',
       ...rows.map((row) => Object.values(row).join(',')),
     ].join('\n');
     const uploaded = await api.post('declaration/', {
@@ -47,6 +51,7 @@ for (const task of ['classification', 'regression'] as const) {
             population: 'Synthetic applicants',
             prediction_horizon: '12 months',
             feature_availability: { default: 'available_at_prediction' },
+            forbidden_features: ['fixture_id'],
             target_contract: {
               target_column: 'outcome',
               positive_class: 'bad',
@@ -104,6 +109,20 @@ for (const task of ['classification', 'regression'] as const) {
       expect(assessed.status()).toBe(200);
       const evidence = (await assessed.json()).evaluation;
       expect(evidence.evidence_status).toBe('exploratory');
+      expect(evidence.holdout_history).toMatchObject({
+        identity_status: 'verified_snapshot',
+        same_final_rows_accesses: 0,
+        overlapping_final_rows_accesses: 0,
+      });
+      const historyPath = `evaluation/holdout-history/${run.execution_id}/?file_id=${fileId}`;
+      for (let check = 0; check < 2; check++) {
+        const historyResponse = await api.get(historyPath);
+        expect(historyResponse.status()).toBe(200);
+        const history = await historyResponse.json();
+        expect(history.same_final_rows_accesses).toBe(1);
+        expect(history.records[0].actor.username).toBeTruthy();
+        expect(history.records[0].attempt_state).toBe('completed');
+      }
       expect(evidence.purifier_provenance.recipe_id).toBe(first.purifier_recipe_id);
       expect(evidence.purifier_provenance.fit_rows.length).toBeLessThan(200);
       expect(evidence.purifier_provenance.clip_bounds.x.hi).toBeLessThan(100);
@@ -237,6 +256,28 @@ for (const task of ['classification', 'regression'] as const) {
       expect(accepted.status()).toBe(200);
       const child = await accepted.json();
       expect(child.execution_id).not.toBe(run.execution_id);
+      expect(child.model.holdout_spec).toEqual(run.model.holdout_spec);
+      const childHistory = await api.get(
+        `evaluation/holdout-history/${child.execution_id}/?file_id=${fileId}`,
+      );
+      expect(childHistory.status()).toBe(200);
+      expect((await childHistory.json()).same_final_rows_accesses).toBe(1);
+      const childAssessment = await api.post('evaluation/run/', {
+        data: { file_id: fileId, execution_id: child.execution_id },
+      });
+      expect(childAssessment.status()).toBe(200);
+      expect(
+        (await childAssessment.json()).evaluation.holdout_history.same_final_rows_accesses,
+      ).toBe(1);
+      const exactPack = await api.post('evaluation/pack/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          assessment_id: evidence.holdout_access_id,
+        },
+      });
+      expect(exactPack.status()).toBe(200);
+      expect(exactPack.headers()['content-type']).toContain('application/zip');
       expect(child.model.fit_receipt.train.features).toEqual(['x']);
       expect(child.model.fit_receipt.num_boost_round).toBe(10);
       expect(child.model.fit_receipt.training_eval_metric).toBe(primary);
@@ -326,6 +367,50 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(oldReplay.status()).toBe(200);
       expect((await oldReplay.json()).scores).toEqual(fullScores);
+      if (task === 'classification') {
+        const runName = `holdout-review-${fileId}`;
+        const pipeline = await api.post('pipeline/create/', {
+          data: {
+            name: runName,
+            file_id: fileId,
+            current_step: 'evaluation',
+            state: {
+              file_id: fileId,
+              pipeline_type: 'boosting',
+              flags: { is_started: true, preprocessing_available: true, modeling_available: true },
+              modeling: {
+                substep: 'hyperparam_completed',
+                modelingStatus: child,
+                hpResults: tuning,
+              },
+            },
+          },
+        });
+        expect(pipeline.status()).toBe(201);
+        const pipelineId = (await pipeline.json()).id;
+        try {
+          await page.context().addCookies((await api.storageState()).cookies);
+          await page.goto('/model-development');
+          await page.getByRole('button', { name: /Saved Pipelines/ }).click();
+          await page
+            .getByTitle(runName, { exact: true })
+            .locator('..')
+            .locator('..')
+            .getByRole('button', { name: 'Load', exact: true })
+            .click();
+          const history = page.getByRole('region', { name: 'Final-outcome access history' });
+          await expect(history).toBeVisible();
+          await expect(history).toContainText('2 accesses to the same final rows');
+          const details = history.locator('summary');
+          await details.focus();
+          await details.press('Space');
+          await expect(history.locator('details')).toHaveAttribute('open', '');
+          await expect(history).toContainText('completed');
+          await history.screenshot({ path: testInfo.outputPath('holdout-review.png') });
+        } finally {
+          expect((await api.delete(`pipeline/${pipelineId}/`)).status()).toBe(200);
+        }
+      }
     } finally {
       expect((await api.delete(`declaration/${fileId}/`)).status()).toBe(204);
     }

@@ -29,7 +29,7 @@ from modeling.crisp_dm import (
     recommend_threshold_by_cost,
 )
 from modeling.execution_artifacts import load_execution, execution_root
-from modeling.models import HoldoutAccess
+from modeling.holdout_evidence import holdout_history, reserve_holdout_access
 from modeling.execution_artifacts import publish_assessment, replace_projection
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
@@ -142,26 +142,40 @@ class EvaluationRunView(APIView):
         if not os.path.exists(model_abs):
             return Response({'error': f'Model artifact not found: {model_rel}'}, status=status.HTTP_404_NOT_FOUND)
 
+        receipt = None
         try:
             dataset_files = (execution_manifest or {}).get('files') or {}
             dataset_digest = next((value['sha256'] for name, value in dataset_files.items() if name.startswith('dataset.')), '')
-            receipt = HoldoutAccess.objects.create(
-                execution_id=execution_id, file_id=file_id, dataset_sha256=dataset_digest,
-                parameters={'threshold': data.get('threshold'), 'features': features, 'contract_sha256': contract.get('sha256')},
-                actor=request.user if request.user.is_authenticated else None,
-            )
+            if execution_id and features is not None and features != model_info.get('selected_features'):
+                return Response({'error': 'Assessment features must match the exact frozen model. Create and select a new candidate version.'}, status=status.HTTP_409_CONFLICT)
+            receipt, history = reserve_holdout_access(model_info.get('holdout_spec'), file_id,
+                execution_id, request.user,
+                {'threshold': data.get('threshold'), 'features': features,
+                 'contract_sha256': contract.get('sha256')}, dataset_digest)
             with open(train_data_path, 'rb') as f:
                 train_data = pickle.load(f)
             final_data = train_data
             if train_data.get('holdout_path'):
+                if execution_id and os.path.realpath(os.path.join(settings.MEDIA_ROOT, train_data['holdout_path'])) != str((execution_root(execution_id) / 'final_holdout.pkl').resolve()):
+                    raise ValueError('Final-outcome input must belong to the verified execution.')
                 with open(os.path.join(settings.MEDIA_ROOT, train_data['holdout_path']), 'rb') as stream:
                     final_data = pickle.load(stream)
             X_test = final_data.get('X_test')
             y_test = final_data.get('y_test')
             if X_test is None or y_test is None or len(X_test) == 0:
+                receipt.attempt_state = 'failed'
+                receipt.save(update_fields=['attempt_state'])
                 return Response({
                     'error': 'Locked outer test set missing from train_data. Re-run modeling.',
                 }, status=status.HTTP_409_CONFLICT)
+
+            identity = model_info.get('holdout_spec')
+            if identity:
+                from modeling.holdout_evidence import holdout_spec
+                if (not X_test.index.equals(y_test.index) or holdout_spec(
+                        identity['source_sha256'], identity['target_column'], X_test.index,
+                        identity['source_kind']) != identity):
+                    raise ValueError('Final-outcome rows/labels do not match the recorded assessment identity.')
 
             if execution_id and train_data.get('feature_names'):
                 X_test = X_test.loc[:, train_data['feature_names']]
@@ -300,6 +314,7 @@ class EvaluationRunView(APIView):
             evaluation['prediction_contract'] = contract
             evaluation['holdout_access_id'] = str(receipt.pk)
             evaluation['evidence_status'] = 'exploratory'
+            evaluation['holdout_history'] = history
             purifier = train_data.get('purifier_state')
             evaluation['purifier_provenance'] = purifier
             evaluation['evidence_limitation'] = (
@@ -307,6 +322,7 @@ class EvaluationRunView(APIView):
                 if purifier else
                 'Final outcomes inspected; upstream fold-local preprocessing and independent review are not yet qualified for confirmatory claims.'
             )
+            evaluation['evidence_limitation'] += ' ' + history['limitation']
             evaluation['split'] = train_data.get('split_meta') or model_info.get('split') or {}
             evaluation['n_test'] = int(len(y_test))
             evaluation['feature_count'] = int(X_test.shape[1])
@@ -398,11 +414,37 @@ class EvaluationRunView(APIView):
             except Exception as pe:
                 print(f"[Evaluation] PipelineRun update skipped: {pe}")
 
+            receipt.attempt_state = 'completed'
+            receipt.save(update_fields=['attempt_state'])
             return Response(payload, status=status.HTTP_200_OK)
         except Exception as e:
+            if receipt is not None:
+                receipt.attempt_state = 'failed'
+                receipt.save(update_fields=['attempt_state'])
             import traceback
             print("[Evaluation] ERROR:\n" + traceback.format_exc())
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': str(e), 'holdout_access_id': str(receipt.pk) if receipt else None,
+                             'evidence_status': 'exploratory'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class HoldoutHistoryView(APIView):
+    """Authenticated receipt history; reading it does not inspect outcomes."""
+
+    def get(self, request, execution_id):
+        try:
+            file_id = int(request.query_params['file_id'])
+            limit = int(request.query_params.get('limit', 50))
+            offset = int(request.query_params.get('offset', 0))
+            if not 1 <= limit <= 100 or offset < 0:
+                raise ValueError('History requires limit 1–100 and a nonnegative offset.')
+        except (KeyError, TypeError, ValueError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload, _ = load_execution(str(execution_id), file_id)
+            return Response(holdout_history(payload.get('model', {}).get('holdout_spec'),
+                file_id, limit=limit, offset=offset))
+        except (ValueError, OSError, KeyError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -420,7 +462,7 @@ class EvaluationStatusView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class EvaluationPackView(APIView):
-    """Download evaluation pack zip (metrics + model card + SHAP snapshot)."""
+    """Download exact assessment evidence and a separate live access history."""
 
     def post(self, request, *args, **kwargs):
         data = request.data or {}
@@ -433,28 +475,56 @@ class EvaluationPackView(APIView):
             return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
 
         eval_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json')
-        card_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
-        if not os.path.exists(eval_path):
-            return Response({'error': 'Evaluation not found. Run evaluation first.'}, status=status.HTTP_404_NOT_FOUND)
+        if bool(data.get('execution_id')) != bool(data.get('assessment_id')):
+            return Response({'error': 'Select both execution_id and assessment_id for an exact assessment export.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if data.get('execution_id'):
+                from modeling.execution_artifacts import load_assessment
+                execution_id, assessment_id = data['execution_id'], data['assessment_id']
+                assessment = load_assessment(execution_id, assessment_id, file_id)
+            else:
+                if not os.path.exists(eval_path):
+                    return Response({'error': 'Evaluation not found. Run evaluation first.'}, status=status.HTTP_404_NOT_FOUND)
+                with open(eval_path, encoding='utf-8') as stream:
+                    assessment = json.load(stream)
+                evaluation = assessment.get('evaluation') or {}
+                execution_id, assessment_id = evaluation.get('execution_id'), evaluation.get('holdout_access_id')
+                if execution_id:
+                    from modeling.execution_artifacts import load_assessment
+                    assessment = load_assessment(execution_id, assessment_id, file_id)
+            frozen_status = manifest = live_history = None
+            if execution_id:
+                frozen_status, manifest = load_execution(execution_id, file_id)
+                live_history = holdout_history(frozen_status['model'].get('holdout_spec'), file_id)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
 
         buf = io.BytesIO()
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
         name = f'evaluation_pack_{file_id}_{stamp}.zip'
         with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            zf.write(eval_path, 'evaluation.json')
-            if os.path.exists(card_path):
-                zf.write(card_path, 'model_card.json')
-            shap_candidates = [
-                os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json'),
-                os.path.join(settings.MEDIA_ROOT, 'explainability', f'{file_id}_shap.json'),
-            ]
-            for p in shap_candidates:
-                if os.path.exists(p):
-                    zf.write(p, os.path.basename(p))
-            zf.writestr(
-                'README.txt',
-                f'DeclarAI evaluation pack\nfile_id={file_id}\ngenerated_utc={stamp}\n',
-            )
+            if execution_id:
+                assessment_root = execution_root(execution_id) / 'assessments' / str(assessment_id)
+                zf.write(assessment_root / 'evaluation.json', 'evaluation.json')
+                zf.write(assessment_root / 'model_card.json', 'model_card.json')
+            else:
+                zf.writestr('evaluation.json', json.dumps(assessment, indent=2, allow_nan=False))
+                zf.writestr('model_card.json', json.dumps(assessment.get('model_card') or {}, indent=2, allow_nan=False))
+            if frozen_status is not None:
+                zf.write(execution_root(execution_id) / 'modeling_status.json', 'modeling_status.json')
+                zf.writestr('execution_manifest.json', json.dumps(manifest, indent=2, allow_nan=False))
+                root = execution_root(execution_id) / 'assessments' / str(assessment_id)
+                zf.write(root / 'manifest.json', 'assessment_manifest.json')
+                # Separate the historical access snapshot from the live export-time history.
+                zf.writestr('holdout_history_at_export.json', json.dumps({
+                    'captured_at': stamp, 'history': live_history}, indent=2, allow_nan=False))
+            zf.writestr('README.txt',
+                f'DeclarAI evaluation evidence pack\nfile_id={file_id}\ngenerated_utc={stamp}\n'
+                f'execution_id={execution_id}\nassessment_id={assessment_id}\n'
+                'Exploratory evidence; no independent review, reproduction or production approval is implied.\n'
+                'Immutable assessment retains access history at reservation; live history is captured separately at export.\n'
+                + ('Frozen execution/assessment integrity verified. Exported JSON uses original artifact bytes.\n' if execution_id else
+                   'Legacy provenance unverified; no frozen execution/assessment is available.\n'))
         raw = buf.getvalue()
         out_dir = os.path.join(settings.MEDIA_ROOT, 'exports')
         os.makedirs(out_dir, exist_ok=True)

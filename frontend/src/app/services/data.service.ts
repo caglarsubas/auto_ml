@@ -739,9 +739,10 @@ export class DataService {
     );
   }
 
-  runEvaluation(fileId: number, threshold: number = 0.5, features?: string[]): Observable<any> {
+  runEvaluation(fileId: number, threshold: number = 0.5, features?: string[], executionId?: string): Observable<any> {
     const payload: any = { file_id: fileId, threshold };
     if (features && features.length) payload.features = features;
+    if (executionId) payload.execution_id = executionId;
     return this.http.post(`${this.apiUrl}evaluation/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running evaluation:', error);
@@ -757,6 +758,12 @@ export class DataService {
         return throwError(() => new Error(error.message || 'Failed to get evaluation status'));
       })
     );
+  }
+
+  getHoldoutHistory(fileId: number, executionId: string, offset = 0): Observable<any> {
+    return this.http.get(`${this.apiUrl}evaluation/holdout-history/${executionId}/`, {
+      params: { file_id: String(fileId), offset: String(offset) },
+    });
   }
 
   getDeployReadiness(fileId: number): Observable<any> {
@@ -856,8 +863,8 @@ export class DataService {
     );
   }
 
-  downloadEvalPack(fileId: number): Observable<Blob> {
-    return this.http.post(`${this.apiUrl}evaluation/pack/`, { file_id: fileId }, { responseType: 'blob' }).pipe(
+  downloadEvalPack(fileId: number, executionId?: string, assessmentId?: string): Observable<Blob> {
+    return this.http.post(`${this.apiUrl}evaluation/pack/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId }, { responseType: 'blob' }).pipe(
       catchError((err: any) => {
         console.error('Error downloading evaluation pack:', err);
         return throwError(() => err);

@@ -10,7 +10,7 @@ from modeling.crisp_views import (
     CrispIterationCloneView, CrispDatqEnrichView,
 )
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
-from evaluation.views import EvaluationRunView, EvaluationStatusView, EvaluationPackView, GovernanceChecksView
+from evaluation.views import EvaluationRunView, EvaluationStatusView, EvaluationPackView, GovernanceChecksView, HoldoutHistoryView
 from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/modeling/vif-detail/', VifDetailView.as_view(), name='vif-detail'),
     path('api/evaluation/run/', EvaluationRunView.as_view(), name='evaluation-run'),
     path('api/evaluation/status/<int:file_id>/', EvaluationStatusView.as_view(), name='evaluation-status'),
+    path('api/evaluation/holdout-history/<uuid:execution_id>/', HoldoutHistoryView.as_view(), name='holdout-history'),
     path('api/evaluation/pack/', EvaluationPackView.as_view(), name='evaluation-pack'),
     path('api/evaluation/governance/', GovernanceChecksView.as_view(), name='evaluation-governance'),
     path('api/deployment/bundle/', DeploymentBundleView.as_view(), name='deployment-bundle'),

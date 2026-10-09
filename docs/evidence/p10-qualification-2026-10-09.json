@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P10",
+  "branch": "codex/holdout-reuse-evidence",
+  "base_commit": "459fc5601613ac3fba1ebebe27f19d00b74b919f",
+  "qualified_source_commit": "c1684b36706178ea60c996afe41eb49813b2f2db",
+  "scope": "Bounded local source qualification for protected final-outcome reuse, exact assessment export and resumed history UI. Later commits are documentation/ledger/evidence only. All mapped outcomes are partial; no release or customer gate is closed.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/99",
+    "state": "MERGED",
+    "merge_commit": "459fc5601613ac3fba1ebebe27f19d00b74b919f",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37871085176",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p10:qualified",
+    "api_image_id": "sha256:5911644162e0eaaab742ceaa5f3c13099c6fb390df80c68cc4d7eb2f373dd10e",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "dependency_baseline": "Unchanged public core P09 package/lock baseline; installed frontend dependencies linked from primary checkout. No optional private SDK. Disposable Redis/SQLite/API/preview, telemetry disabled, blank provider key and unreachable model endpoint. API image copies committed backend source.",
+    "node": "24.16.0",
+    "npm": "11.13.0",
+    "angular": "22.2.1"
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, ruff, migration drift, pip check",
+      "status": "passed",
+      "report": "test-reports/p10/backend-final.log",
+      "passed": 1570,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 150.79,
+      "coverage_percent": 68.34,
+      "coverage_gate_percent": 50,
+      "skip_gate": 15,
+      "command": "ruff check . && python manage.py makemigrations --check --dry-run && python -m pip check && python -m pytest -m \"unit or functional or regression or integration or uat\" --tb=short --durations=5 --junitxml=../test-reports/p10/backend.xml --cov --cov-report=xml:../test-reports/p10/backend-coverage.xml --cov-report=term-missing --cov-fail-under=50"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "report": "test-reports/p10/frontend-unit-qualified.log",
+      "passed": 537
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "report": "test-reports/p10/frontend-lint-qualified.log",
+      "errors": 0,
+      "existing_warnings": 158
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "report": "test-reports/p10/frontend-build-qualified.log",
+      "limitations": "Existing bundle/style/CommonJS warnings; unchanged budgets"
+    },
+    {
+      "name": "E2E TypeScript",
+      "status": "passed",
+      "report": "test-reports/p10/e2e-types.log"
+    },
+    {
+      "name": "Scoped formatting",
+      "status": "passed",
+      "report": "test-reports/p10/format.log"
+    },
+    {
+      "name": "Authenticated browser/API and rendered keyboard history",
+      "status": "passed",
+      "report": "test-reports/p10/browser-api-source-qualified.log",
+      "passed": 19,
+      "skipped": 0,
+      "command": "npm run test:e2e:governed against disposable source-qualified API and built preview",
+      "duration_seconds": 14.5
+    }
+  ],
+  "source_sha256": {
+    "backend/backend/urls.py": "2b5052de70ac849739aa2376533f1d5fa2237cfc22b6b6de7a7deb4d9f2775c1",
+    "backend/evaluation/eval_utils.py": "2db73bb225afe0e3d327e38b1f7aa59d9f2b8df32d51d21b974b2d0338903d2f",
+    "backend/evaluation/views.py": "0316d085011ab830d8490eaf37af02fd127d64fe59b053bb689832a13ed3b725",
+    "backend/modeling/execution_artifacts.py": "823b29b8f7c9bb9782c3b047d3b64a97833c611c9d893794848fc5b2ff6f6ac1",
+    "backend/modeling/holdout_evidence.py": "b901b6d51bb42748da6581c606cc815a47c9871868f472bd6fd6a8fbdb18d3b0",
+    "backend/modeling/migrations/0003_holdout_identity.py": "1875af56ab065fa8d1a8b524b44c631067926f3c928515386c45bfe7fb98ef95",
+    "backend/modeling/models.py": "318a0e5cab6a8f9b613438ef85545d561ce33bee72d7b3d68a5bfb592d2b7229",
+    "backend/modeling/views.py": "75adb5c5d808d3f36217ac2441e332478052f03551f547cf4cf8f4b49cd5ed29",
+    "backend/tests/unit/test_holdout_evidence.py": "14ec6a94e85320e7f5fd4410758a15849cf09baf0079988f2281662b0184ff23",
+    "frontend/e2e/raw-replay-api.spec.ts": "26e371626bae9ef980dd59361575559e623b72b5040aa3b4c5799597f1d3c813",
+    "frontend/e2e/session-boundary-api.spec.ts": "aed7054f16f47455e2b6bad182df59d34472ad3d46bad3e36b96980c29e5c58d",
+    "frontend/src/app/evaluation/evaluation.component.html": "0aac69a94c334056d512c24bd0165911758ac8ff8e07d9861e61da47819b2487",
+    "frontend/src/app/evaluation/evaluation.component.spec.ts": "424e097876333ca40401eebaf5584e008266c0f187e3d7f64b3eed108a27f947",
+    "frontend/src/app/evaluation/evaluation.component.ts": "865d775779adeee975343fc7d4f0b533ed0396f8d606c9b8935b9f8980a9abeb",
+    "frontend/src/app/modeling/modeling.component.spec.ts": "ce8689932a507de059056fa5e14e7cfbf5003f801ac89dbe654ccfabcf5bc07c",
+    "frontend/src/app/modeling/modeling.component.ts": "da6843716b388efcc077172d7fd2cca6d5d807a78baadf249fbd729f5a4777a1",
+    "frontend/src/app/services/data.service.ts": "aff2ccea574d0956044978b939cf079445f47eb83fe050283aca7d8705cf05ef"
+  },
+  "qualification_observations": [
+    "First full run failed a positive-label reversal test that assumed a generated stratified holdout stayed fixed; the fixture now pins final membership. The in-progress roadmap projection was regenerated. No scientific gate was relaxed.",
+    "Repeated identical browser fixture uploads correctly retained reuse history across deleted file IDs; fixtures now use an explicitly excluded synthetic fixture ID to isolate their source. Audit history is retained.",
+    "New browser fixture initially expected 204 from pipeline cleanup, while its existing API contract returns 200; expectation corrected.",
+    "Rendered resume found shared model checkpoint cleared by component restoration, hiding the parent evaluation gate. Restored evidence is retained; regression and browser keyboard checks verify the review panel."
+  ],
+  "limits": [
+    "All evidence exploratory; no confirmatory protocol or independent reproduction/review qualification.",
+    "Shared-filesystem transaction/locking profile only; no distributed audit, recovery, project roles, retention or egress qualification.",
+    "Source edits/reordered imports are not linked automatically; missing historical evidence remains unknown.",
+    "Expert Python remains unavailable pending isolation; D18-D26 planned; queue and prior evidence unchanged.",
+    "Production capacity, complete accessibility, deployment and customer/value acceptance not qualified."
+  ],
+  "workspace_preservation": {
+    "primary": "/Users/caglarsubasi/Desktop/prometa/pocs/auto-ml",
+    "existing_tracked_edits_preserved": 11,
+    "snapshot": "/tmp/declarai-p10-preserved-workspace.json",
+    "scope": "Checks use the managed worktree and disposable services; primary configuration and existing running stack are preserved. Per-command hooks disabled because they target primary containers; equivalent checks run independently, persistent Git config unchanged."
+  },
+  "report_sha256": {
+    "test-reports/p10/backend-final.log": "ada88e4558f43863a21e3cc57760c4de21a2f856f6bd9b2188e9d8c089cdb085",
+    "test-reports/p10/frontend-unit-qualified.log": "050fca558bf4ea00a978a6e4b1625da0643388affb0f0be07efbc31cab0a19c8",
+    "test-reports/p10/frontend-lint-qualified.log": "ce68105547496fd85a97c9ddc8f7dcb647e1127539ecdf1a673806194a0fa1bf",
+    "test-reports/p10/frontend-build-qualified.log": "be363b7ebbc5ac923715552e1b7f7d920ae0d6f5126b81a706a4f7de5554d8c5",
+    "test-reports/p10/e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p10/format.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+    "test-reports/p10/browser-api-source-qualified.log": "7b8454fe9ff40e2afeed687c84bc0febe93a3ba0eaa795fb7c93c392068171b7",
+    "test-reports/p10/backend.xml": "03b29e9eb69a6b4a0c3bbda373001f80aabccb9893cc6e9ea978b3b3e6c65aae",
+    "test-reports/p10/backend-coverage.xml": "7e9a8cb174527d185e4dd17a17bbb8897a7df0df21f4a5c2cc026b368b2fcf7b",
+    "test-reports/p10/api-image-qualified.log": "f168a621e11a3f83f08c916523201393ce242aad25e34f862636a55600bce591",
+    "test-reports/p10/backend.log": "32fdad0d1e8861a7326b3288b0cac50fa6929eec183ecd7cddf5bb3cedb3604c",
+    "test-reports/p10/browser-api-final.log": "f432d2d2867600a3de4e68597e568da02c27878064a53ef77c4268b0cef4e3fe",
+    "test-reports/p10/browser-api-qualified.log": "95a6474fa6d0ffa56fe5ec222876aaad1ead3c1b9a5452f390632c21b8bef1ae",
+    "test-reports/p10/browser-api-rendered.log": "b18dc5908b2e67b0afbcf974ecda32dcf1ef464406f7365013d7953f16a5eeab"
+  },
+  "screenshot_sha256": "4ecf7b79a93c66a15e0fa68cccec757a7691eddf837df37e5213df9e08ef4368"
+}

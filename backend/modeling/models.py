@@ -48,7 +48,12 @@ class HoldoutAccess(models.Model):
     actor = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
     accessed_at = models.DateTimeField(default=timezone.now)
     evidence_status = models.CharField(max_length=24, default='exploratory')
+    holdout_key = models.CharField(max_length=64, blank=True)
+    holdout_spec = models.JSONField(default=dict, blank=True)
+    actor_snapshot = models.JSONField(default=dict, blank=True)
+    attempt_state = models.CharField(max_length=24, default='historical_unknown')
 
     class Meta:
         ordering = ['accessed_at']
-        indexes = [models.Index(fields=['file_id', 'dataset_sha256'], name='holdout_dataset_idx')]
+        indexes = [models.Index(fields=['file_id', 'dataset_sha256'], name='holdout_dataset_idx'),
+                   models.Index(fields=['dataset_sha256', 'holdout_key'], name='holdout_source_key_idx')]
