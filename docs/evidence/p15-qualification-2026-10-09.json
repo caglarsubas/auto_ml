@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P15",
+  "branch": "codex/collinearity-diagnostics",
+  "base_commit": "a7cfb2b42d1e58489f39811752d4b84b5f8f9e47",
+  "qualified_source_commit": "6081e6020636cab2e821d8be6c1ea108745fd4a6",
+  "scope": "Bounded native training-input numeric diagnostic and saved-execution restoration qualification. D04/D05/D12 remain partial; no grouped categorical, paired uncertainty, expert-code, project-role, independent-review, deployment or release/customer qualification.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/104",
+    "state": "MERGED",
+    "merge_commit": "a7cfb2b42d1e58489f39811752d4b84b5f8f9e47",
+    "merged_at": "2026-10-09T08:38:50Z",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37906245564",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p15:qualified",
+    "api_image_id": "sha256:6ed978e2f6fdb0d194a5ad740fb836510f7f2d09046ee0c8fd007646049714ac",
+    "api_build_source_commit": "6081e6020636cab2e821d8be6c1ea108745fd4a6",
+    "final_runtime_equality": "All six changed backend application files in the running API image match final executable source hashes. Later changes are documentation/evidence only.",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "versions": {
+      "Python": "3.12.15",
+      "Django": "5.2.18",
+      "numpy": "2.5.3",
+      "statsmodels": "0.15.0",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10",
+      "mcp": "1.30.0",
+      "node": "v24.16.0",
+      "npm": "11.13.0",
+      "Angular": "22.2.1"
+    },
+    "dependency_baseline": "Unchanged public core/frontend lock; optional private SDK absent. Disposable SQLite/Redis/API and loopback preview; telemetry disabled, blank provider key, unavailable model engine."
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, Ruff, migration drift and dependency consistency",
+      "status": "passed",
+      "passed": 1771,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 229,
+      "duration_seconds": 207.1,
+      "combined_statement_branch_coverage_percent": 69.33,
+      "coverage_gate_percent": 50,
+      "report": "test-reports/p15/backend-final.log",
+      "source_commit": "6081e6020636cab2e821d8be6c1ea108745fd4a6"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "skipped": 6,
+      "budget": 15,
+      "report": "test-reports/p15/skip-budget-final.log"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "passed": 555,
+      "report": "test-reports/p15/frontend-unit-qualified.log"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "errors": 0,
+      "existing_warnings": 153,
+      "report": "test-reports/p15/frontend-lint-qualified.log"
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "report": "test-reports/p15/frontend-build-qualified.log"
+    },
+    {
+      "name": "E2E TypeScript and scoped formatting",
+      "status": "passed",
+      "reports": [
+        "test-reports/p15/e2e-types-final.log",
+        "test-reports/p15/format-final.log"
+      ]
+    },
+    {
+      "name": "Governed actual-session browser/API workflows",
+      "status": "passed",
+      "passed": 28,
+      "duration_seconds": 24.9,
+      "report": "test-reports/p15/browser-final.log",
+      "native_diagnostics": "Real training, candidate publication, authenticated detail endpoints, saved-execution refresh and keyboard dialogs; no synthetic diagnostic responses."
+    },
+    {
+      "name": "Actual MCP SDK stdio workflow",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 10,
+      "completed_events": 6,
+      "denied_events": 4,
+      "report": "test-reports/p15/mcp-stdio-final.log"
+    },
+    {
+      "name": "Ledger validation and preservation",
+      "status": "passed",
+      "passed": 49,
+      "reports": [
+        "test-reports/p15/ledger-render-final.log",
+        "test-reports/p15/ledger-check-final.log",
+        "test-reports/p15/ledger-final.log",
+        "test-reports/p15/preservation.log"
+      ]
+    }
+  ],
+  "source_sha256": {
+    "backend/ai_assistant/tool_executor.py": "bff21f149537b4f56de8774a0c0abee05ff85901adb293ee9f9c1cd04ee55a97",
+    "backend/ai_assistant/views.py": "54143a112ab1a6240e72e2909441c4275b61ccd993919cb06fbd793a39e184e3",
+    "backend/modeling/collinearity.py": "9581c3352e7e81b6c0d691eb216d6ddb0b6b1713472c1dd71f7298c8548fcf8e",
+    "backend/modeling/diagnostics.py": "99647670ed78b4183ca1208f45c9902f7ac0eacd0c3550ff51e86862855daa25",
+    "backend/modeling/execution_artifacts.py": "31a0cfe00375701196b08b8af6b875b5777b12032df2185a4f3ade5e11ff68d5",
+    "backend/modeling/views.py": "02dcdc14f51cbcbc1ea0659f5e593a3a3ef14b335a5d6a5baa1ab6a753e7b253",
+    "backend/tests/unit/test_candidate_evidence.py": "0fae05bad547ab76d0f192b74a92ac255cee20ef7fded0058a6ed025549d7d03",
+    "backend/tests/unit/test_collinearity.py": "c7b7d5381755cc14d05e7968b8109ecf0b7cb5e146f9aa26cf221cbe7bf12c39",
+    "frontend/e2e/raw-replay-api.spec.ts": "e11001c7ba38d6be838057a072fc08892d0caace9583b24e305fc8d04551bbae",
+    "frontend/src/app/app.module.ts": "fd98fe59d005979c176fbbee80d581e8199159b4ee794bada73a4ca0413a195e",
+    "frontend/src/app/modeling/modeling.component.css": "49e63b4530b36ea9f7bb528af07a6456b4c40918acbc8002e6746b86f8fc7a4c",
+    "frontend/src/app/modeling/modeling.component.html": "ee1a5dc4b6bd7791fcfd799ad178f2f626856452cedba96d8387a94dc578eef8",
+    "frontend/src/app/modeling/modeling.component.spec.ts": "e898cb34830f4958d0cc8cb8a213215258ba47e0ad64e232fcfd9f5ad44898d4",
+    "frontend/src/app/modeling/modeling.component.ts": "1adca8018b126c3c066330ab1e4e7611066a025156b916746e0badddd796e33f",
+    "frontend/src/app/services/data.service.spec.ts": "d30176d022355e08df9bf33efcd87d6846f16922f70974c8dc5f4ae183f332ff",
+    "frontend/src/app/services/data.service.ts": "4679d713f499c17a666b296762cebfc19ec3d3fd031c95871b1ebf900eaaecc6"
+  },
+  "report_sha256": {
+    "test-reports/p15/backend-final.log": "78c4ed0ba1824fd87829d13dd1b48ac5694ba21d23c22058123a76c3631a9e3a",
+    "test-reports/p15/backend-final.xml": "6c0e7cc9de7b47ddcf804857e10a637a34546cb2937ca2e830339263ce3f5926",
+    "test-reports/p15/backend-coverage-final.xml": "7b3cec26fead28bd8b8f74bad18cd4cdee512e3eec2691f19ba9e1a3feef7cd4",
+    "test-reports/p15/skip-budget-final.log": "1fb48f157ba38691a5a46a5d0d84ecf30d5f2094c93fe311659a5f8f8ecab931",
+    "test-reports/p15/focused.log": "35d2a159f14aecadfb25eb32194606233daa03d7e8c5e4598256cdacba7d6361",
+    "test-reports/p15/frontend-unit-qualified.log": "b4284bd72c6b52446b8159baa6833c20c658958739d6cafc9cda862f5a8d8a25",
+    "test-reports/p15/frontend-lint-qualified.log": "0c4f6877f1f2ec45d0e35a8437fac3ddd66ad0a5f8ee65f3eac4c16c8b04b045",
+    "test-reports/p15/frontend-build-qualified.log": "ee422109d18eca08e68afec26b2b3fe85f42e17a2df78b40e03c72d77ec3c767",
+    "test-reports/p15/e2e-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p15/format-final.log": "0fd3fc29b5d1a817751b8e4ec3353d8188d233001fb3680d38409479058b6bbb",
+    "test-reports/p15/browser-final.log": "fbacf60fbce3bfb5be3b6d70959b082df14cd6b827258f8aa7100e1ada12cb3c",
+    "test-reports/p15/mcp-stdio-final.log": "eee491e2cfb4b9c138fb617895f548a4dc1dd42831a5d9c1cc7de5d299c5d7d2",
+    "test-reports/p15/runtime-source.json": "9b84f61839f856c5d70341145dc80513b9f46082a3c654d45da7a6a0677fba38",
+    "test-reports/p15/numeric-collinearity.png": "abc9bb556736cb339e0a79cf700717dbeb3dd76358ce6e14b972ebde257829fc",
+    "test-reports/p15/unbounded-collinearity.png": "19a4826f1975a6e05c9734911699839ecea44839fba7362b37f003bd25115a65",
+    "test-reports/p15/browser.log": "eb93aedc36064b3e81fb70721514175a69cda1a291cff808cd6b83d872c85009",
+    "test-reports/p15/frontend-unit-final.log": "439ed88af99459f952c458614f285701f7e01c0efa16370f5eef12810ead5038",
+    "test-reports/p15/api-build.log": "450c6cf6a339ae191a48ad4b408fe27c55aa97a7f7e743081ba7d56702b21a35",
+    "test-reports/p15/api-build-qualified.log": "44e0ccd01a618ab32c38dade37598bf53f310f4837eef5a6cd22b2e28f4914d6",
+    "test-reports/p15/ledger-render-final.log": "deae79e0aa9780314eee469b160349e3dade8ade617d4b22bfbf52fdf0d6d657",
+    "test-reports/p15/ledger-check-final.log": "315a7b45fbf79f75483e11d7457eaa04148b64e6dc6f84941884f71639a68e94",
+    "test-reports/p15/ledger-final.log": "77503a4821e5f3fc5819ea78bbb7bc90f809705e794031ef03391fced51cbf43",
+    "test-reports/p15/preservation.log": "548c591cac1f7eea671cc4e9bb0d340342e5858eb78f6687366be6ce9f005c24",
+    "test-reports/p15/cleanup.log": "daee00a96578b6d471f7e38fc400f93ab734d3e3b7474e6788ac4272cec02131"
+  },
+  "qualification_observations": [
+    "Twenty-six added backend cases cover centered-intercept/analytic reference agreement, shifts/scales/extremes, one predictor, singular/saturated and solver states, category permutations/output groups, non-finite/nullable/constant inputs, engineering budget, native archive validation, exact history, no pickle reading and real session/CSRF. Candidate tests verify subset-specific snapshots.",
+    "Installed statsmodels 0.15.0 already centers VIF by default; singular R-squared clipping, ambiguous nulls, one-hot outputs and mutable legacy detail inputs were actual gaps. Explicit method is independent of dependency default drift; no current-baseline uncentered-VIF defect is claimed.",
+    "Browser qualification found that saved-run restoration refreshed the latest dataset projection. The exact saved-execution status API and frontend identity/stale-response checks now preserve the checkpoint execution. Assertions were retained; all 28 workflows passed afterward.",
+    "A narrow formatting cleanup initially omitted the VIF request execution field; the existing new request-contract test caught it. The field was restored and all 555 final frontend tests passed. No dataset, rounds, assertion, timeout, skip or coverage gate was weakened.",
+    "Initial API build with an external /tmp Dockerfile encountered an unrelated Docker xattr permission error. Feeding only that Dockerfile through stdin built the same source successfully; both logs are retained.",
+    "Six full-suite skips require a live model engine, local .env or four optional SDK checks. Dialog screenshots were visually inspected; finite and unbounded states, provenance, limitations, keyboard focus and controls are visible."
+  ],
+  "limits": [
+    "Training-input auxiliary linear dependence only; no causal, feature-importance, model-refit, sampling-uncertainty or automatic removal claim. Grouped categorical methods and paired model-change inference remain open.",
+    "Mean imputation and finite floating-point representation affect dependence; unbounded includes numerically indistinguishable relationships at the recorded tolerance. Rank/saturation are descriptive, not population validation.",
+    "Diagnostic bounds cap repeated auxiliary computations, not model acceptance or a capacity commitment. Over-budget diagnostics retain unavailable states without sampling or trimming; broader workload profiling remains open.",
+    "Trusted controller/filesystem and existing integrity manifests. No independent signatures, hostile privileged-storage protection, imported-expert array authenticity, comprehensive concurrent-writer/restore or distributed durability qualification.",
+    "REST users retain installation-wide access; project developer/reviewer/admin roles, retention/egress/policy, PostgreSQL/Celery and recovery, expert Linux gVisor execution, independent clean reproduction and production deployment remain open.",
+    "Keyboard/dialog workflows are covered; comprehensive screen-reader/accessibility qualification, historical provenance certification, agentic D18-D26, technical release and customer/value gates remain open."
+  ],
+  "github_ci": "Separate observation after push; not inferred from local qualification.",
+  "preservation": {
+    "preceding_packets_unchanged": 14,
+    "item_statuses_unchanged": true,
+    "planned_D18_D26_unchanged": true,
+    "canonical_queue_unchanged": true,
+    "release_customer_gates_unchanged": true,
+    "primary_tracked_edit_hashes_preserved": 11
+  },
+  "cleanup": {
+    "owned_api_redis_network_preview_removed": true,
+    "temporary_credentials_and_build_file_removed": true,
+    "primary_services_unchanged": true,
+    "qualification_image_retained": true
+  }
+}
