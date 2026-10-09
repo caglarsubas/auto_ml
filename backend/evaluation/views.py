@@ -7,6 +7,7 @@ import json
 import os
 import pickle
 import zipfile
+import uuid
 from datetime import datetime, timezone
 
 import numpy as np
@@ -30,7 +31,7 @@ from modeling.crisp_dm import (
 )
 from modeling.execution_artifacts import load_execution, execution_root
 from modeling.holdout_evidence import holdout_history, reserve_holdout_access
-from modeling.execution_artifacts import publish_assessment, replace_projection
+from modeling.execution_artifacts import publish_assessment, replace_projection, projection_lock
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
 
@@ -367,8 +368,9 @@ class EvaluationRunView(APIView):
             }
             if execution_id:
                 assessment_dir = publish_assessment(execution_id, receipt.pk, payload, card)
-                replace_projection(assessment_dir / 'evaluation.json', eval_path)
-                replace_projection(assessment_dir / 'model_card.json', card_path)
+                with projection_lock(file_id):
+                    replace_projection(assessment_dir / 'evaluation.json', eval_path)
+                    replace_projection(assessment_dir / 'model_card.json', card_path)
             else:
                 with open(eval_path, 'w', encoding='utf-8') as f:
                     json.dump(payload, f, indent=2, default=str)
@@ -501,7 +503,7 @@ class EvaluationPackView(APIView):
 
         buf = io.BytesIO()
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        name = f'evaluation_pack_{file_id}_{stamp}.zip'
+        name = f'evaluation_pack_{file_id}_{stamp}_{uuid.uuid4().hex}.zip'
         with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
             if execution_id:
                 assessment_root = execution_root(execution_id) / 'assessments' / str(assessment_id)
@@ -528,7 +530,7 @@ class EvaluationPackView(APIView):
         raw = buf.getvalue()
         out_dir = os.path.join(settings.MEDIA_ROOT, 'exports')
         os.makedirs(out_dir, exist_ok=True)
-        with open(os.path.join(out_dir, name), 'wb') as f:
+        with open(os.path.join(out_dir, name), 'xb') as f:
             f.write(raw)
         resp = HttpResponse(raw, content_type='application/zip')
         resp['Content-Disposition'] = f'attachment; filename="{name}"'

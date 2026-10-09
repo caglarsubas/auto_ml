@@ -7,6 +7,7 @@ import os
 import shutil
 import uuid
 import hashlib
+import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -16,9 +17,8 @@ import pandas as pd
 from django.conf import settings
 
 from encoding.fitted import apply_fitted_encoding
-from modeling.execution_artifacts import digest_file, load_execution, load_assessment, replace_projection
-from modeling.lineage import load_lineage
-from evaluation.eval_utils import assess_deploy_readiness
+from modeling.execution_artifacts import digest_file, execution_root, projection_lock, replace_projection
+from deployment.evidence import current_selection, resolve_handoff, verify_bundle
 
 
 class DeployNotReadyError(Exception):
@@ -40,73 +40,26 @@ def bundle_dir(file_id: int, bundle_id=None) -> str:
     return str(base)
 
 
-def assess_file_deploy_readiness(file_id: int) -> Dict[str, Any]:
-    """Load evaluation / modeling / lineage artifacts and assess deploy readiness."""
-    modeling_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-    modeling: Dict[str, Any] = {}
-    if os.path.exists(modeling_path):
-        with open(modeling_path, 'r', encoding='utf-8') as f:
-            modeling = json.load(f)
-
-    eval_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json')
-    evaluation: Optional[Dict[str, Any]] = None
-    evaluation_present = False
-    if os.path.exists(eval_path):
-        with open(eval_path, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
-        # EvaluationRunView persists { evaluation, model_card, ... }
-        if isinstance(raw.get('evaluation'), dict):
-            evaluation = raw['evaluation']
-        else:
-            evaluation = raw
-        evaluation_present = True
-
-    card_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
-    if evaluation is None and os.path.exists(card_path):
-        with open(card_path, 'r', encoding='utf-8') as f:
-            card = json.load(f)
-        evaluation = {
-            'task': card.get('task'),
-            'metrics': (card.get('sections') or {}).get('evaluation_outer_test') or {},
-            'leakage_scan': (card.get('sections') or {}).get('leakage_scan'),
-            'scores_calibrated': ((card.get('sections') or {}).get('deployment_readiness') or {}).get('scores_calibrated'),
-            'calibration': ((card.get('sections') or {}).get('modeling') or {}).get('calibration'),
-        }
-        evaluation_present = bool(evaluation.get('metrics'))
-
-    lineage = load_lineage(file_id) or {}
-    return assess_deploy_readiness(
-        evaluation,
-        lineage,
-        modeling,
-        evaluation_present=evaluation_present,
-    )
+def assess_file_deploy_readiness(file_id: int, execution_id=None, assessment_id=None) -> Dict[str, Any]:
+    return resolve_handoff(file_id, execution_id, assessment_id)['readiness']
 
 
-def build_score_bundle(file_id: int) -> Dict[str, Any]:
-    """Freeze model + feature schema + lineage into a score bundle."""
-    readiness = assess_file_deploy_readiness(file_id)
+def build_score_bundle(file_id: int, execution_id=None, assessment_id=None) -> Dict[str, Any]:
+    """Stage and publish an exact native package; failures cannot publish a version."""
+    context = resolve_handoff(file_id, execution_id, assessment_id)
+    readiness = context['readiness']
     if not readiness.get('ready'):
         raise DeployNotReadyError(readiness)
+    parent = Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id)
+    parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.staging-', dir=parent) as staged:
+        return _build_score_bundle(file_id, context, staged)
 
-    modeling_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-    if not os.path.exists(modeling_path):
-        raise FileNotFoundError('Modeling status not found. Run modeling first.')
 
-    with open(modeling_path, 'r', encoding='utf-8') as f:
-        modeling = json.load(f)
+def _build_score_bundle(file_id, context, out):
+    modeling = context['modeling']
     model = modeling.get('model') or {}
-    exact_assessment = None
-    if modeling.get('execution_id'):
-        frozen, _ = load_execution(modeling['execution_id'], file_id)
-        if model.get('model_path') != frozen['model'].get('model_path'):
-            raise ValueError('Model changed since its execution snapshot. Create a new version before packaging.')
-        with open(os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json'), encoding='utf-8') as stream:
-            evaluated = json.load(stream).get('evaluation') or {}
-        if evaluated.get('execution_id') != modeling['execution_id']:
-            raise ValueError('Final assessment belongs to a different execution. Evaluate this exact version before packaging.')
-        exact_assessment = load_assessment(modeling['execution_id'], evaluated['holdout_access_id'], file_id)
-        model = frozen['model']
+    exact_assessment = context['assessment'] if context['execution_id'] else None
     algo = model.get('algorithm') or (model.get('model_type') or 'xgboost')
     algo = str(algo).replace('_classifier', '').replace('_regressor', '')
     model_rel = model.get('model_path') or f'models/{file_id}_xgb_classifier.json'
@@ -137,13 +90,8 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    lineage = load_lineage(file_id) or {}
-    if model.get('lineage_path'):
-        with open(os.path.join(settings.MEDIA_ROOT, model['lineage_path']), encoding='utf-8') as stream:
-            lineage = json.load(stream)
+    lineage = context['lineage']
     bundle_id = str(uuid.uuid4())
-    out = bundle_dir(file_id, bundle_id)
-    os.makedirs(out, exist_ok=False)
     model_basename = os.path.basename(model_abs)
     bundled_model = os.path.join(out, model_basename)
     shutil.copy2(model_abs, bundled_model)
@@ -200,7 +148,7 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     try:
         from modeling.models import PipelineRun
         from modeling.crisp_dm import merge_crisp_dm, normalize_business_understanding
-        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+        run = None if context['execution_id'] else PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
         if run is not None:
             crisp = merge_crisp_dm((run.state or {}).get('crisp_dm'), {
                 'business_understanding': (run.state or {}).get('business_understanding'),
@@ -222,10 +170,13 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     model_card = None
     if exact_assessment:
         model_card = exact_assessment['model_card']
-        with open(os.path.join(out, 'model_card.json'), 'w', encoding='utf-8') as stream:
-            json.dump(model_card, stream, indent=2, allow_nan=False)
-        with open(os.path.join(out, 'evaluation.json'), 'w', encoding='utf-8') as stream:
-            json.dump(exact_assessment, stream, indent=2, allow_nan=False)
+        source = execution_root(context['execution_id'])
+        assessment_root = source / 'assessments' / context['assessment_id']
+        for name in ('evaluation.json', 'model_card.json'):
+            shutil.copyfile(assessment_root / name, Path(out) / name)
+        shutil.copyfile(assessment_root / 'manifest.json', Path(out) / 'assessment_manifest.json')
+        shutil.copyfile(source / 'manifest.json', Path(out) / 'execution_manifest.json')
+        shutil.copyfile(source / 'modeling_status.json', Path(out) / 'modeling_status.json')
     elif os.path.exists(card_abs):
         try:
             with open(card_abs, 'r', encoding='utf-8') as f:
@@ -255,7 +206,10 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'schema_version': 4 if purifier else 3,
         'scoring_schema_version': 4 if purifier else 3,
         'bundle_id': bundle_id,
-        'execution_id': modeling.get('execution_id'),
+        'handoff_schema_version': 1,
+        'execution_id': context['execution_id'],
+        'assessment_id': context['assessment_id'],
+        'readiness': context['readiness'],
         'prediction_contract': contract,
         'fit_receipt': model.get('fit_receipt'),
         'task': model.get('task') or 'classification',
@@ -283,7 +237,7 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
         'deploy_ready': True,
         'package_purpose': 'development_review_and_batch_scoring_handoff',
         'production_use_approved': False,
-        'evidence_status': 'exploratory' if contract else 'legacy_provenance_unverified',
+        'evidence_status': context['readiness']['evidence_status'],
         'model_card_path': 'model_card.json' if model_card else None,
         'business_understanding_path': 'business_understanding.json',
         'success_criteria_path': 'success_criteria.json',
@@ -293,7 +247,9 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as f:
         json.dump(manifest, f, indent=2)
 
-    if lineage:
+    if context['execution_id']:
+        shutil.copyfile(Path(settings.MEDIA_ROOT) / model['lineage_path'], Path(out) / 'lineage.json')
+    else:
         with open(os.path.join(out, 'lineage.json'), 'w', encoding='utf-8') as f:
             json.dump(lineage, f, indent=2, default=str)
 
@@ -318,38 +274,79 @@ def build_score_bundle(file_id: int) -> Dict[str, Any]:
     manifest['immutable_freeze_hash'] = hashlib.sha256(json.dumps(manifest['artifact_integrity'], sort_keys=True).encode()).hexdigest()
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as stream:
         json.dump(manifest, stream, indent=2, allow_nan=False)
-    pointer = Path(out) / 'publication.json'
-    pointer.write_text(json.dumps({'bundle_id': bundle_id}), encoding='utf-8')
-    replace_projection(pointer, Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id) / 'current.json')
-    return {
-        'status': 'ok',
-        'file_id': file_id,
-        'bundle_id': bundle_id,
-        'bundle_path': os.path.relpath(out, settings.MEDIA_ROOT),
-        'manifest': manifest,
-    }
+    publication = {key: manifest[key] for key in ('file_id', 'bundle_id', 'execution_id', 'assessment_id')}
+    publication['manifest_sha256'] = digest_file(Path(out) / 'manifest.json')
+    (Path(out) / 'publication.json').write_text(json.dumps(publication, indent=2), encoding='utf-8')
+    verify_bundle(out, file_id, bundle_id)
+    if context['execution_id']:
+        # Verify the copied native inputs against the original recorded evidence,
+        # including modifications during staging, before any publication.
+        from modeling.execution_artifacts import load_execution, load_assessment
+        load_execution(context['execution_id'], file_id)
+        load_assessment(context['execution_id'], context['assessment_id'], file_id)
+        source = execution_root(context['execution_id'])
+        for source_path, name in [(Path(model_abs), model_basename),
+                (source / 'modeling_status.json', 'modeling_status.json'),
+                (source / 'manifest.json', 'execution_manifest.json'),
+                (source / 'lineage.json', 'lineage.json')]:
+            if digest_file(source_path) != digest_file(Path(out) / name):
+                raise ValueError('Native handoff input changed during package staging.')
+        if calibrator_file and digest_file(cal_abs) != digest_file(Path(out) / calibrator_file):
+            raise ValueError('Calibrator changed during package staging.')
+        assessment_root = source / 'assessments' / context['assessment_id']
+        for name in ('evaluation.json', 'model_card.json', 'manifest.json'):
+            copied = 'assessment_manifest.json' if name == 'manifest.json' else name
+            if digest_file(assessment_root / name) != digest_file(Path(out) / copied):
+                raise ValueError('Assessment changed during package staging.')
+    destination = Path(bundle_dir(file_id, bundle_id))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with projection_lock(file_id):
+        adoption = 'adopted'
+        if context['execution_id'] and current_selection(file_id) != (context['execution_id'], context['execution_id'], context['assessment_id']):
+            adoption = 'version_only_current_changed'
+        os.rename(out, destination)
+        if adoption == 'adopted':
+            replace_projection(destination / 'publication.json', destination.parent.parent / 'current.json')
+    return bundle_summary(file_id, bundle_id, adoption)
 
 
-def build_deployment_pack_zip(file_id: int) -> tuple:
-    """Zip the frozen score bundle directory for regulatory handoff."""
+def bundle_summary(file_id, bundle_id=None, adoption_status=None):
+    out = bundle_dir(file_id, bundle_id)
+    manifest, digest = verify_bundle(out, file_id, bundle_id)
+    return {'status': 'ok', 'file_id': file_id, 'bundle_id': manifest.get('bundle_id'),
+            'execution_id': manifest.get('execution_id'), 'assessment_id': manifest.get('assessment_id'),
+            'manifest_sha256': digest, 'adoption_status': adoption_status,
+            'bundle_path': os.path.relpath(out, settings.MEDIA_ROOT), 'manifest': manifest}
+
+
+def build_deployment_pack_zip(file_id: int, bundle_id=None) -> tuple:
+    """Zip only recorded package files for review and batch scoring handoff."""
     import io
     import zipfile
 
-    out = bundle_dir(file_id)
-    if not os.path.isdir(out) or not os.path.exists(os.path.join(out, 'manifest.json')):
-        raise FileNotFoundError('Deployment bundle not found. Create the bundle first.')
+    out = bundle_dir(file_id, bundle_id)
+    manifest, _ = verify_bundle(out, file_id, bundle_id)
     buf = io.BytesIO()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    name = f'deployment_pack_{file_id}_{stamp}.zip'
+    name = f'deployment_pack_{file_id}_{stamp}_{uuid.uuid4().hex}.zip'
     with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(out):
-            for fn in files:
-                abs_path = os.path.join(root, fn)
-                arc = os.path.relpath(abs_path, out)
-                zf.write(abs_path, arcname=arc)
+        names = set(manifest.get('artifact_integrity') or {}) | {'manifest.json'}
+        if not manifest.get('artifact_integrity') and not manifest.get('handoff_schema_version') and not manifest.get('execution_id'):
+            # Inspectable historical packages lack a recorded integrity map.
+            # Include known sidecars only, and disclose their unverified provenance.
+            legacy = [manifest.get('model_file') or 'model.json', manifest.get('calibrator_file'),
+                'lineage.json', 'model_card.json', 'business_understanding.json',
+                'success_criteria.json', 'monitoring_plan.json', 'train_reference_head.csv']
+            names.update(name for name in legacy if name and Path(name).name == name
+                and (Path(out) / name).is_file() and not (Path(out) / name).is_symlink())
+        if (Path(out) / 'publication.json').is_file():
+            names.add('publication.json')
+        for filename in sorted(names):
+            zf.write(Path(out) / filename, arcname=filename)
         zf.writestr(
             'README.txt',
-            f'DeclarAI deployment pack\nfile_id={file_id}\ngenerated_utc={stamp}\n'
+            f'DeclarAI review and batch scoring pack\nfile_id={file_id}\nbundle_id={manifest.get("bundle_id")}\ngenerated_utc={stamp}\n'
+            'Evidence is exploratory or historically unverified; production use is not approved.\n'
             'Includes frozen score bundle, BU, success criteria, model card, monitoring plan.\n',
         )
     return buf.getvalue(), name
@@ -361,19 +358,7 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
     from evaluation.eval_utils import feature_psi_report
 
     out = bundle_dir(file_id, bundle_id)
-    manifest_path = os.path.join(out, 'manifest.json')
-    if not os.path.exists(manifest_path):
-        raise FileNotFoundError('Deployment bundle not found. Create the bundle first.')
-
-    with open(manifest_path, 'r', encoding='utf-8') as f:
-        manifest = json.load(f)
-    if manifest.get('file_id') != file_id or (bundle_id and manifest.get('bundle_id') != str(bundle_id)):
-        raise ValueError('Scoring bundle identity does not match the requested dataset/version.')
-
-    for name, recorded in (manifest.get('artifact_integrity') or {}).items():
-        path = (Path(out) / name).resolve()
-        if not path.is_relative_to(Path(out).resolve()) or not path.is_file() or digest_file(path) != recorded['sha256']:
-            raise ValueError(f'Scoring artifact failed integrity verification: {name}')
+    manifest, manifest_digest = verify_bundle(out, file_id, bundle_id)
     if manifest.get('input_stage') == 'raw_unencoded':
         from preprocessing.replay import apply_purifier
         if manifest.get('purifier_file') != 'purifier.json' or 'purifier.json' not in (manifest.get('artifact_integrity') or {}):
@@ -387,7 +372,7 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
     if not os.path.exists(model_path):
         # Backward compat with older bundles that always used model.json
         alt = os.path.join(out, 'model.json')
-        if os.path.exists(alt):
+        if not manifest.get('execution_id') and not manifest.get('handoff_schema_version') and os.path.exists(alt):
             model_path = alt
         else:
             raise FileNotFoundError('Deployment model artifact missing from bundle.')
@@ -451,11 +436,10 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
     if multiclass:
         monitoring['class_probability_mean'] = np.mean(proba, axis=0).tolist() if len(proba) else []
     # Optional PSI vs train reference snapshot if present in bundle sidecar
-    ref_path = os.path.join(out, 'train_reference.parquet')
     # Also accept a lightweight CSV reference written at bundle time (optional)
     ref_csv = os.path.join(out, 'train_reference_head.csv')
     try:
-        if os.path.exists(ref_csv):
+        if 'train_reference_head.csv' in (manifest.get('artifact_integrity') or {}):
             ref = pd.read_csv(ref_csv)
             common = [c for c in feature_names if c in ref.columns and c in X.columns]
             if common:
@@ -471,6 +455,11 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
         'class_mapping': (manifest.get('prediction_contract') or {}).get('class_mapping'),
         'score_semantics': 'class probabilities' if multiclass else ('anomaly ranking; not a probability' if manifest.get('task') == 'anomaly' else manifest.get('task')),
         'bundle_id': manifest.get('bundle_id'),
+        'execution_id': manifest.get('execution_id'),
+        'assessment_id': manifest.get('assessment_id'),
+        'manifest_sha256': manifest_digest,
+        'evidence_status': manifest.get('evidence_status', 'legacy_provenance_unverified'),
+        'production_use_approved': False,
         'input_stage': manifest.get('input_stage'),
         'scores_calibrated': scores_calibrated,
         'feature_count': len(feature_names),

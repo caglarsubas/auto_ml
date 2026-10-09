@@ -22,6 +22,7 @@ from deployment.deploy_utils import (
     assess_file_deploy_readiness,
     build_deployment_pack_zip,
     build_score_bundle,
+    bundle_summary,
     score_frame,
 )
 
@@ -39,8 +40,12 @@ class DeploymentBundleView(APIView):
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            readiness = assess_file_deploy_readiness(int(file_id))
+            readiness = assess_file_deploy_readiness(int(file_id), request.query_params.get('execution_id'), request.query_params.get('assessment_id'))
             return Response({'file_id': int(file_id), 'readiness': readiness}, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+        except FileNotFoundError as e:
+            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -50,21 +55,35 @@ class DeploymentBundleView(APIView):
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             file_id = int(file_id)
-            payload = build_score_bundle(file_id)
+            payload = build_score_bundle(file_id, request.data.get('execution_id'), request.data.get('assessment_id'))
             # Persist summary + advance pipeline when possible
             out_dir = os.path.join(settings.MEDIA_ROOT, 'deployment')
             os.makedirs(out_dir, exist_ok=True)
             summary_path = os.path.join(out_dir, f'{file_id}_bundle.json')
-            with open(summary_path, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, indent=2, default=str)
+            # Compatibility summary is not authoritative; exact status reads verify the bundle.
+            if payload['adoption_status'] == 'adopted':
+                from modeling.execution_artifacts import projection_lock, replace_projection
+                from deployment.evidence import read_json
+                from deployment.deploy_utils import bundle_dir
+                with projection_lock(file_id):
+                    current = read_json(os.path.join(os.path.dirname(os.path.dirname(bundle_dir(file_id, payload['bundle_id']))), 'current.json'), {})
+                    if current.get('bundle_id') == payload['bundle_id']:
+                        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8') as staged:
+                            json.dump(payload, staged, indent=2, default=str)
+                            staged.flush()
+                            replace_projection(staged.name, summary_path)
             payload['summary_path'] = os.path.relpath(summary_path, settings.MEDIA_ROOT)
             try:
                 from modeling.models import PipelineRun
                 run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-                if run is not None:
+                if run is not None and payload['adoption_status'] == 'adopted':
                     st = dict(run.state or {})
                     st['deployment'] = {
                         'bundle_path': payload.get('bundle_path'),
+                        'bundle_id': payload['bundle_id'],
+                        'execution_id': payload['execution_id'],
+                        'assessment_id': payload['assessment_id'],
+                        'manifest_sha256': payload['manifest_sha256'],
                         'lineage_id': (payload.get('manifest') or {}).get('lineage_id'),
                         'package_ready': True,
                         'production_use_approved': False,
@@ -90,6 +109,8 @@ class DeploymentBundleView(APIView):
             }, status=status.HTTP_409_CONFLICT)
         except FileNotFoundError as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             import traceback
             print("[DeploymentBundle] ERROR:\n" + traceback.format_exc())
@@ -165,16 +186,12 @@ class DeploymentScoreView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class DeploymentStatusView(APIView):
     def get(self, request, file_id: int, *args, **kwargs):
-        path = os.path.join(settings.MEDIA_ROOT, 'deployment', f'{file_id}_bundle.json')
-        if not os.path.exists(path):
-            return Response({'status': 'unknown', 'file_id': file_id}, status=status.HTTP_200_OK)
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                payload = json.load(f)
-            payload['status'] = 'ok'
-            return Response(payload, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'status': 'error', 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(bundle_summary(file_id, request.query_params.get('bundle_id')))
+        except FileNotFoundError:
+            return Response({'status': 'unknown', 'file_id': file_id})
+        except ValueError as e:
+            return Response({'status': 'error', 'error': str(e)}, status=status.HTTP_409_CONFLICT)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -187,26 +204,29 @@ class DeploymentPackView(APIView):
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             file_id = int(file_id)
-            # Ensure bundle exists (create if deploy-ready)
-            try:
-                build_score_bundle(file_id)
-            except DeployNotReadyError as e:
-                return Response({
-                    'error': str(e),
-                    'deploy_ready': False,
-                    'readiness': e.readiness,
-                }, status=status.HTTP_409_CONFLICT)
-            except FileNotFoundError as e:
-                return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-            raw, filename = build_deployment_pack_zip(file_id)
+            bundle_id = request.data.get('bundle_id')
+            if bundle_id and (request.data.get('execution_id') or request.data.get('assessment_id')):
+                raise ValueError('Select a bundle_id or an execution/assessment pair, not both.')
+            if not bundle_id:
+                payload = build_score_bundle(file_id, request.data.get('execution_id'), request.data.get('assessment_id'))
+                bundle_id = payload['bundle_id']
+            raw, filename = build_deployment_pack_zip(file_id, bundle_id)
             out_dir = os.path.join(settings.MEDIA_ROOT, 'exports')
             os.makedirs(out_dir, exist_ok=True)
-            with open(os.path.join(out_dir, filename), 'wb') as f:
+            with open(os.path.join(out_dir, filename), 'xb') as f:
                 f.write(raw)
             resp = HttpResponse(raw, content_type='application/zip')
             resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+            summary = bundle_summary(file_id, bundle_id)
+            resp['X-DeclarAI-Bundle-Id'] = summary['bundle_id']
+            resp['X-DeclarAI-Manifest-SHA256'] = summary['manifest_sha256']
             return resp
+        except DeployNotReadyError as e:
+            return Response({'error': str(e), 'readiness': e.readiness}, status=status.HTTP_409_CONFLICT)
+        except FileNotFoundError as e:
+            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             import traceback
             print("[DeploymentPack] ERROR:\n" + traceback.format_exc())
