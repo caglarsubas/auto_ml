@@ -29,8 +29,13 @@ The name *DeclarAI* reflects this philosophy: models are built through a series 
 |-------|------------|------|
 | **Frontend** | Angular 22 · Angular Material · Plotly.js | `4300` |
 | **Backend** | Django 5.2 LTS · Django REST Framework · Python 3.12 | `8001` |
-| **Infrastructure** | Docker Compose (2 services, hot-reload dev volumes) | — |
-| **Database** | SQLite (development) | — |
+| **Infrastructure** | Docker Compose (development backend/frontend/Redis, hot-reload volumes) | — |
+| **Database** | SQLite (development); explicit PostgreSQL metadata configuration | — |
+
+The bundled Docker stack is development only. The [private runtime settings](docs/private-runtime-configuration.md)
+require external secrets, explicit hosts/HTTPS origins and certificate-verified
+PostgreSQL. This foundation does not qualify a production installation; deployment,
+project roles, durable workers and recovery remain open in the canonical roadmap.
 
 ---
 

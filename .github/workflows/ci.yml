@@ -96,6 +96,43 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
+  # Private configuration/TLS smoke, disposable restore and full metadata parity.
+  postgresql-runtime:
+    name: PostgreSQL runtime and metadata
+    runs-on: ubuntu-latest
+    env:
+      PROMETA_DISABLE: "1"
+      OPENAI_API_KEY: ""
+      LLM_ENGINE_BASE_URL: http://127.0.0.1:9/v1
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libmagic1 file libgomp1 openssl
+          pip install -r backend/requirements.txt
+      - name: Qualify disposable PostgreSQL fixture
+        run: python scripts/qualify_postgres_fixture.py
+      - name: Enforce existing skip budget
+        if: always()
+        run: python .github/scripts/check_skip_budget.py test-reports/postgresql/postgresql.xml --max-skips 15
+      - name: Upload PostgreSQL reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgresql-runtime-reports
+          path: test-reports/postgresql/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Frontend: Angular Karma/Jasmine unit tests (headless Chrome)
   # ---------------------------------------------------------------------------
   frontend-unit:

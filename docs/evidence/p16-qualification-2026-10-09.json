@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P16",
+  "branch": "codex/private-runtime-postgres",
+  "base_commit": "4e952d611a0fadbeb4a8c9cb954488b8b43676b0",
+  "qualified_application_source_commit": "a139a51fbde75c9482b0ffc1bc9afc4b593da73f",
+  "scope": "Partial D06/D07 private configuration and PostgreSQL metadata foundation; no production installation, live ingress/browser HTTPS, coordinated online restore, durable jobs, project roles, expert isolation, independent reproduction or release/customer qualification.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/105",
+    "state": "MERGED",
+    "merge_commit": "4e952d611a0fadbeb4a8c9cb954488b8b43676b0",
+    "merged_at": "2026-10-09T10:25:16Z",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37917493980",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "core_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "dependency_delta": "psycopg and psycopg-binary 3.3.6; other previously qualified public core dependencies unchanged",
+    "Python": "3.12.15",
+    "Django": "5.2.18",
+    "pytest": "9.1.1",
+    "postgresql": "postgres (PostgreSQL) 17.11",
+    "postgresql_image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+    "private_tls": "TLSv1.3",
+    "pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "sqlite_cpu_affinities": [
+      0,
+      1
+    ],
+    "postgresql_cpu_affinities": [
+      2,
+      3
+    ],
+    "data": "Disposable synthetic PostgreSQL/Redis and temporary artifact/secret/session fixtures, public core without optional SDK. Provider key blank, engine unavailable and telemetry disabled."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked backend suite, Ruff, migration drift and pip consistency",
+      "status": "passed",
+      "passed": 1838,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 228,
+      "duration_seconds": 174.85,
+      "coverage_percent": 69.33,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p16/backend-final.log"
+    },
+    {
+      "name": "Full PostgreSQL marked backend suite",
+      "status": "passed",
+      "passed": 1838,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 229,
+      "duration_seconds": 179.26,
+      "coverage_percent": 69.33,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p16/postgresql-final/postgresql.log"
+    },
+    {
+      "name": "Private TLS middleware/session/API and metadata smoke",
+      "status": "passed",
+      "evidence": "HTTP redirects, invalid Host rejection, secure session/CSRF cookies, HSTS, anonymous and missing-CSRF denial, real sign-in, pipeline JSON, UUID receipts/grants/access events/expired approval records, protected artifact hash parity. Migrations/writes use a database-owning non-superuser with no CREATEDB. This uses the real Django test client, not live TLS ingress or a browser.",
+      "report": "test-reports/p16/postgresql-final/private-runtime.log"
+    },
+    {
+      "name": "Database TLS negative checks",
+      "status": "passed",
+      "evidence": "Bad CA connection fails specifically with certificate verify failed; reachable unnamed host fails specifically with does not match host name. No weakening of verify-full or SQLite fallback.",
+      "reports": [
+        "test-reports/p16/postgresql-final/tls-wrong-ca-connect.log",
+        "test-reports/p16/postgresql-final/tls-wrong-host.log"
+      ]
+    },
+    {
+      "name": "Restart and quiescent synthetic snapshot/restore",
+      "status": "passed",
+      "evidence": "pg_dump/pg_restore into a separate fixture database plus matching artifact copy; restart and restored database preserve session validity, exact pipeline JSON, grant UUID/revision, access and holdout receipts, expired approval state and protected artifact hashes. Not an online coordinated restore or SQLite-to-PostgreSQL migration.",
+      "report": "test-reports/p16/postgresql-final/postgresql-summary.json"
+    },
+    {
+      "name": "Configuration regression cases",
+      "status": "passed",
+      "passed": 67,
+      "evidence": "Included in both final full suites: weak/ambiguous secret inputs, invalid files, host/origin/profile settings, SQLite fallback, TLS downgrade modes, artifact root, IPv6 and live-reload private-start rejection."
+    },
+    {
+      "name": "Static script checks and development Compose validation",
+      "status": "passed",
+      "report": "test-reports/p16/scripts-lint-final.log"
+    }
+  ],
+  "qualification_corrections": [
+    "The first disposable harness seed failed because pathlib.Path.open does not accept opener; replaced with builtin open and reran the fixture.",
+    "First PostgreSQL full run exposed FileResponse.close/request_finished inside a test-wrapping atomic transaction. The existing session-boundary test now uses transaction=True, retaining all assertions and exercising real autocommit. Both final full suites pass.",
+    "Initial host-runner CI reached private seed and both TLS rejection checks, then failed connecting after PostgreSQL restart. Docker ephemeral published ports can change on restart; the host runner now resolves the published port again. The core-image runner uses the stable internal port. Final host qualification remains an exact-head CI check."
+  ],
+  "ci": "Adds PostgreSQL runtime and metadata as a sixth job with private TLS, restart/restore and full PostgreSQL pytest at the existing skip/coverage gates. The existing five jobs remain. Exact-head checks are recorded by the PR, separately from local evidence.",
+  "preservation": {
+    "prior_packets": "P01-P15 unchanged",
+    "outcome_statuses": "unchanged",
+    "progress_evidence_delta": [
+      "D06",
+      "D07"
+    ],
+    "planned_outcomes": "D18-D26 unchanged",
+    "implementation_queue": "unchanged",
+    "release_qualification": "open and unchanged",
+    "primary_tracked_edits_preserved": 11
+  },
+  "source_sha256": {
+    ".env.example": "559f8670ffcb4071f6a49bafc7b4187c397b7eb3d8896137d917822a2796f15b",
+    ".github/workflows/ci.yml": "f760909c6e91558bfa09fac0d66cdc4240152433c1183bb9f21f866631ef3da2",
+    "README.md": "419e9ccf0e33e4fd7b62555bf9e4ac2cdeb24ba7739b963ec17c255dcc27359f",
+    "backend/backend/runtime_config.py": "b3470d9431ea034eeec5ed1e63550665e32a0ce73c3b20356035df7181e10557",
+    "backend/backend/settings.py": "5c265babbdea7a438d421c29e95317ef5facaf835465e12f86efbc9ce22be9ef",
+    "backend/requirements.txt": "7be3bca40cadb7cd23a6726c0acbb5e75e2a436edede18528f332e33af9b1553",
+    "backend/tests/unit/test_runtime_config.py": "dd4031c19c3c87525ce81502f5e743ae18491b1c7cacc50cc63f9200b7ab5292",
+    "backend/tests/unit/test_session_boundary.py": "10047e62850a0d6b615355efda7207ddadfc94e372ef48f14c8da4f96f012ed2",
+    "docker-compose.yml": "133e3a88da46b89072ee8f302e788118e330738204e5ac374a3cf72f6002895b",
+    "docker/backend-entrypoint.sh": "2854cec1b5424477f2a91768e6d28aabf940fda103147c821e6b31b47a9895b2",
+    "docs/private-runtime-configuration.md": "08350516737ee5ff982052e7f655607b300ac4a4a309d70e4bb6a1335e11bad3",
+    "scripts/qualify_postgres_fixture.py": "a85f78ee5bc187c5089c3bf2f3937abf1da70ca3f15e2342fa397f530fc6b177",
+    "scripts/qualify_private_runtime.py": "2a39e8092f6bd9f0d42228e59c61765f09e7a7ec6d5b10aba9a51f7a0f7e87bd"
+  },
+  "limitations": [
+    "No customer capacity, delivery-date or acceptance claim.",
+    "Development default remains SQLite; existing metadata is not transferred automatically.",
+    "Private deployment WSGI/ASGI/TLS/static/offline/encrypted packaging is not delivered or qualified.",
+    "No Celery/durable-worker, interrupted-job recovery, cancellation, online coordinated restore or upgrade/rollback qualification.",
+    "REST project authorization, egress/retention, expert gVisor isolation, independent reproduction and all release/customer gates remain open.",
+    "Final fixture-controller lint/owned-runner cleanup and published-port refresh changes retain application/check semantics; the final host runner is independently exercised by exact-head CI."
+  ]
+}

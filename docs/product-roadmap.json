@@ -236,9 +236,11 @@
         "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
         "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)",
         "[Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md)",
-        "[P14 source qualification](evidence/p14-qualification-2026-10-09.json)"
+        "[P14 source qualification](evidence/p14-qualification-2026-10-09.json)",
+        "[Explicit runtime configuration and limits](private-runtime-configuration.md)",
+        "[P16 source qualification](evidence/p16-qualification-2026-10-09.json)"
       ],
-      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 validates native REST file identifiers and confines table selectors/generated files to managed storage before reads, including traversal, hidden, symlink and nonregular-file rejection. This is a root boundary, not REST project/dataset authorization; roles, egress/retention and release threat-model qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open."
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 validates native REST file identifiers and confines table selectors/generated files to managed storage before reads, including traversal, hidden, symlink and nonregular-file rejection. This is a root boundary, not REST project/dataset authorization; roles, egress/retention and release threat-model qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open."
     },
     {
       "id": "D07",
@@ -260,9 +262,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
-        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)"
+        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)",
+        "[Explicit runtime configuration and limits](private-runtime-configuration.md)",
+        "[P16 source qualification](evidence/p16-qualification-2026-10-09.json)"
       ],
-      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open."
+      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open."
     },
     {
       "id": "D08",
@@ -1000,6 +1004,16 @@
       "date": "2026-10-09",
       "packet": "P15",
       "event": "Local qualification passed 1771 backend tests with six explicit skips and 69.33% combined statement/branch coverage, 555 frontend tests, 28 authenticated browser/API checks and actual MCP SDK stdio. Numeric states, categorical output exclusions, immutable candidate inputs and exact saved-run restoration are covered. Prior packets, outcome statuses, D18-D26, queue and release/customer gates are preserved; grouped categorical methods and paired uncertainty remain open."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P16",
+      "event": "Verified PR105 merged as 4e952d611a0fadbeb4a8c9cb954488b8b43676b0 and merge-main CI run 37917493980 passed all five jobs. Scope explicit private runtime settings and PostgreSQL metadata compatibility/migration/restore foundation; preserve prior packets, outcome states, D18-D26, queue and release/customer gates."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P16",
+      "event": "Local qualification passed 1838 tests each on SQLite and PostgreSQL 17.11, six explicit skips each, and 69.33% combined coverage under unchanged budgets. Private TLS/session/API, bad certificate/hostname rejection, non-superuser migrations, restart persistence and a quiescent synthetic database/artifact restore pass. Add a sixth PostgreSQL CI job. Production deployment/recovery, expert isolation, project roles, prior outcome states, D18-D26, canonical queue and release/customer gates remain open/preserved."
     }
   ],
   "implementation_packets": [
@@ -1273,6 +1287,23 @@
         "[P15 source qualification](evidence/p15-qualification-2026-10-09.json)"
       ],
       "remaining": "Grouped categorical diagnostics, paired-comparison uncertainty, comprehensive scientific/accessibility qualification, project roles, expert isolation, durable execution, independent reproduction and release/customer gates remain open."
+    },
+    {
+      "id": "P16",
+      "title": "Explicit private runtime and PostgreSQL metadata foundation",
+      "kind": "product_implementation",
+      "owner": "Backend/Platform/Security",
+      "status": "tested",
+      "items": [
+        "D06",
+        "D07"
+      ],
+      "description": "Separate development compatibility from fail-closed private settings, externally supplied secrets, explicit hosts/HTTPS origins, artifact root and verified PostgreSQL connections. Qualify native metadata/session compatibility and bounded migration/restore without claiming durable jobs or release readiness.",
+      "evidence": [
+        "[Explicit runtime configuration and limits](private-runtime-configuration.md)",
+        "[P16 source qualification](evidence/p16-qualification-2026-10-09.json)"
+      ],
+      "remaining": "Project roles, egress/retention, encrypted/offline production packaging, queued workers, cancellation/recovery, coordinated production restoration, expert isolation, independent reproduction and release/customer gates remain open."
     }
   ],
   "release_qualification": {

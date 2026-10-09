@@ -2,6 +2,11 @@
 # Backend container entrypoint: migrate → optional KB index → runserver.
 set -eu
 
+if [ "${DECLARAI_RUNTIME_PROFILE:-development}" != development ]; then
+  echo "This live-reload entrypoint supports development only. Use an independently qualified private WSGI/ASGI deployment." >&2
+  exit 1
+fi
+
 python backend/manage.py migrate
 
 if [ -n "${OPENAI_API_KEY:-}" ]; then
