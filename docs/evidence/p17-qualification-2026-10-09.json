@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P17",
+  "branch": "codex/authentication-audit-revocation",
+  "base_commit": "75c3834ba0cc7ecd5987f1536906fb7e0023acb5",
+  "qualified_application_source_commit": "c45cce4fe3bbb5758522c42ad2504f51a924d841",
+  "baseline_verification": {
+    "pull_request": 106,
+    "merged_at": "2026-10-09T11:53:46Z",
+    "merge_main_ci_run": 37926557876,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D06: durable password-login admission/audit, revision-bound browser sessions, installation-operator revocation, unused typed-approval cancellation. No project-role or release claim.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker runners",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "psycopg": "3.3.6",
+    "node": "24.16.0",
+    "angular": "22.2.1",
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "browser_image": "declarai-p17-api:local",
+    "browser_image_id": "sha256:c5f47297a8a47f70787ab7b8dcd9d33c3ff5a234ae32c641b9104e3ca80e7f54",
+    "postgresql": "17.11",
+    "postgresql_image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+    "resources": "Two CPUs per backend runner; OMP/OpenBLAS/MKL threads bounded at two. Datasets, rounds, assertions, skip/coverage budgets unchanged. Provider keys blank, engine unavailable, telemetry disabled; optional SDK absent."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite, Ruff, migration drift and pip consistency",
+      "status": "passed",
+      "passed": 1870,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 227,
+      "duration_seconds": 209.36,
+      "coverage_percent": 69.33,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p17/backend.log"
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "passed": 1870,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 229,
+      "duration_seconds": 188.36,
+      "coverage_percent": 69.33,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p17/postgresql/postgresql.log"
+    },
+    {
+      "name": "Authentication, sessions and typed-action focused checks",
+      "status": "passed",
+      "passed": 113,
+      "deselected": 118,
+      "warnings": 3,
+      "duration_seconds": 24.83,
+      "report": "test-reports/p17/auth-focused-final.log",
+      "evidence": "Includes 32 new cases in the full suites: audit/admission/commit failures, source/pair budgets and reset, account-change denial, legacy/unavailable authority, admin/API shared admission, logout outage, revocation/re-login, unused-approval cancellation, mid-prepare revocation, replay/conflict and MCP actor deactivation."
+    },
+    {
+      "name": "Independent PostgreSQL processes under private TLS",
+      "status": "passed",
+      "processes_per_scenario": 5,
+      "admissions_per_source_or_principal_budget": 3,
+      "denials_per_budget": 2,
+      "committed_revocations": 1,
+      "concurrent_revocation_replays": 4,
+      "revoked_sessions": 2,
+      "report": "test-reports/p17/postgresql/private-identity.log",
+      "evidence": "Database verify-full TLS, current-bucket denial aggregation, five-process shared source/principal limits, one same-UUID revocation commit across five commands, two denied old sessions, unaffected user and fresh-session replay preservation."
+    },
+    {
+      "name": "Private middleware/session/API, TLS negatives and synthetic persistence/restore",
+      "status": "passed",
+      "reports": [
+        "test-reports/p17/postgresql/private-runtime.log",
+        "test-reports/p17/postgresql/postgresql-summary.json"
+      ],
+      "evidence": "Non-superuser migrations, HTTPS/Host/secure-cookie/CSRF checks, certificate and hostname rejection. Authentication login receipt/current revision joins the existing metadata/session/grant/approval/holdout/artifact checks across restart and quiescent matching database/artifact restore. Real Django middleware/client and PostgreSQL TLS; no live TLS browser ingress claim."
+    },
+    {
+      "name": "Real development browser revocation and retry workflow",
+      "status": "passed",
+      "browser": "chromium",
+      "initial_browser_sessions": 3,
+      "revoked_sessions": 2,
+      "protected_api_and_media": "denied",
+      "revoked_ui": "sign_in",
+      "unaffected_actor": "signed_in",
+      "fresh_sign_in": "passed",
+      "retry_preserves_fresh_session": "passed",
+      "runtime_errors": 0,
+      "external_requests": 0,
+      "profile": "development_http_sqlite",
+      "live_private_tls_ingress_qualified": false,
+      "report": "test-reports/p17/browser-final.log",
+      "evidence": "Built Angular assets against disposable Django/SQLite on loopback. Three independent browser contexts use real username/password/CSRF sessions. Revocation denies the affected user's two sessions at REST/media and returns their UI to login; another actor stays authenticated; fresh login survives same-UUID retry. No external requests or runtime page errors."
+    },
+    {
+      "name": "Angular production build",
+      "status": "passed",
+      "report": "test-reports/p17/frontend-build.log",
+      "evidence": "Existing bundle/CommonJS warnings retained; frontend source and dependencies unchanged."
+    },
+    {
+      "name": "Final backend and fixture static checks",
+      "status": "passed",
+      "reports": [
+        "test-reports/p17/backend-static-final.log",
+        "test-reports/p17/scripts-static-final.log"
+      ]
+    },
+    {
+      "name": "Canonical roadmap projection and ledger invariants",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p17/roadmap.log"
+    }
+  ],
+  "qualification_corrections": [
+    "Initial script static checks found two import-order issues and a loop closure warning. Imports and bound closure fixed; final static checks pass without changing fixture scenarios.",
+    "Local host Python has no pytest; ledger checks use the same qualified core runner as backend checks.",
+    "A final formatting-only pass on the new backend files followed full suite/browser runs. Application semantics are unchanged; final static checks pass and exact-head CI independently tests the final source."
+  ],
+  "ci": "All six existing CI jobs remain. The PostgreSQL job additionally executes the five-process private identity fixture. Exact-head CI is recorded by the PR separately from local source evidence.",
+  "preservation": {
+    "prior_packets": "P01-P16 unchanged",
+    "outcome_statuses": "unchanged",
+    "progress_evidence_delta": [
+      "D06"
+    ],
+    "planned_outcomes": "D18-D26 unchanged",
+    "implementation_queue": "unchanged",
+    "release_qualification": "open and unchanged",
+    "primary_tracked_edits_preserved": 11
+  },
+  "source_sha256": {
+    ".env.example": "d6deb5d4ec9e4605c5b21da816e02ce5e3b459e813ee5c5b9e12b0339abb2382",
+    "backend/access_control/apps.py": "2ff092650f08e690a8f876a0a4166a4d278260e795ae55178ab8c3fa176857ee",
+    "backend/access_control/assistant_approvals.py": "d5ef96796fd7aa10f0d2fc87c7c904e2c996353d1cf21c1d754ff4f15ac2ab28",
+    "backend/access_control/auth_backend.py": "a8d5a25ed63b9cba26736830f535b41e668caa172391198da4cc295efda288ec",
+    "backend/access_control/management/commands/revoke_web_sessions.py": "0fca9591be5a736a2f7a745de97a129d57d0927efd0eeb951a3531a1dbdfeb61",
+    "backend/access_control/migrations/0003_loginthrottlebucket_sessionauthority_and_more.py": "6d733573d456e961bdf4246b2dd79bd00e4c0d25de057aceb4fd7a528388921f",
+    "backend/access_control/models.py": "12743491a9a9d9766abeebc768a876bee840f8ffc2f7bc8375dee0664137cc7a",
+    "backend/access_control/session_authority.py": "a6c3b72bbb0dc7c7cf1c10a454496319f017fde6388d442bc49129ba184dca7b",
+    "backend/access_control/session_middleware.py": "10326461f93745fff5e3ba1d16724fba0587b23f3313d84a92709535f5f9ee5a",
+    "backend/backend/auth_views.py": "2cd9e11fe5d307a6d640b0cbb092367aa4a042c3c7af39ff0c4a5b70878455b1",
+    "backend/backend/runtime_config.py": "d5ccf98fc559715e59aca31b6ea9c7e13edb8708aad0cff8ecd654cb4c1908a3",
+    "backend/backend/settings.py": "d88d7e2634ed75929a40d39450a5abf089193e64889de0547192a9af8bf48841",
+    "backend/tests/unit/test_assistant_approvals.py": "c663bd54744de9798a4a636e99de4a02bb280980d83bd8ce94ce2ca6fa56315a",
+    "backend/tests/unit/test_session_governance.py": "d7992063700087eaa6446ad728d32cf5957945aea2386c1a6033b87d002c9af9",
+    "docs/AUTHENTICATION_GOVERNANCE.md": "b0f1c1ceda7196a5929aea7a5c426d06a496fe76e51dc70612fb159f40a92bc8",
+    "docs/private-runtime-configuration.md": "fd4a33e9262a8f4de4450593f1b4a9b7b03127a5b39f49f142078ad70697c697",
+    "scripts/qualify_postgres_fixture.py": "2e961c5d4c8df8b988bb3ef33284d12aa4a413290f9b85ab6a38502d98f87589",
+    "scripts/qualify_private_identity.py": "111fc990d0c1bff3c403243e86485f55521797c231af8ab607de67adcae7979c",
+    "scripts/qualify_private_runtime.py": "de60565cf981ed5b52ecb5bee34915a4e728086b5903302744606b71b85ffc62"
+  },
+  "limitations": [
+    "Project authorization and developer/reviewer/admin roles, SSO/MFA/enrollment, egress/retention, tamper-proof audit and full threat-model qualification remain open.",
+    "Existing unbound browser sessions and pending approvals require reauthentication or fresh preparation/review. No invented historical provenance.",
+    "Operator label is asserted installation metadata, not authenticated human identity. Browser revocation alone does not revoke MCP grants/process scopes; --deactivate blocks the configured actor active-account check.",
+    "Events distinguish API login commit, credential validation and session binding; interrupted admitted attempts can remain pending. Repeated throttled attempts aggregate only in the current bucket window.",
+    "Already-authorized handlers/jobs and dispatching/completed/failed receipts are preserved. Durable worker cancellation/recovery is not delivered.",
+    "No live private TLS ingress, online coordinated restore, SQLite-to-PostgreSQL transfer, encrypted/offline packaging, expert isolation, independent reproduction, customer capacity, delivery-date or acceptance claim. All release/customer gates remain open."
+  ]
+}
