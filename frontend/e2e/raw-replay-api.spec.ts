@@ -76,6 +76,19 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(trained.status()).toBe(200);
       const run = await trained.json();
+      expect(run.model.collinearity.method).toBe('centered_scaled_auxiliary_ols_v1');
+      expect(run.model.collinearity.execution_id).toBe(run.execution_id);
+      expect(run.model.collinearity.columns).toEqual(['x']);
+      expect(run.model.collinearity.features.x.vif).toBeCloseTo(1, 9);
+      for (const [name, diagnostic] of Object.entries(run.model.collinearity.features)) {
+        if (name !== 'x')
+          expect((diagnostic as { vif_status: string }).vif_status).toBe('excluded_categorical');
+      }
+      const numericDetail = await api.post('modeling/vif-detail/', {
+        data: { file_id: fileId, execution_id: run.execution_id, feature: 'x' },
+      });
+      expect(numericDetail.status()).toBe(200);
+      expect((await numericDetail.json()).row_count).toBe(run.model.collinearity.row_count);
       expect(run.model.input_stage).toBe('raw_unencoded');
       expect(run.model.cv.task).toBe(task);
       expect(run.model.cv.status).toBe('completed');
@@ -288,6 +301,17 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(exactPack.status()).toBe(200);
       expect(exactPack.headers()['content-type']).toContain('application/zip');
+      expect(child.model.collinearity.columns).toEqual(['x']);
+      expect(child.model.collinearity.execution_id).toBe(child.execution_id);
+      const oldDiagnostic = await api.post('modeling/vif-detail/', {
+        data: { file_id: fileId, execution_id: run.execution_id, feature: 'x' },
+      });
+      expect(oldDiagnostic.status()).toBe(200);
+      expect((await oldDiagnostic.json()).execution_id).toBe(run.execution_id);
+      const ambiguous = await api.post('modeling/vif-detail/', {
+        data: { file_id: fileId, feature: 'x' },
+      });
+      expect(ambiguous.status()).toBe(400);
       expect(child.model.fit_receipt.train.features).toEqual(['x']);
       expect(child.model.fit_receipt.num_boost_round).toBe(10);
       expect(child.model.fit_receipt.training_eval_metric).toBe(primary);
@@ -428,6 +452,29 @@ for (const task of ['classification', 'regression'] as const) {
             .locator('..')
             .getByRole('button', { name: 'Load', exact: true })
             .click();
+          const numeric = page.getByTestId('numeric-diagnostics');
+          await expect(numeric).toBeVisible();
+          await numeric.locator('summary').focus();
+          await numeric.locator('summary').press('Space');
+          await expect(numeric).toContainText(child.execution_id);
+          const inspect = numeric.getByRole('button', {
+            name: 'Inspect collinearity for x',
+            exact: true,
+          });
+          await inspect.focus();
+          await inspect.press('Enter');
+          const dialog = page.getByRole('dialog', { name: 'VIF Decomposition: x' });
+          await expect(dialog).toBeVisible();
+          await expect(dialog).toContainText('Overall VIF: 1.00');
+          await expect(dialog).toContainText(child.execution_id);
+          await expect(dialog).toContainText('not model importance');
+          await expect(
+            dialog.getByRole('button', { name: 'Close collinearity details' }),
+          ).toBeFocused();
+          await dialog.screenshot({ path: testInfo.outputPath('numeric-collinearity.png') });
+          await dialog.press('Escape');
+          await expect(dialog).not.toBeVisible();
+          await expect(inspect).toBeFocused();
           const history = page.getByRole('region', { name: 'Final-outcome access history' });
           await expect(history).toBeVisible();
           await expect(history).toContainText('2 accesses to the same final rows');

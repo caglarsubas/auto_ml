@@ -163,6 +163,10 @@ def test_candidate_has_fresh_metrics_selected_cv_and_preserves_parent(parent, ro
     model = candidate['model']
     assert candidate['adoption_status'] == 'adopted'
     assert json.loads(current.read_text())['execution_id'] == candidate['execution_id']
+    assert model['collinearity']['columns'] == ['x']
+    assert model['collinearity']['row_count'] == len(data['X_train'])
+    assert model['collinearity']['execution_id'] == candidate['execution_id']
+    assert model['collinearity']['features']['x']['vif'] == pytest.approx(1)
     assert model['test_auc'] is None
     assert 'score' not in model and 'leakage_scan' not in model and 'shap_plot' not in model
     assert model['valid_auc'] == model['development_validation_metrics']['roc_auc']

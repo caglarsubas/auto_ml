@@ -11,7 +11,8 @@ import { ModelingComponent } from './modeling.component';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
 import { AiAssistantService } from '../services/ai-assistant.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
+import { A11yModule } from '@angular/cdk/a11y';
 
 describe('ModelingComponent', () => {
   let component: ModelingComponent;
@@ -24,6 +25,7 @@ describe('ModelingComponent', () => {
         RouterTestingModule,
         FormsModule,
         MatDialogModule,
+        A11yModule,
         MatSnackBarModule,
         MatTooltipModule,
         BrowserAnimationsModule,
@@ -67,9 +69,19 @@ describe('ModelingComponent', () => {
           num_boost_round: 10,
           early_stopping_rounds: 3,
           stopping_evidence: {
-            metric_spec: { primary_metric: 'mse', direction: 'minimize', weighting: 'Unweighted observations.', semantics: 'Regression errors' },
-            mode: 'declared_metric', prediction_rounds: 1, selected_validation_score: 0,
-            training_loss: { native_name: 'reg:squarederror', role: 'Fitter surrogate loss, distinct from the business validation metric.' },
+            metric_spec: {
+              primary_metric: 'mse',
+              direction: 'minimize',
+              weighting: 'Unweighted observations.',
+              semantics: 'Regression errors',
+            },
+            mode: 'declared_metric',
+            prediction_rounds: 1,
+            selected_validation_score: 0,
+            training_loss: {
+              native_name: 'reg:squarederror',
+              role: 'Fitter surrogate loss, distinct from the business validation metric.',
+            },
             qualification: 'Exploratory development stopping.',
           },
           validation_role: 'early_stopping',
@@ -88,7 +100,9 @@ describe('ModelingComponent', () => {
     expect(details.textContent).toContain('Declared fit metric: mse (minimize)');
     expect(details.textContent).toContain('Boosting rounds used for prediction: 1');
     expect(details.textContent).toContain('Selected validation score: 0');
-    expect(details.textContent).toContain('Fitter surrogate loss, distinct from the business validation metric.');
+    expect(details.textContent).toContain(
+      'Fitter surrogate loss, distinct from the business validation metric.',
+    );
     expect(details.textContent).toContain('train-hash');
     expect(fixture.nativeElement.textContent).toContain('Post-selection development CV');
   });
@@ -177,7 +191,12 @@ describe('ModelingComponent', () => {
     (component as any)._currentSubstep = 'sfs_completed';
     component.sfsForwardResults = [{ selected_features: ['x'] }];
     for (const status of ['error', 'stopped', 'interrupted']) {
-      component.hpResults = { status, execution_id: 'old-candidate', features: ['x'], refit_params: { max_depth: 2 } };
+      component.hpResults = {
+        status,
+        execution_id: 'old-candidate',
+        features: ['x'],
+        refit_params: { max_depth: 2 },
+      };
       expect(component.canPromoteChampion()).toBeFalse();
     }
   });
@@ -307,11 +326,17 @@ describe('ModelingComponent', () => {
       component.encodingPlan = plan;
     }
 
-    it('should flip a matching feature\'s user_lom to ordinal and recompute side effects', () => {
+    it("should flip a matching feature's user_lom to ordinal and recompute side effects", () => {
       seedEncodingPlan([
-        { feature: 'Var_2', user_lom: 'nominal', nunique: 7,
-          fallback_strategy: 'label_encoding', fallback_reason: 'Nominal feature → Label Encoding',
-          needs_ranking: false, ranking: null },
+        {
+          feature: 'Var_2',
+          user_lom: 'nominal',
+          nunique: 7,
+          fallback_strategy: 'label_encoding',
+          fallback_reason: 'Nominal feature → Label Encoding',
+          needs_ranking: false,
+          ranking: null,
+        },
       ]);
       sharedService.emitMetadataUpdates([
         { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
@@ -326,9 +351,15 @@ describe('ModelingComponent', () => {
 
     it('should flip back from ordinal to nominal and clear ranking state', () => {
       seedEncodingPlan([
-        { feature: 'Var_36', user_lom: 'ordinal', nunique: 7,
-          fallback_strategy: 'ordinal_encoding', fallback_reason: '...',
-          needs_ranking: true, ranking: ['low', 'mid', 'high'] },
+        {
+          feature: 'Var_36',
+          user_lom: 'ordinal',
+          nunique: 7,
+          fallback_strategy: 'ordinal_encoding',
+          fallback_reason: '...',
+          needs_ranking: true,
+          ranking: ['low', 'mid', 'high'],
+        },
       ]);
       sharedService.emitMetadataUpdates([
         { column: 'Var_36', field: 'Level_of_Measurement', value: 'nominal' },
@@ -342,8 +373,13 @@ describe('ModelingComponent', () => {
 
     it('should ignore a feature not in the encoding plan', () => {
       seedEncodingPlan([
-        { feature: 'Var_2', user_lom: 'nominal', nunique: 5,
-          fallback_strategy: 'label_encoding', fallback_reason: 'x' },
+        {
+          feature: 'Var_2',
+          user_lom: 'nominal',
+          nunique: 5,
+          fallback_strategy: 'label_encoding',
+          fallback_reason: 'x',
+        },
       ]);
       sharedService.emitMetadataUpdates([
         { column: 'NotInPlan', field: 'Level_of_Measurement', value: 'ordinal' },
@@ -354,9 +390,14 @@ describe('ModelingComponent', () => {
 
     it('should mirror Feature_Description on the matching encoding plan entry', () => {
       seedEncodingPlan([
-        { feature: 'Var_9', user_lom: 'nominal', nunique: 3,
-          fallback_strategy: 'label_encoding', fallback_reason: 'x',
-          description: 'Old' },
+        {
+          feature: 'Var_9',
+          user_lom: 'nominal',
+          nunique: 3,
+          fallback_strategy: 'label_encoding',
+          fallback_reason: 'x',
+          description: 'Old',
+        },
       ]);
       sharedService.emitMetadataUpdates([
         { column: 'Var_9', field: 'Feature_Description', value: 'Last credit decision' },
@@ -372,8 +413,13 @@ describe('ModelingComponent', () => {
       // the entry so debugging is possible — the dropdown will simply
       // render blank (a visible signal that the entry is stale).
       seedEncodingPlan([
-        { feature: 'FE_Contact_Info_Count', user_lom: 'nominal', nunique: 12,
-          fallback_strategy: 'label_encoding', fallback_reason: 'x' },
+        {
+          feature: 'FE_Contact_Info_Count',
+          user_lom: 'nominal',
+          nunique: 12,
+          fallback_strategy: 'label_encoding',
+          fallback_reason: 'x',
+        },
       ]);
       sharedService.emitMetadataUpdates([
         { column: 'FE_Contact_Info_Count', field: 'Level_of_Measurement', value: 'cardinal' },
@@ -386,9 +432,11 @@ describe('ModelingComponent', () => {
     it('should do nothing when encodingPlan is empty (modeling step not entered yet)', () => {
       component.encodingPlan = [];
       // Should not throw.
-      expect(() => sharedService.emitMetadataUpdates([
-        { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
-      ])).not.toThrow();
+      expect(() =>
+        sharedService.emitMetadataUpdates([
+          { column: 'Var_2', field: 'Level_of_Measurement', value: 'ordinal' },
+        ]),
+      ).not.toThrow();
       expect(component.encodingPlan).toEqual([]);
     });
   });
@@ -414,28 +462,36 @@ describe('ModelingComponent', () => {
 
     it('should patch entry.ranking on the matching feature', () => {
       seedEncodingPlan([
-        { feature: 'Var_36', user_lom: 'ordinal', nunique: 7,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
+        {
+          feature: 'Var_36',
+          user_lom: 'ordinal',
+          nunique: 7,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
           unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'],
-          ranking: null },
+          ranking: null,
+        },
       ]);
       sharedService.emitEncodingRankingUpdates([
         { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
       ]);
-      expect(component.encodingPlan[0].ranking).toEqual(
-        ['0', '1', '2', '3', '8', 'L', 'Others']);
+      expect(component.encodingPlan[0].ranking).toEqual(['0', '1', '2', '3', '8', 'L', 'Others']);
     });
 
     it('should clone the ranking defensively (subsequent ▲▼ must not mutate AI source)', () => {
       seedEncodingPlan([
-        { feature: 'Var_X', user_lom: 'ordinal', nunique: 3,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['Low', 'Mid', 'High'], ranking: null },
+        {
+          feature: 'Var_X',
+          user_lom: 'ordinal',
+          nunique: 3,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['Low', 'Mid', 'High'],
+          ranking: null,
+        },
       ]);
       const aiSource = ['Low', 'Mid', 'High'];
-      sharedService.emitEncodingRankingUpdates([
-        { column: 'Var_X', ranking: aiSource },
-      ]);
+      sharedService.emitEncodingRankingUpdates([{ column: 'Var_X', ranking: aiSource }]);
       // entry.ranking must be a different array reference so any
       // subsequent moveRankingUp/Down doesn't mutate the AI's source.
       expect(component.encodingPlan[0].ranking).not.toBe(aiSource);
@@ -444,9 +500,15 @@ describe('ModelingComponent', () => {
 
     it('should coerce numeric ranking values to strings (encoding lookup key type)', () => {
       seedEncodingPlan([
-        { feature: 'Var_Num', user_lom: 'ordinal', nunique: 4,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['0', '1', '2', '3'], ranking: null },
+        {
+          feature: 'Var_Num',
+          user_lom: 'ordinal',
+          nunique: 4,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['0', '1', '2', '3'],
+          ranking: null,
+        },
       ]);
       // The LLM may emit ints — the modeling component must coerce
       // to strings so the backend _ordinal_encode lookup hits.
@@ -459,54 +521,75 @@ describe('ModelingComponent', () => {
 
     it('should ignore updates whose column is not in the encoding plan', () => {
       seedEncodingPlan([
-        { feature: 'Var_36', user_lom: 'ordinal', nunique: 3,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['A', 'B', 'C'], ranking: null },
+        {
+          feature: 'Var_36',
+          user_lom: 'ordinal',
+          nunique: 3,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['A', 'B', 'C'],
+          ranking: null,
+        },
       ]);
-      sharedService.emitEncodingRankingUpdates([
-        { column: 'NotInPlan', ranking: ['x', 'y'] },
-      ]);
+      sharedService.emitEncodingRankingUpdates([{ column: 'NotInPlan', ranking: ['x', 'y'] }]);
       // Untouched.
       expect(component.encodingPlan[0].ranking).toBeNull();
     });
 
     it('should patch multiple features in a single emission', () => {
       seedEncodingPlan([
-        { feature: 'Var_2', user_lom: 'ordinal', nunique: 3,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['A', 'P', 'R'], ranking: null },
-        { feature: 'Var_36', user_lom: 'ordinal', nunique: 7,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'], ranking: null },
+        {
+          feature: 'Var_2',
+          user_lom: 'ordinal',
+          nunique: 3,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['A', 'P', 'R'],
+          ranking: null,
+        },
+        {
+          feature: 'Var_36',
+          user_lom: 'ordinal',
+          nunique: 7,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'],
+          ranking: null,
+        },
       ]);
       sharedService.emitEncodingRankingUpdates([
         { column: 'Var_2', ranking: ['A', 'P', 'R'] },
         { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
       ]);
       expect(component.encodingPlan[0].ranking).toEqual(['A', 'P', 'R']);
-      expect(component.encodingPlan[1].ranking).toEqual(
-        ['0', '1', '2', '3', '8', 'L', 'Others']);
+      expect(component.encodingPlan[1].ranking).toEqual(['0', '1', '2', '3', '8', 'L', 'Others']);
     });
 
     it('should silently skip entries with empty ranking arrays', () => {
       seedEncodingPlan([
-        { feature: 'Var_X', user_lom: 'ordinal', nunique: 3,
-          fallback_strategy: 'ordinal_encoding', needs_ranking: true,
-          unique_values: ['Low', 'Mid', 'High'], ranking: ['Low', 'Mid', 'High'] },
+        {
+          feature: 'Var_X',
+          user_lom: 'ordinal',
+          nunique: 3,
+          fallback_strategy: 'ordinal_encoding',
+          needs_ranking: true,
+          unique_values: ['Low', 'Mid', 'High'],
+          ranking: ['Low', 'Mid', 'High'],
+        },
       ]);
       const before = [...component.encodingPlan[0].ranking];
-      sharedService.emitEncodingRankingUpdates([
-        { column: 'Var_X', ranking: [] },
-      ]);
+      sharedService.emitEncodingRankingUpdates([{ column: 'Var_X', ranking: [] }]);
       // Existing ranking preserved — empty payload is a no-op for that entry.
       expect(component.encodingPlan[0].ranking).toEqual(before);
     });
 
     it('should do nothing when encodingPlan is empty (late mount safety)', () => {
       component.encodingPlan = [];
-      expect(() => sharedService.emitEncodingRankingUpdates([
-        { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
-      ])).not.toThrow();
+      expect(() =>
+        sharedService.emitEncodingRankingUpdates([
+          { column: 'Var_36', ranking: ['Low', 'Mid', 'High'] },
+        ]),
+      ).not.toThrow();
       expect(component.encodingPlan).toEqual([]);
     });
 
@@ -516,11 +599,16 @@ describe('ModelingComponent', () => {
     // through the UI manually would produce.
     it('should fully transform a nominal entry through the procedural chain', () => {
       seedEncodingPlan([
-        { feature: 'Var_36', user_lom: 'nominal', nunique: 7,
+        {
+          feature: 'Var_36',
+          user_lom: 'nominal',
+          nunique: 7,
           fallback_strategy: 'label_encoding',
           fallback_reason: 'Nominal feature → Label Encoding',
-          needs_ranking: false, ranking: null,
-          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'] },
+          needs_ranking: false,
+          ranking: null,
+          unique_values: ['0', '1', '2', '3', '8', 'L', 'Others'],
+        },
       ]);
       // Step 1: AI sets LoM = ordinal via update_metadata
       sharedService.emitMetadataUpdates([
@@ -535,8 +623,7 @@ describe('ModelingComponent', () => {
         { column: 'Var_36', ranking: ['0', '1', '2', '3', '8', 'L', 'Others'] },
       ]);
       // Final state matches the UI's manual "Set Ranking" + reorder path.
-      expect(component.encodingPlan[0].ranking).toEqual(
-        ['0', '1', '2', '3', '8', 'L', 'Others']);
+      expect(component.encodingPlan[0].ranking).toEqual(['0', '1', '2', '3', '8', 'L', 'Others']);
     });
   });
 
@@ -567,9 +654,7 @@ describe('ModelingComponent', () => {
     it('should clear the reason when flipping back to keep', () => {
       component.featureUsage['Var_3'] = 'drop';
       component.featureDropReason['Var_3'] = 'VIF=9.39';
-      sharedService.emitFeatureUsageUpdates([
-        { column: 'Var_3', value: 'keep' },
-      ]);
+      sharedService.emitFeatureUsageUpdates([{ column: 'Var_3', value: 'keep' }]);
       expect(component.featureUsage['Var_3']).toBe('keep');
       // Matches the template's onChange handler: $event === 'keep'
       // && (featureDropReason[f.feature] = '').
@@ -580,7 +665,7 @@ describe('ModelingComponent', () => {
       sharedService.emitFeatureUsageUpdates([
         { column: 'Var_3', value: 'drop', reason: 'VIF=9.39' },
         { column: 'Var_25', value: 'drop', reason: 'Low SHAP' },
-        { column: 'Var_24', value: 'drop' },  // no reason
+        { column: 'Var_24', value: 'drop' }, // no reason
       ]);
       expect(component.featureUsage['Var_3']).toBe('drop');
       expect(component.featureUsage['Var_25']).toBe('drop');
@@ -618,7 +703,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should populate SFS form fields from the request and call startSfs()', (done) => {
-      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
       sharedService.emitSfsStartRequest({
         methods: ['backward'],
         stopping_criteria: {
@@ -647,7 +734,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should support both forward and backward methods together', (done) => {
-      spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
       sharedService.emitSfsStartRequest({
         methods: ['forward', 'backward'],
         stopping_criteria: {
@@ -671,7 +760,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should reject empty methods (no startSfs call)', (done) => {
-      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
       // The SharedService guard already blocks empty methods, but the
       // component's own guard is a defensive double-check.
       sharedService.emitSfsStartRequest({
@@ -688,13 +779,15 @@ describe('ModelingComponent', () => {
     });
 
     it('should filter unknown metric names from the form fields', (done) => {
-      spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
       sharedService.emitSfsStartRequest({
         methods: ['backward'],
         stopping_criteria: {
           metrics: [
             { metric: 'roc_auc', pct_change: 1.0 },
-            { metric: 'f1_score', pct_change: 2.0 } as any,  // unknown
+            { metric: 'f1_score', pct_change: 2.0 } as any, // unknown
           ],
           min_features: 5,
           max_features: 15,
@@ -716,7 +809,9 @@ describe('ModelingComponent', () => {
     //   2. start_sfs                         → sfsStartRequests$
     // verifies final state mirrors manual UI click-through.
     it('should fully transform via the v2.25.0+ procedural chain', (done) => {
-      const startSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
       component.featureUsage = {};
       component.featureDropReason = {};
 
@@ -768,7 +863,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should populate form fields from the request and call startModeling()', (done) => {
-      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => {
+        /* no-op */
+      });
       component.selectedPipeline = 'boosting';
       component.implementedAlgorithms = ['xgboost', 'lightgbm', 'catboost'];
       sharedService.emitModelingStartRequest({
@@ -785,7 +882,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should not patch selectedAlgorithm when algorithm is null', (done) => {
-      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => {
+        /* no-op */
+      });
       // Pre-populate selectedAlgorithm so we can verify it's preserved.
       component.selectedAlgorithm = 'xgboost';
       sharedService.emitModelingStartRequest({
@@ -802,11 +901,13 @@ describe('ModelingComponent', () => {
     });
 
     it('should strip whitespace from algorithm before patching', (done) => {
-      spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'startModeling').and.callFake(() => {
+        /* no-op */
+      });
       component.selectedPipeline = 'boosting';
       component.implementedAlgorithms = ['xgboost'];
       sharedService.emitModelingStartRequest({
-        algorithm: 'xgboost',  // already trimmed by the backend handler
+        algorithm: 'xgboost', // already trimmed by the backend handler
         encoding_use_native: true,
       });
       setTimeout(() => {
@@ -816,7 +917,9 @@ describe('ModelingComponent', () => {
     });
 
     it('should not call startModeling on rejected request (empty algorithm string)', (done) => {
-      const startSpy = spyOn(component, 'startModeling').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startModeling').and.callFake(() => {
+        /* no-op */
+      });
       // SharedService guard already filters this; the component's
       // own subscription doesn't even fire.
       sharedService.emitModelingStartRequest({
@@ -871,19 +974,37 @@ describe('ModelingComponent', () => {
 
     it('should write shap_features with NUMERIC `impact` (not undefined) — the v2.36.0 regression', () => {
       seedModelingStatusWithSelectedFeatures([
-        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
-          signed_mean: -0.095, vif: 1.8, combined_score: 0.91,
-          shap_percentile: 0.95, gain_percentile: 0.88, usage: 'keep' },
-        { feature: 'Var_7', impact: 0.349, signed_impact: -0.349,
-          signed_mean: -0.085, vif: 2.1, combined_score: 0.89,
-          shap_percentile: 0.93, gain_percentile: 0.81, usage: 'keep' },
+        {
+          feature: 'Var_5',
+          impact: 0.342,
+          signed_impact: 0.342,
+          signed_mean: -0.095,
+          vif: 1.8,
+          combined_score: 0.91,
+          shap_percentile: 0.95,
+          gain_percentile: 0.88,
+          usage: 'keep',
+        },
+        {
+          feature: 'Var_7',
+          impact: 0.349,
+          signed_impact: -0.349,
+          signed_mean: -0.085,
+          vif: 2.1,
+          combined_score: 0.89,
+          shap_percentile: 0.93,
+          gain_percentile: 0.81,
+          usage: 'keep',
+        },
       ]);
       // Capture what would be pushed to the AI cumulative context —
       // that's where shap_features lands BEFORE pushModelingToAiCache
       // forwards it to the Redis cache as `shap_details`.
       const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
       // Stub the network-bound cache push so this stays a unit test.
-      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      spyOn(component as any, 'pushModelingToAiCache').and.callFake(() => {
+        /* no-op */
+      });
       (component as any).pushModelingAiContext();
       expect(setSpy).toHaveBeenCalled();
       const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
@@ -908,11 +1029,12 @@ describe('ModelingComponent', () => {
 
     it('should include the v2.36.0-added context fields (signed_mean, vif) in shap_features items', () => {
       seedModelingStatusWithSelectedFeatures([
-        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342,
-          signed_mean: -0.095, vif: 1.8 },
+        { feature: 'Var_5', impact: 0.342, signed_impact: 0.342, signed_mean: -0.095, vif: 1.8 },
       ]);
       const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
-      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      spyOn(component as any, 'pushModelingToAiCache').and.callFake(() => {
+        /* no-op */
+      });
       (component as any).pushModelingAiContext();
       const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
       const v5 = pushedCtx.shap_features[0];
@@ -940,7 +1062,9 @@ describe('ModelingComponent', () => {
         { feature: 'LegacyVar', shap_impact: 0.5, signed_shap_impact: 0.5 },
       ]);
       const setSpy = spyOn(sharedService, 'setAiCumulativeContext').and.callThrough();
-      spyOn((component as any), 'pushModelingToAiCache').and.callFake(() => { /* no-op */ });
+      spyOn(component as any, 'pushModelingToAiCache').and.callFake(() => {
+        /* no-op */
+      });
       (component as any).pushModelingAiContext();
       const pushedCtx = setSpy.calls.mostRecent().args[0] as any;
       const item = pushedCtx.shap_features[0];
@@ -989,26 +1113,38 @@ describe('ModelingComponent', () => {
     });
 
     function descriptionCellTexts(): string[] {
-      const cells: NodeListOf<HTMLElement> =
-        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
-      return Array.from(cells).map(c => (c.textContent || '').trim());
+      const cells: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll(
+        '.sfs-feature-description',
+      );
+      return Array.from(cells).map((c) => (c.textContent || '').trim());
     }
 
     it('should render the Description header + cell in the View Details modal', () => {
       component.sfsCompletedSteps = [
-        { step: 1, direction: 'forward', action: 'added',
-          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
-          pct_changes: { roc_auc: 0, pr_auc: 0 } },
-        { step: 2, direction: 'forward', action: 'added',
-          feature_name: 'Var_7', cv_roc_auc: 0.83, cv_pr_auc: 0.65,
-          pct_changes: { roc_auc: 2.47, pr_auc: 4.84 } },
+        {
+          step: 1,
+          direction: 'forward',
+          action: 'added',
+          feature_name: 'Var_5',
+          cv_roc_auc: 0.81,
+          cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 },
+        },
+        {
+          step: 2,
+          direction: 'forward',
+          action: 'added',
+          feature_name: 'Var_7',
+          cv_roc_auc: 0.83,
+          cv_pr_auc: 0.65,
+          pct_changes: { roc_auc: 2.47, pr_auc: 4.84 },
+        },
       ];
       component.showSfsProgressModal = true;
       fixture.detectChanges();
 
-      const headers: NodeListOf<HTMLElement> =
-        fixture.nativeElement.querySelectorAll('th');
-      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+      const headers: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map((h) => (h.textContent || '').trim());
       // Sanity: a Description header exists alongside the original
       // CV ROC-AUC / Direction columns — this is the "column wasn't
       // accidentally dropped" check.
@@ -1024,12 +1160,26 @@ describe('ModelingComponent', () => {
 
     it('should render the Description column in the Forward Selection Results table', () => {
       component.sfsForwardResults = [
-        { step: 1, feature_name: 'Var_5',
-          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
-          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
-        { step: 2, feature_name: 'Var_7',
-          train_roc_auc: 0.87, cv_roc_auc: 0.83, test_roc_auc: 0.82,
-          train_pr_auc: 0.69, cv_pr_auc: 0.65, test_pr_auc: 0.63 },
+        {
+          step: 1,
+          feature_name: 'Var_5',
+          train_roc_auc: 0.85,
+          cv_roc_auc: 0.81,
+          test_roc_auc: 0.8,
+          train_pr_auc: 0.66,
+          cv_pr_auc: 0.62,
+          test_pr_auc: 0.6,
+        },
+        {
+          step: 2,
+          feature_name: 'Var_7',
+          train_roc_auc: 0.87,
+          cv_roc_auc: 0.83,
+          test_roc_auc: 0.82,
+          train_pr_auc: 0.69,
+          cv_pr_auc: 0.65,
+          test_pr_auc: 0.63,
+        },
       ];
       fixture.detectChanges();
 
@@ -1040,12 +1190,28 @@ describe('ModelingComponent', () => {
 
     it('should render the Description column in the Backward Elimination table', () => {
       component.sfsBackwardResults = [
-        { step: 1, feature_name: 'Var_5', selected_features: ['Var_5','Var_7','Var_9'],
-          train_roc_auc: 0.85, cv_roc_auc: 0.81, test_roc_auc: 0.80,
-          train_pr_auc: 0.66, cv_pr_auc: 0.62, test_pr_auc: 0.60 },
-        { step: 2, feature_name: 'Var_7', selected_features: ['Var_5','Var_9'],
-          train_roc_auc: 0.83, cv_roc_auc: 0.79, test_roc_auc: 0.78,
-          train_pr_auc: 0.64, cv_pr_auc: 0.60, test_pr_auc: 0.58 },
+        {
+          step: 1,
+          feature_name: 'Var_5',
+          selected_features: ['Var_5', 'Var_7', 'Var_9'],
+          train_roc_auc: 0.85,
+          cv_roc_auc: 0.81,
+          test_roc_auc: 0.8,
+          train_pr_auc: 0.66,
+          cv_pr_auc: 0.62,
+          test_pr_auc: 0.6,
+        },
+        {
+          step: 2,
+          feature_name: 'Var_7',
+          selected_features: ['Var_5', 'Var_9'],
+          train_roc_auc: 0.83,
+          cv_roc_auc: 0.79,
+          test_roc_auc: 0.78,
+          train_pr_auc: 0.64,
+          cv_pr_auc: 0.6,
+          test_pr_auc: 0.58,
+        },
       ];
       fixture.detectChanges();
 
@@ -1059,9 +1225,15 @@ describe('ModelingComponent', () => {
       // (see beforeEach).  The cell text must be exactly the em-dash
       // placeholder so users see "missing" rather than blank.
       component.sfsCompletedSteps = [
-        { step: 1, direction: 'forward', action: 'added',
-          feature_name: 'Var_unknown', cv_roc_auc: 0.71, cv_pr_auc: 0.55,
-          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+        {
+          step: 1,
+          direction: 'forward',
+          action: 'added',
+          feature_name: 'Var_unknown',
+          cv_roc_auc: 0.71,
+          cv_pr_auc: 0.55,
+          pct_changes: { roc_auc: 0, pr_auc: 0 },
+        },
       ];
       component.showSfsProgressModal = true;
       fixture.detectChanges();
@@ -1076,18 +1248,26 @@ describe('ModelingComponent', () => {
       // [title] binding must carry the full text so users can hover to
       // see the rest — otherwise long descriptions are silently lost.
       component.sfsCompletedSteps = [
-        { step: 1, direction: 'forward', action: 'added',
-          feature_name: 'Var_5', cv_roc_auc: 0.81, cv_pr_auc: 0.62,
-          pct_changes: { roc_auc: 0, pr_auc: 0 } },
+        {
+          step: 1,
+          direction: 'forward',
+          action: 'added',
+          feature_name: 'Var_5',
+          cv_roc_auc: 0.81,
+          cv_pr_auc: 0.62,
+          pct_changes: { roc_auc: 0, pr_auc: 0 },
+        },
       ];
       component.showSfsProgressModal = true;
       fixture.detectChanges();
 
-      const cells: NodeListOf<HTMLElement> =
-        fixture.nativeElement.querySelectorAll('.sfs-feature-description');
+      const cells: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll(
+        '.sfs-feature-description',
+      );
       // Find the cell whose body text matches the seeded description.
-      const cell = Array.from(cells)
-        .find(c => (c.textContent || '').trim() === 'Customer credit score band');
+      const cell = Array.from(cells).find(
+        (c) => (c.textContent || '').trim() === 'Customer credit score band',
+      );
       expect(cell).toBeTruthy();
       expect(cell!.getAttribute('title')).toBe('Customer credit score band');
     });
@@ -1140,15 +1320,30 @@ describe('ModelingComponent', () => {
     // `step`, `feature_name`, `selected_features`, and a CV metric.
     function seedBackwardResults(): any[] {
       return [
-        { step: 1, direction: 'backward', action: 'dropped',
-          feature_name: 'Var_A', cv_roc_auc: 0.70,
-          selected_features: ['Var_B', 'Var_C', 'Var_D'] },
-        { step: 2, direction: 'backward', action: 'dropped',
-          feature_name: 'Var_B', cv_roc_auc: 0.72,
-          selected_features: ['Var_C', 'Var_D'] },
-        { step: 3, direction: 'backward', action: 'dropped',
-          feature_name: 'Var_C', cv_roc_auc: 0.68,
-          selected_features: ['Var_D'] },
+        {
+          step: 1,
+          direction: 'backward',
+          action: 'dropped',
+          feature_name: 'Var_A',
+          cv_roc_auc: 0.7,
+          selected_features: ['Var_B', 'Var_C', 'Var_D'],
+        },
+        {
+          step: 2,
+          direction: 'backward',
+          action: 'dropped',
+          feature_name: 'Var_B',
+          cv_roc_auc: 0.72,
+          selected_features: ['Var_C', 'Var_D'],
+        },
+        {
+          step: 3,
+          direction: 'backward',
+          action: 'dropped',
+          feature_name: 'Var_C',
+          cv_roc_auc: 0.68,
+          selected_features: ['Var_D'],
+        },
       ];
     }
 
@@ -1206,10 +1401,13 @@ describe('ModelingComponent', () => {
       const steps = seedBackwardResults();
       // Stub the HTTP call so the test stays synchronous and stable.
       spyOn(dataService, 'getSfsResults').and.returnValue({
-        subscribe: (cb: any) => cb.next({
-          forward: [], backward: steps, backward_remaining_features: ['Var_D'],
-          forward_from_backward: [],
-        })
+        subscribe: (cb: any) =>
+          cb.next({
+            forward: [],
+            backward: steps,
+            backward_remaining_features: ['Var_D'],
+            forward_from_backward: [],
+          }),
       } as any);
       component.currentFileId = 42;
       component.sfsBackwardResults = steps;
@@ -1233,9 +1431,7 @@ describe('ModelingComponent', () => {
       // list.  The cut step is still valid, but the features list must
       // reflect the latest payload so the green box and the
       // startForwardFromBackwardFeatures() call use the correct set.
-      const stale: any[] = [
-        { step: 1, selected_features: ['Var_OLD_1', 'Var_OLD_2'] },
-      ];
+      const stale: any[] = [{ step: 1, selected_features: ['Var_OLD_1', 'Var_OLD_2'] }];
       const refreshed: any[] = [
         { step: 1, selected_features: ['Var_NEW_1', 'Var_NEW_2', 'Var_NEW_3'] },
       ];
@@ -1244,10 +1440,13 @@ describe('ModelingComponent', () => {
       expect(component.sfsBackwardCutFeatures).toEqual(['Var_OLD_1', 'Var_OLD_2']);
 
       spyOn(dataService, 'getSfsResults').and.returnValue({
-        subscribe: (cb: any) => cb.next({
-          forward: [], backward: refreshed, backward_remaining_features: [],
-          forward_from_backward: [],
-        })
+        subscribe: (cb: any) =>
+          cb.next({
+            forward: [],
+            backward: refreshed,
+            backward_remaining_features: [],
+            forward_from_backward: [],
+          }),
       } as any);
       component.currentFileId = 42;
       component.fetchSfsResults();
@@ -1274,10 +1473,13 @@ describe('ModelingComponent', () => {
       component.sfsBackwardCutFeatures = ['old'];
 
       spyOn(dataService, 'getSfsResults').and.returnValue({
-        subscribe: (cb: any) => cb.next({
-          forward: [], backward: fresh, backward_remaining_features: [],
-          forward_from_backward: [],
-        })
+        subscribe: (cb: any) =>
+          cb.next({
+            forward: [],
+            backward: fresh,
+            backward_remaining_features: [],
+            forward_from_backward: [],
+          }),
       } as any);
       component.currentFileId = 42;
       component.fetchSfsResults();
@@ -1292,19 +1494,26 @@ describe('ModelingComponent', () => {
 
     // ── sfsStartRequests$ branching on backward_cut_step (Bug B) ───────
     it('sfsStartRequests$ with backward_cut_step + forward method should route to startForwardFromBackwardFeatures()', (done) => {
-      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
-      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
-        .and.callFake(() => { /* no-op */ });
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures').and.callFake(() => {
+        /* no-op */
+      });
       const steps = seedBackwardResults();
       component.sfsBackwardResults = steps;
 
       sharedService.emitSfsStartRequest({
         methods: ['forward'],
-        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+          min_features: 5,
+          max_features: 15,
+        },
         excluded_features: [],
         n_jobs: 3,
         top_k: 5,
-        backward_cut_step: 2,  // ← v2.37.0+ new field
+        backward_cut_step: 2, // ← v2.37.0+ new field
       });
 
       setTimeout(() => {
@@ -1319,15 +1528,22 @@ describe('ModelingComponent', () => {
     });
 
     it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is missing (no regression)', (done) => {
-      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
-      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
-        .and.callFake(() => { /* no-op */ });
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures').and.callFake(() => {
+        /* no-op */
+      });
       component.sfsBackwardResults = seedBackwardResults();
 
       // Existing v2.25.0 payload shape — no backward_cut_step.
       sharedService.emitSfsStartRequest({
         methods: ['backward'],
-        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+          min_features: 5,
+          max_features: 15,
+        },
         excluded_features: [],
         n_jobs: 3,
         top_k: 5,
@@ -1341,9 +1557,12 @@ describe('ModelingComponent', () => {
     });
 
     it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step is set but methods lack forward', (done) => {
-      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
-      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
-        .and.callFake(() => { /* no-op */ });
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures').and.callFake(() => {
+        /* no-op */
+      });
       // Console.warn is logged in the fallback branch; spy on it so we
       // can assert the developer-facing warning fired without polluting
       // the test runner's output.
@@ -1355,7 +1574,11 @@ describe('ModelingComponent', () => {
       // defensively falls through to plain startSfs() with a warn.
       sharedService.emitSfsStartRequest({
         methods: ['backward'],
-        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+          min_features: 5,
+          max_features: 15,
+        },
         excluded_features: [],
         n_jobs: 3,
         top_k: 5,
@@ -1371,19 +1594,26 @@ describe('ModelingComponent', () => {
     });
 
     it('sfsStartRequests$ should fall back to startSfs() when backward_cut_step does not match any row', (done) => {
-      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => { /* no-op */ });
-      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures')
-        .and.callFake(() => { /* no-op */ });
+      const startSfsSpy = spyOn(component, 'startSfs').and.callFake(() => {
+        /* no-op */
+      });
+      const ffbSpy = spyOn(component, 'startForwardFromBackwardFeatures').and.callFake(() => {
+        /* no-op */
+      });
       spyOn(console, 'warn');
-      component.sfsBackwardResults = seedBackwardResults();  // steps 1..3
+      component.sfsBackwardResults = seedBackwardResults(); // steps 1..3
 
       sharedService.emitSfsStartRequest({
         methods: ['forward'],
-        stopping_criteria: { metrics: [{ metric: 'roc_auc', pct_change: 1.0 }], min_features: 5, max_features: 15 },
+        stopping_criteria: {
+          metrics: [{ metric: 'roc_auc', pct_change: 1.0 }],
+          min_features: 5,
+          max_features: 15,
+        },
         excluded_features: [],
         n_jobs: 3,
         top_k: 5,
-        backward_cut_step: 999,  // ← not in seedBackwardResults()
+        backward_cut_step: 999, // ← not in seedBackwardResults()
       });
 
       setTimeout(() => {
@@ -1407,7 +1637,9 @@ describe('ModelingComponent', () => {
       // requestAiSupport runs through dataService and the data-dict refetch.
       // Spy on it so we just capture (context, section, prompt) args
       // without triggering network calls.
-      spyOn(component, 'requestAiSupport').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'requestAiSupport').and.callFake(() => {
+        /* no-op */
+      });
       // SFS results section sits inside `modelingStatus?.model` gate;
       // seed the minimum needed to render the section.  We deliberately
       // leave model.cv / model.shap_beeswarm / model.selected_features
@@ -1426,7 +1658,9 @@ describe('ModelingComponent', () => {
       fixture.detectChanges();
 
       const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
-      expect(btns.length).withContext('Only the Forward SFS AI Support button should render').toBe(1);
+      expect(btns.length)
+        .withContext('Only the Forward SFS AI Support button should render')
+        .toBe(1);
 
       (btns[0] as HTMLButtonElement).click();
 
@@ -1448,7 +1682,9 @@ describe('ModelingComponent', () => {
       fixture.detectChanges();
 
       const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
-      expect(btns.length).withContext('Only the Backward SFS AI Support button should render').toBe(1);
+      expect(btns.length)
+        .withContext('Only the Backward SFS AI Support button should render')
+        .toBe(1);
 
       (btns[0] as HTMLButtonElement).click();
 
@@ -1469,13 +1705,19 @@ describe('ModelingComponent', () => {
       fixture.detectChanges();
 
       const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
-      expect(btns.length).withContext('Only the Forward-from-Backward AI Support button should render').toBe(1);
+      expect(btns.length)
+        .withContext('Only the Forward-from-Backward AI Support button should render')
+        .toBe(1);
 
       (btns[0] as HTMLButtonElement).click();
 
       const args = (component.requestAiSupport as jasmine.Spy).calls.mostRecent().args;
       expect(args[1]).toBe('sfs_forward_from_backward');
-      expect(Object.keys(args[0]).sort()).toEqual(['forward_from_backward', 'seed_count', 'seed_features']);
+      expect(Object.keys(args[0]).sort()).toEqual([
+        'forward_from_backward',
+        'seed_count',
+        'seed_features',
+      ]);
       expect(args[0].seed_count).toBe(3);
       expect(args[0].seed_features).toEqual(['p', 'q', 'r']);
     });
@@ -1492,12 +1734,20 @@ describe('ModelingComponent', () => {
       fixture.detectChanges();
 
       const btns = fixture.nativeElement.querySelectorAll('.ai-support-btn');
-      expect(btns.length).withContext('Per-table buttons only — combined button must be removed').toBe(3);
+      expect(btns.length)
+        .withContext('Per-table buttons only — combined button must be removed')
+        .toBe(3);
 
       // Click each button and harvest section names from the spy.
       btns.forEach((b: HTMLButtonElement) => b.click());
-      const sections = (component.requestAiSupport as jasmine.Spy).calls.allArgs().map((a: any[]) => a[1]);
-      expect(sections.slice().sort()).toEqual(['sfs_backward', 'sfs_forward', 'sfs_forward_from_backward']);
+      const sections = (component.requestAiSupport as jasmine.Spy).calls
+        .allArgs()
+        .map((a: any[]) => a[1]);
+      expect(sections.slice().sort()).toEqual([
+        'sfs_backward',
+        'sfs_forward',
+        'sfs_forward_from_backward',
+      ]);
       expect(sections).not.toContain('sfs');
     });
   });
@@ -1515,7 +1765,7 @@ describe('ModelingComponent', () => {
 
     it('initializes the editable param space with XGBoost defaults', () => {
       expect(component.hpParamSpace.length).toBe(9);
-      const names = component.hpParamSpace.map(r => r.name);
+      const names = component.hpParamSpace.map((r) => r.name);
       expect(names).toContain('n_estimators');
       expect(names).toContain('learning_rate');
       // 6 enabled by default (regularizers off).
@@ -1523,23 +1773,29 @@ describe('ModelingComponent', () => {
     });
 
     it('buildHpParamSpacePayload emits the backend object shape with int rounding', () => {
-      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
-      row.min = 2.7 as any; row.max = 9.2 as any;
+      const row = component.hpParamSpace.find((r) => r.name === 'max_depth')!;
+      row.min = 2.7 as any;
+      row.max = 9.2 as any;
       const space = (component as any).buildHpParamSpacePayload();
       expect(space['max_depth'].type).toBe('int');
-      expect(space['max_depth'].min).toBe(3);   // rounded
+      expect(space['max_depth'].min).toBe(3); // rounded
       expect(space['max_depth'].max).toBe(9);
       expect(space['learning_rate'].log).toBeTrue();
       expect(space['n_estimators'].enabled).toBeTrue();
     });
 
     it('startHyperparam posts the config + sets running state', () => {
-      const spy = spyOn(dataService, 'startHyperparam').and.returnValue(of({ status: 'started', message: 'go', space_warnings: [] }));
-      spyOn(component as any, 'startHyperparamStatusPolling');  // avoid the polling interval
+      const spy = spyOn(dataService, 'startHyperparam').and.returnValue(
+        of({ status: 'started', message: 'go', space_warnings: [] }),
+      );
+      spyOn(component as any, 'startHyperparamStatusPolling'); // avoid the polling interval
       const procSpy = spyOn(sharedService, 'setActiveProcess');
 
-      component.hpNIter = 25; component.hpNJobs = 4; component.hpPrimaryMetric = 'f1';
-      component.hpSearchMethod = 'bayesian'; component.hpDefaultPieces = 5;
+      component.hpNIter = 25;
+      component.hpNJobs = 4;
+      component.hpPrimaryMetric = 'f1';
+      component.hpSearchMethod = 'bayesian';
+      component.hpDefaultPieces = 5;
       component.modelingStatus = { execution_id: 'displayed-version' };
       component.startHyperparam();
 
@@ -1551,7 +1807,7 @@ describe('ModelingComponent', () => {
       expect(opts.nJobs).toBe(4);
       expect(opts.primaryMetric).toBe('f1');
       expect(opts.searchMethod).toBe('bayesian');
-      expect(opts.gridPointsPerParam).toBe(6);   // hpDefaultPieces (5) + 1
+      expect(opts.gridPointsPerParam).toBe(6); // hpDefaultPieces (5) + 1
       expect(opts.gridPointsPerParamMap['max_depth']).toBeGreaterThan(0);
       expect(opts.paramSpace['max_depth']).toBeTruthy();
       expect(component.hpRunning).toBeTrue();
@@ -1559,7 +1815,9 @@ describe('ModelingComponent', () => {
     });
 
     it('retains failed evidence without sending a completed checkpoint', () => {
-      spyOn(dataService, 'getHyperparamResults').and.returnValue(of({ status: 'error', error: 'No valid winner', n_failed: 2 }));
+      spyOn(dataService, 'getHyperparamResults').and.returnValue(
+        of({ status: 'error', error: 'No valid winner', n_failed: 2 }),
+      );
       const checkpoint = spyOn(component as any, 'pushModelingCheckpoint');
       spyOn(component as any, 'drawHyperparamCurves');
       component.modelingStatus = { status: 'ok', model: { task: 'regression' } };
@@ -1570,55 +1828,78 @@ describe('ModelingComponent', () => {
       expect(checkpoint).not.toHaveBeenCalledWith('hyperparam_completed');
       fixture.detectChanges();
       expect(fixture.nativeElement.textContent).toContain('Failed/unusable trials: 2');
-      const details = Array.from(fixture.nativeElement.querySelectorAll('details summary')) as HTMLElement[];
-      expect(details.some(item => item.textContent?.includes('Details: tuning objective'))).toBeTrue();
+      const details = Array.from(
+        fixture.nativeElement.querySelectorAll('details summary'),
+      ) as HTMLElement[];
+      expect(
+        details.some((item) => item.textContent?.includes('Details: tuning objective')),
+      ).toBeTrue();
     });
 
     // ── Search-method recommendation (mirrors backend thresholds) ──
     it('hpEstimateGridCandidates multiplies per-param #checkpoints', () => {
-      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth' || r.name === 'learning_rate'));
-      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;     // 2..10 int
-      const lr = component.hpParamSpace.find(r => r.name === 'learning_rate')!;  // 0.01..0.3
+      component.hpParamSpace.forEach(
+        (r) => (r.enabled = r.name === 'max_depth' || r.name === 'learning_rate'),
+      );
+      const md = component.hpParamSpace.find((r) => r.name === 'max_depth')!; // 2..10 int
+      const lr = component.hpParamSpace.find((r) => r.name === 'learning_rate')!; // 0.01..0.3
       lr.log = false;
-      md.walkStep = (10 - 2) / 3;        // 3 pieces -> 4 checkpoints
-      lr.walkStep = (0.3 - 0.01) / 3;    // 3 pieces -> 4 checkpoints
+      md.walkStep = (10 - 2) / 3; // 3 pieces -> 4 checkpoints
+      lr.walkStep = (0.3 - 0.01) / 3; // 3 pieces -> 4 checkpoints
       expect(component.hpCheckpoints(md)).toBe(4);
       expect(component.hpCheckpoints(lr)).toBe(4);
-      expect(component.hpEstimateGridCandidates()).toBe(16);  // 4 x 4
+      expect(component.hpEstimateGridCandidates()).toBe(16); // 4 x 4
     });
 
     it('hpRecommendedMethod picks grid for a tiny space', () => {
-      component.resetHpParamSpace();   // 20-piece defaults
-      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth'));
-      component.hpCvFolds = 3; component.hpNJobs = 3;
+      component.resetHpParamSpace(); // 20-piece defaults
+      component.hpParamSpace.forEach((r) => (r.enabled = r.name === 'max_depth'));
+      component.hpCvFolds = 3;
+      component.hpNJobs = 3;
       // max_depth (2..10) de-dupes to 9 checkpoints -> 9*3/3 = 9 fits/worker.
-      expect(component.hpCheckpoints(component.hpParamSpace.find(r => r.name === 'max_depth')!)).toBe(9);
+      expect(
+        component.hpCheckpoints(component.hpParamSpace.find((r) => r.name === 'max_depth')!),
+      ).toBe(9);
       expect(component.hpFitsPerJob()).toBeLessThan(100);
       expect(component.hpRecommendedMethod()).toBe('grid');
     });
 
     it('hpRecommendedMethod picks random for a mid space and bayesian for a large one', () => {
       component.resetHpParamSpace();
-      component.hpCvFolds = 3; component.hpNJobs = 1;
+      component.hpCvFolds = 3;
+      component.hpNJobs = 1;
       // Pin each param to exactly 5 checkpoints via Walk_Step (span / 4).
       const ck5 = (name: string) => {
-        const r = component.hpParamSpace.find(x => x.name === name)!;
-        r.log = false; r.walkStep = (Number(r.max) - Number(r.min)) / 4;
+        const r = component.hpParamSpace.find((x) => x.name === name)!;
+        r.log = false;
+        r.walkStep = (Number(r.max) - Number(r.min)) / 4;
       };
       ['max_depth', 'learning_rate', 'subsample'].forEach(ck5);
-      component.hpParamSpace.forEach(r => r.enabled = ['max_depth', 'learning_rate', 'subsample'].includes(r.name));
+      component.hpParamSpace.forEach(
+        (r) => (r.enabled = ['max_depth', 'learning_rate', 'subsample'].includes(r.name)),
+      );
       // 3 params @5 = 125 cand * 3 / 1 = 375 fits/worker -> random.
       expect(component.hpEstimateGridCandidates()).toBe(125);
       expect(component.hpRecommendedMethod()).toBe('random');
       // 6 params @5 = 15625 cand -> bayesian.
       ['n_estimators', 'min_child_weight', 'colsample_bytree'].forEach(ck5);
-      component.hpParamSpace.forEach(r => r.enabled = ['n_estimators', 'max_depth', 'learning_rate', 'min_child_weight', 'subsample', 'colsample_bytree'].includes(r.name));
+      component.hpParamSpace.forEach(
+        (r) =>
+          (r.enabled = [
+            'n_estimators',
+            'max_depth',
+            'learning_rate',
+            'min_child_weight',
+            'subsample',
+            'colsample_bytree',
+          ].includes(r.name)),
+      );
       expect(component.hpEstimateGridCandidates()).toBe(15625);
       expect(component.hpRecommendedMethod()).toBe('bayesian');
     });
 
     it('hpResolvedMethod honors an explicit method over the recommendation', () => {
-      component.hpParamSpace.forEach(r => r.enabled = (r.name === 'max_depth'));  // would recommend grid
+      component.hpParamSpace.forEach((r) => (r.enabled = r.name === 'max_depth')); // would recommend grid
       component.hpSearchMethod = 'bayesian';
       expect(component.hpResolvedMethod()).toBe('bayesian');
       component.hpSearchMethod = 'auto';
@@ -1629,14 +1910,14 @@ describe('ModelingComponent', () => {
     it('walkStep defaults split each range into 20 pieces (21 checkpoints, int de-dup)', () => {
       component.resetHpParamSpace();
       expect(component.hpDefaultPieces).toBe(20);
-      const ne = component.hpParamSpace.find(r => r.name === 'n_estimators')!;      // 50..600 int
-      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;          // 2..10 int
-      const mcw = component.hpParamSpace.find(r => r.name === 'min_child_weight')!;  // 1..10 int
-      const ss = component.hpParamSpace.find(r => r.name === 'subsample')!;          // 0.5..1.0 float
-      expect(ne.walkStep).toBeCloseTo(27.5, 6);    // (600-50)/20
+      const ne = component.hpParamSpace.find((r) => r.name === 'n_estimators')!; // 50..600 int
+      const md = component.hpParamSpace.find((r) => r.name === 'max_depth')!; // 2..10 int
+      const mcw = component.hpParamSpace.find((r) => r.name === 'min_child_weight')!; // 1..10 int
+      const ss = component.hpParamSpace.find((r) => r.name === 'subsample')!; // 0.5..1.0 float
+      expect(ne.walkStep).toBeCloseTo(27.5, 6); // (600-50)/20
       expect(component.hpCheckpoints(ne)).toBe(21); // wide int range -> full 21
       expect(component.hpCheckpoints(ss)).toBe(21); // float -> 21
-      expect(component.hpCheckpoints(md)).toBe(9);  // 2..10 -> only 9 distinct ints
+      expect(component.hpCheckpoints(md)).toBe(9); // 2..10 -> only 9 distinct ints
       expect(component.hpCheckpoints(mcw)).toBe(10); // 1..10 -> 10 distinct ints
     });
 
@@ -1644,19 +1925,21 @@ describe('ModelingComponent', () => {
       component.resetHpParamSpace();
       component.hpDefaultPieces = 10;
       component.applyDefaultPiecesToAll();
-      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;   // 2..10
-      expect(md.walkStep).toBeCloseTo(0.8, 6);   // 8 / 10
-      component.hpDefaultPieces = 0; component.applyDefaultPiecesToAll();
+      const md = component.hpParamSpace.find((r) => r.name === 'max_depth')!; // 2..10
+      expect(md.walkStep).toBeCloseTo(0.8, 6); // 8 / 10
+      component.hpDefaultPieces = 0;
+      component.applyDefaultPiecesToAll();
       expect(component.hpDefaultPieces).toBe(2);
-      component.hpDefaultPieces = 9999; component.applyDefaultPiecesToAll();
+      component.hpDefaultPieces = 9999;
+      component.applyDefaultPiecesToAll();
       expect(component.hpDefaultPieces).toBe(200);
     });
 
     it('a larger Walk_Step yields fewer #checkpoints', () => {
-      const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;   // 2..10
-      md.walkStep = 2;     // step 2 over span 8 -> 5 checkpoints [2,4,6,8,10]
+      const md = component.hpParamSpace.find((r) => r.name === 'max_depth')!; // 2..10
+      md.walkStep = 2; // step 2 over span 8 -> 5 checkpoints [2,4,6,8,10]
       expect(component.hpCheckpoints(md)).toBe(5);
-      md.walkStep = 4;     // step 4 -> 3 checkpoints [2,6,10]
+      md.walkStep = 4; // step 4 -> 3 checkpoints [2,6,10]
       expect(component.hpCheckpoints(md)).toBe(3);
     });
 
@@ -1677,9 +1960,23 @@ describe('ModelingComponent', () => {
           .toBeTruthy();
       }
       // Column headers + search/compute control fields.
-      const keys = ['_tune', '_hyperparameter', '_type', '_min', '_max', '_log',
-        '_walk_step', '_checkpoints',
-        '_search_method', '_grid_points', '_n_iter', '_cv_folds', '_n_jobs', '_metric', '_curve_points'];
+      const keys = [
+        '_tune',
+        '_hyperparameter',
+        '_type',
+        '_min',
+        '_max',
+        '_log',
+        '_walk_step',
+        '_checkpoints',
+        '_search_method',
+        '_grid_points',
+        '_n_iter',
+        '_cv_folds',
+        '_n_jobs',
+        '_metric',
+        '_curve_points',
+      ];
       for (const k of keys) {
         expect(component.hpHelp[k]).withContext(`missing hpHelp for "${k}"`).toBeTruthy();
       }
@@ -1688,7 +1985,7 @@ describe('ModelingComponent', () => {
     it('startHyperparam refuses when no param is enabled', () => {
       const alertSpy = spyOn(window, 'alert');
       const startSpy = spyOn(dataService, 'startHyperparam');
-      component.hpParamSpace.forEach(r => r.enabled = false);
+      component.hpParamSpace.forEach((r) => (r.enabled = false));
       component.startHyperparam();
       expect(alertSpy).toHaveBeenCalled();
       expect(startSpy).not.toHaveBeenCalled();
@@ -1706,15 +2003,40 @@ describe('ModelingComponent', () => {
     });
 
     it('fetchHyperparamResults populates results state', () => {
-      spyOn(dataService, 'getHyperparamResults').and.returnValue(of({
-        status: 'completed',
-        best_points: { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9, cv_std: 0.01, test: 0.88, train: 0.97 } },
-        validation_curves: [{ param: 'max_depth', values: [2, 4, 6], cv_mean: [0.8, 0.9, 0.85], cv_std: [0, 0, 0], train_mean: [0.9, 0.95, 0.99], train_std: [0, 0, 0] }],
-        emphasized: { most_cv_gain: 'max_depth', most_overfitting: 'learning_rate', most_shrinkage: 'subsample' },
-        param_importance: { cv_gain: { max_depth: 0.7 } },
-        guidance: [{ param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' }],
-        duration_seconds: 12.3,
-      }));
+      spyOn(dataService, 'getHyperparamResults').and.returnValue(
+        of({
+          status: 'completed',
+          best_points: {
+            roc_auc: {
+              params: { max_depth: 4 },
+              cv_mean: 0.9,
+              cv_std: 0.01,
+              test: 0.88,
+              train: 0.97,
+            },
+          },
+          validation_curves: [
+            {
+              param: 'max_depth',
+              values: [2, 4, 6],
+              cv_mean: [0.8, 0.9, 0.85],
+              cv_std: [0, 0, 0],
+              train_mean: [0.9, 0.95, 0.99],
+              train_std: [0, 0, 0],
+            },
+          ],
+          emphasized: {
+            most_cv_gain: 'max_depth',
+            most_overfitting: 'learning_rate',
+            most_shrinkage: 'subsample',
+          },
+          param_importance: { cv_gain: { max_depth: 0.7 } },
+          guidance: [
+            { param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' },
+          ],
+          duration_seconds: 12.3,
+        }),
+      );
       component.fetchHyperparamResults();
       expect(component.hpBestPoints['roc_auc'].cv_mean).toBe(0.9);
       expect(component.hpValidationCurves.length).toBe(1);
@@ -1724,12 +2046,20 @@ describe('ModelingComponent', () => {
     });
 
     it('getHyperparamResultsContext packages completed results and next-search config', () => {
-      component.hpResults = { status: 'completed', search_method: 'random', feature_count: 12 } as any;
+      component.hpResults = {
+        status: 'completed',
+        search_method: 'random',
+        feature_count: 12,
+      } as any;
       component.hpBestPoints = { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9 } };
-      component.hpValidationCurves = [{ param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] }] as any;
+      component.hpValidationCurves = [
+        { param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] },
+      ] as any;
       component.hpEmphasized = { most_cv_gain: 'max_depth' };
       component.hpParamImportance = { cv_gain: { max_depth: 0.7 } };
-      component.hpGuidance = [{ param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' }];
+      component.hpGuidance = [
+        { param: 'max_depth', type: 'zoom_in', suggested_range: [2, 6], rationale: 'peak' },
+      ];
       component.hpSelectedRanges = { max_depth: [2, 6] };
       component.hpNIter = 44;
       component.hpPrimaryMetric = 'roc_auc';
@@ -1747,16 +2077,22 @@ describe('ModelingComponent', () => {
     });
 
     it("renders a Hyperparameter Results 'Get AI Support' button and routes the scoped context", () => {
-      spyOn(component, 'requestAiSupport').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'requestAiSupport').and.callFake(() => {
+        /* no-op */
+      });
       component.modelingStatus = { model: {} } as any;
       component.hpResults = { status: 'completed', search_method: 'grid', feature_count: 8 } as any;
       component.hpBestPoints = { roc_auc: { params: { max_depth: 4 }, cv_mean: 0.9 } };
-      component.hpValidationCurves = [{ param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] }] as any;
+      component.hpValidationCurves = [
+        { param: 'max_depth', values: [2, 4], cv_mean: [0.8, 0.9] },
+      ] as any;
       component.hpRunning = false;
       fixture.detectChanges();
 
       const btns = fixture.nativeElement.querySelectorAll('.hp-section .ai-support-btn');
-      expect(btns.length).withContext('Only the hyperparameter-results support button should render in hp-section').toBe(1);
+      expect(btns.length)
+        .withContext('Only the hyperparameter-results support button should render in hp-section')
+        .toBe(1);
       expect((btns[0].textContent || '').trim()).toContain('Get AI Support');
 
       (btns[0] as HTMLButtonElement).click();
@@ -1770,10 +2106,11 @@ describe('ModelingComponent', () => {
 
     it('hpBestPointRows returns rows only for present metrics, in metric order', () => {
       component.hpBestPoints = {
-        f1: { cv_mean: 0.5 }, roc_auc: { cv_mean: 0.9 },
+        f1: { cv_mean: 0.5 },
+        roc_auc: { cv_mean: 0.9 },
       };
       const rows = component.hpBestPointRows();
-      expect(rows.map(r => r.metric)).toEqual(['roc_auc', 'f1']);  // roc_auc first per hpMetricOptions order
+      expect(rows.map((r) => r.metric)).toEqual(['roc_auc', 'f1']); // roc_auc first per hpMetricOptions order
     });
 
     it('hpNum formats numbers, integers, null and NaN', () => {
@@ -1784,7 +2121,7 @@ describe('ModelingComponent', () => {
     });
 
     it('applyHpGuidance narrows the matching param range and enables it', () => {
-      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+      const row = component.hpParamSpace.find((r) => r.name === 'max_depth')!;
       row.enabled = false;
       component.applyHpGuidance({ param: 'max_depth', type: 'zoom_in', suggested_range: [3, 7] });
       expect(row.min).toBe(3);
@@ -1795,7 +2132,7 @@ describe('ModelingComponent', () => {
 
     it('brush-select (onHpRangeSelected) updates the space with int rounding', () => {
       (component as any).onHpRangeSelected('max_depth', 2.3, 6.8);
-      const row = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+      const row = component.hpParamSpace.find((r) => r.name === 'max_depth')!;
       expect(row.min).toBe(2);
       expect(row.max).toBe(7);
       expect(component.hpSelectedRanges['max_depth']).toEqual([2, 7]);
@@ -1804,7 +2141,9 @@ describe('ModelingComponent', () => {
     });
 
     it('stopHyperparam signals a stop while running', () => {
-      const spy = spyOn(dataService, 'stopHyperparam').and.returnValue(of({ status: 'stop_requested' }));
+      const spy = spyOn(dataService, 'stopHyperparam').and.returnValue(
+        of({ status: 'stop_requested' }),
+      );
       component.hpRunning = true;
       component.stopHyperparam();
       expect(spy).toHaveBeenCalledWith(1);
@@ -1812,7 +2151,9 @@ describe('ModelingComponent', () => {
     });
 
     it('resetHpParamSpace restores defaults and clears brushed ranges', () => {
-      component.hpParamSpace = [{ name: 'x', label: 'x', type: 'int', min: 0, max: 1, log: false, enabled: true }];
+      component.hpParamSpace = [
+        { name: 'x', label: 'x', type: 'int', min: 0, max: 1, log: false, enabled: true },
+      ];
       component.hpSelectedRanges = { max_depth: [2, 5] };
       component.resetHpParamSpace();
       expect(component.hpParamSpace.length).toBe(9);
@@ -1821,7 +2162,9 @@ describe('ModelingComponent', () => {
 
     // ── AI bridge: hyperparamStartRequests$ → startHyperparam() ─────
     it('AI hyperparamStartRequests$ mirrors config onto the form and kicks off tuning', (done) => {
-      const startSpy = spyOn(component, 'startHyperparam').and.callFake(() => { /* no-op */ });
+      const startSpy = spyOn(component, 'startHyperparam').and.callFake(() => {
+        /* no-op */
+      });
       fixture.detectChanges(); // wire ngOnInit subscriptions
       sharedService.emitHyperparamStartRequest({
         enabled_params: ['max_depth', 'subsample'],
@@ -1836,10 +2179,13 @@ describe('ModelingComponent', () => {
       });
       setTimeout(() => {
         // enabled_params enabled exactly those rows (rest disabled).
-        const enabledNames = component.hpParamSpace.filter(r => r.enabled).map(r => r.name).sort();
+        const enabledNames = component.hpParamSpace
+          .filter((r) => r.enabled)
+          .map((r) => r.name)
+          .sort();
         expect(enabledNames).toEqual(['max_depth', 'subsample']);
         // param_space override landed on the max_depth row.
-        const md = component.hpParamSpace.find(r => r.name === 'max_depth')!;
+        const md = component.hpParamSpace.find((r) => r.name === 'max_depth')!;
         expect(md.min).toBe(3);
         expect(md.max).toBe(8);
         // scalar fields mirrored.
@@ -1849,14 +2195,16 @@ describe('ModelingComponent', () => {
         expect(component.hpPrimaryMetric).toBe('pr_auc');
         expect(component.hpValidationCurvePoints).toBe(12);
         expect(component.hpSearchMethod).toBe('bayesian');
-        expect(component.hpDefaultPieces).toBe(6);   // 7 grid points -> 6 pieces
+        expect(component.hpDefaultPieces).toBe(6); // 7 grid points -> 6 pieces
         expect(startSpy).toHaveBeenCalledTimes(1);
         done();
       }, 5);
     });
 
     it('AI hyperparamStartRequests$ ignores an unsupported primary_metric', (done) => {
-      spyOn(component, 'startHyperparam').and.callFake(() => { /* no-op */ });
+      spyOn(component, 'startHyperparam').and.callFake(() => {
+        /* no-op */
+      });
       fixture.detectChanges();
       const before = component.hpPrimaryMetric;
       sharedService.emitHyperparamStartRequest({ primary_metric: 'rmse' as any });
@@ -1864,6 +2212,71 @@ describe('ModelingComponent', () => {
         expect(component.hpPrimaryMetric).toBe(before); // unchanged
         done();
       }, 5);
+    });
+  });
+  describe('immutable collinearity details', () => {
+    it('keeps non-finite states and provenance available to the assistant', () => {
+      component.currentFileId = 1;
+      component.modelingStatus = { execution_id: 'run-a', model: {} };
+      const service = TestBed.inject(DataService);
+      const get = spyOn(service, 'getVifDetail').and.returnValue(
+        of({
+          vif: null,
+          vif_status: 'unbounded',
+          execution_id: 'run-a',
+          method: 'centered_scaled_auxiliary_ols_v1',
+          row_count: 200,
+          limitations: 'Exploratory, not automatic removal',
+          contributions: [],
+        }),
+      );
+      spyOn(component as any, 'pushModelingAiContext');
+      component.openVifDetail('x', new Event('click'));
+      expect(get).toHaveBeenCalledWith(1, 'x', 'run-a');
+      expect(component.vifDetailVif).toBeNull();
+      expect(component.vifStateLabel(component.vifDetailStatus)).toBe('Unbounded');
+      expect(component.vifDecompositionCache['x'].execution_id).toBe('run-a');
+      expect(component.vifDecompositionCache['x'].limitations).toContain('not automatic removal');
+    });
+    it('rejects delayed responses after execution changes or a newer feature opens', () => {
+      component.currentFileId = 1;
+      component.modelingStatus = { execution_id: 'run-a', model: {} };
+      const old = new Subject<any>();
+      const latest = new Subject<any>();
+      spyOn(TestBed.inject(DataService), 'getVifDetail').and.returnValues(old, latest);
+      spyOn(component as any, 'pushModelingAiContext');
+      component.openVifDetail('x', new Event('click'));
+      component.modelingStatus.execution_id = 'run-b';
+      component.openVifDetail('y', new Event('click'));
+      old.next({ vif: 100, vif_status: 'finite', contributions: [] });
+      expect(component.vifDetailVif).toBeNull();
+      latest.next({
+        vif: 1,
+        vif_status: 'finite',
+        execution_id: 'run-b',
+        method: 'centered_scaled_auxiliary_ols_v1',
+        contributions: [],
+      });
+      expect(component.vifDetailVif).toBe(1);
+      expect(Object.keys(component.vifDecompositionCache)).toEqual(['y']);
+      component.closeVifDetail();
+      latest.next({ vif: 50 });
+      expect(component.vifDetailVif).toBe(1);
+    });
+    it('lists categorical exclusions and constants independently of SHAP evidence', () => {
+      component.modelingStatus = {
+        model: {
+          collinearity: {
+            features: {
+              category: { vif: null, vif_status: 'excluded_categorical' },
+              constant: { vif: null, vif_status: 'constant' },
+            },
+          },
+        },
+      };
+      expect(
+        component.collinearityRows.map((row) => component.vifStateLabel(row.vif_status)),
+      ).toEqual(['Category excluded', 'Constant']);
     });
   });
 });

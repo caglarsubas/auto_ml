@@ -3675,7 +3675,7 @@ def _format_context(context: dict, section: str) -> str:
                              f"combined_score={f.get('combined_score', '?')}, "
                              f"SHAP_percentile={f.get('shap_percentile', '?')}, "
                              f"Gain_percentile={f.get('gain_percentile', '?')}, "
-                             f"VIF={f.get('vif', '?')}, "
+                             f"VIF={f.get('vif', '?')}, state={f.get('vif_status', 'historical_method_unverified')}, "
                              f"usage={f.get('usage', 'keep')}")
         # VIF decomposition (pairwise correlations the user has inspected)
         vif_decomp = context.get('vif_decomposition', {})
@@ -3683,6 +3683,8 @@ def _format_context(context: dict, section: str) -> str:
             parts.append(f'\n═══ VIF Decomposition (pairwise correlations) ═══')
             for feat_name, decomp in vif_decomp.items():
                 parts.append(f'  {feat_name} (overall VIF={_fmt_val(decomp.get("vif"))}):')
+                parts.append(f"    State={decomp.get('vif_status', 'historical_method_unverified')}; execution={decomp.get('execution_id', 'unverified')}; method={decomp.get('method', 'unverified')}")
+                parts.append(f"    {decomp.get('limitations') or 'Exploratory numeric dependence; not importance or an automatic removal gate.'}")
                 for c in decomp.get('top_correlations', []):
                     parts.append(f"    ↔ {c.get('feature','?')}: |corr|={_fmt_val(c.get('correlation'))}, "
                                  f"signed_r={_fmt_val(c.get('signed_correlation'))}, "
@@ -3790,6 +3792,8 @@ def _format_context(context: dict, section: str) -> str:
             parts.append(f'\n═══ VIF Decomposition (pairwise correlations) ═══')
             for feat_name, decomp in vif_decomp.items():
                 parts.append(f'  {feat_name} (overall VIF={_fmt_val(decomp.get("vif"))}):')
+                parts.append(f"    State={decomp.get('vif_status', 'historical_method_unverified')}; execution={decomp.get('execution_id', 'unverified')}; method={decomp.get('method', 'unverified')}")
+                parts.append(f"    {decomp.get('limitations') or 'Exploratory numeric dependence; not importance or an automatic removal gate.'}")
                 for c in decomp.get('top_correlations', []):
                     parts.append(f"    ↔ {c.get('feature','?')}: |corr|={_fmt_val(c.get('correlation'))}, "
                                  f"signed_r={_fmt_val(c.get('signed_correlation'))}, "

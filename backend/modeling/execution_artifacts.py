@@ -289,6 +289,8 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
         cv=cv, importances={'gain': adapter.gain_importance()},
         explanation_limitation='Candidate SHAP/leakage diagnostics have not been recomputed; parent diagnostics are not inherited.',
         best_iteration=int(getattr(adapter, 'best_iteration', 0) or 0))
+    from modeling.collinearity import write_snapshot
+    model['collinearity'] = write_snapshot(root, file_id, execution_id, data['X_train'][features], data['encoding_report'])
     if selection_evidence is not None:
         model['tuning_evidence_path'] = str((root / 'tuning_selection.json').relative_to(Path(settings.MEDIA_ROOT)))
         model['tuning_basis_sha256'] = selection_evidence['search_basis']['sha256']
