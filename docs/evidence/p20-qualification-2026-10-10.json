@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "packet": "P20",
+  "branch": "codex/attributable-package-review",
+  "base_commit": "9916eb762e18c27afa6f890baa92fef8e6f94652",
+  "qualified_application_source_commit": "2969d5fe98be87cf279e21155a8466cb2fb6da9a",
+  "full_backend_matrix_source_commit": "3a026ab4",
+  "source_binding": "2969d5fe changes only Angular review rendering; backend code/tests and seed are identical to 3a026ab4 in both full matrices. All 149 tracked non-test, non-migration backend Python files in the browser API match final source by SHA256.",
+  "baseline_verification": {
+    "pull_request": 109,
+    "merge_commit": "9916eb762e18c27afa6f890baa92fef8e6f94652",
+    "merge_main_ci_run": 37978161349,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D09/D12: authenticated exact-package findings, developer responses, reviewer dispositions/reopening, historical state, retained receipts and browser evidence downloads. No model approval, complete independent review, reproduction or release qualification.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker runners",
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "postgresql": "17.11",
+    "psycopg": "3.3.6",
+    "node": "24.16.0",
+    "angular": "22.2.1",
+    "browser_image": "declarai-p20-api:local",
+    "browser_image_id": "sha256:becc68dacc32c2db4bee6edb0a93ef7cc448cf36705ace7d4d7b1512d981c8c1",
+    "browser_runtime": "Django development runserver, separate disposable fixture, not production serving qualification",
+    "resources": "Two CPUs per backend runner and native thread pool. Provider key blank, engine unavailable, telemetry disabled, optional SDK absent. Existing primary installation unchanged."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "passed": 1948,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 243.6,
+      "coverage_percent": 72.55,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p20/backend.log"
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "passed": 1948,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 256.69,
+      "coverage_percent": 72.55,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p20/postgresql/postgresql.log"
+    },
+    {
+      "name": "New review boundary regressions in each full matrix",
+      "status": "passed",
+      "cases": 32,
+      "scenarios": [
+        "real HTTP/CSRF and project roles",
+        "exact manifest and native package identity",
+        "retry and changed request UUID",
+        "concurrent optimistic revision rejection",
+        "source/projection/pipeline/bundle change",
+        "corrupt or missing artifacts",
+        "authority revocation and database failure",
+        "mid-publication rollback",
+        "retained actor identity and no self-resolution after role change",
+        "unverified legacy rejection",
+        "protected review evidence retention"
+      ]
+    },
+    {
+      "name": "Private TLS, five-process identity/project authority, restart and quiescent restore",
+      "status": "passed",
+      "report": "test-reports/p20/postgresql/postgresql-summary.json",
+      "new_review_history_restore": "not separately qualified",
+      "production_deployment_recovery": false
+    },
+    {
+      "name": "Actual MCP SDK stdio",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 14,
+      "completed": 8,
+      "denied": 6,
+      "report": "test-reports/p20/mcp-stdio.log"
+    },
+    {
+      "name": "Frontend units and existing coverage gates",
+      "status": "passed",
+      "passed": 575,
+      "statement_coverage_percent": 38.21,
+      "branch_coverage_percent": 31.34,
+      "report": "test-reports/p20/frontend-unit-final.log"
+    },
+    {
+      "name": "Frontend build and lint",
+      "status": "passed",
+      "errors": 0,
+      "lint_warnings": 167,
+      "reports": [
+        "test-reports/p20/frontend-build-final.log",
+        "test-reports/p20/frontend-lint.log"
+      ]
+    },
+    {
+      "name": "Governed browser/API matrix",
+      "status": "passed",
+      "passed": 36,
+      "duration_seconds": 57.2,
+      "report": "test-reports/p20/browser-governed.log",
+      "new_review_workflows": 3,
+      "visual_inspection": "Settled reviewer package identity, revision, role actions and evidence download controls inspected. Full screen-reader qualification remains open."
+    },
+    {
+      "name": "Backend Ruff, no migration drift and existing skip budgets",
+      "status": "passed",
+      "reports": [
+        "test-reports/p20/backend-lint.log",
+        "test-reports/p20/migrations.log",
+        "test-reports/p20/skip-budget.log"
+      ]
+    },
+    {
+      "name": "Primary user changes",
+      "status": "preserved",
+      "tracked_files": 11,
+      "report": "test-reports/p20/primary-hashes.json"
+    }
+  ],
+  "initial_attempts": [
+    {
+      "report": "test-reports/p20/review-focus.log",
+      "result": "Inherited scientific fixtures could not authenticate under auth_boundary; replaced by real authenticated native training/assessment setup, preserving the boundary marker."
+    },
+    {
+      "report": "test-reports/p20/frontend-unit.log",
+      "result": "One render assertion failed; asynchronous review rendering repaired with the existing eager strategy. Final full unit and browser runs passed."
+    }
+  ],
+  "limitations": [
+    "Role separation does not prove complete organizational independence from model development.",
+    "Discussion closure confers no model, policy, exception, deployment or production approval.",
+    "Clean-environment reproduction and signed external evidence remain open.",
+    "API append-only receipts do not defend against database/storage administrators.",
+    "Current context fingerprint covers documented inputs; comprehensive dependency/approval invalidation remains open.",
+    "Durable queued jobs, Linux gVisor expert isolation, full retention/deletion procedures, screen-reader qualification and all release/customer gates remain open."
+  ]
+}
