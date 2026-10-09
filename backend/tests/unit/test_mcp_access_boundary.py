@@ -234,6 +234,8 @@ def test_admin_grant_and_audit_http_permissions(mcp_identity, client, superuser)
         assert event.authority_source == 'authenticated_admin'
         assert event.actor_id == admin_actor.pk
         assert event.grant_snapshot['revision'] == str(grant.revision)
+        assert event.grant_snapshot['actor_id'] == actor.pk
+        assert event.grant_snapshot['dataset_id'] == dataset.pk
         assert client.get(f'/admin/access_control/mcpaccessevent/{event.pk}/change/').status_code == 200
         assert client.post(f'/admin/access_control/mcpaccessevent/{event.pk}/change/', {'outcome': 'erased'}).status_code == 403
         event.refresh_from_db()
@@ -242,6 +244,14 @@ def test_admin_grant_and_audit_http_permissions(mcp_identity, client, superuser)
         assert not MCPAccessEvent.objects.exists()
     assert client.post(f'/admin/access_control/mcpdatasetgrant/{grant.pk}/delete/', {'post': 'yes'}).status_code == 403
     assert MCPDatasetGrant.objects.filter(pk=grant.pk).exists()
+    if superuser:
+        target_id, file_id = actor.pk, dataset.pk
+        actor.delete()
+        dataset.delete()
+        event.refresh_from_db()
+        assert event.grant is None and event.actor_id == admin_actor.pk
+        assert event.grant_snapshot['actor_id'] == target_id
+        assert event.grant_snapshot['dataset_id'] == file_id
 
 
 def test_admin_mutation_rolls_back_when_audit_write_fails(mcp_identity, monkeypatch):

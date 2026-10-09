@@ -36,7 +36,8 @@ def actor_snapshot(actor):
 
 
 def grant_snapshot(grant):
-    return {'id': str(grant.pk), 'revision': str(grant.revision), 'role': grant.role,
+    return {'id': str(grant.pk), 'actor_id': grant.actor_id, 'dataset_id': grant.dataset_id,
+        'revision': str(grant.revision), 'role': grant.role,
         'active': grant.active, 'expires_at': grant.expires_at.isoformat() if grant.expires_at else None} if grant else {}
 
 
