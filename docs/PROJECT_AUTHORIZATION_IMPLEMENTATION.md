@@ -117,7 +117,7 @@ production restore/upgrade qualification remain open.
 
 ## Qualification
 
-See [P18 evidence](evidence/p18-qualification-2026-10-09.json). Coverage includes real
+See [P18 evidence](evidence/p18-qualification-2026-10-10.json). Coverage includes real
 HTTP/session/CSRF boundaries, roles and staff flags, path and pipeline selection,
 legacy adoption, exact retries, mid-request/regrant revocation, typed approvals,
 stream withholding, native artifact ownership and cross-project holdout evidence.

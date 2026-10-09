@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-10-09",
+  "updated": "2026-10-10",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -240,9 +240,11 @@
         "[Explicit runtime configuration and limits](private-runtime-configuration.md)",
         "[P16 source qualification](evidence/p16-qualification-2026-10-09.json)",
         "[Authentication audit and revocation](AUTHENTICATION_GOVERNANCE.md)",
-        "[P17 source qualification](evidence/p17-qualification-2026-10-09.json)"
+        "[P17 source qualification](evidence/p17-qualification-2026-10-09.json)",
+        "[Project authorization foundation](PROJECT_AUTHORIZATION_IMPLEMENTATION.md)",
+        "[P18 source qualification](evidence/p18-qualification-2026-10-10.json)"
       ],
-      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 validates native REST file identifiers and confines table selectors/generated files to managed storage before reads, including traversal, hidden, symlink and nonregular-file rejection. This is a root boundary, not REST project/dataset authorization; roles, egress/retention and release threat-model qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open. P17 shares bounded password-login admission across API/admin processes, records authentication facts without raw credentials, requires current browser-session revisions and adds retry-safe installation-operator revocation with unused typed-approval cancellation. Private TLS PostgreSQL five-process budget/revocation checks, session/audit restart/restore and marked suites on both databases pass. Development browser denial, unaffected-user access and fresh-session retry are independently checked. Historical unbound sessions require reauthentication. Operator labels are assertions, not authenticated human identity; project roles, tamper-proof audit/retention, egress and full private release qualification remain open."
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 validates native REST file identifiers and confines table selectors/generated files to managed storage before reads, including traversal, hidden, symlink and nonregular-file rejection. This is a root boundary, not REST project/dataset authorization; roles, egress/retention and release threat-model qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open. P17 shares bounded password-login admission across API/admin processes, records authentication facts without raw credentials, requires current browser-session revisions and adds retry-safe installation-operator revocation with unused typed-approval cancellation. Private TLS PostgreSQL five-process budget/revocation checks, session/audit restart/restore and marked suites on both databases pass. Development browser denial, unaffected-user access and fresh-session retry are independently checked. Historical unbound sessions require reauthentication. Operator labels are assertions, not authenticated human identity; project roles, tamper-proof audit/retention, egress and full private release qualification remain open. P18 adds explicit project membership and developer/reviewer/admin roles, durable activation, scoped native API/pipeline/table/artifact access, project-aware MCP and revision-bound typed approvals. Legacy adoption records current assertions; cross-project holdout reuse counts remain while unrelated details are withheld. Full legacy/scientific matrices, project regressions, governed browser/stdio workflows and private PostgreSQL role/retry/restart/restore fixtures are qualified with separately pinned sources. This is partial D06; unactivated development remains unqualified. Project/reviewer UI, SSO/MFA/enrollment, egress/retention, tamper-proof audit, durable job authority, expert isolation and full private release qualification remain open."
     },
     {
       "id": "D07",
@@ -1031,6 +1033,16 @@
       "date": "2026-10-09",
       "packet": "P17",
       "event": "Final source qualifies ordered authentication timestamps with explicit regression assertions, repeat 1870-test suites on both databases, private process/restore checks and repeat real-browser revocation/retry. Development Compose forwards declared admission controls. Outcome statuses, prior packets, canonical queue and release/customer gates remain unchanged."
+    },
+    {
+      "date": "2026-10-10",
+      "packet": "P18",
+      "event": "Verified PR107 merged as 68dfb2d883a356bfd8bbbf1164afde156e1c2a17; merge-main CI run 37941570170 passed all six jobs. Scope project authority within shared foundations; preserve prior packets, outcome states, D18-D26, queue and release/customer gates."
+    },
+    {
+      "date": "2026-10-10",
+      "packet": "P18",
+      "event": "Local full matrices pass 1898 marked tests each on SQLite/PostgreSQL at their pinned source, with six skips and unchanged budgets. Final application source additionally passes 29 project regressions and 29 governed browser/API cases, actual stdio roles/revocation, three browser roles and five-process private project retries. Project bindings persist across restart/quiescent fixture restore. D06 progresses only; no release or customer acceptance claim."
     }
   ],
   "implementation_packets": [
@@ -1337,6 +1349,22 @@
         "[P17 source qualification](evidence/p17-qualification-2026-10-09.json)"
       ],
       "remaining": "Project roles, egress/retention, identity-provider/MFA enrollment, complete security/deployment/recovery qualification, expert isolation, independent reproduction and all release/customer gates remain open."
+    },
+    {
+      "id": "P18",
+      "title": "Recorded project authority across native APIs and MCP",
+      "kind": "product_implementation",
+      "owner": "Security/Backend",
+      "status": "tested",
+      "items": [
+        "D06"
+      ],
+      "description": "Bind datasets, pre-upload pipelines and registered artifacts to explicit projects; enforce developer/reviewer/admin authority across native API, media, MCP and typed approvals. Preserve legacy assertions, exact retries and revocation evidence. This is partial D06.",
+      "evidence": [
+        "[Project authorization foundation](PROJECT_AUTHORIZATION_IMPLEMENTATION.md)",
+        "[P18 source qualification](evidence/p18-qualification-2026-10-10.json)"
+      ],
+      "remaining": "Project/reviewer UI, identity-provider/MFA enrollment, egress/retention, tamper-proof audit, durable jobs, qualified expert isolation, independent reproduction, production recovery and all release/customer gates remain open."
     }
   ],
   "release_qualification": {
