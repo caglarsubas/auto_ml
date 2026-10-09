@@ -9,6 +9,12 @@ facade only: all platform logic remains in ``tool_executor`` and
 from __future__ import annotations
 
 from typing import Any, Literal
+from functools import wraps
+
+from asgiref.sync import sync_to_async
+from django.db import close_old_connections
+
+from access_control.authority import authorized_access
 
 from ai_assistant.mcp_server import auth
 from ai_assistant.mcp_server.actions import execute_direct_action, prepare_action
@@ -46,9 +52,10 @@ SFS_DIRECTION = Literal["forward", "backward", "forward_from_backward"]
 SERVER_INSTRUCTIONS = """
 DeclarAI Auto-ML MCP server. Read tools inspect one uploaded pipeline file by
 explicit file_id. Prepare-action tools return reviewable action blocks and do
-not mutate state. Direct action tools, when enabled by the operator, execute
-through the existing DeclarAI action dispatcher and require scopes plus an
-approval_id.
+not mutate state. Direct execution is unavailable until exact approvals are
+verified; proposals confer no execution authority.
+Read/proposal tools require the configured active installation actor and a dataset grant.
+Network transport is disabled until authenticated per-client identity is implemented.
 """.strip()
 
 
@@ -69,7 +76,36 @@ def create_mcp_server(
         ) from exc
 
     include_direct_actions = _resolve_include_direct_actions(include_direct_actions)
-    mcp = FastMCP(
+    class LocalMCP(FastMCP):
+        def add_tool(self, function, *args, **kwargs):
+            @wraps(function)
+            async def asynchronous_call(*call_args, **call_kwargs):
+                def invoke():
+                    close_old_connections()
+                    try:
+                        return function(*call_args, **call_kwargs)
+                    finally:
+                        close_old_connections()
+                return await sync_to_async(invoke, thread_sensitive=True)()
+            return super().add_tool(asynchronous_call, *args, **kwargs)
+
+        def run(self, transport='stdio', *args, **kwargs):
+            auth.require_transport(transport)
+            return super().run(transport, *args, **kwargs)
+
+        async def run_streamable_http_async(self, *args, **kwargs):
+            auth.require_transport('streamable-http')
+
+        async def run_sse_async(self, *args, **kwargs):
+            auth.require_transport('sse')
+
+        def streamable_http_app(self, *args, **kwargs):
+            auth.require_transport('streamable-http')
+
+        def sse_app(self, *args, **kwargs):
+            auth.require_transport('sse')
+
+    mcp = LocalMCP(
         "DeclarAI Auto-ML",
         instructions=SERVER_INSTRUCTIONS,
         host=host,
@@ -85,11 +121,9 @@ def create_mcp_server(
 
 
 def _resolve_include_direct_actions(include_direct_actions: bool | None) -> bool:
-    if include_direct_actions is None:
-        return auth.direct_actions_enabled()
-    if include_direct_actions and not auth.direct_actions_enabled():
-        return False
-    return include_direct_actions
+    if include_direct_actions:
+        auth.require_direct_actions_enabled()
+    return False
 
 
 @workflow(name="declarai-mcp-read-tool")
@@ -110,10 +144,9 @@ def _run_read_tool(
             destructive=False,
         )
         try:
-            auth.require_scope(auth.SCOPE_PIPELINE_READ)
-            from ai_assistant.tool_executor import execute_tool_call
-
-            result = execute_tool_call(file_id, internal_name, arguments)
+            with authorized_access(file_id, 'read_tool', mcp_name, auth.SCOPE_PIPELINE_READ, arguments):
+                from ai_assistant.tool_executor import execute_tool_call
+                result = execute_tool_call(file_id, internal_name, arguments)
             stamp_mcp_context(
                 operation="read_tool",
                 ok=True,
@@ -185,10 +218,9 @@ def _register_catalog_tool(mcp, *, include_direct_actions: bool) -> None:
                 destructive=False,
             )
             try:
-                auth.require_scope(auth.SCOPE_PIPELINE_READ)
-                result = build_tool_catalog(
-                    include_direct_actions=include_direct_actions,
-                )
+                with authorized_access(None, 'catalog', CATALOG_TOOL_NAME, auth.SCOPE_PIPELINE_READ) as receipt:
+                    result = build_tool_catalog(include_direct_actions=include_direct_actions)
+                    result['access_receipt'] = receipt
                 stamp_mcp_context(
                     operation="catalog",
                     ok=True,

@@ -222,9 +222,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P02 portable-core/authenticated checks](PORTABLE_CORE_IMPLEMENTATION.md)",
-        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)"
+        "[P02 local qualification](evidence/p02-qualification-2026-10-08.json)",
+        "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
+        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
       ],
-      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions."
+      "progress": "Real server sessions/CSRF, route guards, protected REST/media and streaming credentials replace browser-local sign-in. Production HTTP boundary tests and browser login/reload/logout were exercised. Project roles, MCP identity, audit/retention and egress policy remain open. P02 adds disposable non-admin session/CSRF CI on every PR and repairs HPO/SFS/pipeline payload parsing under real sessions. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open."
     },
     {
       "id": "D07",
@@ -273,9 +275,11 @@
       "status": "in_progress",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
-        "[Local qualification record](evidence/foundation-2026-10-07.json)"
+        "[Local qualification record](evidence/foundation-2026-10-07.json)",
+        "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
+        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
       ],
-      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release."
+      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open."
     },
     {
       "id": "D09",
@@ -931,6 +935,21 @@
       "date": "2026-10-09",
       "packet": "P11",
       "event": "Bounded local qualification passed 1589 backend tests with six explicit skips and 68.84% combined coverage, 540 frontend tests and 19 authenticated browser/API checks including keyboard access and exact historical download. Original assessment bytes, corrupt projections, changed-current publication, staging failure, incomplete/tampered packages and versioned scoring receipts are covered. Shared foundations stay first; prior packets, planned agentic outcomes and release/customer gates are preserved."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P12",
+      "event": "After verified PR101 merge, scope bounded MCP service identity, dataset grants, access records and closed direct-execution/network boundaries in the shared-foundation queue. Prior packets and planned agentic outcomes are preserved."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P12",
+      "event": "PR101 merge at b854e832 and all five merge-main CI jobs were verified before source qualification. Merge is not release or customer acceptance."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P12",
+      "event": "Bounded final source qualification passed 1624 backend tests, six explicit skips, 68.8% combined coverage, 540 frontend tests and 19 authenticated browser/API checks. Actual MCP stdio exercised 29 tools and ten attributable audit events; administrator permissions, authority changes and audit failure boundaries are covered. D06/D08 remain partial; prior packets, outcome states, planned D18-D26, canonical queue and release/customer gates are preserved."
     }
   ],
   "implementation_packets": [
@@ -1132,6 +1151,23 @@
         "[P11 source qualification](evidence/p11-qualification-2026-10-09.json)"
       ],
       "remaining": "Complete immutable stages/jobs, independent reproduction/review, expert isolation, production approval and release/customer gates remain open."
+    },
+    {
+      "id": "P12",
+      "title": "Scoped MCP service identity and access evidence",
+      "kind": "product_implementation",
+      "owner": "Security/Backend",
+      "status": "tested",
+      "items": [
+        "D06",
+        "D08"
+      ],
+      "description": "Require a named active installation actor and explicit dataset grants for MCP reads/proposals; record attributable access before data reads, block unverified direct approvals and network transport pending authenticated per-client identity.",
+      "evidence": [
+        "[P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md)",
+        "[P12 source qualification](evidence/p12-qualification-2026-10-09.json)"
+      ],
+      "remaining": "REST project roles, verified exact action approvals, authenticated MCP HTTP/OAuth, isolated expert Python, full egress/retention, distributed audit/recovery and release/customer qualification remain open."
     }
   ],
   "release_qualification": {

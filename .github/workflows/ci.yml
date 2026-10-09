@@ -233,6 +233,11 @@ jobs:
           docker compose exec -T -e E2E_USER -e E2E_PASSWORD \
             -e DECLARAI_TEST_INSTALLATION=1 backend python scripts/seed_e2e_user.py
 
+      - name: Qualify scoped MCP over the actual stdio protocol
+        run: |
+          docker compose exec -T -e DECLARAI_TEST_INSTALLATION=1 \
+            backend python scripts/qualify_mcp_stdio.py
+
       - name: Build and serve frontend assets
         run: |
           npm --prefix frontend run build

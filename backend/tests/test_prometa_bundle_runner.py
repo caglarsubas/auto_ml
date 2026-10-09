@@ -338,7 +338,8 @@ class TestPrometaBundleRunner:
 
         assert captured["arguments"]["approval_id"] == "approval-1"
 
-    def test_runner_handles_fastmcp_read_tool_list_result(self, monkeypatch):
+    @pytest.mark.django_db(transaction=True)
+    def test_runner_handles_fastmcp_read_tool_list_result(self, monkeypatch, mcp_identity):
         pytest.importorskip("mcp")
         monkeypatch.delenv("DECLARAI_MCP_SCOPES", raising=False)
         from ai_assistant.prometa_runner.runner import PrometaOnPremBundleRunner
@@ -360,7 +361,7 @@ class TestPrometaBundleRunner:
 
         result = runner.call_tool(
             "declarai.get_pipeline_config",
-            {"file_id": 99999},
+            {"file_id": 42},
         )
 
         assert result["operation"] == "declarai.get_pipeline_config"

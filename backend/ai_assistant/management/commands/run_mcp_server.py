@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import os
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from access_control.authority import configured_actor
+from ai_assistant.mcp_server import auth
 
 from ai_assistant.mcp_server.server import create_mcp_server
 
 
 class Command(BaseCommand):
-    help = "Run the DeclarAI Auto-ML MCP server over stdio or Streamable HTTP."
+    help = "Run the scoped DeclarAI MCP server over stdio; network transport is blocked pending per-client identity."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -34,8 +36,7 @@ class Command(BaseCommand):
             "--direct-actions",
             action="store_true",
             help=(
-                "Register direct side-effecting action tools. Also requires "
-                "DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true and the relevant scopes."
+                "Unsupported pending verified exact approvals; fails closed."
             ),
         )
         parser.add_argument(
@@ -53,6 +54,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        try:
+            auth.require_transport(options['transport'])
+            configured_actor()
+            if options['direct_actions']:
+                auth.require_direct_actions_enabled()
+        except PermissionError as exc:
+            raise CommandError(str(exc)) from exc
         mcp = create_mcp_server(
             host=options["host"],
             port=options["port"],

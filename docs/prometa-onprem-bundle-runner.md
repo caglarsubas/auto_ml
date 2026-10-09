@@ -18,6 +18,16 @@ GET /api/agent-manifests/{id}/bundle
 or from a local JSON file, then verifies and preflights the bundle before any
 local MCP tool execution.
 
+## Current installation authority
+
+P12 permits local reads and proposals only. The local runner requires an active
+`DECLARAI_MCP_ACTOR_USER_ID`, explicit dataset grants and matching process scopes,
+as described in [MCP access setup](MCP_ACCESS_IMPLEMENTATION.md). A signed bundle
+identifies its producer and requested policy; it does not authenticate a remote
+user, grant dataset access or verify an exact action approval. Direct tools and
+network MCP transport are disabled. Earlier low-level injected-client tests
+verify bundle parsing/policy only and do not establish mutation authority.
+
 ## Signature Verification
 
 The runner expects the bundle envelope:
@@ -100,18 +110,10 @@ python manage.py run_prometa_bundle \
   --arguments '{"file_id":42,"payload":{"action":"add","content":"Review note"}}'
 ```
 
-For direct actions:
-
-```bash
-export DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true
-export DECLARAI_MCP_SCOPES=declarai.notes.write
-
-python manage.py run_prometa_bundle \
-  --bundle-file /path/to/bundle.json \
-  --tool declarai.action.update_notes \
-  --arguments '{"file_id":42,"payload":{"action":"add","content":"Review note"}}' \
-  --approval-id approval-123
-```
+The example requires a `prepare` grant for the selected dataset, the configured
+active installation actor and `declarai.action.prepare` process scope. Direct
+execution is unavailable: legacy enable flags or supplied approval IDs cannot
+register `declarai.action.*`. The result is a candidate for independent review.
 
 ## Telemetry Correlation
 
