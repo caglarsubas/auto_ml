@@ -1111,3 +1111,19 @@
   font-size: 11px;
   margin-top: 2px;
 }
+
+.action-approval-review {
+  margin-block: 12px;
+  padding: 12px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+.action-approval-review pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.action-approval-review button {
+  margin: 6px 8px 0 0;
+}

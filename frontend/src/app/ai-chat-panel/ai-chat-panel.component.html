@@ -254,6 +254,13 @@
               <div class="typing-indicator"><span></span><span></span><span></span></div>
             </div>
           }
+          @if (actionReceipt && mi === messages.length - 1) {
+            <details class="action-approval-review">
+              <summary>Action dispatch receipt</summary>
+              <p>Pipeline job status and independent review are recorded separately.</p>
+              <pre>{{ actionReceipt | json }}</pre>
+            </details>
+          }
           <!-- Action blocks — general-purpose AI operations -->
           @if (msg.actions && msg.actions.length > 0) {
             <div class="chat-action-blocks">
@@ -420,16 +427,54 @@
                         (click)="applyAction(mi, ai, act)"
                       >
                         @if (!actionApplying) {
-                          <span>&#9654; Apply</span>
+                          <span>Review action</span>
                         }
                         @if (actionApplying) {
-                          <span>Applying...</span>
+                          <span>Preparing review...</span>
                         }
                       </button>
                     </div>
                   }
+                  @if (preparedAction; as pending) {
+                    @if (pending.action === act) {
+                      <section
+                        class="action-approval-review"
+                        aria-label="Prepared assistant action"
+                        aria-live="polite"
+                      >
+                        <strong
+                          >Review the prepared action for dataset
+                          {{ pending.record.file_id }}</strong
+                        >
+                        <p>Recorded inputs are pinned. Changes or expiry require fresh review.</p>
+                        <pre>{{ pending.record.payload | json }}</pre>
+                        <p>{{ pending.record.effect }}</p>
+                        <p>
+                          One typed dispatch; up to
+                          {{ pending.record.budget.max_collection_items }} entries. Expires
+                          {{ pending.record.expires_at | date: 'mediumTime' }}.
+                        </p>
+                        <button
+                          type="button"
+                          class="action-apply-btn"
+                          [disabled]="actionApplying"
+                          (click)="approvePreparedAction()"
+                        >
+                          Approve this action
+                        </button>
+                        <button
+                          type="button"
+                          class="action-edit-btn"
+                          [disabled]="actionApplying"
+                          (click)="cancelPreparedAction()"
+                        >
+                          Cancel review
+                        </button>
+                      </section>
+                    }
+                  }
                   @if (act.applied) {
-                    <div class="action-applied-badge">&#10003; Applied</div>
+                    <div class="action-applied-badge">&#10003; Dispatched</div>
                   }
                 </div>
               }

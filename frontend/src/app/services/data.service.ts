@@ -514,7 +514,8 @@ export class DataService {
 
   executeAiAction(fileId: number, actionType: string, payload: any,
                   parentSpanId?: string,
-                  source?: 'codeline' | 'panel'): Observable<any> {
+                  source?: 'codeline' | 'panel',
+                  approval?: { approval_id: string; proposal_sha256: string }): Observable<any> {
     const body: any = {
       file_id: fileId,
       action_type: actionType,
@@ -528,12 +529,33 @@ export class DataService {
     if (source) {
       body.source = source;
     }
+    if (approval) Object.assign(body, approval);
     return this.http.post(`${this.apiUrl}ai-assistant/execute-action/`, body).pipe(
       catchError((err: any) => {
         console.error('Error executing AI action:', err);
         return throwError(() => err);
       })
     );
+  }
+
+  prepareAiAction(fileId: number, actionType: string, payload: any, parentSpanId?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/prepare-action/`, {
+      file_id: fileId, action_type: actionType, payload, parent_span_id: parentSpanId, source: 'panel',
+    });
+  }
+
+  approveAiAction(approval: { approval_id: string; proposal_sha256: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/approve-action/`, approval);
+  }
+
+  cancelAiAction(approval: { approval_id: string; proposal_sha256: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}ai-assistant/cancel-action/`, approval);
+  }
+
+  getAiActionApproval(approval: { approval_id: string; proposal_sha256: string }): Observable<any> {
+    return this.http.get(`${this.apiUrl}ai-assistant/action-approval/${approval.approval_id}/`, {
+      params: { proposal_sha256: approval.proposal_sha256 },
+    });
   }
 
   // ===== AI Assistant =====

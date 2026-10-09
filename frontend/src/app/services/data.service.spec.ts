@@ -595,6 +595,32 @@ describe('DataService', () => {
       req.flush({ status: 'success' });
     });
 
+    it('sends the exact approval selector alongside dispatch payload', () => {
+      service
+        .executeAiAction(7, 'update_notes', { content: 'reviewed' }, undefined, 'panel', {
+          approval_id: 'proposal-id',
+          proposal_sha256: 'proposal-digest',
+        })
+        .subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/execute-action/`);
+      expect(req.request.body.approval_id).toBe('proposal-id');
+      expect(req.request.body.proposal_sha256).toBe('proposal-digest');
+      expect(req.request.body.payload).toEqual({ content: 'reviewed' });
+      req.flush({ status: 'success' });
+    });
+
+    it('preparing an action does not approve or execute it', () => {
+      service
+        .prepareAiAction(7, 'update_notes', { content: 'reviewed' }, 'chat-origin')
+        .subscribe();
+      const req = httpMock.expectOne(`${apiUrl}ai-assistant/prepare-action/`);
+      expect(req.request.body.parent_span_id).toBe('chat-origin');
+      expect(req.request.body.source).toBe('panel');
+      httpMock.expectNone(`${apiUrl}ai-assistant/approve-action/`);
+      httpMock.expectNone(`${apiUrl}ai-assistant/execute-action/`);
+      req.flush({ state: 'prepared' });
+    });
+
     it('sendAiChat should POST message with context', () => {
       service.sendAiChat('Hello', { summary: [] }, 'data_quality', []).subscribe(res => {
         expect(res.message).toBeTruthy();

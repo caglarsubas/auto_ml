@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P14",
+  "branch": "codex/assistant-action-approvals",
+  "base_commit": "764a18270d65808f079faeecbbd79db48ec58477",
+  "qualified_source_commit": "9b759272ba21f9108d3aca3f32c729e1de0ebb05",
+  "scope": "Bounded local native typed-dispatch approval/receipt qualification. D04/D06/D08/D12 remain partial; no downstream-job, expert-code, project-role, independent-review, deployment or release/customer qualification.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/103",
+    "state": "MERGED",
+    "merge_commit": "764a18270d65808f079faeecbbd79db48ec58477",
+    "merged_at": "2026-10-09T06:15:25Z",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37892596399",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p14:qualified",
+    "api_image_id": "sha256:dfc1b42a411715e82d360f3bbff73069429423188f9629337a830a2b12d900de",
+    "api_build_source_commit": "7996c6e257139c4a5177cd52a258c488f04006e2",
+    "final_runtime_equality": "All eight changed backend application/migration files in the API image match final executable source hashes; later code commits change frontend copy/tests and a backend integration test only.",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "versions": {
+      "Python": "3.12.15",
+      "Django": "5.2.18",
+      "mcp": "1.30.0",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10",
+      "node": "v24.16.0",
+      "npm": "11.13.0",
+      "Angular": "22.2.1"
+    },
+    "dependency_baseline": "Unchanged public core/frontend lock; optional private SDK absent. Disposable SQLite/Redis/API and loopback preview; telemetry disabled, blank provider key, unavailable model engine."
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, Ruff, migration drift and dependency consistency",
+      "status": "passed",
+      "report": "test-reports/p14/backend.log",
+      "passed": 1745,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 165.27,
+      "combined_statement_branch_coverage_percent": 68.91,
+      "coverage_gate_percent": 50,
+      "checkout_commit": "65bb271f5c258f2b4973c023104bf522f16e2415",
+      "source_note": "All changed backend application and backend test hashes match final source. Later source commits only change frontend async behavior/tests."
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "report": "test-reports/p14/skip-budget.log",
+      "skipped": 6,
+      "budget": 15
+    },
+    {
+      "name": "Focused real-session approval, functional and telemetry suite",
+      "status": "passed",
+      "passed": 328,
+      "skipped": 5,
+      "duration_seconds": 13.4,
+      "report": "test-reports/p14/focused-redis-final.log",
+      "source_note": "Earlier focused iteration; final full suite covers subsequent changes."
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "passed": 550,
+      "report": "test-reports/p14/frontend-unit.log",
+      "source_note": "Final frontend application and unit-test source.",
+      "qualified_source_commit": "9b759272ba21f9108d3aca3f32c729e1de0ebb05"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "errors": 0,
+      "existing_warnings": 157,
+      "report": "test-reports/p14/frontend-lint-final.log"
+    },
+    {
+      "name": "Frontend production build",
+      "status": "passed",
+      "report": "test-reports/p14/frontend-build-final.log"
+    },
+    {
+      "name": "E2E TypeScript and scoped formatting",
+      "status": "passed",
+      "reports": [
+        "test-reports/p14/e2e-types-final.log",
+        "test-reports/p14/format.log"
+      ]
+    },
+    {
+      "name": "Governed real-session browser/API workflows",
+      "status": "passed",
+      "passed": 27,
+      "duration_seconds": 22.0,
+      "report": "test-reports/p14/browser.log",
+      "qualified_source_commit": "9b759272ba21f9108d3aca3f32c729e1de0ebb05",
+      "proposal_generation": "Synthetic NDJSON proposal only in keyboard review; authority/mutation/receipt endpoints real."
+    },
+    {
+      "name": "Actual MCP SDK stdio workflow",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 10,
+      "completed_events": 6,
+      "denied_events": 4,
+      "report": "test-reports/p14/mcp-stdio.log"
+    },
+    {
+      "name": "Ledger validation and preservation",
+      "status": "passed",
+      "reports": [
+        "test-reports/p14/ledger-render.log",
+        "test-reports/p14/ledger.log",
+        "test-reports/p14/preservation.log"
+      ],
+      "passed": 49
+    }
+  ],
+  "source_sha256": {
+    "backend/access_control/admin.py": "f64f49ec98c817f5a53061429d6bc0882e884f1d629a8446d236606c383bd7bb",
+    "backend/access_control/assistant_approvals.py": "4e1fe6cc5d4b3633e025fabec655227e69405177b1fe4334a3ef5db3d905c499",
+    "backend/access_control/assistant_views.py": "2b0b4ac75ab4c68614276490eb5f65d752801794d0d12fb4ddcc9e557e26f25b",
+    "backend/access_control/migrations/0002_assistantactionapproval.py": "8dd2b48b66d27ac16d6b1c3e78bc0c92d0b195d9b1dbc4df5f1b2cc668715c6c",
+    "backend/access_control/models.py": "9bc80974b47bfe12f4fbf5277bc6cdae0d2f24bbd2d2c5eb2683776dcb2de441",
+    "backend/ai_assistant/action_executor.py": "937ec4ef43122cdaa0debe193d022fb62a8684b4894db1a7cc083698d169db0b",
+    "backend/ai_assistant/views.py": "6d8829ae52adcc578f64f5da814685c4f3991a45a2f200c0b612460d67631b6f",
+    "backend/backend/urls.py": "1722ea8e1e0e5e923215127b322adad415374d998188c15de963daa875fc7377",
+    "backend/tests/test_functional.py": "eb1b46e315b4399bce55a4ec15ee754cd9bf0f889f1013c1b59f93eee66628bc",
+    "backend/tests/test_integration.py": "9bb56d673179e1223dbbcb7335f72c7947d142f8534ba36e710930e28aba4aa5",
+    "backend/tests/unit/test_ai_cache_telemetry.py": "5d45a779d7ee8f256dfbacd0fe28bc41af63bb2dfcfd97fefaa440e01e1652f6",
+    "backend/tests/unit/test_assistant_approvals.py": "29a8eb62a382a317d34de45bf645b17c3d6f8e1ba6ba0badd476b2a0067200ec",
+    "frontend/e2e/assistant-approval-api.spec.ts": "07443784cbe955993aa8e573df12e86e1fac12833cdcbd03dc22099bc77bb7df",
+    "frontend/package.json": "f9c5b777a7cf19af17b486bb951ebbfc65cbc11a0a8bdaa31503b04fb7681b11",
+    "frontend/src/app/ai-chat-panel/ai-chat-panel.component.css": "e8b68768f9e31d7226d63a424eb91e46744b43304f5c7e1a9d2ed0f956fed6bb",
+    "frontend/src/app/ai-chat-panel/ai-chat-panel.component.html": "eff8669a0da5551db4e7f48e1992a3d51cede0842a52e5536f552f006cabcfaa",
+    "frontend/src/app/ai-chat-panel/ai-chat-panel.component.spec.ts": "57cdbbc1c0224679c977bc05b9505e028346a75701ee7c11879771f77ddd45d4",
+    "frontend/src/app/ai-chat-panel/ai-chat-panel.component.ts": "260232bfb729102297d9105e9ba212b3dc09f06d987bb362437a16b5fe81b143",
+    "frontend/src/app/services/data.service.spec.ts": "693cd4ad200421418ab9574d216c749642391494a755555c7c0743b66a9004ce",
+    "frontend/src/app/services/data.service.ts": "28f788a897ab2b76587431e087dcc63cca74e7f9fe5fa15eb24b2a98a503cefa"
+  },
+  "retained_report_sha256": {
+    "test-reports/p14/ledger-render.log": "b79771ba8f457e6eac8e787144606928003be8a12e97d5a0d6c678af6fd2c631",
+    "test-reports/p14/frontend-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p14/ledger-initial.log": "deae79e0aa9780314eee469b160349e3dade8ade617d4b22bfbf52fdf0d6d657",
+    "test-reports/p14/browser.log": "38046e652d85d1c8fed74a6e9fd44f52079d8d491c433e31210c9ca200bd1d69",
+    "test-reports/p14/api.log": "6bc48b105fc610fa942270353640d2fa2a5045144aa1e50a81d67f4771687b1e",
+    "test-reports/p14/backend.log": "aa7b29f693c61d40f7476d02b58cdc3b3cc694fb0a9eaf10d2e56236a4e8b52a",
+    "test-reports/p14/frontend-build-initial.log": "3f45c0f31552feb19c72dd3d21fe6b34dadb262e1acfc67ea651facf86bf2146",
+    "test-reports/p14/browser-initial.log": "720705fbf04c64acc448810f0d91861e48d411096647728640b46221fc171a46",
+    "test-reports/p14/skip-budget.log": "12bf7d93c11de6540cc9b4c97363a3bdd1b3737f9342ebdec79e62fffa5d649f",
+    "test-reports/p14/format.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+    "test-reports/p14/e2e-types.log": "e85605b267047b261d827b20b784938335b91c7123393dea5b83c6b897e1efe9",
+    "test-reports/p14/ledger.log": "39715b105d36adcceed1778959e1a9408521a7e63c6ff24140e33e76aca5354f",
+    "test-reports/p14/browser-selector-diagnostic.log": "9042e6f846f0d219e049ef63ff05f3eafb27dd1ba79b710189ab6dd2bd66bee6",
+    "test-reports/p14/api-build.log": "095afbc60ee7cf300ec3f7b5eb0d3c14b605261a971230dc2647b19619d14089",
+    "test-reports/p14/frontend-lint-final.log": "bbe5c17c80bcd4c73e05bce390107f507b8abfa4e6b9e2f82e21c89dc4ae731f",
+    "test-reports/p14/frontend-unit.log": "cd9824b6bfc5144ad44099db20e08fcf84ce0ad9cd18dfa625d386f9f95d7942",
+    "test-reports/p14/approvals-final-focused.log": "0b07cd36447af9f6a726a1da43e554734720a486041581e6196752b7b8803745",
+    "test-reports/p14/approvals-focused.log": "95ef52263fbe1213ec80ccf4f1555fa8facf8ed9378940cde89ce178a0e4217d",
+    "test-reports/p14/frontend-lifecycle-diagnostic.log": "bd6dec892a95c67dc49a2704df1ddc8d33b16e7b17954c145abb10e47d9bc119",
+    "test-reports/p14/preservation.log": "54c812b60ec3620e117e7377854526a375752721023161d9931797865b9a28e1",
+    "test-reports/p14/focused-redis-final.log": "1a5ded1a7d4f782ed46a6e9057ea32e25b4639b52910967eb5b6b7522809be9c",
+    "test-reports/p14/frontend-unit-initial.log": "8b4724c1aaab0633cc975e13ed5bd4785f104b638710ca801e2d5ba83db64f88",
+    "test-reports/p14/frontend-build-final.log": "840bce2440b77e87da0f7242c15618812c7d1a11b691d368466831a246c952d1",
+    "test-reports/p14/initial.log": "c9180f550ce2c37f09386e88ee796876681e810b6699bba8841539d7a7146b56",
+    "test-reports/p14/mcp-stdio.log": "66c1f97cbce609fe1ba568f1e9778587fffff1707d5c08bebc76c1bfb25e61c7",
+    "test-reports/p14/ruff-final.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p14/preview.log": "ba44f75551695bd623c2ba6cd7d482f7038ca4be75351a2c19842be64acd3ad2",
+    "test-reports/p14/e2e-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p14/backend-initial.log": "ecd2f4fef492c953173655bc1236410eaf963e32bb3e6d04efea1c44da468ded",
+    "test-reports/p14/frontend-lint.log": "6ce445dc3595fa43d51b7fe7c6bc2a04f5e68aacbd04b1eb7a2f85d9d390eb9b",
+    "test-reports/p14/focused.log": "0d5b85f30273ff5646ba3866aaf65dcdbb46febe0a1cac8fe17368329fd50b2e",
+    "test-reports/p14/frontend-build.log": "6a7073e459d521e5b601efeb806b40f9b354c9c3142e0cc2d29217a1a474de2b",
+    "test-reports/p14/focused-redis.log": "53312b488e7c83e48e3609a276e17c838c823127d5bd96475a0006c09c31067c",
+    "test-reports/p14/backend.xml": "8c8719b67fa7717d2c6117d3bc2b468c6bdf27d0e6162dd6faa3d04a6a697d9d",
+    "test-reports/p14/backend-coverage.xml": "6c030c293b85851ac8aecec922ef3d444e1af6ea094589309b450b2ab0ee1d5a",
+    "test-reports/p14/assistant-action-receipt.png": "125261336032265de12f3553d09d562c4a7ce4148d9758cb678d70683776a3db",
+    "test-reports/p14/assistant-action-review.png": "4e8dc628213ac7a3d638d1afb439315014ce632e88bc780b08cf6cf8fe38b358"
+  },
+  "qualification_observations": [
+    "Fifty-three new actual-session/CSRF approval cases cover actor/payload/context binding, expiry, cancellation, replay, concurrent retries, database-write failure, unknown dispatch and ordinal-cache failures. Existing native handlers retain their behavior behind explicit review.",
+    "Uploaded metadata integration now prepares and approves before dispatch, and verifies the persisted description. Test-only telemetry adapters isolate span/source wiring; production execution always uses the server boundary.",
+    "Automatic code repair execution is removed. Dataset changes, edits and late responses invalidate frontend reviews. Receipts and job-request messages distinguish a native dispatch from downstream execution.",
+    "Initial full regression retained one legacy integration assertion expecting execution without the newly required approval. Corrected integration verifies the approved flow and persisted data; the entire unchanged marked suite passed.",
+    "Two browser diagnostics retained incorrect selectors (badge checkmark and relative receipt scope). The real mutation/expanded receipt were visible in both; corrected selectors assert keyboard dispatch, opened details and persisted description. No requirement, timeout, dataset, rounds, skip or coverage gate was weakened.",
+    "Six full-suite skips require a live model engine, local .env or four optional installed SDK checks. Screenshots of the actual review and receipt were visually inspected. Disposable credentials are absent from retained logs.",
+    "Final UI regression covers cancellation uncertainty, superseded preparation and changing away from and back to a dataset. Initial failures identified missing ngOnInit in two test fixtures; final tests install actual dataset subscriptions and all 550 pass."
+  ],
+  "limits": [
+    "One native typed dispatch only: most actions hand settings to the frontend. Its receipt does not grant or prove a downstream job, immutable execution, independent review, human organizational approval or customer acceptance.",
+    "REST users retain installation-wide dataset access; project developer/reviewer/admin authorization, customer egress/retention and policy packages remain open. Actor-bound approvals are not project isolation.",
+    "Recorded-context freshness is not a transaction/snapshot across mutable form state, concurrent pipeline writers, filesystem, Redis and database. Full input/partition/environment authority and resource budgets remain required.",
+    "Trusted controller/database/filesystem; SHA-256 envelopes are not independent signatures or protection against privileged local/database mutation. Database-result authenticity and distributed/restore guarantees are outside this packet.",
+    "Unknown dispatch blocks new preparation for that dataset. No automatic reconcile/reset/retry protocol exists. Completion/replay idempotence covers native dispatch only, not browser-event adoption or downstream publication.",
+    "Expert Python remains blocked; exact expert-code/input/environment approvals, gVisor isolation, transformations/scorers, replay and scoring are still mandatory unfinished D08 requirements.",
+    "Keyboard workflow uses a synthetic provider proposal and real backend; no live model-quality or comprehensive screen-reader/accessibility qualification is claimed.",
+    "Native Linux/production deployment, full recovery, independent clean reproduction, agentic D18-D26, technical release and customer/value gates remain open."
+  ],
+  "preservation": {
+    "preceding_packets_unchanged": 13,
+    "item_statuses_unchanged": true,
+    "planned_D18_D26_unchanged": true,
+    "canonical_queue_unchanged": true,
+    "release_customer_gates_unchanged": true,
+    "primary_tracked_edit_hashes_preserved": 11
+  },
+  "github_ci": "Separate observation after push; not inferred from local qualification."
+}

@@ -515,7 +515,7 @@ class TestAIActionExecuteWorkflow:
         assert api_client.get(f'/api/declaration/{file_id}/data_dictionary/').data == before_dict
 
     def test_upload_then_update_metadata(self, api_client, _use_tmp_media):
-        """Upload CSV → update metadata description via AI action."""
+        """Upload CSV → review/approve exact metadata action → persist description."""
         df = pd.DataFrame({'Age': [25, 30], 'Target': [0, 1]})
         buf = io.BytesIO()
         df.to_csv(buf, index=False)
@@ -526,21 +526,25 @@ class TestAIActionExecuteWorkflow:
         assert resp.status_code == 201
         file_id = resp.data['id']
 
-        resp = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': file_id,
-                'action_type': 'update_metadata',
-                'payload': {
-                    'updates': [{'column': 'Age', 'field': 'Feature_Description', 'value': 'Customer age in years'}],
-                },
-            }),
-            content_type='application/json',
-        )
+        action = {
+            'file_id': file_id,
+            'action_type': 'update_metadata',
+            'payload': {
+                'updates': [{'column': 'Age', 'field': 'Feature_Description', 'value': 'Customer age in years'}],
+            },
+        }
+        prepared = api_client.post('/api/ai-assistant/prepare-action/', action, format='json')
+        assert prepared.status_code == 200, prepared.data
+        selector = {key: prepared.data[key] for key in ['approval_id', 'proposal_sha256']}
+        assert api_client.post('/api/ai-assistant/approve-action/', selector, format='json').status_code == 200
+        resp = api_client.post('/api/ai-assistant/execute-action/', {**action, **selector}, format='json')
         assert resp.status_code == 200
         assert resp.data['status'] == 'success'
         assert len(resp.data['applied']) == 1
         assert resp.data['applied'][0]['value'] == 'Customer age in years'
+        assert resp.data['approval_receipt']['state'] == 'completed'
+        dictionary = api_client.get(f'/api/declaration/{file_id}/data_dictionary/').data
+        assert next(row for row in dictionary if row['Feature_Name'] == 'Age')['Feature_Description'] == 'Customer age in years'
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { FormsModule } from '@angular/forms';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AiChatPanelComponent } from './ai-chat-panel.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
 import { DataService } from '../services/data.service';
@@ -787,7 +787,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Run preprocessing with low-variance pruning',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Data purifier started');
+      expect(lastMsg.content).toContain('Data purifier request sent to the pipeline');
       expect(lastMsg.content).toContain('Run preprocessing with low-variance pruning');
       expect(lastMsg.content).toContain('1');
       expect(lastMsg.content).toContain('random');
@@ -1030,7 +1030,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Apply encoding plan with native library',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Apply encoding started');
+      expect(lastMsg.content).toContain('Encoding request sent to the pipeline');
       expect(lastMsg.content).toContain('Apply encoding plan with native library');
       expect(lastMsg.content).toContain('use_native');
     });
@@ -1082,7 +1082,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Start modeling with XGBoost',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Modeling started');
+      expect(lastMsg.content).toContain('Modeling request sent to the pipeline');
       expect(lastMsg.content).toContain('Start modeling with XGBoost');
       expect(lastMsg.content).toContain('xgboost');
       expect(lastMsg.content).toContain('use_native');
@@ -1243,13 +1243,15 @@ describe('AiChatPanelComponent', () => {
     it('should persist chat_span_id from /chat/ response onto the message', () => {
       // Mirror the send-flow: stub sendAiChat to return a chat_span_id,
       // verify updateLastMessage stamped it on the assistant message.
-      spyOn(dataService, 'sendAiChat').and.returnValue(of({
-        message: 'I prepared an action.',
-        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
-        chat_span_id: 'chat-span-abc123',
-        chat_trace_id: 'trace-abc123',
-        chat_session_id: 'declarai-file-1',
-      }));
+      spyOn(dataService, 'sendAiChat').and.returnValue(
+        of({
+          message: 'I prepared an action.',
+          actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+          chat_span_id: 'chat-span-abc123',
+          chat_trace_id: 'trace-abc123',
+          chat_session_id: 'declarai-file-1',
+        }),
+      );
       spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
 
       aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
@@ -1266,10 +1268,12 @@ describe('AiChatPanelComponent', () => {
     it('should leave chatSpanId undefined when /chat/ response omits the field', () => {
       // Pre-v2.38.0 backend (or SDK-disabled) — no chat_span_id in response.
       // Frontend must not fabricate one; subsequent applyAction skips link.
-      spyOn(dataService, 'sendAiChat').and.returnValue(of({
-        message: 'I prepared an action.',
-        actions: [{ type: 'update_notes', payload: { description: 'note' } }],
-      }));
+      spyOn(dataService, 'sendAiChat').and.returnValue(
+        of({
+          message: 'I prepared an action.',
+          actions: [{ type: 'update_notes', payload: { description: 'note' } }],
+        }),
+      );
       spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [], default: 'gpt-5.5' }));
 
       aiService.addMessage({ role: 'user', content: 'hi', timestamp: new Date() });
@@ -1281,226 +1285,242 @@ describe('AiChatPanelComponent', () => {
       expect(last.chatSpanId).toBeUndefined();
     });
 
-    it('applyAction should forward chatSpanId as parentSpanId to executeAiAction', () => {
-      // Seed an assistant message that already has a chatSpanId
-      // (mimicking the post-send state from the previous spec).
+    function preparedNote(span = 'chat-span-abc123') {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [] }));
+      fixture.detectChanges(); // Install the actual dataset-change subscription.
       const action: any = {
         type: 'update_notes',
-        payload: { description: 'note' },
+        payload: { content: 'Reviewed note' },
         applied: false,
       };
       aiService.addMessage({
         role: 'assistant',
-        content: 'I prepared an action.',
+        content: 'Proposed note',
         timestamp: new Date(),
         actions: [action],
-        chatSpanId: 'chat-span-abc123',
+        chatSpanId: span,
       });
-      const messageIndex = aiService.getMessages().length - 1;
-
-      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
-        of({ status: 'success', description: 'ok' })
-      );
-
-      component.applyAction(messageIndex, 0, action);
-
-      // 4th arg (parentSpanId) MUST be the message's chatSpanId.
-      expect(execSpy).toHaveBeenCalledWith(
-        1,                            // fileId
-        'update_notes',               // actionType
-        { description: 'note' },      // payload
-        'chat-span-abc123',           // parentSpanId — the link
-      );
-    });
-
-    it('applyAction should pass undefined parentSpanId when message lacks chatSpanId', () => {
-      // Legacy v2.25.0..v2.37.0 message with no chatSpanId — applyAction
-      // must call executeAiAction with parentSpanId omitted/undefined so
-      // dataService skips the parent_span_id POST field (legacy semantics).
-      const action: any = {
-        type: 'update_notes',
-        payload: { description: 'note' },
-        applied: false,
+      const record = {
+        approval_id: 'proposal-1',
+        proposal_sha256: 'digest-1',
+        file_id: 1,
+        action_type: action.type,
+        payload: JSON.parse(JSON.stringify(action.payload)),
+        source: 'panel',
+        parent_span_id: span,
+        expires_at: '2026-10-09T07:00:00Z',
+        budget: { max_collection_items: 100 },
       };
-      aiService.addMessage({
-        role: 'assistant',
-        content: 'I prepared an action.',
-        timestamp: new Date(),
-        actions: [action],
-        // No chatSpanId — pre-v2.38.0 message shape.
-      });
-      const messageIndex = aiService.getMessages().length - 1;
+      const prepareSpy = spyOn(dataService, 'prepareAiAction').and.returnValue(of(record));
+      return { action, record, prepareSpy, index: aiService.getMessages().length - 1 };
+    }
 
-      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValue(
-        of({ status: 'success' })
-      );
-
-      component.applyAction(messageIndex, 0, action);
-
-      expect(execSpy).toHaveBeenCalledWith(
+    it('prepares the proposed action and chat link without approval or dispatch', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const approve = spyOn(dataService, 'approveAiAction');
+      const execute = spyOn(dataService, 'executeAiAction');
+      component.applyAction(index, 0, action);
+      expect(prepareSpy).toHaveBeenCalledWith(
         1,
         'update_notes',
-        { description: 'note' },
-        undefined,                    // ← key assertion: no link forwarded
+        action.payload,
+        'chat-span-abc123',
       );
+      expect(component.preparedAction?.record).toEqual(record);
+      expect(approve).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+      expect(action.applied).toBeFalse();
     });
 
-    it('auto-applies a corrected execute_code action after the first Apply fails', () => {
-      const action: any = {
-        type: 'execute_code',
-        payload: { code: "df['bad'] = missing_name" },
-        applied: false,
-      };
-      aiService.addMessage({
-        role: 'assistant',
-        content: 'I prepared code.',
-        timestamp: new Date(),
-        actions: [action],
-        chatSpanId: 'original-chat-span',
-      });
-      const messageIndex = aiService.getMessages().length - 1;
-
-      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
-        throwError(() => ({ error: { error: 'NameError: missing_name' } })),
+    it('approves and dispatches only the exact server-prepared action after confirmation', () => {
+      const { action, record, index } = preparedNote();
+      const selector = { approval_id: record.approval_id, proposal_sha256: record.proposal_sha256 };
+      const approve = spyOn(dataService, 'approveAiAction').and.returnValue(
+        of({ state: 'approved' }),
+      );
+      const execute = spyOn(dataService, 'executeAiAction').and.returnValue(
         of({
           status: 'success',
-          description: 'fixed',
-          changes: { columns_added: ['fixed'], columns_removed: [], rows_before: 2, rows_after: 2 },
-          preview: { total_columns: 3, total_rows: 2 },
+          action_type: 'update_notes',
+          note_action: 'add',
+          position: 'after_data_preview',
+          content: 'Reviewed note',
+          approval_receipt: { state: 'completed' },
         }),
       );
-      spyOn(dataService, 'sendAiChat').and.returnValue(of({
-        message: 'I fixed the variable reference.',
-        actions: [{ type: 'execute_code', payload: { code: "df['fixed'] = 1" } }],
-        chat_span_id: 'correction-chat-span',
-      }));
-
-      component.applyAction(messageIndex, 0, action);
-
-      expect(execSpy.calls.count()).toBe(2);
-      expect(execSpy.calls.argsFor(0)).toEqual([
+      component.applyAction(index, 0, action);
+      component.approvePreparedAction();
+      expect(approve).toHaveBeenCalledWith(selector);
+      expect(execute).toHaveBeenCalledWith(
         1,
-        'execute_code',
-        { code: "df['bad'] = missing_name" },
-        'original-chat-span',
-      ]);
-      expect(execSpy.calls.argsFor(1)).toEqual([
-        1,
-        'execute_code',
-        { code: "df['fixed'] = 1" },
-        'correction-chat-span',
-      ]);
-      const correctionMsg = aiService.getMessages().find(m =>
-        m.role === 'assistant' && m.content.includes('Applying the corrected operation now')
+        'update_notes',
+        record.payload,
+        'chat-span-abc123',
+        'panel',
+        selector,
       );
-      expect(correctionMsg).toBeTruthy();
-      expect(correctionMsg?.actions).toBeUndefined();
-      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeTrue();
-      expect(component.actionSuccess).toBe('Code executed successfully.');
-      expect(component.actionError).toBeNull();
+      expect(component.preparedAction).toBeNull();
+      expect(component.actionReceipt.state).toBe('completed');
+      expect(aiService.getMessages()[index].actions?.[0].applied).toBeTrue();
     });
 
-    it('iteratively auto-fixes consecutive execute_code failures up to success', () => {
-      const action: any = {
-        type: 'execute_code',
-        payload: { code: "df['x'] = missing_one" },
-        applied: false,
-      };
-      aiService.addMessage({
-        role: 'assistant',
-        content: 'I prepared code.',
-        timestamp: new Date(),
-        actions: [action],
-        chatSpanId: 'original-chat-span',
-      });
-      const messageIndex = aiService.getMessages().length - 1;
-
-      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
-        throwError(() => ({ error: { error: 'NameError: missing_one' } })),
-        throwError(() => ({ error: { error: 'KeyError: Var_404' } })),
-        of({
-          status: 'success',
-          description: 'fixed',
-          changes: { columns_added: ['x'], columns_removed: [], rows_before: 2, rows_after: 2 },
-          preview: { total_columns: 3, total_rows: 2 },
-        }),
-      );
-      const chatSpy = spyOn(dataService, 'sendAiChat').and.returnValues(
-        of({
-          message: 'First correction.',
-          actions: [{ type: 'execute_code', payload: { code: "df['x'] = df['Var_404']" } }],
-          chat_span_id: 'correction-span-1',
-        }),
-        of({
-          message: 'Second correction.',
-          actions: [{ type: 'execute_code', payload: { code: "df['x'] = 1" } }],
-          chat_span_id: 'correction-span-2',
-        }),
-      );
-
-      component.applyAction(messageIndex, 0, action);
-
-      expect(chatSpy.calls.count()).toBe(2);
-      expect(execSpy.calls.count()).toBe(3);
-      expect(execSpy.calls.argsFor(2)).toEqual([
-        1,
-        'execute_code',
-        { code: "df['x'] = 1" },
-        'correction-span-2',
-      ]);
-      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeTrue();
-      expect(component.actionSuccess).toBe('Code executed successfully.');
-      expect(component.actionError).toBeNull();
+    it('keeps missing chat linkage optional in the prepared request', () => {
+      const { action, prepareSpy, index } = preparedNote(undefined as any);
+      aiService.getMessages()[index].chatSpanId = undefined;
+      component.applyAction(index, 0, action);
+      expect(prepareSpy).toHaveBeenCalledWith(1, 'update_notes', action.payload, undefined);
     });
 
-    it('stops automatic execute_code correction after the retry cap', () => {
+    it('cancels a pending review without dispatching', () => {
+      const { action, record, index } = preparedNote();
+      const cancel = spyOn(dataService, 'cancelAiAction').and.returnValue(
+        of({ state: 'cancelled' }),
+      );
+      const execute = spyOn(dataService, 'executeAiAction');
+      component.applyAction(index, 0, action);
+      component.cancelPreparedAction();
+      expect(cancel).toHaveBeenCalledWith({
+        approval_id: record.approval_id,
+        proposal_sha256: record.proposal_sha256,
+      });
+      expect(component.preparedAction).toBeNull();
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('shows uncertainty when cancellation cannot be recorded', () => {
+      const { action, index } = preparedNote();
+      spyOn(dataService, 'cancelAiAction').and.returnValue(throwError(() => new Error('unavailable')));
+      const execute = spyOn(dataService, 'executeAiAction');
+      component.applyAction(index, 0, action);
+      component.cancelPreparedAction();
+      expect(component.actionReceipt.state).toBe('cancellation_unconfirmed');
+      expect(component.actionError).toContain('Cancellation could not be confirmed');
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('requires fresh review after a payload edit', () => {
+      const { action, index } = preparedNote();
+      spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      const approve = spyOn(dataService, 'approveAiAction');
+      component.applyAction(index, 0, action);
+      action.editedPayload = { content: 'Changed after review' };
+      component.approvePreparedAction();
+      expect(approve).not.toHaveBeenCalled();
+      expect(component.preparedAction).toBeNull();
+      expect(component.actionError).toContain('Review a fresh proposal');
+    });
+
+    it('clears a review when the dataset changes', () => {
+      const { action, index } = preparedNote();
+      const cancel = spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      sharedService.setCurrentFileId(2);
+      component.approvePreparedAction();
+      expect(component.preparedAction).toBeNull();
+      expect(cancel).toHaveBeenCalled();
+    });
+
+    it('cancels a late prepared response after the dataset changes', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const response = new Subject<any>();
+      prepareSpy.and.returnValue(response);
+      const cancel = spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      sharedService.setCurrentFileId(2);
+      response.next(record);
+      response.complete();
+      expect(component.preparedAction).toBeNull();
+      expect(cancel).toHaveBeenCalledWith({
+        approval_id: record.approval_id,
+        proposal_sha256: record.proposal_sha256,
+      });
+      expect(component.actionApplying).toBeFalse();
+    });
+
+    it('keeps the newer review busy when an older prepared response arrives', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const oldResponse = new Subject<any>();
+      const freshResponse = new Subject<any>();
+      prepareSpy.and.returnValues(oldResponse, freshResponse);
+      spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      component.cancelPreparedAction();
+      component.applyAction(index, 0, action);
+      oldResponse.next(record);
+      oldResponse.complete();
+      expect(component.actionApplying).toBeTrue();
+      expect(component.preparedAction).toBeNull();
+      freshResponse.next({ ...record, approval_id: 'fresh-proposal' });
+      freshResponse.complete();
+      expect(component.actionApplying).toBeFalse();
+      expect(component.preparedAction?.record.approval_id).toBe('fresh-proposal');
+    });
+
+    it('cancels pending preparation even if the dataset returns to its earlier selection', () => {
+      const { action, record, prepareSpy, index } = preparedNote();
+      const response = new Subject<any>();
+      prepareSpy.and.returnValue(response);
+      const cancel = spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      component.applyAction(index, 0, action);
+      sharedService.setCurrentFileId(2);
+      sharedService.setCurrentFileId(1);
+      response.next(record);
+      response.complete();
+      expect(component.preparedAction).toBeNull();
+      expect(cancel).toHaveBeenCalled();
+      expect(component.actionApplying).toBeFalse();
+    });
+
+    it('never dispatches a late approval after the dataset changes', () => {
+      const { action, index } = preparedNote();
+      const approval = new Subject<any>();
+      spyOn(dataService, 'approveAiAction').and.returnValue(approval);
+      spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      const execute = spyOn(dataService, 'executeAiAction');
+      component.applyAction(index, 0, action);
+      component.approvePreparedAction();
+      sharedService.setCurrentFileId(2);
+      approval.next({ state: 'approved' });
+      approval.complete();
+      expect(execute).not.toHaveBeenCalled();
+      expect(component.actionApplying).toBeFalse();
+      expect(action.applied).toBeFalse();
+    });
+
+    it('does not request or execute automatic repairs after expert isolation denial', () => {
       const action: any = {
         type: 'execute_code',
-        payload: { code: "df['x'] = still_bad" },
+        payload: { code: "df['x'] = 1" },
         applied: false,
       };
-      aiService.addMessage({
-        role: 'assistant',
-        content: 'I prepared code.',
-        timestamp: new Date(),
-        actions: [action],
-        chatSpanId: 'original-chat-span',
-      });
-      const messageIndex = aiService.getMessages().length - 1;
-
-      const execSpy = spyOn(dataService, 'executeAiAction').and.returnValues(
-        throwError(() => ({ error: { error: 'NameError: still_bad' } })),
-        throwError(() => ({ error: { error: 'NameError: still_bad_1' } })),
-        throwError(() => ({ error: { error: 'NameError: still_bad_2' } })),
-        throwError(() => ({ error: { error: 'NameError: still_bad_3' } })),
+      const prepare = spyOn(dataService, 'prepareAiAction').and.returnValue(
+        throwError(() => ({ error: { error: 'Sandboxed Python is unavailable' } })),
       );
-      const chatSpy = spyOn(dataService, 'sendAiChat').and.returnValues(
-        of({
-          message: 'Correction 1.',
-          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_1" } }],
-          chat_span_id: 'correction-span-1',
-        }),
-        of({
-          message: 'Correction 2.',
-          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_2" } }],
-          chat_span_id: 'correction-span-2',
-        }),
-        of({
-          message: 'Correction 3.',
-          actions: [{ type: 'execute_code', payload: { code: "df['x'] = still_bad_3" } }],
-          chat_span_id: 'correction-span-3',
-        }),
+      const execute = spyOn(dataService, 'executeAiAction');
+      const chat = spyOn(dataService, 'sendAiChat');
+      component.applyAction(0, 0, action);
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(execute).not.toHaveBeenCalled();
+      expect(chat).not.toHaveBeenCalled();
+      expect(action.applied).toBeFalse();
+      expect(component.actionError).toContain('Sandboxed Python');
+    });
+
+    it('retains an uncertain receipt and never repairs or repeats a failed dispatch', () => {
+      const { action, index } = preparedNote();
+      spyOn(dataService, 'approveAiAction').and.returnValue(of({ state: 'approved' }));
+      spyOn(dataService, 'cancelAiAction').and.returnValue(of({}));
+      spyOn(dataService, 'getAiActionApproval').and.returnValue(of({ state: 'dispatching' }));
+      const execute = spyOn(dataService, 'executeAiAction').and.returnValue(
+        throwError(() => ({ error: { error: 'Completion unavailable' } })),
       );
-
-      component.applyAction(messageIndex, 0, action);
-
-      expect(chatSpy.calls.count()).toBe(3);
-      expect(execSpy.calls.count()).toBe(4);
-      expect(aiService.getMessages()[messageIndex].actions?.[0].applied).toBeFalse();
-      const finalMsg = aiService.getMessages().slice(-1)[0];
-      expect(finalMsg.content).toContain('I tried 3 automatic correction attempts');
-      expect(finalMsg.content).toContain('NameError: still_bad_3');
-      expect(component.actionError).toContain('NameError: still_bad_3');
+      const chat = spyOn(dataService, 'sendAiChat');
+      component.applyAction(index, 0, action);
+      component.approvePreparedAction();
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(chat).not.toHaveBeenCalled();
+      expect(component.actionReceipt.state).toBe('dispatching');
+      expect(action.applied).toBeFalse();
     });
   });
 
@@ -1737,7 +1757,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Tune depth + learning rate',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Hyperparameter tuning started');
+      expect(lastMsg.content).toContain('Tuning request sent to the pipeline');
       expect(lastMsg.content).toContain('60');          // n_iter
       expect(lastMsg.content).toContain('n_jobs');       // compute-power label
       expect(lastMsg.content).toContain('max_depth');    // enabled param

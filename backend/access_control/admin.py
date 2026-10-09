@@ -45,3 +45,12 @@ class MCPAccessEventAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+from access_control.models import AssistantActionApproval
+
+
+@admin.register(AssistantActionApproval)
+class AssistantActionApprovalAdmin(MCPAccessEventAdmin):
+    list_display = ['prepared_at', 'actor', 'file_id', 'action_type', 'state', 'reason_code']
+    readonly_fields = [field.name for field in AssistantActionApproval._meta.fields]
