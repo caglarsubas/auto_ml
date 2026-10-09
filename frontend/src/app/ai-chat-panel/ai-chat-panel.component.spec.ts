@@ -1286,6 +1286,8 @@ describe('AiChatPanelComponent', () => {
     });
 
     function preparedNote(span = 'chat-span-abc123') {
+      spyOn(dataService, 'getAiModels').and.returnValue(of({ models: [] }));
+      fixture.detectChanges(); // Install the actual dataset-change subscription.
       const action: any = {
         type: 'update_notes',
         payload: { content: 'Reviewed note' },
