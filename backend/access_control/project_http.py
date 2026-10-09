@@ -276,6 +276,7 @@ class ProjectResponseMiddleware:
                 projects.register_artifact(
                     response["X-Export-Path"], file_id=scope.get("file_id"), project_id=scope["project_id"]
                 )
+            self.checkpoint(request)
             if response.streaming:
                 source = response.streaming_content
                 if response.is_async:

@@ -436,3 +436,16 @@ def test_published_native_execution_artifacts_have_explicit_project_owners(world
     assert json.loads(b"".join(response.streaming_content))["file_id"] == files[0].pk
     response.close()
     assert clients["outsider"].get("/media/" + relative).status_code == 403
+
+
+def test_revocation_during_export_inspection_withholds_the_final_response(world, monkeypatch):
+    a, _, users, clients, _, _ = world
+
+    def changed(request, response):
+        member = ProjectMembership.objects.get(actor=users["developer"], project=a)
+        member.active = False
+        member.save()
+
+    monkeypatch.setattr(ProjectResponseMiddleware, "check_evidence", staticmethod(changed))
+    response = clients["developer"].get("/api/projects/")
+    assert response.status_code == 403 and b'"name"' not in response.content
