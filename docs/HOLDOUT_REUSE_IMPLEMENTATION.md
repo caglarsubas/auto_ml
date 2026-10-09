@@ -59,8 +59,14 @@ for a recorded source/row identity. No historical access is inferred as certaint
 
 ## Qualification and limits
 
-Qualification results and source/report digests are recorded in the packet's
-qualification receipt after checks finish. Tests cover concurrent reservations,
+[Source and report digests](evidence/p10-qualification-2026-10-09.json) record
+1,570 backend tests, six explicit skips and 68.34% coverage; 537 frontend tests;
+and 19 authenticated browser/API checks. The 50% coverage and 15-skip gates,
+scientific test timeouts and compute/row budgets are unchanged. Lint, migration
+drift, dependency consistency, frontend production build, E2E TypeScript, scoped
+formatting and roadmap projection checks pass. Existing frontend lint/build
+warnings remain. [Rendered history](evidence/p10-holdout-review.png) records
+the bounded keyboard workflow, not complete accessibility acceptance. Tests cover concurrent reservations,
 changed candidates, positive-label reversal with fixed final rows, overlapping
 cohorts, stale binding, failed reads/retries, audit storage failure, actor deletion,
 unaligned outcomes, exact export bytes, tampered assessment rejection, legacy
