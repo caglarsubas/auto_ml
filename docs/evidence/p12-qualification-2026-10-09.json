@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P12",
+  "branch": "codex/mcp-scoped-identity",
+  "base_commit": "b854e8324b149cf0d149ee9e8b4494c13aeae7d3",
+  "qualified_source_commit": "af5f2c0cd491790432da055c7ed450d0ace0a6e3",
+  "scope": "Bounded local source qualification for MCP installation actor identity, explicit dataset grants, access evidence and blocked direct/network execution. Later commits are documentation/ledger/evidence only. D06/D08 and all release/customer gates remain partial/open.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/101",
+    "state": "MERGED",
+    "merge_commit": "b854e8324b149cf0d149ee9e8b4494c13aeae7d3",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37883327684",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p12:qualified",
+    "api_image_id": "sha256:fd7860e2f1eded6dac573c4c4d7a03eef14433942470a36d9f386ec3cf2ceca1",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "versions": {
+      "Django": "5.2.18",
+      "mcp": "1.30.0",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10",
+      "node": "v24.16.0",
+      "npm": "11.13.0"
+    },
+    "dependency_baseline": "Unchanged public core requirements/frontend lock; no optional private SDK. Disposable SQLite/API/Redis and loopback preview; telemetry disabled, blank provider key and unreachable model endpoint."
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, Ruff, migration drift and pip check",
+      "status": "passed",
+      "report": "test-reports/p12/backend-final.log",
+      "passed": 1624,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 144.72,
+      "combined_statement_branch_coverage_percent": 68.8
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "skipped": 6,
+      "budget": 15,
+      "report": "test-reports/p12/skip-budget.log"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "passed": 540,
+      "report": "test-reports/p12/frontend-unit.log"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "errors": 0,
+      "existing_warnings": 158,
+      "report": "test-reports/p12/frontend-lint.log"
+    },
+    {
+      "name": "Production frontend build",
+      "status": "passed",
+      "report": "test-reports/p12/frontend-build.log"
+    },
+    {
+      "name": "Governed E2E type check",
+      "status": "passed",
+      "report": "test-reports/p12/e2e-types.log"
+    },
+    {
+      "name": "Governed browser/authenticated API checks",
+      "status": "passed",
+      "passed": 19,
+      "duration_seconds": 15.0,
+      "report": "test-reports/p12/browser.log"
+    },
+    {
+      "name": "Actual MCP SDK stdio operator workflow",
+      "status": "passed",
+      "report": "test-reports/p12/mcp-stdio-final.log",
+      "tools_registered": 29,
+      "access_events": 10,
+      "completed_events": 6,
+      "denied_events": 4,
+      "scenarios": [
+        "read granted dataset",
+        "deny ungranted cached data",
+        "deny read-only proposal",
+        "grant revision change",
+        "prepare candidate with receipt and no mutation authority",
+        "revoke live grant",
+        "deny deactivated actor with retained identity",
+        "block network/direct startup despite legacy flags",
+        "remove synthetic fixtures and retain actor/grant snapshots"
+      ]
+    },
+    {
+      "name": "Canonical ledger invariants/projection and prior-state preservation",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p12/ledger.log"
+    }
+  ],
+  "source_sha256": {
+    ".github/workflows/ci.yml": "37182352daf945f69edbc8571441146be1a35fe81cb0915db939b71dfe8f2e8e",
+    "backend/access_control/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/access_control/admin.py": "cc6f51a214c16b55ecbd7a0904befd95e7f35be0b89ea13e1bcaca6c03cd77d8",
+    "backend/access_control/apps.py": "3c1eb40d241966349715301c73f65b726feefa647755966ab703ac66b7d88e34",
+    "backend/access_control/authority.py": "9bec62f92bd162cce3c76211f7a563918f594880e6469d6aa35085da3e92e32f",
+    "backend/access_control/management/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/access_control/management/commands/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/access_control/management/commands/mcp_dataset_grant.py": "3538c939da043c4746b19d8c5dec3e3a912ba4c9e8ab243b256038e3ff216db0",
+    "backend/access_control/migrations/0001_initial.py": "5123f110540af45cc5b886d8e6a44c4cf5e3bea03c4025ee7da1f807291349cc",
+    "backend/access_control/migrations/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backend/access_control/models.py": "d1774422c5b717cfdf1a7b03d629ef044d0ff729fc900cb1a3bb54052deca7b1",
+    "backend/ai_assistant/management/commands/run_mcp_server.py": "1782bb5c72ccdc767ebc38cf5817324854379e20b050aae7fc2ccfc4da62e6e4",
+    "backend/ai_assistant/mcp_server/actions.py": "bcefec96a75a185c1406c29ccf557189deeda187f7b8ebf12e99c3def7533717",
+    "backend/ai_assistant/mcp_server/auth.py": "32055f9e6161e682050a555eed208ccf1dfaa049eb890247c8f5412d976770d6",
+    "backend/ai_assistant/mcp_server/registry.py": "91bbcc3a36aa008ac639e8fbcb0253deccea0532d4699cc4ee16afd479bff543",
+    "backend/ai_assistant/mcp_server/server.py": "653e31f65696d1274ab7929629296ab999ddba32518f5719fa99fd7ea19503d4",
+    "backend/backend/settings.py": "7f4fac83ad4b897502b7b500424506baf998778e9ccdf66d0ba3a78c5940e9f3",
+    "backend/conftest.py": "eb8072430a1b8ca6ff47d2707488c1ba7ff0452bbfc58df781abb05dab290140",
+    "backend/tests/test_mcp_server.py": "1e561023372e8bd30f06463046d1061fc2b90d82fa20cea1dc3734a51b5e5b81",
+    "backend/tests/test_prometa_bundle_runner.py": "804197cc02af8b55245dcabf7b9fa6dbc7e3efa62eecd68d5dea855a63655554",
+    "backend/tests/unit/test_mcp_access_boundary.py": "200fce934aca18c5ac4b76b95d2d36da4c505359fbb285fa5e830655b780b409",
+    "backend/tests/unit/test_mcp_auth_and_commands.py": "bc2936abd5d0790f290f8efc2707ef46b8718fce5b871863b6c8b8e95c145ec0",
+    "scripts/qualify_mcp_stdio.py": "3e9920529504c2f98fec0989e7f791905cb007e9b94408b98ca0c69b51621bc7"
+  },
+  "report_sha256": {
+    "test-reports/p12/backend-final.log": "7dd6614d726aa1f0526d02ce617052509457525d519489f2249123889ea44b72",
+    "test-reports/p12/backend-final.xml": "dec019bc22078890373287fd5b93b4c64c2a64217f2c9aadc0b6f4bdbb38a88e",
+    "test-reports/p12/backend-coverage-final.xml": "7918247493caef4d2b910029fb5f32f05fb431abbe8dca56c83d38082f880e59",
+    "test-reports/p12/frontend-unit.log": "0a17d7a0352ccc465d105c8bf08549f44ffddc6426888d731b7abc15efc6e133",
+    "test-reports/p12/frontend-lint.log": "2307ad7057a6065c9d57e214ebf5b7cb6116f2e9c62bfb1cdd6efc274ee7fbf0",
+    "test-reports/p12/frontend-build.log": "615d5efd078f40a5545063e7dfd0381612c4b722b5f439e74dfbb26f63d9ab45",
+    "test-reports/p12/e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p12/browser.log": "530e991b623dded1285363df551074110d3d2a60182654164773362da75699d1",
+    "test-reports/p12/mcp-stdio-final.log": "24aefe75aae59b58cf3194225008c62a382806291420f61205e891e402ecca10",
+    "test-reports/p12/api-build-final.log": "03fdadff82d32ceac8b31f158970ee879cce19c357ab0fbca2c4b153015ca5d4",
+    "test-reports/p12/api-qualified.log": "a38e4c03a1cea95949b8ca8435f18f15845801ff4091b74172d70711a60af60b",
+    "test-reports/p12/skip-budget.log": "24aa938076fed8419b4e52b35f47d7707a1ae365b69109c2b78d66818192195d",
+    "test-reports/p12/ledger.log": "77503a4821e5f3fc5819ea78bbb7bc90f809705e794031ef03391fced51cbf43"
+  },
+  "qualification_observations": [
+    "Initial focused SDK calls exposed synchronous Django ORM execution on the FastMCP async loop; handlers were moved to database threads without disabling async safety. Focused checks then passed 72 tests.",
+    "The first full marked suite passed 1624 tests. The actual stdio workflow then found that a denied inactive actor call omitted its known identity; attribution was repaired and the final full suite and actual protocol workflow passed.",
+    "Regression coverage includes grant/scope revocation during reads, audit reservation/completion failure, invalid identifiers, administrator HTTP permissions, atomic CLI/admin rollback, fabricated approvals and blocked SDK network constructors.",
+    "The real protocol qualification now runs in the existing disposable CI browser/API job. Native data, round, timeout, assertion, skip and coverage budgets were preserved."
+  ],
+  "limits": [
+    "Installation-controlled stdio identity is not authenticated per-client remote identity; shared local hosts share the configured actor. HTTP/SSE transports are blocked.",
+    "MCP grants do not supply browser/REST project authorization, reviewer roles or a common telemetry/embedding/inference egress policy.",
+    "Proposals and signed bundles confer no exact action approval; direct MCP mutation and expert Python remain blocked pending their required authority/isolation.",
+    "Database audit is not cryptographically signed or immutable against the database administrator; retention, distributed recovery, PostgreSQL deployment and threat-model qualification remain open.",
+    "Completion is recorded before output release, not as a receipt of delivery. In-flight revocation is rechecked before completion; already delivered data cannot be recalled.",
+    "D18-D26 remain planned; prior packets, canonical queue and release/customer/value gates are preserved."
+  ],
+  "workspace_preservation": {
+    "primary": "/Users/caglarsubasi/Desktop/prometa/pocs/auto-ml",
+    "existing_tracked_edits_preserved": 11,
+    "snapshot": "/tmp/declarai-p12-preserved-workspace.json",
+    "scope": "Managed worktree and disposable test services only. Primary configuration/running stack preserved; per-command hooks disabled because they target primary containers. Equivalent independent checks passed; persistent Git config unchanged."
+  }
+}

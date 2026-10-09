@@ -648,175 +648,54 @@ This preserves the platform's current safety model while making the same tool su
 
 ## Implemented Server
 
-The repository includes a FastMCP-based server under:
+The FastMCP server lives in `backend/ai_assistant/mcp_server/`. P12 supports
+**local stdio reads and reviewable proposals** with a named active installation
+actor and explicit per-dataset grants. See [operator setup and access evidence](MCP_ACCESS_IMPLEMENTATION.md).
 
-```text
-backend/ai_assistant/mcp_server/
-```
-
-Run it from the backend directory with stdio transport:
+After migrations, an installation administrator creates a dedicated service
+account and grants an existing dataset through the superuser admin interface
+or the trusted local CLI:
 
 ```bash
+cd backend
+python manage.py mcp_dataset_grant --actor local-mcp-developer --file-id 42 --role prepare
+export DECLARAI_MCP_ACTOR_USER_ID=123
+export DECLARAI_MCP_SCOPES=declarai.pipeline.read,declarai.action.prepare
 python manage.py run_mcp_server
 ```
 
-Run it as a local Streamable HTTP server:
+The IDs and account are examples. No account, superuser or existing dataset
+receives implicit MCP access. A `read` grant permits inspection; `prepare`
+permits inspection and candidate actions. Process scopes further restrict both.
+The local host controls the environment binding; it is not remote authentication.
 
-```bash
-python manage.py run_mcp_server --transport streamable-http --host 127.0.0.1 --port 8000
-```
+The server registers `declarai.get_*`, `declarai.invoke_skill`,
+`declarai.get_skill_file` and `declarai.prepare.*`. Tool annotations describe
+reads/proposals as read-only and non-destructive. `declarai.get_mcp_tool_catalog`
+and `Tool._meta` publish version `declarai-mcp-tools-v2`, required scopes,
+identity/grant requirements, risk and execution availability. Catalog access
+requires the actor and read scope; dataset tools also require their dataset grant.
 
-MCP Inspector can connect to:
+A successful proposal returns the action block, actor/grant access receipt and
+`execution_available=false`. It confers no execution authority. Direct tools are
+not registered. `--direct-actions`, arbitrary `approval_id` strings,
+`DECLARAI_MCP_ENABLE_DIRECT_ACTIONS` and `DECLARAI_MCP_REQUIRE_APPROVAL=false`
+cannot enable mutations. Expert code remains blocked pending isolated execution.
 
-```text
-http://127.0.0.1:8000/mcp
-```
+Network transport and the SDK HTTP/SSE app constructors are disabled until
+per-client authentication and authorization exist. Earlier HTTP and public
+Prometa endpoint examples are unsupported. Local Prometa bundle execution uses
+the same actor/grant boundary; signed bundle scopes and approvals do not replace
+installation authority. See [on-prem bundle runner](prometa-onprem-bundle-runner.md).
 
-The server registers:
+Before dispatch, the server records an attributable database access reservation.
+It rechecks actor, scope, grant revision/role/expiry and records completion before
+releasing output. Revocation or changed authority during a call withholds its
+result. Audit-store failure blocks output; unfinished reservations remain
+unconfirmed. Raw payloads and customer outputs are not stored in access events.
+Read-only audit inspection and grant revocation are available in Django admin.
 
-- `declarai.get_*` read tools for the existing assistant inspection surface.
-- `declarai.prepare.*` action-preparation tools that return reviewable DeclarAI action blocks without mutating state.
-- `declarai.action.*` direct-execution tools only when explicitly enabled.
-
-Default scopes:
-
-```text
-declarai.pipeline.read,declarai.action.prepare
-```
-
-Enable direct side-effecting action tools only for a controlled deployment:
-
-```bash
-export DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true
-export DECLARAI_MCP_SCOPES=declarai.pipeline.read,declarai.action.prepare,declarai.notes.write,declarai.metadata.write,declarai.config.write,declarai.dataset.write,declarai.pipeline.run
-python manage.py run_mcp_server --transport streamable-http --direct-actions
-```
-
-Direct action calls require `approval_id` by default. For trusted local-only automation, this can be disabled with:
-
-```bash
-export DECLARAI_MCP_REQUIRE_APPROVAL=false
-```
-
-### Prometa Binding Contract
-
-Current recommended shape for the POC is Prometa on-prem or same-network
-Prometa connected to an internal DeclarAI Streamable HTTP endpoint:
-
-```bash
-python manage.py run_mcp_server --transport streamable-http --host 0.0.0.0 --port 8000
-```
-
-For Prometa SaaS, put this endpoint behind public HTTPS with MCP-aware OAuth or
-an equivalent resource-server gateway before registering it in Prometa. The
-Django management command is the MCP application surface; production internet
-exposure should add TLS termination, Origin validation, token audience checks,
-and per-agent scopes at the ingress layer.
-
-The server publishes governance metadata in two ways:
-
-- every MCP `Tool` has `_meta` keys such as `declarai.required_scopes`,
-  `declarai.risk`, `declarai.side_effects`, `declarai.destructive`,
-  `declarai.approval_required`, and `declarai.guardrails_required`;
-- `declarai.get_mcp_tool_catalog` returns the same metadata as a structured
-  catalog for hosts that do not consume custom `Tool._meta`.
-
-Read-only tools:
-
-```text
-declarai.get_mcp_tool_catalog
-declarai.get_split_validation
-declarai.get_dq_summary
-declarai.get_feature_stats
-declarai.get_vif_decomposition
-declarai.get_encoding_plan
-declarai.get_selected_features
-declarai.get_shap_details
-declarai.get_sfs_results
-declarai.get_cv_results
-declarai.get_pipeline_notes
-declarai.get_pipeline_config
-declarai.get_purifier_options
-declarai.get_data_dictionary
-declarai.invoke_skill
-declarai.get_skill_file
-```
-
-Required scope for all read-only tools:
-
-```text
-declarai.pipeline.read
-```
-
-Prepare-action tools are review-only. They return DeclarAI action blocks but do
-not mutate data, metadata, config, notes, or pipeline state. They are annotated
-as read-only, non-destructive, and idempotent. Required scope for every
-`declarai.prepare.*` tool:
-
-```text
-declarai.action.prepare
-```
-
-Direct action tools are only registered when both are true:
-
-```bash
-export DECLARAI_MCP_ENABLE_DIRECT_ACTIONS=true
-python manage.py run_mcp_server --direct-actions
-```
-
-Direct action scope map:
-
-| MCP tool | Scope | Risk | Destructive | Mandatory guardrails |
-| --- | --- | --- | --- | --- |
-| `declarai.action.execute_code` | `declarai.dataset.write` | high | yes | human approval, risk gate, dataset backup |
-| `declarai.action.update_metadata` | `declarai.metadata.write` | medium | no | human approval |
-| `declarai.action.update_config` | `declarai.config.write` | medium | no | human approval |
-| `declarai.action.set_ordinal_ranking` | `declarai.metadata.write` | medium | no | human approval |
-| `declarai.action.start_sfs` | `declarai.pipeline.run` | high | no | human approval, risk gate |
-| `declarai.action.start_data_purifier` | `declarai.pipeline.run` | high | no | human approval, risk gate |
-| `declarai.action.update_purifier_selection` | `declarai.config.write` | medium | no | human approval |
-| `declarai.action.apply_encoding` | `declarai.pipeline.run` | high | no | human approval, risk gate |
-| `declarai.action.start_modeling` | `declarai.pipeline.run` | high | no | human approval, risk gate |
-| `declarai.action.start_hyperparameter` | `declarai.pipeline.run` | high | no | human approval, risk gate |
-| `declarai.action.update_notes` | `declarai.notes.write` | low | no | human approval |
-
-Annotation contract:
-
-- read tools: `readOnlyHint=true`, `destructiveHint=false`,
-  `idempotentHint=true`;
-- prepare tools: `readOnlyHint=true`, `destructiveHint=false`,
-  `idempotentHint=true`;
-- direct action tools: `readOnlyHint=false`, `idempotentHint=false`, and
-  `destructiveHint=true` only for `declarai.action.execute_code`.
-
-MCP observability spans:
-
-- `declarai-mcp-catalog` for governance catalog calls;
-- `declarai-mcp-read-tool` for read tool calls;
-- `declarai-mcp-prepare-action` for review-only action preparation;
-- `declarai-mcp-direct-action` for side-effecting action execution;
-
-The emitted attributes include `declarai.mcp.operation`,
-`declarai.mcp.tool_name`, `declarai.mcp.file_id`, `declarai.mcp.action_type`,
-`declarai.mcp.required_scopes`, `declarai.mcp.risk`,
-`declarai.mcp.side_effects`, `declarai.mcp.destructive`,
-`declarai.mcp.approval_id`, `declarai.mcp.ok`,
-`declarai.mcp.result_chars`, and elapsed timing attributes. MCP tool spans
-also stamp `gen_ai.tool.name` and `prometa.tool_name` for Prometa's
-tenant-neutral tool classification, while `mcp.tool.name` remains source
-metadata and `declarai.mcp.*` remains DeclarAI-owned producer metadata.
-
-Optional deployment labels can be supplied with:
-
-```bash
-export DECLARAI_MCP_CLIENT_ID=prometa-builder
-export DECLARAI_MCP_SESSION_ID=prometa-sync-session
-export DECLARAI_MCP_TRANSPORT=streamable-http
-```
-
-Settled runtime boundary: Prometa discovers, governs, signs, and observes;
-DeclarAI runs. Prometa does not call DeclarAI `tools/call`. DeclarAI executes
-approved MCP operations from the signed Prometa bundle next to the MCP host.
-The DeclarAI-owned on-prem runner foundation lives in
-`backend/ai_assistant/prometa_runner/` and is documented in
-[`docs/prometa-onprem-bundle-runner.md`](prometa-onprem-bundle-runner.md).
+Optional MCP observability spans and Prometa correlation remain supplementary
+to these database records. Common telemetry/data-egress policy, REST project
+roles, exact action approvals, sandbox qualification and release gates remain
+open; P12 does not make this a governed deployment.
