@@ -1244,6 +1244,14 @@ class ModelingStatusView(APIView):
     """Returns current modeling status and metrics for a file id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        execution_id = request.query_params.get('execution_id')
+        if execution_id:
+            try:
+                payload, _ = load_execution(execution_id, file_id)
+                return Response(payload)
+            except (ValueError, TypeError, OSError, KeyError):
+                return Response({'error': 'The exact saved execution is unavailable or invalid. Retain the saved evidence or select a verified execution.',
+                    'error_code': 'saved_execution_unavailable'}, status=409)
         modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
         status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
         if not os.path.exists(status_path):

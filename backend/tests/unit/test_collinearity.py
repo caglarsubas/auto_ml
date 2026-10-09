@@ -200,6 +200,18 @@ def test_real_session_csrf_exact_identity_and_missing_feature(archive, django_us
     assert client.post(path, {'file_id': 1, 'feature': 'x'}, format='json').status_code == 400
     assert client.post(path, {**payload, 'feature': 'absent'}, format='json').status_code == 404
     assert client.post(path, {**payload, 'file_id': 2}, format='json').status_code == 409
+    newer, _ = archive()
+    from pathlib import Path
+    from django.conf import settings
+    projection = Path(settings.MEDIA_ROOT) / 'modeling'
+    projection.mkdir(exist_ok=True)
+    (projection / '1_status.json').write_text(json.dumps({'execution_id': newer}))
+    saved_path = '/api/modeling/status/1/'
+    exact = client.get(saved_path, {'execution_id': execution})
+    assert exact.status_code == 200 and exact.json()['execution_id'] == execution
+    assert client.get(saved_path).json()['execution_id'] == newer
+    assert client.get(saved_path, {'execution_id': 'invalid'}).status_code == 409
+    assert client.get('/api/modeling/status/2/', {'execution_id': execution}).status_code == 409
 
 
 def test_assistant_does_not_render_unbounded_as_missing(monkeypatch):

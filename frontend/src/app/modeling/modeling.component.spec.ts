@@ -1933,4 +1933,18 @@ describe('ModelingComponent', () => {
       ).toEqual(['Category excluded', 'Constant']);
     });
   });
+  it('refreshes saved evidence by exact execution and ignores superseded restore responses', () => {
+    const result = new Subject<any>();
+    const request = spyOn(TestBed.inject(DataService), 'getModelingStatus').and.returnValue(result);
+    spyOn(component as any, 'pushModelingAiContext');
+    component.currentFileId = 1;
+    component.restoreFromCheckpoint({modelingStatus: {execution_id: 'run-a', model: {}}});
+    expect(request).toHaveBeenCalledWith(1, 'run-a');
+    result.next({job_status: 'completed', execution_id: 'latest-run', model: {}});
+    expect(component.modelingStatus.execution_id).toBe('run-a');
+    component.modelingStatus = {execution_id: 'run-b', model: {}};
+    result.next({job_status: 'completed', execution_id: 'run-a', model: {}});
+    expect(component.modelingStatus.execution_id).toBe('run-b');
+  });
+
 });

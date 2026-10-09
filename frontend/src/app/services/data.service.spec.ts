@@ -399,6 +399,12 @@ describe('DataService', () => {
     });
   });
 
+  it('requests an exact saved modeling execution', () => {
+    service.getModelingStatus(3, 'run-a').subscribe();
+    const req = httpMock.expectOne(`${apiUrl}modeling/status/3/?execution_id=run-a`);
+    req.flush({execution_id: 'run-a'});
+  });
+
   // ── SFS operations ──────────────────────────────────────────────────
   describe('SFS', () => {
     it('startSfs should POST with parameters', () => {

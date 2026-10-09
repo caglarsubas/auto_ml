@@ -1948,8 +1948,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // beeswarm_png, CV curves). Re-fetch the full data from the backend
       // status JSON so the interactive SHAP beeswarm renders on restore.
       if (this.currentFileId != null) {
-        this.dataService.getModelingStatus(this.currentFileId).subscribe({
+        const restoredFileId = this.currentFileId;
+        const restoredExecutionId = this.modelingStatus.execution_id;
+        this.dataService.getModelingStatus(restoredFileId, restoredExecutionId).subscribe({
           next: (full: any) => {
+            if (
+              this.currentFileId !== restoredFileId ||
+              this.modelingStatus?.execution_id !== restoredExecutionId ||
+              full?.execution_id !== restoredExecutionId
+            )
+              return;
             if (full && (full.job_status === 'completed' || full.status === 'completed')) {
               console.log(
                 '[Modeling] Re-fetched full modelingStatus from backend for SHAP beeswarm',
