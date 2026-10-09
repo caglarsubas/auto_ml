@@ -766,17 +766,20 @@ export class DataService {
     });
   }
 
-  getDeployReadiness(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}deployment/bundle/`, { params: { file_id: String(fileId) } }).pipe(
+  getDeployReadiness(fileId: number, executionId?: string, assessmentId?: string): Observable<any> {
+    const params: any = { file_id: String(fileId) };
+    if (executionId) params.execution_id = executionId;
+    if (assessmentId) params.assessment_id = assessmentId;
+    return this.http.get(`${this.apiUrl}deployment/bundle/`, { params }).pipe(
       catchError((error: any) => {
         console.error('Error getting deploy readiness:', error);
-        return throwError(() => new Error(error?.error?.error || error.message || 'Failed to get deploy readiness'));
+        return throwError(() => error);
       })
     );
   }
 
-  createDeploymentBundle(fileId: number): Observable<any> {
-    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId }).pipe(
+  createDeploymentBundle(fileId: number, executionId?: string, assessmentId?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId }).pipe(
       catchError((error: any) => {
         console.error('Error creating deployment bundle:', error);
         // Preserve structured 409 readiness payload for the deployment UI.
@@ -785,8 +788,8 @@ export class DataService {
     );
   }
 
-  getDeploymentStatus(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}deployment/status/${fileId}/`).pipe(
+  getDeploymentStatus(fileId: number, bundleId?: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}deployment/status/${fileId}/`, { params: bundleId ? { bundle_id: bundleId } : {} }).pipe(
       catchError((error: any) => {
         console.error('Error getting deployment status:', error);
         return throwError(() => new Error(error.message || 'Failed to get deployment status'));
@@ -794,10 +797,11 @@ export class DataService {
     );
   }
 
-  scoreDeployment(fileId: number, file: File): Observable<any> {
+  scoreDeployment(fileId: number, file: File, bundleId?: string): Observable<any> {
     const form = new FormData();
     form.append('file_id', String(fileId));
     form.append('file', file);
+    if (bundleId) form.append('bundle_id', bundleId);
     return this.http.post(`${this.apiUrl}deployment/score/`, form).pipe(
       catchError((error: any) => {
         console.error('Error scoring deployment batch:', error);
@@ -872,8 +876,8 @@ export class DataService {
     );
   }
 
-  downloadDeploymentPack(fileId: number): Observable<any> {
-    return this.http.post(`${this.apiUrl}deployment/pack/`, { file_id: fileId }).pipe(
+  downloadDeploymentPack(fileId: number, bundleId?: string): Observable<Blob> {
+    return this.http.post(`${this.apiUrl}deployment/pack/`, { file_id: fileId, bundle_id: bundleId }, { responseType: 'blob' }).pipe(
       catchError((err: any) => {
         console.error('Error downloading deployment pack:', err);
         return throwError(() => err);

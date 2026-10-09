@@ -126,7 +126,13 @@ for (const task of ['classification', 'regression'] as const) {
       expect(evidence.purifier_provenance.recipe_id).toBe(first.purifier_recipe_id);
       expect(evidence.purifier_provenance.fit_rows.length).toBeLessThan(200);
       expect(evidence.purifier_provenance.clip_bounds.x.hi).toBeLessThan(100);
-      const bundleResponse = await api.post('deployment/bundle/', { data: { file_id: fileId } });
+      const bundleResponse = await api.post('deployment/bundle/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          assessment_id: evidence.holdout_access_id,
+        },
+      });
       expect(bundleResponse.status()).toBe(200);
       const bundle = await bundleResponse.json();
       expect(bundle.manifest.input_stage).toBe('raw_unencoded');
@@ -138,7 +144,11 @@ for (const task of ['classification', 'regression'] as const) {
         data: { file_id: fileId, rows: scoreRows },
       });
       expect(full.status()).toBe(200);
-      const fullScores = (await full.json()).scores;
+      const scoringReceipt = await full.json();
+      expect(scoringReceipt.execution_id).toBe(run.execution_id);
+      expect(scoringReceipt.assessment_id).toBe(evidence.holdout_access_id);
+      expect(scoringReceipt.manifest_sha256).toBe(bundle.manifest_sha256);
+      const fullScores = scoringReceipt.scores;
       expect(fullScores.length).toBe(scoreRows.length);
       for (let index = 0; index < scoreRows.length; index++) {
         const part = await api.post('deployment/score/', {
@@ -367,6 +377,26 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(oldReplay.status()).toBe(200);
       expect((await oldReplay.json()).scores).toEqual(fullScores);
+      const blockedPackage = await api.get(`deployment/bundle/?file_id=${fileId}`);
+      expect(blockedPackage.status()).toBe(409);
+      const historical = await api.post('deployment/bundle/', {
+        data: {
+          file_id: fileId,
+          execution_id: run.execution_id,
+          assessment_id: evidence.holdout_access_id,
+        },
+      });
+      expect(historical.status()).toBe(200);
+      expect((await historical.json()).adoption_status).toBe('version_only_current_changed');
+      expect((await (await api.get(`deployment/status/${fileId}/`)).json()).bundle_id).toBe(
+        bundle.bundle_id,
+      );
+      const exactScoringPack = await api.post('deployment/pack/', {
+        data: { file_id: fileId, bundle_id: bundle.bundle_id },
+      });
+      expect(exactScoringPack.status()).toBe(200);
+      expect(exactScoringPack.headers()['x-declarai-bundle-id']).toBe(bundle.bundle_id);
+      expect(exactScoringPack.headers()['x-declarai-manifest-sha256']).toBe(bundle.manifest_sha256);
       if (task === 'classification') {
         const runName = `holdout-review-${fileId}`;
         const pipeline = await api.post('pipeline/create/', {
@@ -407,6 +437,23 @@ for (const task of ['classification', 'regression'] as const) {
           await expect(history.locator('details')).toHaveAttribute('open', '');
           await expect(history).toContainText('completed');
           await history.screenshot({ path: testInfo.outputPath('holdout-review.png') });
+          const deployment = page.locator('app-deployment');
+          await expect(deployment).toContainText('Review package and batch scoring');
+          await expect(deployment).toContainText('different execution');
+          await expect(
+            deployment.getByRole('button', { name: 'Create score bundle', exact: true }),
+          ).toBeDisabled();
+          const version = deployment.getByText('Package version and evidence', { exact: true });
+          await version.focus();
+          await version.press('Space');
+          await expect(deployment).toContainText(bundle.bundle_id);
+          const downloadEvent = page.waitForEvent('download');
+          await deployment
+            .getByRole('button', { name: 'Download selected bundle', exact: true })
+            .click();
+          const download = await downloadEvent;
+          expect(download.suggestedFilename()).toBe(`declarai-bundle-${bundle.bundle_id}.zip`);
+          await deployment.screenshot({ path: testInfo.outputPath('package-handoff.png') });
         } finally {
           expect((await api.delete(`pipeline/${pipelineId}/`)).status()).toBe(200);
         }

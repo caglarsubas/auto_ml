@@ -2366,12 +2366,12 @@
         <app-evaluation></app-evaluation>
       }
 
-      <!-- Deployment appears only after the outer-test evaluation has run -->
-      @if (evaluationCompleted) {
+      <!-- Show blocked package checks and older frozen bundles after modeling. -->
+      @if (modelingCompleted) {
         <div class="model-development-line"></div>
       }
       <div id="deployment-anchor"></div>
-      @if (evaluationCompleted) {
+      @if (modelingCompleted) {
         <app-deployment></app-deployment>
       }
 

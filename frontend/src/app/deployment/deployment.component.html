@@ -34,17 +34,24 @@
     <button
       mat-raised-button
       color="primary"
-      [disabled]="currentFileId == null || isBundling || (readiness != null && !isDeployReady)"
+      [disabled]="currentFileId == null || isBundling || !isDeployReady"
       (click)="createBundle()"
     >
       {{ isBundling ? 'Creating bundle…' : 'Create score bundle' }}
+    </button>
+    <button
+      mat-stroked-button
+      [disabled]="!bundle?.bundle_id || isDownloading"
+      (click)="downloadBundle()"
+    >
+      {{ isDownloading ? 'Downloading…' : 'Download selected bundle' }}
     </button>
     <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px">
       <span>Score CSV</span>
       <input
         type="file"
         accept=".csv,.xlsx,.xls"
-        [disabled]="!bundle || isScoring"
+        [disabled]="!bundle?.bundle_id || isScoring"
         (change)="onScoreFile($event)"
       />
     </label>
@@ -69,6 +76,20 @@
         <div>
           Path: <code>{{ bundle.bundle_path }}</code>
         </div>
+        <p>
+          Scoring and downloads use this frozen bundle. Later modeling or assessment does not
+          replace it.
+        </p>
+        @if (
+          bundle.manifest?.execution_id &&
+          readiness?.execution_id &&
+          bundle.manifest.execution_id !== readiness.execution_id
+        ) {
+          <p>
+            This bundle belongs to an earlier model. Create a new bundle to score the selected
+            model.
+          </p>
+        }
         @if (bundle.manifest) {
           <p>
             @if (bundle.manifest.input_stage === 'raw_unencoded') {
@@ -92,6 +113,19 @@
               </ul>
             </details>
           }
+          <details>
+            <summary>Package version and evidence</summary>
+            <p>
+              Bundle: {{ bundle.bundle_id }}<br />Model:
+              {{ bundle.manifest.execution_id || 'Historical, unverified' }}<br />Assessment:
+              {{ bundle.manifest.assessment_id || 'Historical, unverified' }}
+            </p>
+            <p>
+              Evidence: {{ bundle.manifest.evidence_status || 'Historical, unverified' }}.
+              Production use is not approved.
+            </p>
+            <p>Manifest SHA-256: {{ bundle.manifest_sha256 }}</p>
+          </details>
           <div>
             Features: {{ bundle.manifest.feature_names?.length || 0 }} · Categorical:
             {{ bundle.manifest.categorical_features?.length || 0 }} · Lineage:
@@ -111,6 +145,15 @@
           <span> (preview truncated)</span>
         }
       </div>
+      <details>
+        <summary>Scoring version receipt</summary>
+        <p>
+          Bundle: {{ scoreResult.bundle_id }}<br />Model:
+          {{ scoreResult.execution_id || 'Historical, unverified' }}<br />Assessment:
+          {{ scoreResult.assessment_id || 'Historical, unverified' }}
+        </p>
+        <p>Manifest SHA-256: {{ scoreResult.manifest_sha256 }}</p>
+      </details>
       @if (scoreResult.scores || scoreResult.scores_preview; as scores) {
         <div
           style="

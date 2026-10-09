@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P11",
+  "branch": "codex/exact-scoring-handoff",
+  "base_commit": "4762cc0015ec415682776687ee5762695954a243",
+  "qualified_source_commit": "fb274bd74cbd4f83af78b1c5157ea6d89aa46d68",
+  "scope": "Bounded local source qualification for exact native package/assessment selection, verified exports, immutable scoring receipts and accessible handoff. Later commits are documentation/ledger/evidence only. All mapped outcomes remain partial; no release/customer gate is closed.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/100",
+    "state": "MERGED",
+    "merge_commit": "4762cc0015ec415682776687ee5762695954a243",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37879822258",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p11:qualified",
+    "api_image_id": "sha256:c2b21987a37c193078b926f7fa737ea28f28368f024943090c166a0fea91508b",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "dependency_baseline": "Unchanged public core dependencies and installed frontend lock baseline; no optional private SDK. Disposable Redis/SQLite/API/loopback preview, telemetry disabled, blank provider key and unreachable model endpoint.",
+    "node": "v24.16.0",
+    "npm": "11.13.0"
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, Ruff, migration drift and pip check",
+      "status": "passed",
+      "report": "test-reports/p11/backend-final.log",
+      "passed": 1589,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 229,
+      "duration_seconds": 147.0,
+      "combined_statement_branch_coverage_percent": 68.84
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "skipped": 6,
+      "budget": 15
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "passed": 540,
+      "report": "test-reports/p11/frontend-unit-final.log"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "errors": 0,
+      "existing_warnings": 158,
+      "report": "test-reports/p11/frontend-lint-final.log"
+    },
+    {
+      "name": "Production frontend build",
+      "status": "passed",
+      "report": "test-reports/p11/frontend-build-final.log"
+    },
+    {
+      "name": "Governed E2E type check",
+      "status": "passed",
+      "report": "test-reports/p11/e2e-types-final.log"
+    },
+    {
+      "name": "Scoped Prettier check",
+      "status": "passed",
+      "report": "test-reports/p11/format.log"
+    },
+    {
+      "name": "Authenticated browser/API workflow and keyboard/download evidence",
+      "status": "passed",
+      "passed": 19,
+      "skipped": 0,
+      "duration_seconds": 14.7,
+      "report": "test-reports/p11/browser-source-qualified.log"
+    },
+    {
+      "name": "Canonical ledger validation and regression suite",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p11/ledger.log"
+    }
+  ],
+  "source_sha256": {
+    "backend/deployment/deploy_utils.py": "f86ccaabbfaf84bae1a96fd511db890c7be60ebdd549bd2aacaaa02d5cb99364",
+    "backend/deployment/evidence.py": "f834f9b65c527357dede6ee0105e767d3525f476861b723468ca0e965e551b77",
+    "backend/deployment/views.py": "445c45c939c4a356207f59f9f06ca26ba9f5d8e70aba3274f3054751f61e447a",
+    "backend/evaluation/views.py": "b0fe3f7a4fe71a6ed3b592c407341c108ebb2409584104f113bb573bcfa6cc51",
+    "backend/tests/unit/test_package_handoff.py": "4606eeca9f7e718be3aa6354e4d140034cb61a05608bdca5363da61232e94e74",
+    "frontend/e2e/raw-replay-api.spec.ts": "a8324d9ea27c74024d73f488f072894ea076d406a520f8695585bd2ef20b31a4",
+    "frontend/src/app/deployment/deployment.component.html": "611e1058e6e7431ba28457082568a99d3a17e6999ad401cb027cabb7d7562459",
+    "frontend/src/app/deployment/deployment.component.spec.ts": "109859fddce16e2e7766498b63cec2236733fc3530579eaf3c8b96d09336da7e",
+    "frontend/src/app/deployment/deployment.component.ts": "7e80b3b41ed2f11eb8e0860b9cff90160c45b461e92bfeb1f58c53b538b86560",
+    "frontend/src/app/model-development/model-development.component.html": "e981d3c50f989f0f6425657123c16a61ebe5ddfd682cec7ecea022db4ba28356",
+    "frontend/src/app/services/data.service.ts": "ef31d27fd63b8941c3cc6bb09d33ade0b48194549a19056ac45f286d8961b5d3"
+  },
+  "report_sha256": {
+    "test-reports/p11/backend-final.log": "a0af12ab797879d9ba62707bd5f1ddf53db0e9c7e5968cb3fd520567e0f35f61",
+    "test-reports/p11/backend-final.xml": "4fb8ec5e1fb300f586bf0067c9e8f402280bbe85d6a1125c2d02b6a0979181ca",
+    "test-reports/p11/backend-coverage-final.xml": "77fde9aafa801dd2663e9a3211f6b6f3b31e18aa9b6ae64b968126bd4df947dc",
+    "test-reports/p11/frontend-unit-final.log": "fe8e5a890e165a1be750cd0a241da6d718417ff155bea65a469facca9f6b8566",
+    "test-reports/p11/frontend-lint-final.log": "2307ad7057a6065c9d57e214ebf5b7cb6116f2e9c62bfb1cdd6efc274ee7fbf0",
+    "test-reports/p11/frontend-build-final.log": "e746c0922b89f6e4555878593a80f616ca0c6edf74b22a6435a1f514cff3e2ae",
+    "test-reports/p11/e2e-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p11/format.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+    "test-reports/p11/browser-source-qualified.log": "c76866b0bfd12a2c8c1e8e3a35cc70ae3f43c8dc258e60bd6dea3708e32c1c60",
+    "test-reports/p11/api-build-final.log": "6ac788b839a6857e48b2a0e9b9a9b31f3ae59e1f291427c923f1ab9497bc0eeb",
+    "test-reports/p11/api-qualified.log": "b784b50feeb135fd8c656509084eed4172885929c930e958bfc8add282d82b25",
+    "test-reports/p11/ledger.log": "39715b105d36adcceed1778959e1a9408521a7e63c6ff24140e33e76aca5354f"
+  },
+  "screenshot_sha256": "e332e8ea0568778bb6ed9c641082ae6a92dcaffe6540b520c2d1b4368d65480b",
+  "qualification_observations": [
+    "The first focused run passed 81 checks and failed one new test because its fixture omitted the compatibility directory; the fixture was corrected. No gate was weakened.",
+    "An initial E2E type check found a duplicate local variable name; corrected before the source-qualified browser run.",
+    "Final source includes preserved historical exports, rejection before native deserialization, corrupt-projection historical selection and shared native assessment/package publication locking. The first full run passed 1587 tests; the final exact source passed 1589 after two additional regressions.",
+    "Rendered browser evidence confirms a newer unassessed model cannot create a package while an earlier verified bundle remains downloadable by its exact ID."
+  ],
+  "limits": [
+    "Hash/receipt integrity is not an authenticity signature or protection against full storage rewriting.",
+    "Native code/trusted fitted state only; expert Python remains blocked pending isolated execution.",
+    "No independent reproduction runner/reviewer acceptance, distributed jobs/publication/restore or project authorization qualification.",
+    "Legacy artifacts remain historical/unverified; no reconstructed provenance or production-use approval.",
+    "D18-D26 remain planned; prior packet credit, canonical queue and all release/customer/value gates are preserved."
+  ],
+  "workspace_preservation": {
+    "primary": "/Users/caglarsubasi/Desktop/prometa/pocs/auto-ml",
+    "existing_tracked_edits_preserved": 11,
+    "snapshot": "/tmp/declarai-p11-preserved-workspace.json",
+    "scope": "Managed worktree and disposable test services only. Primary configuration and running stack preserved. Per-command hooks disabled because they target primary containers; equivalent independent checks passed and persistent Git config is unchanged."
+  }
+}
