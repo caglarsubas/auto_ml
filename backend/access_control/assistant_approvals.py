@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from access_control.authority import actor_snapshot
-from access_control.models import AssistantActionApproval
+from access_control.models import AssistantActionApproval, SessionAuthority
 from access_control.storage import managed_path, positive_file_id
 from declaration.models import Declaration, DataDictionary
 from modeling.execution_artifacts import digest_file, projection_lock
@@ -56,6 +56,11 @@ def _actor(actor):
         or not get_user_model().objects.filter(pk=actor.pk, is_active=True).exists()
     ):
         raise ApprovalError("action_actor_unavailable", "Sign in with an active account.", 403)
+    bound = getattr(actor, '_declarai_session_revision', None)
+    if bound is not None:
+        current = SessionAuthority.objects.filter(user_id=actor.pk).values_list('revision', flat=True).first()
+        if bound != str(current):
+            raise ApprovalError('action_actor_authority_changed', 'Your session authority changed. Sign in and review the action again.', 403)
 
 
 def action_request(data):
@@ -214,6 +219,7 @@ def prepare(actor, data):
     _actor(actor)
     requested = action_request(data)
     with projection_lock(requested["file_id"]):
+        revision = SessionAuthority.objects.get_or_create(user_id=actor.pk)[0].revision
         if AssistantActionApproval.objects.filter(file_id=requested["file_id"], state="dispatching").exists():
             raise ApprovalError(
                 "action_dispatch_unresolved",
@@ -221,13 +227,14 @@ def prepare(actor, data):
             )
         record = AssistantActionApproval(
             actor=actor,
-            actor_snapshot=actor_snapshot(actor),
+            actor_snapshot={**actor_snapshot(actor), 'session_revision': getattr(actor, '_declarai_session_revision', str(revision))},
             **requested,
             context=recorded_context(requested["file_id"], requested["action_type"]),
             environment=environment(),
             budget=BUDGET.copy(),
             expires_at=timezone.now() + timedelta(minutes=5),
         )
+        _actor(actor)
         record.proposal_sha256 = digest(envelope(record))
         record.save(force_insert=True)
     return {
@@ -258,6 +265,9 @@ def _fresh(record):
     code = None
     if record.expires_at <= timezone.now():
         code = "action_approval_expired"
+    elif record.actor_snapshot.get('session_revision') != str(SessionAuthority.objects.filter(
+        user_id=record.actor_id).values_list('revision', flat=True).first()):
+        code = 'action_actor_authority_changed'
     elif environment() != record.environment or recorded_context(record.file_id, record.action_type) != record.context:
         code = "action_approval_stale"
     if code:

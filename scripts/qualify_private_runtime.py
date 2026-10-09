@@ -20,8 +20,10 @@ def main():
     django.setup()
     from access_control.models import (
         AssistantActionApproval,
+        AuthenticationEvent,
         MCPAccessEvent,
         MCPDatasetGrant,
+        SessionAuthority,
     )
     from declaration.models import Declaration
     from django.conf import settings
@@ -155,6 +157,12 @@ def main():
             "session": client.cookies["sessionid"].value,
             "artifact": dataset.file.name,
             "artifact_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+            "auth_event": str(
+                AuthenticationEvent.objects.get(
+                    actor=user, event_type="login", outcome="completed"
+                ).pk
+            ),
+            "session_revision": str(SessionAuthority.objects.get(user=user).revision),
         }
         # Contains a session credential: never publish or attach this fixture state.
         with open(
@@ -163,6 +171,16 @@ def main():
             json.dump(snapshot, output)
     elif sys.argv[1:] == ["verify"]:
         snapshot = json.loads(state_file.read_text())
+        assert (
+            AuthenticationEvent.objects.get(pk=snapshot["auth_event"]).actor_snapshot[
+                "id"
+            ]
+            == snapshot["user"]
+        )
+        assert (
+            str(SessionAuthority.objects.get(user_id=snapshot["user"]).revision)
+            == snapshot["session_revision"]
+        )
         assert (
             PipelineRun.objects.get(pk=snapshot["pipeline"]).state == snapshot["state"]
         )

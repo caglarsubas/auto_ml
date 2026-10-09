@@ -91,6 +91,41 @@ def test_review_approval_dispatch_and_replay_are_distinct(workflow, monkeypatch)
     assert receipt.json()["result"]["status"] == "success"
 
 
+def test_operator_revocation_closes_approved_action_and_old_browser_session(workflow):
+    import uuid
+    from access_control.session_authority import revoke_sessions
+    actor, client, dataset, request = workflow
+    proposal, selector = prepare(client, request)
+    assert 'session_revision' in proposal['actor']
+    assert approve(client, selector).status_code == 200
+    revoke_sessions(actor, request_id=uuid.uuid4(), operator_label='test-operator')
+    assert dispatch(client, request, selector).status_code == 403
+    token = client.get('/api/auth/session/').json()['csrf_token']
+    signed_in = client.post('/api/auth/login/', {'username': actor.username, 'password': 'synthetic-approval-test-pass'},
+        format='json', HTTP_X_CSRFTOKEN=token)
+    assert signed_in.status_code == 200
+    client.credentials(HTTP_X_CSRFTOKEN=signed_in.json()['csrf_token'])
+    closed = client.get(f'/api/ai-assistant/action-approval/{selector["approval_id"]}/', selector)
+    assert closed.json()['state'] == 'cancelled'
+    assert dispatch(client, request, selector).status_code == 409
+    assert not DataDictionary.objects.filter(data_file=dataset).exists()
+
+
+def test_revocation_during_preparation_cannot_create_usable_authority(workflow, monkeypatch):
+    import uuid
+    from access_control.session_authority import revoke_sessions
+    actor, client, _, request = workflow
+    original = authority.recorded_context
+    def changed(*args):
+        context = original(*args)
+        revoke_sessions(actor, request_id=uuid.uuid4(), operator_label='test-operator')
+        return context
+    monkeypatch.setattr(authority, 'recorded_context', changed)
+    response = client.post('/api/ai-assistant/prepare-action/', request, format='json')
+    assert response.status_code == 403 and response.json()['error_code'] == 'action_actor_authority_changed'
+    assert not AssistantActionApproval.objects.exists()
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

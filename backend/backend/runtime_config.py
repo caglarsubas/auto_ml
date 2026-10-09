@@ -193,6 +193,9 @@ def load_runtime(base_dir, development_secret, env=None):
         "SECURE_HSTS_SECONDS": _integer(env, "DJANGO_HSTS_SECONDS", 3600 if private else 0, 0, 31536000),
         "SECURE_HSTS_INCLUDE_SUBDOMAINS": _boolean(env, "DJANGO_HSTS_INCLUDE_SUBDOMAINS"),
         "SECURE_HSTS_PRELOAD": _boolean(env, "DJANGO_HSTS_PRELOAD"),
+        "DECLARAI_AUTH_LOGIN_WINDOW_SECONDS": _integer(env, "DECLARAI_AUTH_LOGIN_WINDOW_SECONDS", 60, 1, 86400),
+        "DECLARAI_AUTH_LOGIN_PAIR_LIMIT": _integer(env, "DECLARAI_AUTH_LOGIN_PAIR_LIMIT", 10, 1, 1000),
+        "DECLARAI_AUTH_LOGIN_SOURCE_LIMIT": _integer(env, "DECLARAI_AUTH_LOGIN_SOURCE_LIMIT", 100, 1, 10000),
         "SECURE_PROXY_SSL_HEADER": ("HTTP_X_FORWARDED_PROTO", "https")
         if _boolean(env, "DJANGO_TRUST_PROXY_TLS")
         else None,

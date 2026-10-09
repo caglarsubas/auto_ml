@@ -432,6 +432,9 @@ def main():
                     "DECLARAI_MEDIA_ROOT": str(fixture / "restored-artifacts"),
                 },
             )
+            run_python(
+                ["scripts/qualify_private_identity.py"], report="private-identity.log"
+            )
             test_env = {
                 "DECLARAI_RUNTIME_PROFILE": "development",
                 "DJANGO_DEBUG": "true",

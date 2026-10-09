@@ -1,15 +1,16 @@
 """Server-side sessions. Project authorization is a separate release gate."""
-import hashlib
 import json
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout
-from django.core.cache import cache
+from django.contrib.auth import authenticate
+from django.db import DatabaseError
+from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, JsonResponse, Http404
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from access_control.session_authority import reserve_login, deny_login, complete_login, recorded_logout
 
 
 def _session(request):
@@ -30,21 +31,35 @@ def session_status(request):
 @csrf_protect
 def session_login(request):
     try:
+        if len(request.body) > 16384:
+            raise ValueError()
         data = json.loads(request.body)
         username, password = data.get('username'), data.get('password')
         if not isinstance(username, str) or not isinstance(password, str) or len(username) > 254 or len(password) > 4096:
             raise ValueError()
     except (ValueError, AttributeError, TypeError):
         return JsonResponse({'error': 'Supply username and password.'}, status=400)
-    key = 'login-attempt:' + hashlib.sha256((request.META.get('REMOTE_ADDR', '') + ':' + username).encode()).hexdigest()
-    cache.add(key, 0, timeout=60)
-    if cache.incr(key) > 10:
-        return JsonResponse({'error': 'Too many attempts. Try again later.'}, status=429)
-    user = authenticate(request, username=username, password=password)
-    if user is None:
-        return JsonResponse({'error': 'Invalid username or password.'}, status=401)
-    login(request, user)
-    cache.delete(key)
+    try:
+        admitted, event = reserve_login(request, username)
+        if not admitted:
+            response = JsonResponse({'error': 'Too many attempts. Try again later.'}, status=429)
+            response['Retry-After'] = str(settings.DECLARAI_AUTH_LOGIN_WINDOW_SECONDS)
+            response['Cache-Control'] = 'no-store'
+            return response
+        request._declarai_login_event = event
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            deny_login(event)
+            return JsonResponse({'error': 'Invalid username or password.'}, status=401)
+        if not complete_login(request, user, event):
+            return JsonResponse({'error': 'Invalid username or password.'}, status=401)
+    except (DatabaseError, RuntimeError, PermissionDenied):
+        # Do not mint or save a browser login whose authority could not be recorded.
+        request.session.clear()
+        response = JsonResponse({'error': 'Authentication authority is unavailable. Try again when the service recovers.',
+            'error_code': 'authentication_authority_unavailable'}, status=503)
+        response['Cache-Control'] = 'no-store'
+        return response
     response = JsonResponse(_session(request))
     response['Cache-Control'] = 'no-store'
     return response
@@ -55,7 +70,11 @@ def session_login(request):
 def session_logout(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Sign in first.'}, status=401)
-    logout(request)
+    try:
+        recorded_logout(request)
+    except DatabaseError:
+        return JsonResponse({'error': 'Logout authority could not be recorded. Try again when the service recovers.',
+            'error_code': 'authentication_authority_unavailable'}, status=503)
     return JsonResponse(_session(request))
 
 

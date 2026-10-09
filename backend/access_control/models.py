@@ -76,3 +76,44 @@ class AssistantActionApproval(models.Model):
     class Meta:
         ordering = ['-prepared_at']
         indexes = [models.Index(fields=['actor', 'file_id', 'prepared_at'], name='assistant_actor_file_idx')]
+
+
+class SessionAuthority(models.Model):
+    """Current browser authority; changing its revision invalidates prior sessions."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, primary_key=True, on_delete=models.CASCADE)
+    revision = models.UUIDField(default=uuid.uuid4, editable=False)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+
+class LoginThrottleBucket(models.Model):
+    """Shared admission counters, keyed by secret-key HMAC rather than raw inputs."""
+    key = models.CharField(max_length=64, primary_key=True)
+    window_started_at = models.DateTimeField(default=timezone.now)
+    attempts = models.PositiveIntegerField(default=0)
+    blocked_attempts = models.PositiveBigIntegerField(default=0)
+    denial_recorded = models.BooleanField(default=False)
+
+
+class AuthenticationEvent(models.Model):
+    """Credential/session/operator evidence; never passwords, cookies or raw IPs."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    actor_snapshot = models.JSONField(default=dict)
+    subject_snapshot = models.JSONField(default=dict)
+    authority_source = models.CharField(max_length=32)
+    event_type = models.CharField(max_length=32)
+    outcome = models.CharField(max_length=24, default='pending')
+    reason_code = models.CharField(max_length=64, blank=True)
+    source_key = models.CharField(max_length=64, blank=True)
+    principal_key = models.CharField(max_length=64, blank=True)
+    session_revision = models.UUIDField(null=True)
+    operator_label = models.CharField(max_length=100, blank=True)
+    request_sha256 = models.CharField(max_length=64, blank=True)
+    details = models.JSONField(default=dict)
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [models.Index(fields=['actor', 'started_at'], name='auth_event_actor_time_idx'),
+                   models.Index(fields=['event_type', 'started_at'], name='auth_event_type_time_idx')]
