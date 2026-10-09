@@ -4,9 +4,9 @@
   "packet": "P20",
   "branch": "codex/attributable-package-review",
   "base_commit": "9916eb762e18c27afa6f890baa92fef8e6f94652",
-  "qualified_application_source_commit": "2969d5fe98be87cf279e21155a8466cb2fb6da9a",
-  "full_backend_matrix_source_commit": "3a026ab4",
-  "source_binding": "2969d5fe changes only Angular review rendering; backend code/tests and seed are identical to 3a026ab4 in both full matrices. All 149 tracked non-test, non-migration backend Python files in the browser API match final source by SHA256.",
+  "qualified_application_source_commit": "557ad49f0d586f341476b266933e70e6705ad3a2",
+  "full_backend_matrix_source_commit": "3a026ab414ca4e6d807f7f4d90e2fdde4fc58e7f",
+  "source_binding": "2969d5fe and 557ad49f change only Angular review rendering/receipt handling and frontend units; backend code/tests and seed are identical to 3a026ab4 in both full matrices. Final frontend units, production build/lint and governed browser matrix are rerun at 557ad49f. All 149 tracked non-test, non-migration backend Python files in the browser API match final source by SHA256.",
   "baseline_verification": {
     "pull_request": 109,
     "merge_commit": "9916eb762e18c27afa6f890baa92fef8e6f94652",
@@ -91,10 +91,10 @@
     {
       "name": "Frontend units and existing coverage gates",
       "status": "passed",
-      "passed": 575,
+      "passed": 576,
       "statement_coverage_percent": 38.21,
-      "branch_coverage_percent": 31.34,
-      "report": "test-reports/p20/frontend-unit-final.log"
+      "branch_coverage_percent": 31.35,
+      "report": "test-reports/p20/frontend-unit-final-receipt.log"
     },
     {
       "name": "Frontend build and lint",
@@ -102,16 +102,16 @@
       "errors": 0,
       "lint_warnings": 167,
       "reports": [
-        "test-reports/p20/frontend-build-final.log",
-        "test-reports/p20/frontend-lint.log"
+        "test-reports/p20/frontend-build-final-receipt.log",
+        "test-reports/p20/frontend-lint-final-receipt.log"
       ]
     },
     {
       "name": "Governed browser/API matrix",
       "status": "passed",
       "passed": 36,
-      "duration_seconds": 57.2,
-      "report": "test-reports/p20/browser-governed.log",
+      "duration_seconds": 56.7,
+      "report": "test-reports/p20/browser-governed-final.log",
       "new_review_workflows": 3,
       "visual_inspection": "Settled reviewer package identity, revision, role actions and evidence download controls inspected. Full screen-reader qualification remains open."
     },
@@ -121,8 +121,10 @@
       "reports": [
         "test-reports/p20/backend-lint.log",
         "test-reports/p20/migrations.log",
-        "test-reports/p20/skip-budget.log"
-      ]
+        "test-reports/p20/skip-budget.log",
+        "test-reports/p20/roadmap-tests-final.log"
+      ],
+      "roadmap_invariants_passed": 49
     },
     {
       "name": "Primary user changes",

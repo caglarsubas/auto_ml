@@ -1065,7 +1065,7 @@
     {
       "date": "2026-10-10",
       "packet": "P20",
-      "event": "Exact-package discussion is qualified with 32 new review boundary cases. Both full metadata matrices pass 1948 tests, six skips and unchanged gates; frontend passes 575 units and 36 governed browser/API checks. Existing private TLS/process/restart/quiescent restore and actual MCP stdio fixtures pass. Partial D09/D12 only; no model approval, complete independent review/reproduction or release/customer acceptance claim."
+      "event": "Exact-package discussion is qualified with 32 new review boundary cases. Both full metadata matrices pass 1948 tests, six skips and unchanged gates; frontend passes 576 units and 36 governed browser/API checks. Existing private TLS/process/restart/quiescent restore and actual MCP stdio fixtures pass. Partial D09/D12 only; no model approval, complete independent review/reproduction or release/customer acceptance claim."
     }
   ],
   "implementation_packets": [
