@@ -76,7 +76,7 @@ def fitted(data, features=('x',), algorithm='xgboost', rounds=10):
 
 
 @pytest.fixture
-def parent(_use_tmp_media, settings, tmp_path):
+def parent(db, _use_tmp_media, settings, tmp_path):
     data = development()
     source = tmp_path / 'dataset.csv'
     pd.concat([data['X_train'], data['X_valid']]).to_csv(source, index=False)

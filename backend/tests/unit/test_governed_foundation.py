@@ -182,6 +182,7 @@ def test_native_booster_contract_survives_assessment_and_scoring(_use_tmp_media,
         assert len(bundle['manifest']['prediction_contract']['class_mapping']) == 65
 
 
+@pytest.mark.django_db
 def test_execution_packages_preserve_versions_and_detect_tampering(settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     source = tmp_path / 'data.csv'
@@ -315,6 +316,7 @@ def test_expert_python_never_runs_in_controller_when_isolation_is_unavailable(mo
     assert result['changes'] is None
 
 
+@pytest.mark.django_db
 def test_assessment_evidence_detects_tampering(settings, tmp_path):
     from modeling.execution_artifacts import publish_assessment, load_assessment
     import uuid
@@ -367,6 +369,7 @@ def test_categorical_code_order_does_not_enter_vif():
 
 
 @pytest.mark.parametrize('override', [None, 'relative', 'absolute'])
+@pytest.mark.django_db
 def test_feature_diagnostics_use_verified_development_rows_only(settings, tmp_path, monkeypatch, override):
     import pickle
     from modeling.booster_adapters import fit_booster
