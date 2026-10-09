@@ -42,6 +42,7 @@ def begin_execution(source):
 
 
 def publish_execution(execution_id, payload):
+    from modeling.holdout_evidence import verify_holdout_spec
     root = execution_root(execution_id)
     status_path = root / 'modeling_status.json'
     with status_path.open('x', encoding='utf-8') as stream:
@@ -58,6 +59,9 @@ def publish_execution(execution_id, payload):
         'historical_provenance': 'partition-fitted purifier replay; exploratory evidence' if payload.get('model', {}).get('purifier_path') else 'legacy upstream preprocessing provenance unverified',
     }
     manifest['packages'] = {}
+    spec = payload.get('model', {}).get('holdout_spec')
+    if spec:
+        manifest['holdout_spec'] = verify_holdout_spec(spec, payload['model'], manifest)
     for package in ('Django', 'djangorestframework', 'pandas', 'numpy', 'scikit-learn', 'xgboost', 'lightgbm', 'catboost', 'joblib'):
         try:
             manifest['packages'][package] = version(package)
@@ -81,7 +85,13 @@ def load_execution(execution_id, file_id):
         if digest_file(path) != expected['sha256'] or path.stat().st_size != expected['bytes']:
             raise ValueError(f'Execution artifact failed integrity verification: {relative}')
     with (root / 'modeling_status.json').open(encoding='utf-8') as stream:
-        return json.load(stream), manifest
+        payload = json.load(stream)
+    from modeling.holdout_evidence import verify_holdout_spec
+    spec = payload.get('model', {}).get('holdout_spec')
+    if spec != manifest.get('holdout_spec'):
+        raise ValueError('Final-outcome identity does not match the execution manifest.')
+    verify_holdout_spec(spec, payload.get('model', {}), manifest)
+    return payload, manifest
 
 
 def replace_projection(source, destination):
@@ -254,7 +264,7 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     lineage_path = root / 'lineage.json'
     lineage_path.write_text(json.dumps(lineage, indent=2, allow_nan=False), encoding='utf-8')
     # Only invariant declarations and input provenance can cross a model change.
-    invariant = ('prediction_contract', 'input_stage', 'purifier_provenance', 'diagnostic_limitations',
+    invariant = ('prediction_contract', 'holdout_spec', 'input_stage', 'purifier_provenance', 'diagnostic_limitations',
                  'impute_fit_on_train_only')
     model = {key: parent['model'][key] for key in invariant if key in parent['model']}
     model.update(model_type=f'{algorithm}_{"regressor" if task == "regression" else "anomaly" if task == "anomaly" else "classifier"}',

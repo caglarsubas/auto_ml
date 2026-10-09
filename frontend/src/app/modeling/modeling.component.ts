@@ -946,8 +946,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const savedState = this.sharedService.getModelingCheckpoint();
     if (savedState) {
       this.restoreFromCheckpoint(savedState);
-      // Clear it so it doesn't re-apply on subsequent navigations
-      this.sharedService.setModelingCheckpoint(null);
+      // The parent derives completion/review gates from this shared checkpoint.
+      // Keep the restored evidence available through evaluation and navigation.
     }
   }
 

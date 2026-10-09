@@ -509,6 +509,12 @@ def build_model_card(
             },
             'leakage_scan': model.get('leakage_scan') or evaluation.get('leakage_scan'),
             'evaluation_outer_test': evaluation.get('metrics'),
+            'final_outcome_access': {
+                'evidence_status': evaluation.get('evidence_status', 'historical_unverified'),
+                'access_id': evaluation.get('holdout_access_id'),
+                'holdout_history': evaluation.get('holdout_history'),
+                'limitation': evaluation.get('evidence_limitation'),
+            },
             'business_success_criteria': floors,
             'deployment_readiness': {
                 'ready': readiness['ready'],

@@ -892,6 +892,11 @@
       "date": "2026-10-09",
       "packet": "P09",
       "event": "Local qualification passed 1547 backend tests with six explicit skips and 67.97% coverage, 531 frontend tests and 19 governed browser/API checks. Metric-code/runtime/delegated-evaluation/callback-integration change publication checks pass. Native XGBoost exports selected rounds, reloads with one scoring thread and skips unrelated stopping diagnostics; full assessment retains its complete checks. CI pools are bounded without weakening gates. Gates and D18-D26 remain open/planned; shared foundations stay first in the canonical queue."
+    },
+    {
+      "date": "2026-10-09",
+      "packet": "P10",
+      "event": "Scoped the next shared-foundation packet after verified PR99 merge: protected holdout reuse and exact assessment evidence. Queue, prior packet evidence and planned D18-D26 remain unchanged."
     }
   ],
   "implementation_packets": [
@@ -1056,6 +1061,24 @@
         "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
       ],
       "remaining": "Complete scientific path, protected independent assessment/reproduction, immutable durable jobs, project governance, expert isolation, agentic outcomes and customer/value qualification remain open."
+    },
+    {
+      "id": "P10",
+      "title": "Protected holdout reuse and assessment evidence",
+      "kind": "product_implementation",
+      "owner": "Backend/ML/Frontend",
+      "status": "in_progress",
+      "items": [
+        "D03",
+        "D04",
+        "D09",
+        "D12"
+      ],
+      "description": "Bind final-outcome access to stable source/target/row identities across executions and changed candidates; expose exact/overlapping reuse, failed attempts and unknown history without reading labels. Preserve exact assessment exports and exploratory evidence.",
+      "evidence": [
+        "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)"
+      ],
+      "remaining": "Confirmatory protocols, project authorization, durable distributed audit/recovery, independent reproduction/review, expert isolation and all release/customer gates remain open."
     }
   ],
   "release_qualification": {

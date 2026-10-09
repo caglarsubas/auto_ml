@@ -146,6 +146,16 @@ Bind initial native training, fold fitting, selection/tuning and candidate refit
 
 **Remaining:** Complete scientific path, protected independent assessment/reproduction, immutable durable jobs, project governance, expert isolation, agentic outcomes and customer/value qualification remain open.
 
+### P10 — Protected holdout reuse and assessment evidence
+
+**Packet status:** in_progress. **Mapped outcomes:** D03, D04, D09, D12.
+
+Bind final-outcome access to stable source/target/row identities across executions and changed candidates; expose exact/overlapping reuse, failed attempts and unknown history without reading labels. Preserve exact assessment exports and exploratory evidence.
+
+**Evidence:** [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)
+
+**Remaining:** Confirmatory protocols, project authorization, durable distributed audit/recovery, independent reproduction/review, expert isolation and all release/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.

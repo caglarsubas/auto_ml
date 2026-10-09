@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 import { DataService } from '../services/data.service';
 import { SharedService } from '../services/shared.service';
 
@@ -16,6 +16,10 @@ export class EvaluationComponent implements OnInit, OnDestroy {
   isRunning = false;
   error: string | null = null;
   result: any = null;
+  selectedExecutionId: string | null = null;
+  holdoutHistory: any = null;
+  historyLoading = false;
+  historyError: string | null = null;
   governanceChecked: { [key: string]: boolean } = {};
   governanceSaving = false;
 
@@ -30,21 +34,41 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     this.subs.push(
       this.sharedService.currentFileId$.subscribe((id) => {
         this.currentFileId = id;
+        this.isRunning = false;
+        this.error = null;
+        this.result = null;
+        this.selectedExecutionId = null;
+        this.holdoutHistory = null;
+        this.historyError = null;
+        this.historyLoading = id != null;
+        this.governanceChecked = {};
+        this.sharedService.setEvaluationCompleted(false);
         if (id != null) {
-          this.dataService.getEvaluationStatus(id).subscribe({
-            next: (resp) => {
-              if (resp?.status === 'ok' || resp?.evaluation) {
-                this.result = resp;
-                this.initGovernanceChecks();
-                this.sharedService.setEvaluationCompleted(true);
-              }
-            },
-            error: () => {},
-          });
-        } else {
-          this.result = null;
-          this.governanceChecked = {};
-          this.sharedService.setEvaluationCompleted(false);
+          this.subs.push(
+            forkJoin({
+              model: this.dataService.getModelingStatus(id),
+              assessment: this.dataService.getEvaluationStatus(id),
+            }).subscribe({
+              next: ({ model, assessment }) => {
+                if (this.currentFileId !== id) return;
+                this.selectedExecutionId = model?.execution_id || null;
+                if (
+                  assessment?.evaluation &&
+                  assessment.evaluation.execution_id === this.selectedExecutionId
+                ) {
+                  this.result = assessment;
+                  this.initGovernanceChecks();
+                  this.sharedService.setEvaluationCompleted(true);
+                }
+                this.refreshHoldoutHistory();
+              },
+              error: () => {
+                if (this.currentFileId !== id) return;
+                this.historyLoading = false;
+                this.historyError = 'Could not load the selected model and assessment history.';
+              },
+            }),
+          );
         }
       }),
     );
@@ -61,36 +85,74 @@ export class EvaluationComponent implements OnInit, OnDestroy {
     }
     this.isRunning = true;
     this.error = null;
-    this.dataService.runEvaluation(this.currentFileId, this.threshold).subscribe({
-      next: (resp) => {
-        this.result = resp;
-        this.initGovernanceChecks();
-        this.isRunning = false;
-        this.sharedService.setEvaluationCompleted(true);
-        try {
-          this.sharedService.triggerCheckpoint('evaluation_completed');
-        } catch {}
-      },
-      error: (err) => {
-        this.error = err?.message || 'Evaluation failed';
-        this.isRunning = false;
-      },
-    });
+    const fileId = this.currentFileId;
+    this.dataService
+      .runEvaluation(fileId, this.threshold, undefined, this.selectedExecutionId || undefined)
+      .subscribe({
+        next: (resp) => {
+          if (this.currentFileId !== fileId) return;
+          this.result = resp;
+          this.initGovernanceChecks();
+          this.isRunning = false;
+          this.refreshHoldoutHistory();
+          this.sharedService.setEvaluationCompleted(true);
+          try {
+            this.sharedService.triggerCheckpoint('evaluation_completed');
+          } catch {}
+        },
+        error: (err) => {
+          if (this.currentFileId !== fileId) return;
+          this.error = err?.message || 'Evaluation failed';
+          this.isRunning = false;
+          this.refreshHoldoutHistory();
+        },
+      });
+  }
+
+  refreshHoldoutHistory(offset = 0): void {
+    const fileId = this.currentFileId;
+    const executionId = this.selectedExecutionId;
+    if (fileId == null || !executionId) {
+      this.historyLoading = false;
+      return;
+    }
+    this.historyLoading = true;
+    this.subs.push(
+      this.dataService.getHoldoutHistory(fileId, executionId, offset).subscribe({
+        next: (history) => {
+          if (this.currentFileId !== fileId || this.selectedExecutionId !== executionId) return;
+          this.holdoutHistory =
+            offset && this.holdoutHistory
+              ? { ...history, records: [...this.holdoutHistory.records, ...history.records] }
+              : history;
+          this.historyLoading = false;
+          this.historyError = null;
+        },
+        error: () => {
+          if (this.currentFileId !== fileId || this.selectedExecutionId !== executionId) return;
+          this.historyLoading = false;
+          this.historyError = 'Access history is unavailable. An unused holdout cannot be assumed.';
+        },
+      }),
+    );
   }
 
   downloadEvaluationPack(): void {
     if (this.currentFileId == null) return;
-    this.dataService.downloadEvalPack(this.currentFileId).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `evaluation_pack_${this.currentFileId}.zip`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-      },
-      error: (err) => console.error('Evaluation pack download failed:', err),
-    });
+    const evaluation = this.result?.evaluation;
+    this.dataService
+      .downloadEvalPack(this.currentFileId, evaluation?.execution_id, evaluation?.holdout_access_id)
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `evaluation_pack_${this.currentFileId}.zip`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        },
+        error: (err) => console.error('Evaluation pack download failed:', err),
+      });
   }
 
   initGovernanceChecks(): void {

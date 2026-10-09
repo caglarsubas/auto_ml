@@ -41,6 +41,20 @@ describe('ModelingComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('retains restored model evidence for the parent evaluation gate', () => {
+    const shared = TestBed.inject(SharedService);
+    const saved = {
+      substep: 'hyperparam_completed',
+      modelingStatus: { execution_id: 'restored-version', model: { task: 'classification' } },
+      hpResults: { status: 'completed' },
+    };
+    shared.setModelingCheckpoint(saved);
+    fixture.detectChanges();
+    expect(shared.getModelingCheckpoint()).toBe(saved);
+    expect(component.modelingStatus.execution_id).toBe('restored-version');
+    expect(component.hpResults.status).toBe('completed');
+  });
+
   it('keeps native fit details expandable and explains post-selection evidence', () => {
     component.modelingStatus = {
       status: 'ok',

@@ -1206,6 +1206,12 @@ class ModelingStartView(APIView):
                 pickle.dump(development_data, stream)
             model_info['train_data_path'] = os.path.relpath(train_data_path, settings.MEDIA_ROOT)
             model_info['holdout_path'] = development_data['holdout_path']
+            from modeling.holdout_evidence import holdout_spec
+            from modeling.execution_artifacts import digest_file
+            source_path = execution_dir / 'raw_input.csv' if purifier_recipe else snapshot_path
+            model_info['holdout_spec'] = holdout_spec(digest_file(source_path),
+                prediction_contract['target_column'], split_meta['membership']['test'],
+                'raw_snapshot' if purifier_recipe else 'processed_snapshot')
         failed = 'error' in model_info or not model_info.get('model_path')
         if failed and 'error' not in model_info:
             model_info['error'] = model_info.get('warning') or 'No fitted model was produced.'

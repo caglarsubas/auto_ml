@@ -1,10 +1,50 @@
 <div class="evaluation-container" style="padding: 8px 4px 24px">
   <h2>Evaluation</h2>
   <p style="color: #555; max-width: 720px; font-size: 14px">
-    Scores the locked outer test set that was never used for early stopping or hyperparameter
-    search. Compare modeling holdout metrics against honest outer-test metrics, then review the
-    governance model card.
+    Scores final outcomes separately from development, early stopping and search. Every assessment
+    is exploratory; accessing or reusing these outcomes does not establish independent confirmation.
+    Review access history and the governance model card alongside the metrics.
   </p>
+
+  @if (historyLoading) {
+    <p role="status">Loading final-outcome access history…</p>
+  }
+  @if (historyError) {
+    <p role="alert">{{ historyError }}</p>
+  }
+  @if (holdoutHistory) {
+    <section aria-label="Final-outcome access history" style="margin: 12px 0">
+      <strong>Exploratory evidence</strong>
+      <p>
+        {{ holdoutHistory.same_final_rows_accesses }} accesses to the same final rows;
+        {{ holdoutHistory.overlapping_final_rows_accesses }} accesses to overlapping final rows;
+        {{ holdoutHistory.unknown_history_accesses }} accesses with unknown historical identity.
+      </p>
+      <details>
+        <summary>Access records and limitations</summary>
+        <p>{{ holdoutHistory.limitation }}</p>
+        <p>Selected execution: {{ selectedExecutionId }}</p>
+        <ul>
+          @for (record of holdoutHistory.records; track record.access_id) {
+            <li>
+              {{ record.accessed_at }} — {{ record.actor.username || record.actor.identity }};
+              {{ record.attempt_state }}; {{ record.relation }}; execution
+              {{ record.execution_id || 'unrecorded' }}
+            </li>
+          }
+        </ul>
+        @if (holdoutHistory.next_offset !== null && holdoutHistory.next_offset !== undefined) {
+          <button
+            mat-stroked-button
+            [disabled]="historyLoading"
+            (click)="refreshHoldoutHistory(holdoutHistory.next_offset)"
+          >
+            Load more access records
+          </button>
+        }
+      </details>
+    </section>
+  }
 
   <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 16px 0">
     @if (!isRegression) {
@@ -16,7 +56,7 @@
     <button
       mat-raised-button
       color="primary"
-      [disabled]="currentFileId == null || isRunning"
+      [disabled]="currentFileId == null || isRunning || historyLoading"
       (click)="runEvaluation()"
     >
       {{ isRunning ? 'Evaluating…' : 'Run outer-test evaluation' }}
