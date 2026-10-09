@@ -25,7 +25,8 @@ from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
 from modeling.development_validation import development_folds
-from modeling.diagnostics import numeric_collinearity_frame, DIAGNOSTIC_LIMITATIONS
+from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
+from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
 from modeling.prediction_contract import PredictionContractError, resolve_prediction_contract
 from modeling.models import PipelineRun
@@ -39,7 +40,6 @@ from modeling.calibration_utils import fit_calibrator, save_calibrator, apply_ca
 from modeling.cv_strategy import build_cv_splitter, iter_cv_splits, pick_group_column
 from modeling.leakage_heuristics import scan_leakage_risks
 import threading
-import pickle
 from pathlib import Path
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
@@ -603,21 +603,6 @@ class ModelingStartView(APIView):
                             # Build gain lookup from already-computed gain_importance
                             gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
 
-                            # Compute VIF (Variance Inflation Factor) for multicollinearity
-                            vif_lookup: dict[str, float] = {}
-                            try:
-                                from statsmodels.stats.outliers_influence import variance_inflation_factor
-                                X_vif = numeric_collinearity_frame(X_train, encoding_report)
-                                X_vif_arr = X_vif.values.astype(float)
-                                for i, col_name in enumerate(X_vif.columns):
-                                    try:
-                                        v = variance_inflation_factor(X_vif_arr, i)
-                                        vif_lookup[col_name] = round(float(v), 2) if np.isfinite(v) else None
-                                    except Exception:
-                                        vif_lookup[col_name] = None
-                                print(f"[ModelingStart] VIF computed for {len(vif_lookup)} features")
-                            except Exception as vif_err:
-                                print(f"[ModelingStart] VIF computation failed: {vif_err}")
 
                             # --- ECDF-rank percentile normalization & combined score ---
                             # Collect raw SHAP |impact| and gain for features with impact > 0
@@ -651,7 +636,7 @@ class ModelingStartView(APIView):
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
                                         'gain': gain_lookup.get(item['feature'], 0.0),
-                                        'vif': vif_lookup.get(item['feature']),
+                                        'vif': None,  # Filled from the immutable snapshot below.
                                         'shap_percentile': float(_shap_pct[idx]),
                                         'gain_percentile': float(_gain_pct[idx]),
                                         'combined_score': float(_combined[idx]),
@@ -666,7 +651,7 @@ class ModelingStartView(APIView):
                                         'signed_impact': item['mean_abs'] * item['direction'],
                                         'signed_mean': item['signed_mean'],
                                         'gain': gain_lookup.get(item['feature'], 0.0),
-                                        'vif': vif_lookup.get(item['feature']),
+                                        'vif': None,  # Filled from the immutable snapshot below.
                                         'shap_percentile': float(_shap_pct[idx]),
                                         'gain_percentile': float(_gain_pct[idx]),
                                         'combined_score': float(_combined[idx]),
@@ -1207,6 +1192,14 @@ class ModelingStartView(APIView):
                 pickle.dump(development_data, stream)
             model_info['train_data_path'] = os.path.relpath(train_data_path, settings.MEDIA_ROOT)
             model_info['holdout_path'] = development_data['holdout_path']
+            collinearity = write_snapshot(execution_dir, int(file_id), execution_id,
+                development_data['X_train'][development_data['feature_names']], encoding_report)
+            model_info['collinearity'] = collinearity
+            for feature in model_info.get('selected_features') or []:
+                if isinstance(feature, dict):
+                    recorded = collinearity['features'].get(feature['feature'],
+                        {'vif': None, 'vif_status': 'unavailable', 'reason': 'missing_training_predictor'})
+                    feature.update(vif=recorded['vif'], vif_status=recorded['vif_status'])
             from modeling.holdout_evidence import holdout_spec
             from modeling.execution_artifacts import digest_file
             source_path = execution_dir / 'raw_input.csv' if purifier_recipe else snapshot_path
@@ -1251,6 +1244,14 @@ class ModelingStatusView(APIView):
     """Returns current modeling status and metrics for a file id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        execution_id = request.query_params.get('execution_id')
+        if execution_id:
+            try:
+                payload, _ = load_execution(execution_id, file_id)
+                return Response(payload)
+            except (ValueError, TypeError, OSError, KeyError):
+                return Response({'error': 'The exact saved execution is unavailable or invalid. Retain the saved evidence or select a verified execution.',
+                    'error_code': 'saved_execution_unavailable'}, status=409)
         modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
         status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
         if not os.path.exists(status_path):
@@ -2597,96 +2598,24 @@ class HyperparamResultsView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class VifDetailView(APIView):
-    """Return per-feature VIF decomposition for a given feature.
-
-    POST payload: { file_id: int, feature: str }
-    Returns:
-      - feature: the queried feature
-      - vif: its overall VIF
-      - contributions: list of { feature, correlation, vif_without } sorted by |correlation| desc
-        where 'correlation' is pairwise Pearson |r| and 'vif_without' is VIF of the queried
-        feature when the other feature is removed from the regression matrix.
-    """
+    """Exact native execution's centered training inputs; no legacy pickle fallback."""
 
     def post(self, request, *args, **kwargs):
         file_id = request.data.get('file_id')
-        feature_name = request.data.get('feature')
-
-        if file_id is None or not feature_name:
-            return Response({'error': 'file_id and feature are required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-        if not os.path.exists(train_data_path):
-            return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
-
+        feature = request.data.get('feature')
+        execution_id = request.data.get('execution_id')
+        if file_id is None or not isinstance(feature, str) or not feature or not execution_id:
+            return Response({'error': 'file_id, feature and exact execution_id are required.',
+                'error_code': 'diagnostic_execution_required'}, status=400)
         try:
-            with open(train_data_path, 'rb') as f:
-                train_data = pickle.load(f)
-
-            X_train = train_data['X_train']
-
-            X_vif = numeric_collinearity_frame(X_train, train_data.get('encoding_report'))
-
-            if feature_name not in X_vif.columns:
-                return Response({'error': f'Feature "{feature_name}" is not a nonconstant numeric predictor. Nominal categories have no numeric-code VIF.'},
-                                status=status.HTTP_404_NOT_FOUND)
-
-            from statsmodels.stats.outliers_influence import variance_inflation_factor
-
-            # Overall VIF for the queried feature
-            all_cols = list(X_vif.columns)
-            feat_idx = all_cols.index(feature_name)
-            X_arr = X_vif.values.astype(float)
-            overall_vif = variance_inflation_factor(X_arr, feat_idx)
-            overall_vif = round(float(overall_vif), 2) if np.isfinite(overall_vif) else None
-
-            # Pairwise correlations + VIF-without-each-feature
-            target_series = X_vif[feature_name]
-            other_cols = [c for c in all_cols if c != feature_name]
-            contributions = []
-
-            for other in other_cols:
-                # Pairwise |correlation|
-                corr_val = target_series.corr(X_vif[other])
-                abs_corr = abs(corr_val) if (corr_val is not None and np.isfinite(corr_val)) else 0.0
-
-                # VIF without this other feature
-                reduced_cols = [c for c in all_cols if c != other]
-                reduced_idx = reduced_cols.index(feature_name)
-                X_reduced = X_vif[reduced_cols].values.astype(float)
-                try:
-                    vif_without = variance_inflation_factor(X_reduced, reduced_idx)
-                    vif_without = round(float(vif_without), 2) if np.isfinite(vif_without) else None
-                except Exception:
-                    vif_without = None
-
-                # VIF drop = how much VIF decreases when this feature is removed
-                vif_drop = None
-                if overall_vif is not None and vif_without is not None:
-                    vif_drop = round(overall_vif - vif_without, 2)
-
-                contributions.append({
-                    'feature': other,
-                    'correlation': round(abs_corr, 4),
-                    'signed_correlation': round(float(corr_val), 4) if (corr_val is not None and np.isfinite(corr_val)) else 0.0,
-                    'vif_without': vif_without,
-                    'vif_drop': vif_drop,
-                })
-
-            # Sort by |correlation| descending
-            contributions.sort(key=lambda x: x['correlation'], reverse=True)
-
-            return Response({
-                'feature': feature_name,
-                'vif': overall_vif,
-                'limitations': DIAGNOSTIC_LIMITATIONS['vif'],
-                'contributions': contributions,
-            }, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            import traceback as tb
-            tb.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            summary, matrix = load_snapshot(int(file_id), execution_id)
+            return Response(detail(summary, matrix, feature))
+        except KeyError:
+            return Response({'error': 'The feature is absent from this execution.',
+                'error_code': 'diagnostic_feature_unavailable'}, status=404)
+        except (ValueError, TypeError, OSError):
+            return Response({'error': 'Centered diagnostic inputs are unavailable, invalid or outside the recorded budget. Select a verified supported execution or refit a new bounded version.',
+                'error_code': 'diagnostic_inputs_unavailable'}, status=409)
 
 
 # ============================================================

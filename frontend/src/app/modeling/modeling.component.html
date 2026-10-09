@@ -1072,7 +1072,7 @@
                           cursor: pointer;
                           user-select: none;
                         "
-                        title="Variance Inflation Factor — measures multicollinearity. VIF=1: no correlation, 1–5: moderate, 5–10: high, >10: severe multicollinearity."
+                        title="Variance Inflation Factor: centered training-input dependence. Inspect method, exclusions, precision and limitations; there is no universal severity or removal cutoff."
                         (click)="sortSelectedFeatures('vif')"
                       >
                         VIF
@@ -1173,28 +1173,20 @@
                         </td>
                         <td
                           style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right"
-                          [style.color]="
-                            f.vif != null && f.vif > 10
-                              ? '#b71c1c'
-                              : f.vif != null && f.vif > 5
-                                ? '#e65100'
-                                : '#333'
-                          "
                         >
-                          @if (f.vif != null) {
-                            <a
-                              href="javascript:void(0)"
-                              (click)="openVifDetail(f.feature, $event)"
-                              style="text-decoration: underline; cursor: pointer"
-                              [style.color]="
-                                f.vif > 10 ? '#b71c1c' : f.vif > 5 ? '#e65100' : '#1976d2'
-                              "
-                              title="Click to see VIF decomposition"
-                              >{{ f.vif | number: '1.2-2' }}</a
-                            >
-                          }
-                          @if (f.vif == null) {
-                            <span style="color: #aaa">—</span>
+                          <button
+                            type="button"
+                            (click)="openVifDetail(f.feature, $event)"
+                            title="Inspect training-input diagnostic"
+                          >
+                            @if (f.vif != null) {
+                              {{ f.vif | number: '1.2-2' }}
+                            } @else {
+                              {{ vifStateLabel(f.vif_status) }}
+                            }
+                          </button>
+                          @if (!f.vif_status) {
+                            <span> Historical method unverified</span>
                           }
                         </td>
                         <td
@@ -1280,6 +1272,57 @@
               </div>
             </div>
           }
+          @if (modelingStatus?.model?.collinearity; as diagnostic) {
+            <details class="numeric-diagnostics" data-testid="numeric-diagnostics">
+              <summary>Numeric collinearity diagnostics</summary>
+              <p>{{ diagnostic.scope }} {{ diagnostic.limitations }}</p>
+              <p>
+                Execution: {{ diagnostic.execution_id }} · Training rows: {{ diagnostic.row_count }}
+              </p>
+              @if (diagnostic.status === 'budget_exceeded') {
+                <p role="status">
+                  Diagnostic compute budget exceeded. The model can still run; refit a bounded
+                  feature subset to inspect this diagnostic.
+                </p>
+              }
+              <table>
+                <caption>
+                  Training-input VIF and explicit diagnostic states
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Feature</th>
+                    <th scope="col">VIF / state</th>
+                    <th scope="col">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of collinearityRows; track row.feature) {
+                    <tr>
+                      <th scope="row">{{ row.feature }}</th>
+                      <td>
+                        @if (row.vif != null) {
+                          {{ row.vif | number: '1.2-2' }}
+                        } @else {
+                          {{ vifStateLabel(row.vif_status) }}
+                        }
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          [disabled]="diagnostic.status !== 'available'"
+                          (click)="openVifDetail(row.feature, $event)"
+                          [attr.aria-label]="'Inspect collinearity for ' + row.feature"
+                        >
+                          Inspect
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          }
           <!-- VIF Detail Modal -->
           @if (showVifDetailModal) {
             <div
@@ -1298,6 +1341,12 @@
               (click)="closeVifDetail()"
             >
               <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="vif-dialog-title"
+                cdkTrapFocus
+                [cdkTrapFocusAutoCapture]="true"
+                (keydown.escape)="closeVifDetail()"
                 style="
                   background: #fff;
                   border-radius: 8px;
@@ -1318,11 +1367,14 @@
                     margin-bottom: 16px;
                   "
                 >
-                  <h3 style="margin: 0">
+                  <h3 id="vif-dialog-title" style="margin: 0">
                     VIF Decomposition: <span style="color: #1976d2">{{ vifDetailFeature }}</span>
                   </h3>
                   <button
                     (click)="closeVifDetail()"
+                    type="button"
+                    aria-label="Close collinearity details"
+                    cdkFocusInitial
                     style="
                       background: none;
                       border: none;
@@ -1334,32 +1386,35 @@
                     ✕
                   </button>
                 </div>
-                @if (vifDetailVif != null) {
-                  <div style="margin-bottom: 12px; font-size: 14px">
+                @if (!vifDetailLoading && !vifDetailError) {
+                  <p>
                     Overall VIF:
-                    <strong
-                      [style.color]="
-                        vifDetailVif > 10 ? '#b71c1c' : vifDetailVif > 5 ? '#e65100' : '#2e7d32'
-                      "
-                      >{{ vifDetailVif | number: '1.2-2' }}</strong
-                    >
-                    <span style="color: #888; margin-left: 8px; font-size: 12px">
-                      (1 = no collinearity, 1–5 = moderate, 5–10 = high, >10 = severe)
-                    </span>
-                  </div>
+                    <strong>
+                      @if (vifDetailVif != null) {
+                        {{ vifDetailVif | number: '1.2-2' }}
+                      } @else {
+                        {{ vifStateLabel(vifDetailStatus) }}
+                      }
+                    </strong>
+                  </p>
+                  <p>
+                    Execution: {{ vifDetailExecutionId }} · Training rows: {{ vifDetailRowCount }}
+                  </p>
+                  <p>{{ vifDetailLimitations }}</p>
+                  <p>
+                    Each row omits one other predictor from the auxiliary regression. This is not a
+                    model refit or evidence that removing the feature improves the model. An
+                    unbounded value includes dependence indistinguishable at recorded numeric
+                    precision.
+                  </p>
                 }
-                <div style="font-size: 12px; color: #666; margin-bottom: 12px">
-                  Each row shows how removing a single other feature would change the VIF of
-                  <strong>{{ vifDetailFeature }}</strong
-                  >. "VIF Drop" = decrease in VIF when that feature is excluded from the regression.
-                </div>
                 @if (vifDetailLoading) {
-                  <div style="text-align: center; padding: 24px; color: #888">
+                  <div role="status" style="text-align: center; padding: 24px; color: #888">
                     Loading VIF decomposition...
                   </div>
                 }
                 @if (vifDetailError) {
-                  <div style="text-align: center; padding: 24px; color: #b71c1c">
+                  <div role="alert" style="text-align: center; padding: 24px; color: #b71c1c">
                     {{ vifDetailError }}
                   </div>
                 }
@@ -1367,106 +1422,37 @@
                   <div style="overflow: auto; max-height: 55vh; border: 1px solid #eee">
                     <table style="width: 100%; border-collapse: collapse; font-size: 13px">
                       <thead>
-                        <tr
-                          style="
-                            background: #fafafa;
-                            text-align: left;
-                            position: sticky;
-                            top: 0;
-                            z-index: 1;
-                          "
-                        >
-                          <th
-                            style="
-                              padding: 8px;
-                              border-bottom: 2px solid #ddd;
-                              cursor: pointer;
-                              user-select: none;
-                            "
-                            (click)="sortVifDetail('feature')"
-                          >
-                            Feature
-                            <span style="font-size: 10px; color: #999">{{
-                              getVifDetailSortIcon('feature')
-                            }}</span>
+                        <tr>
+                          <th scope="col">
+                            <button type="button" (click)="sortVifDetail('feature')">
+                              Feature {{ getVifDetailSortIcon('feature') }}
+                            </button>
                           </th>
-                          <th
-                            style="
-                              padding: 8px;
-                              border-bottom: 2px solid #ddd;
-                              text-align: right;
-                              cursor: pointer;
-                              user-select: none;
-                            "
-                            title="Absolute Pearson correlation between this feature and the selected feature"
-                            (click)="sortVifDetail('correlation')"
-                          >
-                            |Corr|
-                            <span style="font-size: 10px; color: #999">{{
-                              getVifDetailSortIcon('correlation')
-                            }}</span>
+                          <th scope="col">
+                            <button type="button" (click)="sortVifDetail('correlation')">
+                              |Corr| {{ getVifDetailSortIcon('correlation') }}
+                            </button>
                           </th>
-                          <th
-                            style="
-                              padding: 8px;
-                              border-bottom: 2px solid #ddd;
-                              text-align: right;
-                              cursor: pointer;
-                              user-select: none;
-                            "
-                            title="Signed Pearson correlation"
-                            (click)="sortVifDetail('signed_correlation')"
-                          >
-                            Signed r
-                            <span style="font-size: 10px; color: #999">{{
-                              getVifDetailSortIcon('signed_correlation')
-                            }}</span>
+                          <th scope="col">
+                            <button type="button" (click)="sortVifDetail('signed_correlation')">
+                              Signed r {{ getVifDetailSortIcon('signed_correlation') }}
+                            </button>
                           </th>
-                          <th
-                            style="
-                              padding: 8px;
-                              border-bottom: 2px solid #ddd;
-                              text-align: right;
-                              cursor: pointer;
-                              user-select: none;
-                            "
-                            title="VIF of the selected feature when this feature is removed from the model"
-                            (click)="sortVifDetail('vif_without')"
-                          >
-                            VIF w/o
-                            <span style="font-size: 10px; color: #999">{{
-                              getVifDetailSortIcon('vif_without')
-                            }}</span>
+                          <th scope="col">
+                            <button type="button" (click)="sortVifDetail('vif_without')">
+                              VIF without predictor {{ getVifDetailSortIcon('vif_without') }}
+                            </button>
                           </th>
-                          <th
-                            style="
-                              padding: 8px;
-                              border-bottom: 2px solid #ddd;
-                              text-align: right;
-                              cursor: pointer;
-                              user-select: none;
-                            "
-                            title="VIF decrease when this feature is removed (positive = this feature inflates VIF)"
-                            (click)="sortVifDetail('vif_drop')"
-                          >
-                            VIF Drop
-                            <span style="font-size: 10px; color: #999">{{
-                              getVifDetailSortIcon('vif_drop')
-                            }}</span>
+                          <th scope="col">
+                            <button type="button" (click)="sortVifDetail('vif_drop')">
+                              VIF decrease {{ getVifDetailSortIcon('vif_drop') }}
+                            </button>
                           </th>
                         </tr>
                       </thead>
                       <tbody>
                         @for (c of vifDetailContributions; track c) {
-                          <tr
-                            [style.background]="
-                              c.correlation >= 0.7
-                                ? '#fff3e0'
-                                : c.correlation >= 0.5
-                                  ? '#fff8e1'
-                                  : 'transparent'
-                            "
-                          >
+                          <tr>
                             <td
                               style="
                                 padding: 8px;
@@ -1483,13 +1469,6 @@
                                 text-align: right;
                                 font-weight: 600;
                               "
-                              [style.color]="
-                                c.correlation >= 0.7
-                                  ? '#e65100'
-                                  : c.correlation >= 0.5
-                                    ? '#f57f17'
-                                    : '#555'
-                              "
                             >
                               {{ c.correlation | number: '1.4-4' }}
                             </td>
@@ -1499,7 +1478,6 @@
                                 border-bottom: 1px solid #f2f2f2;
                                 text-align: right;
                               "
-                              [style.color]="c.signed_correlation >= 0 ? '#2e7d32' : '#b71c1c'"
                             >
                               {{ c.signed_correlation | number: '1.4-4' }}
                             </td>
@@ -1514,7 +1492,7 @@
                                 <span>{{ c.vif_without | number: '1.2-2' }}</span>
                               }
                               @if (c.vif_without == null) {
-                                <span style="color: #aaa">—</span>
+                                <span>{{ vifStateLabel(c.vif_without_status) }}</span>
                               }
                             </td>
                             <td
@@ -1524,19 +1502,12 @@
                                 text-align: right;
                                 font-weight: 600;
                               "
-                              [style.color]="
-                                c.vif_drop != null && c.vif_drop > 1
-                                  ? '#b71c1c'
-                                  : c.vif_drop != null && c.vif_drop > 0.3
-                                    ? '#e65100'
-                                    : '#555'
-                              "
                             >
                               @if (c.vif_drop != null) {
                                 <span>{{ c.vif_drop | number: '1.2-2' }}</span>
                               }
                               @if (c.vif_drop == null) {
-                                <span style="color: #aaa">—</span>
+                                <span>Not finite</span>
                               }
                             </td>
                           </tr>
@@ -2711,9 +2682,6 @@
                       <tbody>
                         @for (step of sfsBackwardResults; track step) {
                           <tr
-                            [style.background]="
-                              sfsBackwardCutStep === step.step ? '#e8f5e9' : 'transparent'
-                            "
                             style="cursor: pointer; transition: background 0.15s"
                             (click)="setBackwardCutStep(step)"
                           >
@@ -3902,10 +3870,7 @@
                                     >{{ change.feature }}</span
                                   >
                                 </td>
-                                <td
-                                  style="padding: 8px; border: 1px solid #ddd; text-align: right"
-                                  [style.color]="change.change > 0 ? '#4caf50' : '#f44336'"
-                                >
+                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right">
                                   {{ change.change > 0 ? '+' : ''
                                   }}{{ change.change | number: '1.6-6' }}
                                 </td>
@@ -4502,7 +4467,6 @@
                           "
                         >
                           <span
-                            [style.background]="g.type === 'zoom_in' ? '#2e7d32' : '#1976d2'"
                             style="
                               padding: 3px 8px;
                               border-radius: 12px;
@@ -5258,7 +5222,6 @@
                     </td>
                     <td style="padding: 10px; border: 1px solid #ddd">
                       <span
-                        [style.background]="step.direction === 'forward' ? '#4caf50' : '#ff9800'"
                         style="
                           padding: 4px 8px;
                           border-radius: 4px;
@@ -5271,10 +5234,7 @@
                       </span>
                     </td>
                     <td style="padding: 10px; border: 1px solid #ddd">
-                      <span
-                        [style.color]="step.action === 'added' ? '#4caf50' : '#f44336'"
-                        style="font-weight: 500"
-                      >
+                      <span style="font-weight: 500">
                         {{ step.action === 'added' ? '➕ Added' : '➖ Dropped' }}
                       </span>
                     </td>

@@ -11,6 +11,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { A11yModule } from '@angular/cdk/a11y';
 import { MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';  // Import FormsModule
 import { MatCheckboxModule } from '@angular/material/checkbox';  // Ensure you have this for MatCheckbox
@@ -68,6 +69,7 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
+    A11yModule,
     FormsModule,
     MatCheckboxModule,
     MatMenuModule,

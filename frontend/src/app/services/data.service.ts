@@ -157,8 +157,8 @@ export class DataService {
   }
 
   // Get modeling status/metrics
-  getModelingStatus(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/status/${fileId}/`).pipe(
+  getModelingStatus(fileId: number, executionId?: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}modeling/status/${fileId}/`, { params: executionId ? { execution_id: executionId } : {} }).pipe(
       catchError((error: any) => {
         console.error('Error getting modeling status:', error);
         return throwError(() => new Error(error.message || 'Failed to get modeling status'));
@@ -441,8 +441,8 @@ export class DataService {
   }
 
   // Get VIF decomposition detail for a specific feature
-  getVifDetail(fileId: number, feature: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature }).pipe(
+  getVifDetail(fileId: number, feature: string, executionId?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature, execution_id: executionId }).pipe(
       catchError((error: any) => {
         console.error('Error getting VIF detail:', error);
         return throwError(() => error);

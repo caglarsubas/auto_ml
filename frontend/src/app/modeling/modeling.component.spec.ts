@@ -11,7 +11,8 @@ import { ModelingComponent } from './modeling.component';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
 import { AiAssistantService } from '../services/ai-assistant.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
+import { A11yModule } from '@angular/cdk/a11y';
 
 describe('ModelingComponent', () => {
   let component: ModelingComponent;
@@ -24,6 +25,7 @@ describe('ModelingComponent', () => {
         RouterTestingModule,
         FormsModule,
         MatDialogModule,
+        A11yModule,
         MatSnackBarModule,
         MatTooltipModule,
         BrowserAnimationsModule,
@@ -1866,4 +1868,83 @@ describe('ModelingComponent', () => {
       }, 5);
     });
   });
+  describe('immutable collinearity details', () => {
+    it('keeps non-finite states and provenance available to the assistant', () => {
+      component.currentFileId = 1;
+      component.modelingStatus = { execution_id: 'run-a', model: {} };
+      const service = TestBed.inject(DataService);
+      const get = spyOn(service, 'getVifDetail').and.returnValue(
+        of({
+          vif: null,
+          vif_status: 'unbounded',
+          execution_id: 'run-a',
+          method: 'centered_scaled_auxiliary_ols_v1',
+          row_count: 200,
+          limitations: 'Exploratory, not automatic removal',
+          contributions: [],
+        }),
+      );
+      spyOn(component as any, 'pushModelingAiContext');
+      component.openVifDetail('x', new Event('click'));
+      expect(get).toHaveBeenCalledWith(1, 'x', 'run-a');
+      expect(component.vifDetailVif).toBeNull();
+      expect(component.vifStateLabel(component.vifDetailStatus)).toBe('Unbounded');
+      expect(component.vifDecompositionCache['x'].execution_id).toBe('run-a');
+      expect(component.vifDecompositionCache['x'].limitations).toContain('not automatic removal');
+    });
+    it('rejects delayed responses after execution changes or a newer feature opens', () => {
+      component.currentFileId = 1;
+      component.modelingStatus = { execution_id: 'run-a', model: {} };
+      const old = new Subject<any>();
+      const latest = new Subject<any>();
+      spyOn(TestBed.inject(DataService), 'getVifDetail').and.returnValues(old, latest);
+      spyOn(component as any, 'pushModelingAiContext');
+      component.openVifDetail('x', new Event('click'));
+      component.modelingStatus.execution_id = 'run-b';
+      component.openVifDetail('y', new Event('click'));
+      old.next({ vif: 100, vif_status: 'finite', contributions: [] });
+      expect(component.vifDetailVif).toBeNull();
+      latest.next({
+        vif: 1,
+        vif_status: 'finite',
+        execution_id: 'run-b',
+        method: 'centered_scaled_auxiliary_ols_v1',
+        contributions: [],
+      });
+      expect(component.vifDetailVif).toBe(1);
+      expect(Object.keys(component.vifDecompositionCache)).toEqual(['y']);
+      component.closeVifDetail();
+      latest.next({ vif: 50 });
+      expect(component.vifDetailVif).toBe(1);
+    });
+    it('lists categorical exclusions and constants independently of SHAP evidence', () => {
+      component.modelingStatus = {
+        model: {
+          collinearity: {
+            features: {
+              category: { vif: null, vif_status: 'excluded_categorical' },
+              constant: { vif: null, vif_status: 'constant' },
+            },
+          },
+        },
+      };
+      expect(
+        component.collinearityRows.map((row) => component.vifStateLabel(row.vif_status)),
+      ).toEqual(['Category excluded', 'Constant']);
+    });
+  });
+  it('refreshes saved evidence by exact execution and ignores superseded restore responses', () => {
+    const result = new Subject<any>();
+    const request = spyOn(TestBed.inject(DataService), 'getModelingStatus').and.returnValue(result);
+    spyOn(component as any, 'pushModelingAiContext');
+    component.currentFileId = 1;
+    component.restoreFromCheckpoint({modelingStatus: {execution_id: 'run-a', model: {}}});
+    expect(request).toHaveBeenCalledWith(1, 'run-a');
+    result.next({job_status: 'completed', execution_id: 'latest-run', model: {}});
+    expect(component.modelingStatus.execution_id).toBe('run-a');
+    component.modelingStatus = {execution_id: 'run-b', model: {}};
+    result.next({job_status: 'completed', execution_id: 'run-a', model: {}});
+    expect(component.modelingStatus.execution_id).toBe('run-b');
+  });
+
 });

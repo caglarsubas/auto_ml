@@ -491,6 +491,11 @@ def _handle_get_vif_decomposition(file_id: int, args: dict) -> str:
         return (f"No VIF decomposition for '{feature}'. "
                 f"Available features: {', '.join(available[:20])}")
     lines = [f"VIF Decomposition for {feature} (overall VIF={_fmt(decomp.get('vif'))}):"]
+    if decomp.get('vif_status'):
+        lines.append(f"State={decomp['vif_status']}; execution={decomp.get('execution_id')}; method={decomp.get('method')}")
+        lines.append(decomp.get('limitations') or 'Exploratory numeric dependence; not model importance or an automatic removal gate.')
+    else:
+        lines.append('Historical diagnostic method and execution provenance unverified.')
     for c in decomp.get('top_correlations', []):
         lines.append(
             f"  ↔ {c.get('feature','?')}: |corr|={_fmt(c.get('correlation'))}, "
@@ -549,7 +554,7 @@ def _handle_get_selected_features(file_id: int, args: dict) -> str:
             f"  {f.get('feature','?')}: combined={_fmt(f.get('combined_score'))}, "
             f"SHAP%={_fmt(f.get('shap_percentile'))}, "
             f"Gain%={_fmt(f.get('gain_percentile'))}, "
-            f"VIF={_fmt(f.get('vif'))}, "
+            f"VIF={_fmt(f.get('vif'))}, state={f.get('vif_status', 'historical_method_unverified')}, "
             f"usage={f.get('usage', 'keep')}"
         )
     return '\n'.join(lines)
@@ -595,6 +600,8 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
         # collinearity warning so the LLM can flag "high impact AND
         # high VIF" features for SFS-cluster-resolution suggestions).
         tail_parts = []
+        if f.get('vif_status'):
+            tail_parts.append(f"VIF state={f['vif_status']}")
         vif = f.get('vif')
         if isinstance(vif, (int, float)):
             tail_parts.append(f"VIF={vif:.2f}")

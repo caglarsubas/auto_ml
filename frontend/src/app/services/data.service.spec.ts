@@ -399,6 +399,12 @@ describe('DataService', () => {
     });
   });
 
+  it('requests an exact saved modeling execution', () => {
+    service.getModelingStatus(3, 'run-a').subscribe();
+    const req = httpMock.expectOne(`${apiUrl}modeling/status/3/?execution_id=run-a`);
+    req.flush({execution_id: 'run-a'});
+  });
+
   // ── SFS operations ──────────────────────────────────────────────────
   describe('SFS', () => {
     it('startSfs should POST with parameters', () => {
@@ -712,10 +718,11 @@ describe('DataService', () => {
   // ── VIF detail ──────────────────────────────────────────────────────
   describe('getVifDetail', () => {
     it('should POST with file_id and feature', () => {
-      service.getVifDetail(1, 'Income').subscribe();
+      service.getVifDetail(1, 'Income', 'exact-execution').subscribe();
       const req = httpMock.expectOne(`${apiUrl}modeling/vif-detail/`);
       expect(req.request.body.file_id).toBe(1);
       expect(req.request.body.feature).toBe('Income');
+      expect(req.request.body.execution_id).toBe('exact-execution');
       req.flush({ vif: 2.5, correlations: [] });
     });
   });

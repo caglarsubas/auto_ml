@@ -233,7 +233,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   get hpMetricOptions(): string[] {
     const metrics = this.isRegressionTask ? this.hpRegMetricOptions : this.hpClassMetricOptions;
     return this.modelingStatus?.model?.prediction_contract
-      ? metrics.filter(metric => !['f2', 'mcc'].includes(metric))
+      ? metrics.filter((metric) => !['f2', 'mcc'].includes(metric))
       : metrics;
   }
 
@@ -377,6 +377,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   showVifDetailModal: boolean = false;
   vifDetailFeature: string = '';
   vifDetailVif: number | null = null;
+  vifDetailStatus = '';
+  vifDetailLimitations = '';
+  vifDetailExecutionId = '';
+  vifDetailRowCount = 0;
+  private vifRequestSequence = 0;
   vifDetailContributions: any[] = [];
   vifDetailLoading: boolean = false;
   vifDetailError: string | null = null;
@@ -385,7 +390,11 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   // Cache of VIF decomposition data per feature (for AI context)
   vifDecompositionCache: {
     [feature: string]: {
-      vif: number;
+      vif: number | null;
+      vif_status: string;
+      execution_id: string;
+      method: string;
+      limitations: string;
       top_correlations: {
         feature: string;
         correlation: number;
@@ -523,6 +532,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         shap_percentile: f.shap_percentile,
         gain_percentile: f.gain_percentile,
         vif: f.vif,
+        vif_status: f.vif_status,
         usage: f.usage,
       })),
     };
@@ -1322,18 +1332,42 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.vifDetailSortColumn = 'correlation';
     this.vifDetailSortDirection = 'desc';
     this.showVifDetailModal = true;
+    this.vifDetailStatus = '';
+    this.vifDetailLimitations = '';
+    const fileId = this.currentFileId;
+    const executionId = this.modelingStatus?.execution_id;
+    const sequence = ++this.vifRequestSequence;
+    this.vifDetailExecutionId = executionId || '';
+    this.vifDetailRowCount = 0;
 
-    this.dataService.getVifDetail(this.currentFileId, featureName).subscribe({
+    this.dataService.getVifDetail(fileId, featureName, executionId).subscribe({
       next: (resp: any) => {
+        if (
+          sequence !== this.vifRequestSequence ||
+          this.currentFileId !== fileId ||
+          this.modelingStatus?.execution_id !== executionId
+        )
+          return;
         this.vifDetailVif = resp.vif;
+        this.vifDetailStatus = resp.vif_status;
+        this.vifDetailLimitations = resp.limitations;
+        this.vifDetailRowCount = resp.row_count;
         this.vifDetailContributions = resp.contributions || [];
         this.vifDetailLoading = false;
         // Cache top 5 correlations for AI context
         const sorted = [...this.vifDetailContributions].sort(
           (a: any, b: any) => (b.correlation || 0) - (a.correlation || 0),
         );
+        for (const key of Object.keys(this.vifDecompositionCache)) {
+          if (this.vifDecompositionCache[key].execution_id !== executionId)
+            delete this.vifDecompositionCache[key];
+        }
         this.vifDecompositionCache[featureName] = {
           vif: resp.vif,
+          vif_status: resp.vif_status,
+          execution_id: resp.execution_id,
+          method: resp.method,
+          limitations: resp.limitations,
           top_correlations: sorted.slice(0, 5).map((c: any) => ({
             feature: c.feature,
             correlation: c.correlation,
@@ -1344,6 +1378,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         this.pushModelingAiContext();
       },
       error: (err: any) => {
+        if (
+          sequence !== this.vifRequestSequence ||
+          this.currentFileId !== fileId ||
+          this.modelingStatus?.execution_id !== executionId
+        )
+          return;
         this.vifDetailError = err?.error?.error || 'Failed to load VIF detail';
         this.vifDetailLoading = false;
       },
@@ -1351,10 +1391,32 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   closeVifDetail(): void {
+    this.vifRequestSequence++;
     this.showVifDetailModal = false;
     this.vifDetailFeature = '';
     this.vifDetailContributions = [];
     this.vifDetailError = null;
+  }
+
+  get collinearityRows(): any[] {
+    return Object.entries(this.modelingStatus?.model?.collinearity?.features || {}).map(
+      ([feature, record]) => ({ feature, ...(record as object) }),
+    );
+  }
+
+  vifStateLabel(state?: string): string {
+    const labels: Record<string, string> = {
+      finite: 'Finite',
+      unbounded: 'Unbounded',
+      excluded_categorical: 'Category excluded',
+      excluded_nonnumeric: 'Non-numeric',
+      constant: 'Constant',
+      no_finite_values: 'No finite values',
+      insufficient_rows: 'Too few rows',
+      budget_exceeded: 'Budget exceeded',
+      unavailable: 'Unavailable',
+    };
+    return labels[state || ''] || 'Not recorded';
   }
 
   sortVifDetail(column: string): void {
@@ -1655,7 +1717,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         impact: f.impact, // |SHAP| magnitude (positive)
         signed_impact: f.signed_impact, // impact * direction → sign encodes UP/DOWN
         signed_mean: f.signed_mean, // raw mean of signed SHAP values (small)
-        vif: f.vif, // pairs SHAP with collinearity context
+        vif: f.vif,
+        vif_status: f.vif_status, // pairs SHAP with collinearity context
       }));
       modelCtx.selected_features = feats.map((f: any) => ({
         feature: f.feature,
@@ -1663,13 +1726,17 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         shap_percentile: f.shap_percentile,
         gain_percentile: f.gain_percentile,
         vif: f.vif,
+        vif_status: f.vif_status,
         usage: f.usage,
       }));
     }
     // VIF decomposition cache (pairwise correlations for features the user has inspected)
-    if (Object.keys(this.vifDecompositionCache).length > 0) {
-      modelCtx.vif_decomposition = this.vifDecompositionCache;
-    }
+    const currentDiagnostics = Object.fromEntries(
+      Object.entries(this.vifDecompositionCache).filter(
+        ([, row]) => row.execution_id === this.modelingStatus?.execution_id,
+      ),
+    );
+    if (Object.keys(currentDiagnostics).length > 0) modelCtx.vif_decomposition = currentDiagnostics;
     // SFS results + configuration
     if (
       this.sfsForwardResults?.length ||
@@ -1881,8 +1948,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       // beeswarm_png, CV curves). Re-fetch the full data from the backend
       // status JSON so the interactive SHAP beeswarm renders on restore.
       if (this.currentFileId != null) {
-        this.dataService.getModelingStatus(this.currentFileId).subscribe({
+        const restoredFileId = this.currentFileId;
+        const restoredExecutionId = this.modelingStatus.execution_id;
+        this.dataService.getModelingStatus(restoredFileId, restoredExecutionId).subscribe({
           next: (full: any) => {
+            if (
+              this.currentFileId !== restoredFileId ||
+              this.modelingStatus?.execution_id !== restoredExecutionId ||
+              full?.execution_id !== restoredExecutionId
+            )
+              return;
             if (full && (full.job_status === 'completed' || full.status === 'completed')) {
               console.log(
                 '[Modeling] Re-fetched full modelingStatus from backend for SHAP beeswarm',

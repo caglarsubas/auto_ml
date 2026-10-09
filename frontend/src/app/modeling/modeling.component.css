@@ -715,3 +715,23 @@
   text-align: left !important;
   padding: 9px 12px !important;
 }
+
+.numeric-diagnostics {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #ddd;
+}
+.numeric-diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.numeric-diagnostics table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.numeric-diagnostics th,
+.numeric-diagnostics td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+}
