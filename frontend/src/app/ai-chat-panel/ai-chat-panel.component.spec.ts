@@ -787,7 +787,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Run preprocessing with low-variance pruning',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Data purifier started');
+      expect(lastMsg.content).toContain('Data purifier request sent to the pipeline');
       expect(lastMsg.content).toContain('Run preprocessing with low-variance pruning');
       expect(lastMsg.content).toContain('1');
       expect(lastMsg.content).toContain('random');
@@ -1030,7 +1030,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Apply encoding plan with native library',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Apply encoding started');
+      expect(lastMsg.content).toContain('Encoding request sent to the pipeline');
       expect(lastMsg.content).toContain('Apply encoding plan with native library');
       expect(lastMsg.content).toContain('use_native');
     });
@@ -1082,7 +1082,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Start modeling with XGBoost',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Modeling started');
+      expect(lastMsg.content).toContain('Modeling request sent to the pipeline');
       expect(lastMsg.content).toContain('Start modeling with XGBoost');
       expect(lastMsg.content).toContain('xgboost');
       expect(lastMsg.content).toContain('use_native');
@@ -1710,7 +1710,7 @@ describe('AiChatPanelComponent', () => {
         description: 'Tune depth + learning rate',
       });
       const lastMsg = aiService.getMessages().slice(-1)[0];
-      expect(lastMsg.content).toContain('Hyperparameter tuning started');
+      expect(lastMsg.content).toContain('Tuning request sent to the pipeline');
       expect(lastMsg.content).toContain('60');          // n_iter
       expect(lastMsg.content).toContain('n_jobs');       // compute-power label
       expect(lastMsg.content).toContain('max_depth');    // enabled param

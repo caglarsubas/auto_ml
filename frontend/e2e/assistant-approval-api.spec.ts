@@ -218,7 +218,9 @@ test('keyboard review confirms a synthetic proposal through real authority endpo
     const confirm = proposal.getByRole('button', { name: 'Approve this action', exact: true });
     await confirm.focus();
     await confirm.press('Enter');
-    await expect(panel.getByText('Dispatched', { exact: true })).toBeVisible();
+    await expect(
+      panel.locator('.action-applied-badge').filter({ hasText: 'Dispatched' }),
+    ).toBeVisible();
     const receipt = panel.getByText('Action dispatch receipt', { exact: true });
     await receipt.focus();
     await receipt.press('Space');

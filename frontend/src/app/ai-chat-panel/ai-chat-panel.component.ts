@@ -629,7 +629,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // populates its SFS form fields and calls startSfs() — the exact
       // code path a manual "Start SFS" button click would take.
       const applied = resp.applied || null;
-      let msg = `✅ **SFS started.**`;
+      let msg = `✅ **SFS request sent to the pipeline.**`;
       if (desc) msg += ` ${desc}`;
       if (applied && typeof applied === 'object') {
         const methods = Array.isArray(applied.methods) ? applied.methods.join(', ') : '?';
@@ -647,7 +647,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
             `- **Parallelism**: n_jobs=${applied.n_jobs ?? '?'}, top_k=${applied.top_k ?? '?'}`,
           ].join('\n');
       }
-      this.actionSuccess = 'SFS started.';
+      this.actionSuccess = 'SFS request sent to the pipeline.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       if (applied && typeof applied === 'object') {
         this.sharedService.emitSfsStartRequest(applied);
@@ -660,7 +660,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // component via dataPurifierStartRequests$, which mirrors
       // the user clicking "Run Preprocessing" with these settings.
       const applied = resp.applied || null;
-      let msg = `✅ **Data purifier started.**`;
+      let msg = `✅ **Data purifier request sent to the pipeline.**`;
       if (desc) msg += ` ${desc}`;
       if (applied && typeof applied === 'object') {
         const opts = Array.isArray(applied.purifier_options) ? applied.purifier_options : [];
@@ -677,7 +677,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
             `- **Split**: ${splitDesc}`,
           ].join('\n');
       }
-      this.actionSuccess = 'Data purifier started.';
+      this.actionSuccess = 'Data purifier request sent to the pipeline.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       if (applied && typeof applied === 'object') {
         this.sharedService.emitDataPurifierStartRequest({
@@ -750,10 +750,10 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       const applied = resp.applied || null;
       const useNative =
         applied && typeof applied.use_native === 'boolean' ? applied.use_native : true;
-      let msg = `✅ **Apply encoding started.**`;
+      let msg = `✅ **Encoding request sent to the pipeline.**`;
       if (desc) msg += ` ${desc}`;
       msg += `\n\n- **use_native**: \`${useNative}\``;
-      this.actionSuccess = 'Apply encoding started.';
+      this.actionSuccess = 'Encoding request sent to the pipeline.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       this.sharedService.emitEncodingApplyRequest({ use_native: useNative });
       this.sharedService.triggerCheckpoint('ai_action_apply_encoding');
@@ -773,7 +773,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
         applied && typeof applied.encoding_use_native === 'boolean'
           ? applied.encoding_use_native
           : true;
-      let msg = `✅ **Modeling started.**`;
+      let msg = `✅ **Modeling request sent to the pipeline.**`;
       if (desc) msg += ` ${desc}`;
       msg +=
         '\n\n' +
@@ -781,7 +781,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           `- **Algorithm**: ${algorithm ? `\`${algorithm}\`` : '_form value_'}`,
           `- **encoding_use_native**: \`${useNative}\``,
         ].join('\n');
-      this.actionSuccess = 'Modeling started.';
+      this.actionSuccess = 'Modeling request sent to the pipeline.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       this.sharedService.emitModelingStartRequest({
         algorithm,
@@ -796,7 +796,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       // and calls startHyperparam() — the same code path the manual
       // click takes (active-process registration + status polling).
       const applied = resp.applied || null;
-      let msg = `✅ **Hyperparameter tuning started.**`;
+      let msg = `✅ **Tuning request sent to the pipeline.**`;
       if (desc) msg += ` ${desc}`;
       if (applied && typeof applied === 'object') {
         const enabled =
@@ -816,7 +816,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
             `- **Tuned params**: ${enabled}`,
           ].join('\n');
       }
-      this.actionSuccess = 'Hyperparameter tuning started.';
+      this.actionSuccess = 'Tuning request sent to the pipeline.';
       this.aiService.addMessage({ role: 'assistant', content: msg, timestamp: new Date() });
       if (applied && typeof applied === 'object') {
         this.sharedService.emitHyperparamStartRequest(applied);
