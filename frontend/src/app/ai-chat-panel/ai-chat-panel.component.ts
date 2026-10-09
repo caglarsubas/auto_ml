@@ -9,7 +9,7 @@ import {
   NgZone,
   ChangeDetectionStrategy,
 } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { EMPTY, Subscription, switchMap } from 'rxjs';
 import {
   AiAssistantService,
   AiAction,
@@ -31,7 +31,6 @@ import { SharedService } from '../services/shared.service';
 export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('chatContainer') chatContainer!: ElementRef;
   @ViewChild('modelSelectorWrapper') modelSelectorWrapper?: ElementRef<HTMLElement>;
-  private static readonly MAX_AUTO_CORRECTION_ATTEMPTS = 3;
 
   messages: ChatMessage[] = [];
   userInput: string = '';
@@ -86,6 +85,13 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   ) {}
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.sharedService.currentFileId$.subscribe((fileId) => {
+        if (this.preparedAction && this.preparedAction.record.file_id !== fileId)
+          this.cancelPreparedAction();
+        this.actionReceipt = null;
+      }),
+    );
     // Fetch available models (applying the backend's default selection).
     this.loadModels(true);
 
@@ -118,6 +124,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   }
 
   ngOnDestroy(): void {
+    this.approvalSequence++;
     this.subscriptions.unsubscribe();
   }
 
@@ -186,7 +193,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
           }));
           const fallbackMsg =
             actions.length > 0
-              ? "I've prepared the following operation for you. Review the details below and click **Apply** to execute."
+              ? 'Review the proposed action below, then approve its exact prepared details before dispatch.'
               : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
           // v2.38.0: capture chat_span_id (only present when actions exist
           // AND Prometa SDK is active server-side).  Stored on the message
@@ -277,6 +284,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   /** Toggle edit mode for an action block */
   toggleEdit(action: AiAction): void {
+    this.cancelPreparedAction();
     if (action.applied) return;
     if (!action.editing) {
       // Enter edit mode — seed editedPayload from current payload
@@ -302,6 +310,7 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   /** Update the edited payload when the user types in the textarea */
   onEditChange(action: AiAction, value: string): void {
+    this.cancelPreparedAction();
     if (action.type === 'execute_code') {
       if (!action.editedPayload) action.editedPayload = { ...action.payload };
       action.editedPayload.code = value;
@@ -337,58 +346,139 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
       .join(' ');
   }
 
-  /** Execute any AI action via the general-purpose backend endpoint */
+  preparedAction: {
+    record: any;
+    action: AiAction;
+    messageIndex: number;
+    actionIndex: number;
+  } | null = null;
+  actionReceipt: any = null;
+  private approvalSequence = 0;
+
+  /** Prepare immutable review details; this never approves or dispatches. */
   applyAction(messageIndex: number, actionIndex: number, action: AiAction): void {
     if (action.applied || this.actionApplying) return;
-
     const fileId = this.sharedService.getCurrentFileId();
     if (!fileId) {
-      this.actionError = 'No dataset loaded. Please upload data first.';
+      this.actionError = 'Load a dataset before reviewing an action.';
       return;
     }
-
-    // Use editedPayload if user modified the action, otherwise use original
+    this.cancelPreparedAction();
+    const sequence = ++this.approvalSequence;
     const payload = action.editedPayload ?? action.payload;
-
-    // v2.38.0: pull the chat_span_id stamped on the source message when
-    // the proposing turn was traced.  Falls back to undefined for
-    // legacy v2.25.0..v2.37.0 messages or untraced turns — in which
-    // case dataService skips the parent_span_id POST field and the
-    // backend treats it as no-link (legacy semantics preserved).
-    const sourceMessage = this.aiService.getMessages()[messageIndex];
-    const parentSpanId = sourceMessage?.chatSpanId;
-
+    const parentSpanId = this.aiService.getMessages()[messageIndex]?.chatSpanId;
     this.actionApplying = true;
     this.actionError = null;
     this.actionSuccess = null;
-
-    this.dataService.executeAiAction(fileId, action.type, payload, parentSpanId).subscribe({
-      next: (resp: any) => {
+    this.actionReceipt = null;
+    this.dataService.prepareAiAction(fileId, action.type, payload, parentSpanId).subscribe({
+      next: (record: any) => {
+        if (
+          sequence !== this.approvalSequence ||
+          this.sharedService.getCurrentFileId() !== fileId
+        ) {
+          this.dataService
+            .cancelAiAction(this.approvalSelector(record))
+            .subscribe({ error: () => {} });
+          this.actionApplying = false;
+          return;
+        }
+        this.preparedAction = { record, action, messageIndex, actionIndex };
         this.actionApplying = false;
-        action.editing = false;
-        this.aiService.markActionApplied(messageIndex, actionIndex);
-        this._handleActionResult(action.type, resp);
       },
       error: (err: any) => {
+        if (sequence !== this.approvalSequence) return;
         this.actionApplying = false;
-        const errMsg = err?.error?.error || err?.error?.message || 'Action failed.';
-        const traceback = err?.error?.traceback || '';
-        const fullError = traceback ? errMsg + '\n' + traceback : errMsg;
-        this.actionError = fullError;
-
-        // Auto-send the error back to the AI for self-correction. The user's
-        // first Apply is treated as consent for bounded execute_code repairs.
-        this._requestErrorCorrection(
-          action.type,
-          payload,
-          fullError,
-          1,
-          parentSpanId,
-          messageIndex,
-          actionIndex,
-        );
+        this.actionError = err?.error?.error || 'The action could not be prepared for review.';
       },
     });
+  }
+
+  private approvalSelector(record: any): { approval_id: string; proposal_sha256: string } {
+    return { approval_id: record.approval_id, proposal_sha256: record.proposal_sha256 };
+  }
+
+  cancelPreparedAction(): void {
+    this.approvalSequence++;
+    const pending = this.preparedAction;
+    this.preparedAction = null;
+    if (pending)
+      this.dataService
+        .cancelAiAction(this.approvalSelector(pending.record))
+        .subscribe({ error: () => {} });
+  }
+
+  approvePreparedAction(): void {
+    const pending = this.preparedAction;
+    if (!pending || this.actionApplying) return;
+    const { record, action, messageIndex, actionIndex } = pending;
+    if (
+      this.sharedService.getCurrentFileId() !== record.file_id ||
+      JSON.stringify(action.editedPayload ?? action.payload) !== JSON.stringify(record.payload)
+    ) {
+      this.cancelPreparedAction();
+      this.actionError = 'The dataset or action changed. Review a fresh proposal.';
+      return;
+    }
+    const sequence = this.approvalSequence;
+    const selector = this.approvalSelector(record);
+    this.actionApplying = true;
+    this.dataService
+      .approveAiAction(selector)
+      .pipe(
+        switchMap(() => {
+          if (
+            sequence !== this.approvalSequence ||
+            this.sharedService.getCurrentFileId() !== record.file_id
+          ) {
+            this.actionApplying = false;
+            return EMPTY;
+          }
+          return this.dataService.executeAiAction(
+            record.file_id,
+            record.action_type,
+            record.payload,
+            record.parent_span_id || undefined,
+            record.source,
+            selector,
+          );
+        }),
+      )
+      .subscribe({
+        next: (resp: any) => {
+          this.actionApplying = false;
+          if (
+            sequence !== this.approvalSequence ||
+            this.sharedService.getCurrentFileId() !== record.file_id
+          )
+            return;
+          this.preparedAction = null;
+          this.actionReceipt = resp.approval_receipt;
+          action.editing = false;
+          this.aiService.markActionApplied(messageIndex, actionIndex);
+          this._handleActionResult(record.action_type, resp);
+        },
+        error: (err: any) => {
+          this.actionApplying = false;
+          if (sequence !== this.approvalSequence) return;
+          this.cancelPreparedAction();
+          this.actionError =
+            err?.error?.error ||
+            'The action stopped. Review its receipt before preparing another proposal.';
+          this.actionReceipt = { ...selector, state: 'outcome_unconfirmed' };
+          const receiptSequence = this.approvalSequence;
+          this.dataService.getAiActionApproval(selector).subscribe({
+            next: (receipt: any) => {
+              if (
+                receiptSequence === this.approvalSequence &&
+                this.sharedService.getCurrentFileId() === record.file_id
+              )
+                this.actionReceipt = receipt;
+            },
+            error: () => {},
+          });
+        },
+      });
   }
 
   /** Build a human-readable confirmation message and trigger appropriate refreshes */
@@ -874,220 +964,6 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
 
   isCorrectionExpanded(index: number): boolean {
     return this.expandedCorrections.has(index);
-  }
-
-  /** Automatically send the failed action + error back to the AI for self-correction */
-  private _requestErrorCorrection(
-    actionType: string,
-    payload: any,
-    errorText: string,
-    attempt: number = 1,
-    parentSpanId?: string,
-    acceptedMessageIndex?: number,
-    acceptedActionIndex?: number,
-  ): void {
-    // Build a concise description of what failed
-    let codeSnippet = '';
-    if (actionType === 'execute_code') {
-      codeSnippet = payload?.code || JSON.stringify(payload, null, 2);
-    } else {
-      codeSnippet = JSON.stringify(payload, null, 2);
-    }
-
-    const correctionPrompt =
-      `The following "${actionType}" action you proposed failed with an error.\n\n` +
-      `**Failed code / payload:**\n\`\`\`\n${codeSnippet}\n\`\`\`\n\n` +
-      `**Error:**\n\`\`\`\n${errorText}\n\`\`\`\n\n` +
-      `Please analyze the error and provide a corrected action block. ` +
-      `Remember: only pandas (pd), numpy (np), and the DataFrame (df) are available in the sandbox. ` +
-      `No imports, no open(), no __import__. Fix the issue and respond with the corrected action.` +
-      (actionType === 'execute_code'
-        ? `\n\nThis is automated correction attempt ${attempt} of ${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}. ` +
-          `The user already approved applying this implementation, so return exactly one corrected execute_code action block. ` +
-          `Do not ask the user to press Apply again.`
-        : '');
-
-    // Extract the first line of the error for the collapsed summary
-    const firstErrorLine = errorText.split('\n')[0].trim();
-    const summary =
-      actionType === 'execute_code'
-        ? `Code run failed: ${firstErrorLine} — auto-fix attempt ${attempt}/${AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS}...`
-        : `Action failed: ${firstErrorLine} — requesting AI correction...`;
-
-    // Add the error as a user-role message, marked as auto-correction (collapsed by default)
-    this.aiService.addMessage({
-      role: 'user',
-      content: correctionPrompt,
-      timestamp: new Date(),
-      autoCorrection: true,
-      autoCorrectionSummary: summary,
-    });
-
-    // Add a loading placeholder for the AI response
-    this.aiService.addMessage({
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      loading: true,
-    });
-
-    this.isLoading = true;
-
-    const history = this.aiService.getHistory().slice(0, -1);
-    const cumulative = this.sharedService.getAiCumulativeContext() || {};
-    const sectionCtx = this.currentContext || {};
-    const ctx = { ...cumulative, ...sectionCtx };
-    ctx.pipeline_config = {
-      ...(cumulative.pipeline_config || {}),
-      ...(sectionCtx.pipeline_config || {}),
-    };
-    if (!ctx.pipeline_config.target_definition) {
-      ctx.pipeline_config.target_definition = this.sharedService.getTargetDefinition() || '';
-    }
-    if (!ctx.pipeline_config.pipeline_type) {
-      ctx.pipeline_config.pipeline_type = this.sharedService.getSelectedPipeline() || '';
-    }
-
-    this.dataService
-      .sendAiChat(
-        correctionPrompt,
-        ctx,
-        this.currentSection || 'general',
-        history,
-        this.sharedService.getCurrentFileId() ?? undefined,
-        this.selectedModel,
-        undefined,
-        undefined,
-        undefined,
-        { onStep: (step) => this.onProgressStep(step) },
-      )
-      .subscribe({
-        next: (resp: any) => {
-          this.aiService.finalizeProgressSteps();
-          const actions: AiAction[] = (resp.actions || []).map((a: any) => ({
-            type: a.type,
-            payload: a.payload,
-            applied: false,
-          }));
-          const shouldAutoApply = this._shouldAutoApplyCorrection(actionType, actions, attempt);
-          if (shouldAutoApply) {
-            const message = resp.message || 'I prepared a corrected operation.';
-            this.aiService.updateLastMessage(
-              `${message}\n\nApplying the corrected operation now...`,
-              [],
-              resp.chat_span_id,
-              resp.chat_trace_id,
-              resp.chat_session_id,
-            );
-            this.isLoading = false;
-            this.actionError = null;
-            this._executeAutoCorrectedAction(
-              actions[0].type,
-              actions[0].payload,
-              attempt,
-              resp.chat_span_id || parentSpanId,
-              acceptedMessageIndex,
-              acceptedActionIndex,
-            );
-            return;
-          }
-          const correctionFallback =
-            actions.length > 0
-              ? "I've prepared a corrected operation. Review the details below and click **Apply** to execute."
-              : AiChatPanelComponent.EMPTY_RESPONSE_FALLBACK;
-          // v2.38.0: same chat_span_id capture as the main send flow.
-          // Self-correction turns produce a NEW chat span, so the corrected
-          // action card (now appended to this new assistant message) gets
-          // linked to that new span — not the original failing turn.
-          this.aiService.updateLastMessage(
-            resp.message || correctionFallback,
-            actions,
-            resp.chat_span_id,
-            resp.chat_trace_id,
-            resp.chat_session_id,
-          );
-          this.isLoading = false;
-          // Clear the error since the AI has provided a correction
-          this.actionError = null;
-        },
-        error: (err: any) => {
-          const errorMsg = err?.error?.error || err?.message || 'Failed to get AI correction.';
-          this.aiService.updateLastMessage(`Error getting correction: ${errorMsg}`);
-          this.aiService.finalizeProgressSteps();
-          this.isLoading = false;
-        },
-      });
-  }
-
-  private _shouldAutoApplyCorrection(
-    actionType: string,
-    actions: AiAction[],
-    attempt: number,
-  ): boolean {
-    return (
-      actionType === 'execute_code' &&
-      attempt <= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS &&
-      actions.length === 1 &&
-      actions[0].type === 'execute_code' &&
-      !!actions[0].payload
-    );
-  }
-
-  private _executeAutoCorrectedAction(
-    actionType: string,
-    payload: any,
-    attempt: number,
-    parentSpanId?: string,
-    acceptedMessageIndex?: number,
-    acceptedActionIndex?: number,
-  ): void {
-    const fileId = this.sharedService.getCurrentFileId();
-    if (!fileId) {
-      this.actionError = 'No dataset loaded. Please upload data first.';
-      return;
-    }
-
-    this.actionApplying = true;
-    this.actionError = null;
-    this.actionSuccess = null;
-
-    this.dataService.executeAiAction(fileId, actionType, payload, parentSpanId).subscribe({
-      next: (resp: any) => {
-        this.actionApplying = false;
-        this.actionError = null;
-        if (acceptedMessageIndex !== undefined && acceptedActionIndex !== undefined) {
-          this.aiService.markActionApplied(acceptedMessageIndex, acceptedActionIndex);
-        }
-        this._handleActionResult(actionType, resp);
-      },
-      error: (err: any) => {
-        this.actionApplying = false;
-        const errMsg = err?.error?.error || err?.error?.message || 'Action failed.';
-        const traceback = err?.error?.traceback || '';
-        const fullError = traceback ? errMsg + '\n' + traceback : errMsg;
-        this.actionError = fullError;
-
-        if (attempt >= AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS) {
-          const max = AiChatPanelComponent.MAX_AUTO_CORRECTION_ATTEMPTS;
-          this.aiService.addMessage({
-            role: 'assistant',
-            content: `I tried ${max} automatic correction attempts, but the code still failed. The last error was:\n\n\`\`\`\n${fullError}\n\`\`\``,
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        this._requestErrorCorrection(
-          actionType,
-          payload,
-          fullError,
-          attempt + 1,
-          parentSpanId,
-          acceptedMessageIndex,
-          acceptedActionIndex,
-        );
-      },
-    });
   }
 
   onKeyDown(event: KeyboardEvent): void {

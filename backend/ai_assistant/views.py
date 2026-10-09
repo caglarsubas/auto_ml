@@ -2452,51 +2452,27 @@ class AIActionExecuteView(APIView):
     POST /api/ai-assistant/execute-action/
     Body: {
         "file_id": 123,
-        "action_type": "execute_code" | "update_metadata" | "update_config" | "update_notes",
-        "payload": { ... action-specific data ... }
+        "action_type": "update_metadata" | "update_config" | "update_notes" | other native type,
+        "payload": { ... exact prepared action data ... },
+        "approval_id": "UUID from prepare-action",
+        "proposal_sha256": "exact reviewed digest"
     }
+    Expert Python remains blocked until qualified isolation is available.
     """
 
     def post(self, request, *args, **kwargs):
         from .action_executor import dispatch_action
 
+        from access_control.assistant_approvals import ApprovalError, execute
+        from django.db import DatabaseError
         try:
-            file_id = request.data.get('file_id')
-            action_type = request.data.get('action_type', '')
-            payload = request.data.get('payload', {})
-            # v2.38.0: optional cross-trace link back to the chat span
-            # that proposed this action.  Frontend echoes the
-            # ``chat_span_id`` it received from /chat/.  Defensive limit:
-            # span ids in Prometa are short hex strings — a payload
-            # longer than 256 chars is almost certainly malformed and
-            # treated as missing rather than stamped (so a buggy client
-            # can't poison span attributes).
-            parent_span_id_raw = request.data.get('parent_span_id')
-            parent_span_id = None
-            if isinstance(parent_span_id_raw, str) and 0 < len(parent_span_id_raw) <= 256:
-                parent_span_id = parent_span_id_raw
-            # Origin: inline Codeline cell vs right-side panel (default panel).
-            action_source_raw = request.data.get('source') or 'panel'
-            action_source = (
-                action_source_raw.strip().lower()
-                if isinstance(action_source_raw, str) else 'panel'
-            )
-            if action_source not in ('codeline', 'panel'):
-                action_source = 'panel'
-
-            if not file_id:
-                return Response({'status': 'error', 'error': 'file_id is required'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if not action_type:
-                return Response({'status': 'error', 'error': 'action_type is required'},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            result = dispatch_action(int(file_id), action_type, payload,
-                                     parent_span_id=parent_span_id,
-                                     source=action_source)
-
-            http_status = status.HTTP_200_OK if result.get('status') == 'success' else status.HTTP_400_BAD_REQUEST
-            return Response(result, status=http_status)
+            result = execute(getattr(request, 'user', None), request.data, dispatch_action)
+            return Response(result, status=200 if result.get('status') == 'success' else 400)
+        except ApprovalError as exc:
+            return Response({'status': 'error', 'error_code': exc.code, 'error': exc.message}, status=exc.status)
+        except (DatabaseError, OSError):
+            return Response({'status': 'error', 'error_code': 'action_receipt_unavailable',
+                'error': 'Action authority or completion cannot be recorded. Inspect the receipt before repeating.'}, status=503)
         finally:
             prometa_flush()
 

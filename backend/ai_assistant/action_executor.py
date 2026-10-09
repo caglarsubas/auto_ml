@@ -2,13 +2,13 @@
 General-purpose AI action executor.
 
 Handles all action types that the AI Assistant can trigger:
-  - execute_code    : Safe pandas code execution on the dataset
+  - execute_code    : Blocked until qualified Linux expert isolation is available
   - update_metadata : Update data dictionary entries (descriptions, LOM, etc.)
   - update_config   : Change pipeline decisions (Model_Usage, preprocessing options, etc.)
   - update_notes    : Add / edit / delete pipeline commentary notes
 
-The design is intentionally open-ended: the AI writes real pandas code
-and the executor runs it inside a restricted sandbox.
+Typed dispatch is governed by server-bound session approvals. Expert Python
+cannot execute in this process.
 """
 
 import base64
@@ -83,8 +83,8 @@ def _load_dataframe(file_id: int) -> tuple:
     Returns (df, data_file, file_path).
     """
     data_file = Declaration.objects.get(pk=file_id)
-    file_path = data_file.file.path
-    if not os.path.exists(file_path):
+    file_path = data_file.get_file_path()
+    if not file_path or not os.path.exists(file_path):
         raise FileNotFoundError(f"Dataset file not found: {file_path}")
     if file_path.lower().endswith(('.xls', '.xlsx')):
         df = pd.read_excel(file_path, engine='openpyxl')

@@ -1,3 +1,4 @@
+from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -72,6 +73,10 @@ urlpatterns = [
     path('api/pipeline/<int:pk>/report/', PipelineReportView.as_view(), name='pipeline-report'),
     path('api/ai-assistant/chat/', AIAssistantView.as_view(), name='ai-assistant-chat'),
     path('api/ai-assistant/execute-action/', AIActionExecuteView.as_view(), name='ai-assistant-execute-action'),
+    path('api/ai-assistant/prepare-action/', AssistantApprovalView.as_view(), name='assistant-prepare-action'),
+    path('api/ai-assistant/approve-action/', AssistantApproveView.as_view(), name='assistant-approve-action'),
+    path('api/ai-assistant/cancel-action/', AssistantCancelView.as_view(), name='assistant-cancel-action'),
+    path('api/ai-assistant/action-approval/<uuid:approval_id>/', AssistantReceiptView.as_view(), name='assistant-action-receipt'),
     path('api/ai-assistant/feedback/', AIFeedbackView.as_view(), name='ai-assistant-feedback'),
     path('api/ai-assistant/cache/', AICachePushView.as_view(), name='ai-assistant-cache'),
     path('api/ai-assistant/models/', AIModelListView.as_view(), name='ai-assistant-models'),

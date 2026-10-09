@@ -1389,6 +1389,13 @@ class TestAIAssistantChatAPI:
 @pytest.mark.django_db
 class TestAIActionExecuteAPI:
 
+    def approved_post(self, api_client, payload):
+        prepared = api_client.post('/api/ai-assistant/prepare-action/', payload, format='json')
+        assert prepared.status_code == 200, prepared.data
+        selector = {key: prepared.data[key] for key in ['approval_id', 'proposal_sha256']}
+        assert api_client.post('/api/ai-assistant/approve-action/', selector, format='json').status_code == 200
+        return api_client.post('/api/ai-assistant/execute-action/', {**payload, **selector}, format='json')
+
     def test_execute_missing_file_id(self, api_client, _use_tmp_media):
         """POST /api/ai-assistant/execute-action/ without file_id returns 400."""
         response = api_client.post(
@@ -1418,64 +1425,48 @@ class TestAIActionExecuteAPI:
         assert response.status_code == 400
         assert 'Unknown action type' in response.data['error']
 
-    def test_execute_update_notes_success(self, api_client, _use_tmp_media):
-        """POST /api/ai-assistant/execute-action/ update_notes succeeds without DB."""
-        response = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': 1,
+    def test_execute_update_notes_success(self, api_client, _use_tmp_media, uploaded_declaration):
+        """POST /api/ai-assistant/execute-action/ update_notes succeeds after exact approval."""
+        response = self.approved_post(api_client, {
+                'file_id': uploaded_declaration['id'],
                 'action_type': 'update_notes',
                 'payload': {
                     'action': 'add',
                     'position': 'after_data_preview',
                     'content': 'Test note',
                 },
-            }),
-            content_type='application/json',
-        )
+            })
         assert response.status_code == 200
         assert response.data['status'] == 'success'
         assert response.data['action_type'] == 'update_notes'
         assert response.data['content'] == 'Test note'
 
-    def test_execute_update_notes_invalid_position(self, api_client, _use_tmp_media):
+    def test_execute_update_notes_invalid_position(self, api_client, _use_tmp_media, uploaded_declaration):
         """POST /api/ai-assistant/execute-action/ update_notes with invalid position returns error."""
-        response = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': 1,
+        response = self.approved_post(api_client, {
+                'file_id': uploaded_declaration['id'],
                 'action_type': 'update_notes',
                 'payload': {'action': 'add', 'position': 'invalid_position', 'content': 'x'},
-            }),
-            content_type='application/json',
-        )
+            })
         assert response.status_code == 400
         assert 'Invalid note position' in response.data['error']
 
-    def test_execute_update_metadata_no_updates(self, api_client, _use_tmp_media):
+    def test_execute_update_metadata_no_updates(self, api_client, _use_tmp_media, uploaded_declaration):
         """POST /api/ai-assistant/execute-action/ update_metadata with no updates returns error."""
-        response = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': 1,
+        response = self.approved_post(api_client, {
+                'file_id': uploaded_declaration['id'],
                 'action_type': 'update_metadata',
                 'payload': {'updates': []},
-            }),
-            content_type='application/json',
-        )
+            })
         assert response.status_code == 400
 
-    def test_execute_update_config_no_updates(self, api_client, _use_tmp_media):
+    def test_execute_update_config_no_updates(self, api_client, _use_tmp_media, uploaded_declaration):
         """POST /api/ai-assistant/execute-action/ update_config with no updates returns error."""
-        response = api_client.post(
-            '/api/ai-assistant/execute-action/',
-            data=json.dumps({
-                'file_id': 1,
+        response = self.approved_post(api_client, {
+                'file_id': uploaded_declaration['id'],
                 'action_type': 'update_config',
                 'payload': {'updates': []},
-            }),
-            content_type='application/json',
-        )
+            })
         assert response.status_code == 400
 
     def test_execute_code_nonexistent_file(self, api_client, _use_tmp_media):

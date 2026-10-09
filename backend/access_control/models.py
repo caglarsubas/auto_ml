@@ -48,3 +48,31 @@ class MCPAccessEvent(models.Model):
     class Meta:
         ordering = ['-started_at']
         indexes = [models.Index(fields=['actor', 'file_id', 'started_at'], name='mcp_access_actor_file_idx')]
+
+
+class AssistantActionApproval(models.Model):
+    """One expiring typed dispatch; not review, job or expert-code authority."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    actor_snapshot = models.JSONField(default=dict)
+    file_id = models.PositiveBigIntegerField()
+    action_type = models.CharField(max_length=64)
+    payload = models.JSONField()
+    source = models.CharField(max_length=16, default='panel')
+    parent_span_id = models.CharField(max_length=256, blank=True)
+    context = models.JSONField()
+    environment = models.JSONField()
+    budget = models.JSONField()
+    proposal_sha256 = models.CharField(max_length=64)
+    state = models.CharField(max_length=24, default='prepared')
+    result = models.JSONField(null=True)
+    reason_code = models.CharField(max_length=64, blank=True)
+    prepared_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    approved_at = models.DateTimeField(null=True)
+    dispatched_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+
+    class Meta:
+        ordering = ['-prepared_at']
+        indexes = [models.Index(fields=['actor', 'file_id', 'prepared_at'], name='assistant_actor_file_idx')]

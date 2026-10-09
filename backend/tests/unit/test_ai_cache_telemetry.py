@@ -1653,6 +1653,12 @@ class TestCrossTraceRefs:
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
                             fake_dispatch)
 
+        from access_control.assistant_approvals import action_request
+        def approved_wire(actor, data, dispatch):
+            requested = action_request(data)
+            return dispatch(requested['file_id'], requested['action_type'], requested['payload'],
+                parent_span_id=requested['parent_span_id'] or None, source=requested['source'])
+        monkeypatch.setattr('access_control.assistant_approvals.execute', approved_wire)
         view = views.AIActionExecuteView()
 
         class _FakeRequest:
@@ -1691,6 +1697,12 @@ class TestCrossTraceRefs:
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
                             fake_dispatch)
 
+        from access_control.assistant_approvals import action_request
+        def approved_wire(actor, data, dispatch):
+            requested = action_request(data)
+            return dispatch(requested['file_id'], requested['action_type'], requested['payload'],
+                parent_span_id=requested['parent_span_id'] or None, source=requested['source'])
+        monkeypatch.setattr('access_control.assistant_approvals.execute', approved_wire)
         view = views.AIActionExecuteView()
 
         class _FakeRequest:
@@ -1724,6 +1736,12 @@ class TestCrossTraceRefs:
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
                             fake_dispatch)
 
+        from access_control.assistant_approvals import action_request
+        def approved_wire(actor, data, dispatch):
+            requested = action_request(data)
+            return dispatch(requested['file_id'], requested['action_type'], requested['payload'],
+                parent_span_id=requested['parent_span_id'] or None, source=requested['source'])
+        monkeypatch.setattr('access_control.assistant_approvals.execute', approved_wire)
         view = views.AIActionExecuteView()
 
         class _FakeRequest:
@@ -1759,6 +1777,12 @@ class TestCrossTraceRefs:
         monkeypatch.setattr('ai_assistant.action_executor.dispatch_action',
                             fake_dispatch)
 
+        from access_control.assistant_approvals import action_request
+        def approved_wire(actor, data, dispatch):
+            requested = action_request(data)
+            return dispatch(requested['file_id'], requested['action_type'], requested['payload'],
+                parent_span_id=requested['parent_span_id'] or None, source=requested['source'])
+        monkeypatch.setattr('access_control.assistant_approvals.execute', approved_wire)
         view = views.AIActionExecuteView()
 
         class _FakeRequest:
