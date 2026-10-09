@@ -101,6 +101,9 @@ def test_invalid_and_inactive_credentials_cannot_authenticate(django_user_model)
     assert client.get('/api/auth/session/').json()['authenticated'] is False
 
 
+# FileResponse.close emits request_finished. Exercise real autocommit rather
+# than closing PostgreSQL inside pytest-django's wrapping atomic transaction.
+@pytest.mark.django_db(transaction=True)
 def test_artifacts_require_session_and_block_internal_serialization(_use_tmp_media, settings, django_user_model):
     from pathlib import Path
     root = Path(settings.MEDIA_ROOT)

@@ -9,6 +9,8 @@ services:
       - path: .env
         required: false
     environment:
+      # This live-reload stack rejects private mode before migrations/startup.
+      - DECLARAI_RUNTIME_PROFILE=${DECLARAI_RUNTIME_PROFILE:-development}
       - DJANGO_ALLOWED_HOSTS=*
       - DATQ_MAX_CELLS=20000000
       - DATQ_SAMPLE_ROWS=10000
