@@ -442,7 +442,7 @@ export class DataService {
 
   // Get VIF decomposition detail for a specific feature
   getVifDetail(fileId: number, feature: string, executionId?: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature }).pipe(
+    return this.http.post(`${this.apiUrl}modeling/vif-detail/`, { file_id: fileId, feature, execution_id: executionId }).pipe(
       catchError((error: any) => {
         console.error('Error getting VIF detail:', error);
         return throwError(() => error);
