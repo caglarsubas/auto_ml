@@ -37,10 +37,12 @@
       "skipped": 6,
       "deselected": 62,
       "duration_seconds": 243.6,
-      "coverage_percent": 72.55,
+      "coverage_percent": 70.03,
       "coverage_gate_percent": 50,
       "skip_budget": 15,
-      "report": "test-reports/p20/backend.log"
+      "report": "test-reports/p20/backend.log",
+      "line_coverage_percent": 72.55,
+      "coverage_measure": "combined statement and branch coverage, matching pytest-cov release gate"
     },
     {
       "name": "Full PostgreSQL marked suite",
@@ -49,10 +51,12 @@
       "skipped": 6,
       "deselected": 62,
       "duration_seconds": 256.69,
-      "coverage_percent": 72.55,
+      "coverage_percent": 70.03,
       "coverage_gate_percent": 50,
       "skip_budget": 15,
-      "report": "test-reports/p20/postgresql/postgresql.log"
+      "report": "test-reports/p20/postgresql/postgresql.log",
+      "line_coverage_percent": 72.55,
+      "coverage_measure": "combined statement and branch coverage, matching pytest-cov release gate"
     },
     {
       "name": "New review boundary regressions in each full matrix",
