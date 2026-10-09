@@ -135,6 +135,13 @@
       "report": "test-reports/p19/primary-preservation.json",
       "tracked_user_edits": 11,
       "method": "SHA256 comparison against pre-work snapshot"
+    },
+    {
+      "name": "Roadmap schema/projection invariants",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p19/roadmap.log",
+      "preserved": "Prior packets, outcome states, reconciliation, execution queue and release qualification"
     }
   ],
   "qualification_repairs": [
