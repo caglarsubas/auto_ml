@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "packet": "P13",
+  "branch": "codex/managed-storage-inputs",
+  "base_commit": "5583b45efc1983cebece8919ea94172d15133338",
+  "qualified_source_commit": "ffe2c0c2b6086bbc1c46ac0a11af0e1afc3be88e",
+  "scope": "Bounded local qualification for native managed-storage selectors, verified XGBoost explanation overrides and preserved generated files. Later commits are documentation/ledger/evidence only. D04/D06/D08 and all release/customer gates remain partial/open.",
+  "preceding_pr": {
+    "url": "https://github.com/caglarsubas/auto_ml/pull/102",
+    "state": "MERGED",
+    "merge_commit": "5583b45efc1983cebece8919ea94172d15133338",
+    "merged_at": "2026-10-09T05:17:46Z",
+    "main_ci_run": "https://github.com/caglarsubas/auto_ml/actions/runs/37887903487",
+    "main_ci_conclusion": "success",
+    "main_ci_jobs_passed": 5
+  },
+  "environment": {
+    "backend_base_image": "declarai-core-p07:local",
+    "backend_base_image_id": "sha256:de97a68e0cd1e1c3019176b0a8f681a63065b90cbb4ba26c75e64e6068f9f576",
+    "api_image": "declarai-core-p13:qualified",
+    "api_image_id": "sha256:81e10fb81bfbb2da890ef9761ff31c2a1d2a0ed9f5f1c7fbd3e68c7ece63af92",
+    "full_suite_cpu_affinities": [
+      0,
+      1
+    ],
+    "api_cpu_affinities": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "native_pools": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "versions": {
+      "Django": "5.2.18",
+      "mcp": "1.30.0",
+      "pytest": "9.1.1",
+      "ruff": "0.16.10",
+      "node": "v24.16.0",
+      "npm": "11.13.0"
+    },
+    "dependency_baseline": "Unchanged public core requirements/frontend dependency lock; optional private SDK absent. Disposable SQLite/API/Redis and loopback preview; telemetry disabled, blank provider key and unreachable model endpoint."
+  },
+  "checks": [
+    {
+      "name": "Full marked backend suite, Ruff, migration drift and pip check",
+      "status": "passed",
+      "report": "test-reports/p13/backend.log",
+      "passed": 1692,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 158.21,
+      "combined_statement_branch_coverage_percent": 68.92,
+      "qualified_source_commit": "ffe2c0c2b6086bbc1c46ac0a11af0e1afc3be88e"
+    },
+    {
+      "name": "Skip budget",
+      "status": "passed",
+      "skipped": 6,
+      "budget": 15,
+      "report": "test-reports/p13/skip-budget.log"
+    },
+    {
+      "name": "Focused native storage and scientific handler regression",
+      "status": "passed",
+      "passed": 214,
+      "skipped": 1,
+      "duration_seconds": 32.73,
+      "report": "test-reports/p13/focused-corrected.log"
+    },
+    {
+      "name": "Frontend unit suite",
+      "status": "passed",
+      "passed": 540,
+      "report": "test-reports/p13/frontend-unit.log"
+    },
+    {
+      "name": "Frontend lint",
+      "status": "passed",
+      "errors": 0,
+      "existing_warnings": 158,
+      "report": "test-reports/p13/frontend-lint.log"
+    },
+    {
+      "name": "Production frontend build",
+      "status": "passed",
+      "report": "test-reports/p13/frontend-build.log"
+    },
+    {
+      "name": "Governed E2E type check and changed-file formatting",
+      "status": "passed",
+      "reports": [
+        "test-reports/p13/e2e-types.log",
+        "test-reports/p13/format.log"
+      ]
+    },
+    {
+      "name": "Governed browser/authenticated API checks",
+      "status": "passed",
+      "passed": 23,
+      "duration_seconds": 17.7,
+      "report": "test-reports/p13/browser.log",
+      "qualified_source_commit": "ffe2c0c2b6086bbc1c46ac0a11af0e1afc3be88e"
+    },
+    {
+      "name": "Actual MCP SDK stdio operator workflow",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 10,
+      "completed_events": 6,
+      "denied_events": 4,
+      "report": "test-reports/p13/mcp-stdio.log",
+      "qualified_source_commit": "ffe2c0c2b6086bbc1c46ac0a11af0e1afc3be88e"
+    },
+    {
+      "name": "Canonical ledger invariants/projection and prior-state preservation",
+      "status": "passed",
+      "passed": 49,
+      "reports": [
+        "test-reports/p13/ledger.log",
+        "test-reports/p13/preservation.log"
+      ]
+    }
+  ],
+  "source_sha256": {
+    ".github/workflows/ci.yml": "37182352daf945f69edbc8571441146be1a35fe81cb0915db939b71dfe8f2e8e",
+    "backend/access_control/storage.py": "2ec94dd12b1cf64488a5bf17305f43a5eb6b7223635f91cf066cf0edc1cb93bf",
+    "backend/backend/settings.py": "7c6c72fc7e47171c9425704973ab29910e3b5b92902994c9540a5f3ab3e3c39d",
+    "backend/declaration/models.py": "71344841b027cb5aaa22d150c7ef4375e8f7f232ab498085732de6c9c289f4d9",
+    "backend/declaration/views.py": "d1426842a8dae88be417242e4f2136d6458b5f5303b7f25857e5c1e75954ce88",
+    "backend/encoding/views.py": "81e3bed96f901dfb057abeebf788de09b1ec6953af34c42aae5b028685ac02dd",
+    "backend/feature_card/views.py": "7ace3c2271576de540504d6759f41f76d62824bc03302b36acfc88431b2153b1",
+    "backend/modeling/views.py": "cd8826c88ab55b43a0439824498cb3bf66585dc0bf0aa579199a56e78021dd20",
+    "backend/preprocessing/views.py": "08447eba5575760886799acef9a58b31a74ce49a94fd77206bdcd3ad1badaae5",
+    "backend/tests/unit/conftest.py": "d9fb7da80aa5357ed256cf802fb23fba48aaa2a88296111a908d6a4542781cc0",
+    "backend/tests/unit/test_governed_foundation.py": "be584bd5afd57f9079f93a16198ad572a037327c572729926dc52b9facaa9f57",
+    "backend/tests/unit/test_managed_storage_boundary.py": "2b9f592442dff8d96a1f590de84e88f5ae371aefd036a2c995c5f493cb63a1d2",
+    "frontend/e2e/managed-storage-api.spec.ts": "f30715bac7dcfd02f3fff2886d42f0df9cb0683aea5e6ae427c7c686406e6978",
+    "frontend/package.json": "2af3462029852b5e65fac7f1b0a5c620ef5aff470d099df7f0eb2c6d704c0e48",
+    "scripts/qualify_mcp_stdio.py": "3e9920529504c2f98fec0989e7f791905cb007e9b94408b98ca0c69b51621bc7",
+    "scripts/seed_e2e_user.py": "4a0e9aea379e9118d4dd7830f99b87d09db08c8c2db68ebd46635ab329dd079f"
+  },
+  "report_sha256": {
+    "test-reports/p13/backend.log": "394b0c14457b18f218b5d62ce3cf53e8c5102674185d6aa09ca12482d77c1592",
+    "test-reports/p13/backend.xml": "6d493ce2e73354dfc58a38598698c91c66f15f23fbe0bdd186accb99413b13f1",
+    "test-reports/p13/backend-coverage.xml": "dcf8a490c738d0cd915bc4f37f520ebfc5c8e47b475ae903ec53832d9b11a544",
+    "test-reports/p13/focused.log": "a4e613d3f33009c7264c29101d1fce4c4678f23a3903f93315e30c5184a86a98",
+    "test-reports/p13/focused-corrected.log": "d21cb9c7aa0486420ee2ab425887a3d35ca1718ab42619987ded86a924f4c7b5",
+    "test-reports/p13/foundation-focused.log": "8eba761db907902ba6496d91c00e52e72939795880a4220f05f350fc4512b40e",
+    "test-reports/p13/boundary.log": "132b8ce2c993a714baf48f6046586ec222ac28536f5b499f72de8a5ed7c92961",
+    "test-reports/p13/frontend-unit.log": "5f7862fb111ee2bc2b64bc5e88e4eb49d478cdad410597c587e262222d13f6e2",
+    "test-reports/p13/frontend-lint.log": "2307ad7057a6065c9d57e214ebf5b7cb6116f2e9c62bfb1cdd6efc274ee7fbf0",
+    "test-reports/p13/frontend-build.log": "2ad357a70f04cb7863a822e322213b9ce20c71130fc02e87a62d5c34f200c2d4",
+    "test-reports/p13/e2e-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reports/p13/format.log": "4f3c2061d3e8411b2d3f026aa01a0d26b89b61e34ff47d236f758a5e961a1fe7",
+    "test-reports/p13/browser.log": "29242d54f47a7ebf02f8a990ec7f3b1128e2fbb5fdc54ec6f7b7d514457e84f4",
+    "test-reports/p13/mcp-stdio.log": "647400383e89f9735c0e539f4138b1519ac6373e4fefb4b62d5b84b72a56a517",
+    "test-reports/p13/api-build.log": "ef2d7043dfbbaad0927da98aa0dbb2f205eced96e4fb2cfa6b0d11923fd3e952",
+    "test-reports/p13/api.log": "e2b8ec473d9a72f45271da77e3ae309b4b02adb34152aab80259ecdb177c8a4f",
+    "test-reports/p13/preview.log": "ba44f75551695bd623c2ba6cd7d482f7038ca4be75351a2c19842be64acd3ad2",
+    "test-reports/p13/skip-budget.log": "682ffd272a2e6a7894bdf1c2ba2c7e173526e21ebbddeb09cb64c24056845082",
+    "test-reports/p13/ledger-render.log": "deae79e0aa9780314eee469b160349e3dade8ade617d4b22bfbf52fdf0d6d657",
+    "test-reports/p13/ledger.log": "bd2d11fa8059a5be89a8a6666f685bf679179765b2a8c78bd902d44095bdf227",
+    "test-reports/p13/preservation.log": "1df103d8d345ce906f8c6ca755cb6cd529492fcc4d0d3a9df0534f1fd04ee478"
+  },
+  "qualification_observations": [
+    "Sixty-six new real-session/CSRF tests reject invalid table references, oversized/conflicting identifiers and unverified/mismatched model overrides before readers run. They also cover valid managed references, external output directory symlinks, forced upload/encoding collisions, metadata failure and ambiguous legacy fallback.",
+    "Existing development-only native explanation tests now exercise relative/absolute verified model overrides without an active projection. Sealed final evidence is deliberately unreadable; all three variants succeed using development rows.",
+    "An initial mixed explicit pytest argument order omitted the child-directory autouse handler fixture, producing seven authentication failures. Retained diagnostics identified the missing fixture. Parent-first focused collection and standard full collection passed; runtime authentication was unchanged.",
+    "Four new authenticated browser/API scenarios exercise blocked references/identifiers/model overrides and preserved repeated upload/encoding files with metadata downloads. The prior nineteen governed workflows and actual MCP stdio operator workflow passed on the same executable source.",
+    "Scientific datasets, round counts, timeout/assertion, skip and coverage budgets were preserved. The six full-suite skips require four optional installed SDK checks, a live model engine and a local .env."
+  ],
+  "limits": [
+    "A managed-root check is not dataset/project authorization. Signed-in REST users still have installation-wide access; MCP uses its separate installation actor/grants.",
+    "The controller/filesystem are trusted; path resolution is not a sandbox or filesystem-race defense against a hostile local process.",
+    "Expert Python remains blocked. Exact action approvals, gVisor isolation, expert transformations/scorers and replay/scoring remain unimplemented.",
+    "Verified client-selected native XGBoost overrides do not certify all legacy/internal fitted-state readers or historical provenance. Ambiguous legacy matches return no file; historical files are preserved.",
+    "UUID names and exclusive file creation prevent overwrite; they do not provide a transaction across database/filesystem, durable recovery or full immutable versioning of legacy stages. A failed metadata write may leave an unpublished partial sidecar, but no success or CSV publication.",
+    "Project roles, policy/retention/egress, independent reproduction, PostgreSQL/durable jobs and release/customer/value qualification remain open. D18-D26 and canonical queue are preserved."
+  ],
+  "workspace_preservation": {
+    "primary": "/Users/caglarsubasi/Desktop/prometa/pocs/auto-ml",
+    "existing_tracked_edits_preserved": 11,
+    "snapshot": "/tmp/declarai-p13-preserved-workspace.json",
+    "scope": "Managed worktree and disposable test services only; primary configuration/running stack preserved. Per-command hooks disabled because they target primary containers; equivalent independent checks passed and persistent Git config is unchanged."
+  }
+}
