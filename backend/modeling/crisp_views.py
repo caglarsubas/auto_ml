@@ -216,14 +216,19 @@ class CrispIterationCloneView(APIView):
                 'is_started': True,
             },
         }
-        child = PipelineRun.objects.create(
-            name=f"{parent.name} — iteration {crisp['iteration_id']}",
-            pipeline_type=parent.pipeline_type,
-            file_id=parent.file_id,
-            current_step='modeling',
-            status='active',
-            state=new_state,
-        )
+        from django.db import transaction
+        with transaction.atomic():
+            child = PipelineRun.objects.create(
+                name=f"{parent.name} — iteration {crisp['iteration_id']}",
+                pipeline_type=parent.pipeline_type,
+                file_id=parent.file_id,
+                current_step='modeling',
+                status='active',
+                state=new_state,
+            )
+            from access_control.projects import governed, bind_pipeline
+            if governed():
+                bind_pipeline(child, request._request._project_scopes[0]['project_id'], request.user)
         return Response({
             'status': 'ok',
             'parent_run_id': parent.id,

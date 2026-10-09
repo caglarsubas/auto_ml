@@ -1,3 +1,4 @@
+import { uploadUntrainedDataset } from './fixtures/dataset';
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures/session';
 import { API_BASE_URL } from './fixtures/credentials';
@@ -54,25 +55,27 @@ test('real-session invalid and conflicting dataset IDs fail before execution', a
 test('real-session model overrides require a verified matching execution', async ({
   authenticatedApi: api,
 }) => {
+  const dataset = await uploadUntrainedDataset(api);
   const unverified = await api.post('modeling/feature-explainability/', {
     data: {
-      file_id: 1,
+      file_id: dataset.id,
       feature_name: 'x',
       model_path: 'models/unverified.json',
     },
   });
-  expect(unverified.status()).toBe(409);
-  expect((await unverified.json()).error_code).toBe('unverified_model_override');
+  expect(unverified.status()).toBe(403);
+  expect((await unverified.json()).error_code).toBe('use_immutable_execution_identifier');
   const mismatched = await api.post('modeling/feature-explainability/', {
     data: {
-      file_id: 1,
+      file_id: dataset.id,
       feature_name: 'x',
       execution_id: '00000000-0000-0000-0000-000000000001',
       model_path: 'execution_runs/00000000-0000-0000-0000-000000000002/models/model.json',
     },
   });
-  expect(mismatched.status()).toBe(409);
-  expect((await mismatched.json()).error_code).toBe('unverified_model_override');
+  expect(mismatched.status()).toBe(403);
+  expect((await mismatched.json()).error_code).toBe('use_immutable_execution_identifier');
+  await api.delete(`declaration/${dataset.id}/`);
 });
 
 test('real-session repeated uploads and encodings preserve earlier managed files', async ({

@@ -110,6 +110,8 @@ class EncodingApplyView(APIView):
             encoded_filename = f'encoded_{file_id}_{ts}.csv'
             encoded_path = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
             encoded_df.to_csv(encoded_path, index=False, mode='x')
+            from access_control.projects import register_artifact
+            register_artifact(encoded_path, file_id=int(file_id))
             encoded_rel = os.path.relpath(encoded_path, settings.MEDIA_ROOT)
 
             # Save sidecar metadata so the modeling step knows which columns
@@ -125,6 +127,7 @@ class EncodingApplyView(APIView):
             try:
                 with open(meta_path, 'x', encoding='utf-8') as mf:
                     json.dump({'categorical_columns': cat_meta}, mf)
+                register_artifact(meta_path, file_id=int(file_id))
                 logger.info('Saved encoding metadata to %s (%d categorical cols)', meta_path, len(cat_meta))
             except Exception:
                 os.remove(encoded_path)  # Only this request's exclusively created CSV.

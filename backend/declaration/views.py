@@ -187,6 +187,12 @@ def detect_has_header(raw_bytes: bytes, sep: str = ',', is_excel: bool = False,
 class DeclarationViewSet(viewsets.ModelViewSet):
     queryset = Declaration.objects.all()
     serializer_class = DeclarationSerializer
+
+    def get_queryset(self):
+        from access_control.projects import governed, allowed_datasets
+        if governed():
+            return self.queryset.filter(pk__in=allowed_datasets(self.request.user.pk))
+        return self.queryset
     
     def create(self, request, *args, **kwargs):
         files = request.FILES
@@ -284,13 +290,19 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             
             merged_df.to_csv(full_merged_path, index=False, mode='x')
 
-            # Create Declaration instance
-            declaration = Declaration.objects.create(
-                file=merged_file_path,
-                name=merged_file_name,
-                original_name=merged_file_name,
-                has_header=not first_line_is_not_header,
-            )
+            from django.db import transaction
+            with transaction.atomic():
+                # Create Declaration instance
+                declaration = Declaration.objects.create(
+                    file=merged_file_path,
+                    name=merged_file_name,
+                    original_name=merged_file_name,
+                    has_header=not first_line_is_not_header,
+                )
+
+                from access_control.projects import governed, bind_dataset
+                if governed():
+                    bind_dataset(declaration, request._request._project_scopes[0]['project_id'], request.user)
 
             serializer = self.get_serializer(declaration)
             response_data = serializer.data

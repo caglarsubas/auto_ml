@@ -435,6 +435,7 @@ def main():
             run_python(
                 ["scripts/qualify_private_identity.py"], report="private-identity.log"
             )
+            run_python(["scripts/qualify_private_projects.py"], report="private-projects.log")
             test_env = {
                 "DECLARAI_RUNTIME_PROFILE": "development",
                 "DJANGO_DEBUG": "true",

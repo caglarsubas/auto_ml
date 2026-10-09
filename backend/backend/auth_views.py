@@ -1,4 +1,4 @@
-"""Server-side sessions. Project authorization is a separate release gate."""
+"""Server-side sessions and project-scoped artifact downloads."""
 import json
 from pathlib import Path
 
@@ -83,6 +83,21 @@ def protected_media(request, path):
     """No public artifact storage or native-pickle download endpoint."""
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Sign in to access artifacts.'}, status=403)
+    from access_control import projects
+    try:
+        if projects.governed():
+            scope = projects.path_authority(request.user.pk, path)
+            event = projects.audit(request.user, 'media_access', {'scope': scope}, scope['project_id'], outcome='started')
+            request._project_event = event.pk
+            request._project_scopes = [scope]
+    except projects.ProjectDenied as exc:
+        try:
+            projects.audit(request.user, 'media_access', {}, outcome='denied', reason=exc.code)
+        except DatabaseError:
+            return JsonResponse({'error_code': 'project_authority_unavailable'}, status=503)
+        return JsonResponse({'error': str(exc), 'error_code': exc.code}, status=403)
+    except DatabaseError:
+        return JsonResponse({'error': 'Project authority is unavailable.', 'error_code': 'project_authority_unavailable'}, status=503)
     root = Path(settings.MEDIA_ROOT).resolve()
     artifact = (root / path).resolve()
     if (not artifact.is_relative_to(root) or not artifact.is_file()

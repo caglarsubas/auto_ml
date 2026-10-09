@@ -1,3 +1,4 @@
+import { uploadUntrainedDataset } from './fixtures/dataset';
 import { test, expect } from './fixtures/session';
 import { API_BASE_URL, BASE_URL, requireTestCredentials } from './fixtures/credentials';
 
@@ -42,18 +43,22 @@ test('a wrong password does not establish a server session', async ({ request })
 });
 
 test('expert code stays blocked until isolation is available', async ({ authenticatedApi: api }) => {
+  const dataset = await uploadUntrainedDataset(api);
   const result = await api.post('ai-assistant/execute-action/', {
-    data: { file_id: 999999999, action_type: 'execute_code', payload: { code: 'df["x"] = 1' } },
+    data: { file_id: dataset.id, action_type: 'execute_code', payload: { code: 'df["x"] = 1' } },
   });
   expect(result.status()).toBe(400);
   expect((await result.json()).error_code).toBe('expert_isolation_unavailable');
+  await api.delete(`declaration/${dataset.id}/`);
 });
 
 test('session and CSRF parsing preserves feature-selection requests', async ({ authenticatedApi: api }) => {
   expect((await api.post('modeling/sfs/start/', { data: {} })).status()).toBe(400);
-  const missing = await api.post('modeling/sfs/start/', { data: { file_id: 999999999 } });
+  const dataset = await uploadUntrainedDataset(api);
+  const missing = await api.post('modeling/sfs/start/', { data: { file_id: dataset.id } });
   expect(missing.status()).toBe(404);
   expect((await missing.json()).error).toContain('Training data not found');
+  await api.delete(`declaration/${dataset.id}/`);
 });
 
 test('a signed-in user can create, update and delete a pipeline', async ({ authenticatedApi: api }) => {
@@ -70,5 +75,7 @@ test('a signed-in user can create, update and delete a pipeline', async ({ authe
   } finally {
     expect((await api.delete(path)).status()).toBe(200);
   }
-  expect((await api.get(path)).status()).toBe(404);
+  const unavailable = await api.get(path);
+  expect(unavailable.status()).toBe(403);
+  expect((await unavailable.json()).error_code).toBe('pipeline_project_assignment_required');
 });

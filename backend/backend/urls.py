@@ -1,3 +1,4 @@
+from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
 from django.urls import path, include
@@ -22,6 +23,8 @@ router.register(r'declaration', DeclarationViewSet)
 router.register(r'feature-card', FeatureCardViewSet, basename='feature-card')
 
 urlpatterns = [
+    path('api/projects/', ProjectListView.as_view(), name='project-list'),
+    path('api/projects/<uuid:project_id>/members/', ProjectMemberView.as_view(), name='project-member'),
     path('api/auth/session/', session_status, name='auth-session'),
     path('api/auth/login/', session_login, name='auth-login'),
     path('api/auth/logout/', session_logout, name='auth-logout'),

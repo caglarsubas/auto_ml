@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "packet": "P18",
+  "branch": "codex/project-authorization-foundation",
+  "base_commit": "68dfb2d883a356bfd8bbbf1164afde156e1c2a17",
+  "qualified_application_source_commit": "6a0f9628a885f724a13d91c282bb8fda4b3e24f1",
+  "full_matrix_source_commit": "bba448c4909d74c1c4809bc08af9a6f70aca95eb",
+  "baseline_verification": {
+    "pull_request": 107,
+    "merged_at": "2026-10-09T14:05:11Z",
+    "merge_main_ci_run": 37941570170,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D06: recorded project authority across native API, pipeline/artifact selection, local MCP and typed approvals; no full security or release claim.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker runners",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "psycopg": "3.3.6",
+    "node": "24.16.0",
+    "angular": "22.2.1",
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "postgresql": "17.11",
+    "postgresql_image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+    "browser_base_image_id": "sha256:98e75ebeca71f9cb191d708b41dd1c72b8583bc97ad1b36f9cfcb7f1d8e78127",
+    "browser_source_overlays": [
+      "backend/access_control/projects.py",
+      "backend/access_control/project_http.py",
+      "backend/encoding/views.py",
+      "backend/modeling/execution_artifacts.py",
+      "backend/ai_assistant/mcp_server/server.py"
+    ],
+    "resources": "Two CPUs per backend runner; native threads bounded at two. Provider keys blank, engine unavailable, telemetry disabled; optional SDK absent. Primary installation untouched."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "qualification_source_commit": "bba448c4909d74c1c4809bc08af9a6f70aca95eb",
+      "passed": 1898,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 224,
+      "duration_seconds": 234.34,
+      "coverage_percent": 69.63,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p18/backend-final-source.log"
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "qualification_source_commit": "bba448c4909d74c1c4809bc08af9a6f70aca95eb",
+      "passed": 1898,
+      "skipped": 6,
+      "deselected": 62,
+      "warnings": 230,
+      "duration_seconds": 227.44,
+      "coverage_percent": 69.63,
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p18/postgresql-final-source/postgresql.log"
+    },
+    {
+      "name": "Project authority focused regressions",
+      "status": "passed",
+      "passed": 29,
+      "report": "test-reports/p18/projects-release.log",
+      "qualification_source_commit": "6a0f9628a885f724a13d91c282bb8fda4b3e24f1"
+    },
+    {
+      "name": "Publication/scientific/project integration regressions",
+      "status": "passed",
+      "passed": 115,
+      "report": "test-reports/p18/publish-focused.log",
+      "qualification_source_commit": "bba448c4909d74c1c4809bc08af9a6f70aca95eb"
+    },
+    {
+      "name": "Governed Chromium/API workflows",
+      "status": "passed",
+      "passed": 29,
+      "qualification_source_commit": "6a0f9628a885f724a13d91c282bb8fda4b3e24f1",
+      "report": "test-reports/p18/browser-release.log",
+      "evidence": "Explicit project activation; existing classification/regression, exact artifacts, batch scoring, keyboard approval/diagnostics and CSRF assertions retained; missing-artifact fixtures are now project-owned."
+    },
+    {
+      "name": "Actual MCP stdio protocol",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 14,
+      "outcomes": {
+        "completed": 8,
+        "denied": 6
+      },
+      "report": "test-reports/p18/mcp-stdio-qualified.log",
+      "evidence": "Original actor/process scope/grant/direct-execution checks retained; project revocation and reviewer read/prepare checks added."
+    },
+    {
+      "name": "Governed browser roles and revocation",
+      "status": "passed",
+      "browser": "chromium",
+      "roles": [
+        "developer",
+        "reviewer",
+        "admin"
+      ],
+      "isolated_projects": 2,
+      "cross_project_api_media": "denied",
+      "reviewer_admin_model_mutation": "denied",
+      "revoked_reviewer": "denied",
+      "unaffected_developer": "authorized",
+      "project_denial_preserves_signin": true,
+      "operator_retry": "same_receipt",
+      "runtime_errors": 0,
+      "external_requests": 0,
+      "profile": "governed_development_http_sqlite",
+      "live_private_tls_ingress_qualified": false,
+      "report": "test-reports/p18/browser-roles.log"
+    },
+    {
+      "name": "Independent private PostgreSQL project processes",
+      "status": "passed",
+      "concurrent_processes": 5,
+      "committed_changes": 1,
+      "replays": 4,
+      "report": "test-reports/p18/postgresql-final-source/private-projects.log",
+      "evidence": "Private verify-full TLS; two isolated projects, developer/reviewer/admin behavior, native and MCP revocation with an active MCP grant, unaffected reviewer and preserved browser sign-in."
+    },
+    {
+      "name": "Private metadata restart and quiescent synthetic restore",
+      "status": "passed",
+      "report": "test-reports/p18/postgresql-final-source/private-runtime.log",
+      "evidence": "Existing authentication/TLS/CSRF checks retained; policy activation, membership revisions and dataset/pipeline project bindings persist across restart and matching database/artifact restore. Production recovery remains unqualified."
+    },
+    {
+      "name": "Static/dependency/migration/frontend build checks",
+      "status": "passed",
+      "evidence": "Ruff; migration drift; pip consistency; changed Python script syntax; Angular build; ESLint has zero errors and 153 legacy warnings. Exact-head six-job CI remains a separate PR fact."
+    }
+  ],
+  "qualification_corrections": [
+    "Governance checks mutate evidence and require developer authority; static purifier options remain a data-free catalog.",
+    "Successful authorized deletion recognizes the removed object while rechecking membership; it does not report a false denial.",
+    "Native encoding sidecars and immutable execution/assessment artifacts receive explicit owners; pathlib inputs are normalized only inside the trusted managed-path boundary.",
+    "PostgreSQL response-close tests use actual transaction lifecycles. Previously pure file-publication fixtures now provide metadata access because governed publication records artifact authority; all scientific assertions remain unchanged.",
+    "After the 1898-test full matrix, one additional authority recheck was added after evidence inspection. Its new regression and all 29 project cases pass on the final application source; all 29 governed browser/API cases repeat on that source. Final exact-head CI qualifies the complete updated tree separately."
+  ],
+  "ci": "All six existing CI jobs remain. PostgreSQL additionally runs the five-process private project fixture; browser CI activates real project bindings and actual stdio tests add project roles/revocation. Exact-head CI is tracked by PR108 separately from local matrix source evidence.",
+  "preservation": {
+    "prior_packets": "P01-P17 unchanged",
+    "outcome_statuses": "unchanged",
+    "progress_evidence_delta": [
+      "D06"
+    ],
+    "planned_outcomes": "D18-D26 unchanged",
+    "implementation_queue": "unchanged",
+    "release_qualification": "open and unchanged",
+    "primary_tracked_edits_preserved": 11
+  },
+  "source_sha256": {
+    "backend/access_control/assistant_approvals.py": "e0a7dfce65e80244eb5ec77682a068591e67cf0addbdc8849b3dcff5b6d03be0",
+    "backend/access_control/authority.py": "c797d2df144aa70d5ef604476dbf5caef8ba6ed984d99a5083275abdbcac9d09",
+    "backend/access_control/management/commands/manage_project.py": "06bad8c4fbeb2a04b1bdae5c410d03f873695396db35b9afcc36c0313ca3bf43",
+    "backend/access_control/migrations/0004_project_projectpolicy_projectartifact_and_more.py": "3bfbf03ee25526fb56279d1540feaf8e34d840a6ead9937031fda3758b7281d1",
+    "backend/access_control/models.py": "2da3b1d5faacfc504e80909a09b8dcfa642db101b785e6aad5c5bf2a8d3838c5",
+    "backend/access_control/project_http.py": "48b154ec9a8a9eb000b62a48fda30336f14e2b6bc44ed847449cdf9041e6d7c8",
+    "backend/access_control/project_views.py": "a86e225890c6f005470585ee6339efdfda5bb7e7e8e1d21815d4e86066d77a16",
+    "backend/access_control/projects.py": "8078826004e0b470444c6de4e1be8f8b6f8fbdb55b68144390b5bbdf5b137024",
+    "backend/backend/auth_views.py": "ad9614ff9f3b249dc8de7391b8462d0b137725f9cc7db50dd21f7660cc5af020",
+    "backend/backend/settings.py": "6c9cfd8433eb585aa8b830803719692ffae81e6648a689b49ecba5601f681a27",
+    "backend/backend/urls.py": "ac1ef038cedb7f9a79ca7851336a7093d607a9ea2fc887aa2d4700ed1fea2edb",
+    "backend/declaration/models.py": "b04bcbe10a7fa02822d74a3811ded60a2c85883e96b689849b4fdded875db912",
+    "backend/declaration/views.py": "f5b712b7d94f0df0a6a5b4dea7b7466d2549889c052a7348283a98da09dc1d4a",
+    "backend/encoding/views.py": "c6285f98508463260ee9024bb8a3ac4efbb3ad2c83f527493f8f69816ea18fd5",
+    "backend/modeling/crisp_views.py": "33cd131d85de09c6c20b4ca2c2f507bb488182b3c599095a2276f6e2edc48d9e",
+    "backend/modeling/execution_artifacts.py": "3469efac2a1a32845e037c0b97a390d0dfbc31848bbca6ff4edd079ebab584b0",
+    "backend/modeling/holdout_evidence.py": "47d636c02f5afd9988cd67276a7860ef627d813a48295cb468763f806d482ac7",
+    "backend/modeling/views.py": "26194b790f0e1fe3708eef476a536c9e6b713d9561e920118e5b47fcaf8b9fe7",
+    "backend/preprocessing/views.py": "922ebc339d7d1d849592f0c1df4a9ad0678ed39f891f13ae8eb008ec1681ee95",
+    "backend/tests/unit/test_candidate_evidence.py": "4b68c4be650b9d3d12620023eb95e6600cac45555c0d8a021bbb03fa7309bb66",
+    "backend/tests/unit/test_collinearity.py": "0880b3d748c3fdbfad53b11af36fe8b28ebceb8aef4735c3936a3718f2ca7463",
+    "backend/tests/unit/test_governed_foundation.py": "5e6474146230bcdeb80d188a6657f2136a09c572c845afc3bd47a76ee44bb370",
+    "backend/tests/unit/test_project_authority.py": "d5db56da22b8f65fb762841043d8c74126053a70a6ead703dcb21a95d8204567",
+    "docs/AUTHENTICATION_GOVERNANCE.md": "e4a29b774272eaa5595bafa695ecda564dbe445e54511af6e7898f9fdb94bbbe",
+    "docs/PROJECT_AUTHORIZATION_IMPLEMENTATION.md": "222058d519df3f901af8eec65a74b94c358b88212e30ebc980c2857188cb8fc5",
+    "frontend/e2e/fixtures/dataset.ts": "74ebde0349562486657f7591ba4265750db9229bc6cbb7243b176b8b9c92225a",
+    "frontend/e2e/hyperparameter-api.spec.ts": "cd99b2d872311e75af75887324901f75dd69ed6564c22c16d1a9c08b14d87e4e",
+    "frontend/e2e/managed-storage-api.spec.ts": "2fb1eff2cbc5d870e6c10b498508925921ed6e5eaf293f4d2f867fdac07bbf2f",
+    "frontend/e2e/project-authority.spec.ts": "41e7d221ecb385d1b48d8f63975e03595cf1c90c4983743aa9713170b0a654f1",
+    "frontend/e2e/session-boundary-api.spec.ts": "134432c6f5f19520cfde5256ce3753767a11302cfd73e8ce242b5ac44de3268d",
+    "frontend/package.json": "5a0fec2bb5bebe7ddbcf02f4eaf690b8addee3e181bf3d68c7cb589f26b972a4",
+    "scripts/qualify_mcp_stdio.py": "1adc7244eafec96433fa262a5822e11ae013a9f2b29b0a5a3299aaea4118fe48",
+    "scripts/qualify_postgres_fixture.py": "8c27f99a122a5d83277f87d8380bfb479fa6c76a0cef9ffff621693e3652d343",
+    "scripts/qualify_private_projects.py": "6b07f43aa9f5dbf6e1ad8c123817fb8eb73edf90f3dd90cc2ae12c8a51435e68",
+    "scripts/qualify_private_runtime.py": "c6c9714b5913d7b6f3d3732327b823524e138e8e251e8e53da3290fa447c1d2d",
+    "scripts/seed_e2e_user.py": "7dee9bb2423f79cef93cec30aa899060ea84de2425bd0f85070a93c31dc7da45"
+  },
+  "limitations": [
+    "Development installations without explicit activation retain legacy organization-wide authenticated behavior and are unqualified for project isolation. Governance activation has no supported downgrade.",
+    "Legacy adoption is a current operator assertion; it never invents historical ownership/provenance. Unregistered legacy media and incompatible frozen cross-project history exports are withheld.",
+    "Single-role membership, operator bootstrap/adoption and scoped admin API only. SSO/MFA/enrollment, project/reviewer UI and comprehensive accessibility remain open.",
+    "No recall of already delivered bytes and no cancellation/recovery of already authorized handlers/jobs. Interrupted access receipts may remain started.",
+    "Database and artifact administrators are trusted. Tamper-proof audit, retention/deletion, provider/embedding/telemetry/log egress and full threat-model qualification remain open.",
+    "No expert-isolation, independent reproduction, live private TLS ingress, offline/encrypted installation, production restore/upgrade, PostgreSQL dataset intake, customer capacity/value/acceptance or release claim."
+  ]
+}

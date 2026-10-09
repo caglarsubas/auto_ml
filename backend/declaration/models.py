@@ -17,6 +17,9 @@ class Declaration(models.Model):
         file_path = managed_path(self.file.name, table=True)
         if os.path.isfile(file_path):
             return file_path
+        from access_control.projects import governed
+        if governed():
+            return None  # Missing governed sources cannot inherit a filename-based legacy guess.
         # Legacy fallback must be unique; never choose another dataset arbitrarily.
         data_files_dir = os.path.join(settings.MEDIA_ROOT, 'data_files')
         if not os.path.isdir(data_files_dir):

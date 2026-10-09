@@ -24,6 +24,10 @@ def main():
         MCPAccessEvent,
         MCPDatasetGrant,
         SessionAuthority,
+        ProjectPolicy,
+        ProjectMembership,
+        ProjectDataset,
+        ProjectPipeline,
     )
     from declaration.models import Declaration
     from django.conf import settings
@@ -92,6 +96,27 @@ def main():
         )
         assert logged_in.status_code == 200 and logged_in.cookies["sessionid"]["secure"]
         csrf = logged_in.json()["csrf_token"]
+        from access_control.projects import operator_change, bind_dataset
+
+        admin = get_user_model().objects.create_user(
+            username="fixture-admin-" + uuid.uuid4().hex
+        )
+        bootstrap, _ = operator_change(
+            {"operation": "create", "name": "Private fixture", "user": admin.username},
+            uuid.uuid4(),
+            "disposable-fixture",
+        )
+        project_id = str(bootstrap.project_id)
+        operator_change(
+            {
+                "operation": "member",
+                "project_id": project_id,
+                "user": user.username,
+                "role": "developer",
+            },
+            uuid.uuid4(),
+            "disposable-fixture",
+        )
         state = {
             "modeling": {"substep": "encoding_completed"},
             "fixture": {"nested": [1, False, None, "same"]},
@@ -109,6 +134,7 @@ def main():
             original_name="fixture.csv",
             file="data_files/fixture.csv",
         )
+        bind_dataset(dataset, project_id, source="disposable_fixture")
         artifact = Path(settings.MEDIA_ROOT) / dataset.file.name
         artifact.parent.mkdir(parents=True, exist_ok=True)
         artifact.write_text("feature,target\n1,0\n2,1\n")
@@ -146,6 +172,12 @@ def main():
         )
         snapshot = {
             "user": user.pk,
+            "project_id": project_id,
+            "project_revision": str(
+                ProjectMembership.objects.get(
+                    actor=user, project_id=project_id
+                ).revision
+            ),
             "pipeline": created.json()["id"],
             "state": state,
             "dataset": dataset.pk,
@@ -171,6 +203,25 @@ def main():
             json.dump(snapshot, output)
     elif sys.argv[1:] == ["verify"]:
         snapshot = json.loads(state_file.read_text())
+        assert ProjectPolicy.objects.filter(pk=1).exists()
+        assert (
+            str(
+                ProjectMembership.objects.get(
+                    actor_id=snapshot["user"], project_id=snapshot["project_id"]
+                ).revision
+            )
+            == snapshot["project_revision"]
+        )
+        assert (
+            str(ProjectDataset.objects.get(dataset_id=snapshot["dataset"]).project_id)
+            == snapshot["project_id"]
+        )
+        assert (
+            str(
+                ProjectPipeline.objects.get(pipeline_id=snapshot["pipeline"]).project_id
+            )
+            == snapshot["project_id"]
+        )
         assert (
             AuthenticationEvent.objects.get(pk=snapshot["auth_event"]).actor_snapshot[
                 "id"

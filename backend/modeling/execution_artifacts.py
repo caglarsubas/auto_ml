@@ -69,6 +69,13 @@ def publish_execution(execution_id, payload):
             manifest['packages'][package] = None
     with (root / 'manifest.json').open('x', encoding='utf-8') as stream:
         json.dump(manifest, stream, indent=2, allow_nan=False)
+    from access_control.projects import governed, register_artifact
+    if governed():
+        from django.db import transaction
+        with transaction.atomic():
+            for path in sorted(root.rglob('*')):
+                if path.is_file() and path.suffix.lower() in {'.json', '.csv', '.png', '.svg', '.pdf'}:
+                    register_artifact(path, file_id=payload['file_id'])
     return manifest
 
 
@@ -121,6 +128,12 @@ def publish_assessment(execution_id, receipt_id, payload, card):
                     name: {'sha256': digest_file(root / name), 'bytes': (root / name).stat().st_size}
                     for name in ('evaluation.json', 'model_card.json')}}
     (root / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    from access_control.projects import governed, register_artifact
+    if governed():
+        from django.db import transaction
+        with transaction.atomic():
+            for name in ('evaluation.json', 'model_card.json', 'manifest.json'):
+                register_artifact(root / name, file_id=payload['file_id'])
     return root
 
 

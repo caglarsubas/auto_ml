@@ -116,7 +116,7 @@ def test_budget_blocks_diagnostic_without_sampling_or_solves(tmp_path, monkeypat
 
 
 @pytest.fixture
-def archive(_use_tmp_media, tmp_path):
+def archive(db, _use_tmp_media, tmp_path):
     def create(include=True, file_id=1):
         source = tmp_path / 'source.csv'
         frame().to_csv(source, index=False)

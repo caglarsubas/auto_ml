@@ -1,4 +1,4 @@
-"""Local MCP authority. REST project roles remain a separate release requirement."""
+"""Attributable session, MCP and project authority records."""
 import uuid
 
 from django.conf import settings
@@ -117,3 +117,72 @@ class AuthenticationEvent(models.Model):
         ordering = ['-started_at']
         indexes = [models.Index(fields=['actor', 'started_at'], name='auth_event_actor_time_idx'),
                    models.Index(fields=['event_type', 'started_at'], name='auth_event_type_time_idx')]
+
+
+class ProjectPolicy(models.Model):
+    """Durable installation activation; no supported downgrade to legacy access."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    activated_at = models.DateTimeField(default=timezone.now)
+
+
+class Project(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(default=timezone.now)
+
+
+class ProjectMembership(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, related_name='memberships')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    role = models.CharField(max_length=16, choices=[('developer', 'Developer'), ('reviewer', 'Reviewer'), ('admin', 'Project administrator')])
+    active = models.BooleanField(default=True)
+    revision = models.UUIDField(default=uuid.uuid4, editable=False)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['project', 'actor'], name='project_actor_unique')]
+
+
+    def save(self, *args, **kwargs):
+        self.revision = uuid.uuid4()
+        self.updated_at = timezone.now()
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'revision', 'updated_at'}
+        super().save(*args, **kwargs)
+
+
+class ProjectDataset(models.Model):
+    dataset = models.OneToOneField('declaration.Declaration', on_delete=models.CASCADE, primary_key=True, related_name='project_binding')
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    revision = models.UUIDField(default=uuid.uuid4, editable=False)
+    assigned_at = models.DateTimeField(default=timezone.now)
+
+
+class ProjectPipeline(models.Model):
+    pipeline = models.OneToOneField('modeling.PipelineRun', on_delete=models.CASCADE, primary_key=True, related_name='project_binding')
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    revision = models.UUIDField(default=uuid.uuid4, editable=False)
+    assigned_at = models.DateTimeField(default=timezone.now)
+
+
+class ProjectArtifact(models.Model):
+    path_sha256 = models.CharField(max_length=64, primary_key=True)
+    relative_path = models.TextField()
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    dataset = models.ForeignKey('declaration.Declaration', on_delete=models.CASCADE, null=True)
+    registered_at = models.DateTimeField(default=timezone.now)
+
+
+class ProjectAuthorityEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, null=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    actor_snapshot = models.JSONField(default=dict)
+    authority_source = models.CharField(max_length=40)
+    operator_label = models.CharField(max_length=100, blank=True)
+    operation = models.CharField(max_length=40)
+    resource = models.JSONField(default=dict)
+    outcome = models.CharField(max_length=24)
+    reason_code = models.CharField(max_length=64, blank=True)
+    request_sha256 = models.CharField(max_length=64, blank=True)
+    recorded_at = models.DateTimeField(default=timezone.now)
