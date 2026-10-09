@@ -224,11 +224,8 @@ test('keyboard review confirms a synthetic proposal through real authority endpo
     const receipt = panel.getByText('Action dispatch receipt', { exact: true });
     await receipt.focus();
     await receipt.press('Space');
-    await expect(
-      panel
-        .locator('details')
-        .filter({ has: panel.getByText('Action dispatch receipt', { exact: true }) }),
-    ).toContainText('completed');
+    await expect(receipt.locator('..')).toHaveAttribute('open', '');
+    await expect(receipt.locator('..')).toContainText('completed');
     expect(await description(api, fileId)).toBe('Approved browser description');
     await panel.screenshot({ path: testInfo.outputPath('assistant-action-receipt.png') });
   } finally {
