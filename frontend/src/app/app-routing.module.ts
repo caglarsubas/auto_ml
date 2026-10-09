@@ -9,6 +9,7 @@ import { ModelDevelopmentComponent } from './model-development/model-development
 import { HomeComponent } from './home/home.component';
 import { LoginComponent } from './login/login.component';
 import { UnsavedChangesGuard } from './guards/unsaved-changes.guard';
+import { ProjectWorkspaceGuard } from './guards/project-workspace.guard';
 import { SessionGuard } from './guards/session.guard';
 
 const routes: Routes = [
@@ -18,7 +19,8 @@ const routes: Routes = [
   {
     path: 'model-development',
     component: ModelDevelopmentComponent,
-    canActivate: [SessionGuard],
+    canActivate: [SessionGuard, ProjectWorkspaceGuard],
+    runGuardsAndResolvers: 'paramsOrQueryParamsChange',
     canDeactivate: [UnsavedChangesGuard],
     children: [
       { path: 'declaration', component: DeclarationComponent },

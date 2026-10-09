@@ -143,6 +143,12 @@ def authorize(request, view):
         supplied.append(record.file_id)
     elif name == "project-member":
         scopes.append(projects.membership(request.user.pk, view.kwargs["project_id"], "admin"))
+    # A browser workspace may narrow reads/writes to one already-authorized project.
+    # Never use this selector as a resource assignment or substitute for its binding.
+    if request.query_params.get("project_id") is not None:
+        if len(request.query_params.getlist("project_id")) != 1:
+            raise projects.ProjectDenied("project_reference_invalid")
+        scopes.append(projects.membership(request.user.pk, request.query_params["project_id"], operation))
     for values in [request.query_params, body]:
         if values.get("pipeline_run_id") is not None and name != "crisp-iteration-clone":
             scopes.append(projects.pipeline_authority(request.user.pk, values["pipeline_run_id"], operation))
@@ -164,6 +170,8 @@ def authorize(request, view):
         raise projects.ProjectDenied("dataset_identifier_required")
     for values in [request.query_params, body]:
         projects.validate_paths(request.user.pk, file_id, values, operation)
+    if len({scope["project_id"] for scope in scopes}) > 1:
+        raise projects.ProjectDenied("pipeline_dataset_project_mismatch")
     return name, scopes
 
 

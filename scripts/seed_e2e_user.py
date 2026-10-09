@@ -59,7 +59,28 @@ def main():
             uuid.uuid4(),
             "disposable-e2e-fixture",
         )
-    print("Created a disposable, non-admin E2E account.")
+        # Separate account exercises multiple memberships without changing the
+        # original single-project scientific and MCP fixtures.
+        workspace_actor = users.create_user(username=username + "-workspace", password=password)
+        from access_control.projects import bind_dataset, bind_pipeline
+        from declaration.models import Declaration
+        from django.core.files.base import ContentFile
+        from modeling.models import PipelineRun
+
+        for title, role in [("Workspace A", "developer"), ("Workspace B", "developer"),
+                            ("Workspace Review", "reviewer"), ("Workspace Admin", "admin")]:
+            event, _ = operator_change({"operation": "create", "name": title, "user": admin.username},
+                                       uuid.uuid4(), "disposable-e2e-fixture")
+            operator_change({"operation": "member", "project_id": str(event.project_id),
+                             "user": workspace_actor.username, "role": role},
+                            uuid.uuid4(), "disposable-e2e-fixture")
+            dataset = Declaration.objects.create(name=title, original_name=title + ".csv")
+            dataset.file.save("workspace-" + uuid.uuid4().hex + ".csv", ContentFile(b"x,target\n1,0\n2,1\n"))
+            bind_dataset(dataset, event.project_id, source="disposable-e2e-fixture")
+            run = PipelineRun.objects.create(name=title + " pipeline", file_id=dataset.pk,
+                                             state={"file_id": dataset.pk})
+            bind_pipeline(run, event.project_id, source="disposable-e2e-fixture")
+    print("Created disposable, non-admin E2E accounts and owned workspace records.")
 
 
 if __name__ == "__main__":

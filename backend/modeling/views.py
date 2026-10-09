@@ -2633,6 +2633,9 @@ class PipelineRunListView(APIView):
         from access_control.projects import governed, allowed_projects
         if governed():
             runs = runs.filter(project_binding__project_id__in=allowed_projects(request.user.pk))
+            if request.query_params.get('project_id'):
+                runs = runs.filter(project_binding__project_id=request.query_params['project_id'])
+        runs = runs.select_related('project_binding')
         data = []
         for run in runs:
             state = run.state or {}
@@ -2643,6 +2646,7 @@ class PipelineRunListView(APIView):
                 detailed_step = self._infer_detailed_step(run.current_step, modeling_sub, state.get('file_id'))
             data.append({
                 'id': run.id,
+                'project_id': str(run.project_binding.project_id) if hasattr(run, 'project_binding') else None,
                 'name': run.name,
                 'pipeline_type': run.pipeline_type,
                 'file_id': run.file_id,

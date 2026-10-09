@@ -2,6 +2,7 @@ import { Component, OnInit, Inject, PLATFORM_ID, ChangeDetectionStrategy } from 
 import { Router, NavigationEnd, Event } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { isPlatformBrowser } from '@angular/common';
+import { ProjectWorkspaceService } from './services/project-workspace.service';
 import { AuthService } from './services/auth.service'; // Make sure to import AuthService
 
 @Component({
@@ -27,6 +28,7 @@ export class AppComponent implements OnInit {
   constructor(
     private router: Router,
     @Inject(PLATFORM_ID) private platformId: object,
+    public workspace: ProjectWorkspaceService,
     private authService: AuthService, // Inject AuthService
   ) {
     this.isBrowser = isPlatformBrowser(this.platformId);

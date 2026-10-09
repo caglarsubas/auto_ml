@@ -4,6 +4,7 @@ import { Observable, throwError } from 'rxjs';
 import { catchError, tap, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { AssistantStep } from './ai-assistant.service';
+import { ProjectWorkspaceService } from './project-workspace.service';
 import { AuthService } from './auth.service';
 
 @Injectable({
@@ -12,11 +13,13 @@ import { AuthService } from './auth.service';
 export class DataService {
   private apiUrl = environment.apiBaseUrl;
 
-  constructor(private http: HttpClient, private auth: AuthService) { }
+  constructor(private http: HttpClient, private auth: AuthService, private workspace: ProjectWorkspaceService) { }
 
   uploadFile(file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file, file.name);
+    try { this.workspace.appendProject(formData); }
+    catch (error) { return throwError(() => error); }
     return this.http.post(`${this.apiUrl}declaration/`, formData);
   }
 
@@ -452,8 +455,12 @@ export class DataService {
 
   // ===== Pipeline Run CRUD =====
 
-  listPipelineRuns(): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}pipeline/`).pipe(
+  listDatasets(projectId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}declaration/`, { params: { project_id: projectId }, transferCache: false });
+  }
+
+  listPipelineRuns(projectId = this.workspace.projectId): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}pipeline/`, { params: projectId ? { project_id: projectId } : {}, transferCache: false }).pipe(
       catchError((err: any) => {
         console.error('Error listing pipeline runs:', err);
         return throwError(() => err);
@@ -462,7 +469,10 @@ export class DataService {
   }
 
   createPipelineRun(payload: any): Observable<any> {
-    return this.http.post(`${this.apiUrl}pipeline/create/`, payload).pipe(
+    let scoped: any;
+    try { scoped = this.workspace.creationPayload(payload); }
+    catch (error) { return throwError(() => error); }
+    return this.http.post(`${this.apiUrl}pipeline/create/`, scoped).pipe(
       catchError((err: any) => {
         console.error('Error creating pipeline run:', err);
         return throwError(() => err);
@@ -471,7 +481,7 @@ export class DataService {
   }
 
   getPipelineRun(id: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}pipeline/${id}/`).pipe(
+    return this.http.get(`${this.apiUrl}pipeline/${id}/`, { params: this.workspace.projectId ? { project_id: this.workspace.projectId } : {}, transferCache: false }).pipe(
       catchError((err: any) => {
         console.error('Error getting pipeline run:', err);
         return throwError(() => err);
@@ -480,7 +490,7 @@ export class DataService {
   }
 
   updatePipelineRun(id: number, payload: any): Observable<any> {
-    return this.http.put(`${this.apiUrl}pipeline/${id}/`, payload).pipe(
+    return this.http.put(`${this.apiUrl}pipeline/${id}/`, payload, { params: this.workspace.projectId ? { project_id: this.workspace.projectId } : {} }).pipe(
       catchError((err: any) => {
         console.error('Error updating pipeline run:', err);
         return throwError(() => err);
@@ -489,7 +499,7 @@ export class DataService {
   }
 
   deletePipelineRun(id: number): Observable<any> {
-    return this.http.delete(`${this.apiUrl}pipeline/${id}/`).pipe(
+    return this.http.delete(`${this.apiUrl}pipeline/${id}/`, { params: this.workspace.projectId ? { project_id: this.workspace.projectId } : {} }).pipe(
       catchError((err: any) => {
         console.error('Error deleting pipeline run:', err);
         return throwError(() => err);
@@ -501,8 +511,8 @@ export class DataService {
     return `${this.apiUrl}pipeline/${id}/report/?output=${output}`;
   }
 
-  downloadPipelineReport(id: number): Observable<Blob> {
-    return this.http.get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob' }).pipe(
+  downloadPipelineReport(id: number, projectId = this.workspace.projectId): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}pipeline/${id}/report/?output=html`, { responseType: 'blob', params: projectId ? { project_id: projectId } : {} }).pipe(
       catchError((err: any) => {
         console.error('Error downloading pipeline report:', err);
         return throwError(() => err);

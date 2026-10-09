@@ -191,7 +191,10 @@ class DeclarationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         from access_control.projects import governed, allowed_datasets
         if governed():
-            return self.queryset.filter(pk__in=allowed_datasets(self.request.user.pk))
+            rows = self.queryset.filter(pk__in=allowed_datasets(self.request.user.pk))
+            if self.request.query_params.get('project_id'):
+                rows = rows.filter(project_binding__project_id=self.request.query_params['project_id'])
+            return rows.select_related('project_binding')
         return self.queryset
     
     def create(self, request, *args, **kwargs):
