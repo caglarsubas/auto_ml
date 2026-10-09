@@ -26,8 +26,7 @@ test('multiple projects require choice; keyboard selection pins pipeline creatio
   expect(index).toBeGreaterThan(0);
   const projectId = await picker.locator('option').nth(index).getAttribute('value');
   await picker.focus();
-  await picker.press('Home');
-  for (let i = 0; i < index; i++) await picker.press('ArrowDown');
+  await page.keyboard.type('Workspace A ');
   await picker.press('Tab');
   await expect(picker).toHaveValue(projectId!);
   await expect(page.getByLabel('Project datasets')).toContainText('Workspace A.csv');
@@ -85,6 +84,8 @@ for (const [name, role] of [
     await picker.selectOption({ label: `${name} — ${role}` });
     const id = await picker.inputValue();
     await expect(page.locator('#workspace-role')).toContainText(`Your role: ${role}`);
+    await page.getByRole('button', { name: 'Refresh access', exact: true }).click();
+    await expect(picker).toHaveValue(id);
     await expect(page.getByLabel('Project datasets')).toContainText(`${name}.csv`);
     await expect(page.getByLabel('Project pipelines')).not.toContainText('Workspace A pipeline');
     await expect(
@@ -106,6 +107,14 @@ for (const [name, role] of [
     });
     expect(denied.status()).toBe(403);
     await page.screenshot({ path: testInfo.outputPath(`workspace-${role}.png`) });
+    // The redirected home URL still names the read-only project. A manual
+    // selection must remain the refresh preference instead of resetting to it.
+    await picker.selectOption({ label: 'Workspace B — developer' });
+    const changedId = await picker.inputValue();
+    await page.getByRole('button', { name: 'Refresh access', exact: true }).click();
+    await expect(picker).toHaveValue(changedId);
+    await expect(page.getByLabel('Project datasets')).toContainText('Workspace B.csv');
+
     await page.getByRole('button', { name: /sign out/i }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.locator('app-project-workspace')).toHaveCount(0);

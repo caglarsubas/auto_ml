@@ -20,6 +20,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   loading = false;
   recordsError = '';
   reportError = '';
+  private preferredProject: string | null = null;
   private readonly subscriptions = new Subscription();
   constructor(
     public workspace: ProjectWorkspaceService,
@@ -58,15 +59,15 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
           this.pipelines = records?.pipelines ?? [];
         }),
     );
+    this.preferredProject = this.route.snapshot.queryParamMap.get('project_id');
     this.refresh();
   }
   refresh(): void {
-    this.subscriptions.add(
-      this.workspace.refresh(this.route.snapshot.queryParamMap.get('project_id')).subscribe(),
-    );
+    this.subscriptions.add(this.workspace.refresh(this.preferredProject).subscribe());
   }
   select(event: Event): void {
-    this.workspace.select((event.target as HTMLSelectElement).value);
+    this.preferredProject = (event.target as HTMLSelectElement).value;
+    this.workspace.select(this.preferredProject);
   }
   report(run: any): void {
     const project = this.workspace.projectId;
