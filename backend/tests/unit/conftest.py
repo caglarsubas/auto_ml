@@ -21,7 +21,8 @@ def _isolate_handler_unit_tests_from_authentication(request, monkeypatch):
         return
     from rest_framework.permissions import AllowAny
     from rest_framework.views import APIView
-    monkeypatch.setattr(APIView, 'permission_classes', [AllowAny])
+    from access_control.storage import ManagedRequestReferences
+    monkeypatch.setattr(APIView, 'permission_classes', [AllowAny, ManagedRequestReferences])
 
 
 # ---------------------------------------------------------------------------

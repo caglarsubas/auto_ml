@@ -152,7 +152,7 @@ CORS_ALLOWED_ORIGINS = [value.strip() for value in os.environ.get(
 ).split(',') if value.strip()]
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated', 'access_control.storage.ManagedRequestReferences'],
 }
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'

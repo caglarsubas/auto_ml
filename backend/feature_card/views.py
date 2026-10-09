@@ -1,3 +1,4 @@
+from access_control.storage import managed_path
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -33,7 +34,7 @@ class FeatureCardViewSet(viewsets.ViewSet):
         """Resolve the file path, respecting optional file_override query param."""
         file_override = request.query_params.get('file_override', None)
         if file_override:
-            override_path = os.path.join(settings.MEDIA_ROOT, file_override) if not os.path.isabs(file_override) else file_override
+            override_path = managed_path(file_override, table=True)
             if os.path.exists(override_path):
                 logger.info(f"Using file override: {override_path}")
                 return override_path, None

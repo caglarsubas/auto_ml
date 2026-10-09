@@ -366,7 +366,8 @@ def test_categorical_code_order_does_not_enter_vif():
     pd.testing.assert_frame_equal(numeric_collinearity_frame(encoded, report), numeric_collinearity_frame(permuted, report))
 
 
-def test_feature_diagnostics_use_verified_development_rows_only(settings, tmp_path, monkeypatch):
+@pytest.mark.parametrize('override', [None, 'relative', 'absolute'])
+def test_feature_diagnostics_use_verified_development_rows_only(settings, tmp_path, monkeypatch, override):
     import pickle
     from modeling.booster_adapters import fit_booster
     settings.MEDIA_ROOT = str(tmp_path)
@@ -393,8 +394,13 @@ def test_feature_diagnostics_use_verified_development_rows_only(settings, tmp_pa
     def no_mutable_csv(*args, **kwargs):
         raise AssertionError('Diagnostics cannot read the full processed dataset.')
     monkeypatch.setattr(pd, 'read_csv', no_mutable_csv)
+    payload = {'file_id': 8, 'feature_name': 'x', 'n_samples': 40}
+    if override:
+        payload['model_path'] = str(model) if override == 'absolute' else str(model.relative_to(tmp_path))
+    else:
+        payload['execution_id'] = execution
     response = FeatureExplainabilityView.as_view()(APIRequestFactory().post('/modeling/feature-explainability/',
-        {'file_id': 8, 'execution_id': execution, 'feature_name': 'x', 'n_samples': 40}, format='json'))
+        payload, format='json'))
     assert response.status_code == 200, response.data.get('error')
     assert response.data['evidence_partition'] == 'development_only'
     assert len(response.data['beeswarm']['feature_values_raw']) == 25
