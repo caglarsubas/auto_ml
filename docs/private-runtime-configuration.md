@@ -1,4 +1,4 @@
-# Explicit runtime configuration (P16)
+# Explicit runtime configuration (P16–P17)
 
 P16 adds a fail-closed private settings profile and PostgreSQL metadata support.
 It is partial D06/D07 implementation. The bundled Compose/live-reload stack is
@@ -12,8 +12,9 @@ deployment, authorize project access, or isolate expert Python.
 import, before requests or migrations. Errors name the field without printing
 secret values. There is no implicit SQLite fallback when PostgreSQL is requested.
 
-Development retains local HTTP origins, SQLite, debug output and existing session
-behavior. Set `DECLARAI_DB_ENGINE=postgresql` explicitly to test PostgreSQL in
+Development retains local HTTP origins, SQLite and debug output. P17 requires a
+current authority revision for browser sessions in both profiles; pre-migration
+sessions must sign in again. Set `DECLARAI_DB_ENGINE=postgresql` explicitly to test PostgreSQL in
 development. Supplying database fields while selecting SQLite blocks startup.
 `docker/backend-entrypoint.sh` rejects every profile except development before
 migrating, indexing or starting Django's live-reload server; Compose forwards the
@@ -84,7 +85,11 @@ server TLS negotiation, certificate/hostname rejection, PostgreSQL migrations,
 session/CSRF enforcement and JSON/UUID metadata persistence. It restarts the
 database and restores a **quiescent synthetic** database snapshot plus matching
 artifact copy, then checks session validity, pipeline state, receipts, grants,
-approval state and artifact hashes. The full existing marked backend suite runs
+approval state and artifact hashes, including the authentication receipt and
+session authority revision. P17 adds five-process source/principal admission and
+five-process retry-safe revocation, revoked-session denial, unaffected-user access
+and fresh-session retry checks. See [authentication governance](AUTHENTICATION_GOVERNANCE.md)
+for configuration, operator commands and evidence limits. The full existing marked backend suite runs
 against PostgreSQL with the same assertions, skip budget and coverage gate as
 SQLite. CI runs this as an additional job; the five existing jobs remain.
 
