@@ -555,23 +555,20 @@ def main():
         )
         assert snapshot(ids) == current
         # Wait for actual Celery completion, not just broker publish or a sleep.
-        output = log_path.read_text(errors="replace")
-        observed = {
-            identifier: output.count(
-                f"Task declarai.package_integrity[{identifier}] succeeded"
-            )
-            for identifier in ids.values()
-        }
+        deliveries = []
         for identifier in ids.values():
             for _ in range(2):
-                run_native_job.apply_async(args=[identifier], retry=False)
+                # Celery delivery IDs differ from durable job IDs. Observe each
+                # broker delivery's own completion before comparing DB history.
+                deliveries.append(
+                    run_native_job.apply_async(args=[identifier], retry=False).id
+                )
         until = time.monotonic() + 45
         while time.monotonic() < until:
             output = log_path.read_text(errors="replace")
             if all(
-                output.count(f"Task declarai.package_integrity[{identifier}] succeeded")
-                >= count + 2
-                for identifier, count in observed.items()
+                f"Task declarai.package_integrity[{identifier}] succeeded" in output
+                for identifier in deliveries
             ):
                 break
             if any(p.poll() is not None for p in processes):
