@@ -293,6 +293,8 @@ def checkpoint(identifier, token, deadline):
     job = NativeJob.objects.get(pk=identifier)
     if job.state != "running" or job.lease_token != token or timezone.now() >= job.lease_until:
         raise JobStopped
+    if timezone.now() >= job.expires_at:
+        raise JobConflict("job_expired")
     if time.monotonic() >= deadline:
         raise JobConflict("job_time_budget_exceeded")
     projects.recheck(job.authority)
@@ -305,6 +307,9 @@ def finish(identifier, token, state, reason="", result=None):
             return
         if job.state == "cancel_requested":
             close(job, "cancelled", "actor_cancelled")
+            return
+        if timezone.now() >= job.expires_at:
+            close(job, "failed", "job_expired")
             return
         try:
             # Same project/binding/member locks as authoritative membership edits.
@@ -377,6 +382,8 @@ def execute(identifier):
         finish(identifier, token, "cancelled", "job_stopped")
     except projects.ProjectDenied:
         finish(identifier, token, "blocked", "job_authority_changed")
+    except JobConflict as exc:
+        finish(identifier, token, "blocked", exc.code)
     except (ValueError, OSError, TypeError, KeyError):
         finish(identifier, token, "blocked", "job_package_or_budget_invalid")
     # Unexpected/storage failures leave a leased attempt for reconciliation;

@@ -289,3 +289,16 @@ def test_private_broker_requires_tls_and_explicit_verified_ca(env):
     with pytest.raises(ImproperlyConfigured):
         load_job_config("private", env)
     assert load_job_config("development", {})["DECLARAI_JOBS_ENABLED"] is False
+
+
+@pytest.mark.parametrize("stage", ["checkpoint", "publication"])
+def test_request_expiry_also_stops_active_work_and_publication(world, stage):
+    identifier = submit(world)[0].json()["id"]
+    _, token = service.claim(identifier)
+    NativeJob.objects.filter(pk=identifier).update(expires_at=timezone.now() - timedelta(seconds=1))
+    if stage == "checkpoint":
+        with pytest.raises(service.JobConflict, match="job_expired"):
+            service.checkpoint(identifier, token, float("inf"))
+    service.finish(identifier, token, "succeeded", result={"expired": True})
+    job = NativeJob.objects.get()
+    assert job.state == "failed" and job.reason_code == "job_expired" and job.result is None
