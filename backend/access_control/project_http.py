@@ -48,6 +48,7 @@ DATASET = {
     "deployment-score",
     "deployment-status",
     "deployment-pack",
+    "package-review-list",
     "crisp-export",
     "crisp-monitoring",
     "crisp-sequential",
@@ -72,8 +73,9 @@ SPECIAL = {
     "assistant-cancel-action",
     "assistant-action-receipt",
     "project-member",
+    "package-review-detail",
 }
-READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export"}
+READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail"}
 
 
 class AuthorityUnavailable(APIException):
@@ -143,6 +145,13 @@ def authorize(request, view):
         supplied.append(record.file_id)
     elif name == "project-member":
         scopes.append(projects.membership(request.user.pk, view.kwargs["project_id"], "admin"))
+    elif name == "package-review-detail":
+        from deployment.models import PackageReview
+        try:
+            record = PackageReview.objects.get(pk=view.kwargs['review_id'])
+        except PackageReview.DoesNotExist:
+            raise projects.ProjectDenied('package_review_unavailable') from None
+        supplied.append(record.dataset_id)
     # A browser workspace may narrow reads/writes to one already-authorized project.
     # Never use this selector as a resource assignment or substitute for its binding.
     if request.query_params.get("project_id") is not None:

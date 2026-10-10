@@ -1,0 +1,58 @@
+.review {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--neutral-400);
+  color: var(--neutral-800);
+  background: white;
+}
+button,
+select,
+textarea {
+  font: inherit;
+  padding: 0.6rem;
+  color: inherit;
+  border: 1px solid var(--neutral-500);
+  background: white;
+  border-radius: 4px;
+}
+button {
+  margin: 0.4rem 0.4rem 0.4rem 0;
+  cursor: pointer;
+}
+label {
+  display: block;
+  margin: 0.8rem 0 0.4rem;
+  font-weight: 600;
+}
+select,
+textarea {
+  width: 100%;
+  max-width: 40rem;
+  box-sizing: border-box;
+}
+textarea {
+  min-height: 7rem;
+  display: block;
+}
+code,
+small {
+  overflow-wrap: anywhere;
+}
+dd {
+  margin: 0.3rem 0 0.8rem;
+}
+li {
+  border-top: 1px solid var(--neutral-200);
+  padding: 0.7rem 0;
+}
+p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--info-600);
+  outline-offset: 3px;
+}
