@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "packet": "P29",
+  "date": "2026-10-11",
+  "status": "local_source_qualified",
+  "base_main_commit": "9e05e6037d137a1c06517a28f6f80a1e804559a7",
+  "base_pull_request": {
+    "number": 118,
+    "state": "merged",
+    "merged_at": "2026-10-10T17:02:38Z",
+    "exact_pr_head_ci": "all_six_success"
+  },
+  "base_main_ci": {
+    "run_id": 38070121980,
+    "url": "https://github.com/caglarsubas/auto_ml/actions/runs/38070121980",
+    "conclusion": "success",
+    "all_six_checks": "passed"
+  },
+  "executable_source_commit": "6fa5fca97116af441ddef29087e93b17e3426de9",
+  "source_binding": "Both complete metadata suites and the final portable fixed image qualify the executable source in 6fa5fca9. Later edits change documentation/ledger/evidence only. Exact final-head six-job CI and AMD64 public-dependency build are separate evidence recorded on the PR.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "b93198984ed7c0ff1b08f25a474b54dbcdf6006523022338ebe0df28db807dba",
+    "backend/tests/unit/test_private_api_package.py": "4b0a8d4f07e3db53e4686c5cf0343049fd961293410bba6bdfee6e1fea82e4b2",
+    "docker-compose.private-api.yml": "cd55b9767b5e3ba829ff9de36689952715c64fc10103e6874a730ecf71388f25",
+    "docker/private-api.Dockerfile": "4af76fcf5a426cc8123388de8c6bcc31b00aef8017a44939992c785337136f20",
+    "docker/private-api.requirements.lock": "cc7d8ad6a52cf73eaa34e22b0fbe8846650fc14b88ba5e0b4a210a46849c3538",
+    "docker/private-dependencies.Dockerfile": "fe694318bbd0f8b20eb58155ab8b3ee828e60d829de188c0171de2564cb873b4",
+    "docker/private-gunicorn.py": "cff29d9a749fc4b28c5ae31e01ed43627b07b4b8d55e661bf33cd34f75b1d74b",
+    "docs/PRIVATE_API_PACKAGING_IMPLEMENTATION.md": "98f334f33f8f5c1e0a5b67b0d82e1deb95b83c66441aad6507c8b24c3ac06914",
+    "docs/PRODUCT_DEVELOPMENT_ROADMAP.md": "e7e5954703c127bdb9bc12e6c9044662d61617e683124952cefc322469fac41a",
+    "docs/product-roadmap.json": "91cff62ed6456faaddc83939999199caa3afa4fe1acc6f5b046c5b045f987ab9",
+    "scripts/private_api_package.py": "c218c39b1fe07da57d727f90681446252970eeee95049a4fd541132214fd83c1",
+    "scripts/private_runtime_manifest.py": "8376a193eb1110da837a6658277f17ebd6b55a1cd130f8852eb591ffe64b4109",
+    "scripts/private_service.py": "5b3b06f6ab17587f622865ddc711455a45e21108c79c4d5cc5e434e09cac813e",
+    "scripts/qualify_postgres_fixture.py": "2a2c9e1841f32d7efc77909dd41451c4f8e24f6a3804ae1b2da66cd0f79f0203",
+    "scripts/qualify_private_api_image.py": "a84b8b702256e5d8bbdb9e765300b3f51673fd81a076147cd04597a99ad0b741"
+  },
+  "checks": {
+    "sqlite_full_marked": {
+      "passed": 2271,
+      "skipped": 6,
+      "deselected": 62,
+      "failures": 0,
+      "junit_sha256": "caeb131343cea6b757df9a1c61edb19e81263585568cac214cf8af13f650efb1",
+      "line_coverage_percent": 69.61,
+      "branch_coverage_percent": 52.63,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
+    },
+    "postgresql_full_marked": {
+      "passed": 2271,
+      "skipped": 6,
+      "deselected": 62,
+      "failures": 0,
+      "junit_sha256": "6e07e7dd722bad6e2a7ba1d489d557a3cdfb39105997e99a9c52e11f27d709ee",
+      "line_coverage_percent": 73.89,
+      "branch_coverage_percent": 64.11,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
+    },
+    "focused_packaging_and_roadmap": {
+      "passed": 119,
+      "packaging_cases": 70,
+      "roadmap_invariants": 49,
+      "failures": 0
+    },
+    "ruff": "passed for backend and all changed Python runtime/qualification tools",
+    "roadmap_renderer_and_git_diff": "passed",
+    "compose_fragment": {
+      "config": "passed",
+      "services": [
+        "api",
+        "worker",
+        "dispatcher"
+      ],
+      "started_services": false,
+      "external_network_volume": true
+    },
+    "actual_fixed_api": {
+      "actual_wsgi_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_proxy_header": "passed",
+      "host_allowlist": "passed",
+      "protected_projects_and_media": "passed",
+      "recorded_logout": "passed",
+      "local_socket_permissions": "passed",
+      "image_id": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+      "source_mounts": false,
+      "public_ports": false,
+      "read_only_root": true,
+      "uid": 10001,
+      "native_runtime_inventory": "verified_before_launch",
+      "actual_tls_ingress": "not_qualified"
+    },
+    "existing_private_recovery": {
+      "postgresql": "postgres (PostgreSQL) 17.11",
+      "image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+      "private_tls_session_api": "passed",
+      "wrong_ca": "rejected",
+      "wrong_hostname": "rejected",
+      "restart_persistence": "passed",
+      "quiescent_database_artifact_restore": "passed",
+      "full_postgresql_suite": "passed",
+      "private_job_broker_tls_authentication": "passed",
+      "job_wrong_ca_hostname_credentials": "blocked",
+      "actual_job_broker_loss": "passed",
+      "quiescent_job_database_artifact_restore_empty_broker": "passed",
+      "natural_orphan_lease_recovery": "passed",
+      "private_native_scoring_restore_parity": "passed",
+      "private_scoring_full_receipts_and_duplicate_completion": "passed",
+      "private_scoring_changed_missing_inputs_revocation": "blocked",
+      "private_scoring_source_scope_fault": "blocked",
+      "production_deployment_recovery": "not_qualified"
+    },
+    "offline_handoff": {
+      "image_id": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+      "offline_image_verified": true,
+      "release_qualified": false,
+      "image_absent_before_import": true,
+      "owned_tag_removed": true,
+      "no_services_started": true,
+      "manifest_sha256": "a43f0a662de5bfe4dabea5b4df70d7d3127a9e17bfeb527179c1c9a38a7b7b4b",
+      "archive_sha256": "c13087fd4deaf7b0d05ed32ef01ff95f01ef837ebf7b2b2f32564c0c2ed685dd",
+      "archive_bytes": 718325760,
+      "native_platform": "linux/arm64",
+      "cross_architecture_import": "not_qualified",
+      "tags_in_archive": false
+    }
+  },
+  "final_native_image": {
+    "id": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+    "dependency_image_id": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
+    "dependency_selection": "trusted previously qualified local core system paths; CI builds a fresh public dependency core",
+    "source_commit": "6fa5fca97116af441ddef29087e93b17e3426de9",
+    "working_tree_changes_at_build": false,
+    "python": "3.12.15",
+    "gunicorn": "26.2.0",
+    "distribution_versions": 171,
+    "allowlisted_source_files": 196,
+    "runtime_inventory_files": 197,
+    "source_and_dockerfile_hashes_match_checkout": true,
+    "application_data_database_environment_indexes_historical_layers": "excluded",
+    "api_workers": 1,
+    "automatic_request_count_recycling": false,
+    "legacy_search_control": "process_local; manual restart can lose state",
+    "native_celery_workers": 2
+  },
+  "retained_initial_findings": [
+    {
+      "finding": "Disposable seed harness referenced an unavailable settings alias",
+      "repair": "Use the actual DATABASES name; no application behavior or budget changed"
+    },
+    {
+      "finding": "Gunicorn 26.2.0 rejects a list for forwarder_headers",
+      "repair": "Use its required empty string and qualify real Unix WSGI requests"
+    },
+    {
+      "finding": "Containerd-backed Docker uses OCI engine identity distinct from the config hash",
+      "repair": "Verify and retain one complete native image graph; disable extra build attestations"
+    },
+    {
+      "finding": "Digest-only Docker saves retain config.digest metadata",
+      "repair": "Allow only the exact verified config identity hint; reject foreign tags and mismatched hints"
+    },
+    {
+      "finding": "Fresh scratch recipe omitted the AMD64 loader path",
+      "repair": "Retain /lib64 with an empty-directory fallback on ARM64; require fresh AMD64 CI build"
+    }
+  ],
+  "qualification_limits": [
+    "Image handoff only, not a complete offline installation or signed supply-chain package",
+    "Actual Unix ingress peer probe, not a real buffering TLS proxy or frontend/browser installation",
+    "Existing native worker/dispatcher launcher and recovery qualified separately; final fixed-image worker task completion is not newly exercised by the API smoke",
+    "No change to model algorithms, scientific assertions, sampling budgets, universal thresholds or frontend source",
+    "No throughput, production recovery, expert isolation, independent full refit, accessibility release or customer acceptance claim"
+  ],
+  "preservation": {
+    "primary_checkout_status_and_13_file_sha256": "unchanged",
+    "prior_packets_outcomes_queue_and_release_gates": "preserved",
+    "owned_fixture_containers_networks_volumes": "removed; rechecked before PR",
+    "deployment_and_primary_services": "not_modified"
+  },
+  "release_status": {
+    "D06": "in_progress",
+    "D07": "in_progress",
+    "M2": "open",
+    "expert_python_isolation": "unavailable and mandatory for first governed release",
+    "technical_release": "open",
+    "value_gate": "open",
+    "customer_acceptance": "not_claimed"
+  }
+}
