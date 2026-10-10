@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "packet": "P24",
+  "date": "2026-10-10",
+  "status": "tested",
+  "branch": "codex/durable-csv-scoring",
+  "qualified_application_test_source_commit": "0109113c57caad9c4560583e7e5e3e2b858b0e1d",
+  "backend_source_commit": "0109113c57caad9c4560583e7e5e3e2b858b0e1d",
+  "source_binding": "Final application/backend test source is 0109113c57caad9c4560583e7e5e3e2b858b0e1d. Frontend component/unit/E2E source is unchanged since 8a6297ca. Full SQLite/TLS PostgreSQL suites and actual worker/browser/offline/MCP qualification repeat on the optimized backend. Earlier frontend units/build/lint remain applicable to unchanged source. All 165 backend module hashes match the new fixed API/offline image. Later ledger/evidence changes are documentation only.",
+  "baseline_verification": {
+    "pull_request": 113,
+    "state": "MERGED",
+    "merged_at": "2026-10-10T09:25:55Z",
+    "merge_commit": "2b5b84384aaf142e50671cc53a7257c15c6aabc5",
+    "merge_main_ci_run": 38041361899,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D04/D07/D09/D12: bounded registered CSV native scoring with exact input/package/runtime anchors, both dataset authorities, fenced atomic full receipts, explicit developer queue and authorized reviewer downloads. No refit/final assessment/review approval/expert isolation or production/release acceptance.",
+  "source_sha256": {
+    "backend/access_control/project_http.py": "c4fa15bbd43b1cd422c564c93e4eea6624451935d0bc724aa01feffa86495f1c",
+    "backend/backend/urls.py": "128c5dd08f80d100d3b8c0b68ec3adf8191b5e136c72bbe7ade101f9b8e0d454",
+    "backend/deployment/deploy_utils.py": "690135de05d63f0ba29861e0b47a1b2021b9c0d1480d08c2a455bc2e2003bee0",
+    "backend/execution_jobs/csv_scoring.py": "82257a53c60f6f9b3b7ccf4c44402313e25082d1a841d88a107f074100252d1b",
+    "backend/execution_jobs/migrations/0002_nativejob_source_dataset.py": "f983af2ecd8abec871af5805c338c424a30db3140f6b8cc544c07a06cbf10f6f",
+    "backend/execution_jobs/models.py": "56935148c7bddea572e1607110521a2152b05ce6c888d5b9555035105e747c1f",
+    "backend/execution_jobs/service.py": "3cb808aa7548efd84bad904e3178b102534ea10aff0a4f02c73da30503f3a985",
+    "backend/execution_jobs/views.py": "a0e86fa2c762117bb3a6a2e8c0672537fd7ac0b437752e8f11141ce053d50b17",
+    "backend/tests/unit/test_durable_scoring.py": "2449665dbc6e0f482b65dd53e4769a2c6c8aab550b7041efde5c88194302d6aa",
+    "backend/tests/unit/test_package_reviews.py": "4a3a8ffa9369f12b4ee9c3f4cd0a17756abc57d8f2ff31a3dbee95a901df4443",
+    "frontend/e2e/package-review.spec.ts": "91cf259e8fd2f02d0138691f098d0a770c6bca988cd4b0af8c2d541566b216a3",
+    "frontend/e2e/raw-replay-api.spec.ts": "4ccb791cd394f394cb293df5d63541592a5e87a09b37f0da9dd53e616978e586",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "8f63be073d00337c6c765c926c33c985d27ce4ecc028aa9a7e2e4b96f2d21e2c",
+    "frontend/src/app/package-jobs/package-jobs.component.spec.ts": "95b0f602f5d13753904a76b312bcf86e8f9013a943e9647ec5dfb0dabd633c08",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "ed71996bbf403d905b98e3e8a31f7ea59a372d725060ce47ee3a13efb2ce4d21"
+  },
+  "environment": {
+    "core_image": "declarai-core-p22:local",
+    "core_image_id": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
+    "fixed_api_image": "declarai-p24-api-opt:local",
+    "fixed_api_image_id": "sha256:077b436f9597e3ca1503e8bdac5f767707c776518755e5c9a80a3488c174bce1",
+    "backend_module_hashes_matched": 165,
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "celery": "5.6.3",
+    "postgresql": "17.11",
+    "node": "24.16.0",
+    "resource_profile": "Two CPUs/native threads per full backend matrix; separate owned browser worker CPUs. No provider keys; telemetry disabled. Existing fixture assertions/datasets/rounds/timeouts preserved.",
+    "offline_profile": "No network, read-only fixed runtime, uid65534, all capabilities dropped, no-new-privileges, 1GiB/2CPU/128PID limits; no installation media/database."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "passed": 2059,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 304.193,
+      "combined_statement_branch_coverage_percent": 71.0,
+      "report": "test-reports/p24/requalified/backend.log"
+    },
+    {
+      "name": "Full TLS PostgreSQL marked suite",
+      "status": "passed",
+      "passed": 2059,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 320.718,
+      "combined_statement_branch_coverage_percent": 71.0,
+      "report": "test-reports/p24/requalified/postgresql/postgresql.log"
+    },
+    {
+      "name": "Focused scoring, integrity, preflight and independent-review regressions",
+      "status": "passed",
+      "passed": 107,
+      "new_scoring_cases": 27,
+      "report": "test-reports/p24/focused-optimized.log"
+    },
+    {
+      "name": "Frontend units",
+      "status": "passed",
+      "passed": 590,
+      "report": "test-reports/p24/frontend-unit.log"
+    },
+    {
+      "name": "Frontend build and lint",
+      "status": "passed",
+      "reports": [
+        "test-reports/p24/frontend-build.log",
+        "test-reports/p24/frontend-lint-final.log"
+      ]
+    },
+    {
+      "name": "Authenticated browser/API and actual native worker/dispatcher",
+      "status": "passed",
+      "passed": 37,
+      "report": "test-reports/p24/requalified/browser-final.log",
+      "scoring_fixtures": [
+        "keyboard prepared/uploaded native calibrated scoring and exact full receipt download",
+        "XGBoost classification and regression: exact stored CSV bytes and synchronous/native parity",
+        "retained dataset deletion conflicts without erasing evidence"
+      ],
+      "browser_runtime": "Django development runserver; SQLite metadata and explicit disposable Redis broker; not production serving/private deployment"
+    },
+    {
+      "name": "Actual MCP SDK stdio boundary",
+      "status": "passed",
+      "tools_registered": 29,
+      "access_events": 14,
+      "completed": 8,
+      "denied": 6,
+      "direct_execution": "blocked",
+      "network_transport": "blocked",
+      "report": "test-reports/p24/requalified/mcp-stdio-final.log"
+    },
+    {
+      "name": "Offline native worker-receipt parity",
+      "status": "passed",
+      "tasks": [
+        "classification",
+        "regression"
+      ],
+      "rows_each": 300,
+      "chunk_sizes": [
+        300,
+        1,
+        17,
+        64
+      ],
+      "atol": 1e-12,
+      "rtol": 1e-12,
+      "maximum_absolute_difference": 0.0,
+      "network": "none",
+      "read_only_runtime": true,
+      "unprivileged": true,
+      "installation_data": "absent",
+      "report": "test-reports/p24/requalified/offline-scoring/summary.json"
+    },
+    {
+      "name": "Preserved TLS startup, broker-loss and quiescent native-job restore",
+      "status": "passed",
+      "scoring_recovery": "not_qualified",
+      "model_state_loaded": false,
+      "report": "test-reports/p24/requalified/postgresql/private-jobs.log"
+    },
+    {
+      "name": "Preserved killed-worker/cancellation/duplicate/failed-broker integrity fixture",
+      "status": "passed",
+      "synthetic_artifact_bytes_per_attempt": 402653202,
+      "report": "test-reports/p24/requalified/postgresql/native-jobs.log"
+    },
+    {
+      "name": "Preserved private identity/projects/TLS metadata restart and quiescent restore",
+      "status": "passed",
+      "report": "test-reports/p24/requalified/postgresql/postgresql-summary.json"
+    },
+    {
+      "name": "Backend Ruff and additive migration consistency",
+      "status": "passed",
+      "report": "test-reports/p24/requalified/static-migration.log"
+    },
+    {
+      "name": "Canonical ledger and deterministic projection",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p24/requalified/roadmap-final.log"
+    },
+    {
+      "name": "Bounded CSV authority queries and retained real credential verification",
+      "status": "passed",
+      "datasets": "unchanged 650-row parity and 10,001-row rejection fixtures",
+      "query_ceiling": 1000,
+      "before": "3448 queries for the 650-row case; 9000-entry logging limit exceeded for row rejection",
+      "after": "both cases below 1000; every record/schema/size check retained; revocation during parsing blocks before native state",
+      "test_credentials": "real Django hash cached for synthetic setup only; fresh users/sessions/native models/evidence and correct/incorrect password verification",
+      "reports": [
+        "test-reports/p24/query-profile-before.log",
+        "test-reports/p24/focused-optimized.log"
+      ]
+    }
+  ],
+  "budgets": {
+    "coverage_gate_percent": 50,
+    "skip_budget": 15,
+    "existing_test_and_coverage_scope": "unchanged",
+    "global_active_leases": 2,
+    "max_pending": 100,
+    "job_attempts": 3,
+    "cooperative_seconds": 120,
+    "metadata_lease_seconds": 180,
+    "request_expiry_hours": 1,
+    "input_bytes": 5242880,
+    "rows": 10000,
+    "columns": 256,
+    "canonical_output_bytes": 16777216
+  },
+  "resolved_findings": [
+    "Initial verifier assertion expected verified instead of the documented passed status; corrected without changing parity/data assertions.",
+    "A focused command referenced a nonexistent test filename and ran zero cases; corrected command ran all 74 cases.",
+    "Initial browser export assertions hashed pre-upload bytes and expected deletion despite retained jobs. Corrected to independently downloaded stored CSV bytes, explicit retained-dataset conflicts and continued availability; fresh final installation passes all 37 cases.",
+    "First CI PostgreSQL run reached the existing 900-second full-suite deadline. Bounded parsed-text polling removes per-record authority-query overhead; repeated synthetic password encoding is cached without caching auth decisions or database/ML objects. Final full suites and browser/worker/offline checks repeat; no datasets, rounds, assertions, timeouts, skip or coverage gates are reduced."
+  ],
+  "preservation": {
+    "prior_packets_history_and_outcome_states": "preserved",
+    "canonical_queue_and_release_reconciliation": "unchanged",
+    "D18_D26": "planned",
+    "all_primary_tracked_edits": "11 original hashes unchanged",
+    "customer_acceptance": "not_performed",
+    "owned_fixture_cleanup": {
+      "owned_containers_network_preview_and_secrets": "removed",
+      "primary_edits_preserved": 11,
+      "primary_services": "not modified; no endpoint/deployment acceptance claim",
+      "canonical_prior_evidence_queue_states_and_gates": "preserved"
+    }
+  },
+  "remaining": [
+    "Training/search and other scoring profiles; synchronous routes remain",
+    "Durable assistant/mission grants",
+    "Complete private/offline packaging and locked runtime supply",
+    "Production supervisor/resource/hard-timeout/clock/live-backup/machine-loss/scoring recovery",
+    "Artifact authenticity, retention/egress and full refit/assessment reproduction",
+    "Expert Linux gVisor/runsc isolation",
+    "Full accessibility and every milestone/release/value/design-partner/customer gate"
+  ],
+  "initial_qualification": {
+    "source_commit": "8a6297ca1eda12aab521eeba028cdf20fe7fdcee",
+    "source_sha256": {
+      "backend/access_control/project_http.py": "c4fa15bbd43b1cd422c564c93e4eea6624451935d0bc724aa01feffa86495f1c",
+      "backend/backend/urls.py": "128c5dd08f80d100d3b8c0b68ec3adf8191b5e136c72bbe7ade101f9b8e0d454",
+      "backend/deployment/deploy_utils.py": "690135de05d63f0ba29861e0b47a1b2021b9c0d1480d08c2a455bc2e2003bee0",
+      "backend/execution_jobs/csv_scoring.py": "1478f765aa8fe046c58837e7d4abc8d4b4e5f7df173f5080f86d0029bcd72668",
+      "backend/execution_jobs/migrations/0002_nativejob_source_dataset.py": "f983af2ecd8abec871af5805c338c424a30db3140f6b8cc544c07a06cbf10f6f",
+      "backend/execution_jobs/models.py": "56935148c7bddea572e1607110521a2152b05ce6c888d5b9555035105e747c1f",
+      "backend/execution_jobs/service.py": "3cb808aa7548efd84bad904e3178b102534ea10aff0a4f02c73da30503f3a985",
+      "backend/execution_jobs/views.py": "a0e86fa2c762117bb3a6a2e8c0672537fd7ac0b437752e8f11141ce053d50b17",
+      "backend/tests/unit/test_durable_scoring.py": "8b0c69228cd32f957584c86ad9c47275c8d69e211092f224e3ce0b61bee4854a",
+      "frontend/e2e/package-review.spec.ts": "91cf259e8fd2f02d0138691f098d0a770c6bca988cd4b0af8c2d541566b216a3",
+      "frontend/e2e/raw-replay-api.spec.ts": "4ccb791cd394f394cb293df5d63541592a5e87a09b37f0da9dd53e616978e586",
+      "frontend/src/app/package-jobs/package-jobs.component.html": "8f63be073d00337c6c765c926c33c985d27ce4ecc028aa9a7e2e4b96f2d21e2c",
+      "frontend/src/app/package-jobs/package-jobs.component.spec.ts": "95b0f602f5d13753904a76b312bcf86e8f9013a943e9647ec5dfb0dabd633c08",
+      "frontend/src/app/package-jobs/package-jobs.component.ts": "ed71996bbf403d905b98e3e8a31f7ea59a372d725060ce47ee3a13efb2ce4d21"
+    },
+    "full_metadata_checks": [
+      {
+        "name": "Full SQLite marked suite",
+        "status": "passed",
+        "passed": 2059,
+        "skipped": 6,
+        "deselected": 62,
+        "duration_seconds": 304.193,
+        "combined_statement_branch_coverage_percent": 71.0,
+        "report": "test-reports/p24/requalified/backend.log"
+      },
+      {
+        "name": "Full TLS PostgreSQL marked suite",
+        "status": "passed",
+        "passed": 2059,
+        "skipped": 6,
+        "deselected": 62,
+        "duration_seconds": 320.718,
+        "combined_statement_branch_coverage_percent": 71.0,
+        "report": "test-reports/p24/requalified/postgresql/postgresql.log"
+      }
+    ],
+    "first_ci": {
+      "head": "f8b9eefff91c8c52b98d27f15dab1cf1419f16d5",
+      "run_id": 38044419729,
+      "successful_jobs": 5,
+      "postgresql": "900-second full-suite wrapper timeout; no assertion failure reported before cutoff"
+    }
+  }
+}

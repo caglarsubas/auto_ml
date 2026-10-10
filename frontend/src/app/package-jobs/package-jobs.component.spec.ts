@@ -101,4 +101,66 @@ describe('Durable package job receipts', () => {
     expect(create).not.toHaveBeenCalled();
     expect(component.job).toBeNull();
   });
+  it('pins prepared CSV bytes and preserves the exact scoring request after an uncertain response', () => {
+    component.role = 'developer';
+    component.selectInput(27);
+    component.prepareInput();
+    http.expectOne('/api/jobs/datasets/27/input/?project_id=project-a').flush({
+      file_id: 27,
+      sha256: 'b'.repeat(64),
+      bytes: 52,
+    });
+    component.submitScore();
+    const request = http.expectOne('/api/jobs/datasets/1/?project_id=project-a');
+    const body = request.request.body;
+    expect(body).toEqual({
+      request_id: jasmine.any(String),
+      kind: 'native_csv_scoring_v1',
+      bundle_id: 'bundle-1',
+      manifest_sha256: 'a'.repeat(64),
+      input_file_id: 27,
+      input_sha256: 'b'.repeat(64),
+    });
+    request.flush({}, { status: 503, statusText: 'Unavailable' });
+    component.retry();
+    const retry = http.expectOne('/api/jobs/datasets/1/?project_id=project-a');
+    expect(retry.request.body).toEqual(body);
+    retry.flush({ ...job, specification: body, replayed: true });
+    expect(component.pending).toBeNull();
+  });
+  it('does not prepare or score as reviewer and requires a fresh preparation after input changes', () => {
+    component.prepareInput();
+    component.source = { file_id: 1, sha256: 'b'.repeat(64) };
+    component.submitScore();
+    expect(component.pending).toBeNull();
+    component.role = 'developer';
+    component.selectInput(2);
+    component.submitScore();
+    expect(component.source).toBeNull();
+    expect(component.pending).toBeNull();
+  });
+  it('discards prepared source versions on project changes', () => {
+    component.source = { file_id: 1, sha256: 'b'.repeat(64) };
+    component.projectId = 'project-b';
+    component.ngOnChanges();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-b').flush(directory);
+    expect(component.source).toBeNull();
+  });
+  it('withholds scoring downloads when current source authority is denied', () => {
+    const create = spyOn(URL, 'createObjectURL');
+    component.job = {
+      ...job,
+      state: 'succeeded',
+      result_sha256: 'c'.repeat(64),
+      specification: { kind: 'native_csv_scoring_v1' },
+    };
+    component.downloadScores();
+    const request = http.expectOne(
+      '/api/jobs/job-1/scores/?project_id=project-a&sha256=' + 'c'.repeat(64),
+    );
+    expect(request.request.responseType).toBe('blob');
+    request.flush(null, { status: 403, statusText: 'Forbidden' });
+    expect(create).not.toHaveBeenCalled();
+    expect(component.job).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../services/auth.service';
@@ -7,7 +8,7 @@ import { AuthService } from '../services/auth.service';
 @Component({
   selector: 'app-package-jobs',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './package-jobs.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
@@ -20,6 +21,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   job: any = null;
   busy = false;
   error = '';
+  inputFileId = 0;
+  source: any = null;
   pending: { url: string; body: any } | null = null;
   private generation = 0;
   private requests = new Subscription();
@@ -31,7 +34,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.generation++;
     this.requests.unsubscribe();
     this.requests = new Subscription();
-    this.directory = this.job = this.pending = null;
+    this.directory = this.job = this.pending = this.source = null;
+    this.inputFileId = this.fileId;
     this.busy = false;
     this.error = '';
     this.refresh();
@@ -113,6 +117,95 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     };
     this.retry();
   }
+  selectInput(id: number): void {
+    this.inputFileId = id;
+    this.source = null;
+  }
+  prepareInput(): void {
+    if (
+      this.busy ||
+      this.pending ||
+      this.role !== 'developer' ||
+      !Number.isSafeInteger(this.inputFileId) ||
+      this.inputFileId < 1
+    )
+      return;
+    this.source = null;
+    this.busy = true;
+    this.error = '';
+    const generation = ++this.generation;
+    this.requests.add(
+      this.http
+        .get<any>(this.url(`datasets/${this.inputFileId}/input`), {
+          params: this.params,
+          transferCache: false,
+        })
+        .subscribe({
+          next: (source) => {
+            if (generation === this.generation) {
+              this.source = source;
+              this.busy = false;
+            }
+          },
+          error: (error) => this.fail(generation, error, false),
+        }),
+    );
+  }
+  submitScore(): void {
+    if (
+      this.role !== 'developer' ||
+      !this.source ||
+      !this.packageInfo ||
+      !this.directory?.jobs_enabled ||
+      this.busy ||
+      this.pending
+    )
+      return;
+    this.pending = {
+      url: this.url(`datasets/${this.fileId}`),
+      body: {
+        request_id: crypto.randomUUID(),
+        kind: 'native_csv_scoring_v1',
+        bundle_id: this.packageInfo.bundle_id,
+        manifest_sha256: this.packageInfo.manifest_sha256,
+        input_file_id: this.source.file_id,
+        input_sha256: this.source.sha256,
+      },
+    };
+    this.retry();
+  }
+  downloadScores(): void {
+    if (
+      this.busy ||
+      this.job?.state !== 'succeeded' ||
+      this.job.specification.kind !== 'native_csv_scoring_v1'
+    )
+      return;
+    const generation = this.generation,
+      id = this.job.id;
+    this.requests.add(
+      this.http
+        .get(this.url(`${id}/scores`), {
+          params: { ...this.params, sha256: this.job.result_sha256 },
+          responseType: 'blob',
+          transferCache: false,
+        })
+        .subscribe({
+          next: (blob) => {
+            if (generation === this.generation) this.save(blob, `scoring-${id}.json`);
+          },
+          error: (error) => this.fail(generation, error, false),
+        }),
+    );
+  }
+  private save(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob),
+      link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   cancel(): void {
     if (!this.canCancel || this.pending || this.busy) return;
     this.pending = { url: this.url(this.job.id), body: { action: 'cancel' } };
@@ -135,6 +228,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
             this.directory.jobs.unshift({
               id: job.id,
               state: job.state,
+              kind: job.specification.kind,
               bundle_id: job.specification.bundle_id,
             });
             this.directory.total++;
@@ -148,7 +242,10 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (generation !== this.generation) return;
     this.busy = false;
     this.job = null;
-    if (error.status === 403 || !mutation) this.directory = null;
+    if (error.status === 403 || !mutation) {
+      this.directory = null;
+      this.source = null;
+    }
     if (mutation && ![400, 404, 409].includes(error.status)) {
       this.error =
         'The outcome could not be confirmed. Retry the same pending request after access or service recovery.';

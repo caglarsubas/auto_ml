@@ -3,6 +3,7 @@ import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from functools import lru_cache
 from unittest.mock import patch
 
 import pytest
@@ -56,13 +57,21 @@ def world(packaged, django_user_model):
     projects.bind_dataset(Declaration.objects.get(pk=file_id), project.pk)
     users, clients = {}, {}
     for role in ['developer', 'reviewer', 'admin', 'outsider']:
-        actor = django_user_model.objects.create_user(username=role, password='synthetic-review-fixture')
+        actor = django_user_model.objects.create(username=role, password=_review_password())
         if role != 'outsider':
             ProjectMembership.objects.create(actor=actor, project=project, role=role)
         client = Client()
         client.force_login(actor)
         users[role], clients[role] = actor, client
     return file_id, project, bundle, users, clients
+
+
+@lru_cache(maxsize=1)
+def _review_password():
+    # Reuse only a real encoded synthetic credential, never database objects or
+    # authentication results. Cases retain fresh users/sessions and native ML.
+    from django.contrib.auth.hashers import make_password
+    return make_password('synthetic-review-fixture')
 
 
 def post(client, url, data):
