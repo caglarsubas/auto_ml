@@ -189,7 +189,18 @@
     "canonical_queue_and_release_reconciliation": "unchanged",
     "D18_D26": "planned",
     "all_primary_tracked_edits": "11 original hashes unchanged",
-    "customer_acceptance": "not_performed"
+    "customer_acceptance": "not_performed",
+    "owned_fixture_cleanup": {
+      "owned_containers_network_preview_and_secrets": "removed",
+      "primary_edits_preserved": 11,
+      "primary_container_state": {
+        "auto-ml-backend-1": "running",
+        "auto-ml-frontend-1": "running",
+        "auto-ml-redis-1": "running"
+      },
+      "primary_services": "not modified; running container state is not endpoint/deployment acceptance",
+      "canonical_prior_evidence_queue_states_and_gates": "preserved"
+    }
   },
   "remaining": [
     "Training/search and other scoring profiles; synchronous routes remain",
