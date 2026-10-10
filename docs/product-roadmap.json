@@ -31,7 +31,7 @@
       "id": "M3",
       "title": "Reviewable product and feature development",
       "purpose": "Independent reproduction and paired experiments make developer-to-reviewer handoff useful.",
-      "gate": "Bounded agentic pilot requires remaining D01–D09/D12 foundations and D18–D22/D25–D26, including isolation, both intake paths, live accountability, accessible oversight and clean independent reproduction. D10/D11/D23 deeper experiments follow the baseline pilot; full M1–M3 outcome completion remains separate. Broader rollout requires two partner workflows meeting the proposed >=30% combined development/review effort reduction against equal-data/policy/budget guided and single-agent baselines without increased validation defects."
+      "gate": "Bounded agentic pilot requires remaining D01\u2013D09/D12 foundations and D18\u2013D22/D25\u2013D26, including isolation, both intake paths, live accountability, accessible oversight and clean independent reproduction. D10/D11/D23 deeper experiments follow the baseline pilot; full M1\u2013M3 outcome completion remains separate. Broader rollout requires two partner workflows meeting the proposed >=30% combined development/review effort reduction against equal-data/policy/budget guided and single-agent baselines without increased validation defects."
     },
     {
       "id": "M4",
@@ -176,9 +176,11 @@
         "[Immutable numeric diagnostic implementation](COLLINEARITY_IMPLEMENTATION.md)",
         "[P15 source qualification](evidence/p15-qualification-2026-10-09.json)",
         "[Durable native CSV scoring](DURABLE_CSV_SCORING_IMPLEMENTATION.md)",
-        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)"
+        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)",
+        "[Private native scoring recovery](PRIVATE_SCORING_RECOVERY_IMPLEMENTATION.md)",
+        "[P25 source qualification](evidence/p25-qualification-2026-10-10.json)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open."
     },
     {
       "id": "D05",
@@ -210,7 +212,7 @@
         "[Immutable numeric diagnostic implementation](COLLINEARITY_IMPLEMENTATION.md)",
         "[P15 source qualification](evidence/p15-qualification-2026-10-09.json)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R² and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open."
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open."
     },
     {
       "id": "D06",
@@ -278,9 +280,11 @@
         "[Private native job startup and recovery](PRIVATE_JOB_RUNTIME_IMPLEMENTATION.md)",
         "[P23 source qualification](evidence/p23-qualification-2026-10-10.json)",
         "[Durable native CSV scoring](DURABLE_CSV_SCORING_IMPLEMENTATION.md)",
-        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)"
+        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)",
+        "[Private native scoring recovery](PRIVATE_SCORING_RECOVERY_IMPLEMENTATION.md)",
+        "[P25 source qualification](evidence/p25-qualification-2026-10-10.json)"
       ],
-      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open. P22 adds one exact-package integrity job with durable request/event/result receipts, explicit dedicated Celery/Redis dispatch, database admission/lease bounds, cooperative cancellation, authority/runtime rechecks and fenced terminal publication. Actual prefork delivery, killed-worker recovery after injected lease expiry, duplicate/stale publication, active cancellation and failed broker connection recovery pass against TLS PostgreSQL metadata. Real native package keyboard queue/status/receipt handoff passes in the review workspace. This is partial D07/D12: training/search/scoring migration, private Redis TLS, complete private worker packaging, job backup/restore and production recovery, expert isolation, complete accessibility and release/customer gates remain open. P23 adds a fail-closed private launcher and actual metadata TLS/migration/broker preflight. Authenticated Redis TLS and wrong CA/hostname/credential rejection pass. Actual broker removal retains requests; a quiescent four-state native-job PostgreSQL/artifact snapshot restores exactly into a separate database with an empty broker. The actual dispatcher naturally expires the original 180-second controlled abandoned lease, fences its old token and a fresh prefork worker publishes pending results once; terminal history and original event prefixes remain intact. Both full metadata matrices pass 2032 tests and six skips with unchanged gates. This is bounded synthetic Linux qualification, not complete private packaging, live/machine-loss disaster recovery, expert isolation or D07/release/customer completion."
+      "progress": "Django 5.2 LTS/DRF 3.16 and Angular/Material 22 with Node 24/TypeScript 6 are adopted; local framework tests/builds pass. Database/jobs remain SQLite/synchronous/local threads; production installation, PostgreSQL/Celery, offline packaging and recovery are not qualified. P02 qualifies a public-dependency core build without the optional SDK and a full marked Linux/ARM64 backend run; production deployment and locked offline supply remain open. P16 adds an explicit fail-closed private runtime with external secret/value-file sources, explicit hosts/HTTPS origins, secure cookies/redirects, an existing artifact root and PostgreSQL verify-full TLS. Both SQLite and PostgreSQL full marked suites pass unchanged assertions, skip and coverage budgets. Real private middleware/session/CSRF, non-superuser migrations, certificate/hostname rejection, restart persistence and a quiescent synthetic database/artifact restore are qualified; the live-reload stack rejects private mode. This is metadata/configuration support, not PostgreSQL dataset intake or qualified production deployment. Project roles, egress/retention, durable workers, expert isolation, independent reproduction and production recovery remain open. P22 adds one exact-package integrity job with durable request/event/result receipts, explicit dedicated Celery/Redis dispatch, database admission/lease bounds, cooperative cancellation, authority/runtime rechecks and fenced terminal publication. Actual prefork delivery, killed-worker recovery after injected lease expiry, duplicate/stale publication, active cancellation and failed broker connection recovery pass against TLS PostgreSQL metadata. Real native package keyboard queue/status/receipt handoff passes in the review workspace. This is partial D07/D12: training/search/scoring migration, private Redis TLS, complete private worker packaging, job backup/restore and production recovery, expert isolation, complete accessibility and release/customer gates remain open. P23 adds a fail-closed private launcher and actual metadata TLS/migration/broker preflight. Authenticated Redis TLS and wrong CA/hostname/credential rejection pass. Actual broker removal retains requests; a quiescent four-state native-job PostgreSQL/artifact snapshot restores exactly into a separate database with an empty broker. The actual dispatcher naturally expires the original 180-second controlled abandoned lease, fences its old token and a fresh prefork worker publishes pending results once; terminal history and original event prefixes remain intact. Both full metadata matrices pass 2032 tests and six skips with unchanged gates. This is bounded synthetic Linux qualification, not complete private packaging, live/machine-loss disaster recovery, expert isolation or D07/release/customer completion. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open."
     },
     {
       "id": "D08",
@@ -345,9 +349,11 @@
         "[Offline native score verification](OFFLINE_SCORING_IMPLEMENTATION.md)",
         "[P21 source qualification](evidence/p21-qualification-2026-10-10.json)",
         "[Durable native CSV scoring](DURABLE_CSV_SCORING_IMPLEMENTATION.md)",
-        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)"
+        "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)",
+        "[Private native scoring recovery](PRIVATE_SCORING_RECOVERY_IMPLEMENTATION.md)",
+        "[P25 source qualification](evidence/p25-qualification-2026-10-10.json)"
       ],
-      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open."
+      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open."
     },
     {
       "id": "D10",
@@ -641,7 +647,7 @@
       "title": "End-to-end agentic baseline pilot",
       "owner": "Product/ML/Platform/Independent Review",
       "description": "Execute accepted business/oversight declarations through uploaded or connected data, a pinned private snapshot, checks/preparation, simple references and bounded XGBoost candidate search, independent assessment, a reproducible review package and batch-scoring handoff. Start with binary classification/regression; preserve and separately qualify other product workflows.",
-      "acceptance": "Both intake paths complete the bounded workflow under mixed HITL/HOTL, full live accountability and qualified isolation. An independent reviewer reproduces a clean package; protected outcomes cannot drive adaptive search or silently retain confirmatory status. Pilot is not production-use approval or closure of all M1–M3 outcomes.",
+      "acceptance": "Both intake paths complete the bounded workflow under mixed HITL/HOTL, full live accountability and qualified isolation. An independent reviewer reproduces a clean package; protected outcomes cannot drive adaptive search or silently retain confirmatory status. Pilot is not production-use approval or closure of all M1\u2013M3 outcomes.",
       "dependencies": [
         "D01",
         "D02",
@@ -825,7 +831,7 @@
     "Customer/jurisdiction policy is versioned; provider-report deadlines and blanket legal claims do not become product guarantees.",
     "Defer general real-time/A-B platforms, mandatory registries/feature stores, full causal discovery, automatic reject-inference correction, unrestricted self-modification and managed multitenant SaaS. Replace blanket automatic-promotion deferral with planned D24 conditional recipe-bounded lifecycle authority; production autonomy remains disabled until separately granted and qualified.",
     "Agentic baseline pilot is end-to-end rather than HPO-only; both intake paths, configurable oversight, live accountability and independent reproduction are first-pilot requirements.",
-    "Preserve P01–P07 scientific/data/fit/identity foundation credit. Planned durable jobs, expert isolation, project governance and independent review remain prerequisites, not delivered capabilities.",
+    "Preserve P01\u2013P07 scientific/data/fit/identity foundation credit. Planned durable jobs, expert isolation, project governance and independent review remain prerequisites, not delivered capabilities.",
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
@@ -833,7 +839,7 @@
   "history": [
     {
       "date": "2026-10-07",
-      "event": "User approved the reconciled D01–D17 roadmap; implementation started on codex/governed-foundation."
+      "event": "User approved the reconciled D01\u2013D17 roadmap; implementation started on codex/governed-foundation."
     },
     {
       "date": "2026-10-07",
@@ -878,7 +884,7 @@
     {
       "date": "2026-10-08",
       "packet": "P04",
-      "event": "Continue M1 with task-specific auditable development CV, complete fold-metric coverage, undefined R² handling and explicit validation limitations. Full objective/search consistency and milestone gates remain open."
+      "event": "Continue M1 with task-specific auditable development CV, complete fold-metric coverage, undefined R\u00b2 handling and explicit validation limitations. Full objective/search consistency and milestone gates remain open."
     },
     {
       "date": "2026-10-08",
@@ -938,7 +944,7 @@
     {
       "date": "2026-10-08",
       "packet": "P08",
-      "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01–P07. Add planned D18–D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
+      "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01\u2013P07. Add planned D18\u2013D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
     },
     {
       "date": "2026-10-08",
@@ -1114,6 +1120,16 @@
       "date": "2026-10-10",
       "packet": "P24",
       "event": "After first exact-head CI PostgreSQL reached its unchanged 900-second fixture deadline, profile and bound parsed-CSV authority polling and reuse only real synthetic credential encoding in fresh test worlds. Final source repeats both full metadata matrices: 2059 passed, six skips, 71.00 percent combined coverage; 107 focused cases, 37 actual-worker browser/API workflows and isolated native score parity pass. All datasets, rounds, assertions, timeouts and gates remain unchanged. Previous source/CI attempts remain explicit evidence; outcome/queue/release/customer states stay unchanged."
+    },
+    {
+      "date": "2026-10-10",
+      "packet": "P25",
+      "event": "Bound an owned synthetic private CSV scoring recovery packet after verifying PR 114 merged at cf1d0275696613d07172c2dc4650552765d29d7b. Preserve all prior packets, outcome states, implementation queue, planned D18-D26 and every release/customer gate. Application/native runtime behavior is unchanged."
+    },
+    {
+      "date": "2026-10-10",
+      "packet": "P25",
+      "event": "Final committed recovery fixture source qualifies ten private native scoring jobs after exact quiescent database/input/package/full-result restore and actual broker/AOF removal. Natural scoring lease recovery, twenty observed Celery duplicate completions, blocked changed/missing inputs and revoked/source authority, and isolated 650-row calibrated classification/regression replay at 1e-12 tolerances pass. Both full metadata matrices pass 2059 tests with six skips and 71.00 percent combined coverage; prior integrity/identity/project qualification is retained. Initial harness/Redis setup failures remain explicit evidence. Product/runtime source, budgets, outcome/queue/release/customer states remain unchanged."
     }
   ],
   "implementation_packets": [
@@ -1155,7 +1171,7 @@
         "[Implementation and limits](PORTABLE_CORE_IMPLEMENTATION.md)",
         "[Local source qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
-      "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1–M3 gates remain open."
+      "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1\u2013M3 gates remain open."
     },
     {
       "id": "P03",
@@ -1258,7 +1274,7 @@
         "[Agentic contracts and acceptance](AGENTIC_EXECUTION_SPEC.md)",
         "[P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)"
       ],
-      "remaining": "D18–D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
+      "remaining": "D18\u2013D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
     },
     {
       "id": "P09",
@@ -1539,6 +1555,24 @@
         "[P24 source qualification](evidence/p24-qualification-2026-10-10.json)"
       ],
       "remaining": "Training/search and other scoring-profile migration, durable assistant/mission grants, complete private/offline packaging, production resource/clock/hard-timeout/live-backup/machine-loss recovery, artifact authenticity/full reproduction, expert isolation, full accessibility and every release/value/customer gate remain open."
+    },
+    {
+      "id": "P25",
+      "title": "Private native scoring restore and empty-broker recovery qualification",
+      "kind": "product_implementation",
+      "owner": "Platform/ML/Security",
+      "status": "tested",
+      "items": [
+        "D04",
+        "D07",
+        "D09"
+      ],
+      "description": "Extend the disposable private TLS recovery fixture with calibrated native classification and regression scoring, exact full-result/input/authority restore, natural orphan leases, observed Celery duplicate completions and fail-closed changed/missing-input/current-authority checks. Retain synthetic recovered packages for independent score replay.",
+      "evidence": [
+        "[Private native scoring recovery](PRIVATE_SCORING_RECOVERY_IMPLEMENTATION.md)",
+        "[P25 source qualification](evidence/p25-qualification-2026-10-10.json)"
+      ],
+      "remaining": "Production interrupted-scoring/supervisor/clock/hard-timeout/live-backup/machine-loss recovery, complete private/offline installation, training/search migration, authenticity/retention/egress, full refit/assessment reproduction, expert isolation, accessibility and all release/value/customer gates remain open."
     }
   ],
   "release_qualification": {
@@ -1602,7 +1636,7 @@
     "implementation_base": "506945f9742bd7bdc5d599f422ad360dc473c929",
     "preceding_pr": 97,
     "specification": "AGENTIC_EXECUTION_SPEC.md",
-    "scope": "P08 adopts the roadmap and execution specification only. D18–D26 are planned, without implementation evidence. P01–P07 remain tested; their partial foundation credit and all open product/release/customer gates are preserved. No feature packet is dispatched.",
+    "scope": "P08 adopts the roadmap and execution specification only. D18\u2013D26 are planned, without implementation evidence. P01\u2013P07 remain tested; their partial foundation credit and all open product/release/customer gates are preserved. No feature packet is dispatched.",
     "added_outcomes": [
       "D18",
       "D19",
@@ -1615,7 +1649,7 @@
       "D26"
     ],
     "priority_delta": [
-      "Finish remaining scientific, shared security/runtime, expert isolation and reproduction foundations first; extend delivered P01–P07 behavior rather than rebuilding it.",
+      "Finish remaining scientific, shared security/runtime, expert isolation and reproduction foundations first; extend delivered P01\u2013P07 behavior rather than rebuilding it.",
       "Add mission/oversight contracts, durable orchestration, independent gates and authoritative decision history before autonomous product execution.",
       "Move both upload/PostgreSQL snapshot intake and the supervision/review workspace into the first end-to-end pilot prerequisites.",
       "Qualify declaration-to-scoring handoff with configurable HITL/HOTL and live accountability before deeper adaptive feature/HPO families; D23 integrates D10/D11 and R1/R2/R3.",
@@ -1640,7 +1674,7 @@
         "D12"
       ],
       "owner": "Backend/ML/Platform/Security/Independent Review",
-      "exit_requirement": "Supported scientific, access-control, runtime/isolation, recovery and clean-reproduction workflows pass; preserve P01–P07 tested evidence."
+      "exit_requirement": "Supported scientific, access-control, runtime/isolation, recovery and clean-reproduction workflows pass; preserve P01\u2013P07 tested evidence."
     },
     {
       "order": 2,
