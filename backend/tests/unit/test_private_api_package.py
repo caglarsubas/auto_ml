@@ -418,7 +418,7 @@ def test_build_requires_exact_dependency_digest_and_owned_tag(modules, monkeypat
     docker.assert_not_called()
 
 
-def test_normalization_drops_oci_index_and_exports_only_one_tag_free_graph(modules, tmp_path):
+def test_normalization_exports_only_one_tag_free_legacy_graph(modules, tmp_path):
     package, _, _ = modules
     source, target = tmp_path / "trusted-save.tar", tmp_path / "package.tar"
     image = write_archive(source)
@@ -453,6 +453,10 @@ def write_oci_archive(path, fault=None):
         index["manifests"].append(root)
     if fault == "tag":
         root["annotations"] = {"org.opencontainers.image.ref.name": "unrelated:latest"}
+    if fault == "config_annotation":
+        root["annotations"] = {"config.digest": config_desc["digest"]}
+    if fault == "wrong_config_annotation":
+        root["annotations"] = {"config.digest": "sha256:" + "a" * 64}
     if fault == "size":
         root["size"] += 1
     if fault == "identity":
@@ -485,13 +489,25 @@ def write_oci_archive(path, fault=None):
 
 
 @pytest.mark.parametrize(
-    "fault", [None, "multiple", "tag", "size", "identity", "blob", "extra_blob", "legacy_disagreement"]
+    "fault",
+    [
+        None,
+        "config_annotation",
+        "wrong_config_annotation",
+        "multiple",
+        "tag",
+        "size",
+        "identity",
+        "blob",
+        "extra_blob",
+        "legacy_disagreement",
+    ],
 )
 def test_oci_graph_preserves_engine_identity_and_rejects_secondary_effects(modules, tmp_path, fault):
     package, _, _ = modules
     source = tmp_path / "oci.tar"
     image = write_oci_archive(source, fault)
-    if fault:
+    if fault not in (None, "config_annotation"):
         with pytest.raises(package.PackageError):
             package.verify_archive(source, image)
     else:

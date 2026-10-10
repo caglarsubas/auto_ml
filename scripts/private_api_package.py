@@ -321,6 +321,16 @@ def verify_archive(path, image_id):
                 index = json.loads(payload("index.json"))
                 required.update({"index.json", "oci-layout"})
 
+                def validate_descriptor(descriptor):
+                    if set(descriptor) - {"mediaType", "digest", "size", "platform", "annotations"}:
+                        raise PackageError("package_archive_oci_annotation_rejected")
+                    # Docker's containerd store records this identity hint even
+                    # for digest-only saves. It cannot select or retag an image.
+                    if "annotations" in descriptor and descriptor["annotations"] != {
+                        "config.digest": "sha256:" + hashlib.sha256(config).hexdigest()
+                    }:
+                        raise PackageError("package_archive_oci_annotation_rejected")
+
                 def select(node):
                     if (
                         set(node) != {"schemaVersion", "mediaType", "manifests"}
@@ -329,13 +339,11 @@ def verify_archive(path, image_id):
                     ):
                         raise PackageError("package_archive_oci_selection_invalid")
                     descriptor = node["manifests"][0]
-                    if set(descriptor) - {"mediaType", "digest", "size", "platform"}:
-                        raise PackageError("package_archive_oci_annotation_rejected")
+                    validate_descriptor(descriptor)
                     return descriptor
 
                 def blob(descriptor, metadata=True):
-                    if set(descriptor) - {"mediaType", "digest", "size", "platform"}:
-                        raise PackageError("package_archive_oci_annotation_rejected")
+                    validate_descriptor(descriptor)
                     digest = descriptor["digest"]
                     if not DIGEST.fullmatch(digest):
                         raise PackageError("package_archive_oci_digest_invalid")
