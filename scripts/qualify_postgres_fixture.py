@@ -488,10 +488,12 @@ def main():
             run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_URL_FILE": str(wrong_auth_file)},
                        succeed=False, report="job-wrong-auth.log", rejection="job_broker_unavailable")
             run_python(["scripts/qualify_private_jobs.py", "seed"], job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_scoring.py", "seed"], job_env, report="private-scoring.log")
             # Quiesce all owned job processes, then remove the actual broker and its
             # anonymous AOF volume. PostgreSQL metadata remains the outbox authority.
             command(["docker", "rm", "-f", "-v", job_broker])
             run_python(["scripts/qualify_private_jobs.py", "broker-down"], job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_scoring.py", "broker-down"], job_env, report="private-scoring.log")
             jobs_dump = command(["docker", "exec", db, "pg_dump", "-U", "declarai_fixture_admin", "-Fc", "declarai_fixture"])
             command(["docker", "exec", db, "createdb", "-U", "declarai_fixture_admin", "-O", "declarai_fixture_app", "declarai_fixture_jobs_restored"])
             command(["docker", "exec", "-i", db, "pg_restore", "--exit-on-error", "--no-owner", "--no-acl", "-U", "declarai_fixture_app", "-d", "declarai_fixture_jobs_restored"], data=jobs_dump)
@@ -499,10 +501,17 @@ def main():
             shutil.copytree(fixture / "artifacts", fixture / "restored-job-artifacts", dirs_exist_ok=True)
             start_job_broker()  # Empty broker, no restoration of Celery/AOF queues.
             run_python(["scripts/qualify_private_jobs.py", "verify"], job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_scoring.py", "verify"], job_env, report="private-scoring.log")
             restored_job_env = {**job_env, "DECLARAI_DB_NAME": "declarai_fixture_jobs_restored",
                                 "DECLARAI_MEDIA_ROOT": str(fixture / "restored-job-artifacts")}
             run_python(["scripts/qualify_private_jobs.py", "verify"], restored_job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_scoring.py", "verify"], restored_job_env, report="private-scoring.log")
+            run_python(["scripts/qualify_private_scoring.py", "prepare-recovery"], restored_job_env, report="private-scoring.log")
             run_python(["scripts/qualify_private_jobs.py", "recover"], restored_job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_scoring.py", "recover"], restored_job_env, report="private-scoring.log")
+            # Only synthetic export evidence is retained; sessions/leases, TLS keys,
+            # credentials and dumps stay in the owner's temporary directory.
+            shutil.copytree(fixture / "recovered-scoring", reports / "recovered-scoring", dirs_exist_ok=True)
             test_env = {
                 "DECLARAI_RUNTIME_PROFILE": "development",
                 "DJANGO_DEBUG": "true",
@@ -560,6 +569,10 @@ def main():
                 "actual_job_broker_loss": "passed",
                 "quiescent_job_database_artifact_restore_empty_broker": "passed",
                 "natural_orphan_lease_recovery": "passed",
+                "private_native_scoring_restore_parity": "passed",
+                "private_scoring_full_receipts_and_duplicate_completion": "passed",
+                "private_scoring_changed_missing_inputs_revocation": "blocked",
+                "private_scoring_source_scope_fault": "blocked",
                 "production_deployment_recovery": "not_qualified",
             }
             (reports / "postgresql-summary.json").write_text(
