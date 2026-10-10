@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { PackageJobsComponent } from '../package-jobs/package-jobs.component';
 import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-package-review',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PackageJobsComponent],
   templateUrl: './package-review.component.html',
   styleUrl: './package-review.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,

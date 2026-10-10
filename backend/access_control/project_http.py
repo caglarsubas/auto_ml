@@ -50,6 +50,7 @@ DATASET = {
     "deployment-status",
     "deployment-pack",
     "package-review-list",
+    "dataset-jobs",
     "crisp-export",
     "crisp-monitoring",
     "crisp-sequential",
@@ -75,8 +76,9 @@ SPECIAL = {
     "assistant-action-receipt",
     "project-member",
     "package-review-detail",
+    "job-detail",
 }
-READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail"}
+READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail"}
 
 
 class AuthorityUnavailable(APIException):
@@ -152,6 +154,13 @@ def authorize(request, view):
             record = PackageReview.objects.get(pk=view.kwargs['review_id'])
         except PackageReview.DoesNotExist:
             raise projects.ProjectDenied('package_review_unavailable') from None
+        supplied.append(record.dataset_id)
+    elif name == 'job-detail':
+        from execution_jobs.models import NativeJob
+        try:
+            record = NativeJob.objects.get(pk=view.kwargs['job_id'])
+        except NativeJob.DoesNotExist:
+            raise projects.ProjectDenied('job_unavailable') from None
         supplied.append(record.dataset_id)
     # A browser workspace may narrow reads/writes to one already-authorized project.
     # Never use this selector as a resource assignment or substitute for its binding.

@@ -222,11 +222,12 @@ jobs:
       LLM_ENGINE_API_KEY: ci-unused
       E2E_BASE_URL: http://localhost:4300
       E2E_API_BASE_URL: http://localhost:8001/api/
+      DECLARAI_JOB_BROKER_URL: redis://redis:6379/1
     steps:
       - uses: actions/checkout@v4
 
       - name: Start backend stack (backend + redis)
-        run: docker compose up -d --build backend redis
+        run: docker compose -f docker-compose.yml -f docker-compose.ci-jobs.yml up -d --build backend redis
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -274,6 +275,11 @@ jobs:
         run: |
           docker compose exec -T -e DECLARAI_TEST_INSTALLATION=1 \
             backend python scripts/qualify_mcp_stdio.py
+
+      - name: Start bounded native worker and durable dispatcher
+        run: |
+          docker compose exec -d -e DECLARAI_JOB_BROKER_URL backend sh -c 'cd backend && exec python -m celery -A backend.celery:app worker --concurrency=2 --without-gossip --without-mingle --without-heartbeat --loglevel=WARNING > /tmp/native-worker.log 2>&1'
+          docker compose exec -d -e DECLARAI_JOB_BROKER_URL backend sh -c 'cd backend && exec python manage.py dispatch_jobs > /tmp/native-dispatcher.log 2>&1'
 
       - name: Build and serve frontend assets
         run: |

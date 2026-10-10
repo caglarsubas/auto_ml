@@ -1,0 +1,44 @@
+# Optional DEVELOPMENT worker profile. The live-reload stack still rejects private mode.
+# Use: DECLARAI_JOB_BROKER_URL=redis://job-broker:6379/1 docker compose -f docker-compose.yml -f docker-compose.jobs.yml up --build backend job-broker job-worker job-dispatcher
+services:
+  backend:
+    environment:
+      - DECLARAI_JOB_BROKER_URL=${DECLARAI_JOB_BROKER_URL:?configure a dedicated development job broker}
+    depends_on:
+      - job-broker
+  job-broker:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - job-broker-data:/data
+  job-worker:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DECLARAI_RUNTIME_PROFILE=${DECLARAI_RUNTIME_PROFILE:-development}
+      - DECLARAI_JOB_BROKER_URL=${DECLARAI_JOB_BROKER_URL:?configure a dedicated development job broker}
+      - PROMETA_DISABLE=1
+      - OMP_NUM_THREADS=2
+      - OPENBLAS_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+    entrypoint: [sh, /app/docker/job-entrypoint.sh]
+    command: [python, -m, celery, -A, backend.celery:app, worker, --concurrency=2, --without-gossip, --without-mingle, --without-heartbeat, --loglevel=WARNING]
+    working_dir: /app/backend
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+      - job-broker
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 128
+  job-dispatcher:
+    extends:
+      service: job-worker
+    command: [python, manage.py, dispatch_jobs]
+volumes:
+  job-broker-data:

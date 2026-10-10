@@ -42,6 +42,11 @@ describe('Package review receipts and context', () => {
   });
   afterEach(() => {
     fixture.destroy();
+    http
+      .match((request) => request.url.startsWith('/api/jobs/datasets/'))
+      .forEach((request) =>
+        request.flush({ jobs_enabled: false, jobs: [], total: 0, next_offset: null }),
+      );
     http.verify();
   });
   it('opens the exact package with a unique receipt and no client actor', () => {

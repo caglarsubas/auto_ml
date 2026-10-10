@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'preprocessing',
     'ai_assistant',
     'access_control',
+    'execution_jobs',
 ]
 
 MIDDLEWARE = [
@@ -192,3 +193,6 @@ try:
     )
 except (TypeError, ValueError):
     EMBEDDING_CACHE_TTL = 60 * 60 * 24 * 7
+
+from execution_jobs.config import load_job_config
+globals().update(load_job_config(globals()['DECLARAI_RUNTIME_PROFILE']))

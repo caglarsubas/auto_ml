@@ -1,0 +1,101 @@
+<section aria-labelledby="package-jobs-title">
+  <h4 id="package-jobs-title">Queued package integrity checks</h4>
+  <p>
+    Verify the exact package manifest and artifact bytes in a background worker. This does not load
+    the model, reproduce scores or approve its use. Refresh to see progress; jobs continue after you
+    leave this page.
+  </p>
+  @if (packageInfo) {
+    <details>
+      <summary>Check scope and execution budget</summary>
+      <p>
+        Package <code>{{ packageInfo.bundle_id }}</code> · Manifest
+        <code>{{ packageInfo.manifest_sha256 }}</code>
+      </p>
+      <p>
+        Up to 256 artifacts and 1 GiB, 120 seconds per attempt, at most 3 attempts. Two active
+        checks per installation. Access is checked again during execution and publication.
+      </p>
+    </details>
+  }
+  <button type="button" (click)="refresh()" [disabled]="busy">Refresh jobs</button>
+  @if (busy) {
+    <p role="status">Checking job receipt…</p>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+  @if (pending && !busy) {
+    <button type="button" (click)="retry()">Retry pending job request</button>
+  }
+  @if (directory) {
+    @if (!directory.jobs_enabled) {
+      <p role="status">
+        The dedicated job service is not configured. Ask the installation operator to configure it.
+      </p>
+    }
+    @if (role === 'developer' || role === 'reviewer') {
+      <button
+        type="button"
+        (click)="submit()"
+        [disabled]="busy || !!pending || !packageInfo || !directory.jobs_enabled"
+      >
+        Queue integrity check
+      </button>
+    }
+    <ul aria-label="Package jobs">
+      @for (item of directory.jobs; track item.id) {
+        <li>
+          <button type="button" (click)="open(item.id)" [disabled]="busy">
+            Open job {{ item.id }}
+          </button>
+          · {{ item.state }} · {{ item.bundle_id }}
+        </li>
+      } @empty {
+        <li>No checks recorded.</li>
+      }
+    </ul>
+    @if (directory.next_offset !== null) {
+      <button type="button" (click)="refresh(true)" [disabled]="busy">Load older jobs</button>
+    }
+  }
+  @if (job) {
+    <p role="status">
+      Job state: {{ job.state }} · Attempt {{ job.attempts }} · {{ job.reason_code }}
+    </p>
+    <p>
+      Request <code>{{ job.id }}</code> · Submitted by {{ job.submitted_by.username }}
+    </p>
+    @if (canCancel) {
+      <button type="button" (click)="cancel()" [disabled]="busy || !!pending">Cancel job</button>
+    }
+    @if (job.state === 'cancel_requested') {
+      <p>
+        Cancellation is recorded. The worker must stop or its lease expire before cancellation
+        completes; completed reads are not undone.
+      </p>
+    }
+    <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
+    @if (job.result) {
+      <p>
+        Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes
+      </p>
+      <p>
+        Result SHA-256 <code>{{ job.result_sha256 }}</code
+        >. Hashes detect changes relative to this recorded package; independent authenticity and
+        review remain separate.
+      </p>
+    }
+    <details>
+      <summary>Attributable job history</summary>
+      <ol aria-label="Job events">
+        @for (event of job.events; track event.revision) {
+          <li>
+            {{ event.event_type }} · {{ event.created_at }} ·
+            {{ event.actor.username || 'native execution service' }}
+          </li>
+        }
+      </ol>
+    </details>
+  }
+</section>
