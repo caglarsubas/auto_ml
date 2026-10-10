@@ -1179,6 +1179,11 @@
       "date": "2026-10-11",
       "packet": "P28",
       "event": "Unchanged grouped diagnostic source qualifies 42 new scientific/evidence cases, both complete metadata suites (2200 passed, six skips each), 597 frontend units, 37 final-source governed browser checks, private TLS recovery and isolated native scoring parity. Preserve initial read-policy/SQLite contention findings; no capacity, full reproduction, expert isolation or release/customer claim."
+    },
+    {
+      "date": "2026-10-11",
+      "packet": "P28",
+      "event": "Final review reproduced a small NumPy archive whose header declares an oversized allocation. Add preallocation format/header/dtype/shape/payload checks and a failing-before/passing-after regression. Earlier 2200-case qualification remains retained; requalify the final source before readiness."
     }
   ],
   "implementation_packets": [
@@ -1663,7 +1668,7 @@
       "title": "Immutable grouped categorical and numeric dependence",
       "kind": "product_implementation",
       "owner": "ML/Backend/Review UX/Security",
-      "status": "tested",
+      "status": "in_progress",
       "items": [
         "D04",
         "D05",

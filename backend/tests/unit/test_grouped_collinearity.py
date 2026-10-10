@@ -233,11 +233,24 @@ def test_exact_native_replay_does_not_read_fitted_state_or_final_outcomes(archiv
         load_snapshot(2, execution)
 
 
-@pytest.mark.parametrize('case', ['tampered', 'object', 'missing_matrix', 'bad_basis', 'oversized_array', 'extra_entry', 'layout', 'dimensions', 'provenance', 'method', 'identity', 'metric', 'missing_archive'])
+@pytest.mark.parametrize('case', ['tampered', 'object', 'missing_matrix', 'bad_basis', 'oversized_array', 'extra_entry', 'layout', 'dimensions', 'provenance', 'method', 'identity', 'metric', 'missing_archive', 'oversized_header'])
 def test_malformed_or_tampered_native_evidence_fails_closed(archive, case):
     execution, root = archive()
     if case == 'tampered':
         (root / ARRAY).write_bytes(b'changed')
+    elif case == 'oversized_header':
+        import io
+        from zipfile import ZipFile
+
+        header = io.BytesIO()
+        np.lib.format.write_array_header_1_0(header, {'shape': (240, 5_000_000), 'fortran_order': False, 'descr': '<f8'})
+        with ZipFile(root / ARRAY, 'w') as archive:
+            archive.writestr('matrix.npy', header.getvalue())
+        reseal(root, ARRAY)
+        with patch('numpy.load', side_effect=AssertionError('reject before array allocation')):
+            with pytest.raises(ValueError):
+                load_snapshot(1, execution)
+        return
     elif case == 'missing_archive':
         manifest = json.loads((root / 'manifest.json').read_text())
         manifest['files'].pop(ARRAY)

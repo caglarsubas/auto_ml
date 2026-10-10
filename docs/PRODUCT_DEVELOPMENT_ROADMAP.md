@@ -328,7 +328,7 @@ Use support-weighted average ranks for requested multiclass ROC-AUC, retaining i
 
 ### P28 — Immutable grouped categorical and numeric dependence
 
-**Packet status:** tested. **Mapped outcomes:** D04, D05, D06, D12.
+**Packet status:** in_progress. **Mapped outcomes:** D04, D05, D06, D12.
 
 Retain centered training-input group bases and descriptive GVIF with explicit representation, rank, precision and compute states. Replay exact native evidence without fitted state/outcomes; allow current reviewers to inspect numeric/grouped diagnostics and expose accessible summaries without universal cutoffs.
 

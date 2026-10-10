@@ -222,6 +222,17 @@ def load_snapshot(file_id, execution_id):
             entries = archive.infolist()
             if len(entries) != 1 or entries[0].filename != "matrix.npy" or entries[0].file_size > rows * offset * 8 + 4096:
                 raise ValueError("Grouped diagnostic archive exceeds its recorded allocation.")
+            with archive.open(entries[0]) as stream:
+                version = np.lib.format.read_magic(stream)
+                readers = {(1, 0): np.lib.format.read_array_header_1_0,
+                           (2, 0): np.lib.format.read_array_header_2_0}
+                if version not in readers:
+                    raise ValueError("Unsupported grouped array format.")
+                shape, _, dtype = readers[version](stream, max_header_size=4096)
+                if shape != (rows, offset) or dtype != np.dtype('float64'):
+                    raise ValueError("Grouped array header does not match recorded dimensions or dtype.")
+                if entries[0].file_size != stream.tell() + rows * offset * 8:
+                    raise ValueError("Grouped array payload does not match its header.")
         with np.load(root / ARRAY, allow_pickle=False) as data:
             matrix = data["matrix"]
     except (BadZipFile, KeyError, EOFError) as exc:
