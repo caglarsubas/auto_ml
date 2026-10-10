@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 
@@ -36,7 +37,8 @@ def main():
             for name in ('offline-package.zip', 'offline-input.csv', 'offline-receipt.json'):
                 shutil.copyfile(context_path.parent / name, approved / name)
                 (approved / name).chmod(0o644)
-            command = ['docker', 'run', '--rm', '--network', 'none', '--read-only',
+            container = 'declarai-offline-qual-' + uuid.uuid4().hex
+            command = ['docker', 'run', '--rm', '--name', container, '--network', 'none', '--read-only',
                        '--user', '65534:65534', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
                        '--memory', '1g', '--pids-limit', '128', '--cpus', '2',
                        '--tmpfs', '/tmp:rw,nosuid,nodev,size=512m',
@@ -53,7 +55,15 @@ def main():
                        '--manifest-sha256', context['manifest_sha256'],
                        '--trust-native-state', '--atol', '1e-12', '--rtol', '1e-12',
                        '--chunk-sizes', '1', '17', '64', '--output', '/evidence/verification.json']
-            result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+            finally:
+                # A timed-out Docker client does not stop its daemon-owned job.
+                # Touch only this invocation's exact randomly named fixture.
+                exists = subprocess.run(['docker', 'inspect', container], capture_output=True, timeout=15)
+                if exists.returncode == 0:
+                    subprocess.run(['docker', 'stop', '--time', '10', container], capture_output=True, timeout=30, check=True)
+                    subprocess.run(['docker', 'rm', container], capture_output=True, timeout=15)
             (args.reports / f'{task}.log').write_text(result.stdout + result.stderr)
             report = json.loads((output / 'verification.json').read_text()) if (output / 'verification.json').is_file() else {'status': 'blocked'}
             (args.reports / f'{task}.json').write_text(json.dumps(report, indent=2))

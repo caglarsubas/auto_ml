@@ -292,12 +292,20 @@ jobs:
         working-directory: frontend
         run: npm run test:e2e:governed
 
+      - name: Reproduce native CSV scores without network or installation data
+        run: |
+          python scripts/qualify_offline_scoring.py \
+            --runtime-image "$(docker compose images -q backend)" \
+            --inputs frontend/test-results --reports test-reports/offline-scoring
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: frontend/playwright-report/
+          path: |
+            frontend/playwright-report/
+            test-reports/offline-scoring/
           if-no-files-found: ignore
 
       - name: Tear down stack
