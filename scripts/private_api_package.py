@@ -438,7 +438,7 @@ def verify_archive(path, image_id, *, trusted_daemon_metadata=False):
                     if (
                         hashlib.sha256(data).hexdigest() != PurePosixPath(name).name
                         or not re.fullmatch(r"[0-9a-f]{64}", metadata.get("id", ""))
-                        or set(metadata) & {"mediaType", "config", "layers", "manifests"}
+                        or set(metadata) & {"mediaType", "layers", "manifests"}
                     ):
                         raise PackageError("package_archive_graph_invalid")
                 extra = set()

@@ -489,7 +489,12 @@ def write_oci_archive(path, fault=None):
     if fault == "legacy_disagreement":
         legacy[0]["Layers"] = [legacy[0]["Config"]]
     if fault in ("v1_compat", "v1_invalid", "v1_secondary"):
-        metadata = {"id": "a" * 64, "os": "linux", "created": "1970-01-01T00:00:00Z"}
+        metadata = {
+            "id": "a" * 64,
+            "os": "linux",
+            "created": "1970-01-01T00:00:00Z",
+            "config": {"Env": ["PUBLIC=test"], "Cmd": ["api"]},
+        }
         if fault == "v1_secondary":
             metadata["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
         data = json.dumps(metadata).encode()
