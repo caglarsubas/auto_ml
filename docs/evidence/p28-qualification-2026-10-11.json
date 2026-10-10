@@ -16,16 +16,16 @@
     "conclusion": "success",
     "all_six_checks": "passed"
   },
-  "backend_application_and_test_source_commit": "fa082139ef7a7b22e04c303423a45d3f8a35da66",
-  "source_binding": "Local full matrices and final API/offline runtime qualify the unchanged executable source in fa082139. Later updates change ledger/documentation/evidence only; exact final-head GitHub checks remain separate.",
+  "backend_application_and_test_source_commit": "9ace9052157595803207a397617bf382b2ece58a",
+  "source_binding": "Local full matrices and final API/offline runtime qualify the unchanged executable source in 9ace9052. Later updates change ledger/documentation/evidence only; exact final-head GitHub checks remain separate.",
   "source_sha256": {
     "backend/access_control/project_http.py": "86cbaed56759a1ffc50e3f507309a7b93b24bb14a37afe12f2636ab2aaf5c3b5",
     "backend/ai_assistant/views.py": "cfef3fa41879a05a140a16761b018c9e708b02e2157eb02e50abaf779bcf2389",
     "backend/modeling/collinearity.py": "bcf6a0463c60027b9db2572d2e744c8681d64afeee7bd996af0e3316e4e3b06f",
     "backend/modeling/diagnostics.py": "f25bc58f79127319c4ac500692a787a3a609482d6c7f3b6b129b29588c0633bc",
-    "backend/modeling/grouped_collinearity.py": "eaa039777be7a31bedcefcf3cd5755e7419068bf3c712e1643c2107ae5a36949",
+    "backend/modeling/grouped_collinearity.py": "608693fae4ec244927ce63ee143d83d9a23a2d5611fa9750bdb8d9279d4be5da",
     "backend/modeling/views.py": "0c6cfc06e713d98cc7bcc022bbf23a14271bc4a97028a5c8e40ef6c7c895306f",
-    "backend/tests/unit/test_grouped_collinearity.py": "6a60d3074d96be1bd68bced7f3ed807dca3e0b0a9b39b6d0d7a2f4d5dce48129",
+    "backend/tests/unit/test_grouped_collinearity.py": "9294bc0aeef590102ae04198d09afdbaefb85be34c88b0c023722f16587c1d6a",
     "frontend/e2e/raw-replay-api.spec.ts": "bd68afcd9d9e75e6572155115c88edfb2ee4232ed502aca84394f9209c27e789",
     "frontend/src/app/modeling/modeling.component.html": "c5cac0f4f3da5862b2bbfb7e985079f01bd2ac41e736bf4cdc5db817a0e0d39f",
     "frontend/src/app/modeling/modeling.component.spec.ts": "ae6ad106f862fd368676deb423a8caea243d0f60352560d6f355f14e2994f3dd",
@@ -61,7 +61,7 @@
     "modeling/hyperparam_utils.py": "959f57678a89204cc238aadd36436d1c2ecc6f2a16de188497a9199bde89aa12",
     "modeling/tuning_evidence.py": "315b695827674de2dac0d2fe0de03f37739e2ca6cf575d3148a371c88bae2c3f",
     "modeling/lineage.py": "c94e4d336da69bd00c79d7997e60ef60ce2de72c43c097d37172012f479f47c3",
-    "modeling/grouped_collinearity.py": "eaa039777be7a31bedcefcf3cd5755e7419068bf3c712e1643c2107ae5a36949",
+    "modeling/grouped_collinearity.py": "608693fae4ec244927ce63ee143d83d9a23a2d5611fa9750bdb8d9279d4be5da",
     "modeling/collinearity.py": "bcf6a0463c60027b9db2572d2e744c8681d64afeee7bd996af0e3316e4e3b06f",
     "modeling/declared_metric.py": "d5cc14f8febc8e38c07eccbcae297c8afc1f1310b5c5f650e8deee8abb2d1b53",
     "modeling/holdout_evidence.py": "47d636c02f5afd9988cd67276a7860ef627d813a48295cb468763f806d482ac7",
@@ -216,38 +216,38 @@
   },
   "local_checks": {
     "full_sqlite": {
-      "passed": 2200,
+      "passed": 2201,
       "skipped": 6,
-      "seconds": 313.177,
-      "junit_sha256": "907b02385ce4de2159fb68eadbcab0c2065ba6bda7577f875fbf416f320b6130",
+      "seconds": 319.551,
+      "junit_sha256": "05008990072ec6c3d53775cb32b626b27b054897efc1c32f46d0db75ca51108e",
       "coverage": {
-        "statement_covered": 12795,
-        "statement_valid": 17317,
-        "branches_covered": 3577,
-        "branches_valid": 5580,
-        "combined_percent": 71.5
+        "statement_covered": 12803,
+        "statement_valid": 17327,
+        "branches_covered": 3581,
+        "branches_valid": 5586,
+        "combined_percent": 71.51
       }
     },
     "full_private_tls_postgresql": {
-      "passed": 2200,
+      "passed": 2201,
       "skipped": 6,
-      "seconds": 328.301,
-      "junit_sha256": "94ab1492b1955c7f49976c41a049a7e5ccc0506c3ace80ab09173c321c08e0d8",
+      "seconds": 322.07,
+      "junit_sha256": "4436c14857953a6c7a5c1a9e0c31f587303b86d104943ae8ff6a09a3a7fc11b5",
       "coverage": {
-        "statement_covered": 12795,
-        "statement_valid": 17317,
-        "branches_covered": 3577,
-        "branches_valid": 5580,
-        "combined_percent": 71.5
+        "statement_covered": 12803,
+        "statement_valid": 17327,
+        "branches_covered": 3581,
+        "branches_valid": 5586,
+        "combined_percent": 71.51
       }
     },
-    "new_scientific_evidence_cases": 42,
+    "new_scientific_evidence_cases": 43,
     "focused": {
-      "passed": 266,
+      "passed": 267,
       "skipped": 6,
-      "seconds": 3.524,
-      "junit_sha256": "5da36493f9d2ca86ec5e7a10f57f3359dcc67032eb72c984185d11c44289794e",
-      "scope": "266 passed; six Redis-dependent cases skipped in network-isolated focused run. Both complete matrices use actual Redis and pass all 2200 cases with six existing optional/live-engine skips."
+      "seconds": 2.351,
+      "junit_sha256": "e4e9122e827105d076a6702245df97f1c2d04a0a5ea267d9cb0cefc32b7ec1da",
+      "scope": "267 passed; six Redis-dependent cases skipped in network-isolated focused run. Both complete matrices use actual Redis and pass all 2201 cases with six existing optional/live-engine skips."
     },
     "frontend_unit": {
       "passed": 597,
@@ -320,6 +320,13 @@
   },
   "initial_findings": [
     {
+      "event": "Final review: tiny archive declares a much larger NumPy array in its header",
+      "observed_failure": "New regression reaches numpy.load on the earlier source; allocation is mocked to avoid exhaustion.",
+      "correction": "Validate bounded NPY header format/dtype/shape and exact payload size before array allocation. New case passes and final source is requalified.",
+      "prior_qualified_source": "fa082139ef7a7b22e04c303423a45d3f8a35da66",
+      "prior_2200_case_reports": "pre-header-hardening/"
+    },
+    {
       "event": "New current-role focused test initially lacked auth_boundary marker",
       "correction": "Enable actual permission defaults instead of unit handler isolation; retain initial failed reports."
     },
@@ -339,7 +346,7 @@
   ],
   "runtime": {
     "core_image_id": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
-    "api_offline_image_id": "sha256:b47f6cbb83cb308639d71576ed1f42c49ad5212b218f798dc2a509ebe2326abc",
+    "api_offline_image_id": "sha256:7467ae106af8c755802c2c460f0bf2b92b923b6b574fcb0769be5f98b40a906b",
     "native_module_count": 167,
     "all_native_source_hashes_match": true,
     "postgresql": "postgres (PostgreSQL) 17.11",
@@ -354,10 +361,9 @@
     "primary_file_hashes_preserved": 13,
     "primary_status_identical": true,
     "owned_private_containers_absent": [
-      "declarai-fixture-c62aebb042b4-runner",
-      "declarai-fixture-c62aebb042b4-job-broker",
-      "declarai-fixture-c62aebb042b4-redis",
-      "declarai-fixture-c62aebb042b4-db"
+      "declarai-fixture-46e740c402e3-runner",
+      "declarai-fixture-46e740c402e3-redis",
+      "declarai-fixture-46e740c402e3-db"
     ],
     "owned_browser_sqlite_resources_absent": true
   },
@@ -376,17 +382,18 @@
     "frontend-production-build.log": "cc17f7fe0193df2185b1a48998fec4e6a785e2ebc4d0f1dba14d57542f7523ee",
     "backend-lint.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
     "migrations.log": "afb40fb75d459aaa4649fc90abd1dcaeb44a72335a557ee7a066269f070fa6e6",
-    "browser.log": "fb592ac0098899ce2383c0f32be18fac5513a835f285bce3b12dffb1a9a1321c",
+    "browser.log": "a43b1e1bd58aa4aa7204718ae9162a9c748659088a89228a156a7443ea61bf09",
     "mcp-stdio.log": "683a39b5bf14ae0f3e3a404983923dcffa0c322814e774dadeea24d9d1803a4f",
     "postgresql/postgresql-summary.json": "dbf1c0ad00b5217a9612263b685a165c47f043866849c6455dd9bbcdad7cb793",
-    "postgresql/private-scoring.log": "2f42e7b0bfe09f76a2d25da3b798cd4e7a79bde803316f4e2a71fdae23d9a7fd",
+    "postgresql/private-scoring.log": "dc1b16edbb5d4539d38ebf3c89adcc7dc40242e37cccb7ea0ed4d0962396571e",
     "postgresql/private-jobs.log": "5b48aee1a211a8efc4ec246e71adc4e5b638f50fff5cafae8d7ffa0335706098",
-    "offline-scoring/classification.json": "464a7dedb3a69f3a7b429e704e0543460bf7b577fe24814190cefd1bba620bc0",
-    "offline-scoring/regression.json": "c668448e7cc84f09fe61d9ccbfac763f4c3de9eda16ba7b96c7e29e99e0e3a2f",
-    "preservation.json": "7e5b2fba115a875e595f05a8c516ca00695112a0d35396d5e9a8fe1d11a8c774",
+    "offline-scoring/classification.json": "d686ce9ab4621eca255b3ba8bdf1d6083ec8e61841aba78d113e62d010453dcf",
+    "offline-scoring/regression.json": "c355499dbfdcca91df534df050d00b802c20cc947b24a174f5e19a43d5fa71fc",
+    "preservation.json": "92f5900c99aa3192cc801fcb30fbf406b19922a2e76c1ab7cee265a0755e2053",
     "initial-browser/browser.log": "9e31249133dc9aa111822aff79b4121a856eb809f42a6c1343b90b2af04c3a76",
     "initial-browser/worker.log": "2e90fa1e9d9c1de193fa677d4ab46ce9c8b58320855ed9ee7dd0b191d2258427",
     "focused-initial.log": "cf0688ce0203e9337633b7e5ac4cef2bcc8eabc73aafcf39ea8347402bb9f72c",
-    "focused-session-initial.log": "9b03b9ab1a06be7dd7d188d13b3e936ebbbbd430953ae4b35e125469811ff8fc"
+    "focused-session-initial.log": "9b03b9ab1a06be7dd7d188d13b3e936ebbbbd430953ae4b35e125469811ff8fc",
+    "header-before.log": "a87a9a20af59b98794097055a6d1a243a52e61ee7e78f2e2671aa69de4c12f04"
   }
 }
