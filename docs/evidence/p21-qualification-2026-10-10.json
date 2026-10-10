@@ -4,9 +4,9 @@
   "packet": "P21",
   "branch": "codex/offline-package-verification",
   "base_commit": "3df1b293bd4ae54f03cb413a6b7fd5b1dc3e55eb",
-  "qualified_application_source_commit": "e2418861b692f863bb23685b2189cf36b1f265d4",
+  "qualified_application_source_commit": "3b03788996e0adb4b30d630fb5c97d6348b2849b",
   "full_backend_matrix_source_commit": "be50bb0981b8d7f42d93a4cc5d95b48a2c3f3d7c",
-  "source_binding": "e2418861 changes only the CI qualification step and its Docker fixture lifecycle. Application backend/frontend and regression tests are identical to be50bb09 in both full matrices and all frontend checks. All 151 tracked non-test, non-migration backend Python modules match the browser/offline fixed image by SHA256.",
+  "source_binding": "e2418861 changes only the CI qualification step and Docker fixture lifecycle. 3b037889 changes only Angular download state and frontend regressions. All backend code/tests match be50bb09 in both full metadata matrices, the 151-module browser image hash comparison and both isolated offline fixtures. Final 580 frontend units, production build/lint and the full 36-test governed browser matrix are rerun at 3b037889.",
   "baseline_verification": {
     "pull_request": 110,
     "merge_commit": "3df1b293bd4ae54f03cb413a6b7fd5b1dc3e55eb",
@@ -77,10 +77,10 @@
     {
       "name": "Frontend units",
       "status": "passed",
-      "passed": 579,
-      "statement_coverage_percent": 38.3,
-      "branch_coverage_percent": 31.45,
-      "report": "test-reports/p21/frontend-unit.log"
+      "passed": 580,
+      "statement_coverage_percent": 38.37,
+      "branch_coverage_percent": 31.57,
+      "report": "test-reports/p21/frontend-unit-final.log"
     },
     {
       "name": "Frontend production build and lint",
@@ -88,22 +88,23 @@
       "lint_errors": 0,
       "lint_warnings": 167,
       "reports": [
-        "test-reports/p21/frontend-build.log",
-        "test-reports/p21/frontend-lint.log"
+        "test-reports/p21/frontend-build-final.log",
+        "test-reports/p21/frontend-lint-final.log"
       ]
     },
     {
       "name": "Governed browser/authenticated API",
       "status": "passed",
       "passed": 36,
-      "duration_seconds": 56.5,
       "scenarios": [
         "keyboard full receipt download matches returned digest",
         "input byte digests and full score export",
         "classification/regression approved offline fixtures",
-        "existing review, project, session, raw replay and assistant boundaries"
+        "existing review, project, session, raw replay and assistant boundaries",
+        "superseded receipt/package downloads do not block or alter replacement evidence"
       ],
-      "report": "test-reports/p21/browser.log"
+      "report": "test-reports/p21/browser-final.log",
+      "reported_duration": "1.0m"
     },
     {
       "name": "Offline independent fixed runtime",
@@ -222,6 +223,12 @@
       "status": "blocked",
       "reason": "Exactly two explicit synthetic export contexts were not yet available; no parity output existed. Retried only after browser completion.",
       "report": "test-reports/p21/offline-driver.log"
+    },
+    {
+      "name": "Final UI review correction",
+      "status": "qualified",
+      "finding": "Pending receipt/package downloads could retain disabled state or report stale failures after replacing evidence. Corrected reset/guards; final units and full browser suite pass.",
+      "source_commit": "3b03788996e0adb4b30d630fb5c97d6348b2849b"
     }
   ]
 }

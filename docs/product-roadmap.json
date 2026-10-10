@@ -1074,7 +1074,7 @@
     {
       "date": "2026-10-10",
       "packet": "P21",
-      "event": "Offline native CSV score parity is qualified with 36 new regressions. Both full metadata matrices pass 1984 tests and six skips under unchanged coverage/skip gates; frontend passes 579 units and 36 governed browser/API checks. Real 300-row classification/regression exports reproduce in no-network, read-only, unprivileged fixed runtimes. Partial D09/D12 only; no refit, assessment reproduction, expert isolation, approval or release/customer acceptance claim."
+      "event": "Offline native CSV score parity is qualified with 36 new regressions. Both full metadata matrices pass 1984 tests and six skips under unchanged coverage/skip gates; frontend passes 580 units and 36 governed browser/API checks. Real 300-row classification/regression exports reproduce in no-network, read-only, unprivileged fixed runtimes. Partial D09/D12 only; no refit, assessment reproduction, expert isolation, approval or release/customer acceptance claim."
     }
   ],
   "implementation_packets": [
