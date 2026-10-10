@@ -46,6 +46,7 @@ DATASET = {
     "evaluation-governance",
     "deployment-bundle",
     "deployment-score",
+    "deployment-receipt",
     "deployment-status",
     "deployment-pack",
     "package-review-list",

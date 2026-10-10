@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures/session';
 import { API_BASE_URL } from './fixtures/credentials';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
 
 for (const task of ['classification', 'regression'] as const) {
   test(`real-session ${task} raw input survives preprocessing versions and batch scoring`, async ({
@@ -421,6 +422,37 @@ for (const task of ['classification', 'regression'] as const) {
       expect(exactScoringPack.status()).toBe(200);
       expect(exactScoringPack.headers()['x-declarai-bundle-id']).toBe(bundle.bundle_id);
       expect(exactScoringPack.headers()['x-declarai-manifest-sha256']).toBe(bundle.manifest_sha256);
+      const verificationScore = await api.post('deployment/score/', {
+        multipart: {
+          file_id: String(fileId),
+          bundle_id: bundle.bundle_id,
+          file: { name: 'offline-input.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) },
+        },
+      });
+      expect(verificationScore.status()).toBe(200);
+      const verificationReceipt = await verificationScore.json();
+      const exactReceipt = await api.get(
+        `deployment/receipts/${fileId}/${verificationReceipt.batch_id}/?sha256=${verificationReceipt.receipt_sha256}`,
+      );
+      expect(exactReceipt.status()).toBe(200);
+      const packBytes = await exactScoringPack.body();
+      const receiptBytes = await exactReceipt.body();
+      expect(createHash('sha256').update(receiptBytes).digest('hex')).toBe(
+        verificationReceipt.receipt_sha256,
+      );
+      await writeFile(testInfo.outputPath('offline-package.zip'), packBytes);
+      await writeFile(testInfo.outputPath('offline-input.csv'), csv);
+      await writeFile(testInfo.outputPath('offline-receipt.json'), receiptBytes);
+      await writeFile(
+        testInfo.outputPath('offline-context.json'),
+        JSON.stringify({
+          task,
+          synthetic_fixture: true,
+          package_sha256: createHash('sha256').update(packBytes).digest('hex'),
+          receipt_sha256: verificationReceipt.receipt_sha256,
+          manifest_sha256: bundle.manifest_sha256,
+        }),
+      );
       if (task === 'classification') {
         const runName = `holdout-review-${fileId}`;
         const pipeline = await api.post('pipeline/create/', {
@@ -500,6 +532,38 @@ for (const task of ['classification', 'regression'] as const) {
             .click();
           const download = await downloadEvent;
           expect(download.suggestedFilename()).toBe(`declarai-bundle-${bundle.bundle_id}.zip`);
+          const scoreResponse = page.waitForResponse(
+            (response) =>
+              response.url().includes('/deployment/score/') &&
+              response.request().method() === 'POST',
+          );
+          await deployment.locator('input[type="file"]').setInputFiles({
+            name: 'approved-verification.csv',
+            mimeType: 'text/csv',
+            buffer: Buffer.from(csv),
+          });
+          const scoredResponse = await scoreResponse;
+          expect(scoredResponse.status()).toBe(200);
+          const scored = await scoredResponse.json();
+          expect(scored.input.sha256).toBe(createHash('sha256').update(csv).digest('hex'));
+          const scoreDetails = deployment.getByText('Scoring version receipt', { exact: true });
+          await scoreDetails.focus();
+          await scoreDetails.press('Space');
+          await expect(deployment).toContainText('Verification checks score parity');
+          const receiptDownload = page.waitForEvent('download');
+          await deployment
+            .getByRole('button', { name: 'Download full scoring receipt', exact: true })
+            .focus();
+          await page.keyboard.press('Enter');
+          const receiptFile = await receiptDownload;
+          const receiptBytes = await readFile((await receiptFile.path())!);
+          expect(createHash('sha256').update(receiptBytes).digest('hex')).toBe(
+            scored.receipt_sha256,
+          );
+          const receipt = JSON.parse(receiptBytes.toString('utf8'));
+          expect(receipt.bundle_id).toBe(bundle.bundle_id);
+          expect(receipt.scores).toHaveLength(rows.length);
+          expect(receipt.production_use_approved).toBe(false);
           await deployment.screenshot({ path: testInfo.outputPath('package-handoff.png') });
         } finally {
           expect((await api.delete(`pipeline/${pipelineId}/`)).status()).toBe(200);

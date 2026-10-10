@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import uuid
+from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
@@ -16,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.http import HttpResponse
+from deployment.scoring_receipts import byte_digest, csv_input, require_digest, scoring_runtime
 
 from deployment.deploy_utils import (
     DeployNotReadyError,
@@ -143,6 +145,8 @@ class DeploymentScoreView(APIView):
                     tmp_path = tmp.name
                 try:
                     df = pd.read_csv(tmp_path) if tmp_path.endswith('.csv') else pd.read_excel(tmp_path)
+                    input_receipt = csv_input(Path(tmp_path).read_bytes()) if tmp_path.endswith('.csv') else {
+                        'format': 'excel', 'offline_verification_supported': False}
                 finally:
                     try:
                         os.unlink(tmp_path)
@@ -150,6 +154,7 @@ class DeploymentScoreView(APIView):
                         pass
             elif isinstance(request.data.get('rows'), list):
                 df = pd.DataFrame(request.data.get('rows'))
+                input_receipt = {'format': 'json_rows', 'offline_verification_supported': False}
             else:
                 return Response({
                     'error': 'Provide multipart file upload or JSON rows array.',
@@ -165,8 +170,13 @@ class DeploymentScoreView(APIView):
             os.makedirs(batch_dir, exist_ok=True)
             scored_path = os.path.join(batch_dir, f'{batch_id}.json')
             result['batch_id'] = batch_id
+            result['receipt_schema_version'] = 1
+            result['input'] = input_receipt
+            result['scoring_runtime'] = scoring_runtime()
+            result['offline_verification_scope'] = 'native_csv_batch_score_parity'
             with open(scored_path, 'x', encoding='utf-8') as f:
-                json.dump(result, f)
+                json.dump(result, f, allow_nan=False)
+            result['receipt_sha256'] = byte_digest(Path(scored_path).read_bytes())
             result['scores_path'] = os.path.relpath(scored_path, settings.MEDIA_ROOT)
             if len(scores) > 500:
                 result['scores_preview'] = scores[:500]
@@ -181,6 +191,32 @@ class DeploymentScoreView(APIView):
             import traceback
             print("[DeploymentScore] ERROR:\n" + traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeploymentReceiptView(APIView):
+    """Read the exact full batch receipt under current dataset authority."""
+
+    def get(self, request, file_id: int, batch_id: uuid.UUID, *args, **kwargs):
+        try:
+            expected = require_digest(request.query_params.get('sha256'))
+            path = Path(settings.MEDIA_ROOT) / 'deployment' / str(file_id) / 'batches' / f'{batch_id}.json'
+            if path.is_symlink():
+                raise ValueError('Scoring receipt cannot be a symbolic link.')
+            raw = path.read_bytes()
+            if byte_digest(raw) != expected:
+                raise ValueError('Scoring receipt changed; the requested digest does not match.')
+            receipt = json.loads(raw)
+            if receipt.get('file_id') != file_id or receipt.get('batch_id') != str(batch_id):
+                raise ValueError('Scoring receipt identity does not match the requested batch.')
+            response = HttpResponse(raw, content_type='application/json')
+            response['Content-Disposition'] = f'attachment; filename="scoring-{batch_id}.json"'
+            response['X-DeclarAI-Receipt-SHA256'] = expected
+            response['Cache-Control'] = 'no-store'
+            return response
+        except FileNotFoundError:
+            return Response({'error': 'Scoring receipt not found.'}, status=404)
+        except (ValueError, TypeError, AttributeError):
+            return Response({'error': 'Exact scoring receipt verification failed.'}, status=409)
 
 
 @method_decorator(csrf_exempt, name='dispatch')

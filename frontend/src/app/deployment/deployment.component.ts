@@ -15,6 +15,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
   isBundling = false;
   isScoring = false;
   isDownloading = false;
+  isReceiptDownloading = false;
   error: string | null = null;
   bundle: any = null;
   scoreResult: any = null;
@@ -46,6 +47,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
         this.blockers = [];
         this.error = null;
         this.isBundling = this.isScoring = this.isDownloading = false;
+        this.isReceiptDownloading = false;
         this.sharedService.setDeploymentCompleted(false);
         if (id != null) {
           this.refreshReadiness(id);
@@ -171,6 +173,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
       return;
     }
     this.isScoring = true;
+    this.scoreResult = null;
     this.error = null;
     const generation = this.generation;
     const bundleId = this.bundle.bundle_id;
@@ -199,7 +202,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     this.subs.push(
       this.dataService.downloadDeploymentPack(this.currentFileId, bundleId).subscribe({
         next: (blob) => {
-          if (generation !== this.generation) return;
+          if (generation !== this.generation || this.bundle?.bundle_id !== bundleId) return;
           const url = URL.createObjectURL(blob);
           const anchor = document.createElement('a');
           anchor.href = url;
@@ -213,6 +216,37 @@ export class DeploymentComponent implements OnInit, OnDestroy {
           this.error =
             'Package download failed verification. Refresh the selected package and retry.';
           this.isDownloading = false;
+        },
+      }),
+    );
+  }
+
+  downloadReceipt(): void {
+    if (this.currentFileId == null || !this.scoreResult?.receipt_sha256) return;
+    const generation = this.generation;
+    const { batch_id: batchId, receipt_sha256: digest, bundle_id: bundleId } = this.scoreResult;
+    this.isReceiptDownloading = true;
+    this.subs.push(
+      this.dataService.downloadScoringReceipt(this.currentFileId, batchId, digest).subscribe({
+        next: (blob) => {
+          if (
+            generation !== this.generation ||
+            this.bundle?.bundle_id !== bundleId ||
+            this.scoreResult?.batch_id !== batchId
+          )
+            return;
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = `scoring-${batchId}.json`;
+          anchor.click();
+          URL.revokeObjectURL(url);
+          this.isReceiptDownloading = false;
+        },
+        error: () => {
+          if (generation !== this.generation) return;
+          this.error = 'Exact scoring receipt download failed. Refresh access and retry.';
+          this.isReceiptDownloading = false;
         },
       }),
     );
