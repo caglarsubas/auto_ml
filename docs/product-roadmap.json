@@ -31,7 +31,7 @@
       "id": "M3",
       "title": "Reviewable product and feature development",
       "purpose": "Independent reproduction and paired experiments make developer-to-reviewer handoff useful.",
-      "gate": "Bounded agentic pilot requires remaining D01\u2013D09/D12 foundations and D18\u2013D22/D25\u2013D26, including isolation, both intake paths, live accountability, accessible oversight and clean independent reproduction. D10/D11/D23 deeper experiments follow the baseline pilot; full M1\u2013M3 outcome completion remains separate. Broader rollout requires two partner workflows meeting the proposed >=30% combined development/review effort reduction against equal-data/policy/budget guided and single-agent baselines without increased validation defects."
+      "gate": "Bounded agentic pilot requires remaining D01–D09/D12 foundations and D18–D22/D25–D26, including isolation, both intake paths, live accountability, accessible oversight and clean independent reproduction. D10/D11/D23 deeper experiments follow the baseline pilot; full M1–M3 outcome completion remains separate. Broader rollout requires two partner workflows meeting the proposed >=30% combined development/review effort reduction against equal-data/policy/budget guided and single-agent baselines without increased validation defects."
     },
     {
       "id": "M4",
@@ -220,7 +220,7 @@
         "[Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md)",
         "[P28 source qualification](evidence/p28-qualification-2026-10-11.json)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R\u00b2 and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets."
+      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. Grouped diagnostics and paired-comparison uncertainty remain open. P04 reports undefined constant-target R² and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets."
     },
     {
       "id": "D06",
@@ -666,7 +666,7 @@
       "title": "End-to-end agentic baseline pilot",
       "owner": "Product/ML/Platform/Independent Review",
       "description": "Execute accepted business/oversight declarations through uploaded or connected data, a pinned private snapshot, checks/preparation, simple references and bounded XGBoost candidate search, independent assessment, a reproducible review package and batch-scoring handoff. Start with binary classification/regression; preserve and separately qualify other product workflows.",
-      "acceptance": "Both intake paths complete the bounded workflow under mixed HITL/HOTL, full live accountability and qualified isolation. An independent reviewer reproduces a clean package; protected outcomes cannot drive adaptive search or silently retain confirmatory status. Pilot is not production-use approval or closure of all M1\u2013M3 outcomes.",
+      "acceptance": "Both intake paths complete the bounded workflow under mixed HITL/HOTL, full live accountability and qualified isolation. An independent reviewer reproduces a clean package; protected outcomes cannot drive adaptive search or silently retain confirmatory status. Pilot is not production-use approval or closure of all M1–M3 outcomes.",
       "dependencies": [
         "D01",
         "D02",
@@ -850,7 +850,7 @@
     "Customer/jurisdiction policy is versioned; provider-report deadlines and blanket legal claims do not become product guarantees.",
     "Defer general real-time/A-B platforms, mandatory registries/feature stores, full causal discovery, automatic reject-inference correction, unrestricted self-modification and managed multitenant SaaS. Replace blanket automatic-promotion deferral with planned D24 conditional recipe-bounded lifecycle authority; production autonomy remains disabled until separately granted and qualified.",
     "Agentic baseline pilot is end-to-end rather than HPO-only; both intake paths, configurable oversight, live accountability and independent reproduction are first-pilot requirements.",
-    "Preserve P01\u2013P07 scientific/data/fit/identity foundation credit. Planned durable jobs, expert isolation, project governance and independent review remain prerequisites, not delivered capabilities.",
+    "Preserve P01–P07 scientific/data/fit/identity foundation credit. Planned durable jobs, expert isolation, project governance and independent review remain prerequisites, not delivered capabilities.",
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
@@ -858,7 +858,7 @@
   "history": [
     {
       "date": "2026-10-07",
-      "event": "User approved the reconciled D01\u2013D17 roadmap; implementation started on codex/governed-foundation."
+      "event": "User approved the reconciled D01–D17 roadmap; implementation started on codex/governed-foundation."
     },
     {
       "date": "2026-10-07",
@@ -903,7 +903,7 @@
     {
       "date": "2026-10-08",
       "packet": "P04",
-      "event": "Continue M1 with task-specific auditable development CV, complete fold-metric coverage, undefined R\u00b2 handling and explicit validation limitations. Full objective/search consistency and milestone gates remain open."
+      "event": "Continue M1 with task-specific auditable development CV, complete fold-metric coverage, undefined R² handling and explicit validation limitations. Full objective/search consistency and milestone gates remain open."
     },
     {
       "date": "2026-10-08",
@@ -963,7 +963,7 @@
     {
       "date": "2026-10-08",
       "packet": "P08",
-      "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01\u2013P07. Add planned D18\u2013D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
+      "event": "Reconcile user-approved requirements from Plan agentic roadmap shift against merged P01–P07. Add planned D18–D26, one implementation queue and an agentic execution specification; documentation adoption does not implement product outcomes or close gates."
     },
     {
       "date": "2026-10-08",
@@ -1189,6 +1189,11 @@
       "date": "2026-10-11",
       "packet": "P28",
       "event": "Unchanged grouped diagnostic source qualifies 43 new scientific/evidence cases, both complete metadata suites (2201 passed, six skips each), 597 frontend units, 37 final-source governed browser checks, private TLS recovery and isolated native scoring parity. Preserve initial read-policy/SQLite contention findings; no capacity, full reproduction, expert isolation or release/customer claim."
+    },
+    {
+      "date": "2026-10-11",
+      "packet": "P29",
+      "event": "After verified PR118 merge, begin bounded private native API packaging and exact offline image handoff. Preserve prior packets/outcomes/queue and all open release gates. Qualification pending."
     }
   ],
   "implementation_packets": [
@@ -1230,7 +1235,7 @@
         "[Implementation and limits](PORTABLE_CORE_IMPLEMENTATION.md)",
         "[Local source qualification](evidence/p02-qualification-2026-10-08.json)"
       ],
-      "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1\u2013M3 gates remain open."
+      "remaining": "Full backend locking/offline supply, production PostgreSQL/jobs/TLS and recovery, project authorization, expert isolation and remaining M1–M3 gates remain open."
     },
     {
       "id": "P03",
@@ -1333,7 +1338,7 @@
         "[Agentic contracts and acceptance](AGENTIC_EXECUTION_SPEC.md)",
         "[P08 documentation and validator qualification](evidence/p08-qualification-2026-10-08.json)"
       ],
-      "remaining": "D18\u2013D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
+      "remaining": "D18–D26 remain planned. Remaining foundation and agentic product work require owned bounded implementation packets and their acceptance evidence."
     },
     {
       "id": "P09",
@@ -1686,6 +1691,22 @@
         "[P28 source qualification](evidence/p28-qualification-2026-10-11.json)"
       ],
       "remaining": "Paired uncertainty, lossy-source categorical reconstruction, full scientific/accessibility qualification, expert isolation, independent refit/assessment reproduction, private/offline packaging, production recovery and all release/value/customer gates remain open."
+    },
+    {
+      "id": "P29",
+      "title": "Fixed private native API and offline image handoff",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "in_progress",
+      "items": [
+        "D06",
+        "D07"
+      ],
+      "description": "Build an explicit application source allowlist into a fresh system-dependency image snapshot, retain runtime/package inventories, launch fixed unprivileged native services only after verification/TLS/migration preflight, and import one exact tag-free image through a trusted-digest handoff.",
+      "evidence": [
+        "[Private native API packaging](PRIVATE_API_PACKAGING_IMPLEMENTATION.md)"
+      ],
+      "remaining": "Complete frontend/TLS ingress and offline installation, supply-chain authentication, upgrade/rollback and production recovery, comprehensive egress/retention, training/search migration, expert isolation, independent reproduction and all release/value/customer gates remain open."
     }
   ],
   "release_qualification": {
@@ -1749,7 +1770,7 @@
     "implementation_base": "506945f9742bd7bdc5d599f422ad360dc473c929",
     "preceding_pr": 97,
     "specification": "AGENTIC_EXECUTION_SPEC.md",
-    "scope": "P08 adopts the roadmap and execution specification only. D18\u2013D26 are planned, without implementation evidence. P01\u2013P07 remain tested; their partial foundation credit and all open product/release/customer gates are preserved. No feature packet is dispatched.",
+    "scope": "P08 adopts the roadmap and execution specification only. D18–D26 are planned, without implementation evidence. P01–P07 remain tested; their partial foundation credit and all open product/release/customer gates are preserved. No feature packet is dispatched.",
     "added_outcomes": [
       "D18",
       "D19",
@@ -1762,7 +1783,7 @@
       "D26"
     ],
     "priority_delta": [
-      "Finish remaining scientific, shared security/runtime, expert isolation and reproduction foundations first; extend delivered P01\u2013P07 behavior rather than rebuilding it.",
+      "Finish remaining scientific, shared security/runtime, expert isolation and reproduction foundations first; extend delivered P01–P07 behavior rather than rebuilding it.",
       "Add mission/oversight contracts, durable orchestration, independent gates and authoritative decision history before autonomous product execution.",
       "Move both upload/PostgreSQL snapshot intake and the supervision/review workspace into the first end-to-end pilot prerequisites.",
       "Qualify declaration-to-scoring handoff with configurable HITL/HOTL and live accountability before deeper adaptive feature/HPO families; D23 integrates D10/D11 and R1/R2/R3.",
@@ -1787,7 +1808,7 @@
         "D12"
       ],
       "owner": "Backend/ML/Platform/Security/Independent Review",
-      "exit_requirement": "Supported scientific, access-control, runtime/isolation, recovery and clean-reproduction workflows pass; preserve P01\u2013P07 tested evidence."
+      "exit_requirement": "Supported scientific, access-control, runtime/isolation, recovery and clean-reproduction workflows pass; preserve P01–P07 tested evidence."
     },
     {
       "order": 2,

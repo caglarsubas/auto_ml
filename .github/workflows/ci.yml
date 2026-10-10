@@ -119,8 +119,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libmagic1 file libgomp1 openssl
           pip install -r backend/requirements.txt
+      - name: Build allowlisted fixed private API runtime
+        run: |
+          python scripts/private_api_package.py context /tmp/declarai-private-context
+          docker build -f /tmp/declarai-private-context/dependencies.Dockerfile -t declarai-private-dependencies:ci /tmp/declarai-private-context
+          mkdir -p test-reports/postgresql
+          python scripts/private_api_package.py build \
+            --base-image "$(docker image inspect declarai-private-dependencies:ci --format '{{.Id}}')" \
+            --tag declarai-private-api:ci > test-reports/postgresql/fixed-api-build.json
+          python - <<'PY'
+          import json, os
+          record = json.load(open('test-reports/postgresql/fixed-api-build.json'))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('DECLARAI_PRIVATE_API_IMAGE=' + record['image_id'] + '\n')
+          PY
       - name: Qualify disposable PostgreSQL fixture
-        run: python scripts/qualify_postgres_fixture.py
+        run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE"
       - name: Enforce existing skip budget
         if: always()
         run: python .github/scripts/check_skip_budget.py test-reports/postgresql/postgresql.xml --max-skips 15

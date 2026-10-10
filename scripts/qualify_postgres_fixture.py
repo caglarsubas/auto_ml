@@ -42,6 +42,7 @@ def main():
         "--runner-image", help="Local core test image; omitted in host Python CI"
     )
     parser.add_argument("--reports", default="test-reports/postgresql")
+    parser.add_argument("--private-api-image", help="Exact local private API image sha256; adds real fixed-image socket smoke")
     args = parser.parse_args()
     reports = (ROOT / args.reports).resolve()
     if not reports.is_relative_to(ROOT / "test-reports"):
@@ -472,6 +473,9 @@ def main():
             }
             preflight = ["backend/manage.py", "check_job_runtime"]
             run_python(preflight, job_env, report="private-jobs.log")
+            if args.private_api_image:
+                from qualify_private_api_image import qualify_image
+                qualify_image(args.private_api_image, network, fixture, env, reports)
             run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_CA_FILE": str(fixture / "wrong-ca.crt")},
                        succeed=False, report="job-tls-wrong-ca.log", rejection="job_broker_unavailable")
             broker_ip = command(["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", job_broker]).decode().strip()
