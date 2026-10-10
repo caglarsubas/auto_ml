@@ -3,11 +3,14 @@
 # Copy system paths into a fresh image, never inheriting application/data layers.
 ARG DEPENDENCY_IMAGE
 FROM ${DEPENDENCY_IMAGE} AS dependencies
+# AMD64's interpreter uses /lib64; ARM64 bases may omit that directory.
+RUN mkdir -p /lib64
 FROM scratch
 COPY --from=dependencies /usr /usr
 COPY --from=dependencies /bin /bin
 COPY --from=dependencies /sbin /sbin
 COPY --from=dependencies /lib /lib
+COPY --from=dependencies /lib64 /lib64
 COPY --from=dependencies /etc /etc
 COPY --from=dependencies /var/lib/dpkg /var/lib/dpkg
 ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
