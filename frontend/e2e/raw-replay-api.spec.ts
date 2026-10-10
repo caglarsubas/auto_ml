@@ -674,6 +674,20 @@ test('real-session numeric diagnostics retain singular and excluded states throu
     expect(trained.status()).toBe(200);
     const run = await trained.json();
     expect(run.model.collinearity.features.x).toMatchObject({ vif: null, vif_status: 'unbounded' });
+    const grouped = run.model.collinearity.grouped;
+    expect(grouped).toMatchObject({ status: 'available', execution_id: run.execution_id });
+    expect(grouped.groups.category).toMatchObject({ kind: 'categorical', df: 1, status: 'finite' });
+    expect(grouped.groups.x.status).toBe('unbounded');
+    const groupDetail = await api.post('modeling/vif-detail/', {
+      data: {
+        file_id: fileId,
+        execution_id: run.execution_id,
+        feature: 'category',
+        diagnostic: 'grouped',
+      },
+    });
+    expect(groupDetail.status()).toBe(200);
+    expect((await groupDetail.json()).gvif).toBeCloseTo(grouped.groups.category.gvif, 10);
     const excluded = Object.entries(run.model.collinearity.features).find(
       ([, record]) => (record as { vif_status: string }).vif_status === 'excluded_categorical',
     )?.[0];
@@ -708,6 +722,16 @@ test('real-session numeric diagnostics retain singular and excluded states throu
       .locator('..')
       .getByRole('button', { name: 'Load', exact: true })
       .click();
+    const groupPanel = page.getByTestId('grouped-diagnostics');
+    await expect(groupPanel).toBeVisible();
+    await groupPanel.locator('summary').focus();
+    await groupPanel.locator('summary').press('Space');
+    await expect(groupPanel).toContainText(run.execution_id);
+    await expect(groupPanel.getByRole('table')).toContainText('category');
+    await expect(groupPanel).toContainText('Unbounded');
+    await expect(groupPanel).toContainText('Neither value provides a removal threshold');
+    await expect(groupPanel).toContainText('Selected one-hot outputs');
+    await groupPanel.screenshot({ path: testInfo.outputPath('grouped-collinearity.png') });
     const numeric = page.getByTestId('numeric-diagnostics');
     await numeric.locator('summary').focus();
     await numeric.locator('summary').press('Space');

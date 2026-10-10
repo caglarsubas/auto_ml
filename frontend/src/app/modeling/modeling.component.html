@@ -1273,6 +1273,77 @@
             </div>
           }
           @if (modelingStatus?.model?.collinearity; as diagnostic) {
+            @if (groupedCollinearity; as grouped) {
+              @if (grouped.status !== 'not_applicable') {
+                <details class="numeric-diagnostics" data-testid="grouped-diagnostics">
+                  <summary>Grouped categorical and numeric dependence</summary>
+                  <p>{{ grouped.scope }} {{ grouped.limitations }}</p>
+                  <p>
+                    Execution: {{ grouped.execution_id }} · Training rows: {{ grouped.row_count }}
+                  </p>
+                  <p>
+                    GVIF measures each group's dependence on the other selected groups. The adjusted
+                    value is GVIF^(1/(2 df)); for one dimension it is the square root of VIF.
+                    Neither value provides a removal threshold.
+                  </p>
+                  @if (grouped.status !== 'available') {
+                    <p role="status">
+                      Grouped calculation unavailable: {{ groupedReasonLabel(grouped.reason) }}. No
+                      predictors were silently omitted. Inspect the recorded inputs and refit a
+                      supported bounded subset.
+                    </p>
+                    <ul>
+                      @for (row of groupedBlockedRows; track row.feature) {
+                        <li>{{ row.feature }}: {{ row.reason }}</li>
+                      }
+                    </ul>
+                  }
+                  <table>
+                    <caption>
+                      Selected training-input groups and descriptive dependence
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Predictor group</th>
+                        <th scope="col">Dimensions (df)</th>
+                        <th scope="col">GVIF / state</th>
+                        <th scope="col">Adjusted GVIF</th>
+                        <th scope="col">Recorded inputs</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of groupedCollinearityRows; track row.feature) {
+                        <tr>
+                          <th scope="row">{{ row.feature }}</th>
+                          <td>{{ row.df ?? 'Unavailable' }}</td>
+                          <td>
+                            @if (row.gvif != null) {
+                              {{ row.gvif | number: '1.2-2' }}
+                            } @else {
+                              {{ vifStateLabel(row.status) }}
+                            }
+                            @if (row.reason) {
+                              <p>{{ groupedReasonLabel(row.reason) }}</p>
+                            }
+                          </td>
+                          <td>
+                            {{
+                              row.adjusted_gvif != null
+                                ? (row.adjusted_gvif | number: '1.2-2')
+                                : 'Unavailable'
+                            }}
+                          </td>
+                          <td>
+                            {{ row.columns.join(', ') }} ·
+                            {{ groupedRepresentationLabel(row.representation) }}
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </details>
+              }
+            }
             <details class="numeric-diagnostics" data-testid="numeric-diagnostics">
               <summary>Numeric collinearity diagnostics</summary>
               <p>{{ diagnostic.scope }} {{ diagnostic.limitations }}</p>

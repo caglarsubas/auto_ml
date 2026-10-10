@@ -175,8 +175,8 @@ The user is a data scientist or risk analyst building a supervised binary classi
 • Keep answers relevant to the user's CURRENT pipeline step and ongoing flow.
   Example: if user is at Data Quality, mention what to watch for before Encoding; if at
   Modeling, reference what the next SFS step could reveal.
-• Use well-known rule-of-thumbs when applicable (e.g., PSI > 0.25 = population shift,
-  VIF > 5 = multicollinearity concern, missing > 30% = consider dropping, etc.).
+• Diagnostic values are descriptive and depend on the declared task, representation and sampling.
+  Do not impose universal VIF/GVIF cutoffs or infer that a predictor should be removed from dependence alone.
 • Prefer bullet points, short paragraphs, and tables. Highlight key takeaways first.
 • Use Unicode characters DIRECTLY for math, arrows, and Greek letters: → ⇒ ← ↔ ≤ ≥
   ≠ ≈ ± × ÷ · ∈ ∉ ∑ ∏ ∫ √ ∞ α β γ δ θ λ μ π ρ σ τ φ χ ψ ω Δ Σ Ω, etc.
@@ -1198,15 +1198,13 @@ def _build_slim_context(file_id: int, section: str) -> str:
                          "Tell the user that uploading a dictionary file (or editing descriptions in the UI) "
                          "would unlock domain-aware feature engineering.")
 
-    # Feature list (names + VIF flags only)
+    # Feature names; dependence does not establish importance or a removal threshold.
     sel_feats = read_selected_features(file_id)
     if sel_feats:
         feat_list = sel_feats if isinstance(sel_feats, list) else sel_feats.get('features', [])
         names = [f.get('feature', '?') for f in feat_list[:40]]
-        high_vif = [f.get('feature', '?') for f in feat_list if (f.get('vif') or 0) > 5]
         parts.append(f"Selected features ({len(feat_list)}): {', '.join(names)}")
-        if high_vif:
-            parts.append(f"High-VIF features (>5): {', '.join(high_vif)}")
+        parts.append("VIF/GVIF are descriptive dependence diagnostics. Inspect exact method/state before interpretation; no universal cutoff or automatic removal rule.")
 
     # Available data (so the LLM knows which tools will return data).
     # ``cache_list_artifacts`` is already instrumented with ``redis-list``.
@@ -3464,6 +3462,19 @@ def _format_context(context: dict, section: str) -> str:
         if isinstance(v, float):
             return f'{v:.4f}'
         return str(v)
+
+    grouped = context.get('grouped_collinearity')
+    if isinstance(grouped, dict) and grouped.get('method') == 'centered_group_subspace_gvif_v1':
+        parts.append(f"Grouped training-input dependence: execution={grouped.get('execution_id', 'unverified')}; "
+                     f"method={grouped['method']}; state={grouped.get('status', 'unavailable')}; "
+                     f"reason={grouped.get('reason')}")
+        parts.append(grouped.get('limitations') or 'Descriptive subspace dependence; no automatic removal threshold.')
+        parts.append('Adjusted GVIF = GVIF^(1/(2 df)); for df=1 this is sqrt(VIF), not VIF.')
+        for name, group in (grouped.get('groups') or {}).items():
+            if isinstance(group, dict):
+                parts.append(f"  {name}: df={group.get('df')}; GVIF={_fmt_val(group.get('gvif'))}; "
+                             f"adjusted={_fmt_val(group.get('adjusted_gvif'))}; state={group.get('status')}; "
+                             f"representation={group.get('representation')}; reason={group.get('reason')}")
 
     if section == 'data_quality':
         summary = context.get('summary', [])

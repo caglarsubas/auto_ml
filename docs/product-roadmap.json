@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-10-10",
+  "updated": "2026-10-11",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -1161,6 +1161,11 @@
       "date": "2026-10-10",
       "packet": "P27",
       "event": "Final multiclass objective source qualifies all 75 new scientific cases and both full metadata suites: 2158 passed, six skips, 71.20 percent combined coverage. The existing 37 governed browser checks, private TLS recovery and isolated native scoring parity pass. Final two-CPU cProfile call time is 8.08 seconds versus 30.57 seconds on the unchanged baseline workflow; no deployment SLA. Initial configuration prototype and floating-normalization assertion findings remain explicit. Full reproduction, expert isolation and all release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-11",
+      "packet": "P28",
+      "event": "Begin grouped categorical/numeric training-input diagnostics after verified PR117 merge and all-six successful merge-main CI. Preserve all prior packets, outcome states, implementation queue and release/customer gates."
     }
   ],
   "implementation_packets": [
@@ -1639,6 +1644,24 @@
         "[P27 source qualification](evidence/p27-qualification-2026-10-10.json)"
       ],
       "remaining": "Full independent refit/assessment reproduction, production capacity/recovery, private offline installation, training/search job migration, expert isolation, egress/retention, accessibility and every release/value/customer gate remain open."
+    },
+    {
+      "id": "P28",
+      "title": "Immutable grouped categorical and numeric dependence",
+      "kind": "product_implementation",
+      "owner": "ML/Backend/Review UX/Security",
+      "status": "in_progress",
+      "items": [
+        "D04",
+        "D05",
+        "D06",
+        "D12"
+      ],
+      "description": "Retain centered training-input group bases and descriptive GVIF with explicit representation, rank, precision and compute states. Replay exact native evidence without fitted state/outcomes; allow current reviewers to inspect numeric/grouped diagnostics and expose accessible summaries without universal cutoffs.",
+      "evidence": [
+        "[Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md)"
+      ],
+      "remaining": "Paired uncertainty, lossy-source categorical reconstruction, full scientific/accessibility qualification, expert isolation, independent refit/assessment reproduction, private/offline packaging, production recovery and all release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

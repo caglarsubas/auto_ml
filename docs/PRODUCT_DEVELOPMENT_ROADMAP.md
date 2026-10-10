@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-10-10. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-10-11. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.
 
@@ -325,6 +325,16 @@ Use support-weighted average ranks for requested multiclass ROC-AUC, retaining i
 **Evidence:** [Multiclass objective execution](MULTICLASS_METRIC_RUNTIME_IMPLEMENTATION.md); [P27 source qualification](evidence/p27-qualification-2026-10-10.json)
 
 **Remaining:** Full independent refit/assessment reproduction, production capacity/recovery, private offline installation, training/search job migration, expert isolation, egress/retention, accessibility and every release/value/customer gate remain open.
+
+### P28 — Immutable grouped categorical and numeric dependence
+
+**Packet status:** in_progress. **Mapped outcomes:** D04, D05, D06, D12.
+
+Retain centered training-input group bases and descriptive GVIF with explicit representation, rank, precision and compute states. Replay exact native evidence without fitted state/outcomes; allow current reviewers to inspect numeric/grouped diagnostics and expose accessible summaries without universal cutoffs.
+
+**Evidence:** [Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md)
+
+**Remaining:** Paired uncertainty, lossy-source categorical reconstruction, full scientific/accessibility qualification, expert isolation, independent refit/assessment reproduction, private/offline packaging, production recovery and all release/value/customer gates remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

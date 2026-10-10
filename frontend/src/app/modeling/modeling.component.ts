@@ -1404,6 +1404,64 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     );
   }
 
+  get groupedCollinearity(): any | null {
+    const report = this.modelingStatus?.model?.collinearity?.grouped;
+    return report?.schema_version === 1 &&
+      report.method === 'centered_group_subspace_gvif_v1' &&
+      report.execution_id === this.modelingStatus?.execution_id
+      ? report
+      : null;
+  }
+
+  get groupedCollinearityRows(): any[] {
+    return Object.entries(this.groupedCollinearity?.groups || {}).map(([feature, record]) => ({
+      feature,
+      ...(record as object),
+    }));
+  }
+
+  get groupedBlockedRows(): any[] {
+    return Object.entries(this.groupedCollinearity?.blocked_groups || {}).map(
+      ([feature, reason]) => ({
+        feature,
+        reason: this.groupedReasonLabel(reason as string),
+      }),
+    );
+  }
+
+  groupedReasonLabel(reason?: string): string {
+    const reasons: Record<string, string> = {
+      incomplete_group_provenance:
+        'Some predictor groups cannot be reconstructed from the recorded inputs',
+      original_category_partition_unavailable:
+        'Original categories are unavailable after this encoding',
+      diagnostic_compute_budget: 'The selected groups exceed the diagnostic compute budget',
+      insufficient_rows: 'At least two training rows are needed',
+      linear_solver_failed: 'The numerical calculation failed',
+      zero_training_subspace: 'This group has no variation in the training rows',
+      intersecting_or_numerically_indistinguishable_subspaces:
+        'Perfect or numerically indistinguishable dependence',
+      invalid_encoding_provenance: 'The recorded encoding does not identify a valid group',
+      overlapping_encoding_provenance: 'Recorded groups overlap',
+      ambiguous_group_name: 'A group name conflicts with another predictor',
+      invalid_one_hot_values: 'Recorded one-hot inputs are invalid',
+      unsupported_training_predictor: 'A training predictor has no supported representation',
+      gvif_exceeds_float_range:
+        'GVIF exceeds the numeric range; the adjusted value remains available',
+      nonfinite_or_invalid_solver_result: 'The calculation returned an invalid numerical result',
+    };
+    return reasons[reason || ''] || 'Calculation unavailable; inspect the recorded inputs';
+  }
+
+  groupedRepresentationLabel(representation: string): string {
+    const labels: Record<string, string> = {
+      selected_one_hot_columns: 'Selected one-hot outputs',
+      observed_nominal_partition: 'Observed category groups',
+      centered_numeric_predictor: 'Numeric training predictor',
+    };
+    return labels[representation] || 'Representation unavailable';
+  }
+
   vifStateLabel(state?: string): string {
     const labels: Record<string, string> = {
       finite: 'Finite',
@@ -1415,6 +1473,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       insufficient_rows: 'Too few rows',
       budget_exceeded: 'Budget exceeded',
       unavailable: 'Unavailable',
+      overflow: 'Outside numeric range',
     };
     return labels[state || ''] || 'Not recorded';
   }
@@ -1737,6 +1796,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       ),
     );
     if (Object.keys(currentDiagnostics).length > 0) modelCtx.vif_decomposition = currentDiagnostics;
+    modelCtx.grouped_collinearity = this.groupedCollinearity;
     // SFS results + configuration
     if (
       this.sfsForwardResults?.length ||
