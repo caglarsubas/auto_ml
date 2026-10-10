@@ -26,6 +26,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   severity = 'major';
   eventType = 'finding';
   findingId = '';
+  evidence: any = null;
   private generation = 0;
   private requests = new Subscription();
   pending: { url: string; body: any } | null = null;
@@ -39,6 +40,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.directory = this.review = this.pending = null;
+    this.evidence = null;
     this.text = this.findingId = '';
     this.eventType = this.role === 'developer' ? 'response' : 'finding';
     this.refresh();
@@ -82,6 +84,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   refresh(): void {
     const selected = this.review?.id;
     this.review = this.directory = null;
+    this.evidence = null;
     this.busy = true;
     this.error = '';
     const generation = ++this.generation;
@@ -109,6 +112,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   }
   open(id: string): void {
     this.review = null;
+    this.evidence = null;
     this.busy = true;
     this.error = '';
     const generation = ++this.generation;
@@ -158,6 +162,8 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     };
     if (this.eventType === 'finding') body.severity = this.severity;
     else body.finding_id = this.findingId;
+    if (this.evidence)
+      body.evidence = { job_id: this.evidence.id, result_sha256: this.evidence.result_sha256 };
     this.pending = { url: this.url(this.review.id), body };
     this.retry();
   }
@@ -185,6 +191,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
             this.directory.total++;
           }
           this.text = this.findingId = '';
+          this.evidence = null;
           this.busy = false;
         },
         error: (error) => {
@@ -195,16 +202,65 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
           if ([400, 404, 409].includes(error.status)) {
             this.pending = null;
             this.review = null;
+            this.evidence = null;
             this.error = `Action was blocked (${error.error?.error_code || 'invalid request'}). Refresh the review before making another change.`;
           } else {
             if (error.status === 403) {
               this.review = this.directory = null;
+              this.evidence = null;
             }
             this.error =
               'The outcome could not be confirmed. Retry the pending action with the same receipt.';
           }
         },
       }),
+    );
+  }
+  selectEvidence(job: any): void {
+    if (!this.review || this.review.freshness !== 'current' || this.pending || this.busy) return;
+    if (
+      job.state !== 'succeeded' ||
+      job.file_id !== this.fileId ||
+      job.project_id !== this.projectId ||
+      ['bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256'].some(
+        (key) => job.specification[key] !== this.review[key],
+      )
+    ) {
+      this.evidence = null;
+      this.error = 'This receipt belongs to a different package. Select a check for this review.';
+      return;
+    }
+    this.evidence = job;
+    this.error = '';
+  }
+  downloadEvidence(eventId: string): void {
+    if (!this.review || this.busy) return;
+    const generation = this.generation;
+    const reviewId = this.review.id;
+    this.requests.add(
+      this.http
+        .get(this.url(`${reviewId}/events/${eventId}/receipt`), {
+          params: this.params,
+          transferCache: false,
+          responseType: 'blob',
+        })
+        .subscribe({
+          next: (blob) => {
+            if (generation !== this.generation) return;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `review-${reviewId}-event-${eventId}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+          },
+          error: (error) => {
+            if (generation !== this.generation) return;
+            if (error.status === 403) this.review = this.directory = this.evidence = null;
+            this.error =
+              'Linked receipt access or integrity could not be checked. Refresh and retry.';
+          },
+        }),
     );
   }
   download(kind: 'discussion' | 'package'): void {

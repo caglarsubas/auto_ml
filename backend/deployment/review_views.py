@@ -2,12 +2,13 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
 from django.db import transaction
+from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from access_control import projects
 from deployment import reviews
-from deployment.models import PackageReview
+from deployment.models import PackageReview, PackageReviewEvent
 from modeling.execution_artifacts import projection_lock
 
 
@@ -60,7 +61,7 @@ class PackageReviewDetailView(APIView):
                 raise projects.ProjectDenied('review_project_mismatch')
             with projection_lock(case.dataset_id), transaction.atomic():
                 case = PackageReview.objects.select_for_update().get(pk=review_id)
-                result = reviews.serialize(case)
+                result = reviews.serialize(case, request.user)
                 projects.recheck(scope)
                 return Response(result)
         except ERRORS as exc:
@@ -69,5 +70,26 @@ class PackageReviewDetailView(APIView):
     def post(self, request, review_id):
         try:
             return Response(reviews.append(request.user, review_id, request.data))
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class PackageReviewReceiptView(APIView):
+    def get(self, request, review_id, event_id):
+        from deployment.review_evidence import receipt
+        from execution_jobs.csv_scoring import canonical_bytes
+        try:
+            case = PackageReview.objects.get(pk=review_id)
+            scope = reviews.actor_scope(request.user, case.dataset_id)
+            if str(case.project_id) != scope['project_id']:
+                raise projects.ProjectDenied('review_project_mismatch')
+            with projection_lock(case.dataset_id), transaction.atomic():
+                event = PackageReviewEvent.objects.get(pk=event_id, review=case)
+                raw = canonical_bytes(receipt(request.user, case, event))
+                projects.recheck(scope)
+                response = HttpResponse(raw, content_type='application/json')
+                response['Content-Disposition'] = f'attachment; filename="review-{review_id}-event-{event_id}.json"'
+                response['Cache-Control'] = 'no-store'
+                return response
         except ERRORS as exc:
             return failure(exc)

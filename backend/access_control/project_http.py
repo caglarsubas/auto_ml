@@ -77,6 +77,7 @@ SPECIAL = {
     "assistant-action-receipt",
     "project-member",
     "package-review-detail",
+    "package-review-receipt",
     "job-detail",
     "job-scores",
 }
@@ -150,13 +151,15 @@ def authorize(request, view):
         supplied.append(record.file_id)
     elif name == "project-member":
         scopes.append(projects.membership(request.user.pk, view.kwargs["project_id"], "admin"))
-    elif name == "package-review-detail":
+    elif name in {"package-review-detail", "package-review-receipt"}:
         from deployment.models import PackageReview
+        from deployment.review_evidence import source_scopes
         try:
             record = PackageReview.objects.get(pk=view.kwargs['review_id'])
         except PackageReview.DoesNotExist:
             raise projects.ProjectDenied('package_review_unavailable') from None
         supplied.append(record.dataset_id)
+        scopes.extend(source_scopes(request.user, record, body.get('evidence')))
     elif name in {'job-detail', 'job-scores'}:
         from execution_jobs.models import NativeJob
         try:

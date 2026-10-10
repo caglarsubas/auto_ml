@@ -1,4 +1,13 @@
-import { Component, Input, OnChanges, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -17,6 +26,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) projectId!: string;
   @Input({ required: true }) role!: string;
   @Input() packageInfo: any = null;
+  @Input() evidenceEnabled = false;
+  @Output() receiptSelected = new EventEmitter<any>();
   directory: any = null;
   job: any = null;
   busy = false;
@@ -30,7 +41,10 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     private http: HttpClient,
     private auth: AuthService,
   ) {}
-  ngOnChanges(): void {
+  ngOnChanges(changes?: SimpleChanges): void {
+    // Review availability changes during a write; it is not a new job context.
+    // Avoid resetting selection and issuing an audit-writing read at that point.
+    if (changes && Object.keys(changes).every((key) => key === 'evidenceEnabled')) return;
     this.generation++;
     this.requests.unsubscribe();
     this.requests = new Subscription();
@@ -271,6 +285,24 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
           link.download = `job-${id}.json`;
           link.click();
           URL.revokeObjectURL(url);
+        },
+        error: (error) => this.fail(generation, error, false),
+      }),
+    );
+  }
+  selectReceipt(): void {
+    if (!this.evidenceEnabled || this.busy || this.job?.state !== 'succeeded') return;
+    const generation = this.generation;
+    const id = this.job.id;
+    // Selection refreshes authority; the review API validates again on adoption.
+    this.busy = true;
+    this.requests.add(
+      this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
+        next: (job) => {
+          if (generation !== this.generation) return;
+          this.job = job;
+          this.busy = false;
+          if (job.state === 'succeeded') this.receiptSelected.emit(job);
         },
         error: (error) => this.fail(generation, error, false),
       }),

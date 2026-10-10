@@ -34,8 +34,13 @@ class PackageReviewEvent(models.Model):
     finding_id = models.UUIDField(null=True)
     severity = models.CharField(max_length=16, blank=True)
     text = models.TextField(blank=True)
+    evidence_job = models.ForeignKey('execution_jobs.NativeJob', null=True, on_delete=models.PROTECT)
+    evidence = models.JSONField(null=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ['revision']
-        constraints = [models.UniqueConstraint(fields=['review', 'revision'], name='review_event_revision_unique')]
+        constraints = [models.UniqueConstraint(fields=['review', 'revision'], name='review_event_revision_unique'),
+                       models.CheckConstraint(condition=(models.Q(evidence_job__isnull=True, evidence__isnull=True)
+                                                         | models.Q(evidence_job__isnull=False, evidence__isnull=False)),
+                                              name='review_event_evidence_pair')]

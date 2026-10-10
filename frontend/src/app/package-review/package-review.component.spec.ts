@@ -16,6 +16,14 @@ describe('Package review receipts and context', () => {
     findings: [],
     events: [],
   };
+  const receipt = {
+    id: 'job',
+    file_id: 1,
+    project_id: 'project-a',
+    state: 'succeeded',
+    result_sha256: 'b'.repeat(64),
+    specification: { bundle_id: 'bundle', kind: 'package_integrity_v1' },
+  };
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [PackageReviewComponent],
@@ -109,6 +117,46 @@ describe('Package review receipts and context', () => {
     component.submit();
     http.expectNone('/api/reviews/case/?project_id=project-a');
     expect(component.pending).toBeNull();
+  });
+  it('pins an optional selected receipt across an ambiguous write', () => {
+    component.review = review;
+    component.selectEvidence(receipt);
+    component.text = 'Finding citing a check';
+    component.submit();
+    const first = http.expectOne('/api/reviews/case/?project_id=project-a');
+    const body = first.request.body;
+    expect(body.evidence).toEqual({ job_id: 'job', result_sha256: 'b'.repeat(64) });
+    first.error(new ProgressEvent('network'));
+    component.evidence = { ...receipt, result_sha256: 'c'.repeat(64) };
+    component.retry();
+    const retry = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(retry.request.body).toEqual(body);
+    retry.flush({ ...review, revision: 4, replayed: true });
+    expect(component.evidence).toBeNull();
+  });
+  it('rejects a selected receipt for a different package or unsuccessful check', () => {
+    component.review = review;
+    component.selectEvidence({ ...receipt, specification: { bundle_id: 'other' } });
+    expect(component.evidence).toBeNull();
+    expect(component.error).toContain('different package');
+    component.selectEvidence({ ...receipt, state: 'blocked' });
+    expect(component.evidence).toBeNull();
+  });
+  it('clears selected evidence on context change and never publishes a denied download', () => {
+    const create = spyOn(URL, 'createObjectURL');
+    component.review = review;
+    component.selectEvidence(receipt);
+    component.downloadEvidence('event');
+    const request = http.expectOne('/api/reviews/case/events/event/receipt/?project_id=project-a');
+    expect(request.request.transferCache).toBeFalse();
+    request.flush(new Blob(), { status: 403, statusText: 'Forbidden' });
+    expect(component.review).toBeNull();
+    expect(component.evidence).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    component.evidence = receipt;
+    component.open('case');
+    expect(component.evidence).toBeNull();
+    http.expectOne('/api/reviews/case/?project_id=project-a').flush(review);
   });
   it('context changes cancel prior reads and clear pending authority', () => {
     component.open('old-case');

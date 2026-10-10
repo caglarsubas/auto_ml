@@ -116,6 +116,11 @@
       </p>
     }
     <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
+    @if (evidenceEnabled && job.state === 'succeeded') {
+      <button type="button" (click)="selectReceipt()" [disabled]="busy || !!pending">
+        Use receipt for review action
+      </button>
+    }
     @if (job.result) {
       @if (job.specification.kind === 'native_csv_scoring_v1') {
         <p>

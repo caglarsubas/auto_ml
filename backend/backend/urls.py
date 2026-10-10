@@ -15,7 +15,7 @@ from modeling.crisp_views import (
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from evaluation.views import EvaluationRunView, EvaluationStatusView, EvaluationPackView, GovernanceChecksView, HoldoutHistoryView
 from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView, DeploymentReceiptView
-from deployment.review_views import PackageReviewListView, PackageReviewDetailView
+from deployment.review_views import PackageReviewListView, PackageReviewDetailView, PackageReviewReceiptView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
 from backend.auth_views import session_status, session_login, session_logout, protected_media
@@ -71,6 +71,7 @@ urlpatterns = [
     path('api/jobs/<uuid:job_id>/', JobDetailView.as_view(), name='job-detail'),
     path('api/reviews/datasets/<int:file_id>/', PackageReviewListView.as_view(), name='package-review-list'),
     path('api/reviews/<uuid:review_id>/', PackageReviewDetailView.as_view(), name='package-review-detail'),
+    path('api/reviews/<uuid:review_id>/events/<uuid:event_id>/receipt/', PackageReviewReceiptView.as_view(), name='package-review-receipt'),
     path('api/crisp/export/', CrispExportPackView.as_view(), name='crisp-export'),
     path('api/crisp/monitoring/', CrispMonitoringRunView.as_view(), name='crisp-monitoring'),
     path('api/crisp/iteration/clone/', CrispIterationCloneView.as_view(), name='crisp-iteration-clone'),

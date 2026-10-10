@@ -101,6 +101,48 @@ describe('Durable package job receipts', () => {
     expect(create).not.toHaveBeenCalled();
     expect(component.job).toBeNull();
   });
+  it('refreshes receipt authority before emitting an explicit review selection', () => {
+    component.evidenceEnabled = true;
+    component.job = { ...job, state: 'succeeded' };
+    const emit = spyOn(component.receiptSelected, 'emit');
+    component.selectReceipt();
+    const request = http.expectOne('/api/jobs/job-1/?project_id=project-a');
+    expect(request.request.transferCache).toBeFalse();
+    expect(emit).not.toHaveBeenCalled();
+    request.flush({ ...job, state: 'succeeded' });
+    expect(emit).toHaveBeenCalledOnceWith({ ...job, state: 'succeeded' });
+  });
+  it('does not refresh or discard job context when a review action temporarily disables selection', () => {
+    component.job = { ...job, state: 'succeeded' };
+    component.ngOnChanges({
+      evidenceEnabled: {
+        previousValue: true,
+        currentValue: false,
+        firstChange: false,
+        isFirstChange: () => false,
+      },
+    });
+    expect(component.job.id).toBe('job-1');
+    http.expectNone('/api/jobs/datasets/1/?project_id=project-a');
+  });
+  it('withholds a denied selection and ignores a receipt from a superseded context', () => {
+    component.evidenceEnabled = true;
+    component.job = { ...job, state: 'succeeded' };
+    const emit = spyOn(component.receiptSelected, 'emit');
+    component.selectReceipt();
+    http
+      .expectOne('/api/jobs/job-1/?project_id=project-a')
+      .flush({}, { status: 403, statusText: 'Forbidden' });
+    expect(emit).not.toHaveBeenCalled();
+    component.job = { ...job, state: 'succeeded' };
+    component.selectReceipt();
+    const old = http.expectOne('/api/jobs/job-1/?project_id=project-a');
+    component.projectId = 'project-b';
+    component.ngOnChanges();
+    expect(old.cancelled).toBeTrue();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-b').flush(directory);
+    expect(emit).not.toHaveBeenCalled();
+  });
   it('pins prepared CSV bytes and preserves the exact scoring request after an uncertain response', () => {
     component.role = 'developer';
     component.selectInput(27);
