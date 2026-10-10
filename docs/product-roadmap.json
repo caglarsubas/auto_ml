@@ -1208,6 +1208,11 @@
       "date": "2026-10-11",
       "packet": "P29",
       "event": "Initial fresh AMD64 CI build passed but its Moby V1 export metadata failed the strict graph check. A bounded trusted-output normalization repair retains strict consumer checks, adds four regressions (74 packaging cases total), repeats ARM64 empty-slot import and blocks changed post-load engine identity. Native application/runtime and scientific budgets are unchanged; final-head CI remains separate evidence."
+    },
+    {
+      "date": "2026-10-11",
+      "packet": "P29",
+      "event": "Retained CI member receipts isolate the remaining trusted-normalizer fault: legitimate V1 metadata can contain runtime config. The observed fixture fails before repair and all 123 focused cases pass after it. Strict normalized-consumer graph and post-load identity checks stay intact; native scientific/runtime source and budgets remain unchanged."
     }
   ],
   "implementation_packets": [

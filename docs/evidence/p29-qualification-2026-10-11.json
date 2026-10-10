@@ -16,10 +16,10 @@
     "conclusion": "success",
     "all_six_checks": "passed"
   },
-  "source_binding": "The unchanged native runtime/application in 6fa5fca9 is bound to both complete local metadata suites and the final fixed API image. A subsequent Moby archive compatibility repair in 5e1795ad qualifies 74 packaging cases plus 49 ledger invariants and repeats exact empty-slot ARM64 export/import. Exact final-head six-job CI, including fresh AMD64 packaging and a complete PostgreSQL matrix, remains separate PR evidence.",
+  "source_binding": "The unchanged native runtime/application in 6fa5fca9 is bound to both complete local metadata suites and the final fixed API image. Subsequent Moby compatibility hardening is pinned separately: 74 packaging cases and 49 ledger invariants pass, including a retained failing-before/passing-after case for the observed V1 config shape. ARM64 empty-slot import was repeated after the initial compatibility repair; later changes refine only trusted daemon metadata handling and neutral error diagnostics. Exact final-head six-job CI, including fresh AMD64 packaging and a complete PostgreSQL matrix, remains separate PR evidence.",
   "source_sha256": {
     ".github/workflows/ci.yml": "b93198984ed7c0ff1b08f25a474b54dbcdf6006523022338ebe0df28db807dba",
-    "backend/tests/unit/test_private_api_package.py": "b51089240aaf6f0bbf7e38f1bbeab3c9d3825a88538f548c97976f97b040479b",
+    "backend/tests/unit/test_private_api_package.py": "0728fd6e0bf651678a0038b59cd1f6d0465b122ada036b72cfbf24d6e231dd10",
     "docker-compose.private-api.yml": "cd55b9767b5e3ba829ff9de36689952715c64fc10103e6874a730ecf71388f25",
     "docker/private-api.Dockerfile": "4af76fcf5a426cc8123388de8c6bcc31b00aef8017a44939992c785337136f20",
     "docker/private-api.requirements.lock": "cc7d8ad6a52cf73eaa34e22b0fbe8846650fc14b88ba5e0b4a210a46849c3538",
@@ -28,7 +28,7 @@
     "docs/PRIVATE_API_PACKAGING_IMPLEMENTATION.md": "98f334f33f8f5c1e0a5b67b0d82e1deb95b83c66441aad6507c8b24c3ac06914",
     "docs/PRODUCT_DEVELOPMENT_ROADMAP.md": "e7e5954703c127bdb9bc12e6c9044662d61617e683124952cefc322469fac41a",
     "docs/product-roadmap.json": "91cff62ed6456faaddc83939999199caa3afa4fe1acc6f5b046c5b045f987ab9",
-    "scripts/private_api_package.py": "0699477e36778631372d50bebe7efa7792ee13c54317f06321b5f2d935bb2fbd",
+    "scripts/private_api_package.py": "5e65b4fb604c7efb827b576d2ca96e50e8a3b380a3f9bb619f8e6b6f9d1307d4",
     "scripts/private_runtime_manifest.py": "8376a193eb1110da837a6658277f17ebd6b55a1cd130f8852eb591ffe64b4109",
     "scripts/private_service.py": "5b3b06f6ab17587f622865ddc711455a45e21108c79c4d5cc5e434e09cac813e",
     "scripts/qualify_postgres_fixture.py": "2a2c9e1841f32d7efc77909dd41451c4f8e24f6a3804ae1b2da66cd0f79f0203",
@@ -173,6 +173,20 @@
       "run_url": "https://github.com/caglarsubas/auto_ml/actions/runs/38074544017",
       "failing_step": "Verify offline handoff into an empty image slot",
       "reported_cause": "package_archive_graph_invalid"
+    },
+    {
+      "finding": "CI archive member receipts from run 38076055940 identify a legitimate V1 compatibility record containing config; the secondary-manifest filter was too broad",
+      "repair": "A representative fixture fails once before repair (two negative cases still pass), then all 123 focused cases pass. Permit the V1 runtime config only in trusted normalization; typed secondary graphs and every extra consumer blob remain rejected. No import or scientific budget is relaxed.",
+      "run_url": "https://github.com/caglarsubas/auto_ml/actions/runs/38076055940",
+      "failing_before": {
+        "failed": 1,
+        "passed": 2,
+        "junit_sha256": "910f383af73cec65f16aa83a864b6bcf747d519e336af9ab9cf1eb92e24d99ce"
+      },
+      "passing_after": {
+        "passed": 123,
+        "junit_sha256": "be0cc4954b694eaf8cb92bbc37b43ce1a14c117056e2a80ec07589d4b48bb7ea"
+      }
     }
   ],
   "qualification_limits": [
@@ -198,5 +212,5 @@
     "customer_acceptance": "not_claimed"
   },
   "native_runtime_application_source_commit": "6fa5fca97116af441ddef29087e93b17e3426de9",
-  "offline_packager_source_commit": "5e1795ad10b19cf4b602a08b8f414c8bab8dc2b8"
+  "offline_packager_source_commit": "038e2121e9532d3d45bbeab8c7e84109f3429536"
 }
