@@ -28,7 +28,12 @@ for (const task of ['classification', 'regression'] as const) {
       },
     });
     expect(uploaded.status()).toBe(201);
-    const fileId = (await uploaded.json()).id;
+    const registered = await uploaded.json();
+    const fileId = registered.id;
+    const registeredInput = await api.get(registered.file);
+    expect(registeredInput.status()).toBe(200);
+    const registeredBytes = await registeredInput.body();
+    let retainedScoring = false;
     try {
       const preprocessed = await api.post('preprocessing/run/', {
         data: {
@@ -434,7 +439,7 @@ for (const task of ['classification', 'regression'] as const) {
       const preparedInput = await api.get(`jobs/datasets/${fileId}/input/`);
       expect(preparedInput.status()).toBe(200);
       expect((await preparedInput.json()).sha256).toBe(
-        createHash('sha256').update(csv).digest('hex'),
+        createHash('sha256').update(registeredBytes).digest('hex'),
       );
       const queuedScore = await api.post(`jobs/datasets/${fileId}/`, {
         data: {
@@ -447,6 +452,7 @@ for (const task of ['classification', 'regression'] as const) {
         },
       });
       expect(queuedScore.status()).toBe(202);
+      retainedScoring = true;
       const jobId = (await queuedScore.json()).id;
       await expect
         .poll(async () => (await (await api.get(`jobs/${jobId}/`)).json()).state, {
@@ -471,7 +477,7 @@ for (const task of ['classification', 'regression'] as const) {
         jobReceipt.result_sha256,
       );
       await writeFile(testInfo.outputPath('offline-package.zip'), packBytes);
-      await writeFile(testInfo.outputPath('offline-input.csv'), csv);
+      await writeFile(testInfo.outputPath('offline-input.csv'), registeredBytes);
       await writeFile(testInfo.outputPath('offline-receipt.json'), receiptBytes);
       await writeFile(
         testInfo.outputPath('offline-context.json'),
@@ -600,7 +606,12 @@ for (const task of ['classification', 'regression'] as const) {
         }
       }
     } finally {
-      expect((await api.delete(`declaration/${fileId}/`)).status()).toBe(204);
+      const removed = await api.delete(`declaration/${fileId}/`);
+      expect(removed.status()).toBe(retainedScoring ? 409 : 204);
+      if (retainedScoring) {
+        expect((await removed.json()).error_code).toBe('dataset_retained_for_review');
+        expect((await api.get(`declaration/${fileId}/`)).status()).toBe(200);
+      }
     }
   });
 }
