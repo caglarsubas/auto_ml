@@ -133,6 +133,17 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write('DECLARAI_PRIVATE_API_IMAGE=' + record['image_id'] + '\n')
           PY
+      - name: Verify offline handoff into an empty image slot
+        run: |
+          python scripts/private_api_package.py export --image "$DECLARAI_PRIVATE_API_IMAGE" /tmp/declarai-private-handoff > test-reports/postgresql/fixed-api-export.json
+          expected=$(python -c "import json; print(json.load(open('test-reports/postgresql/fixed-api-export.json'))['manifest_sha256'])")
+          python scripts/private_api_package.py verify /tmp/declarai-private-handoff --expected-manifest-sha256 "$expected" > test-reports/postgresql/fixed-api-verify.json
+          docker image rm declarai-private-api:ci
+          if docker image inspect "$DECLARAI_PRIVATE_API_IMAGE" >/dev/null 2>&1; then
+            echo "Owned image slot was not empty before import" >&2
+            exit 1
+          fi
+          python scripts/private_api_package.py load /tmp/declarai-private-handoff --expected-manifest-sha256 "$expected" > test-reports/postgresql/fixed-api-load.json
       - name: Qualify disposable PostgreSQL fixture
         run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE"
       - name: Enforce existing skip budget
@@ -193,7 +204,7 @@ jobs:
         run: pip install "ruff>=0.9"
       - name: Ruff check
         working-directory: backend
-        run: ruff check .
+        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/qualify_private_api_image.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
 
   # ---------------------------------------------------------------------------
   # Frontend static analysis (ESLint + Prettier)

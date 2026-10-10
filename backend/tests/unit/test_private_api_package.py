@@ -397,7 +397,7 @@ def test_native_server_config_has_no_untrusted_forwarder_or_control_socket(modul
     assert namespace["max_requests"] == 0
     assert namespace["control_socket_disable"] is True
     assert namespace["reload"] is False and namespace["proxy_protocol"] is False
-    assert namespace["secure_scheme_headers"] == {} and namespace["forwarder_headers"] == []
+    assert namespace["secure_scheme_headers"] == {} and namespace["forwarder_headers"] == ""
     assert namespace["umask"] == 0o007 and namespace["accesslog"] is None
 
 
@@ -421,9 +421,81 @@ def test_build_requires_exact_dependency_digest_and_owned_tag(modules, monkeypat
 def test_normalization_drops_oci_index_and_exports_only_one_tag_free_graph(modules, tmp_path):
     package, _, _ = modules
     source, target = tmp_path / "trusted-save.tar", tmp_path / "package.tar"
-    image = write_archive(source, extra={"index.json": b"potential alternate graph", "oci-layout": b"metadata"})
+    image = write_archive(source)
     package.normalize_save(source, target)
     package.verify_archive(target, image)
     with tarfile.open(target) as archive:
         assert len(archive.getnames()) == 3
         assert "index.json" not in archive.getnames()
+
+
+def write_oci_archive(path, fault=None):
+    config, layer = b'{"architecture":"arm64","os":"linux"}', b"unit layer; never imported"
+    blobs = {}
+
+    def descriptor(data, media):
+        digest = hashlib.sha256(data).hexdigest()
+        blobs["blobs/sha256/" + digest] = data
+        return {"mediaType": media, "digest": "sha256:" + digest, "size": len(data)}
+
+    config_desc = descriptor(config, "application/vnd.oci.image.config.v1+json")
+    layer_desc = descriptor(layer, "application/vnd.oci.image.layer.v1.tar")
+    node = {
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": config_desc,
+        "layers": [layer_desc],
+    }
+    root = descriptor(json.dumps(node).encode(), node["mediaType"])
+    identity = root["digest"]
+    index = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [root]}
+    if fault == "multiple":
+        index["manifests"].append(root)
+    if fault == "tag":
+        root["annotations"] = {"org.opencontainers.image.ref.name": "unrelated:latest"}
+    if fault == "size":
+        root["size"] += 1
+    if fault == "identity":
+        identity = "sha256:" + "a" * 64
+    if fault == "blob":
+        blobs["blobs/sha256/" + layer_desc["digest"][7:]] = b"tampered layer same filesystem scope"
+    if fault == "extra_blob":
+        blobs["blobs/sha256/" + "a" * 64] = b"unrelated image"
+    legacy = [
+        {
+            "Config": "blobs/sha256/" + config_desc["digest"][7:],
+            "RepoTags": None,
+            "Layers": ["blobs/sha256/" + layer_desc["digest"][7:]],
+        }
+    ]
+    if fault == "legacy_disagreement":
+        legacy[0]["Layers"] = [legacy[0]["Config"]]
+    files = {
+        **blobs,
+        "index.json": json.dumps(index).encode(),
+        "manifest.json": json.dumps(legacy).encode(),
+        "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
+    }
+    with tarfile.open(path, "w", format=tarfile.USTAR_FORMAT) as archive:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return identity
+
+
+@pytest.mark.parametrize(
+    "fault", [None, "multiple", "tag", "size", "identity", "blob", "extra_blob", "legacy_disagreement"]
+)
+def test_oci_graph_preserves_engine_identity_and_rejects_secondary_effects(modules, tmp_path, fault):
+    package, _, _ = modules
+    source = tmp_path / "oci.tar"
+    image = write_oci_archive(source, fault)
+    if fault:
+        with pytest.raises(package.PackageError):
+            package.verify_archive(source, image)
+    else:
+        package.verify_archive(source, image)
+        target = tmp_path / "normalized.tar"
+        package.normalize_save(source, target)
+        package.verify_archive(target, image)

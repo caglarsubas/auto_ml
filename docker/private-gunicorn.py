@@ -21,7 +21,7 @@ proxy_protocol = False
 # The socket/its mount is the trust boundary; do not expose a TCP listener.
 secure_scheme_headers = {}
 forwarded_allow_ips = ""
-forwarder_headers = []
+forwarder_headers = ""
 accesslog = None
 errorlog = "-"
 loglevel = "warning"

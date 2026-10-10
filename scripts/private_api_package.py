@@ -213,10 +213,10 @@ def export(image, destination):
 
 
 def normalize_save(raw, destination):
-    """Reduce our trusted daemon's save to one tag-free legacy image graph.
+    """Retain a verified single-image graph from our trusted daemon's save.
 
-    Drop OCI indexes/annotations that could otherwise select other images or
-    tags independently of manifest.json. This never accepts a user archive.
+    Preserve OCI identity on containerd-backed Docker. No tags or secondary
+    images are permitted. This never accepts a user archive.
     """
     if not 0 < raw.stat().st_size <= MAX_IMAGE_BYTES:
         raise PackageError("package_image_size")
@@ -227,9 +227,17 @@ def normalize_save(raw, destination):
         records = json.load(source.extractfile(member))
         if len(records) != 1 or records[0].get("RepoTags") not in (None, []):
             raise PackageError("package_archive_tags_rejected")
-        names = ["manifest.json", records[0]["Config"], *records[0]["Layers"]]
-        if len(names) > 502 or len(names) != len(set(names)):
-            raise PackageError("package_archive_layers_invalid")
+        if "index.json" in source.getnames():
+            index = source.getmember("index.json")
+            if not 0 < index.size <= MAX_METADATA_BYTES:
+                raise PackageError("package_archive_metadata_invalid")
+            identity = json.load(source.extractfile(index))["manifests"][0]["digest"]
+        else:
+            config = source.getmember(records[0]["Config"])
+            if not 0 < config.size <= MAX_METADATA_BYTES:
+                raise PackageError("package_archive_metadata_invalid")
+            identity = "sha256:" + hashlib.sha256(source.extractfile(config).read()).hexdigest()
+        names = verify_archive(raw, identity)
         for name in names:
             item = source.getmember(name)
             if not item.isfile() or item.size > MAX_IMAGE_BYTES:
@@ -300,16 +308,83 @@ def verify_archive(path, image_id):
             if len(records) != 1 or records[0].get("RepoTags") not in (None, []):
                 raise PackageError("package_archive_tags_rejected")
             config = payload(records[0]["Config"])
-            if "sha256:" + hashlib.sha256(config).hexdigest() != image_id:
-                raise PackageError("package_archive_image_mismatch")
             layers = records[0]["Layers"]
             if not isinstance(layers, list) or not layers or len(layers) > 500:
                 raise PackageError("package_archive_layers_invalid")
             for layer in layers:
                 if entries[layer][2] == b"5":
                     raise PackageError("package_archive_layers_invalid")
-            if set(entries) != {"manifest.json", records[0]["Config"], *layers}:
+            required = {"manifest.json", records[0]["Config"], *layers}
+            if "index.json" in entries or "oci-layout" in entries:
+                if json.loads(payload("oci-layout")) != {"imageLayoutVersion": "1.0.0"}:
+                    raise PackageError("package_archive_oci_invalid")
+                index = json.loads(payload("index.json"))
+                required.update({"index.json", "oci-layout"})
+
+                def select(node):
+                    if (
+                        set(node) != {"schemaVersion", "mediaType", "manifests"}
+                        or node["schemaVersion"] != 2
+                        or len(node["manifests"]) != 1
+                    ):
+                        raise PackageError("package_archive_oci_selection_invalid")
+                    descriptor = node["manifests"][0]
+                    if set(descriptor) - {"mediaType", "digest", "size", "platform"}:
+                        raise PackageError("package_archive_oci_annotation_rejected")
+                    return descriptor
+
+                def blob(descriptor, metadata=True):
+                    if set(descriptor) - {"mediaType", "digest", "size", "platform"}:
+                        raise PackageError("package_archive_oci_annotation_rejected")
+                    digest = descriptor["digest"]
+                    if not DIGEST.fullmatch(digest):
+                        raise PackageError("package_archive_oci_digest_invalid")
+                    name = "blobs/sha256/" + digest[7:]
+                    offset, size, kind = entries[name]
+                    if kind == b"5" or type(descriptor["size"]) is not int or descriptor["size"] != size:
+                        raise PackageError("package_archive_oci_size_invalid")
+                    required.add(name)
+                    archive.seek(offset)
+                    result = hashlib.sha256()
+                    remaining = size
+                    while remaining:
+                        block = archive.read(min(1024 * 1024, remaining))
+                        if not block:
+                            raise PackageError("package_archive_truncated")
+                        result.update(block)
+                        remaining -= len(block)
+                    if result.hexdigest() != digest[7:]:
+                        raise PackageError("package_archive_oci_digest_invalid")
+                    return json.loads(payload(name)) if metadata else name
+
+                descriptor = select(index)
+                if descriptor["digest"] != image_id:
+                    raise PackageError("package_archive_image_mismatch")
+                node = blob(descriptor)
+                if descriptor["mediaType"] == "application/vnd.oci.image.index.v1+json":
+                    descriptor = select(node)
+                    node = blob(descriptor)
+                if (
+                    descriptor["mediaType"]
+                    not in (
+                        "application/vnd.oci.image.manifest.v1+json",
+                        "application/vnd.docker.distribution.manifest.v2+json",
+                    )
+                    or node.get("schemaVersion") != 2
+                    or set(node) - {"schemaVersion", "mediaType", "config", "layers"}
+                ):
+                    raise PackageError("package_archive_oci_manifest_invalid")
+                if blob(node["config"], metadata=False) != records[0]["Config"]:
+                    raise PackageError("package_archive_oci_config_invalid")
+                if [blob(layer, metadata=False) for layer in node["layers"]] != layers:
+                    raise PackageError("package_archive_oci_layers_invalid")
+            elif "sha256:" + hashlib.sha256(config).hexdigest() != image_id:
+                raise PackageError("package_archive_image_mismatch")
+            directories = {name for name, item in entries.items() if item[2] == b"5"}
+            parents = {p.as_posix() for name in required for p in PurePosixPath(name).parents if p.as_posix() != "."}
+            if set(entries) - directories != required or not directories.issubset(parents):
                 raise PackageError("package_archive_graph_invalid")
+            return sorted(required)
     except PackageError:
         raise
     except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, RecursionError):
@@ -465,7 +540,16 @@ def build(base_image, tag):
             metadata["dependency_image_id"] = dependencies["Id"]
             source.write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n")
             run(
-                ["docker", "build", "--build-arg", "DEPENDENCY_IMAGE=" + reference, "--tag", tag, str(destination)],
+                [
+                    "docker",
+                    "build",
+                    "--provenance=false",
+                    "--build-arg",
+                    "DEPENDENCY_IMAGE=" + reference,
+                    "--tag",
+                    tag,
+                    str(destination),
+                ],
                 timeout=900,
             )
     finally:
