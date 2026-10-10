@@ -1,0 +1,134 @@
+{
+  "packet": "P23",
+  "date": "2026-10-10",
+  "status": "tested",
+  "application_source_commit": "f0f73ca332d62210aecc565dfede941a98b343a5",
+  "implementation_base": "55aee3a662934c267dbe963fdcb78808a8f0e93b",
+  "verified_base_pr": {
+    "number": 112,
+    "state": "MERGED",
+    "merged_at": "2026-10-10T08:13:59Z",
+    "main_ci_run": 38037164967,
+    "all_six_jobs": "success"
+  },
+  "scope": [
+    "D07"
+  ],
+  "application_test_helper_sha256": {
+    "backend/execution_jobs/preflight.py": "fa001c74ed6579d04037533b3f1dc937846dbac79254c19530c2c6b45373230b",
+    "backend/execution_jobs/management/commands/check_job_runtime.py": "032020474ba2e4b9e81df88a1f1e39bf24919d7588bd291dc3e38a4ee8d46b08",
+    "backend/tests/unit/test_job_preflight.py": "78d892f12aa84c187658a3c666ee31cc03903eb655f12c313735702511a7756a",
+    "docker/private-job-entrypoint.sh": "cee8a0415baa5290556f2d8f554755a26ce5265ad7d01ed8385e404096c7b2c0",
+    "scripts/qualify_private_jobs.py": "b2d8235fe8acd9ab75ce2714f62d6779fcebc5cb5b8846aa4989f63c165f34f5",
+    "scripts/qualify_postgres_fixture.py": "4d9c1b0c7f60db063343f9405e0d9183301367c1d5f4914a2b14b3c2a61fed8a"
+  },
+  "qualification": [
+    {
+      "name": "Full SQLite backend marked suite",
+      "status": "passed",
+      "passed": 2032,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 302.87,
+      "combined_coverage_percent": 70.73,
+      "report": "test-reports/p23/backend.log"
+    },
+    {
+      "name": "Full TLS PostgreSQL backend marked suite",
+      "status": "passed",
+      "passed": 2032,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 320.36,
+      "combined_coverage_percent": 70.73,
+      "report": "test-reports/p23/postgresql/postgresql.log"
+    },
+    {
+      "name": "Private startup and safe-error regressions",
+      "status": "passed",
+      "new_cases": 12,
+      "scenarios": [
+        "actual connection attempts in preflight interface",
+        "profile/disabled/non-PostgreSQL/no-TLS/pending-migration/storage/broker rejection",
+        "neutral errors with no exception credential values",
+        "fixed launcher rejects downgrade/arbitrary command/extra arguments"
+      ],
+      "report": "test-reports/p23/preflight-final.log"
+    },
+    {
+      "name": "Actual private TLS job runtime and quiescent restore",
+      "status": "passed",
+      "scenarios": [
+        "authenticated TLS Redis and TLS PostgreSQL",
+        "wrong CA/hostname/credentials block actual preflight",
+        "real broker/AOF removal with committed requests unchanged",
+        "exact original and restored request/authority/specification/lease/event/result receipts and artifact hashes",
+        "empty broker and restored database/artifacts",
+        "actual private launcher/prefork worker/independent dispatcher",
+        "natural original 180-second controlled abandoned metadata lease expiry",
+        "stale token fenced",
+        "pending jobs complete once",
+        "terminal receipts/history and original event prefixes preserved",
+        "duplicate messages cannot rerun/adopt terminal requests"
+      ],
+      "model_state_loaded": false,
+      "orphan_origin": "Controlled native claim, not an additional killed-active-worker drill",
+      "production_recovery": "not_qualified",
+      "report": "test-reports/p23/postgresql/private-jobs.log"
+    },
+    {
+      "name": "Preserved P22 actual killed worker/cancellation/duplicate/failed-connection fixture",
+      "status": "passed",
+      "synthetic_artifact_bytes_per_attempt": 402653202,
+      "report": "test-reports/p23/postgresql/native-jobs.log"
+    },
+    {
+      "name": "Preserved private identity/projects/metadata restart/quiescent restore",
+      "status": "passed",
+      "report": "test-reports/p23/postgresql/postgresql-summary.json"
+    },
+    {
+      "name": "Frontend units unchanged",
+      "status": "passed",
+      "passed": 586,
+      "report": "test-reports/p23/frontend-unit.log"
+    },
+    {
+      "name": "Backend Ruff and shell/Python syntax",
+      "status": "passed",
+      "report": "test-reports/p23/ruff.log"
+    },
+    {
+      "name": "Canonical ledger/projection invariants",
+      "status": "passed",
+      "cases": 49,
+      "report": "test-reports/p23/roadmap-final.log"
+    }
+  ],
+  "budgets": {
+    "coverage_gate_percent": 50,
+    "skip_budget": 15,
+    "datasets_assertions_timeouts_skips_and_existing_coverage_scope": "unchanged",
+    "job_lease_seconds": 180,
+    "job_attempts": 3,
+    "job_expiry_hours": 1
+  },
+  "fixture_environment": {
+    "core_image": "declarai-core-p22:local",
+    "core_image_id": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
+    "source_mount": "Qualified checkout; not a production/offline image qualification",
+    "postgresql": "17.11",
+    "redis_broker": "Redis 7 Alpine with ephemeral fixture password and self-signed certificate",
+    "cleanup": "Invocation-owned containers/networks/process groups and temporary secrets/state removed; primary services untouched"
+  },
+  "remaining": [
+    "Production installation/offline dependency packaging and locked runtime supply",
+    "Private supervisor, enforced resource/clock/hard-timeout drills",
+    "Live concurrent backup, machine/power/storage failure and recovery objectives",
+    "Cross-installation fencing and updates after snapshot",
+    "Training/search/scoring job migration and durable assistant/mission grants",
+    "Customer Redis ACL/mTLS/network policy",
+    "Expert Linux gVisor/runsc isolation",
+    "Every milestone/release/value/design-partner/customer acceptance gate"
+  ]
+}

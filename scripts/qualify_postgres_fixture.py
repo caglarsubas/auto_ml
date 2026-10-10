@@ -48,9 +48,9 @@ def main():
         parser.error("Reports must be inside the ignored test-reports directory.")
     reports.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex[:12]
-    network, db, redis, runner = (
+    network, db, redis, runner, job_broker = (
         f"declarai-fixture-{token}-{suffix}"
-        for suffix in ("net", "db", "redis", "runner")
+        for suffix in ("net", "db", "redis", "runner", "job-broker")
     )
     with tempfile.TemporaryDirectory(prefix="declarai-pg-fixture-") as directory:
         fixture = Path(directory)
@@ -66,7 +66,7 @@ def main():
         ]:
             (fixture / name).write_text(value)
             (fixture / name).chmod(0o600)
-        for name in ["server", "wrong-ca"]:
+        for name in ["server", "wrong-ca", "job-server"]:
             command(
                 [
                     "openssl",
@@ -78,15 +78,40 @@ def main():
                     "-days",
                     "1",
                     "-subj",
-                    "/CN=localhost",
+                    "/CN=job-broker" if name == "job-server" else "/CN=localhost",
                     "-addext",
-                    "subjectAltName=DNS:localhost,DNS:postgres,IP:127.0.0.1",
+                    "subjectAltName=DNS:job-broker,IP:127.0.0.1" if name == "job-server" else "subjectAltName=DNS:localhost,DNS:postgres,IP:127.0.0.1",
                     "-keyout",
                     str(fixture / (name + ".key")),
                     "-out",
                     str(fixture / (name + ".crt")),
                 ]
             )
+        broker_password = secrets.token_urlsafe(32)
+        (fixture / "job-broker.conf").write_text(
+            "port 0\ntls-port 6379\ntls-cert-file /fixture/job-server.crt\n"
+            "tls-key-file /fixture/job-server.key\ntls-ca-cert-file /fixture/job-server.crt\n"
+            "tls-auth-clients no\nappendonly yes\ndir /data\nrequirepass " + broker_password + "\n"
+        )
+        (fixture / "job-broker.conf").chmod(0o600)
+
+        job_tls = fixture / "job-tls"
+        job_tls.mkdir()
+        for name in ["job-server.crt", "job-server.key", "job-broker.conf"]:
+            shutil.copy2(fixture / name, job_tls / name)
+
+        def start_job_broker():
+            command(["docker", "create", "--name", job_broker, "--network", network,
+                     "--network-alias", "job-broker", "-p", "127.0.0.1::6379", "redis:7-alpine",
+                     "sh", "-c", "chown -R redis:redis /fixture; exec docker-entrypoint.sh redis-server /fixture/job-broker.conf"])
+            command(["docker", "cp", str(job_tls), job_broker + ":/fixture"])
+            command(["docker", "start", job_broker])
+            port = command(["docker", "port", job_broker, "6379/tcp"]).decode().strip().rsplit(":", 1)[1]
+            host = "job-broker:6379" if args.runner_image else "127.0.0.1:" + port
+            (fixture / "job-broker-url").write_text("rediss://:" + broker_password + "@" + host + "/1")
+            (fixture / "job-broker-url").chmod(0o600)
+            return port
+
         try:
             command(["docker", "network", "create", network])
             command(
@@ -130,6 +155,7 @@ def main():
                     "redis:7-alpine",
                 ]
             )
+            job_broker_port = start_job_broker()
             ready = False
             for _ in range(60):
                 result = subprocess.run(
@@ -208,6 +234,7 @@ def main():
                 "DECLARAI_DB_SSLMODE": "verify-full",
                 "DECLARAI_DB_SSLROOTCERT": str(fixture / "server.crt"),
                 "DECLARAI_FIXTURE_STATE": str(fixture / "state.json"),
+                "DECLARAI_JOB_FIXTURE_STATE": str(fixture / "jobs-state.json"),
                 "REDIS_URL": f"redis://{redis}:6379/0"
                 if args.runner_image
                 else f"redis://localhost:{redis_port}/0",
@@ -220,6 +247,9 @@ def main():
                 "DJANGO_SECRET_KEY",
                 "DECLARAI_DB_PASSWORD",
                 "DJANGO_TRUST_PROXY_TLS",
+                "DECLARAI_JOB_BROKER_URL",
+                "DECLARAI_JOB_BROKER_URL_FILE",
+                "DECLARAI_JOB_BROKER_CA_FILE",
             ]:
                 env.pop(name, None)
 
@@ -436,6 +466,43 @@ def main():
                 ["scripts/qualify_private_identity.py"], report="private-identity.log"
             )
             run_python(["scripts/qualify_private_projects.py"], report="private-projects.log")
+            job_env = {
+                "DECLARAI_JOB_BROKER_URL_FILE": str(fixture / "job-broker-url"),
+                "DECLARAI_JOB_BROKER_CA_FILE": str(fixture / "job-server.crt"),
+            }
+            preflight = ["backend/manage.py", "check_job_runtime"]
+            run_python(preflight, job_env, report="private-jobs.log")
+            run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_CA_FILE": str(fixture / "wrong-ca.crt")},
+                       succeed=False, report="job-tls-wrong-ca.log", rejection="job_broker_unavailable")
+            broker_ip = command(["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", job_broker]).decode().strip()
+            bad_host = broker_ip + ":6379" if args.runner_image else "localhost:" + job_broker_port
+            wrong_host_file = fixture / "job-wrong-host-url"
+            wrong_host_file.write_text("rediss://:" + broker_password + "@" + bad_host + "/1")
+            wrong_host_file.chmod(0o600)
+            run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_URL_FILE": str(wrong_host_file)},
+                       succeed=False, report="job-tls-wrong-host.log", rejection="job_broker_unavailable")
+            wrong_auth_file = fixture / "job-wrong-auth-url"
+            host = "job-broker:6379" if args.runner_image else "127.0.0.1:" + job_broker_port
+            wrong_auth_file.write_text("rediss://:invalid-fixture-password@" + host + "/1")
+            wrong_auth_file.chmod(0o600)
+            run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_URL_FILE": str(wrong_auth_file)},
+                       succeed=False, report="job-wrong-auth.log", rejection="job_broker_unavailable")
+            run_python(["scripts/qualify_private_jobs.py", "seed"], job_env, report="private-jobs.log")
+            # Quiesce all owned job processes, then remove the actual broker and its
+            # anonymous AOF volume. PostgreSQL metadata remains the outbox authority.
+            command(["docker", "rm", "-f", "-v", job_broker])
+            run_python(["scripts/qualify_private_jobs.py", "broker-down"], job_env, report="private-jobs.log")
+            jobs_dump = command(["docker", "exec", db, "pg_dump", "-U", "declarai_fixture_admin", "-Fc", "declarai_fixture"])
+            command(["docker", "exec", db, "createdb", "-U", "declarai_fixture_admin", "-O", "declarai_fixture_app", "declarai_fixture_jobs_restored"])
+            command(["docker", "exec", "-i", db, "pg_restore", "--exit-on-error", "--no-owner", "--no-acl", "-U", "declarai_fixture_app", "-d", "declarai_fixture_jobs_restored"], data=jobs_dump)
+            (fixture / "restored-job-artifacts").mkdir()
+            shutil.copytree(fixture / "artifacts", fixture / "restored-job-artifacts", dirs_exist_ok=True)
+            start_job_broker()  # Empty broker, no restoration of Celery/AOF queues.
+            run_python(["scripts/qualify_private_jobs.py", "verify"], job_env, report="private-jobs.log")
+            restored_job_env = {**job_env, "DECLARAI_DB_NAME": "declarai_fixture_jobs_restored",
+                                "DECLARAI_MEDIA_ROOT": str(fixture / "restored-job-artifacts")}
+            run_python(["scripts/qualify_private_jobs.py", "verify"], restored_job_env, report="private-jobs.log")
+            run_python(["scripts/qualify_private_jobs.py", "recover"], restored_job_env, report="private-jobs.log")
             test_env = {
                 "DECLARAI_RUNTIME_PROFILE": "development",
                 "DJANGO_DEBUG": "true",
@@ -488,6 +555,11 @@ def main():
                 "restart_persistence": "passed",
                 "quiescent_database_artifact_restore": "passed",
                 "full_postgresql_suite": "passed",
+                "private_job_broker_tls_authentication": "passed",
+                "job_wrong_ca_hostname_credentials": "blocked",
+                "actual_job_broker_loss": "passed",
+                "quiescent_job_database_artifact_restore_empty_broker": "passed",
+                "natural_orphan_lease_recovery": "passed",
                 "production_deployment_recovery": "not_qualified",
             }
             (reports / "postgresql-summary.json").write_text(
@@ -496,7 +568,7 @@ def main():
             print(json.dumps(summary))
         finally:
             # Only exact random names created by this invocation are eligible for cleanup.
-            for name in [runner, db, redis]:
+            for name in [runner, db, redis, job_broker]:
                 subprocess.run(
                     ["docker", "rm", "-f", "-v", name],
                     stdout=subprocess.DEVNULL,
