@@ -16,11 +16,10 @@
     "conclusion": "success",
     "all_six_checks": "passed"
   },
-  "executable_source_commit": "6fa5fca97116af441ddef29087e93b17e3426de9",
-  "source_binding": "Both complete metadata suites and the final portable fixed image qualify the executable source in 6fa5fca9. Later edits change documentation/ledger/evidence only. Exact final-head six-job CI and AMD64 public-dependency build are separate evidence recorded on the PR.",
+  "source_binding": "The unchanged native runtime/application in 6fa5fca9 is bound to both complete local metadata suites and the final fixed API image. A subsequent Moby archive compatibility repair in 5e1795ad qualifies 74 packaging cases plus 49 ledger invariants and repeats exact empty-slot ARM64 export/import. Exact final-head six-job CI, including fresh AMD64 packaging and a complete PostgreSQL matrix, remains separate PR evidence.",
   "source_sha256": {
     ".github/workflows/ci.yml": "b93198984ed7c0ff1b08f25a474b54dbcdf6006523022338ebe0df28db807dba",
-    "backend/tests/unit/test_private_api_package.py": "4b0a8d4f07e3db53e4686c5cf0343049fd961293410bba6bdfee6e1fea82e4b2",
+    "backend/tests/unit/test_private_api_package.py": "b51089240aaf6f0bbf7e38f1bbeab3c9d3825a88538f548c97976f97b040479b",
     "docker-compose.private-api.yml": "cd55b9767b5e3ba829ff9de36689952715c64fc10103e6874a730ecf71388f25",
     "docker/private-api.Dockerfile": "4af76fcf5a426cc8123388de8c6bcc31b00aef8017a44939992c785337136f20",
     "docker/private-api.requirements.lock": "cc7d8ad6a52cf73eaa34e22b0fbe8846650fc14b88ba5e0b4a210a46849c3538",
@@ -29,7 +28,7 @@
     "docs/PRIVATE_API_PACKAGING_IMPLEMENTATION.md": "98f334f33f8f5c1e0a5b67b0d82e1deb95b83c66441aad6507c8b24c3ac06914",
     "docs/PRODUCT_DEVELOPMENT_ROADMAP.md": "e7e5954703c127bdb9bc12e6c9044662d61617e683124952cefc322469fac41a",
     "docs/product-roadmap.json": "91cff62ed6456faaddc83939999199caa3afa4fe1acc6f5b046c5b045f987ab9",
-    "scripts/private_api_package.py": "c218c39b1fe07da57d727f90681446252970eeee95049a4fd541132214fd83c1",
+    "scripts/private_api_package.py": "0699477e36778631372d50bebe7efa7792ee13c54317f06321b5f2d935bb2fbd",
     "scripts/private_runtime_manifest.py": "8376a193eb1110da837a6658277f17ebd6b55a1cd130f8852eb591ffe64b4109",
     "scripts/private_service.py": "5b3b06f6ab17587f622865ddc711455a45e21108c79c4d5cc5e434e09cac813e",
     "scripts/qualify_postgres_fixture.py": "2a2c9e1841f32d7efc77909dd41451c4f8e24f6a3804ae1b2da66cd0f79f0203",
@@ -59,8 +58,8 @@
       "dataset_round_assertion_timeout_skip_budgets": "unchanged"
     },
     "focused_packaging_and_roadmap": {
-      "passed": 119,
-      "packaging_cases": 70,
+      "passed": 123,
+      "packaging_cases": 74,
       "roadmap_invariants": 49,
       "failures": 0
     },
@@ -119,12 +118,14 @@
       "image_absent_before_import": true,
       "owned_tag_removed": true,
       "no_services_started": true,
-      "manifest_sha256": "a43f0a662de5bfe4dabea5b4df70d7d3127a9e17bfeb527179c1c9a38a7b7b4b",
-      "archive_sha256": "c13087fd4deaf7b0d05ed32ef01ff95f01ef837ebf7b2b2f32564c0c2ed685dd",
+      "manifest_sha256": "033f8d97a624ec56349be2ca67b1b5d4634b2e00a8d33ccdb369a22160400001",
+      "archive_sha256": "cc88d027d372a9afd0f93ce13d86f5e234848bf7367915efad6524880ccd606d",
       "archive_bytes": 718325760,
       "native_platform": "linux/arm64",
       "cross_architecture_import": "not_qualified",
-      "tags_in_archive": false
+      "tags_in_archive": false,
+      "exporter_source_commit": "5e1795ad10b19cf4b602a08b8f414c8bab8dc2b8",
+      "engine_identity_translation": "blocked"
     }
   },
   "final_native_image": {
@@ -165,6 +166,13 @@
     {
       "finding": "Fresh scratch recipe omitted the AMD64 loader path",
       "repair": "Retain /lib64 with an empty-directory fallback on ARM64; require fresh AMD64 CI build"
+    },
+    {
+      "finding": "Initial AMD64 CI run 38074544017 built the fresh public image but export rejected Moby V1 compatibility config blobs",
+      "repair": "Validate bounded digest-named V1 metadata only in trusted daemon output, exclude it and compatibility-only fields from the normalized consumer graph, distinguish config and OCI engine identity, and reject changed identity after load",
+      "run_url": "https://github.com/caglarsubas/auto_ml/actions/runs/38074544017",
+      "failing_step": "Verify offline handoff into an empty image slot",
+      "reported_cause": "package_archive_graph_invalid"
     }
   ],
   "qualification_limits": [
@@ -188,5 +196,7 @@
     "technical_release": "open",
     "value_gate": "open",
     "customer_acceptance": "not_claimed"
-  }
+  },
+  "native_runtime_application_source_commit": "6fa5fca97116af441ddef29087e93b17e3426de9",
+  "offline_packager_source_commit": "5e1795ad10b19cf4b602a08b8f414c8bab8dc2b8"
 }

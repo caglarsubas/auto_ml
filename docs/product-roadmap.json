@@ -1203,6 +1203,11 @@
       "date": "2026-10-11",
       "packet": "P29",
       "event": "Final bounded source qualifies 70 packaging regressions, 49 roadmap invariants, both complete metadata suites (2271 passed and six skips each), real fixed-image Unix WSGI authority and exact empty-slot offline import. Retain initial runtime/OCI findings; complete installation, expert isolation, capacity, full reproduction and release/customer gates stay open."
+    },
+    {
+      "date": "2026-10-11",
+      "packet": "P29",
+      "event": "Initial fresh AMD64 CI build passed but its Moby V1 export metadata failed the strict graph check. A bounded trusted-output normalization repair retains strict consumer checks, adds four regressions (74 packaging cases total), repeats ARM64 empty-slot import and blocks changed post-load engine identity. Native application/runtime and scientific budgets are unchanged; final-head CI remains separate evidence."
     }
   ],
   "implementation_packets": [
