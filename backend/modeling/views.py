@@ -2606,17 +2606,25 @@ class VifDetailView(APIView):
         file_id = request.data.get('file_id')
         feature = request.data.get('feature')
         execution_id = request.data.get('execution_id')
+        diagnostic = request.data.get('diagnostic', 'numeric')
+        if diagnostic not in ('numeric', 'grouped'):
+            return Response({'error': 'diagnostic must be numeric or grouped.'}, status=400)
         if file_id is None or not isinstance(feature, str) or not feature or not execution_id:
             return Response({'error': 'file_id, feature and exact execution_id are required.',
                 'error_code': 'diagnostic_execution_required'}, status=400)
         try:
+            if diagnostic == 'grouped':
+                from modeling.grouped_collinearity import load_snapshot as load_grouped_snapshot
+                grouped = load_grouped_snapshot(int(file_id), execution_id)
+                return Response({'feature': feature, **grouped['groups'][feature],
+                    **{key: grouped[key] for key in ('execution_id', 'method', 'scope', 'row_count', 'limitations')}})
             summary, matrix = load_snapshot(int(file_id), execution_id)
             return Response(detail(summary, matrix, feature))
         except KeyError:
             return Response({'error': 'The feature is absent from this execution.',
                 'error_code': 'diagnostic_feature_unavailable'}, status=404)
         except (ValueError, TypeError, OSError):
-            return Response({'error': 'Centered diagnostic inputs are unavailable, invalid or outside the recorded budget. Select a verified supported execution or refit a new bounded version.',
+            return Response({'error': 'Diagnostic inputs are unavailable, invalid or outside the recorded budget. Select a verified supported execution or refit a new bounded version.',
                 'error_code': 'diagnostic_inputs_unavailable'}, status=409)
 
 

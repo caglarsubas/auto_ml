@@ -81,7 +81,7 @@ SPECIAL = {
     "job-detail",
     "job-scores",
 }
-READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail"}
+READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail", "vif-detail"}
 
 
 class AuthorityUnavailable(APIException):

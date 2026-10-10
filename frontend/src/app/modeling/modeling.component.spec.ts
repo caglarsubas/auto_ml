@@ -1869,6 +1869,27 @@ describe('ModelingComponent', () => {
     });
   });
   describe('immutable collinearity details', () => {
+    it('withholds grouped evidence from another execution and clears stale assistant context', () => {
+      const sharedService = TestBed.inject(SharedService);
+      const report = {
+        schema_version: 1,
+        method: 'centered_group_subspace_gvif_v1',
+        execution_id: 'run-a',
+        status: 'available',
+        groups: { category: { df: 2, gvif: 4, adjusted_gvif: Math.SQRT2, status: 'finite' } },
+      };
+      component.modelingStatus = {
+        execution_id: 'run-a',
+        model: { collinearity: { grouped: report } },
+      };
+      expect(component.groupedCollinearityRows[0].df).toBe(2);
+      sharedService.setAiCumulativeContext({ grouped_collinearity: report });
+      component.modelingStatus.execution_id = 'run-b';
+      expect(component.groupedCollinearity).toBeNull();
+      expect(component.groupedCollinearityRows).toEqual([]);
+      (component as any).pushModelingAiContext();
+      expect(sharedService.getAiCumulativeContext().grouped_collinearity).toBeNull();
+    });
     it('keeps non-finite states and provenance available to the assistant', () => {
       component.currentFileId = 1;
       component.modelingStatus = { execution_id: 'run-a', model: {} };

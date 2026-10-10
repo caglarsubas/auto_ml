@@ -51,7 +51,7 @@ def numeric_collinearity_frame(frame, encoding_report=None):
 
 
 DIAGNOSTIC_LIMITATIONS = {
-    'vif': 'Centered numeric training predictors only; category-derived columns are excluded. Mean imputation changes dependence. VIF is a descriptive auxiliary linear-regression diagnostic, not model importance, causal attribution, a statistical test or an automatic feature-removal gate. Grouped categorical diagnostics and sampling uncertainty remain unqualified. Historical values may use another method.',
+    'vif': 'Centered numeric training predictors only; category-derived columns are excluded. Mean imputation changes dependence. VIF is a descriptive auxiliary linear-regression diagnostic, not model importance, causal attribution, a statistical test or an automatic feature-removal gate. Category groups have a separate method and scope; sampling uncertainty remains unqualified. Historical values may use another method.',
     'combined_score': 'A ranking heuristic combining SHAP and gain percentiles; not an effect estimate, statistical test or validation gate.',
     'sequential_patterns': 'Consecutive near-duplicate patterns identify records for review; they do not establish causal relationships.',
 }

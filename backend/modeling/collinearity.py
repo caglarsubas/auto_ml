@@ -57,6 +57,8 @@ def vif(matrix, index):
 
 
 def write_snapshot(root, file_id, execution_id, frame, encoding_report=None):
+    from modeling.grouped_collinearity import ARRAY as GROUP_ARRAY, snapshot as grouped_snapshot
+
     numeric, preparation = numeric_diagnostic_inputs(frame, encoding_report)
     columns = list(numeric.columns)
     work = len(frame) * len(columns) ** 3
@@ -90,10 +92,15 @@ def write_snapshot(root, file_id, execution_id, frame, encoding_report=None):
         "limitations": DIAGNOSTIC_LIMITATIONS["vif"],
         "features": records,
     }
+    grouped, group_matrix = grouped_snapshot(frame, encoding_report)
+    grouped.update(file_id=int(file_id), execution_id=str(execution_id))
+    summary["grouped"] = grouped
     root = Path(root)
     (root / "diagnostics").mkdir(exist_ok=False)
     with (root / ARRAY).open("xb") as stream:
         np.savez_compressed(stream, matrix=matrix)
+    with (root / GROUP_ARRAY).open("xb") as stream:
+        np.savez_compressed(stream, matrix=group_matrix)
     with (root / META).open("x", encoding="utf-8") as stream:
         json.dump(summary, stream, indent=2, allow_nan=False)
     return summary
