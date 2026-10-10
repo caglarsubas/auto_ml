@@ -68,6 +68,36 @@ test('reviewer and developer complete an attributable keyboard workflow and expo
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const created = await openNewReview(page);
+  await page.getByRole('button', { name: 'Queue integrity check', exact: true }).focus();
+  const submitted = page.waitForResponse(
+    (r: any) => r.url().includes('/jobs/datasets/') && r.request().method() === 'POST',
+  );
+  await page.keyboard.press('Enter');
+  const jobResponse = await submitted;
+  expect(jobResponse.status()).toBe(202);
+  const job = await jobResponse.json();
+  expect(job.specification.bundle_id).toBe(created.bundle_id);
+  expect(job.specification.manifest_sha256).toBe(created.manifest_sha256);
+  await expect
+    .poll(async () => (await (await api.get(`jobs/${job.id}/`)).json()).state, { timeout: 30000 })
+    .toBe('succeeded');
+  await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
+  await expect(page.locator('app-package-jobs')).toContainText('Job state: succeeded');
+  const downloadButton = page.getByRole('button', { name: 'Download job receipt', exact: true });
+  await expect(downloadButton).toBeEnabled();
+  const jobDownload = page.waitForEvent('download');
+  await downloadButton.focus();
+  await page.keyboard.press('Enter');
+  const receiptDownload = await jobDownload;
+  expect(receiptDownload.suggestedFilename()).toBe(`job-${job.id}.json`);
+  const jobReceipt = JSON.parse(await readFile((await receiptDownload.path())!, 'utf8'));
+  expect(jobReceipt.events.map((e: any) => e.event_type)).toEqual([
+    'submitted',
+    'started',
+    'succeeded',
+  ]);
+  expect(jobReceipt.result.model_state_loaded).toBe(false);
+  expect(jobReceipt.production_use_approved).toBe(false);
   await page.getByLabel('Finding severity').selectOption('major');
   await page
     .getByLabel('Finding, response or disposition')

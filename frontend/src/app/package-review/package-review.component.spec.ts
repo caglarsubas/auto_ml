@@ -148,6 +148,12 @@ describe('Package review receipts and context', () => {
       ],
     };
     fixture.detectChanges();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-a').flush({
+      jobs_enabled: false,
+      jobs: [],
+      total: 0,
+      next_offset: null,
+    });
     expect(fixture.nativeElement.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
   });

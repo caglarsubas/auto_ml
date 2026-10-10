@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "packet": "P22",
+  "branch": "codex/durable-package-jobs",
+  "base_commit": "123bd1cef5d484d00bb063449e439ebe786d8ae8",
+  "qualified_application_source_commit": "0e5d46915769086112c318969523522d98cdc6f0",
+  "qualified_test_source_commit": "0e5d46915769086112c318969523522d98cdc6f0",
+  "source_binding": "Final application/test source is 0e5d4691. It includes request-expiry checks at each work checkpoint and final publication, two additional regressions and execution_jobs in the existing explicit coverage list. Both full marked matrices and the real process/browser/offline/MCP fixtures are repeated on that source. All 162 non-test/non-migration backend module hashes match the final fixed API image. Remaining ledger/evidence changes are documentation only.",
+  "baseline_verification": {
+    "pull_request": 111,
+    "merge_commit": "123bd1cef5d484d00bb063449e439ebe786d8ae8",
+    "merge_main_ci_run": 38021460448,
+    "successful_jobs": 6
+  },
+  "scope": "Partial D07/D12: one bounded, read-only, exact-package integrity job; durable DB requests/events/results, explicit Celery/Redis dispatch and lease/publication fencing. No model deserialization, refit, assessment, score parity, review approval, expert code or production/release acceptance.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker fixtures",
+    "core_image": "declarai-core-p22:local",
+    "core_image_id": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
+    "browser_image": "declarai-p22-api-final:local",
+    "browser_image_id": "sha256:d93f2729147966e6a282e994d8b032d75903479637c066c2ac5ed32afdfab8ba",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "celery": "5.6.3",
+    "postgresql": "17.11",
+    "node": "24.16.0",
+    "browser_runtime": "Django development runserver plus actual prefork Celery and independent dispatcher; not production serving",
+    "resource_profile": "Two CPUs/native threads per backend matrix; disjoint API/core fixture CPUs; no provider keys, telemetry disabled. Qualification owns its isolated installation. Process fixture injects worker kill, lease expiry and failed broker connection; it does not claim private Redis TLS or complete machine/broker/restore recovery."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "passed": 2020,
+      "skipped": 6,
+      "deselected": 62,
+      "coverage_measure": "combined statements and branches, matching pytest-cov gate",
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p22/backend-final.log",
+      "duration_seconds": 326.26,
+      "coverage_percent": 70.68,
+      "line_coverage_percent": 73.15,
+      "coverage_scope": "Existing apps plus execution_jobs; existing 50 percent gate, 15-skip budget and omissions unchanged"
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "passed": 2020,
+      "skipped": 6,
+      "deselected": 62,
+      "coverage_measure": "combined statements and branches, matching pytest-cov gate",
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p22/postgresql-final/postgresql.log",
+      "duration_seconds": 323.9,
+      "coverage_percent": 70.68,
+      "line_coverage_percent": 73.15,
+      "coverage_scope": "Existing apps plus execution_jobs; existing 50 percent gate, 15-skip budget and omissions unchanged"
+    },
+    {
+      "name": "New native job authority, fencing, cancellation and admission regressions",
+      "status": "passed",
+      "cases": 36,
+      "report": "test-reports/p22/focused-expiry.log"
+    },
+    {
+      "name": "Actual Celery process/Redis delivery with TLS PostgreSQL metadata",
+      "status": "passed",
+      "scenarios": [
+        "actual prefork Redis delivery",
+        "kill owned active worker process group then inject lease expiry",
+        "fresh-worker recovery",
+        "stale token rejected",
+        "duplicate delivery single publication",
+        "active cooperative cancellation",
+        "real failed broker connection retains committed request then recovers"
+      ],
+      "synthetic_artifact_bytes_per_attempt": 402653202,
+      "private_redis_tls": "not_qualified",
+      "production_recovery": "not_qualified",
+      "report": "test-reports/p22/postgresql-final/native-jobs.log"
+    },
+    {
+      "name": "Frontend units",
+      "status": "passed",
+      "passed": 586,
+      "new_cases": 6,
+      "statement_coverage_percent": 38.81,
+      "branch_coverage_percent": 31.92,
+      "report": "test-reports/p22/frontend-unit-final2.log"
+    },
+    {
+      "name": "Frontend build and lint",
+      "status": "passed",
+      "lint_errors": 0,
+      "lint_warnings": 170,
+      "reports": [
+        "test-reports/p22/frontend-build.log",
+        "test-reports/p22/frontend-lint.log"
+      ]
+    },
+    {
+      "name": "Governed browser/authenticated API",
+      "status": "passed",
+      "passed": 36,
+      "duration_seconds": 48.2,
+      "scenarios": [
+        "real reviewer queues exact package via keyboard",
+        "actual background completion and retained event/result receipt",
+        "freshly authorized keyboard receipt download",
+        "existing developer/reviewer findings/responses/disposition and package handoff",
+        "existing native training/scoring/project/session/assistant workflows"
+      ],
+      "report": "test-reports/p22/browser-expiry.log"
+    },
+    {
+      "name": "Real private TLS identity/project/restart/quiescent restore fixtures",
+      "status": "passed",
+      "production_job_restore": "not_qualified",
+      "report": "test-reports/p22/postgresql-final/postgresql-summary.json"
+    },
+    {
+      "name": "Actual MCP SDK stdio",
+      "status": "passed",
+      "registered_tools": 29,
+      "events": 14,
+      "completed": 8,
+      "denied": 6,
+      "job_mutation": "not_exposed",
+      "report": "test-reports/p22/mcp-stdio-expiry.log"
+    },
+    {
+      "name": "Native scoring parity compatibility",
+      "status": "passed",
+      "tasks": [
+        "classification",
+        "regression"
+      ],
+      "rows_per_task": 300,
+      "chunk_sizes": [
+        1,
+        17,
+        64
+      ],
+      "atol": 1e-12,
+      "rtol": 1e-12,
+      "max_absolute_difference": 0.0,
+      "report": "test-reports/p22/offline-scoring-expiry.log"
+    },
+    {
+      "name": "Fixed installed API source binding",
+      "status": "passed",
+      "backend_non_test_non_migration_modules": 162,
+      "all_hashes_match": true,
+      "report": "test-reports/p22/image-source-hashes-final.json"
+    },
+    {
+      "name": "Additive migration drift and optional development compose validation",
+      "status": "passed"
+    },
+    {
+      "name": "Canonical roadmap invariants and projection",
+      "status": "passed",
+      "cases": 49,
+      "report": "test-reports/p22/roadmap.log"
+    }
+  ],
+  "qualification_attempts": {
+    "initial_backend": "Admission supplied an extra argument to the strict digest validator; fixed before final matrices. The initial focused run failed 22 cases; the next run passed 33 with a clock mock exhausted by shared monotonic calls; the final focused run passed 34 unchanged assertions.",
+    "initial_frontend": "An unflushed nested job request, followed by attempted post-destruction fixture flush, failed one test; the corrected explicit fixture response passes all 586 units.",
+    "initial_browser": "Download readiness failed in two attempts (35 and 34 passes). The final clean fixture waits for server completion, performs one UI refresh and verifies all 36 workflows. No timeout, assertion, dataset, skip or coverage budget was weakened.",
+    "coverage_scope": "The existing explicit coverage source list omitted the new app. Added execution_jobs without changing gates/omissions; both full suites are repeated for the expanded final coverage basis.",
+    "expiry_review": "Final review found one-hour expiry checked only before starting. Added active checkpoint and publication checks plus two regressions; 36 focused cases pass. Superseded expanded-coverage runners were stopped by their exact P22 report-path ownership; final matrices use the stable corrected source."
+  },
+  "remaining": [
+    "Training, search and batch scoring remain on existing execution paths.",
+    "No durable assistant/mission grants or automatic promotion.",
+    "Private Redis TLS connections, installed private worker profile, full hard-timeout/clock/resource drills and coordinated job database/artifact backup/restore are not qualified.",
+    "Native workers/broker are trusted; JSON messages and model-free hashing are not the required gVisor expert sandbox.",
+    "Hashes/code bindings are not artifact authenticity or every-transitive-dependency/image attestation.",
+    "Full reviewer independence, model refit/assessment reproduction, retention/deletion, full accessibility and all release/customer/value gates remain open."
+  ],
+  "preservation": {
+    "tracked_primary_edit_count": 11,
+    "tracked_primary_hashes": "unchanged",
+    "prior_packets_and_all_outcome_states": "unchanged",
+    "queue_reconciliation_and_release_gates": "unchanged",
+    "primary_runtime_services": "untouched"
+  },
+  "full_backend_matrix_source_commit": "0e5d46915769086112c318969523522d98cdc6f0"
+}

@@ -16,6 +16,12 @@
     <button type="button" (click)="retry()">Retry pending action</button>
   }
   @if (directory) {
+    <app-package-jobs
+      [fileId]="fileId"
+      [projectId]="projectId"
+      [role]="role"
+      [packageInfo]="directory.current_package"
+    />
     @if (directory.current_package; as packageInfo) {
       <p>
         Current frozen package: <code>{{ packageInfo.bundle_id }}</code>

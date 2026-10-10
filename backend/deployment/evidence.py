@@ -96,7 +96,7 @@ def resolve_handoff(file_id, execution_id=None, assessment_id=None):
             'execution_id': execution_id, 'assessment_id': assessment_id}
 
 
-def verify_bundle(out, file_id, bundle_id=None):
+def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file):
     out = Path(out)
     manifest_path = out / 'manifest.json'
     if not manifest_path.is_file():
@@ -122,7 +122,7 @@ def verify_bundle(out, file_id, bundle_id=None):
         if not isinstance(name, str) or not isinstance(recorded, dict):
             raise ValueError('Package integrity contains a malformed entry.')
         path = out / name
-        if Path(name).name != name or path.is_symlink() or not path.is_file() or digest_file(path) != recorded.get('sha256') or path.stat().st_size != recorded.get('bytes'):
+        if Path(name).name != name or path.is_symlink() or not path.is_file() or artifact_digest(path) != recorded.get('sha256') or path.stat().st_size != recorded.get('bytes'):
             raise ValueError(f'Scoring artifact failed integrity verification: {name}')
     # Current and earlier governed schemas cannot select unverified native state.
     if handoff or int(manifest.get('schema_version') or 0) >= 3:

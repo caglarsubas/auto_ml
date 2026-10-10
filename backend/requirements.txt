@@ -25,6 +25,7 @@ statsmodels>=0.14
 openai>=1.0
 # Optional telemetry SDK: see requirements-observability.txt.
 redis>=5.0
+celery[redis]>=5.6.3,<5.7
 mcp>=1.27,<2
 cryptography>=42
 chromadb>=0.5,<1.1

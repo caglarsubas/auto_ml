@@ -446,6 +446,14 @@ def main():
             }
             (fixture / "test-password").write_text(test_password)
             (fixture / "test-password").chmod(0o600)
+            run_python(
+                ['backend/manage.py', 'migrate', '--noinput'], test_env, report='native-jobs.log'
+            )
+            run_python(
+                ['scripts/qualify_native_jobs.py'],
+                {**test_env, 'DECLARAI_JOB_BROKER_URL': env['REDIS_URL'].rsplit('/', 1)[0] + '/1'},
+                report='native-jobs.log',
+            )
             relative = reports.relative_to(ROOT).as_posix()
             run_python(
                 [

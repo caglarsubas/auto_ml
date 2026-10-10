@@ -1,3 +1,4 @@
+from execution_jobs.views import DatasetJobsView, JobDetailView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -64,6 +65,8 @@ urlpatterns = [
     path('api/deployment/receipts/<int:file_id>/<uuid:batch_id>/', DeploymentReceiptView.as_view(), name='deployment-receipt'),
     path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
     path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
+    path('api/jobs/datasets/<int:file_id>/', DatasetJobsView.as_view(), name='dataset-jobs'),
+    path('api/jobs/<uuid:job_id>/', JobDetailView.as_view(), name='job-detail'),
     path('api/reviews/datasets/<int:file_id>/', PackageReviewListView.as_view(), name='package-review-list'),
     path('api/reviews/<uuid:review_id>/', PackageReviewDetailView.as_view(), name='package-review-detail'),
     path('api/crisp/export/', CrispExportPackView.as_view(), name='crisp-export'),
