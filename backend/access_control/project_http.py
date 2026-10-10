@@ -51,6 +51,7 @@ DATASET = {
     "deployment-pack",
     "package-review-list",
     "dataset-jobs",
+    "job-input",
     "crisp-export",
     "crisp-monitoring",
     "crisp-sequential",
@@ -77,6 +78,7 @@ SPECIAL = {
     "project-member",
     "package-review-detail",
     "job-detail",
+    "job-scores",
 }
 READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail"}
 
@@ -155,7 +157,7 @@ def authorize(request, view):
         except PackageReview.DoesNotExist:
             raise projects.ProjectDenied('package_review_unavailable') from None
         supplied.append(record.dataset_id)
-    elif name == 'job-detail':
+    elif name in {'job-detail', 'job-scores'}:
         from execution_jobs.models import NativeJob
         try:
             record = NativeJob.objects.get(pk=view.kwargs['job_id'])

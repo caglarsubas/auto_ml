@@ -360,7 +360,7 @@ def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any
     return score_bundle_directory(bundle_dir(file_id, bundle_id), file_id, df, bundle_id)
 
 
-def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any]:
+def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, *, artifact_digest=None) -> Dict[str, Any]:
     """Shared native scorer for an exact directory, including offline copies.
 
     Callers must trust native serialized state. Integrity is not a sandbox or
@@ -369,7 +369,7 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None) 
     from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
     from evaluation.eval_utils import feature_psi_report
 
-    manifest, manifest_digest = verify_bundle(out, file_id, bundle_id)
+    manifest, manifest_digest = verify_bundle(out, file_id, bundle_id, **({'artifact_digest': artifact_digest} if artifact_digest else {}))
     if manifest.get('input_stage') == 'raw_unencoded':
         from preprocessing.replay import apply_purifier
         if manifest.get('purifier_file') != 'purifier.json' or 'purifier.json' not in (manifest.get('artifact_integrity') or {}):

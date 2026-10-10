@@ -2,10 +2,13 @@
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
+from django.http import HttpResponse
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from access_control import projects
 from execution_jobs import service
+from execution_jobs import csv_scoring
 from execution_jobs.models import NativeJob
 
 
@@ -21,7 +24,7 @@ def failure(exc):
     return Response({"error_code": "job_request_invalid"}, status=400)
 
 
-ERRORS = (ObjectDoesNotExist, DatabaseError, ValueError, TypeError, OSError, projects.ProjectDenied)
+ERRORS = (ObjectDoesNotExist, DatabaseError, ValueError, TypeError, OSError, projects.ProjectDenied, ValidationError)
 
 
 class DatasetJobsView(APIView):
@@ -39,6 +42,7 @@ class DatasetJobsView(APIView):
                 {
                     "id": str(j.pk),
                     "state": j.state,
+                    "kind": j.specification["kind"],
                     "bundle_id": j.specification["bundle_id"],
                     "created_at": j.created_at.isoformat(),
                 }
@@ -80,5 +84,27 @@ class JobDetailView(APIView):
     def post(self, request, job_id):
         try:
             return Response(service.cancel(request.user, job_id, request.data))
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobInputView(APIView):
+    def get(self, request, file_id):
+        try:
+            return Response(csv_scoring.prepare(request.user, file_id))
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobScoresView(APIView):
+    def get(self, request, job_id):
+        try:
+            sha = request.query_params.get("sha256")
+            raw = service.scoring_receipt(request.user, job_id, sha)
+            response = HttpResponse(raw, content_type="application/json")
+            response["Content-Disposition"] = f'attachment; filename="scoring-{job_id}.json"'
+            response["X-DeclarAI-Receipt-SHA256"] = sha
+            response["Cache-Control"] = "no-store"
+            return response
         except ERRORS as exc:
             return failure(exc)

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { API_BASE_URL, BASE_URL, requireTestCredentials } from './fixtures/credentials';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 async function developerApi(playwright: any) {
   const credentials = requireTestCredentials();
@@ -190,6 +191,49 @@ test('changed development context preserves historical discussion and blocks edi
   });
   expect(denied.status()).toBe(409);
   expect((await denied.json()).error_code).toBe('package_review_stale');
+});
+
+test('developer queues exact CSV scoring by keyboard and downloads a full worker receipt', async ({
+  page,
+}, testInfo) => {
+  await signIn(page, '-review-developer');
+  await expect(page.getByLabel('Scoring input dataset ID')).toHaveValue(String(fileId));
+  await page.getByRole('button', { name: 'Prepare scoring input', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const queue = page.getByRole('button', { name: 'Queue CSV scoring', exact: true });
+  await expect(queue).toBeEnabled();
+  const submitted = page.waitForResponse(
+    (r: any) => r.url().includes('/jobs/datasets/') && r.request().method() === 'POST',
+  );
+  await queue.focus();
+  await page.keyboard.press('Enter');
+  const response = await submitted;
+  expect(response.status()).toBe(202);
+  const job = await response.json();
+  expect(job.specification.source.file_id).toBe(fileId);
+  await expect
+    .poll(async () => (await (await api.get(`jobs/${job.id}/`)).json()).state, { timeout: 30_000 })
+    .toBe('succeeded');
+  await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
+  await expect(page.locator('app-package-jobs')).toContainText('Job state: succeeded');
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download full scoring receipt', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toBe(`scoring-${job.id}.json`);
+  const raw = await readFile((await download.path())!);
+  const receipt = JSON.parse(raw.toString());
+  const current = await (await api.get(`jobs/${job.id}/`)).json();
+  expect(createHash('sha256').update(raw).digest('hex')).toBe(current.result_sha256);
+  expect(receipt.n_scored).toBeGreaterThan(0);
+  expect(receipt.scores.length).toBe(receipt.n_scored);
+  expect(receipt.input.sha256).toBe(job.specification.source.sha256);
+  expect(receipt.review_approved).toBe(false);
+  expect(receipt.production_use_approved).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath('durable-csv-scoring.png'),
+    animations: 'disabled',
+  });
 });
 
 test('review panel and authority disappear on project switch or access refresh failure', async ({

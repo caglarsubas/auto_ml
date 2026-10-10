@@ -14,6 +14,7 @@ class NativeJob(models.Model):
     id = models.UUIDField(primary_key=True, editable=False)
     project = models.ForeignKey("access_control.Project", on_delete=models.PROTECT)
     dataset = models.ForeignKey("declaration.Declaration", on_delete=models.PROTECT)
+    source_dataset = models.ForeignKey("declaration.Declaration", null=True, on_delete=models.PROTECT, related_name="scoring_jobs")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     actor_snapshot = models.JSONField()
     authority = models.JSONField()

@@ -1,9 +1,10 @@
 <section aria-labelledby="package-jobs-title">
-  <h4 id="package-jobs-title">Queued package integrity checks</h4>
+  <h4 id="package-jobs-title">Queued package checks and scoring</h4>
   <p>
-    Verify the exact package manifest and artifact bytes in a background worker. This does not load
-    the model, reproduce scores or approve its use. Refresh to see progress; jobs continue after you
-    leave this page.
+    Run an integrity check or score a governed CSV with the exact frozen package in a background
+    worker. Integrity checks do not load models. Scoring loads trusted native model state; expert
+    code is unsupported. Refresh to see progress; jobs continue after you leave this page. Results
+    do not approve review or production use.
   </p>
   @if (packageInfo) {
     <details>
@@ -43,16 +44,55 @@
         Queue integrity check
       </button>
     }
+    @if (role === 'developer') {
+      <fieldset>
+        <legend>CSV batch scoring</legend>
+        <p>
+          Use a CSV already uploaded to this project. Prepare its version, then explicitly queue
+          scoring.
+        </p>
+        <label for="scoring-input-id">Scoring input dataset ID</label>
+        <input
+          id="scoring-input-id"
+          type="number"
+          min="1"
+          step="1"
+          [ngModel]="inputFileId"
+          (ngModelChange)="selectInput($event)"
+          [disabled]="busy || !!pending"
+        />
+        <button type="button" (click)="prepareInput()" [disabled]="busy || !!pending">
+          Prepare scoring input
+        </button>
+        <p>
+          Limit: 5 MiB CSV, 10,000 rows, 256 columns, 16 MiB output; the same 120-second work,
+          three-attempt and one-hour request budgets apply.
+        </p>
+        @if (source) {
+          <p>
+            Input {{ source.name }} · {{ source.bytes }} bytes · SHA-256
+            <code>{{ source.sha256 }}</code>
+          </p>
+        }
+        <button
+          type="button"
+          (click)="submitScore()"
+          [disabled]="busy || !!pending || !source || !packageInfo || !directory.jobs_enabled"
+        >
+          Queue CSV scoring
+        </button>
+      </fieldset>
+    }
     <ul aria-label="Package jobs">
       @for (item of directory.jobs; track item.id) {
         <li>
           <button type="button" (click)="open(item.id)" [disabled]="busy">
             Open job {{ item.id }}
           </button>
-          · {{ item.state }} · {{ item.bundle_id }}
+          · {{ item.kind }} · {{ item.state }} · {{ item.bundle_id }}
         </li>
       } @empty {
-        <li>No checks recorded.</li>
+        <li>No jobs recorded.</li>
       }
     </ul>
     @if (directory.next_offset !== null) {
@@ -77,9 +117,24 @@
     }
     <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
     @if (job.result) {
-      <p>
-        Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes
-      </p>
+      @if (job.specification.kind === 'native_csv_scoring_v1') {
+        <p>
+          Scored {{ job.result.n_scored }} rows · {{ job.result.score_semantics }} · Calibration
+          applied: {{ job.result.scores_calibrated }}
+        </p>
+        <button type="button" (click)="downloadScores()" [disabled]="busy">
+          Download full scoring receipt
+        </button>
+        @if (job.result.scores_truncated) {
+          <p>
+            Job evidence includes a 500-row preview; the full scoring receipt contains all rows.
+          </p>
+        }
+      } @else {
+        <p>
+          Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes
+        </p>
+      }
       <p>
         Result SHA-256 <code>{{ job.result_sha256 }}</code
         >. Hashes detect changes relative to this recorded package; independent authenticity and

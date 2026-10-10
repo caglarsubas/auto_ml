@@ -431,14 +431,44 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(verificationScore.status()).toBe(200);
       const verificationReceipt = await verificationScore.json();
+      const preparedInput = await api.get(`jobs/datasets/${fileId}/input/`);
+      expect(preparedInput.status()).toBe(200);
+      expect((await preparedInput.json()).sha256).toBe(
+        createHash('sha256').update(csv).digest('hex'),
+      );
+      const queuedScore = await api.post(`jobs/datasets/${fileId}/`, {
+        data: {
+          request_id: randomUUID(),
+          kind: 'native_csv_scoring_v1',
+          bundle_id: bundle.bundle_id,
+          manifest_sha256: bundle.manifest_sha256,
+          input_file_id: fileId,
+          input_sha256: (await preparedInput.json()).sha256,
+        },
+      });
+      expect(queuedScore.status()).toBe(202);
+      const jobId = (await queuedScore.json()).id;
+      await expect
+        .poll(async () => (await (await api.get(`jobs/${jobId}/`)).json()).state, {
+          timeout: 30_000,
+        })
+        .toBe('succeeded');
+      const jobReceipt = await (await api.get(`jobs/${jobId}/`)).json();
+      expect(jobReceipt.attempts).toBe(1);
+      expect(jobReceipt.result.scores).toEqual(verificationReceipt.scores);
+      expect(jobReceipt.events.map((event: any) => event.event_type)).toEqual([
+        'submitted',
+        'started',
+        'succeeded',
+      ]);
       const exactReceipt = await api.get(
-        `deployment/receipts/${fileId}/${verificationReceipt.batch_id}/?sha256=${verificationReceipt.receipt_sha256}`,
+        `jobs/${jobId}/scores/?sha256=${jobReceipt.result_sha256}`,
       );
       expect(exactReceipt.status()).toBe(200);
       const packBytes = await exactScoringPack.body();
       const receiptBytes = await exactReceipt.body();
       expect(createHash('sha256').update(receiptBytes).digest('hex')).toBe(
-        verificationReceipt.receipt_sha256,
+        jobReceipt.result_sha256,
       );
       await writeFile(testInfo.outputPath('offline-package.zip'), packBytes);
       await writeFile(testInfo.outputPath('offline-input.csv'), csv);
@@ -449,7 +479,7 @@ for (const task of ['classification', 'regression'] as const) {
           task,
           synthetic_fixture: true,
           package_sha256: createHash('sha256').update(packBytes).digest('hex'),
-          receipt_sha256: verificationReceipt.receipt_sha256,
+          receipt_sha256: jobReceipt.result_sha256,
           manifest_sha256: bundle.manifest_sha256,
         }),
       );

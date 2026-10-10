@@ -1,4 +1,4 @@
-"""One bounded read-only job kind. DB leases fence every result publication."""
+"""Bounded native jobs. DB leases fence every result publication."""
 
 import hashlib
 import json
@@ -22,6 +22,7 @@ from deployment.evidence import verify_bundle
 from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import QueueLock, NativeJob, JobEvent
+from execution_jobs import csv_scoring
 from modeling.execution_artifacts import projection_lock
 
 ACTIVE = {"running", "cancel_requested"}
@@ -48,22 +49,33 @@ class JobStopped(Exception):
     pass
 
 
-def runtime():
+def limits(kind):
+    return {**LIMITS, **csv_scoring.BUDGET} if kind == csv_scoring.KIND else dict(LIMITS)
+
+
+def runtime(kind=KIND):
     sources = [
         "execution_jobs/service.py",
         "execution_jobs/models.py",
         "execution_jobs/tasks.py",
         "execution_jobs/config.py",
+        "execution_jobs/csv_scoring.py",
         "backend/celery.py",
         "deployment/evidence.py",
         "deployment/deploy_utils.py",
         "access_control/projects.py",
     ]
-    return {
+    result = {
         "python": sys.version.split()[0],
         "packages": {p: version(p) for p in ["Django", "celery", "kombu", "redis"]},
         "sources": {p: hashlib.sha256((Path(settings.BASE_DIR) / p).read_bytes()).hexdigest() for p in sources},
     }
+
+    if kind == csv_scoring.KIND:
+        from deployment.scoring_receipts import scoring_runtime
+
+        result["scoring"] = scoring_runtime()
+    return result
 
 
 @contextmanager
@@ -147,40 +159,65 @@ def header(file_id, bundle_id, expected_sha):
 def submit(actor, file_id, data):
     if not settings.DECLARAI_JOBS_ENABLED:
         raise JobConflict("job_service_disabled")
-    if (
-        not isinstance(data, dict)
-        or set(data) != {"request_id", "kind", "bundle_id", "manifest_sha256"}
-        or data["kind"] != KIND
-    ):
-        raise ValueError("Supply exactly request_id, package_integrity_v1, bundle_id and manifest_sha256.")
+    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND}:
+        raise ValueError("Select a supported native job kind.")
+    kind = data["kind"]
+    fields = {"request_id", "kind", "bundle_id", "manifest_sha256"}
+    if kind == csv_scoring.KIND:
+        fields |= {"input_file_id", "input_sha256"}
+    if set(data) != fields:
+        raise ValueError("Supply exactly the displayed native job fields.")
     identifier, bundle_id = uuid.UUID(str(data["request_id"])), uuid.UUID(str(data["bundle_id"]))
     sha = require_digest(data["manifest_sha256"])
     current = scope(actor, file_id)
-    if current["role"] not in {"developer", "reviewer"}:
+    roles = {"developer"} if kind == csv_scoring.KIND else {"developer", "reviewer"}
+    if current["role"] not in roles:
         raise projects.ProjectDenied("job_submit_role_required")
     request_sha = digest({"actor_id": actor.pk, "file_id": file_id, "request": data})
     with locked():
         current = lock_authority(actor, file_id, None)
-        if current["role"] not in {"developer", "reviewer"}:
+        if current["role"] not in roles:
             raise projects.ProjectDenied("job_submit_role_required")
         previous = NativeJob.objects.filter(pk=identifier).first()
         if previous:
             if previous.request_sha256 != request_sha:
                 raise JobConflict("job_request_reused")
+            for authority in read_authority(actor, previous):
+                projects.recheck(authority)
             return serialize(previous, replayed=True)
         if NativeJob.objects.filter(state__in=ACTIVE | {"queued"}).count() >= LIMITS["max_pending"]:
             raise JobConflict("job_queue_full")
-        _, identity = header(file_id, bundle_id, sha)
+        manifest, identity = header(file_id, bundle_id, sha)
+        source, input_scope, input_id = None, None, None
+        if kind == csv_scoring.KIND:
+            from deployment.offline_verify import NATIVE_ALGORITHMS
+
+            if manifest.get("algorithm") not in NATIVE_ALGORITHMS:
+                raise JobConflict("job_native_package_required")
+            input_id = data["input_file_id"]
+            if type(input_id) is not int or not 0 < input_id <= 2**63 - 1:
+                raise ValueError("Supply a positive input dataset ID.")
+            input_scope = lock_authority(actor, input_id, None)
+            if input_scope["project_id"] != current["project_id"]:
+                raise projects.ProjectDenied("job_input_project_mismatch")
+            _, source, input_scope = csv_scoring.input_bytes(actor.pk, input_id)
+            if input_scope["project_id"] != current["project_id"]:
+                raise projects.ProjectDenied("job_input_project_mismatch")
+            if source["sha256"] != require_digest(data["input_sha256"]):
+                raise JobConflict("job_input_changed")
         specification = {
             "schema_version": 1,
-            "kind": KIND,
+            "kind": kind,
             **identity,
             "manifest_sha256": sha,
-            "runtime": runtime(),
-            "limits": LIMITS,
+            "runtime": runtime(kind),
+            "limits": limits(kind),
         }
+        if source:
+            specification.update(source=source, source_authority=input_scope)
         job = NativeJob.objects.create(
             id=identifier,
+            source_dataset_id=input_id,
             actor=actor,
             actor_snapshot=actor_snapshot(actor),
             project_id=current["project_id"],
@@ -196,6 +233,12 @@ def submit(actor, file_id, data):
 
 
 def serialize(job, *, replayed=False):
+    result = job.result
+    if result and job.specification["kind"] == csv_scoring.KIND and len(result.get("scores", [])) > 500:
+        result = {k: v for k, v in result.items() if k != "scores"} | {
+            "scores_preview": result["scores"][:500],
+            "scores_truncated": True,
+        }
     return {
         "id": str(job.pk),
         "file_id": job.dataset_id,
@@ -208,7 +251,7 @@ def serialize(job, *, replayed=False):
         "created_at": job.created_at.isoformat(),
         "expires_at": job.expires_at.isoformat(),
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
-        "result": job.result,
+        "result": result,
         "result_sha256": job.result_sha256,
         "reason_code": job.reason_code,
         "replayed": replayed,
@@ -227,14 +270,47 @@ def serialize(job, *, replayed=False):
     }
 
 
+def recheck_execution(job):
+    projects.recheck(job.authority)
+    if job.source_dataset_id is not None:
+        projects.recheck(job.specification["source_authority"])
+
+
+def read_authority(actor, job):
+    current = scope(actor, job.dataset_id)
+    if str(job.project_id) != current["project_id"]:
+        raise projects.ProjectDenied("job_project_mismatch")
+    scopes = [current]
+    if job.source_dataset_id is not None:
+        source = scope(actor, job.source_dataset_id)
+        if source["project_id"] != current["project_id"]:
+            raise projects.ProjectDenied("job_input_project_mismatch")
+        scopes.append(source)
+    if job.result is not None and digest(job.result) != job.result_sha256:
+        raise JobConflict("job_result_changed")
+    return scopes
+
+
+def scoring_receipt(actor, identifier, expected):
+    expected = require_digest(expected)
+    with locked():
+        job = NativeJob.objects.get(pk=identifier)
+        scopes = read_authority(actor, job)
+        if job.state != "succeeded" or job.specification["kind"] != csv_scoring.KIND or job.result_sha256 != expected:
+            raise JobConflict("job_scoring_result_unavailable")
+        raw = csv_scoring.canonical_bytes(job.result)
+        for current in scopes:
+            projects.recheck(current)
+        return raw
+
+
 def read(actor, identifier):
     with locked():
         job = NativeJob.objects.get(pk=identifier)
-        current = scope(actor, job.dataset_id)
-        if str(job.project_id) != current["project_id"]:
-            raise projects.ProjectDenied("job_project_mismatch")
+        scopes = read_authority(actor, job)
         result = serialize(job)
-        projects.recheck(current)
+        for current in scopes:
+            projects.recheck(current)
         return result
 
 
@@ -252,7 +328,8 @@ def cancel(actor, identifier, data):
             if job.state == "cancelled":
                 job.finished_at = timezone.now()
             record(job, job.state, actor=actor)
-        projects.recheck(current)
+        for authority in read_authority(actor, job):
+            projects.recheck(authority)
         return serialize(job)
 
 
@@ -271,14 +348,14 @@ def claim(identifier):
             close(job, "failed", "job_expired")
             return None
         try:
-            projects.recheck(job.authority)
+            recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
             close(job, "blocked", "job_authority_changed")
             return None
         if (
-            job.specification.get("runtime") != runtime()
-            or job.specification.get("kind") != KIND
-            or job.specification.get("limits") != LIMITS
+            job.specification.get("kind") not in {KIND, csv_scoring.KIND}
+            or job.specification.get("runtime") != runtime(job.specification.get("kind"))
+            or job.specification.get("limits") != limits(job.specification.get("kind"))
         ):
             close(job, "blocked", "job_runtime_changed")
             return None
@@ -297,7 +374,7 @@ def checkpoint(identifier, token, deadline):
         raise JobConflict("job_expired")
     if time.monotonic() >= deadline:
         raise JobConflict("job_time_budget_exceeded")
-    projects.recheck(job.authority)
+    recheck_execution(job)
 
 
 def finish(identifier, token, state, reason="", result=None):
@@ -315,8 +392,11 @@ def finish(identifier, token, state, reason="", result=None):
             # Same project/binding/member locks as authoritative membership edits.
             from django.contrib.auth import get_user_model
 
-            lock_authority(get_user_model().objects.get(pk=job.authority["actor_id"]), job.dataset_id, None)
-            projects.recheck(job.authority)
+            actor = get_user_model().objects.get(pk=job.authority["actor_id"])
+            lock_authority(actor, job.dataset_id, None)
+            if job.source_dataset_id is not None:
+                lock_authority(actor, job.source_dataset_id, None)
+            recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
             close(job, "blocked", "job_authority_changed")
             return
@@ -351,18 +431,22 @@ def execute(identifier):
 
     try:
         check()
-        _, identity = header(job.dataset_id, spec["bundle_id"], spec["manifest_sha256"])
+        manifest, identity = header(job.dataset_id, spec["bundle_id"], spec["manifest_sha256"])
         if any(spec[k] != v for k, v in identity.items()):
             raise JobConflict("job_package_identity_changed")
         out = Path(bundle_dir(job.dataset_id, spec["bundle_id"]))
-        manifest, sha = verify_bundle(out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed)
-        if sha != spec["manifest_sha256"]:
-            raise JobConflict("job_manifest_changed")
         for name in ["evaluation.json", "model_card.json"]:
             if (out / name).stat().st_size > 8 * 1024**2:
                 raise JobConflict("job_evidence_budget_exceeded")
             projects.assert_evidence_scope(json.loads((out / name).read_text()), job.dataset_id)
         check()
+        if spec["kind"] == csv_scoring.KIND:
+            result = csv_scoring.score(job, manifest, out, hashed, check)
+            finish(identifier, token, "succeeded", result=result)
+            return
+        manifest, sha = verify_bundle(out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed)
+        if sha != spec["manifest_sha256"]:
+            raise JobConflict("job_manifest_changed")
         result = {
             "schema_version": 1,
             "scope": KIND,
