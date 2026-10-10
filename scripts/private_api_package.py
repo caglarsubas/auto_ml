@@ -237,7 +237,26 @@ def normalize_save(raw, destination, image_id=None):
             if not 0 < config.size <= MAX_METADATA_BYTES:
                 raise PackageError("package_archive_metadata_invalid")
             identity = "sha256:" + hashlib.sha256(source.extractfile(config).read()).hexdigest()
-        names = verify_archive(raw, image_id or identity, trusted_daemon_metadata=True)
+        try:
+            names = verify_archive(raw, image_id or identity, trusted_daemon_metadata=True)
+        except PackageError:
+            # Neutral diagnostics for our own daemon's save only: no layer
+            # contents, config values, environment or application data.
+            receipt = []
+            for item in source.getmembers()[:10_000]:
+                record = {"name": item.name, "bytes": item.size, "regular": item.isfile()}
+                if item.isfile() and 0 < item.size <= MAX_METADATA_BYTES:
+                    try:
+                        value = json.load(source.extractfile(item))
+                        if isinstance(value, dict):
+                            record["json_keys"] = sorted(value)
+                            record["id_type"] = type(value.get("id")).__name__
+                            record["id_characters"] = len(value["id"]) if isinstance(value.get("id"), str) else None
+                    except (ValueError, UnicodeError, RecursionError):
+                        pass
+                receipt.append(record)
+            print(json.dumps({"trusted_daemon_archive_members": receipt}), file=sys.stderr)
+            raise
         for name in names:
             item = source.getmember(name)
             if not item.isfile() or item.size > MAX_IMAGE_BYTES:
