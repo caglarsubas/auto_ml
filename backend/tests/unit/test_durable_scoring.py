@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from django.db.models.deletion import ProtectedError
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from django.test import Client
 from access_control import projects
@@ -62,7 +64,9 @@ def test_real_native_job_parity_full_digest_receipt_and_offline_replay(world, so
     assert retry.status_code == 200 and retry.json()["replayed"]
     frame = pd.read_csv(source.get_file_path())
     expected = score_frame(world[0], frame, world[2]["bundle_id"])
-    service.execute(identifier)
+    with CaptureQueriesContext(connection) as queries:
+        service.execute(identifier)
+    assert len(queries) < 1000
     service.execute(identifier)
     job = NativeJob.objects.get(pk=identifier)
     assert job.state == "succeeded" and job.attempts == 1
@@ -165,7 +169,9 @@ def test_changed_inputs_or_authority_and_invalid_csv_never_publish(world, source
     elif change == "expiry":
         job.expires_at = timezone.now() - timedelta(seconds=1)
         job.save()
-    service.execute(job.pk)
+    with CaptureQueriesContext(connection) as queries:
+        service.execute(job.pk)
+    assert len(queries) < 1000
     job.refresh_from_db()
     assert job.state in {"blocked", "failed", "cancelled"} and job.result is None
 
@@ -232,6 +238,8 @@ def test_output_budget_and_tampered_results_block(world, source):
 
 
 def test_source_prepare_and_jobs_obey_real_csrf_and_project_selector(world, source):
+    assert all(actor.check_password("synthetic-review-fixture") for actor in world[3].values())
+    assert not world[3]["developer"].check_password("wrong-fixture-password")
     assert Client().get(f"/api/jobs/datasets/{source.pk}/input/").status_code == 403
     client = Client(enforce_csrf_checks=True)
     client.force_login(world[3]["developer"])
@@ -240,3 +248,22 @@ def test_source_prepare_and_jobs_obey_real_csrf_and_project_selector(world, sour
     assert (
         world[4]["developer"].get(f"/api/jobs/datasets/{source.pk}/input/?project_id={uuid.uuid4()}").status_code == 403
     )
+
+
+def test_authority_revocation_during_csv_validation_blocks_before_model_load(world, source):
+    response, _ = submit(world, source)
+    original = csv_scoring.csv.reader
+
+    def revoke(*args, **kwargs):
+        for index, row in enumerate(original(*args, **kwargs)):
+            if index == 1:
+                ProjectMembership.objects.filter(actor=world[3]["developer"]).update(active=False)
+            yield row
+
+    with (
+        patch("execution_jobs.csv_scoring.csv.reader", side_effect=revoke),
+        patch("joblib.load", side_effect=AssertionError("Revoked source reached native state")),
+    ):
+        service.execute(response.json()["id"])
+    job = NativeJob.objects.get(pk=response.json()["id"])
+    assert job.state == "blocked" and job.reason_code == "job_authority_changed" and job.result is None

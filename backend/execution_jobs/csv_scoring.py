@@ -75,19 +75,26 @@ def score(job, manifest, out, hashed, check):
     # Reject pathological width/record counts before pandas allocates a frame.
     # This bounded UTF-8 profile uses the default CSV dialect and field limit.
     try:
-        records = csv.reader(io.StringIO(raw.decode("utf-8-sig")), strict=True)
+        text = io.StringIO(raw.decode("utf-8-sig"))
+        records = csv.reader(text, strict=True)
         header = next(row for row in records if row)
         if len(header) > BUDGET["max_columns"] or len(set(header)) != len(header):
             raise JobConflict("job_csv_schema_invalid")
         count = 0
+        checked_at = text.tell()
         for row in records:
-            check()
+            # Poll by bounded parsed text instead of issuing authority queries
+            # for every tiny record. Every schema/row check still executes.
+            if text.tell() - checked_at >= 65536:
+                check()
+                checked_at = text.tell()
             if row:
                 count += 1
                 if count > BUDGET["max_rows"] or len(row) > len(header):
                     raise JobConflict("job_input_budget_exceeded")
     except (csv.Error, UnicodeError, StopIteration):
         raise JobConflict("job_csv_input_invalid") from None
+    check()
     frame = pd.read_csv(io.BytesIO(raw), nrows=BUDGET["max_rows"] + 1)
     if frame.empty or len(frame) > BUDGET["max_rows"] or len(frame.columns) > BUDGET["max_columns"]:
         raise JobConflict("job_input_budget_exceeded")
@@ -110,4 +117,5 @@ def score(job, manifest, out, hashed, check):
     )
     if len(canonical_bytes(result)) > BUDGET["max_output_bytes"]:
         raise JobConflict("job_output_budget_exceeded")
+    check()
     return result
