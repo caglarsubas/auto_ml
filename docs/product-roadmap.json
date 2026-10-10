@@ -1148,6 +1148,11 @@
       "date": "2026-10-10",
       "packet": "P26",
       "event": "Exact successful native integrity/scoring references, current model/input authority, retained full receipts, retries and tamper/package/publication checks are implemented and tested. Both full metadata suites pass 2083 tests with six skips and 71.16 percent combined coverage; 596 frontend units and 37 real browser checks pass. Existing private recovery and isolated native replay remain qualified within their recorded bounds. Initial browser refresh and readiness failures are retained and corrected without changing budgets; independent reproduction, expert isolation and all release/customer gates remain open."
+    },
+    {
+      "date": "2026-10-10",
+      "packet": "P27",
+      "event": "Verified PR 116 merged at 497501fd7a6ee127914e8a4547fa13207bbc1486. Five merge-main checks passed; the private PostgreSQL owning fixture timed out during its full suite at the unchanged 900-second budget. Profile and qualify a bounded multiclass objective calculation against independent reference metrics; preserve prior outcomes, queue and all release/customer gates."
     }
   ],
   "implementation_packets": [
@@ -1608,6 +1613,23 @@
         "[P26 source qualification](evidence/p26-qualification-2026-10-10.json)"
       ],
       "remaining": "Full refit/assessment reproduction, organizational independence/exceptions/approval, expert isolation, comprehensive accessibility, training/search migration, private/offline installation, authenticity/retention/egress, production recovery and all release/value/customer gates remain open."
+    },
+    {
+      "id": "P27",
+      "title": "Reference-checked multiclass objective execution",
+      "kind": "product_implementation",
+      "owner": "ML/Platform",
+      "status": "in_progress",
+      "items": [
+        "D01",
+        "D04",
+        "D07"
+      ],
+      "description": "Use support-weighted average ranks for requested multiclass ROC-AUC, retaining independent scikit-learn full assessment and exact declared-method/source receipts. Reject malformed encoded labels before conversion; compare native stopping histories, selected models and replay against reference callbacks under unchanged scientific and runtime budgets.",
+      "evidence": [
+        "[Multiclass objective execution](MULTICLASS_METRIC_RUNTIME_IMPLEMENTATION.md)"
+      ],
+      "remaining": "Full independent refit/assessment reproduction, production capacity/recovery, private offline installation, training/search job migration, expert isolation, egress/retention, accessibility and every release/value/customer gate remain open."
     }
   ],
   "release_qualification": {

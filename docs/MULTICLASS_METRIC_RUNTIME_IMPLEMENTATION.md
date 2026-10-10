@@ -1,0 +1,23 @@
+# P27 — Multiclass objective execution
+
+This bounded packet advances D01/D04/D07. PR #116 is merged at `497501fd7a6ee127914e8a4547fa13207bbc1486`. Five merge-main checks passed; the PostgreSQL owning fixture exhausted its unchanged 900-second command budget during the full suite. Its TLS, broker-loss and scoring-restore checks completed before the timeout. That run does not qualify the full PostgreSQL suite. The next PR must pass all six checks on its exact head.
+
+## Calculation and independent assessment
+
+For an explicitly requested multiclass ROC-AUC metric, including the native declared-objective stopping callback, the shared evaluator uses `weighted_ovr_rank_auc_v1`. For each encoded class, it ranks its probability column with SciPy's average-tie ranks. If `m` observations have that class and `N` observations are present, its AUC is `(sum_positive_ranks − m(m+1)/2) / (m(N−m))`. The result is the class-support-weighted mean of these one-versus-rest values. Positive/negative ties receive half credit. Observation weights are absent; training class weights do not become validation weights.
+
+This computes the existing weighted one-versus-rest objective. It introduces no p-value, acceptance threshold, tie-breaking jitter, score rounding, class subsampling or surrogate metric. [SciPy rank handling](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.rankdata.html) and [scikit-learn's support-weighted OvR definition](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html) describe the underlying operations. The implementation processes one class at a time, using temporary rank storage proportional to validation rows. Sorting work still grows with rows and classes; this packet supplies no customer capacity or latency commitment.
+
+Full development and final assessments retain scikit-learn's independent ROC integration, all reference metrics and confusion matrices. Other stopping criteria, binary classification and regression retain their calculations. Metric specifications name the stopping calculation and already include source/runtime digests; new native fit receipts retain the method through training, selection, tuning and candidate refits. Historical immutable evidence is preserved. No historical receipt is relabeled or retroactively verified, and pending jobs pinned to changed native source require a fresh request under the existing runtime rules.
+
+Both paths require finite, row-aligned probabilities and an encoded declared label per row. The multiclass evaluator now checks labels before integer conversion: fractional, missing, unknown, complex, string-encoded or non-vector labels cannot be silently truncated or reinterpreted. A valid partition missing a declared class still reports unavailable AUC, and required early stopping blocks without fallback.
+
+Existing probability validation and row normalization remain unchanged. Floating-point summation can perturb nearly tied normalized probabilities when columns are reordered; both calculations must agree on the resulting represented probabilities. Qualification includes exact-fraction permutations and separate near-tie reference checks. No tolerance is used to collapse distinct scores into ties.
+
+## Qualification boundary
+
+The source qualification record is [P27 evidence](evidence/p27-qualification-2026-10-10.json). Independent tests cover random scores, exact ties, uniform/perfect/inverted predictions, singleton and imbalanced classes, float32/float64 probabilities, 3/5/65 classes, permutations, explicit positive/negative pair counting, malformed inputs and unavailable objectives. Real XGBoost, LightGBM and CatBoost runs compare their complete stopping histories, selected rounds, predictions and exported replay against separate scikit-learn callbacks. Injected rank failures cannot bypass the independent full-assessment checks.
+
+The owning private TLS fixture, full SQLite/PostgreSQL matrices, governed browser workflow and isolated native scoring replay must retain existing datasets, model rounds, assertions, per-test/fixture deadlines, attempt/lease/output budgets, skip budget and coverage gates. Profiles measure the unchanged 65-class workflow on a fixed two-CPU Linux fixture; profiling timings are diagnostic evidence, not deployment benchmarks.
+
+Full refit/assessment reproduction, production recovery and capacity, dependency locking/offline private installation, expert-code isolation, comprehensive accessibility, egress/retention and all release/value/customer gates remain open. The rank calculation is trusted application code; it does not authorize expert Python or establish independent artifact authenticity.

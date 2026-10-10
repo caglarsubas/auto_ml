@@ -41,6 +41,7 @@ def metric_spec(contract):
         implementation.update(name.encode())
         implementation.update((root / name).read_bytes())
     return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
+            'calculation': 'weighted_ovr_rank_auc_v1' if classes > 2 and primary == 'roc_auc' else 'trusted_reference_metrics_v1',
             'direction': direction(primary), 'cost_matrix': costs, 'threshold': .5,
             'contract_sha256': contract.get('sha256'),
             'implementation_sha256': implementation.hexdigest(), 'metric_runtime': metric_runtime,

@@ -316,6 +316,16 @@ Let review findings, responses and dispositions cite a successful native integri
 
 **Remaining:** Full refit/assessment reproduction, organizational independence/exceptions/approval, expert isolation, comprehensive accessibility, training/search migration, private/offline installation, authenticity/retention/egress, production recovery and all release/value/customer gates remain open.
 
+### P27 — Reference-checked multiclass objective execution
+
+**Packet status:** in_progress. **Mapped outcomes:** D01, D04, D07.
+
+Use support-weighted average ranks for requested multiclass ROC-AUC, retaining independent scikit-learn full assessment and exact declared-method/source receipts. Reject malformed encoded labels before conversion; compare native stopping histories, selected models and replay against reference callbacks under unchanged scientific and runtime budgets.
+
+**Evidence:** [Multiclass objective execution](MULTICLASS_METRIC_RUNTIME_IMPLEMENTATION.md)
+
+**Remaining:** Full independent refit/assessment reproduction, production capacity/recovery, private offline installation, training/search job migration, expert isolation, egress/retention, accessibility and every release/value/customer gate remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.

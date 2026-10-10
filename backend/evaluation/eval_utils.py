@@ -34,11 +34,34 @@ def compute_ks_gini(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[Optional[f
         return None, None
 
 
+def _weighted_ovr_rank_auc(y, p):
+    """Unweighted observations, support-weighted OvR AUC for validated inputs.
+
+    Average ranks give tied positive/negative pairs half credit. Compute one
+    class at a time, so temporary rank storage grows with rows, not rows ×
+    classes. Full assessment keeps sklearn's independent ROC integration.
+    """
+    from scipy.stats import rankdata
+
+    values, supports = [], []
+    for label in range(p.shape[1]):
+        positive = y == label
+        support = float(positive.sum())
+        ranks = rankdata(p[:, label], method='average')
+        u = ranks[positive].sum() - support * (support + 1.) / 2.
+        values.append(u / (support * (len(y) - support)))
+        supports.append(support)
+    return float(np.average(values, weights=supports))
+
+
 def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
-    y = np.asarray(y_true, dtype=int)
+    y = np.asarray(y_true)
     p = np.asarray(probabilities, dtype=float)
-    if p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
+    if y.ndim != 1 or p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
         raise ValueError('Multiclass evaluation requires one finite probability per declared class and row.')
+    if not len(y) or np.iscomplexobj(y) or not np.isin(y, np.arange(p.shape[1])).all():
+        raise ValueError('Multiclass labels must be encoded declared classes; fractional, missing or unknown labels are invalid.')
+    y = y.astype(int)
     if (p < 0).any() or not np.allclose(p.sum(axis=1), 1, atol=1e-5):
         raise ValueError('Multiclass probabilities must be nonnegative and sum to one.')
     # Native float32 probabilities may sum to 1 within their precision but
@@ -52,7 +75,8 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
         'log_loss': lambda: _safe_float(log_loss(y, p, labels=classes)),
         'f1_weighted': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
         'f1': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
-        'roc_auc': lambda: _safe_float(roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
+        'roc_auc': lambda: _safe_float(_weighted_ovr_rank_auc(y, p) if metric_names is not None else
+                                      roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
                           if set(np.unique(y)) == set(classes) else None,
         'n_samples': lambda: len(y)}
     metrics = {name: values[name]() for name in (metric_names if metric_names is not None else values)}
@@ -61,7 +85,8 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
         'metrics': metrics,
         'confusion_matrix': confusion_matrix(y, pred, labels=classes).tolist(),
         'threshold_table': [],
-        'metric_semantics': {'roc_auc': 'weighted one-vs-rest', 'f1': 'weighted across declared classes'},
+        'metric_semantics': {'roc_auc': 'weighted one-vs-rest', 'f1': 'weighted across declared classes',
+                             'roc_auc_calculation': 'weighted_ovr_rank_auc_v1' if metric_names is not None else 'sklearn_roc_integration'},
         'limitations': ['Weighted multiclass AUC is unavailable when the assessment partition lacks a declared class.'] if 'roc_auc' in metrics and metrics['roc_auc'] is None else [],
     }
 
