@@ -21,6 +21,9 @@ test('multiple projects require choice; keyboard selection pins pipeline creatio
   await page.goto('/model-development');
   await expect(page).toHaveURL(/\/home$/);
   const picker = page.getByLabel('Current project');
+  await expect(
+    picker.getByRole('option', { name: 'Workspace A — developer', exact: true }),
+  ).toHaveCount(1);
   const labels = await picker.locator('option').allTextContents();
   const index = labels.findIndex((label) => label.trim() === 'Workspace A — developer');
   expect(index).toBeGreaterThan(0);

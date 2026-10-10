@@ -112,6 +112,19 @@ describe('Durable package job receipts', () => {
     request.flush({ ...job, state: 'succeeded' });
     expect(emit).toHaveBeenCalledOnceWith({ ...job, state: 'succeeded' });
   });
+  it('does not refresh or discard job context when a review action temporarily disables selection', () => {
+    component.job = { ...job, state: 'succeeded' };
+    component.ngOnChanges({
+      evidenceEnabled: {
+        previousValue: true,
+        currentValue: false,
+        firstChange: false,
+        isFirstChange: () => false,
+      },
+    });
+    expect(component.job.id).toBe('job-1');
+    http.expectNone('/api/jobs/datasets/1/?project_id=project-a');
+  });
   it('withholds a denied selection and ignores a receipt from a superseded context', () => {
     component.evidenceEnabled = true;
     component.job = { ...job, state: 'succeeded' };

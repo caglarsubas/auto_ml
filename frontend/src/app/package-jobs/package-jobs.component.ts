@@ -5,6 +5,7 @@ import {
   EventEmitter,
   OnChanges,
   OnDestroy,
+  SimpleChanges,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -40,7 +41,10 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     private http: HttpClient,
     private auth: AuthService,
   ) {}
-  ngOnChanges(): void {
+  ngOnChanges(changes?: SimpleChanges): void {
+    // Review availability changes during a write; it is not a new job context.
+    // Avoid resetting selection and issuing an audit-writing read at that point.
+    if (changes && Object.keys(changes).every((key) => key === 'evidenceEnabled')) return;
     this.generation++;
     this.requests.unsubscribe();
     this.requests = new Subscription();
