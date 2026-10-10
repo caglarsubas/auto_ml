@@ -144,6 +144,8 @@ export class DeploymentComponent implements OnInit, OnDestroy {
             this.bundle = resp;
             this.scoreResult = null;
             this.isScoring = false;
+            this.isDownloading = false;
+            this.isReceiptDownloading = false;
             if (request === this.readinessRequest)
               this.readiness = resp?.manifest?.readiness || this.readiness;
             this.isBundling = false;
@@ -174,6 +176,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     }
     this.isScoring = true;
     this.scoreResult = null;
+    this.isReceiptDownloading = false;
     this.error = null;
     const generation = this.generation;
     const bundleId = this.bundle.bundle_id;
@@ -212,7 +215,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
           this.isDownloading = false;
         },
         error: () => {
-          if (generation !== this.generation) return;
+          if (generation !== this.generation || this.bundle?.bundle_id !== bundleId) return;
           this.error =
             'Package download failed verification. Refresh the selected package and retry.';
           this.isDownloading = false;
@@ -244,7 +247,12 @@ export class DeploymentComponent implements OnInit, OnDestroy {
           this.isReceiptDownloading = false;
         },
         error: () => {
-          if (generation !== this.generation) return;
+          if (
+            generation !== this.generation ||
+            this.bundle?.bundle_id !== bundleId ||
+            this.scoreResult?.batch_id !== batchId
+          )
+            return;
           this.error = 'Exact scoring receipt download failed. Refresh access and retry.';
           this.isReceiptDownloading = false;
         },

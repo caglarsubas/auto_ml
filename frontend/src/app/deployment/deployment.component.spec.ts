@@ -169,12 +169,42 @@ describe('DeploymentComponent', () => {
     component.currentFileId = 1;
     component.bundle = { bundle_id: 'frozen' };
     component.scoreResult = { batch_id: 'previous' };
+    component.isReceiptDownloading = true;
     component.onScoreFile({
       target: { files: [new File(['x\n1\n'], 'input.csv')] },
     } as unknown as Event);
     expect(component.scoreResult).toBeNull();
+    expect(component.isReceiptDownloading).toBeFalse();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne((req) => req.url.endsWith('/deployment/score/')).flush({ scores: [1] });
+    http.verify();
+  });
+
+  it('resets download state when publishing a replacement bundle and withholds old failures', () => {
+    component.currentFileId = 1;
+    component.bundle = { bundle_id: 'old-bundle' };
+    component.scoreResult = {
+      bundle_id: 'old-bundle',
+      batch_id: 'old-batch',
+      receipt_sha256: 'digest',
+    };
+    component.readiness = { ready: true, execution_id: 'model', assessment_id: 'assessment' };
+    component.downloadBundle();
+    component.downloadReceipt();
+    component.createBundle();
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne((req) => req.url.endsWith('/deployment/bundle/'))
+      .flush({ bundle_id: 'new-bundle' });
+    expect(component.isDownloading).toBeFalse();
+    expect(component.isReceiptDownloading).toBeFalse();
+    http
+      .expectOne((req) => req.url.endsWith('/deployment/pack/'))
+      .flush(new Blob(), { status: 403, statusText: 'Forbidden' });
+    http
+      .expectOne((req) => req.url.includes('/deployment/receipts/'))
+      .flush(new Blob(), { status: 403, statusText: 'Forbidden' });
+    expect(component.error).toBeNull();
     http.verify();
   });
 });
