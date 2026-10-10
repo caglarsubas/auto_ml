@@ -153,7 +153,27 @@
           {{ scoreResult.assessment_id || 'Historical, unverified' }}
         </p>
         <p>Manifest SHA-256: {{ scoreResult.manifest_sha256 }}</p>
+        @if (scoreResult.receipt_sha256) {
+          <p>Full receipt SHA-256: {{ scoreResult.receipt_sha256 }}</p>
+        }
+        @if (scoreResult.input?.format === 'csv') {
+          <p>Input CSV SHA-256: {{ scoreResult.input.sha256 }}</p>
+          <p>
+            Keep this exact CSV, selected bundle and full receipt for offline score verification.
+            Verification checks score parity; model refitting, assessment and approval remain
+            separate.
+          </p>
+        } @else {
+          <p>Offline score verification currently supports CSV uploads only.</p>
+        }
       </details>
+      <button
+        mat-stroked-button
+        [disabled]="!scoreResult.receipt_sha256 || isReceiptDownloading"
+        (click)="downloadReceipt()"
+      >
+        {{ isReceiptDownloading ? 'Downloading receipt…' : 'Download full scoring receipt' }}
+      </button>
       @if (scoreResult.scores || scoreResult.scores_preview; as scores) {
         <div
           style="

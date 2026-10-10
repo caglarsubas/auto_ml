@@ -13,7 +13,7 @@ from modeling.crisp_views import (
 )
 from encoding.views import EncodingAnalyzeView, EncodingApplyView
 from evaluation.views import EvaluationRunView, EvaluationStatusView, EvaluationPackView, GovernanceChecksView, HoldoutHistoryView
-from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView
+from deployment.views import DeploymentBundleView, DeploymentScoreView, DeploymentStatusView, DeploymentPackView, DeploymentReceiptView
 from deployment.review_views import PackageReviewListView, PackageReviewDetailView
 from ai_assistant.feedback import AIFeedbackView
 from ai_assistant.views import AIAssistantView, AIActionExecuteView, AICachePushView, AIModelListView
@@ -61,6 +61,7 @@ urlpatterns = [
     path('api/evaluation/governance/', GovernanceChecksView.as_view(), name='evaluation-governance'),
     path('api/deployment/bundle/', DeploymentBundleView.as_view(), name='deployment-bundle'),
     path('api/deployment/score/', DeploymentScoreView.as_view(), name='deployment-score'),
+    path('api/deployment/receipts/<int:file_id>/<uuid:batch_id>/', DeploymentReceiptView.as_view(), name='deployment-receipt'),
     path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
     path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
     path('api/reviews/datasets/<int:file_id>/', PackageReviewListView.as_view(), name='package-review-list'),

@@ -347,17 +347,28 @@ def build_deployment_pack_zip(file_id: int, bundle_id=None) -> tuple:
             'README.txt',
             f'DeclarAI review and batch scoring pack\nfile_id={file_id}\nbundle_id={manifest.get("bundle_id")}\ngenerated_utc={stamp}\n'
             'Evidence is exploratory or historically unverified; production use is not approved.\n'
-            'Includes frozen score bundle, BU, success criteria, model card, monitoring plan.\n',
+            'Includes frozen score bundle, BU, success criteria, model card, monitoring plan.\n'
+            'Offline CSV score parity: use the installed deployment.offline_verify module with the exact CSV, full batch receipt, independently retained digests and declared tolerances.\n'
+            'Trust native serialized state explicitly; this ZIP provides no sandbox, refit, assessment reproduction or approval.\n'
+            'See docs/OFFLINE_SCORING_IMPLEMENTATION.md in the matching DeclarAI distribution.\n',
         )
     return buf.getvalue(), name
 
 
 def score_frame(file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any]:
     """Score a batch DataFrame with the frozen bundle."""
+    return score_bundle_directory(bundle_dir(file_id, bundle_id), file_id, df, bundle_id)
+
+
+def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None) -> Dict[str, Any]:
+    """Shared native scorer for an exact directory, including offline copies.
+
+    Callers must trust native serialized state. Integrity is not a sandbox or
+    authenticity proof. This function never resolves a live current pointer.
+    """
     from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
     from evaluation.eval_utils import feature_psi_report
 
-    out = bundle_dir(file_id, bundle_id)
     manifest, manifest_digest = verify_bundle(out, file_id, bundle_id)
     if manifest.get('input_stage') == 'raw_unencoded':
         from preprocessing.replay import apply_purifier

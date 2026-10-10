@@ -842,6 +842,12 @@ export class DataService {
     );
   }
 
+  downloadScoringReceipt(fileId: number, batchId: string, sha256: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}deployment/receipts/${fileId}/${batchId}/`, {
+      params: { sha256 }, responseType: 'blob', transferCache: false,
+    });
+  }
+
   // ===== CRISP-DM cycle APIs =====
 
   downloadCrispExportPack(fileId: number, pipelineRunId?: number, bu?: any): Observable<Blob> {

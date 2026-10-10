@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "packet": "P21",
+  "branch": "codex/offline-package-verification",
+  "base_commit": "3df1b293bd4ae54f03cb413a6b7fd5b1dc3e55eb",
+  "qualified_application_source_commit": "3b03788996e0adb4b30d630fb5c97d6348b2849b",
+  "full_backend_matrix_source_commit": "be50bb0981b8d7f42d93a4cc5d95b48a2c3f3d7c",
+  "source_binding": "e2418861 changes only the CI qualification step and Docker fixture lifecycle. 3b037889 changes only Angular download state and frontend regressions. All backend code/tests match be50bb09 in both full metadata matrices, the 151-module browser image hash comparison and both isolated offline fixtures. Final 580 frontend units, production build/lint and the full 36-test governed browser matrix are rerun at 3b037889.",
+  "baseline_verification": {
+    "pull_request": 110,
+    "merge_commit": "3df1b293bd4ae54f03cb413a6b7fd5b1dc3e55eb",
+    "merge_main_ci_run": 38018651670,
+    "successful_jobs": 6,
+    "user_merge_reference": "1010; live PR110 was merged, PR1010 was not found"
+  },
+  "scope": "Partial D09/D12: input/runtime-bound full CSV scoring receipts, authorized exact downloads and an installed offline native batch parity verifier. No refit, assessment reproduction, model approval, expert isolation or release acceptance.",
+  "environment": {
+    "host": "macOS ARM64; disposable Linux Docker runners",
+    "core_image": "declarai-core-p16:local",
+    "core_image_id": "sha256:ac7c4bc0f58c77a64ed185f6e1d9fc8890dbd851a3d252f2ebcd60b2d9ee4946",
+    "python": "3.12.15",
+    "django": "5.2.18",
+    "postgresql": "17.11",
+    "psycopg": "3.3.6",
+    "node": "24.16.0",
+    "angular": "22.2.1",
+    "browser_image": "declarai-p21-api:local",
+    "browser_image_id": "sha256:f78d7986e967a1fd19e6ec1daac95591fff26c242ebbe5891ad47a58a2bec9c1",
+    "browser_runtime": "Django development runserver; not production serving qualification",
+    "resource_profile": "Backend matrices use two CPUs/native threads. Offline fixtures use no network, read-only fixed runtime and approved inputs, unprivileged UID, dropped capabilities, empty read-only installation media, 1GiB memory, 128 processes, two CPUs and bounded temporary storage. No provider key; telemetry disabled."
+  },
+  "checks": [
+    {
+      "name": "Full SQLite marked suite",
+      "status": "passed",
+      "passed": 1984,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 280.65,
+      "coverage_percent": 70.3,
+      "line_coverage_percent": 72.77,
+      "coverage_measure": "combined statement and branch coverage, matching pytest-cov gate",
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p21/backend.log"
+    },
+    {
+      "name": "Full PostgreSQL marked suite",
+      "status": "passed",
+      "passed": 1984,
+      "skipped": 6,
+      "deselected": 62,
+      "duration_seconds": 298.39,
+      "coverage_percent": 70.3,
+      "line_coverage_percent": 72.77,
+      "coverage_measure": "combined statement and branch coverage, matching pytest-cov gate",
+      "coverage_gate_percent": 50,
+      "skip_budget": 15,
+      "report": "test-reports/p21/postgresql/postgresql.log"
+    },
+    {
+      "name": "New offline/receipt boundary regressions in both full matrices",
+      "status": "passed",
+      "cases": 36,
+      "scenarios": [
+        "calibrated native logistic subprocess without Django/database settings",
+        "input/archive/receipt/manifest tampering before native loading",
+        "runtime/parser and semantic mismatch",
+        "finite full score shape/row count and explicit numerical tolerance",
+        "ZIP traversal, links, duplicates and expansion limit",
+        "unsupported expert package; no implicit native-state trust",
+        "603-score receipt download beyond 500-score preview",
+        "real HTTP roles, revocation, final response recheck and database outage"
+      ]
+    },
+    {
+      "name": "Frontend units",
+      "status": "passed",
+      "passed": 580,
+      "statement_coverage_percent": 38.37,
+      "branch_coverage_percent": 31.57,
+      "report": "test-reports/p21/frontend-unit-final.log"
+    },
+    {
+      "name": "Frontend production build and lint",
+      "status": "passed",
+      "lint_errors": 0,
+      "lint_warnings": 167,
+      "reports": [
+        "test-reports/p21/frontend-build-final.log",
+        "test-reports/p21/frontend-lint-final.log"
+      ]
+    },
+    {
+      "name": "Governed browser/authenticated API",
+      "status": "passed",
+      "passed": 36,
+      "scenarios": [
+        "keyboard full receipt download matches returned digest",
+        "input byte digests and full score export",
+        "classification/regression approved offline fixtures",
+        "existing review, project, session, raw replay and assistant boundaries",
+        "superseded receipt/package downloads do not block or alter replacement evidence"
+      ],
+      "report": "test-reports/p21/browser-final.log",
+      "reported_duration": "1.0m"
+    },
+    {
+      "name": "Offline independent fixed runtime",
+      "status": "passed",
+      "fixtures": [
+        {
+          "task": "classification",
+          "exit_code": 0,
+          "status": "passed",
+          "network": "none",
+          "read_only_runtime": true,
+          "unprivileged": true,
+          "installation_media": "empty read-only tmpfs",
+          "rows": 300
+        },
+        {
+          "task": "regression",
+          "exit_code": 0,
+          "status": "passed",
+          "network": "none",
+          "read_only_runtime": true,
+          "unprivileged": true,
+          "installation_media": "empty read-only tmpfs",
+          "rows": 300
+        }
+      ],
+      "chunk_sizes": [
+        1,
+        17,
+        64
+      ],
+      "whole_batch": true,
+      "max_absolute_difference": 0.0,
+      "absolute_tolerance": 1e-12,
+      "relative_tolerance": 1e-12,
+      "report": "test-reports/p21/offline-final/summary.json",
+      "remaining": "No refit, assessment, hostile-state safety or approval claim."
+    },
+    {
+      "name": "Private PostgreSQL operational fixture",
+      "status": "passed",
+      "details": {
+        "postgresql": "postgres (PostgreSQL) 17.11",
+        "image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+        "private_tls_session_api": "passed",
+        "wrong_ca": "rejected",
+        "wrong_hostname": "rejected",
+        "restart_persistence": "passed",
+        "quiescent_database_artifact_restore": "passed",
+        "full_postgresql_suite": "passed",
+        "production_deployment_recovery": "not_qualified"
+      },
+      "report": "test-reports/p21/postgresql/postgresql-summary.json"
+    },
+    {
+      "name": "Private identity and project fixtures",
+      "status": "passed",
+      "processes": 5,
+      "reports": [
+        "test-reports/p21/postgresql/private-identity.log",
+        "test-reports/p21/postgresql/private-projects.log"
+      ]
+    },
+    {
+      "name": "Actual scoped MCP SDK stdio",
+      "status": "passed",
+      "tools": 29,
+      "events": 14,
+      "completed": 8,
+      "denied": 6,
+      "expert_and_network_execution": "blocked",
+      "report": "test-reports/p21/mcp-stdio.log"
+    },
+    {
+      "name": "Backend ruff",
+      "status": "passed",
+      "report": "test-reports/p21/ruff.log"
+    },
+    {
+      "name": "Canonical roadmap invariants",
+      "status": "passed",
+      "passed": 49,
+      "report": "test-reports/p21/roadmap.log"
+    }
+  ],
+  "limitations": [
+    "Numerical scoring parity only; full refit and final-assessment reproduction remain unimplemented.",
+    "Native serialized state requires explicit trust; matching hashes and the qualification container are not D08 expert isolation or artifact authenticity.",
+    "CSV parsing uses recorded pandas defaults on the whole input before slicing; independent chunk-parser inference is not checked. Excel and JSON-row scoring remain supported but not offline-qualified.",
+    "Model/runtime comparison covers recorded package versions and listed scoring-source modules, not every transitive dependency or whole-image attestation.",
+    "Structural native adapter admission exceeds the bounded fixtures: calibrated logistic and raw replay XGBoost classification/regression are qualified here; other adapters and multiclass require representative offline qualification.",
+    "Existing private restart/quiescent restore fixtures pass; newly introduced batch receipt restore is not separately exercised. Complete production recovery remains unqualified.",
+    "No D09/D12 outcome or milestone/release/value/customer gate closes. D07 durable workers/offline installation and D08 gVisor remain open."
+  ],
+  "preservation": {
+    "primary_tracked_user_edits_unchanged": 11,
+    "primary_services": "untouched",
+    "historical_packets_and_outcome_statuses": "unchanged",
+    "release_gates_and_agentic_queue": "unchanged"
+  },
+  "attempts": [
+    {
+      "name": "Focused new regressions and existing package compatibility",
+      "status": "passed",
+      "passed": 55,
+      "report": "test-reports/p21/focused.log"
+    },
+    {
+      "name": "Final new regressions after actionable CLI failures",
+      "status": "passed",
+      "passed": 36,
+      "report": "test-reports/p21/focused-final.log"
+    },
+    {
+      "name": "Offline fixture requested before browser exports existed",
+      "status": "blocked",
+      "reason": "Exactly two explicit synthetic export contexts were not yet available; no parity output existed. Retried only after browser completion.",
+      "report": "test-reports/p21/offline-driver.log"
+    },
+    {
+      "name": "Final UI review correction",
+      "status": "qualified",
+      "finding": "Pending receipt/package downloads could retain disabled state or report stale failures after replacing evidence. Corrected reset/guards; final units and full browser suite pass.",
+      "source_commit": "3b03788996e0adb4b30d630fb5c97d6348b2849b"
+    }
+  ]
+}
