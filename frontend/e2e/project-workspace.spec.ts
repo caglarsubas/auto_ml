@@ -97,8 +97,10 @@ for (const [name, role] of [
     await expect(
       page.getByRole('link', { name: 'Open development workspace', exact: true }),
     ).toHaveCount(0);
+    const reportButton = page.getByRole('button', { name: `Download report for ${name} pipeline` });
+    await expect(reportButton).toBeEnabled();
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: `Download report for ${name} pipeline` }).focus();
+    await reportButton.focus();
     await page.keyboard.press('Enter');
     expect((await download).suggestedFilename()).toMatch(/^pipeline-\d+-report.html$/);
     await page.goto('/model-development?project_id=' + id);
