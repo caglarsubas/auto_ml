@@ -99,6 +99,9 @@ test('reviewer and developer complete an attributable keyboard workflow and expo
   ]);
   expect(jobReceipt.result.model_state_loaded).toBe(false);
   expect(jobReceipt.production_use_approved).toBe(false);
+  await page.getByRole('button', { name: 'Use receipt for review action', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Selected package_integrity_v1 receipt/)).toBeVisible();
   await page.getByLabel('Finding severity').selectOption('major');
   await page
     .getByLabel('Finding, response or disposition')
@@ -150,9 +153,22 @@ test('reviewer and developer complete an attributable keyboard workflow and expo
   ]);
   expect(exported.events[2].authority.role).toBe('developer');
   expect(exported.events[3].authority.role).toBe('reviewer');
+  expect(exported.events[1].evidence.job_id).toBe(job.id);
+  expect(exported.events[1].evidence.result_sha256).toBe(jobReceipt.result_sha256);
+  expect(exported.events[1].evidence.independent_reproduction_verified).toBe(false);
+  expect(exported.events[2].evidence).toBeNull();
   expect(exported.manifest_sha256).toBe(created.manifest_sha256);
   expect(exported.review_approved).toBe(false);
   expect(exported.production_use_approved).toBe(false);
+  await page.getByText('Attributable event history', { exact: true }).click();
+  const linkedDownload = page.waitForEvent('download');
+  await page
+    .getByRole('button', { name: 'Download linked receipt for event 2', exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  const linked = JSON.parse(await readFile((await (await linkedDownload).path())!, 'utf8'));
+  expect(linked.job.result).toEqual(jobReceipt.result);
+  expect(linked.evidence.result_sha256).toBe(jobReceipt.result_sha256);
   const packageDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download exact package', exact: true }).click();
   expect((await packageDownload).suggestedFilename()).toBe(`package-${created.bundle_id}.zip`);
@@ -222,6 +238,33 @@ test('developer queues exact CSV scoring by keyboard and downloads a full worker
   const download = await downloaded;
   expect(download.suggestedFilename()).toBe(`scoring-${job.id}.json`);
   const raw = await readFile((await download.path())!);
+  const fullReceipt = JSON.parse(raw.toString('utf8'));
+  await page.getByRole('button', { name: /sign out/i }).click();
+  await signIn(page, '-workspace');
+  const reviewCreated = page.waitForResponse(
+    (r: any) => r.url().includes('/reviews/datasets/') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Start package review', exact: true }).click();
+  const review = await (await reviewCreated).json();
+  await page.getByRole('button', { name: 'Open job ' + job.id, exact: true }).click();
+  await page.getByRole('button', { name: 'Use receipt for review action', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Selected native_csv_scoring_v1 receipt/)).toBeVisible();
+  await page
+    .getByLabel('Finding, response or disposition')
+    .fill('Review the recorded native batch scores.');
+  await page.getByRole('button', { name: 'Record review action', exact: true }).click();
+  await expect(page.getByLabel('Review findings')).toContainText('Linked native_csv_scoring_v1');
+  await page.getByText('Attributable event history', { exact: true }).click();
+  const linkedDownload = page.waitForEvent('download');
+  await page
+    .getByRole('button', { name: 'Download linked receipt for event 2', exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  const linked = JSON.parse(await readFile((await (await linkedDownload).path())!, 'utf8'));
+  expect(linked.review_id).toBe(review.id);
+  expect(linked.job.result).toEqual(fullReceipt);
+  expect(linked.evidence.result_sha256).toBe(createHash('sha256').update(raw).digest('hex'));
   const receipt = JSON.parse(raw.toString());
   const current = await (await api.get(`jobs/${job.id}/`)).json();
   expect(createHash('sha256').update(raw).digest('hex')).toBe(current.result_sha256);

@@ -306,6 +306,16 @@ Extend the disposable private TLS recovery fixture with calibrated native classi
 
 **Remaining:** Production interrupted-scoring/supervisor/clock/hard-timeout/live-backup/machine-loss recovery, complete private/offline installation, training/search migration, authenticity/retention/egress, full refit/assessment reproduction, expert isolation, accessibility and all release/value/customer gates remain open.
 
+### P26 — Exact native execution receipts in package review
+
+**Packet status:** in_progress. **Mapped outcomes:** D04, D06, D09, D12.
+
+Let review findings, responses and dispositions cite a successful native integrity or CSV scoring receipt from the exact package. Retain attributable, digest-bound references, recheck model and input authority, and expose keyboard attachment and freshly authorized receipt download.
+
+**Evidence:** Qualification pending.
+
+**Remaining:** Full refit/assessment reproduction, organizational independence/exceptions/approval, expert isolation, comprehensive accessibility, training/search migration, private/offline installation, authenticity/retention/egress, production recovery and all release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.

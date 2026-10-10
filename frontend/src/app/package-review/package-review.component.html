@@ -21,6 +21,13 @@
       [projectId]="projectId"
       [role]="role"
       [packageInfo]="directory.current_package"
+      [evidenceEnabled]="
+        review?.freshness === 'current' &&
+        !busy &&
+        !pending &&
+        (role === 'developer' || role === 'reviewer')
+      "
+      (receiptSelected)="selectEvidence($event)"
     />
     @if (directory.current_package; as packageInfo) {
       <p>
@@ -85,6 +92,9 @@
         <li>
           <strong>{{ finding.severity }} · {{ finding.state }}</strong>
           <p>{{ finding.text }}</p>
+          @if (finding.evidence) {
+            <p>Linked {{ finding.evidence.kind }} receipt · {{ finding.evidence.job_id }}</p>
+          }
           <small>{{ finding.responses }} developer responses · {{ finding.id }}</small>
         </li>
       } @empty {
@@ -102,6 +112,19 @@
             >
             · {{ event.created_at }}
             <p>{{ event.text }}</p>
+            @if (event.evidence; as evidence) {
+              <p>
+                Linked {{ evidence.kind }} · Job <code>{{ evidence.job_id }}</code> · Result SHA-256
+                <code>{{ evidence.result_sha256 }}</code>
+              </p>
+              <p>
+                Execution receipts record what ran. Independent reproduction requires separate
+                evidence.
+              </p>
+              <button type="button" (click)="downloadEvidence(event.id)" [disabled]="busy">
+                Download linked receipt for event {{ event.revision }}
+              </button>
+            }
             <small>Receipt {{ event.id }} · revision {{ event.revision }}</small>
           </li>
         }
@@ -109,6 +132,19 @@
     </details>
     @if (case.freshness === 'current' && (role === 'developer' || role === 'reviewer')) {
       <form (ngSubmit)="submit()">
+        <p>
+          Optionally open a successful job above and choose “Use receipt for review action”. The
+          receipt must belong to this exact package.
+        </p>
+        @if (evidence) {
+          <p role="status">
+            Selected {{ evidence.specification.kind }} receipt · {{ evidence.id }} · Result SHA-256
+            {{ evidence.result_sha256 }}
+          </p>
+          <button type="button" (click)="evidence = null" [disabled]="busy || !!pending">
+            Remove selected receipt
+          </button>
+        }
         <label for="review-action">Review action</label>
         <select
           id="review-action"

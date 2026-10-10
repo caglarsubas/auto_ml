@@ -1573,6 +1573,20 @@
         "[P25 source qualification](evidence/p25-qualification-2026-10-10.json)"
       ],
       "remaining": "Production interrupted-scoring/supervisor/clock/hard-timeout/live-backup/machine-loss recovery, complete private/offline installation, training/search migration, authenticity/retention/egress, full refit/assessment reproduction, expert isolation, accessibility and all release/value/customer gates remain open."
+    },
+    {
+      "id": "P26",
+      "title": "Exact native execution receipts in package review",
+      "status": "in_progress",
+      "items": [
+        "D04",
+        "D06",
+        "D09",
+        "D12"
+      ],
+      "description": "Let review findings, responses and dispositions cite a successful native integrity or CSV scoring receipt from the exact package. Retain attributable, digest-bound references, recheck model and input authority, and expose keyboard attachment and freshly authorized receipt download.",
+      "evidence": [],
+      "remaining": "Full refit/assessment reproduction, organizational independence/exceptions/approval, expert isolation, comprehensive accessibility, training/search migration, private/offline installation, authenticity/retention/egress, production recovery and all release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

@@ -93,7 +93,7 @@ def findings(events):
     for event in events:
         if event.event_type == 'finding':
             result[str(event.pk)] = {'id': str(event.pk), 'severity': event.severity, 'text': event.text,
-                                     'state': 'open', 'responses': 0}
+                                     'state': 'open', 'responses': 0, 'evidence': event.evidence}
         elif event.finding_id:
             item = result[str(event.finding_id)]
             if event.event_type == 'response':
@@ -103,8 +103,10 @@ def findings(events):
     return list(result.values())
 
 
-def serialize(review, *, replayed=False):
+def serialize(review, actor, *, replayed=False):
+    from deployment.review_evidence import validate_events
     events = list(review.events.all())
+    validate_events(actor, review, events)
     return {'id': str(review.pk), 'file_id': review.dataset_id, 'project_id': str(review.project_id),
             **{k: str(getattr(review, k)) for k in ('bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256', 'context_sha256')},
             'revision': review.revision, 'created_at': review.created_at.isoformat(),
@@ -113,7 +115,8 @@ def serialize(review, *, replayed=False):
             'events': [{'id': str(e.pk), 'revision': e.revision, 'event_type': e.event_type,
                         'finding_id': str(e.finding_id) if e.finding_id else None,
                         'severity': e.severity, 'text': e.text, 'actor': e.actor_snapshot,
-                        'authority': e.authority_snapshot, 'created_at': e.created_at.isoformat()} for e in events]}
+                        'authority': e.authority_snapshot, 'created_at': e.created_at.isoformat(),
+                        'evidence': e.evidence} for e in events]}
 
 
 def actor_scope(actor, file_id, role=None):
@@ -150,11 +153,12 @@ def replay(identifier, request_sha):
     return None
 
 
-def append_record(review, actor, scope, identifier, sha, kind, text='', finding_id=None, severity=''):
+def append_record(review, actor, scope, identifier, sha, kind, text='', finding_id=None, severity='', evidence_job=None, evidence=None):
     review.revision += 1
     PackageReviewEvent.objects.create(id=identifier, review=review, actor=actor, actor_snapshot=actor_snapshot(actor),
                                      authority_snapshot=scope, request_sha256=sha, revision=review.revision,
-                                     event_type=kind, text=text, finding_id=finding_id, severity=severity)
+                                     event_type=kind, text=text, finding_id=finding_id, severity=severity,
+                                     evidence_job=evidence_job, evidence=evidence)
     review.save(update_fields=['revision'])
 
 
@@ -167,7 +171,7 @@ def start(actor, file_id, data):
         scope = lock_authority(actor, file_id, 'reviewer')
         previous = replay(identifier, sha)
         if previous:
-            return serialize(previous, replayed=True)
+            return serialize(previous, actor, replayed=True)
         exact = package_identity(file_id, bundle_id)
         if data['manifest_sha256'] != exact['manifest_sha256']:
             raise ReviewConflict('review_manifest_changed')
@@ -179,7 +183,7 @@ def start(actor, file_id, data):
         append_record(review, actor, scope, identifier, sha, 'opened')
         projects.recheck(scope)
         require_current(review)
-        return serialize(review)
+        return serialize(review, actor)
 
 
 def append(actor, review_id, data):
@@ -191,6 +195,10 @@ def append(actor, review_id, data):
         fields.add('finding_id')
     else:
         raise ValueError('Select finding, response, resolve or reopen.')
+    if isinstance(data, dict) and 'evidence' in data:
+        fields.add('evidence')
+        from deployment.review_evidence import checked_reference
+        checked_reference(data['evidence'])
     identifier = checked_request(data, fields)
     if not isinstance(data['text'], str) or not 1 <= len(data['text'].strip()) <= 10000:
         raise ValueError('Supply a finding, response or disposition between 1 and 10000 characters.')
@@ -207,7 +215,7 @@ def append(actor, review_id, data):
             raise projects.ProjectDenied('review_project_mismatch')
         previous = replay(identifier, sha)
         if previous:
-            return serialize(previous, replayed=True)
+            return serialize(previous, actor, replayed=True)
         require_current(review)
         if data['expected_revision'] != review.revision:
             raise ReviewConflict('review_revision_changed')
@@ -224,7 +232,11 @@ def append(actor, review_id, data):
             if kind == 'resolve' and review.events.filter(finding_id=finding_id, event_type='response',
                                                          actor_snapshot__id=actor.pk).exists():
                 raise projects.ProjectDenied('reviewer_cannot_resolve_own_response')
-        append_record(review, actor, scope, identifier, sha, kind, data['text'], finding_id, severity)
+        evidence_job, evidence = None, None
+        if 'evidence' in data:
+            from deployment.review_evidence import capture
+            evidence_job, evidence = capture(actor, review, data['evidence'])
+        append_record(review, actor, scope, identifier, sha, kind, data['text'], finding_id, severity, evidence_job, evidence)
         projects.recheck(scope)
         require_current(review)
-        return serialize(review)
+        return serialize(review, actor)
