@@ -338,6 +338,20 @@ def test_load_rejects_cross_architecture_before_import(modules, handoff, monkeyp
     assert command.call_count == 1 and command.call_args.args[0][:2] == ["docker", "info"]
 
 
+def test_load_rejects_engine_identity_change_after_import(modules, handoff, monkeypatch):
+    package, _, _ = modules
+    directory, _, expected = handoff
+    monkeypatch.setattr(
+        package, "run", lambda argv, **kwargs: b"linux aarch64" if argv[:2] == ["docker", "info"] else b""
+    )
+    monkeypatch.setattr(package, "inspect_image", lambda image: {"Id": "sha256:" + "a" * 64})
+    native = Mock(side_effect=AssertionError("Changed identity must stop before executing image"))
+    monkeypatch.setattr(package, "native_manifest", native)
+    with pytest.raises(package.PackageError, match="loaded_identity_mismatch"):
+        package.load(directory, expected)
+    native.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "fault", ["role", "profile", "uid", "override", "settings", "ingress", "manifest", "preflight"]
 )
@@ -474,6 +488,15 @@ def write_oci_archive(path, fault=None):
     ]
     if fault == "legacy_disagreement":
         legacy[0]["Layers"] = [legacy[0]["Config"]]
+    if fault in ("v1_compat", "v1_invalid", "v1_secondary"):
+        metadata = {"id": "a" * 64, "os": "linux", "created": "1970-01-01T00:00:00Z"}
+        if fault == "v1_secondary":
+            metadata["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
+        data = json.dumps(metadata).encode()
+        name = "blobs/sha256/" + hashlib.sha256(data).hexdigest()
+        blobs[name] = data if fault != "v1_invalid" else data.replace(b"linux", b"other")
+        legacy[0]["LayerSources"] = {}
+        identity = config_desc["digest"]
     files = {
         **blobs,
         "index.json": json.dumps(index).encode(),
@@ -515,3 +538,22 @@ def test_oci_graph_preserves_engine_identity_and_rejects_secondary_effects(modul
         target = tmp_path / "normalized.tar"
         package.normalize_save(source, target)
         package.verify_archive(target, image)
+
+
+@pytest.mark.parametrize("fault", ["v1_compat", "v1_invalid", "v1_secondary"])
+def test_graphdriver_compatibility_metadata_is_verified_and_never_imported(modules, tmp_path, fault):
+    package, _, _ = modules
+    source, target = tmp_path / "trusted-save.tar", tmp_path / "normalized.tar"
+    image = write_oci_archive(source, fault)
+    with pytest.raises(package.PackageError):
+        package.verify_archive(source, image)
+    if fault == "v1_compat":
+        package.normalize_save(source, target, image)
+        package.verify_archive(target, image)
+        with tarfile.open(target) as archive:
+            record = json.load(archive.extractfile("manifest.json"))[0]
+            assert set(record) == {"Config", "RepoTags", "Layers"}
+            assert len(archive.getnames()) == 6
+    else:
+        with pytest.raises(package.PackageError):
+            package.normalize_save(source, target, image)

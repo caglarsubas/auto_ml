@@ -190,7 +190,7 @@ def export(image, destination):
         archive = stage / "image.tar"
         raw = Path(temp) / "docker-save.tar"
         run(["docker", "image", "save", "--output", str(raw), info["Id"]], timeout=600)
-        normalize_save(raw, archive)
+        normalize_save(raw, archive, info["Id"])
         if not 0 < archive.stat().st_size <= MAX_IMAGE_BYTES:
             raise PackageError("package_image_size")
         manifest = {
@@ -212,7 +212,7 @@ def export(image, destination):
     return {"image_id": info["Id"], "manifest_sha256": expected, "scope": manifest["scope"]}
 
 
-def normalize_save(raw, destination):
+def normalize_save(raw, destination, image_id=None):
     """Retain a verified single-image graph from our trusted daemon's save.
 
     Preserve OCI identity on containerd-backed Docker. No tags or secondary
@@ -237,17 +237,26 @@ def normalize_save(raw, destination):
             if not 0 < config.size <= MAX_METADATA_BYTES:
                 raise PackageError("package_archive_metadata_invalid")
             identity = "sha256:" + hashlib.sha256(source.extractfile(config).read()).hexdigest()
-        names = verify_archive(raw, identity)
+        names = verify_archive(raw, image_id or identity, trusted_daemon_metadata=True)
         for name in names:
             item = source.getmember(name)
             if not item.isfile() or item.size > MAX_IMAGE_BYTES:
                 raise PackageError("package_archive_layout_invalid")
             header = tarfile.TarInfo(name)
             header.size, header.mode = item.size, 0o644
-            output.addfile(header, source.extractfile(item))
+            if name == "manifest.json":
+                import io
+
+                # Moby's compatibility fields/legacy configs are unnecessary
+                # for a manifest-based load; never hand those to the consumer.
+                data = json.dumps([{key: records[0][key] for key in ("Config", "RepoTags", "Layers")}]).encode()
+                header.size = len(data)
+                output.addfile(header, io.BytesIO(data))
+            else:
+                output.addfile(header, source.extractfile(item))
 
 
-def verify_archive(path, image_id):
+def verify_archive(path, image_id, *, trusted_daemon_metadata=False):
     try:
         # Bound raw headers before a generic TAR reader could allocate a PAX,
         # long-name or sparse extension payload. Docker save uses short names.
@@ -307,6 +316,11 @@ def verify_archive(path, image_id):
             records = json.loads(payload("manifest.json"))
             if len(records) != 1 or records[0].get("RepoTags") not in (None, []):
                 raise PackageError("package_archive_tags_rejected")
+            fields = {"Config", "RepoTags", "Layers"}
+            if trusted_daemon_metadata:
+                fields.update({"LayerSources", "Parent"})
+            if set(records[0]) - fields:
+                raise PackageError("package_archive_manifest_invalid")
             config = payload(records[0]["Config"])
             layers = records[0]["Layers"]
             if not isinstance(layers, list) or not layers or len(layers) > 500:
@@ -366,7 +380,7 @@ def verify_archive(path, image_id):
                     return json.loads(payload(name)) if metadata else name
 
                 descriptor = select(index)
-                if descriptor["digest"] != image_id:
+                if descriptor["digest"] != image_id and "sha256:" + hashlib.sha256(config).hexdigest() != image_id:
                     raise PackageError("package_archive_image_mismatch")
                 node = blob(descriptor)
                 if descriptor["mediaType"] == "application/vnd.oci.image.index.v1+json":
@@ -390,7 +404,26 @@ def verify_archive(path, image_id):
                 raise PackageError("package_archive_image_mismatch")
             directories = {name for name, item in entries.items() if item[2] == b"5"}
             parents = {p.as_posix() for name in required for p in PurePosixPath(name).parents if p.as_posix() != "."}
-            if set(entries) - directories != required or not directories.issubset(parents):
+            extra = set(entries) - directories - required
+            if trusted_daemon_metadata and extra:
+                # Moby graphdriver saves additional V1 compatibility config
+                # blobs. This bounded exception applies only to our own daemon
+                # output; normalized packages and untrusted import stay strict.
+                if len(extra) > len(layers):
+                    raise PackageError("package_archive_graph_invalid")
+                for name in extra:
+                    if not re.fullmatch(r"blobs/sha256/[0-9a-f]{64}", name):
+                        raise PackageError("package_archive_graph_invalid")
+                    data = payload(name)
+                    metadata = json.loads(data)
+                    if (
+                        hashlib.sha256(data).hexdigest() != PurePosixPath(name).name
+                        or not re.fullmatch(r"[0-9a-f]{64}", metadata.get("id", ""))
+                        or set(metadata) & {"mediaType", "config", "layers", "manifests"}
+                    ):
+                        raise PackageError("package_archive_graph_invalid")
+                extra = set()
+            if extra or not directories.issubset(parents):
                 raise PackageError("package_archive_graph_invalid")
             return sorted(required)
     except PackageError:
@@ -522,6 +555,8 @@ def load(directory, expected):
         # Numeric digest-only import cannot overwrite an unrelated image tag.
         run(["docker", "image", "load", "--input", str(snapshot / "image.tar")], timeout=600)
     info = inspect_image(value["image_id"])
+    if info["Id"] != value["image_id"]:
+        raise PackageError("package_loaded_identity_mismatch")
     if any(info[k] != value[k.lower()] for k in ("Os", "Architecture")) or info.get("Variant", "") != value["variant"]:
         raise PackageError("package_loaded_platform_mismatch")
     if native_manifest(info["Id"]) != value["runtime"]:
