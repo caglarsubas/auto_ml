@@ -79,17 +79,14 @@ test('reviewer and developer complete an attributable keyboard workflow and expo
   expect(job.specification.bundle_id).toBe(created.bundle_id);
   expect(job.specification.manifest_sha256).toBe(created.manifest_sha256);
   await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
-        await expect(page.getByRole('button', { name: 'Refresh jobs', exact: true })).toBeEnabled();
-        return await page.locator('app-package-jobs').textContent();
-      },
-      { timeout: 30000 },
-    )
-    .toContain('Job state: succeeded');
+    .poll(async () => (await (await api.get(`jobs/${job.id}/`)).json()).state, { timeout: 30000 })
+    .toBe('succeeded');
+  await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
+  await expect(page.locator('app-package-jobs')).toContainText('Job state: succeeded');
+  const downloadButton = page.getByRole('button', { name: 'Download job receipt', exact: true });
+  await expect(downloadButton).toBeEnabled();
   const jobDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download job receipt', exact: true }).focus();
+  await downloadButton.focus();
   await page.keyboard.press('Enter');
   const receiptDownload = await jobDownload;
   expect(receiptDownload.suggestedFilename()).toBe(`job-${job.id}.json`);

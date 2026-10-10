@@ -42,11 +42,6 @@ describe('Package review receipts and context', () => {
   });
   afterEach(() => {
     fixture.destroy();
-    http
-      .match((request) => request.url.startsWith('/api/jobs/datasets/'))
-      .forEach((request) =>
-        request.flush({ jobs_enabled: false, jobs: [], total: 0, next_offset: null }),
-      );
     http.verify();
   });
   it('opens the exact package with a unique receipt and no client actor', () => {
@@ -153,6 +148,12 @@ describe('Package review receipts and context', () => {
       ],
     };
     fixture.detectChanges();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-a').flush({
+      jobs_enabled: false,
+      jobs: [],
+      total: 0,
+      next_offset: null,
+    });
     expect(fixture.nativeElement.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
   });
