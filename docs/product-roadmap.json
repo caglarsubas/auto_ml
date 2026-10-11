@@ -1737,7 +1737,7 @@
       "title": "Fixed buffering private TLS ingress",
       "kind": "product_implementation",
       "owner": "Platform/Backend/Security",
-      "status": "implemented",
+      "status": "tested",
       "items": [
         "D06",
         "D07"

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "packet": "P30",
   "date": "2026-10-11",
-  "status": "qualification_in_progress",
+  "status": "local_source_qualified",
   "base_main_commit": "85bde85e79eb64eb266f8d29f2fb80663a72fdf8",
   "base_pull_request": {
     "number": 119,
@@ -15,16 +15,106 @@
     "sqlite_full_marked": {
       "passed": 2312,
       "skipped": 6,
-      "deselected": 62,
       "failures": 0,
-      "budgets": "unchanged"
+      "junit_sha256": "2a6dcd7baad5f2ad2e1aae2d2459330dac9c83830cda3a264dc65f6a5696b68c",
+      "coverage_sha256": "e66be2ca00ca6906e3e07e1f4d5f6fda3bda5b7c86ad2280f05a17319ba248ea",
+      "line_coverage_percent": 73.89,
+      "branch_coverage_percent": 64.11,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
     },
     "focused": {
       "passed": 86,
       "ingress_cases": 37,
       "roadmap_invariants": 49
     },
-    "postgresql_full_marked": "pending"
+    "postgresql_full_marked": {
+      "passed": 2312,
+      "skipped": 6,
+      "failures": 0,
+      "junit_sha256": "fb9d79d117c2f4cc895935ca5ff8294c99e52ca5f1839e1b8265625151bf34e3",
+      "coverage_sha256": "28f0e4c0f7f5cb0665809538aed05115143e3318e1a7689f7816777b44d73d94",
+      "line_coverage_percent": 73.89,
+      "branch_coverage_percent": 64.11,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
+    },
+    "actual_https": {
+      "actual_https_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_scheme_and_host": "passed",
+      "invalid_host_sni_ca": "blocked",
+      "tls_1_2_and_1_3": "passed",
+      "invalid_origin": "blocked",
+      "partial_upload_keeps_api_available": "passed",
+      "multipart_upload_and_protected_download": "passed",
+      "admitted_chunked_body": "passed",
+      "declared_and_chunked_body_limit": "passed",
+      "recorded_logout": "passed",
+      "missing_cert_root_command_key_permissions": "blocked_before_listening",
+      "image_id": "sha256:fef35f191c424628d9d27b5aa19132a71c3867bc27600a68a5ee18b63cd9cac9",
+      "uid": 10001,
+      "read_only_root": true,
+      "shared_socket_read_only": true,
+      "private_service_network_access": false,
+      "host_ports": false,
+      "frontend": "not_packaged"
+    },
+    "native_runtime_parity": {
+      "image_id": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+      "source_files": 196,
+      "mismatches": [],
+      "source_manifest": "historical_P29_build_identity_excluded_from_file_parity"
+    },
+    "private_recovery": {
+      "postgresql": "postgres (PostgreSQL) 17.11",
+      "image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+      "private_tls_session_api": "passed",
+      "wrong_ca": "rejected",
+      "wrong_hostname": "rejected",
+      "restart_persistence": "passed",
+      "quiescent_database_artifact_restore": "passed",
+      "full_postgresql_suite": "passed",
+      "private_job_broker_tls_authentication": "passed",
+      "job_wrong_ca_hostname_credentials": "blocked",
+      "actual_job_broker_loss": "passed",
+      "quiescent_job_database_artifact_restore_empty_broker": "passed",
+      "natural_orphan_lease_recovery": "passed",
+      "private_native_scoring_restore_parity": "passed",
+      "private_scoring_full_receipts_and_duplicate_completion": "passed",
+      "private_scoring_changed_missing_inputs_revocation": "blocked",
+      "private_scoring_source_scope_fault": "blocked",
+      "production_deployment_recovery": "not_qualified"
+    },
+    "native_read_only_config_before_after": [
+      {
+        "source": "before",
+        "image": "sha256:3eca6af6bfcf81e98ee314f7b3ca6bbc9b569cdd963d908bf505616150b17fe2",
+        "returncode": 1,
+        "native_config_output": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n2026/10/11 00:45:48 [emerg] 1#1: mkdir() \"/var/cache/nginx/fastcgi_temp\" failed (30: Read-only file system)\nnginx: [emerg] mkdir() \"/var/cache/nginx/fastcgi_temp\" failed (30: Read-only file system)\nnginx: configuration file /etc/nginx/nginx.conf test failed\n"
+      },
+      {
+        "source": "after",
+        "image": "sha256:773ba6d5ed01ef35ba1fae53ee55714586adacc2de6c198c5b15c7b025e7003e",
+        "returncode": 0,
+        "native_config_output": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful\n"
+      }
+    ],
+    "compose": {
+      "combined_config": "passed",
+      "services": [
+        "api",
+        "worker",
+        "dispatcher",
+        "ingress"
+      ],
+      "ingress_network": "separate_external_edge",
+      "ingress_socket_and_certificates": "read_only",
+      "host_binding_default": "127.0.0.1:8443",
+      "started_services": false
+    },
+    "ruff": "passed in backend cwd with unchanged configured rules and all changed tools",
+    "roadmap_renderer_and_git_diff": "passed"
   },
   "qualification_limits": [
     "Complete frontend/static assets and multi-image offline installation, supply-chain authentication, upgrades/rollback and production recovery, comprehensive egress/retention, training/search migration, expert isolation, independent refit reproduction and all release/value/customer gates remain open.",
@@ -37,5 +127,43 @@
     "customer_acceptance": "not_performed",
     "value_gate": "not_performed"
   },
-  "preservation": "Primary changes and services are unchanged; fixtures own and remove only their synthetic resources."
+  "preservation": "Primary changes and services are unchanged; fixtures own and remove only their synthetic resources.",
+  "source_commit": "e4c4712b028a1a2d19fbdbdb484337182713f8c4",
+  "base_main_ci": {
+    "run_id": 38098840003,
+    "url": "https://github.com/caglarsubas/auto_ml/actions/runs/38098840003",
+    "conclusion": "success",
+    "all_six_checks": "passed"
+  },
+  "source_sha256": {
+    ".github/workflows/ci.yml": "004879722220a502086175149cc969104c258b68742a5dc90271d0465caf3a05",
+    "backend/tests/unit/test_private_ingress.py": "9c8a867dd325b53edfb2fd8396d767655dd2c7ed174aba2ac52b8c540cc9db6b",
+    "docker-compose.private-ingress.yml": "94bb673aebbf04ea008a2e2c9c4a8d2d096ef52f62805c44a74ef6f087b63218",
+    "docker/private-ingress.Dockerfile": "3631e79fd4941d2e30587b05e23b7d53547797aceff68c862e3eb08f8476d83c",
+    "docker/private-ingress-entrypoint.sh": "ed94df2ba9987aa664e8e7ed520247d9c9258934dfe012c15a206ba3bb7002f2",
+    "scripts/private_ingress_package.py": "4ca87632b47a997bd050b364a2abb474e3c7c2eb1af558d2b28984811a6b3517",
+    "scripts/qualify_private_ingress.py": "cdc39f1968a57812459939285fb46ab9121023b609e82fc41a8523be195c42a6",
+    "scripts/qualify_private_api_image.py": "58b123a80ce6fd130d6ec9f688492dcf1200a406adbfe2b23956de468731df2f",
+    "scripts/qualify_postgres_fixture.py": "9999d61034800c97abfe65bde8f9c288937e623409542c278c19e14804b97108"
+  },
+  "native_ingress_image": {
+    "schema": "private_tls_ingress_v1",
+    "nginx_version": "1.30.5",
+    "authority": "api.private.test:8443",
+    "body_mib": 1,
+    "source_sha256": {
+      "nginx.conf": "0701a212d299f8bf7fc62167a85ff51d2932723f0c4bc86c46ba966df49dc0d8",
+      "Dockerfile": "3631e79fd4941d2e30587b05e23b7d53547797aceff68c862e3eb08f8476d83c",
+      "start-ingress.sh": "ed94df2ba9987aa664e8e7ed520247d9c9258934dfe012c15a206ba3bb7002f2"
+    },
+    "image_id": "sha256:fef35f191c424628d9d27b5aa19132a71c3867bc27600a68a5ee18b63cd9cac9",
+    "base_image_id": "sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+    "architecture": "arm64"
+  },
+  "retained_findings": [
+    "Initial native read-only startup failed on unused FastCGI temp paths under /var/cache/nginx; all native temp paths now use /tmp. The old and corrected native config check is retained.",
+    "The certificate fixture originally transferred directory ownership before writing and lost root helper access; writes now precede ownership transfer.",
+    "The original administrator correctly lacked developer write authority; the fixture now uses recorded operator enrollment as a developer. Application permissions are unchanged.",
+    "The initial CI browser job succeeded with 35 first passes and two cases passing after retry 1. Final exact-head results remain separate PR evidence; root causes are not established."
+  ]
 }

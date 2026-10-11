@@ -348,7 +348,7 @@ Build an explicit application source allowlist into a fresh system-dependency im
 
 ### P30 — Fixed buffering private TLS ingress
 
-**Packet status:** implemented. **Mapped outcomes:** D06, D07.
+**Packet status:** tested. **Mapped outcomes:** D06, D07.
 
 Build one canonical-authority NGINX image from exact trusted dependencies, separate the edge network and read-only socket/certificate mounts, and qualify real HTTPS identity, CSRF, buffered uploads and current media authorization without application changes.
 
