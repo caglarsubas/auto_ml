@@ -45,7 +45,7 @@ def missing_bind_check(image, temp):
         subprocess.run(["docker", "container", "rm", "--force", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
 
-def qualify(directory, expected, reports):
+def qualify(directory, expected, reports, path_check_image=None):
     reports = reports.resolve()
     if not reports.is_relative_to(ROOT / "test-reports"):
         raise planner.PlanError("installation_reports_path_invalid")
@@ -60,6 +60,8 @@ def qualify(directory, expected, reports):
         request_path.write_bytes(planner.encoded(request))
         plan = temp / "plan"
         result = planner.render(request_path, directory, expected, plan)
+        if path_check_image is not None and path_check_image != result["images"]["api"]:
+            raise planner.PlanError("installation_path_fixture_scope_required")
         command = subprocess.run(
             ["docker", "compose", "--project-directory", str(plan), "-f", str(plan / "compose.json"), "config", "--format", "json"],
             capture_output=True, timeout=30, check=False,
@@ -82,6 +84,10 @@ def qualify(directory, expected, reports):
             if role == "ingress" and any(normalized["ports"][0][key] != value for key, value in service["ports"][0].items()):
                 raise planner.PlanError("installation_compose_normalization_mismatch")
         missing_bind_check(result["images"]["api"], temp)
+        if path_check_image is not None:
+            from qualify_private_installation_check import qualify as qualify_paths
+
+            qualify_paths(plan, result["plan_manifest_sha256"], path_check_image, reports)
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))
@@ -95,9 +101,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image_set", type=Path)
     parser.add_argument("--expected-image-set-sha256", required=True)
+    parser.add_argument("--path-check-image", help="Exact API image from the verified set; adds owned Linux filesystem qualification")
     parser.add_argument("--reports", type=Path, default=ROOT / "test-reports/postgresql")
     args = parser.parse_args()
-    print(json.dumps(qualify(args.image_set, args.expected_image_set_sha256, args.reports)))
+    print(json.dumps(qualify(args.image_set, args.expected_image_set_sha256, args.reports, args.path_check_image)))
 
 
 if __name__ == "__main__":
