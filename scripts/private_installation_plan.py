@@ -20,6 +20,7 @@ import private_image_set as image_set
 from private_ingress_package import IngressError, authority, configuration
 
 SCHEMA = "private_installation_request_v1"
+PLAN_SCHEMA = "private_installation_plan_v2"
 MAX_REQUEST = 16_384
 FILES = {"request.json", "compose.json", "prerequisites.json", "image-set.json", "ingress.json"}
 
@@ -158,10 +159,10 @@ def composition(request, images):
     }
 
 
-def prerequisites(request, images):
+def prerequisites(request, images, legacy=False):
     root, name = request["root"], "declarai-" + request["installation_id"]
     return {
-        "schema": "private_installation_prerequisites_v1",
+        "schema": "private_installation_prerequisites_v1" if legacy else "private_installation_prerequisites_v2",
         "scope": "native_application_layer_with_operator_managed_dependencies",
         "directories": [
             {"path": root + "/secrets/app", "uid": 10001, "gid": 10001, "mode": "0700", "mount": "read_only"},
@@ -170,7 +171,7 @@ def prerequisites(request, images):
         ],
         "secret_files": {"app": ["django-key", "app-password", "job-broker-url", "postgres-ca.crt", "job-ca.crt"], "tls": ["tls.crt", "tls.key"]},
         "secret_file_identity": {"uid": 10001, "gid": 10001, "mode": "0400", "regular_no_links": True},
-        "networks": [{"name": name + "-" + key, "driver": "bridge", "internal": True, "dedicated_installation": request["installation_id"]} for key in ("private", "edge")],
+        "networks": [{"name": name + "-" + key, "driver": "bridge", "internal": legacy or key == "private", "dedicated_installation": request["installation_id"]} for key in ("private", "edge")],
         "socket_volume": {"name": name + "-socket", "uid": 10001, "gid": 10001, "mode": "0750", "dedicated_installation": request["installation_id"]},
         "dependencies": {
             "postgres": {"image_id": images["postgres"], "alias": "postgres", "port": 5432, "tls": "verify-full", "database": request["database"], "application_superuser": False, "migrations": "approved_explicit_step"},
@@ -197,7 +198,7 @@ def render(request_path, directory, expected, destination):
         images = {key: component["image_id"] for key, component in value["components"].items()}
         files = {"request.json": encoded(request), "compose.json": encoded(composition(request, images)), "prerequisites.json": encoded(prerequisites(request, images)), "image-set.json": (stage / "manifest.json").read_bytes(), "ingress.json": (stage / "ingress/manifest.json").read_bytes()}
     manifest = {
-        "schema": "private_installation_plan_v1", "installation_id": request["installation_id"],
+        "schema": PLAN_SCHEMA, "installation_id": request["installation_id"],
         "image_set_manifest_sha256": expected, "architecture": value["architecture"],
         "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "scope": "native_application_layer_with_operator_managed_dependencies", "archive_verified_at_render": True,

@@ -131,6 +131,12 @@ def validate_application(info, role, service, profile, digest, binding, image):
         wanted_ports = {"8443/tcp": [{"HostIp": declared["host_ip"], "HostPort": declared["published"]}]}
     if ports != wanted_ports:
         raise checker.planner.PlanError("installation_adopt_application_port_mismatch")
+    if (
+        role == "ingress"
+        and info.get("State", {}).get("Running") is True
+        and info.get("NetworkSettings", {}).get("Ports") != wanted_ports
+    ):
+        raise checker.planner.PlanError("installation_adopt_https_port_not_published")
 
 
 def prerequisites(value, binding, applications):
@@ -348,6 +354,8 @@ def https_check(request, context):
 
 def adoption(plan, expected, ca):
     value = checker.verify(plan, expected)
+    if value["manifest"]["schema"] != checker.planner.PLAN_SCHEMA:
+        raise checker.planner.PlanError("installation_adopt_v2_plan_required_render_new_root")
     if sys.platform != "linux" or os.geteuid() != 0:
         raise checker.planner.PlanError("installation_adopt_linux_root_required")
     initialized = resources.initialization(value)
@@ -451,6 +459,8 @@ def adoption(plan, expected, ca):
         "services_adopted": True,
         "model_use_approved": False,
         "production_recovery_qualified": False,
+        "host_firewall_qualified": False,
+        "ingress_egress_policy_qualified": False,
     }
 
 

@@ -77,7 +77,8 @@ def test_real_set_renders_without_docker_secret_reads_or_installation_changes(pl
     assert len(compose["services"]["worker"]["volumes"]) == len(compose["services"]["dispatcher"]["volumes"]) == 2
     assert all(v["external"] for v in compose["networks"].values())
     prereq = json.loads((destination / "prerequisites.json").read_bytes())
-    assert all(v["internal"] for v in prereq["networks"])
+    assert prereq["networks"][0]["internal"] is True
+    assert prereq["networks"][1]["internal"] is False
     assert prereq["dependencies"]["postgres"]["image_id"] == result["images"]["postgres"]
     assert not prereq["dependencies"]["postgres"]["application_superuser"]
     assert prereq["directories"][2]["encrypted_storage_required"]

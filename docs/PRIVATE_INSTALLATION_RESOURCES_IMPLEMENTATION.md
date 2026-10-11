@@ -1,5 +1,7 @@
 # Dedicated private networks and socket — P37
 
+The historical v1 profile below used two internal bridges. [P38 adoption](PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md) adds a versioned v2 profile: the data-service bridge remains internal and the dedicated ingress bridge supports approved-address HTTPS publication. Current preparation follows the exact verified version; existing networks are never converted or repaired.
+
 After [fresh filesystem initialization](PRIVATE_INSTALLATION_INIT_IMPLEMENTATION.md), the operator can prepare the dedicated networks and empty API socket volume required by the reviewed application plan. P37 remains partial D07. It starts only a bounded filesystem initializer; database/cache/broker and application service adoption are separate steps.
 
 ```sh

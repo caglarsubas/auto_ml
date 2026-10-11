@@ -149,7 +149,7 @@ def validate_network(info, spec, binding):
         or info.get("Labels") != binding
         or info.get("Driver") != "bridge"
         or info.get("Scope") != "local"
-        or info.get("Internal") is not True
+        or info.get("Internal") is not spec["internal"]
         or info.get("EnableIPv6") is not False
         or info.get("Attachable") is not False
         or info.get("Ingress") is not False
@@ -264,13 +264,13 @@ def provision(value, expected, identifier):
     for spec in value["prerequisites"]["networks"]:
         name = spec["name"]
         if not listing("network", name):
-            args = ["network", "create", "--driver", "bridge", "--internal"]
+            args = ["network", "create", "--driver", "bridge", *(["--internal"] if spec["internal"] else [])]
             for key, item in binding.items():
                 args += ["--label", key + "=" + item]
             command([*args, name])
         info = inspect("network", name)
         validate_network(info, spec, binding)
-        networks.append({"name": name, "id": info["Id"], "internal": True})
+        networks.append({"name": name, "id": info["Id"], "internal": spec["internal"]})
     volume = value["prerequisites"]["socket_volume"]
     if not listing("volume", volume["name"]):
         args = ["volume", "create", "--driver", "local"]
