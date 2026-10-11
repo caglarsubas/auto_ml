@@ -1,0 +1,31 @@
+# Combine with docker-compose.private-api.yml. Supply an exact prebuilt local
+# image, certificate directory and separate edge network. No database access.
+services:
+  ingress:
+    image: ${DECLARAI_PRIVATE_INGRESS_IMAGE:?set the verified sha256 ingress image ID}
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 256m
+    pids_limit: 32
+    restart: "on-failure:3"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=268435456,uid=10001,gid=10001,mode=700
+    ports:
+      - "${DECLARAI_PRIVATE_TLS_BIND:-127.0.0.1}:${DECLARAI_PRIVATE_TLS_PORT:-8443}:8443"
+    volumes:
+      - type: bind
+        source: ${DECLARAI_PRIVATE_TLS_DIRECTORY:?set the approved certificate directory}
+        target: /installation
+        read_only: true
+        bind:
+          create_host_path: false
+      - api-socket:/run/declarai:ro
+    networks: [edge]
+networks:
+  edge:
+    external: true
+    name: ${DECLARAI_PRIVATE_EDGE_NETWORK:?set a separate approved ingress network}
