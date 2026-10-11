@@ -4,8 +4,11 @@ FROM ${NGINX_IMAGE}
 # templates, environment substitution, downloads or inherited entrypoint.
 USER root
 RUN addgroup -g 10001 declarai && adduser -D -H -u 10001 -G declarai declarai
+# Replace the upstream public welcome page; serve only sealed allowlisted assets.
+RUN rm -rf /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY start-ingress.sh /opt/declarai/start-ingress.sh
+COPY frontend /opt/declarai/frontend
 USER 10001:10001
 EXPOSE 8443
 ENTRYPOINT ["/bin/sh", "/opt/declarai/start-ingress.sh"]

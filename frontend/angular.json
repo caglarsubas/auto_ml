@@ -71,6 +71,20 @@
                   "with": "src/environments/environment.development.ts"
                 }
               ]
+            },
+            "private": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.private.ts"
+                }
+              ],
+              "sourceMap": false,
+              "optimization": {
+                "scripts": true,
+                "styles": { "minify": true, "inlineCritical": false },
+                "fonts": false
+              }
             }
           },
           "defaultConfiguration": "production"

@@ -9,8 +9,14 @@ export class SessionInterceptor implements HttpInterceptor {
   constructor(private auth: AuthService) {}
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    const managed = request.url.startsWith(this.auth.apiRoot)
-      || request.url.startsWith(this.auth.apiRoot.replace(/api\/$/, 'media/'));
+    // Resolve relative private-installation URLs and absolute artifact URLs
+    // against the same origin before applying the credential boundary.
+    const base = new URL(this.auth.apiRoot, window.location.origin);
+    const url = new URL(request.url, window.location.origin);
+    const managed = url.origin === base.origin && (
+      url.pathname.startsWith(base.pathname)
+      || url.pathname.startsWith(base.pathname.replace(/api\/$/, 'media/'))
+    );
     if (!managed) return next.handle(request);
     const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
     const headers: Record<string, string> = unsafe && this.auth.csrfToken ? { 'X-CSRFToken': this.auth.csrfToken } : {};

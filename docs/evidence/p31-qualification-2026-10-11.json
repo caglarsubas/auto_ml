@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "packet": "P31",
+  "date": "2026-10-11",
+  "status": "local_source_qualified",
+  "base_main_commit": "ddb2e5b911862c520442d538b862b47a17e7b46e",
+  "base_pull_request": {
+    "number": 120,
+    "state": "merged",
+    "merged_at": "2026-10-11T04:19:53Z",
+    "exact_pr_head_ci": "all_six_success"
+  },
+  "base_main_ci": {
+    "run_id": 38111238393,
+    "conclusion": "success",
+    "all_six_checks": "passed"
+  },
+  "source_binding": "Current source file hashes, compiled source/asset inventory and exact native ingress receipt; unchanged native API source verified separately. Exact final-head CI is separate PR evidence.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "edaefa8482657cf40ba1f1d6e7c807a4fe36706f6de1f997841e2a22e7a0eccf",
+    "backend/tests/unit/test_private_ingress.py": "c1a380c07088d0f4893ffdda269c653222dc51774ffa13537964674e23394f9c",
+    "backend/tests/unit/test_private_frontend.py": "4f13d557c98903512917937dced0691ec4f4e714817f83311e1c0783735f0d18",
+    "docker/private-ingress.Dockerfile": "baa10625b7d8c87dc559966ec65eb07e88d025ea069366af2ca294d30f4ffc53",
+    "frontend/angular.json": "5a5984e224d28f671c92d0b2795a5cf8af71b5a8483c18f3c37aa86dd09d1aed",
+    "frontend/src/environments/environment.private.ts": "8905f6bc100b28d99be3526564cc9e456ca7a4ff9eebd756f2664ee72674b2f1",
+    "frontend/src/app/services/session.interceptor.ts": "99e64119bb6b44182c328ca79ca46288dab9cc4f91e95cab08f46b264a2f28cd",
+    "frontend/src/app/services/session.interceptor.spec.ts": "bbee215015e34a04437d7194bfb90cbd30e7bfda603f99f4f6d0c974b3942f98",
+    "scripts/private_frontend_package.py": "492417e4b2261cd99f4525e25e3fc6a538df9821593c5641187c19c7adff84c2",
+    "scripts/private_ingress_package.py": "bd5a0674687812f0e70028e0ae9730296a86c41c3cbe65c3c21ce2406c3918c4",
+    "scripts/qualify_private_frontend.mjs": "8a56b5d00fa2305188699a80ae035011ebb903c065f000f55b4067bca3a24964",
+    "scripts/qualify_private_ingress.py": "88fd9e5a0e8f048e0d0d43f2171907382e833c2f8a36e0d4ec47d55deb347dd8",
+    "scripts/qualify_private_api_image.py": "1f6e9bb63f76ca953c5aaf9d7e3bc67414e4d0ff5e1baa3637b81d5182be5722",
+    "scripts/qualify_postgres_fixture.py": "3a3680930d663efbae541dce829a58b728807875dc44feb371aa40aca669d0a6"
+  },
+  "checks": {
+    "sqlite_full_marked": {
+      "passed": 2332,
+      "skipped": 6,
+      "failures": 0,
+      "junit_sha256": "d7759c7400ace43e6d15ea903ba215be780b5d1061ecf8c5135e87a00888bf1a",
+      "coverage_sha256": "4380e6b45bc62b9d743eaf110b54ad9430658169077524756066a40fc2e7a898",
+      "line_coverage_percent": 73.89,
+      "branch_coverage_percent": 64.11,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
+    },
+    "postgresql_full_marked": {
+      "passed": 2332,
+      "skipped": 6,
+      "failures": 0,
+      "junit_sha256": "5654954928f2173d5f75351212cd919fd827743952fd342790a972bf9b6d913c",
+      "coverage_sha256": "2c9022b53b9424b6065e6033e9fcded890ad9793d6b9004dcf6f39264c04ed07",
+      "line_coverage_percent": 73.89,
+      "branch_coverage_percent": 64.11,
+      "coverage_gate_percent": 50,
+      "dataset_round_assertion_timeout_skip_budgets": "unchanged"
+    },
+    "focused": {
+      "passed": 106,
+      "frontend_package_cases": 20,
+      "ingress_cases": 37,
+      "roadmap_invariants": 49
+    },
+    "frontend_units": {
+      "passed": 599,
+      "failures": 0
+    },
+    "actual_private_https": {
+      "actual_https_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_scheme_and_host": "passed",
+      "invalid_host_sni_ca": "blocked",
+      "tls_1_2_and_1_3": "passed",
+      "invalid_origin": "blocked",
+      "partial_upload_keeps_api_available": "passed",
+      "multipart_upload_and_protected_download": "passed",
+      "admitted_chunked_body": "passed",
+      "declared_and_chunked_body_limit": "passed",
+      "recorded_logout": "passed",
+      "frontend_browser": {
+        "compiled_private_browser": "passed",
+        "certificate": "exact_fixture_leaf_spki_pin",
+        "same_origin_session_csrf": "passed",
+        "project_selection_reload": "passed",
+        "local_fonts": "passed",
+        "pipeline_and_upload": "passed",
+        "protected_download_logout": "passed",
+        "missing_assets_metadata_admin_api_fallback": "blocked",
+        "media_as_application_script": "blocked_by_csp",
+        "protected_media_document": "attachment_and_sandbox",
+        "external_requests": 0,
+        "runtime_errors": 0,
+        "unexpected_csp_violations": 0,
+        "deliberate_script_violation": 1
+      },
+      "missing_cert_root_command_key_permissions": "blocked_before_listening",
+      "image_id": "sha256:9dca816b0ff57bda4a884f043e529005149b2fbaa5380367253ef03b1bf244ae",
+      "uid": 10001,
+      "read_only_root": true,
+      "shared_socket_read_only": true,
+      "private_service_network_access": false,
+      "host_ports": "owned_random_loopback",
+      "frontend": "baked_private_assets"
+    },
+    "compiled_frontend": {
+      "source_files": 113,
+      "asset_files": 50,
+      "asset_bytes": 27866925,
+      "node": "v24.16.0",
+      "compiler_versions": {
+        "@angular/cli": "22.2.2",
+        "@angular/compiler-cli": "22.2.1",
+        "@angular/core": "22.2.1",
+        "typescript": "6.0.3"
+      },
+      "compiler_configuration": "production,private",
+      "font_and_dependency_license_files": 5,
+      "manifest_sha256": "2c4db3940daed6f3207251bc7351bcb236b247947664bea3404bfe06b897a4fc",
+      "two_native_builds_identical_source_and_asset_inventories": true
+    },
+    "native_api_parity": {
+      "image_id": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+      "source_files": 196,
+      "mismatches": [],
+      "source_manifest": "historical_P29_build_identity_excluded_from_file_parity"
+    },
+    "private_recovery": {
+      "postgresql": "postgres (PostgreSQL) 17.11",
+      "image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+      "private_tls_session_api": "passed",
+      "wrong_ca": "rejected",
+      "wrong_hostname": "rejected",
+      "restart_persistence": "passed",
+      "quiescent_database_artifact_restore": "passed",
+      "full_postgresql_suite": "passed",
+      "private_job_broker_tls_authentication": "passed",
+      "job_wrong_ca_hostname_credentials": "blocked",
+      "actual_job_broker_loss": "passed",
+      "quiescent_job_database_artifact_restore_empty_broker": "passed",
+      "natural_orphan_lease_recovery": "passed",
+      "private_native_scoring_restore_parity": "passed",
+      "private_scoring_full_receipts_and_duplicate_completion": "passed",
+      "private_scoring_changed_missing_inputs_revocation": "blocked",
+      "private_scoring_source_scope_fault": "blocked",
+      "production_deployment_recovery": "not_qualified"
+    },
+    "ruff_frontend_lint_renderer_and_diff": "passed with unchanged configured rules"
+  },
+  "retained_failures": [
+    {
+      "stage": "initial_loopback_fixture",
+      "result": "internal Docker bridge had no published host binding; failed before browser execution; owning edge fixture corrected"
+    },
+    {
+      "stage": "mid_hardening_postgresql",
+      "passed": 2331,
+      "failed": 1,
+      "skipped": 6,
+      "result": "Old collected CSP assertion and new packaging module mixed after source edit during execution; retained; both full suites rerun with frozen final source."
+    },
+    {
+      "stage": "shared_fixture_media_probe",
+      "result": "503 project_authority_unavailable while owning failed run cleaned up its services; not qualification evidence. Final independent owned fixture passes; no application assertions, timeout/retry/skip/coverage budgets relaxed."
+    }
+  ],
+  "qualification_limits": [
+    "Bounded Linux/ARM64 synthetic deployment and Chromium developer flow, with fresh AMD64 qualification delegated to exact-head CI; no running-user deployment or capacity claim.",
+    "Complete restricted-network multi-image installation, authenticated supply, upgrades/rollback and production recovery, client-source attribution, comprehensive egress/retention, training/search migration, expert isolation, independent refit reproduction, comprehensive private UI/accessibility and release/value/customer gates remain open."
+  ],
+  "release_status": {
+    "D06": "in_progress",
+    "D07": "in_progress",
+    "D12": "in_progress",
+    "technical_release": "open",
+    "customer_acceptance": "not_performed",
+    "value_gate": "not_performed"
+  },
+  "preservation": "Primary status/file hashes and services preserved; owned fixtures cleaned up."
+}
