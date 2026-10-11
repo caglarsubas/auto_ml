@@ -287,6 +287,9 @@ def qualify_image(image_id, network, fixture, env, reports, ingress_image=None, 
             from qualify_private_ingress import qualify_ingress
 
             qualify_ingress(ingress_image, image_id, container, sockets, fixture, reports, probe, frontend_browser)
+        from qualify_private_image_jobs import qualify_jobs
+
+        qualify_jobs(image_id, network, installation, artifacts, env_file, reports)
         return status
     except BaseException as error:
         # Retain diagnostic text only after stripping every generated secret.
