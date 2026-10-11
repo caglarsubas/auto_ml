@@ -1,0 +1,60 @@
+# Partial private native services. Operator-provided PostgreSQL/Redis/TLS ingress
+# and frontend are separate; no automatic migrations, public port or source bind.
+x-native: &native
+  image: ${DECLARAI_PRIVATE_IMAGE:?set the verified sha256 image ID}
+  pull_policy: never
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  cpus: 2
+  mem_limit: 2g
+  pids_limit: 256
+  restart: "on-failure:3"
+  env_file: ${DECLARAI_PRIVATE_ENV_FILE:?set an external private environment file}
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=134217728,uid=10001,gid=10001
+  volumes: &storage
+    - type: bind
+      source: ${DECLARAI_PRIVATE_SECRETS:?set the external secret and CA directory}
+      target: /installation
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${DECLARAI_PRIVATE_ARTIFACTS:?set the encrypted artifact directory}
+      target: /artifacts
+      bind:
+        create_host_path: false
+  networks: [private]
+services:
+  api:
+    <<: *native
+    command: [api]
+    volumes:
+      - type: bind
+        source: ${DECLARAI_PRIVATE_SECRETS:?set the external secret and CA directory}
+        target: /installation
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DECLARAI_PRIVATE_ARTIFACTS:?set the encrypted artifact directory}
+        target: /artifacts
+        bind:
+          create_host_path: false
+      - api-socket:/run/declarai
+  worker:
+    <<: *native
+    command: [worker]
+  dispatcher:
+    <<: *native
+    command: [dispatcher]
+networks:
+  private:
+    external: true
+    name: ${DECLARAI_PRIVATE_NETWORK:?set the approved private service network}
+volumes:
+  api-socket:
+    external: true
+    name: ${DECLARAI_PRIVATE_SOCKET_VOLUME:?set a dedicated ingress socket volume}
