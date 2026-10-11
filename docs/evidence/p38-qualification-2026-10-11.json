@@ -38,15 +38,15 @@
     }
   },
   "source_sha256": {
-    "scripts/private_installation_adopt.py": "7f1b007014f5141549a8a78a280d90d78880ca5e3856ac4c4eb64e97da081428",
-    "scripts/qualify_private_installation_adopt.py": "d87df69a8e0dcf0d8b628450b7350f99412d37cd4e3c150e707aa7497d2f7a32",
+    "scripts/private_installation_adopt.py": "1238de8bcd684fb07448b445444afd5ad4b066f9a2088501619af886520cb8be",
+    "scripts/qualify_private_installation_adopt.py": "9fdacccc0823800a96cc0908b03a6a1c7a35aeee9aee613388fc89082c063607",
     "scripts/private_service.py": "15368a08e5a2a1cc41a7e69bb8d7bba7e28a5021364348c26827f960dd221032",
     "scripts/qualify_private_installation_plan.py": "e9bb126d6269fbf45680f2bea3b8ecaf34d2c6579cae056e069d0ab238984662",
     "backend/execution_jobs/preflight.py": "cf9e5e8896879596fa452ba29b5e755a2eb365823474f117c71bff01ad6188f2",
     "backend/execution_jobs/management/commands/check_job_runtime.py": "33e7c11e03ed364f96f8025397347e00cbe5622fbb7068ce636a540e08380820",
-    "backend/tests/unit/test_private_installation_adopt.py": "2748aaf4e11c07d6a808646ec0e8b64de50f7503b9e33ea7a5e49beb8db84a3e",
+    "backend/tests/unit/test_private_installation_adopt.py": "217d29d9968ad291f955f2ecd2fd15f3356ce3d7289c2e894446c036633ffb71",
     ".github/workflows/ci.yml": "c30c335f2335d80880c42755df4d5d27211b9fafd33982e52d3444acd39bf1f8",
-    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "4790711f47db878cca0b636f62c304cf3ef2588df139506ca158d931554bee07",
+    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "c681f042c23ca10ea7a96e9879c3ab335057361f6103f5abf7cddd44d1f3b119",
     "scripts/private_installation_plan.py": "377a5256fa9fcb6eb33f31cb18f72f2ad228d30bb48c2600d13b4a0f2ff3d720",
     "scripts/private_installation_check.py": "c92a42191912816c6b98ce9f05a94e6dbad2dad557430429ccba19c142ac6330",
     "scripts/private_installation_resources.py": "4631067b498581e9c3af9bc612f155783f58db44500c231169e21ad938143af1",
@@ -57,12 +57,12 @@
   },
   "checks": {
     "focused": {
-      "passed": 476,
+      "passed": 636,
       "skipped": 0,
       "failures": 0,
       "errors": 0
     },
-    "new_adoption_checks": 74,
+    "new_adoption_checks": 84,
     "prior_focused_checks": 402,
     "roadmap": {
       "passed": 49,
@@ -132,9 +132,14 @@
       "branch_coverage": 0.6411
     },
     "sqlite_full": {
-      "status": "frozen_v2_source_running_required_before_merge",
-      "prior_full_passed": 2714,
-      "prior_skipped": 6
+      "head": "5ef24dced97650e57907520adc0ea201442c2107",
+      "passed": 2719,
+      "skipped": 6,
+      "seconds": 293.019,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "frozen_source": true,
+      "status": "passed_on_preceding_frozen_v2_source"
     },
     "v2_actual_native_resources": {
       "application_services_started": false,
@@ -223,7 +228,94 @@
       },
       "architecture": "arm64",
       "installation_qualified": false
-    }
+    },
+    "native_published_port_metadata": {
+      "image": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+      "image_exposed_ports": {
+        "80/tcp": {},
+        "8443/tcp": {}
+      },
+      "snapshots": [
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        },
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        },
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        }
+      ],
+      "purpose": "actual Docker metadata semantics only; application not started",
+      "owned_cleanup": "passed"
+    },
+    "previous_focused": {
+      "passed": 476,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "expanded_focused_scope": "Includes 49 roadmap and all private runtime/frontend checks alongside prior handoff scope"
   },
   "hosted_acceptance": {
     "status": "required_before_merge",
@@ -261,6 +353,16 @@
     {
       "stage": "superseded local v2 matrix",
       "result": "2717 pass, 6 existing skips, one ingress-positive fixture failure: old collected fixture lacked actual Ports while controller was updated during this run. Run retained as mixed-source, not final evidence. New frozen full matrix with updated fixture and actual-publication regression is required."
+    },
+    {
+      "stage": "fourth exact-head hosted CI",
+      "run": 38151673820,
+      "head": "5ef24dced97650e57907520adc0ea201442c2107",
+      "result": "Actual port guard failed after startup. Exact ingress image exposes both 80/tcp and 8443/tcp; Docker may report image-declared unpublished ports as null. Actual comparison now accepts only null entries declared by the trusted image and still requires exact HTTPS binding. Owned fixture startup state/port/log diagnostics are retained with synthetic secret redaction; full fresh Linux acceptance required."
+    },
+    {
+      "stage": "actual port regression development",
+      "result": "Four failures identified shared dict identity between requested and actual port fixtures. Fixture now copies actual metadata independently; assertions unchanged. Failed local metadata hypothesis on Docker Desktop retained: this engine omits null unpublished entries, so Linux diagnostics remain required."
     }
   ],
   "remaining": [

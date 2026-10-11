@@ -335,6 +335,39 @@ def host_case(plan, expected, parent):
             "client_tls_hostname_and_ca": "verified",
             "operator_installation_modified": False,
         }
+    except BaseException:
+        # This exclusively owned synthetic fixture may retain neutral startup
+        # logs/metadata. Never inspect containers outside its exact binding.
+        if initialized is not None:
+            binding = m.labels(value, expected, initialized["initialization_id"])
+            profile, _, _ = adopter.application_profile(value, expected, initialized["initialization_id"])
+            for info in adopter.project_containers(profile["name"]):
+                if any(info.get("Config", {}).get("Labels", {}).get(k) != v for k, v in binding.items()):
+                    continue
+                logs = subprocess.run(
+                    [*m.PREFIX, "container", "logs", "--tail", "20", info["Id"]],
+                    capture_output=True,
+                    timeout=15,
+                    check=False,
+                )
+                detail = (logs.stdout + logs.stderr).decode(errors="replace")
+                for secret in redactions:
+                    detail = detail.replace(secret, "[synthetic-secret-redacted]")
+                print(
+                    json.dumps(
+                        {
+                            "fixture_role": info["Config"]["Labels"].get(m.LABEL + "role"),
+                            "state": {
+                                k: info.get("State", {}).get(k) for k in ["Running", "Restarting", "ExitCode", "Error"]
+                            },
+                            "requested_ports": info.get("HostConfig", {}).get("PortBindings"),
+                            "actual_ports": info.get("NetworkSettings", {}).get("Ports"),
+                            "logs": detail[:12000],
+                        }
+                    ),
+                    file=sys.stderr,
+                )
+        raise
     finally:
         if initialized is not None:
             binding = m.labels(value, expected, initialized["initialization_id"])

@@ -131,12 +131,18 @@ def validate_application(info, role, service, profile, digest, binding, image):
         wanted_ports = {"8443/tcp": [{"HostIp": declared["host_ip"], "HostPort": declared["published"]}]}
     if ports != wanted_ports:
         raise checker.planner.PlanError("installation_adopt_application_port_mismatch")
-    if (
-        role == "ingress"
-        and info.get("State", {}).get("Running") is True
-        and info.get("NetworkSettings", {}).get("Ports") != wanted_ports
-    ):
-        raise checker.planner.PlanError("installation_adopt_https_port_not_published")
+    if role == "ingress" and info.get("State", {}).get("Running") is True:
+        # Docker also reports image-declared, unpublished ports as null. These
+        # are not host bindings; only declarations from this exact image may
+        # accompany the one required live HTTPS publication.
+        actual_ports = info.get("NetworkSettings", {}).get("Ports")
+        declared_ports = image["Config"].get("ExposedPorts") or {}
+        if (
+            not isinstance(actual_ports, dict)
+            or {port: bindings for port, bindings in actual_ports.items() if bindings is not None} != wanted_ports
+            or any(port not in declared_ports for port, bindings in actual_ports.items() if bindings is None)
+        ):
+            raise checker.planner.PlanError("installation_adopt_https_port_not_published")
 
 
 def prerequisites(value, binding, applications):

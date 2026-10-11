@@ -89,7 +89,7 @@ def application(role, profile):
             "PortBindings": ports,
         },
         "NetworkSettings": {
-            "Ports": ports,
+            "Ports": copy.deepcopy(ports),
             "Networks": {composition["networks"][name]["name"]: {} for name in service["networks"]},
         },
         "Mounts": mounts,
@@ -108,6 +108,50 @@ def test_requested_https_port_does_not_substitute_for_actual_publication(adopter
     _, composition, digest, binding, image = profile
     info = application("ingress", profile)
     info["NetworkSettings"]["Ports"] = {"8443/tcp": None}
+    with pytest.raises(adopter.checker.planner.PlanError, match="https_port_not_published"):
+        adopter.validate_application(
+            info, "ingress", composition["services"]["ingress"], composition, digest, binding, image
+        )
+
+
+def test_trusted_image_unpublished_port_is_not_a_host_binding(adopter, profile):
+    _, composition, digest, binding, image = profile
+    image["Config"]["ExposedPorts"] = {"80/tcp": {}, "8443/tcp": {}}
+    info = application("ingress", profile)
+    info["NetworkSettings"]["Ports"]["80/tcp"] = None
+    adopter.validate_application(
+        info, "ingress", composition["services"]["ingress"], composition, digest, binding, image
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        [],
+        {},
+        {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "80"}]},
+        {"8443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8443"}]},
+        {"8443/tcp": [{"HostIp": "127.0.0.1", "HostPort": "1"}]},
+    ],
+)
+def test_only_exact_actual_https_binding_is_accepted(adopter, profile, bad):
+    _, composition, digest, binding, image = profile
+    image["Config"]["ExposedPorts"] = {"80/tcp": {}, "8443/tcp": {}}
+    info = application("ingress", profile)
+    info["NetworkSettings"]["Ports"] = bad
+    with pytest.raises(adopter.checker.planner.PlanError, match="https_port_not_published"):
+        adopter.validate_application(
+            info, "ingress", composition["services"]["ingress"], composition, digest, binding, image
+        )
+
+
+@pytest.mark.parametrize("bindings", [None, [], [{"HostIp": "127.0.0.1", "HostPort": "80"}]])
+def test_additional_actual_port_cannot_hide_behind_valid_https(adopter, profile, bindings):
+    _, composition, digest, binding, image = profile
+    image["Config"]["ExposedPorts"] = {"80/tcp": {}, "8443/tcp": {}}
+    info = application("ingress", profile)
+    info["NetworkSettings"]["Ports"]["9999/tcp"] = bindings
     with pytest.raises(adopter.checker.planner.PlanError, match="https_port_not_published"):
         adopter.validate_application(
             info, "ingress", composition["services"]["ingress"], composition, digest, binding, image
