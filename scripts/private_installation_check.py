@@ -175,8 +175,8 @@ def verify(directory, expected):
             planner.prerequisites(request, images),
         )
         if (
-            planner.decode(files["compose.json"]) != compose
-            or planner.decode(files["prerequisites.json"]) != prerequisites
+            planner.encoded(planner.decode(files["compose.json"])) != planner.encoded(compose)
+            or planner.encoded(planner.decode(files["prerequisites.json"])) != planner.encoded(prerequisites)
         ):
             raise planner.PlanError("installation_plan_profile_mismatch")
     except planner.PlanError:

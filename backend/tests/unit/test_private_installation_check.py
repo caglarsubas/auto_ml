@@ -129,6 +129,7 @@ def test_layout_links_and_bounded_inputs_fail_before_installation_inspection(
             lambda v: v["services"]["worker"].update(command=["python", "expert.py"]),
         ),
         ("compose.json", lambda v: v["services"]["api"].update(read_only=False)),
+    ("compose.json", lambda v: v["services"]["api"].update(read_only=1)),
         (
             "compose.json",
             lambda v: v["services"]["ingress"]["ports"][0].update(host_ip="0.0.0.0"),
@@ -138,6 +139,7 @@ def test_layout_links_and_bounded_inputs_fail_before_installation_inspection(
             lambda v: v["services"]["api"]["environment"].update(DJANGO_DEBUG="true"),
         ),
         ("prerequisites.json", lambda v: v["secret_file_identity"].update(mode="0644")),
+    ("prerequisites.json", lambda v: v["secret_file_identity"].update(uid=10001.0)),
         ("prerequisites.json", lambda v: v["networks"][0].update(internal=False)),
         (
             "request.json",

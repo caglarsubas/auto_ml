@@ -1255,7 +1255,7 @@
     {
       "date": "2026-10-11",
       "packet": "P35",
-      "event": "Verified PR124 merge and its exact-head all-six CI. P35 adds saved-plan integrity/profile verification, metadata-only Linux filesystem checks, 55 new security cases and five actual native owned-volume cases. Prior packets/outcomes, implementation queue, scientific/time/skip/coverage budgets and every release/customer state remain unchanged. Full local SQLite regression passes 2548 tests with six existing skips; final exact-head CI is recorded externally on the PR."
+      "event": "Verified PR124 merge and its exact-head all-six CI. P35 adds saved-plan integrity/profile verification, metadata-only Linux filesystem checks, 57 new security cases and five actual native owned-volume cases. Prior packets/outcomes, implementation queue, scientific/time/skip/coverage budgets and every release/customer state remain unchanged. Full local SQLite regression passes 2548 tests with six existing skips; final exact-head CI is recorded externally on the PR."
     }
   ],
   "implementation_packets": [

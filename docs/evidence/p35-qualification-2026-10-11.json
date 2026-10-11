@@ -13,17 +13,17 @@
   },
   "source_binding": "Final local executable sources, focused cases and actual native path qualification are bound below. Final canonical ledger/projection are rechecked after evidence recording. Fresh exact-head CI is recorded externally on the PR; merge and its separate main run remain separate states.",
   "source_sha256": {
-    "scripts/private_installation_check.py": "5a36cd2a4f48f6c4f945d05086f71883b84bc2dace603245854124111d3f94fb",
+    "scripts/private_installation_check.py": "ddd82ae73d5626d9c7e81a292c0adb26aa0c885012add7c47e37b1fb526d180b",
     "scripts/qualify_private_installation_check.py": "373afbd7bbf074e194ffa39ead6231458ada17e7bb24d324f0a318235b69a53a",
     "scripts/qualify_private_installation_plan.py": "45a0f63e7a11f7fb8f5c618433ad6a019560cd6db0b383bdf1c0cddb691f398c",
-    "backend/tests/unit/test_private_installation_check.py": "ba01669053aac0deef4eb8bae0b1ba3ab838f7e8481337624902eb2729697214",
+    "backend/tests/unit/test_private_installation_check.py": "07417709cbe4026b6909bab29bbb67cfe8a86187eedbe23a2869eedb6049aecd",
     ".github/workflows/ci.yml": "c00b72e2224a4068810957b64a0b641558b3251b242f5c73501004ec460ed20d",
-    "docs/PRIVATE_INSTALLATION_CHECK_IMPLEMENTATION.md": "3dff600c1a601c96a5288b1cf071ac3b2495d988864da8510e402cc2cffb9483"
+    "docs/PRIVATE_INSTALLATION_CHECK_IMPLEMENTATION.md": "7af3d62541862041c6bc858a1ddaa78e89870bc55fec74305e3cbcdc34fae551"
   },
   "checks": {
     "focused": {
-      "passed": 223,
-      "new_security_cases": 55,
+      "passed": 225,
+      "new_security_cases": 57,
       "existing_plan_cases": 52,
       "existing_image_set_cases": 67,
       "roadmap_cases": 49
@@ -38,7 +38,8 @@
       "line_coverage": 0.7389,
       "branch_coverage": 0.6411,
       "coverage_gate": 0.5,
-      "skip_budget": 15
+      "skip_budget": 15,
+      "source_scope": "Full regression before two added JSON-type rejection cases. Final focused/native qualification and hosted full suite run the corrected typed profile."
     },
     "offline_plan_and_actual_compose": {
       "actual_compose_configuration": "passed",
@@ -82,17 +83,17 @@
             "roots": [
               {
                 "device": 65025,
-                "inode": 100943102,
+                "inode": 100943079,
                 "kind": "app"
               },
               {
                 "device": 65025,
-                "inode": 100943103,
+                "inode": 100943080,
                 "kind": "tls"
               },
               {
                 "device": 65025,
-                "inode": 100943104,
+                "inode": 100943081,
                 "kind": "artifacts"
               }
             ],
@@ -147,5 +148,14 @@
     "Filesystem checks inspect point-in-time UID/mode/link/size/ACL metadata only; no secret contents/hashes or artifact descendants are read.",
     "Secret semantics/certificate trust, storage encryption/capacity/retention, network/socket isolation, dependency initialization, runtime connectivity and service adoption remain unqualified.",
     "Full installation, supply authentication, upgrade/rollback, production recovery, expert isolation, reproduction, accessibility and release/value/customer gates remain open."
+  ],
+  "retained_failures": [
+    {
+      "report": "ignored test-reports/p35/type-regression-before.xml",
+      "passed": 13,
+      "failed": 1,
+      "reason": "Python dictionary equality accepted JSON numeric 1 in place of a required boolean true.",
+      "correction": "Compare rederived Compose/prerequisites as canonical JSON, preserving boolean/integer/float types; add numeric-boolean and floating identity rejection cases. Final 225 focused and real native path cases pass; no runtime or acceptance budget changes."
+    }
   ]
 }
