@@ -1,0 +1,153 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P38",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "c7769d24f81bcb97e1692a91aa5443558be3a706",
+  "base_pull_request": 127,
+  "preceding_exact_head_ci": {
+    "run": 38144701562,
+    "head": "ef67fc7506499b9980f02d326424fab1c242ef6b",
+    "status": "all_six_success",
+    "backend": {
+      "passed": 2501,
+      "skipped": 5,
+      "seconds": 364.901,
+      "line_rate": "0.7219",
+      "branch_rate": "0.6199"
+    },
+    "postgresql": {
+      "passed": 2645,
+      "skipped": 6,
+      "seconds": 777.267,
+      "line_rate": "0.739",
+      "branch_rate": "0.6411"
+    },
+    "browser": {
+      "stats": {
+        "total": 37,
+        "expected": 36,
+        "unexpected": 0,
+        "flaky": 1,
+        "skipped": 0,
+        "ok": false
+      },
+      "max_retry": 2,
+      "retained_failure": "raw regression batch scoring remained queued/running under unchanged 30-second poll; third attempt passed",
+      "configured_retry_budget": 2
+    }
+  },
+  "source_sha256": {
+    "scripts/private_installation_adopt.py": "c20d7563de412693a819cdb5de8e78ede99294c74f2c7385e3b5f351c63facfe",
+    "scripts/qualify_private_installation_adopt.py": "e48fb7c3e035076107908b5cda9481463aaf51389e487d59ec2452a611c6c305",
+    "scripts/private_service.py": "15368a08e5a2a1cc41a7e69bb8d7bba7e28a5021364348c26827f960dd221032",
+    "scripts/qualify_private_installation_plan.py": "e9bb126d6269fbf45680f2bea3b8ecaf34d2c6579cae056e069d0ab238984662",
+    "backend/execution_jobs/preflight.py": "cf9e5e8896879596fa452ba29b5e755a2eb365823474f117c71bff01ad6188f2",
+    "backend/execution_jobs/management/commands/check_job_runtime.py": "33e7c11e03ed364f96f8025397347e00cbe5622fbb7068ce636a540e08380820",
+    "backend/tests/unit/test_private_installation_adopt.py": "b6c21cd8d206b6b97f8c033a65a1a7514e2a6ebd6e85667b7eb42bd9712f29b3",
+    ".github/workflows/ci.yml": "c30c335f2335d80880c42755df4d5d27211b9fafd33982e52d3444acd39bf1f8",
+    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "1c24300cdc16c2d2274fa122e529ae760bd292ca69c13502a2f86c10dd0a4bb4"
+  },
+  "checks": {
+    "focused": {
+      "passed": 461,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 0.649
+    },
+    "new_adoption_checks": 59,
+    "prior_focused_checks": 402,
+    "sqlite_full": {
+      "passed": 2704,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 272.747,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411
+    },
+    "roadmap": {
+      "passed": 49,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 0.132
+    },
+    "runtime": {
+      "sealed_image": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "source_files": 196,
+      "all_current_hashes_match": true,
+      "git_commit_in_manifest": "c7769d24f81bcb97e1692a91aa5443558be3a706",
+      "working_tree_changes": true
+    },
+    "actual_native_profiles": {
+      "schema": "private_adoption_native_profile_qualification_v1",
+      "architecture": "arm64",
+      "profiles": [
+        {
+          "role": "dispatcher",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "worker",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "api",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "ingress",
+          "image_id": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+          "created_not_started": true
+        }
+      ],
+      "failures": [],
+      "actual_compose_profiles": "passed",
+      "services_started": false,
+      "linux_root_controller_qualified": false,
+      "owned_fixture_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "primary_checkout": "exact status and 13 file hashes preserved"
+  },
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "Linux_root_fixture": "initialization/preparation, synthetic pinned operator dependencies/migrations, four fixed services, malformed CA before start, no-recreation retry, changed-profile rejection without repair, elevated membership rejection preserving services, and owned cleanup",
+    "exact_image_binding": "fresh complete native image set and existing fixed-worker/full-metadata receipts must match",
+    "budgets": "all six existing jobs; unchanged scientific assertions, 120-second single-test/900-second full-suite outer budgets, 50-percent full coverage, 15 skips and existing two Playwright retries"
+  },
+  "retained_failures": [
+    {
+      "stage": "focused development",
+      "result": "duplicate environment fixture correctly rejected by environment_invalid; fixture changed to replace existing value so the intended altered-value boundary is tested; final 461 pass"
+    },
+    {
+      "stage": "final ARM64 Compose profile attempt",
+      "result": "one mount_mismatch blocked; no assertion/profile relaxed; all owned resources cleaned; fresh exact final-image profile replay passes; full Linux-root acceptance remains required"
+    }
+  ],
+  "remaining": [
+    "operator dependency initialization/hardening",
+    "full storage encryption/capacity/retention",
+    "supply authenticity",
+    "upgrade/rollback",
+    "production disaster recovery",
+    "expert isolation",
+    "independent reproduction",
+    "complete accessibility",
+    "release/value/customer gates"
+  ],
+  "claims": {
+    "installation_qualified": false,
+    "release_qualified": false,
+    "expert_isolation_qualified": false,
+    "production_recovery_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  }
+}

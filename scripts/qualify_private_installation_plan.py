@@ -45,10 +45,12 @@ def missing_bind_check(image, temp):
         subprocess.run(["docker", "container", "rm", "--force", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
 
-def qualify(directory, expected, reports, path_check_image=None):
+def qualify(directory, expected, reports, path_check_image=None, adoption_check=False):
     reports = reports.resolve()
     if not reports.is_relative_to(ROOT / "test-reports"):
         raise planner.PlanError("installation_reports_path_invalid")
+    if adoption_check and path_check_image is None:
+        raise planner.PlanError("installation_adoption_fixture_image_required")
     request = {
         "schema": planner.SCHEMA, "installation_id": "qualification", "root": "/srv/declarai/qualification",
         "authority": "api.private.test:8443", "body_mib": 1, "bind_ip": "127.0.0.1",
@@ -94,6 +96,10 @@ def qualify(directory, expected, reports, path_check_image=None):
             from qualify_private_installation_resources import qualify as qualify_resources
 
             qualify_resources(plan, result["plan_manifest_sha256"], path_check_image, reports)
+            if adoption_check:
+                from qualify_private_installation_adopt import qualify as qualify_adoption
+
+                qualify_adoption(plan, result["plan_manifest_sha256"], path_check_image, reports)
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))
@@ -108,9 +114,10 @@ def main():
     parser.add_argument("image_set", type=Path)
     parser.add_argument("--expected-image-set-sha256", required=True)
     parser.add_argument("--path-check-image", help="Exact API image from the verified set; adds owned Linux filesystem qualification")
+    parser.add_argument("--adoption-check", action="store_true", help="Additionally qualify a complete owned Linux root adoption fixture")
     parser.add_argument("--reports", type=Path, default=ROOT / "test-reports/postgresql")
     args = parser.parse_args()
-    print(json.dumps(qualify(args.image_set, args.expected_image_set_sha256, args.reports, args.path_check_image)))
+    print(json.dumps(qualify(args.image_set, args.expected_image_set_sha256, args.reports, args.path_check_image, args.adoption_check)))
 
 
 if __name__ == "__main__":
