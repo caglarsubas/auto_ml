@@ -1,0 +1,74 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P39",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "d195c115806b30d8ae90eb384365e0f3a6e4ad01",
+  "base_pull_request": 128,
+  "preceding_exact_head_ci": {
+    "run": 38152965535,
+    "head": "b4ec87f3b4005dbac717244253015dd87f342d8f",
+    "status": "all_six_success",
+    "postgresql": {
+      "head": "b4ec87f3b4005dbac717244253015dd87f342d8f",
+      "passed": 2729,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 435.593,
+      "line_coverage": 0.739,
+      "branch_coverage": 0.6411
+    },
+    "browser": {
+      "total": 37,
+      "first_attempt": 37,
+      "flaky": 0,
+      "unexpected": 0,
+      "skipped": 0
+    }
+  },
+  "source_sha256": {
+    "scripts/private_installation_adopt.py": "857501cf1eaef94bae12163f11291d3a996f19c3a4c4780336abbd189d3df3dc",
+    "scripts/qualify_private_installation_adopt.py": "d63563431ec3b46fec2d10c12201c44c13f968af069f1fce5efb943902959076",
+    "backend/tests/unit/test_private_installation_adopt.py": "707b944b6936c3f38756f73ddf93f3e05ac2ba6f9e65a6e4f734cfc2d40fcc84",
+    "docs/PRIVATE_ADOPTION_READINESS_IMPLEMENTATION.md": "c957fe8fa4e6c8f1f197536f39f00a880d078af9a45884e3d230397f5a7bc285"
+  },
+  "checks": {
+    "missed_pause_on_preceding_source": "reproduced one failing-before case, retained without product modification",
+    "focused": {
+      "passed": 653,
+      "new_checks": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "runtime_sources": "same 196 files as qualified P38 image; only host controller/qualification and test/document changes",
+    "primary_checkout": "exact status and 13 file hashes preserved",
+    "runtime": {
+      "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "source_files": 196,
+      "all_current_hashes_match": true,
+      "git_commit_in_manifest": "c7769d24f81bcb97e1692a91aa5443558be3a706",
+      "working_tree_changes": true
+    },
+    "roadmap": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0
+    },
+    "ruff": "passed"
+  },
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "real_linux_pause_after_valid_https": "must reject without repair or replacement; fixture alone unpauses its injected fault",
+    "existing_acceptance": "fresh initialization/preparation, fixed profiles, repeated adoption, CA/profile/elevated-role guards, cleanup and all earlier native/private/full metadata/recovery workflows retained",
+    "budgets": "unchanged six jobs, 120-second single-test/900-second full-suite outer limits, 50-percent full coverage, 15 skips and two existing browser retries"
+  },
+  "claims": {
+    "installation_qualified": false,
+    "release_qualified": false,
+    "expert_isolation_qualified": false,
+    "production_recovery_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  }
+}

@@ -53,7 +53,7 @@ def application(role, profile):
     return {
         "Id": role + "-id",
         "Image": service["image"],
-        "State": {"Running": True},
+        "State": {"Running": True, "Paused": False, "Restarting": False, "Dead": False},
         "Config": {
             "User": "10001:10001",
             "Entrypoint": image["Config"]["Entrypoint"],
@@ -434,3 +434,129 @@ def test_legacy_plan_remains_verifiable_but_cannot_adopt_or_touch_host(adopter, 
     with pytest.raises(adopter.checker.planner.PlanError, match="v2_plan_required_render_new_root"):
         adopter.adoption(plan, expected, tmp_path / "ca.pem")
     assert before == {p.name: p.read_bytes() for p in plan.iterdir()}
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "missing",
+        "duplicate",
+        "unknown",
+        "stopped",
+        "unknown_state",
+        "numeric_state",
+        "paused",
+        "restarting",
+        "dead",
+        "changed_profile",
+    ],
+)
+def test_receipt_snapshot_requires_all_four_exact_active_services(adopter, profile, monkeypatch, fault):
+    _, composition, digest, binding, image = profile
+    rows = [application(role, profile) for role in sorted(adopter.ROLES)]
+    if fault == "missing":
+        rows.pop()
+    elif fault == "duplicate":
+        rows.append(copy.deepcopy(rows[0]))
+    elif fault == "unknown":
+        rows[0]["Config"]["Labels"]["com.docker.compose.service"] = "expert"
+    elif fault == "stopped":
+        rows[0]["State"]["Running"] = False
+    elif fault == "unknown_state":
+        rows[0]["State"].pop("Paused")
+    elif fault == "numeric_state":
+        rows[0]["State"]["Paused"] = 0
+    elif fault in {"paused", "restarting", "dead"}:
+        rows[0]["State"][fault.title()] = True
+    elif fault == "changed_profile":
+        rows[0]["HostConfig"]["Memory"] = 1024**3
+    monkeypatch.setattr(adopter, "project_containers", lambda *a: rows)
+    if fault is None:
+        result = adopter.active_applications(composition, digest, binding, {"api": image, "ingress": image})
+        assert set(result) == adopter.ROLES
+    else:
+        with pytest.raises(adopter.checker.planner.PlanError):
+            adopter.active_applications(composition, digest, binding, {"api": image, "ingress": image})
+
+
+@pytest.mark.parametrize(
+    "fault,expected_error",
+    [
+        (None, None),
+        ("stopped", "service_not_active"),
+        ("paused", "service_not_active"),
+        ("identity", "identity_changed_during_readiness"),
+        ("profile", "profile_mismatch"),
+        ("dependency", "test_dependency_changed"),
+    ],
+)
+def test_https_success_cannot_publish_stale_service_or_dependency_evidence(
+    adopter, saved_plan, profile, monkeypatch, tmp_path, fault, expected_error
+):
+    plan, expected = saved_plan
+    value, composition, _, _, image = profile
+    rows = [application(role, profile) for role in sorted(adopter.ROLES)]
+    state = {"started": False, "https": False}
+    checks = []
+    monkeypatch.setattr(adopter.sys, "platform", "linux")
+    monkeypatch.setattr(adopter.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        adopter.resources,
+        "initialization",
+        lambda *a: {"plan_manifest_sha256": expected, "initialization_id": "a" * 32},
+    )
+    monkeypatch.setattr(adopter.checker, "check_paths", lambda *a: None)
+    monkeypatch.setattr(adopter, "client_context", lambda *a: object())
+    monkeypatch.setattr(adopter.resources, "docker_host", lambda *a: None)
+    monkeypatch.setattr(adopter.resources, "record", lambda *a: {"DefaultRuntime": "runc"})
+    monkeypatch.setattr(
+        adopter.resources,
+        "inspect",
+        lambda kind, identifier: {
+            "Id": identifier,
+            "Architecture": value["manifest"]["architecture"],
+            "Os": "linux",
+            **image,
+        },
+    )
+    monkeypatch.setattr(adopter, "project_containers", lambda *a: copy.deepcopy(rows) if state["started"] else [])
+    monkeypatch.setattr(adopter, "preflight", lambda *a: checks.append("preflight"))
+
+    def prerequisites(*a):
+        checks.append("final_dependencies" if state["https"] else "initial_dependencies")
+        if state["https"] and fault == "dependency":
+            raise adopter.checker.planner.PlanError("test_dependency_changed")
+
+    def start(*a, **kw):
+        state["started"] = True
+        checks.append("compose")
+        return SimpleNamespace(returncode=0)
+
+    def https(*a):
+        checks.append("https")
+        state["https"] = True
+        worker = next(row for row in rows if row["Config"]["Labels"]["com.docker.compose.service"] == "worker")
+        if fault == "stopped":
+            worker["State"]["Running"] = False
+        elif fault == "paused":
+            worker["State"]["Paused"] = True
+        elif fault == "identity":
+            worker["Id"] = "replacement-worker"
+        elif fault == "profile":
+            worker["HostConfig"]["Memory"] = 1024**3
+
+    monkeypatch.setattr(adopter, "prerequisites", prerequisites)
+    monkeypatch.setattr(adopter.subprocess, "run", start)
+    monkeypatch.setattr(adopter, "https_check", https)
+    if expected_error is None:
+        receipt = adopter.adoption(plan, expected, tmp_path / "ca.crt")
+        assert receipt["post_https_service_state"] == "verified" and receipt["model_use_approved"] is False
+        assert {role: row["container_id"] for role, row in receipt["services"].items()} == {
+            role: role + "-id" for role in adopter.ROLES
+        }
+        assert checks == ["initial_dependencies", "preflight", "compose", "https", "final_dependencies"]
+    else:
+        with pytest.raises(adopter.checker.planner.PlanError, match=expected_error):
+            adopter.adoption(plan, expected, tmp_path / "ca.crt")
+        assert checks[:4] == ["initial_dependencies", "preflight", "compose", "https"]

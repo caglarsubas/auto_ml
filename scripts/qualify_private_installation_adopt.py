@@ -280,6 +280,36 @@ def host_case(plan, expected, parent):
             k: v["container_id"] for k, v in again["services"].items()
         } or any(v["reused"] is not True for v in again["services"].values()):
             raise adopter.checker.planner.PlanError("installation_adopt_fixture_recreated_services")
+        # Only this bound fixture injects a real Docker pause after valid HTTPS.
+        # The controller must reject the final state and must not repair it.
+        worker_id = first["services"]["worker"]["container_id"]
+        original_https = adopter.https_check
+        paused = False
+
+        def pause_after_https(request, context):
+            nonlocal paused
+            original_https(request, context)
+            command(["container", "pause", worker_id])
+            paused = True
+
+        adopter.https_check = pause_after_https
+        try:
+            try:
+                adopter.adoption(plan, expected, cert)
+            except adopter.checker.planner.PlanError as error:
+                if str(error) != "installation_adopt_service_not_active":
+                    raise
+            else:
+                raise adopter.checker.planner.PlanError("installation_adopt_fixture_stale_readiness_not_blocked")
+            current = adopter.project_containers(profile["name"])
+            if {c["Id"] for c in current} != {v["container_id"] for v in first["services"].values()} or m.inspect(
+                "container", worker_id
+            )["State"]["Paused"] is not True:
+                raise adopter.checker.planner.PlanError("installation_adopt_fixture_readiness_silently_repaired")
+        finally:
+            adopter.https_check = original_https
+            if paused:
+                command(["container", "unpause", worker_id])
         api_id = first["services"]["api"]["container_id"]
         command(["container", "update", "--memory", "1g", "--memory-swap", "2g", api_id])
         try:
@@ -333,6 +363,8 @@ def host_case(plan, expected, parent):
             "elevated_database_membership": "blocked",
             "existing_services_preserved": "passed",
             "client_tls_hostname_and_ca": "verified",
+            "paused_worker_after_https": "blocked_without_repair",
+            "post_https_service_state": "verified",
             "operator_installation_modified": False,
         }
     except BaseException:
