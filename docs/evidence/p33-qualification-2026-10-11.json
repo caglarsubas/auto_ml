@@ -1,0 +1,225 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P33",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "c63489dec0a6c51b2a209d52a76a78c98cd10c97",
+  "base_pull_request": 122,
+  "base_main_ci": {
+    "run": 38129481749,
+    "status": "all_six_success",
+    "head": "c63489dec0a6c51b2a209d52a76a78c98cd10c97"
+  },
+  "source_binding": "Final executable sources and acceptance cases are shared by local fixed-image/private and full metadata qualification. Final canonical ledger/projection are independently rechecked after recording evidence. Fresh exact-head CI is recorded on the PR.",
+  "source_sha256": {
+    "backend/execution_jobs/management/commands/dispatch_jobs.py": "11d84e5d3e66112b57004197a45b4366f25b55b47fa85b3a6c33c4d8e564ab68",
+    "scripts/qualify_private_image_jobs.py": "91d714ddfe5a16d137ae39ccad3b553c90f0c8bc4c36066ac5eee432564a2a83",
+    "scripts/qualify_private_api_image.py": "0e5e3cbbdbc520741063246168b9d82e77df10e7f074b7c4e8fdd1d0b012ba54",
+    "backend/tests/unit/test_dispatcher_shutdown.py": "f1173ec9901ffa7f62e86b7f3b5de99bd85ff0634141336543fec763748d87d3",
+    "backend/tests/unit/test_private_image_jobs.py": "c4d7b6c5ebd93f81ec6de7cf850bb1cef4d04f64f2a42535e77051cc6aea6416",
+    ".github/workflows/ci.yml": "037f609630fdf973561435f1886a6b1dfec9b3df360716f861266d4547d2083b",
+    "docs/PRIVATE_PACKAGED_JOBS_IMPLEMENTATION.md": "73a0fc2afe2a9cb0f7391262b33c016513e90a88e6c5a1edbccbffaea575a7e5"
+  },
+  "checks": {
+    "focused": {
+      "passed": 202,
+      "new_isolation_and_ownership_cases": 34,
+      "new_shutdown_cases": 8,
+      "existing_api_cases": 74,
+      "existing_ingress_cases": 37,
+      "roadmap_cases": 49
+    },
+    "sqlite": {
+      "tests": 2447,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 2441,
+      "seconds": 308.957,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    },
+    "postgresql": {
+      "tests": 2447,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 2441,
+      "seconds": 338.643,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    },
+    "fixed_packaged_jobs": {
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "roles": [
+        "worker",
+        "dispatcher"
+      ],
+      "source_mounts": false,
+      "public_ports": false,
+      "read_only_root": true,
+      "uid": 10001,
+      "fixed_entrypoint": true,
+      "resource_limits": {
+        "cpus": 2,
+        "memory_bytes": 2147483648,
+        "pids": 256
+      },
+      "observer_state_visible_to_services": false,
+      "receipts": [
+        {
+          "phase": "seed",
+          "jobs": 10,
+          "rows_per_task": 650,
+          "trusted_native_fit": "passed"
+        },
+        {
+          "phase": "verify",
+          "sealed_worker_dispatcher_completion": "passed",
+          "native_scoring_parity": "passed",
+          "calibrated_classification": true,
+          "rows_per_task": 650,
+          "jobs": 10,
+          "queued_cancellation": "passed",
+          "changed_missing_inputs_revocation": "blocked",
+          "authorized_full_receipts": "passed"
+        },
+        {
+          "phase": "duplicates",
+          "duplicate_broker_drained": "passed",
+          "terminal_history_artifacts_unchanged": "passed",
+          "deployment_qualified": false,
+          "expert_isolation_qualified": false
+        },
+        {
+          "phase": "settled",
+          "duplicate_broker_drained": "passed",
+          "terminal_history_artifacts_unchanged": "passed",
+          "deployment_qualified": false,
+          "expert_isolation_qualified": false
+        }
+      ],
+      "twenty_acknowledged_duplicate_deliveries": "passed",
+      "warm_worker_shutdown": "passed",
+      "production_recovery_qualified": false,
+      "expert_isolation_qualified": false
+    },
+    "private_api": {
+      "actual_wsgi_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_proxy_header": "passed",
+      "host_allowlist": "passed",
+      "protected_projects_and_media": "passed",
+      "recorded_logout": "passed",
+      "local_socket_permissions": "passed",
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "source_mounts": false,
+      "public_ports": false,
+      "read_only_root": true,
+      "uid": 10001,
+      "native_runtime_inventory": "verified_before_launch",
+      "actual_tls_ingress": "not_qualified"
+    },
+    "private_tls_ingress_browser": {
+      "actual_https_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_scheme_and_host": "passed",
+      "invalid_host_sni_ca": "blocked",
+      "tls_1_2_and_1_3": "passed",
+      "invalid_origin": "blocked",
+      "partial_upload_keeps_api_available": "passed",
+      "multipart_upload_and_protected_download": "passed",
+      "admitted_chunked_body": "passed",
+      "declared_and_chunked_body_limit": "passed",
+      "recorded_logout": "passed",
+      "frontend_browser": {
+        "compiled_private_browser": "passed",
+        "certificate": "exact_fixture_leaf_spki_pin",
+        "same_origin_session_csrf": "passed",
+        "project_selection_reload": "passed",
+        "local_fonts": "passed",
+        "pipeline_and_upload": "passed",
+        "protected_download_logout": "passed",
+        "missing_assets_metadata_admin_api_fallback": "blocked",
+        "media_as_application_script": "blocked_by_csp",
+        "protected_media_document": "attachment_and_sandbox",
+        "external_requests": 0,
+        "runtime_errors": 0,
+        "unexpected_csp_violations": 0,
+        "deliberate_script_violation": 1
+      },
+      "missing_cert_root_command_key_permissions": "blocked_before_listening",
+      "image_id": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+      "uid": 10001,
+      "read_only_root": true,
+      "shared_socket_read_only": true,
+      "private_service_network_access": false,
+      "host_ports": "owned_random_loopback",
+      "frontend": "baked_private_assets"
+    },
+    "private_metadata_recovery": {
+      "postgresql": "postgres (PostgreSQL) 17.11",
+      "image_id": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+      "redis_image_id": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "dependency_selection": "exact_local_no_pull",
+      "private_tls_session_api": "passed",
+      "wrong_ca": "rejected",
+      "wrong_hostname": "rejected",
+      "restart_persistence": "passed",
+      "quiescent_database_artifact_restore": "passed",
+      "full_postgresql_suite": "passed",
+      "private_job_broker_tls_authentication": "passed",
+      "job_wrong_ca_hostname_credentials": "blocked",
+      "actual_job_broker_loss": "passed",
+      "quiescent_job_database_artifact_restore_empty_broker": "passed",
+      "natural_orphan_lease_recovery": "passed",
+      "private_native_scoring_restore_parity": "passed",
+      "private_scoring_full_receipts_and_duplicate_completion": "passed",
+      "private_scoring_changed_missing_inputs_revocation": "blocked",
+      "private_scoring_source_scope_fault": "blocked",
+      "production_deployment_recovery": "not_qualified"
+    },
+    "api_source_parity": {
+      "packaged_application_files": 196,
+      "match_current_sources": true,
+      "generated_source_manifest": "separately verified by sealed runtime inventory",
+      "image_source_manifest": "retained actual build record, not reconstructed"
+    },
+    "ruff": "passed",
+    "diff_check": "passed",
+    "frontend": "No frontend source/dependency changes. Base main all-six CI passed; fresh PR CI retains unit/browser qualification."
+  },
+  "retained_failures": [
+    {
+      "stage": "first packaged synthetic seed",
+      "error": "HTTP replay assertion expected 202 but observed 200",
+      "cause": "Harness incorrectly treated replayed submissions as new requests.",
+      "resolution": "Use the existing 200 replay contract and assert stable job ID/replayed status; native API behavior is unchanged."
+    },
+    {
+      "stage": "first separate packaged dispatcher shutdown",
+      "error": "Fixed dispatcher did not stop cleanly after successful task completion.",
+      "cause": "Original dispatcher had no explicit PID-1 SIGTERM handling.",
+      "resolution": "Handle SIGTERM/SIGINT using a lock-free flag, finish the current bounded dispatch, check the flag during the five-second idle interval, and restore prior handlers. Dedicated signal/idle/rejection cases and actual final packaged shutdown pass."
+    }
+  ],
+  "superseded_runs": "In-progress local runs were stopped and their ignored reports retained after the final signal-handler refinement. Only the final rebuilt API image and complete source matrices are claimed here.",
+  "qualification_limits": [
+    "Local native ARM64 fixed-image execution is qualified; fresh PR CI runs native Linux AMD64 after building/importing its own exact source images. No cross-architecture model portability claim.",
+    "Only fixed trusted native models are loaded; observer test code is injected into an ephemeral observer, and its state is absent from service containers. This is not expert-code isolation.",
+    "Queued cancellation is qualified; this packet does not add interrupted-running-job or machine-loss recovery qualification.",
+    "Existing quiescent restore/natural-lease recovery remains source-runner qualification. Fixed-image normal task completion and warm duplicate drain are additional bounded evidence, not complete production recovery.",
+    "Complete restricted-network installation, operator secrets/storage/supervisor, authenticated supply, upgrade/rollback, production recovery, training/search migration, comprehensive egress/retention, expert isolation, independent refit/assessment reproduction, accessibility and all release/value/customer gates remain open."
+  ],
+  "release_status": "open; no deployment or customer acceptance",
+  "preservation": {
+    "primary_checkout": "exact status and 13 SHA256 baseline checks unchanged",
+    "existing_services": "untouched",
+    "existing_assertions_timeouts_retries_skips_coverage": "unchanged",
+    "canonical_history": "prior packets/evidence preserved; D07 progress and P33 history appended only"
+  }
+}
