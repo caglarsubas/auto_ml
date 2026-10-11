@@ -38,32 +38,32 @@
     }
   },
   "source_sha256": {
-    "scripts/private_installation_adopt.py": "c20d7563de412693a819cdb5de8e78ede99294c74f2c7385e3b5f351c63facfe",
-    "scripts/qualify_private_installation_adopt.py": "e48fb7c3e035076107908b5cda9481463aaf51389e487d59ec2452a611c6c305",
+    "scripts/private_installation_adopt.py": "d6fa0db5aa0d92b4f73c2ab490ff8119a33f49302b1c97f38fc62fa103afc808",
+    "scripts/qualify_private_installation_adopt.py": "cbe29715ba87a9a32f2ec736cb477b02e4f231c7024fca7e0e49ac6cd830ae19",
     "scripts/private_service.py": "15368a08e5a2a1cc41a7e69bb8d7bba7e28a5021364348c26827f960dd221032",
     "scripts/qualify_private_installation_plan.py": "e9bb126d6269fbf45680f2bea3b8ecaf34d2c6579cae056e069d0ab238984662",
     "backend/execution_jobs/preflight.py": "cf9e5e8896879596fa452ba29b5e755a2eb365823474f117c71bff01ad6188f2",
     "backend/execution_jobs/management/commands/check_job_runtime.py": "33e7c11e03ed364f96f8025397347e00cbe5622fbb7068ce636a540e08380820",
-    "backend/tests/unit/test_private_installation_adopt.py": "b6c21cd8d206b6b97f8c033a65a1a7514e2a6ebd6e85667b7eb42bd9712f29b3",
+    "backend/tests/unit/test_private_installation_adopt.py": "743a8b4f0b68f69a254ad45fb56cf3b2816d437c4699a362a6c16eb5b6b8cf38",
     ".github/workflows/ci.yml": "c30c335f2335d80880c42755df4d5d27211b9fafd33982e52d3444acd39bf1f8",
-    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "1c24300cdc16c2d2274fa122e529ae760bd292ca69c13502a2f86c10dd0a4bb4"
+    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "732cbe141bce49c2d17a40b362950d36fe404249e537b0b6c05c3fef412b3439"
   },
   "checks": {
     "focused": {
-      "passed": 461,
+      "passed": 471,
       "skipped": 0,
       "failures": 0,
       "errors": 0,
-      "seconds": 0.649
+      "seconds": 0.734
     },
-    "new_adoption_checks": 59,
+    "new_adoption_checks": 69,
     "prior_focused_checks": 402,
     "sqlite_full": {
-      "passed": 2704,
+      "passed": 2714,
       "skipped": 6,
       "failures": 0,
       "errors": 0,
-      "seconds": 272.747,
+      "seconds": 277.244,
       "line_coverage": 0.7389,
       "branch_coverage": 0.6411
     },
@@ -110,10 +110,21 @@
       "actual_compose_profiles": "passed",
       "services_started": false,
       "linux_root_controller_qualified": false,
-      "owned_fixture_cleanup": "passed"
+      "owned_fixture_cleanup": "passed",
+      "fixture_only_desktop_bind_aliases": 0,
+      "product_linux_mount_checks_relaxed": false
     },
     "ruff": "passed",
-    "primary_checkout": "exact status and 13 file hashes preserved"
+    "primary_checkout": "exact status and 13 file hashes preserved",
+    "previous_sqlite_full": {
+      "passed": 2704,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 272.747,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411
+    }
   },
   "hosted_acceptance": {
     "status": "required_before_merge",
@@ -128,7 +139,13 @@
     },
     {
       "stage": "final ARM64 Compose profile attempt",
-      "result": "one mount_mismatch blocked; no assertion/profile relaxed; all owned resources cleaned; fresh exact final-image profile replay passes; full Linux-root acceptance remains required"
+      "result": "Docker Desktop reports some exact owned bind sources with /host_mnt VM aliases. Raw controller comparison correctly blocks that Mac-only alias; native inspection fixture recognizes only this explicit owned path mapping and reports it. Linux controller source equality is unchanged; complete Linux-root acceptance remains required."
+    },
+    {
+      "stage": "initial exact-head hosted CI",
+      "run": 38148603377,
+      "head": "8ce95110fca898082fca190439db3a1078c731cd",
+      "result": "fresh Linux fixture failed at migration container start before adoption; failure receipt retained. Fixture now waits for final PostgreSQL TCP listener rather than a temporary Unix bootstrap server, and redacts synthetic values in retained command diagnostics. Final hosted acceptance remains required."
     }
   ],
   "remaining": [

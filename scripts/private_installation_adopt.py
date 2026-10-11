@@ -79,6 +79,7 @@ def validate_application(info, role, service, profile, digest, binding, image):
         or config.get("Entrypoint") != image["Config"].get("Entrypoint")
         or config.get("Cmd") != expected_command
         or config.get("WorkingDir") != image["Config"].get("WorkingDir")
+        or config.get("Healthcheck") != image["Config"].get("Healthcheck")
         or config.get("StopTimeout") != 60
         or parsed_environment(config.get("Env")) != wanted_env
         or host.get("ReadonlyRootfs") is not True
@@ -95,6 +96,12 @@ def validate_application(info, role, service, profile, digest, binding, image):
         or host.get("UsernsMode") not in (None, "")
         or host.get("DeviceRequests") not in (None, [])
         or host.get("Devices") not in (None, [])
+        or host.get("Runtime") != "runc"
+        or host.get("GroupAdd") not in (None, [])
+        or host.get("ExtraHosts") not in (None, [])
+        or host.get("Links") not in (None, [])
+        or any(host.get(key) not in (None, []) for key in ("Dns", "DnsOptions", "DnsSearch", "VolumesFrom"))
+        or host.get("Sysctls") not in (None, {})
         or host.get("Tmpfs") != {"/tmp": service["tmpfs"][0].removeprefix("/tmp:")}
         or host.get("RestartPolicy") != {"Name": "on-failure", "MaximumRetryCount": 3}
     ):
@@ -185,6 +192,7 @@ def validate_preflight(info, value, environment, binding, image):
         or config.get("User") != "10001:10001"
         or config.get("Entrypoint") != image["Config"].get("Entrypoint")
         or config.get("WorkingDir") != image["Config"].get("WorkingDir")
+        or config.get("Healthcheck") != image["Config"].get("Healthcheck")
         or config.get("Cmd") != ["preflight"]
         or parsed_environment(config.get("Env")) != wanted_env
         or host.get("ReadonlyRootfs") is not True
@@ -197,7 +205,16 @@ def validate_preflight(info, value, environment, binding, image):
         or host.get("Memory") != 1024**3
         or host.get("PidMode") not in (None, "")
         or host.get("IpcMode") != "private"
+        or host.get("UTSMode") not in (None, "")
+        or host.get("UsernsMode") not in (None, "")
         or host.get("Devices") not in (None, [])
+        or host.get("DeviceRequests") not in (None, [])
+        or host.get("Runtime") != "runc"
+        or host.get("GroupAdd") not in (None, [])
+        or host.get("ExtraHosts") not in (None, [])
+        or host.get("Links") not in (None, [])
+        or any(host.get(key) not in (None, []) for key in ("Dns", "DnsOptions", "DnsSearch", "VolumesFrom"))
+        or host.get("Sysctls") not in (None, {})
         or host.get("PortBindings") not in (None, {})
         or host.get("Tmpfs") != {"/tmp": "rw,noexec,nosuid,size=134217728,uid=10001,gid=10001,mode=700"}
         or set(info.get("NetworkSettings", {}).get("Networks", {})) != {value["prerequisites"]["networks"][0]["name"]}
@@ -339,6 +356,8 @@ def adoption(plan, expected, ca):
     checker.check_paths(plan, expected)
     context = client_context(ca)
     resources.docker_host(value["manifest"]["architecture"])
+    if resources.record(["info", "--format", "{{json .}}"]).get("DefaultRuntime") != "runc":
+        raise checker.planner.PlanError("installation_adopt_default_runtime_required")
     profile, digest, binding = application_profile(value, expected, initialized["initialization_id"])
     images = {role: resources.inspect("image", identity) for role, identity in value["images"].items()}
     for role, image in images.items():

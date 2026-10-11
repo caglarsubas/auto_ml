@@ -82,6 +82,7 @@ def application(role, profile):
             "UTSMode": "",
             "UsernsMode": "",
             "DeviceRequests": None,
+            "Runtime": "runc",
             "Devices": [],
             "Tmpfs": {"/tmp": service["tmpfs"][0].removeprefix("/tmp:")},
             "RestartPolicy": {"Name": "on-failure", "MaximumRetryCount": 3},
@@ -108,6 +109,7 @@ def test_exact_application_profile_is_inspectable_without_secret_values(adopter,
         ("Config", "Entrypoint", ["sh", "-c"]),
         ("Config", "WorkingDir", "/tmp"),
         ("Config", "StopTimeout", 0),
+        ("Config", "Healthcheck", {"Test": ["CMD", "expert.py"]}),
         ("HostConfig", "Privileged", True),
         ("HostConfig", "ReadonlyRootfs", False),
         ("HostConfig", "ReadonlyRootfs", 1),
@@ -119,6 +121,15 @@ def test_exact_application_profile_is_inspectable_without_secret_values(adopter,
         ("HostConfig", "UTSMode", "host"),
         ("HostConfig", "UsernsMode", "host"),
         ("HostConfig", "DeviceRequests", [{"Driver": "nvidia"}]),
+        ("HostConfig", "Runtime", "nvidia"),
+        ("HostConfig", "GroupAdd", ["0"]),
+        ("HostConfig", "ExtraHosts", ["postgres:192.168.1.1"]),
+        ("HostConfig", "Links", ["foreign:cache"]),
+        ("HostConfig", "Dns", ["8.8.8.8"]),
+        ("HostConfig", "DnsOptions", ["use-vc"]),
+        ("HostConfig", "DnsSearch", ["outside.example"]),
+        ("HostConfig", "VolumesFrom", ["foreign"]),
+        ("HostConfig", "Sysctls", {"net.ipv4.ip_forward": "1"}),
         ("HostConfig", "PidsLimit", -1),
         ("HostConfig", "Memory", 0),
         ("HostConfig", "NanoCpus", 0),
@@ -292,6 +303,7 @@ def test_failed_approval_prerequisites_never_start_application_services(
         return {"Id": identifier, "Architecture": value["manifest"]["architecture"], "Os": "linux", **image}
 
     monkeypatch.setattr(adopter.resources, "inspect", inspected)
+    monkeypatch.setattr(adopter.resources, "record", lambda *a: {"DefaultRuntime": "runc"})
     info = application("api", profile)
     info["Config"]["Cmd"] = ["foreign"]
     monkeypatch.setattr(adopter, "project_containers", lambda *a: [info] if fault == "existing" else [])

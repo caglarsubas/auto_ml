@@ -37,10 +37,21 @@ def host_case(plan, expected, parent):
     names = {role: "declarai-adopt-" + token + "-" + role for role in ["postgres", "cache", "job-broker"]}
     containers = []
     initialized = None
+    redactions = []
 
     def command(args, data=None):
         result = subprocess.run([*m.PREFIX, *args], input=data, capture_output=True, timeout=120, check=False)
         if result.returncode:
+            detail = (result.stdout + result.stderr).decode(errors="replace")
+            for secret in redactions:
+                detail = detail.replace(secret, "[synthetic-secret-redacted]")
+            detail = m.re.sub(
+                r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----",
+                "[synthetic-key-redacted]",
+                detail,
+                flags=m.re.S,
+            )
+            print(json.dumps({"fixture_command": args[:3], "diagnostic": detail[:12000]}), file=sys.stderr)
             raise adopter.checker.planner.PlanError("installation_adopt_fixture_command_failed")
         return result.stdout
 
@@ -97,6 +108,7 @@ def host_case(plan, expected, parent):
             "tls/tls.crt": cert.read_bytes(),
             "tls/tls.key": key.read_bytes(),
         }
+        redactions.extend([app_password, admin_password, broker_password, files["app/django-key"].decode()])
         for name, data in files.items():
             p = delivery / name
             p.write_bytes(data)
@@ -168,7 +180,7 @@ def host_case(plan, expected, parent):
         deadline = time.monotonic() + 60
         while True:
             result = subprocess.run(
-                [*m.PREFIX, "exec", names["postgres"], "pg_isready", "-U", "declarai_fixture_admin"],
+                [*m.PREFIX, "exec", names["postgres"], "pg_isready", "-h", "127.0.0.1", "-U", "declarai_fixture_admin"],
                 capture_output=True,
                 timeout=10,
                 check=False,
