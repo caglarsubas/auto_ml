@@ -144,8 +144,21 @@ jobs:
             exit 1
           fi
           python scripts/private_api_package.py load /tmp/declarai-private-handoff --expected-manifest-sha256 "$expected" > test-reports/postgresql/fixed-api-load.json
+      - name: Build fixed private TLS ingress
+        run: |
+          docker pull nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+          python scripts/private_ingress_package.py build \
+            --base-image "$(docker image inspect nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94 --format '{{.Id}}')" \
+            --tag declarai-private-ingress:ci --authority api.private.test:8443 --body-mib 1 \
+            > test-reports/postgresql/fixed-ingress-build.json
+          python - <<'PY'
+          import json, os
+          record = json.load(open('test-reports/postgresql/fixed-ingress-build.json'))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('DECLARAI_PRIVATE_INGRESS_IMAGE=' + record['image_id'] + '\n')
+          PY
       - name: Qualify disposable PostgreSQL fixture
-        run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE"
+        run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE" --private-ingress-image "$DECLARAI_PRIVATE_INGRESS_IMAGE"
       - name: Enforce existing skip budget
         if: always()
         run: python .github/scripts/check_skip_budget.py test-reports/postgresql/postgresql.xml --max-skips 15
@@ -204,7 +217,7 @@ jobs:
         run: pip install "ruff>=0.9"
       - name: Ruff check
         working-directory: backend
-        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/qualify_private_api_image.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
+        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/private_ingress_package.py ../scripts/qualify_private_ingress.py ../scripts/qualify_private_api_image.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
 
   # ---------------------------------------------------------------------------
   # Frontend static analysis (ESLint + Prettier)

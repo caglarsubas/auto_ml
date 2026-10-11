@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "packet": "P30",
+  "date": "2026-10-11",
+  "status": "qualification_in_progress",
+  "base_main_commit": "85bde85e79eb64eb266f8d29f2fb80663a72fdf8",
+  "base_pull_request": {
+    "number": 119,
+    "state": "merged",
+    "merged_at": "2026-10-11T00:33:34Z",
+    "exact_pr_head_ci": "all_six_success"
+  },
+  "source_binding": "Application/native API unchanged; all 196 packaged native source files match the retained P29 API image. New ingress source and qualification tools are bound separately by file hashes and image receipts. Exact final-head CI is separate PR evidence.",
+  "checks": {
+    "sqlite_full_marked": {
+      "passed": 2312,
+      "skipped": 6,
+      "deselected": 62,
+      "failures": 0,
+      "budgets": "unchanged"
+    },
+    "focused": {
+      "passed": 86,
+      "ingress_cases": 37,
+      "roadmap_invariants": 49
+    },
+    "postgresql_full_marked": "pending"
+  },
+  "qualification_limits": [
+    "Complete frontend/static assets and multi-image offline installation, supply-chain authentication, upgrades/rollback and production recovery, comprehensive egress/retention, training/search migration, expert isolation, independent refit reproduction and all release/value/customer gates remain open.",
+    "No frontend/browser installation, capacity, client-source attribution or customer acceptance claim."
+  ],
+  "release_status": {
+    "D06": "in_progress",
+    "D07": "in_progress",
+    "technical_release": "open",
+    "customer_acceptance": "not_performed",
+    "value_gate": "not_performed"
+  },
+  "preservation": "Primary changes and services are unchanged; fixtures own and remove only their synthetic resources."
+}

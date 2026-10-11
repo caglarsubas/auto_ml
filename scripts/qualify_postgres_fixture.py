@@ -43,7 +43,10 @@ def main():
     )
     parser.add_argument("--reports", default="test-reports/postgresql")
     parser.add_argument("--private-api-image", help="Exact local private API image sha256; adds real fixed-image socket smoke")
+    parser.add_argument("--private-ingress-image", help="Exact local TLS ingress image for api.private.test:8443 with 1 MiB body limit")
     args = parser.parse_args()
+    if args.private_ingress_image and not args.private_api_image:
+        parser.error("Private ingress qualification requires the fixed private API.")
     reports = (ROOT / args.reports).resolve()
     if not reports.is_relative_to(ROOT / "test-reports"):
         parser.error("Reports must be inside the ignored test-reports directory.")
@@ -475,7 +478,7 @@ def main():
             run_python(preflight, job_env, report="private-jobs.log")
             if args.private_api_image:
                 from qualify_private_api_image import qualify_image
-                qualify_image(args.private_api_image, network, fixture, env, reports)
+                qualify_image(args.private_api_image, network, fixture, env, reports, args.private_ingress_image)
             run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_CA_FILE": str(fixture / "wrong-ca.crt")},
                        succeed=False, report="job-tls-wrong-ca.log", rejection="job_broker_unavailable")
             broker_ip = command(["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", job_broker]).decode().strip()

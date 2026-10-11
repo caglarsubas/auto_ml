@@ -107,7 +107,7 @@ print(json.dumps({'actual_wsgi_session_csrf':'passed','secure_cookies':'passed',
 """
 
 
-def qualify_image(image_id, network, fixture, env, reports):
+def qualify_image(image_id, network, fixture, env, reports, ingress_image=None):
     if (
         not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id)
         or env.get("DECLARAI_TEST_INSTALLATION") != "1"
@@ -283,6 +283,10 @@ def qualify_image(image_id, network, fixture, env, reports):
             }
         )
         (reports / "fixed-api.json").write_text(json.dumps(status, indent=2) + "\n")
+        if ingress_image:
+            from qualify_private_ingress import qualify_ingress
+
+            qualify_ingress(ingress_image, image_id, container, sockets, fixture, reports, probe)
         return status
     except BaseException as error:
         # Retain diagnostic text only after stripping every generated secret.
