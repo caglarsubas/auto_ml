@@ -159,6 +159,7 @@ jobs:
       - name: Build fixed private TLS ingress with frontend
         run: |
           docker pull nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+          umask 077
           python scripts/private_ingress_package.py build \
             --base-image "$(docker image inspect nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94 --format '{{.Id}}')" \
             --tag declarai-private-ingress:ci --authority api.private.test:8443 --body-mib 1 \

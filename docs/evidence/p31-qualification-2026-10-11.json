@@ -15,12 +15,12 @@
     "conclusion": "success",
     "all_six_checks": "passed"
   },
-  "source_binding": "Current source file hashes, compiled source/asset inventory and exact native ingress receipt; unchanged native API source verified separately. Exact final-head CI is separate PR evidence.",
+  "source_binding": "Current source file hashes, compiled source/asset inventory and exact native ingress receipt; unchanged native API source verified separately. Exact final-head CI is separate PR evidence. Local HTTPS/scientific runs precede final image permission normalization; final umask-077 image has identical served/configuration bytes, passes actual UID-10001 read-only access, and receives fresh complete TLS/metadata qualification in exact-head CI.",
   "source_sha256": {
-    ".github/workflows/ci.yml": "edaefa8482657cf40ba1f1d6e7c807a4fe36706f6de1f997841e2a22e7a0eccf",
+    ".github/workflows/ci.yml": "d9d51343652fc99183c733ffee48b3ae2e4351317c98acf9eceeb18bd40ef6e9",
     "backend/tests/unit/test_private_ingress.py": "c1a380c07088d0f4893ffdda269c653222dc51774ffa13537964674e23394f9c",
     "backend/tests/unit/test_private_frontend.py": "4f13d557c98903512917937dced0691ec4f4e714817f83311e1c0783735f0d18",
-    "docker/private-ingress.Dockerfile": "baa10625b7d8c87dc559966ec65eb07e88d025ea069366af2ca294d30f4ffc53",
+    "docker/private-ingress.Dockerfile": "569a3f1074eaceaa9f796f2e36912762e4cd7210bcc5aa906945588dad4f592c",
     "frontend/angular.json": "5a5984e224d28f671c92d0b2795a5cf8af71b5a8483c18f3c37aa86dd09d1aed",
     "frontend/src/environments/environment.private.ts": "8905f6bc100b28d99be3526564cc9e456ca7a4ff9eebd756f2664ee72674b2f1",
     "frontend/src/app/services/session.interceptor.ts": "99e64119bb6b44182c328ca79ca46288dab9cc4f91e95cab08f46b264a2f28cd",
@@ -144,7 +144,39 @@
       "private_scoring_source_scope_fault": "blocked",
       "production_deployment_recovery": "not_qualified"
     },
-    "ruff_frontend_lint_renderer_and_diff": "passed with unchanged configured rules"
+    "ruff_frontend_lint_renderer_and_diff": "passed with unchanged configured rules",
+    "restrictive_build_umask": {
+      "umask": "077",
+      "before_after": [
+        {
+          "source": "before",
+          "image": "declarai-private-ingress:p31-umask-before",
+          "returncode": 42,
+          "readable_asset_count": 0
+        },
+        {
+          "source": "intermediate",
+          "image": "sha256:889231b016eb4ab152feff352832372d989eaf09e8d4b5b9dbe4aa8a168c9d3c",
+          "returncode": 42,
+          "readable_asset_count": 0
+        },
+        {
+          "source": "after",
+          "image": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+          "returncode": 0,
+          "readable_asset_count": 50
+        }
+      ],
+      "image_id": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+      "compiled_source_and_asset_inventories_match_https_image": true,
+      "nginx_config_and_entrypoint_bytes_match_https_image": true,
+      "actual_new_uid_10001_read_only_asset_read": "50 files passed",
+      "full_final_native_tls_and_metadata": "exact-head CI evidence recorded on PR"
+    },
+    "frontend_runtime_dependency_audit": {
+      "findings": 0,
+      "scope": "npm audit --omit=dev for current locked frontend; broader dependency/security qualification remains open"
+    }
   },
   "retained_failures": [
     {
@@ -161,6 +193,10 @@
     {
       "stage": "shared_fixture_media_probe",
       "result": "503 project_authority_unavailable while owning failed run cleaned up its services; not qualification evidence. Final independent owned fixture passes; no application assertions, timeout/retry/skip/coverage budgets relaxed."
+    },
+    {
+      "stage": "restrictive_build_permissions",
+      "result": "Actual pre-fix image under umask077 failed UID10001 config/script access. Intermediate COPY chmod also affected a newly created parent directory; final explicit traversable parent, read-only files and owned assets pass all50 actual reads."
     }
   ],
   "qualification_limits": [
