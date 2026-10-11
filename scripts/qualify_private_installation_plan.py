@@ -5,11 +5,44 @@ import argparse
 import json
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 import private_installation_plan as planner
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def normalized_mounts(values):
+    # Compose 2 serializes its false CreateHostPath bool as an omitted field.
+    # Accept only that representation; true and other mount changes still fail.
+    result = []
+    for value in values:
+        value = dict(value)
+        if value.get("type") == "bind":
+            value["bind"] = {"create_host_path": False, **value.get("bind", {})}
+        result.append(value)
+    return result
+
+
+def missing_bind_check(image, temp):
+    name = "declarai-plan-bind-" + uuid.uuid4().hex
+    source = temp / (name + "-missing")
+    file = temp / "missing-bind.json"
+    file.write_bytes(planner.encoded({"name": name, "services": {"fixture": {
+        "container_name": name, "image": image, "pull_policy": "never", "network_mode": "none",
+        "user": "10001:10001", "read_only": True, "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
+        "cpus": 1, "mem_limit": "256m", "pids_limit": 32,
+        "volumes": [{"type": "bind", "source": str(source), "target": "/installation", "read_only": True, "bind": {"create_host_path": False}}],
+    }}}))
+    try:
+        command = subprocess.run(["docker", "compose", "--project-directory", str(temp), "-f", str(file), "create", "--no-build", "--pull", "never", "fixture"], capture_output=True, timeout=30, check=False)
+        output = (command.stdout + command.stderr).decode(errors="replace").lower()
+        if command.returncode == 0 or source.exists() or "bind source path does not exist" not in output or source.name not in output:
+            raise planner.PlanError("installation_missing_bind_not_blocked")
+    finally:
+        # The owned UUID container is never started. No other object is removed.
+        subprocess.run(["docker", "container", "rm", "--force", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
 
 
 def qualify(directory, expected, reports):
@@ -42,14 +75,15 @@ def qualify(directory, expected, reports):
             for field in ("image", "pull_policy", "user", "read_only", "cap_drop", "security_opt", "pids_limit", "restart", "tmpfs"):
                 if normalized[field] != service[field]:
                     raise planner.PlanError("installation_compose_normalization_mismatch")
-            if normalized["volumes"] != service["volumes"]:
+            if normalized_mounts(normalized["volumes"]) != normalized_mounts(service["volumes"]):
                 raise planner.PlanError("installation_compose_normalization_mismatch")
             if role != "ingress" and normalized["environment"] != service["environment"]:
                 raise planner.PlanError("installation_compose_normalization_mismatch")
             if role == "ingress" and any(normalized["ports"][0][key] != value for key, value in service["ports"][0].items()):
                 raise planner.PlanError("installation_compose_normalization_mismatch")
+        missing_bind_check(result["images"]["api"], temp)
         reports.mkdir(parents=True, exist_ok=True)
-        result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
+        result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))
         # Retain nonsecret rendered evidence, not the multi-GiB image archives.
         for name in planner.FILES | {"manifest.json"}:

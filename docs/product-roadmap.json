@@ -1248,7 +1248,7 @@
     {
       "date": "2026-10-11",
       "packet": "P34",
-      "event": "Verified PR123 merge. P34 adds offline application-layer plans, 51 new trust/input cases and real four-image Compose normalization without secret reads or adoption. Full SQLite qualification passes 2492 tests with six existing skips; final source CI and separate main completion are bound on the PR; prior evidence, implementation queue, scientific/time/skip/coverage budgets and release/customer states are preserved."
+      "event": "Verified PR123 merge and its separate all-six main CI. P34 adds offline application-layer plans, 52 new trust/input cases and real four-image Compose normalization without secret reads or adoption. Full SQLite qualification passes 2492 tests with six existing skips; final source CI and separate main completion are bound on the PR; prior evidence, implementation queue, scientific/time/skip/coverage budgets and release/customer states are preserved."
     }
   ],
   "implementation_packets": [

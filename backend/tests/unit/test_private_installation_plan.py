@@ -169,3 +169,14 @@ def test_deterministic_configuration_and_fixed_prerequisite_layout(planner, requ
     assert request_value == before
     text = planner.encoded(planner.composition(request_value, images))
     assert b"$" not in text and b"DJANGO_SECRET_KEY\"" not in text and b"PASSWORD\"" not in text
+
+
+def test_compose_omitted_false_is_equivalent_but_path_creation_true_is_rejected(planner):
+    qualifier = importlib.import_module("qualify_private_installation_plan")
+    mount = {"type": "bind", "source": "/srv/declarai/pilot", "target": "/installation", "bind": {"create_host_path": False}}
+    omitted = copy.deepcopy(mount)
+    omitted["bind"] = {}
+    assert qualifier.normalized_mounts([omitted]) == [mount]
+    unsafe = copy.deepcopy(mount)
+    unsafe["bind"]["create_host_path"] = True
+    assert qualifier.normalized_mounts([unsafe]) != [mount]
