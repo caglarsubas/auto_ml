@@ -1,0 +1,161 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P37",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "3ae756fdb6eaa59dd8357f3c6494e83c1838eda7",
+  "base_pull_request": 126,
+  "preceding_exact_head_ci": {
+    "run": 38142690355,
+    "head": "07ece75332cae00caaca23e3f116ff4097a27059",
+    "status": "all_six_success",
+    "backend": {
+      "passed": 2451,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "seconds": 764.069,
+      "line_coverage": 0.7219
+    },
+    "postgresql": {
+      "passed": 2595,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 616.354,
+      "line_coverage": 0.739,
+      "branch_coverage": 0.6411
+    },
+    "browser": {
+      "stats": {
+        "total": 37,
+        "expected": 37,
+        "unexpected": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": true
+      },
+      "maxRetry": 0,
+      "all_last_attempts_passed": true,
+      "result_groups": 37
+    }
+  },
+  "source_sha256": {
+    "scripts/private_installation_resources.py": "bb992100f519939a68f953e38803c7045828dc8d2664d310d6ae19ab75663cb6",
+    "scripts/qualify_private_installation_resources.py": "334e2ca7d13ef83d43d84c8d631f08672335866f5e83f366c2ba3f9b66bf45e7",
+    "scripts/qualify_private_installation_plan.py": "e64570592b6b9e9c652da4e509eac9535af145752539bcd2f549c9c438b6652c",
+    "backend/tests/unit/test_private_installation_resources.py": "4bc7adcf9ee3bc37dd053d67db0ef37a89bb186129d9acbf1d2540906e6315aa",
+    ".github/workflows/ci.yml": "27e9261d5a62cc21f5895bae7513bff38fd0f666e42e415e0df0e5a21a1fb416",
+    "docs/PRIVATE_INSTALLATION_RESOURCES_IMPLEMENTATION.md": "098f41c91cf8950a3e8ac9636e87e7b68d0ca1c5eea6f3e191834f54d0659520"
+  },
+  "checks": {
+    "focused": {
+      "passed": 320,
+      "new_security_cases": 50,
+      "prior_cases": 270
+    },
+    "actual_native_resources": {
+      "application_services_started": false,
+      "cases": [
+        {
+          "case": "clean",
+          "linux_root_controller": null,
+          "receipt": {
+            "architecture": "arm64",
+            "archives_reverified": false,
+            "dependencies_initialized": false,
+            "existing_resources_repaired": false,
+            "expert_isolation_qualified": false,
+            "initialization_id": "0a7dc5f0a1e04dadad6e0866010032ed",
+            "installation_id": "q-0a7dc5f0a1e04dadad6e",
+            "installation_qualified": false,
+            "networks": [
+              {
+                "id": "d032d25282b97c24bf9d4d29c136f1100ef0d4e9bc67cde467ce9ee1cfe15803",
+                "internal": true,
+                "name": "declarai-q-0a7dc5f0a1e04dadad6e-private"
+              },
+              {
+                "id": "eb8e7d27540a45f52af76431b4ba468ef0fc31a783b767d1e3bd98b99bc19cdc",
+                "internal": true,
+                "name": "declarai-q-0a7dc5f0a1e04dadad6e-edge"
+              }
+            ],
+            "plan_manifest_sha256": "50788943cad69d3d22d92ca6de5a660e656d336a9f1565193561f3830b4c167a",
+            "plan_verified": true,
+            "release_qualified": false,
+            "resources_prepared": true,
+            "schema": "private_installation_resources_v1",
+            "services_adopted": false,
+            "socket_volume": {
+              "empty": true,
+              "identity": "10001:10001",
+              "mode": "0750",
+              "name": "declarai-q-0a7dc5f0a1e04dadad6e-socket"
+            }
+          },
+          "repeat_prepare": "passed"
+        },
+        {
+          "blocked": "installation_resources_network_conflict",
+          "case": "foreign_network"
+        },
+        {
+          "blocked": "installation_resources_network_conflict",
+          "case": "public_network"
+        },
+        {
+          "blocked": "installation_resources_volume_conflict",
+          "case": "foreign_volume"
+        },
+        {
+          "blocked": "installation_resources_socket_in_use",
+          "case": "occupied_volume"
+        },
+        {
+          "blocked": "installation_resources_socket_init_failed",
+          "case": "nonempty_socket"
+        },
+        {
+          "blocked": "installation_resources_socket_init_failed",
+          "case": "wrong_socket_mode"
+        }
+      ],
+      "expert_isolation_qualified": false,
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "installation_qualified": false,
+      "native_internal_networks": "passed",
+      "native_socket_initialization": "passed",
+      "operator_resources_modified": false,
+      "owned_resource_cleanup": "passed",
+      "schema": "private_installation_resources_qualification_v1",
+      "source_plan_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7"
+    },
+    "preceding_full_sqlite": {
+      "passed": 2595,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 328.157,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    },
+    "sealed_runtime_source_count": 196
+  },
+  "limits": [
+    "Local ARM64 qualifies actual native daemon/socket behavior. The full Linux root-controller path is separately exercised by hosted AMD64 CI.",
+    "No secret values or artifact descendants are read by preparation; no application or dependency services are started.",
+    "Partial resource creation is retained with exact ownership labels; only the owned helper is removed.",
+    "Docker ordinary initialization is not expert isolation; supply authentication/storage/firewall/production/release/value/customer gates remain open."
+  ],
+  "preservation": {
+    "prior_packets_preserved": true,
+    "queue_preserved": true,
+    "primary_checkout_preserved": true,
+    "acceptance_budgets_unchanged": true,
+    "release_customer_states_preserved": true
+  },
+  "source_binding": "Final local focused/native sources are bound above. Full regression/new Linux root entrypoint qualification runs in fresh exact-head CI; CI/merge evidence is retained externally."
+}

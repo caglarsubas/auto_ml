@@ -91,6 +91,9 @@ def qualify(directory, expected, reports, path_check_image=None):
             from qualify_private_installation_init import qualify as qualify_init
 
             qualify_init(plan, result["plan_manifest_sha256"], path_check_image, reports)
+            from qualify_private_installation_resources import qualify as qualify_resources
+
+            qualify_resources(plan, result["plan_manifest_sha256"], path_check_image, reports)
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))
