@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def launch(args):
-    if len(args) != 1 or args[0] not in ("api", "worker", "dispatcher"):
+    if len(args) != 1 or args[0] not in ("api", "worker", "dispatcher", "preflight"):
         raise ManifestError("private_service_role_required")
     if os.environ.get("DECLARAI_RUNTIME_PROFILE") != "private":
         raise ManifestError("private_service_profile_required")
@@ -29,13 +29,21 @@ def launch(args):
     verify(ROOT)
     os.chdir(ROOT / "backend")
     check = subprocess.run(
-        [sys.executable, "manage.py", "check_job_runtime"],
+        [
+            sys.executable,
+            "manage.py",
+            "check_job_runtime",
+            *(["--require-application-role"] if args[0] == "preflight" else []),
+        ],
         capture_output=True,
         timeout=60,
         check=False,
     )
     if check.returncode:
         raise ManifestError("private_service_preflight_failed")
+    if args[0] == "preflight":
+        print("private_service_preflight_passed")
+        return
     if args[0] != "api":
         os.execv("/bin/sh", ["sh", str(ROOT / "docker/private-job-entrypoint.sh"), args[0]])
     directory = Path("/run/declarai")

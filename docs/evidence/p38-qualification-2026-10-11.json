@@ -1,0 +1,389 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P38",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "c7769d24f81bcb97e1692a91aa5443558be3a706",
+  "base_pull_request": 127,
+  "preceding_exact_head_ci": {
+    "run": 38144701562,
+    "head": "ef67fc7506499b9980f02d326424fab1c242ef6b",
+    "status": "all_six_success",
+    "backend": {
+      "passed": 2501,
+      "skipped": 5,
+      "seconds": 364.901,
+      "line_rate": "0.7219",
+      "branch_rate": "0.6199"
+    },
+    "postgresql": {
+      "passed": 2645,
+      "skipped": 6,
+      "seconds": 777.267,
+      "line_rate": "0.739",
+      "branch_rate": "0.6411"
+    },
+    "browser": {
+      "stats": {
+        "total": 37,
+        "expected": 36,
+        "unexpected": 0,
+        "flaky": 1,
+        "skipped": 0,
+        "ok": false
+      },
+      "max_retry": 2,
+      "retained_failure": "raw regression batch scoring remained queued/running under unchanged 30-second poll; third attempt passed",
+      "configured_retry_budget": 2
+    }
+  },
+  "source_sha256": {
+    "scripts/private_installation_adopt.py": "1238de8bcd684fb07448b445444afd5ad4b066f9a2088501619af886520cb8be",
+    "scripts/qualify_private_installation_adopt.py": "9fdacccc0823800a96cc0908b03a6a1c7a35aeee9aee613388fc89082c063607",
+    "scripts/private_service.py": "15368a08e5a2a1cc41a7e69bb8d7bba7e28a5021364348c26827f960dd221032",
+    "scripts/qualify_private_installation_plan.py": "e9bb126d6269fbf45680f2bea3b8ecaf34d2c6579cae056e069d0ab238984662",
+    "backend/execution_jobs/preflight.py": "cf9e5e8896879596fa452ba29b5e755a2eb365823474f117c71bff01ad6188f2",
+    "backend/execution_jobs/management/commands/check_job_runtime.py": "33e7c11e03ed364f96f8025397347e00cbe5622fbb7068ce636a540e08380820",
+    "backend/tests/unit/test_private_installation_adopt.py": "217d29d9968ad291f955f2ecd2fd15f3356ce3d7289c2e894446c036633ffb71",
+    ".github/workflows/ci.yml": "c30c335f2335d80880c42755df4d5d27211b9fafd33982e52d3444acd39bf1f8",
+    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "c681f042c23ca10ea7a96e9879c3ab335057361f6103f5abf7cddd44d1f3b119",
+    "scripts/private_installation_plan.py": "377a5256fa9fcb6eb33f31cb18f72f2ad228d30bb48c2600d13b4a0f2ff3d720",
+    "scripts/private_installation_check.py": "c92a42191912816c6b98ce9f05a94e6dbad2dad557430429ccba19c142ac6330",
+    "scripts/private_installation_resources.py": "4631067b498581e9c3af9bc612f155783f58db44500c231169e21ad938143af1",
+    "scripts/qualify_private_installation_resources.py": "e4787f78e7e5cc7ce3b7301e0898b6b334cf52d46680f1ad6f284e9f98a1e795",
+    "backend/tests/unit/test_private_installation_plan.py": "1435b78f9af82722dd002613842e5217e5f035188a3e0e70086535b4a06f2b06",
+    "backend/tests/unit/test_private_installation_resources.py": "54c838f8b2e48bdc953d44ee71986ca661efcfebbc87d78e04ba4a1cbea83456",
+    "docs/PRIVATE_INSTALLATION_RESOURCES_IMPLEMENTATION.md": "c9dad8fe79284694e672b3d8954d918fbca1957926d1c1d6a8a976d45459f59e"
+  },
+  "checks": {
+    "focused": {
+      "passed": 636,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "new_adoption_checks": 84,
+    "prior_focused_checks": 402,
+    "roadmap": {
+      "passed": 49,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 0.132
+    },
+    "runtime": {
+      "sealed_image": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "source_files": 196,
+      "all_current_hashes_match": true,
+      "git_commit_in_manifest": "c7769d24f81bcb97e1692a91aa5443558be3a706",
+      "working_tree_changes": true
+    },
+    "actual_native_profiles": {
+      "schema": "private_adoption_native_profile_qualification_v1",
+      "architecture": "arm64",
+      "profiles": [
+        {
+          "role": "dispatcher",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "api",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "worker",
+          "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+          "created_not_started": true
+        },
+        {
+          "role": "ingress",
+          "image_id": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+          "created_not_started": true
+        }
+      ],
+      "failures": [],
+      "actual_compose_profiles": "passed",
+      "services_started": false,
+      "linux_root_controller_qualified": false,
+      "owned_fixture_cleanup": "passed",
+      "fixture_only_desktop_bind_aliases": 0,
+      "product_linux_mount_checks_relaxed": false
+    },
+    "ruff": "passed",
+    "primary_checkout": "exact status and 13 file hashes preserved",
+    "previous_sqlite_full": {
+      "passed": 2704,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 272.747,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411
+    },
+    "previous_sqlite_before_v2": {
+      "passed": 2714,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 277.244,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411
+    },
+    "sqlite_full": {
+      "head": "5ef24dced97650e57907520adc0ea201442c2107",
+      "passed": 2719,
+      "skipped": 6,
+      "seconds": 293.019,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "frozen_source": true,
+      "status": "passed_on_preceding_frozen_v2_source"
+    },
+    "v2_actual_native_resources": {
+      "application_services_started": false,
+      "cases": [
+        {
+          "case": "clean",
+          "linux_root_controller": null,
+          "receipt": {
+            "architecture": "arm64",
+            "archives_reverified": false,
+            "dependencies_initialized": false,
+            "existing_resources_repaired": false,
+            "expert_isolation_qualified": false,
+            "initialization_id": "8bdd7e9f166e4e99a97221f13959fbb1",
+            "installation_id": "q-8bdd7e9f166e4e99a972",
+            "installation_qualified": false,
+            "networks": [
+              {
+                "id": "b6ade0499440a027155563f9c58b83148a888cea0a7d83193bc48d51aeb87ef0",
+                "internal": true,
+                "name": "declarai-q-8bdd7e9f166e4e99a972-private"
+              },
+              {
+                "id": "09520bb9717c492cc4434b6b5c24747476c0aba50b47692d30d2df62727547d9",
+                "internal": false,
+                "name": "declarai-q-8bdd7e9f166e4e99a972-edge"
+              }
+            ],
+            "plan_manifest_sha256": "b0d13231aa5ee761e3005d4a16246db9bad704b26a5a7b8f97ad6971cacc7cae",
+            "plan_verified": true,
+            "release_qualified": false,
+            "resources_prepared": true,
+            "schema": "private_installation_resources_v1",
+            "services_adopted": false,
+            "socket_volume": {
+              "empty": true,
+              "identity": "10001:10001",
+              "mode": "0750",
+              "name": "declarai-q-8bdd7e9f166e4e99a972-socket"
+            }
+          },
+          "repeat_prepare": "passed"
+        },
+        {
+          "blocked": "installation_resources_network_conflict",
+          "case": "foreign_network"
+        },
+        {
+          "blocked": "installation_resources_network_conflict",
+          "case": "public_network"
+        },
+        {
+          "blocked": "installation_resources_volume_conflict",
+          "case": "foreign_volume"
+        },
+        {
+          "blocked": "installation_resources_socket_in_use",
+          "case": "occupied_volume"
+        },
+        {
+          "blocked": "installation_resources_socket_init_failed",
+          "case": "nonempty_socket"
+        },
+        {
+          "blocked": "installation_resources_socket_init_failed",
+          "case": "wrong_socket_mode"
+        }
+      ],
+      "expert_isolation_qualified": false,
+      "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "installation_qualified": false,
+      "native_internal_networks": "passed",
+      "native_socket_initialization": "passed",
+      "operator_resources_modified": false,
+      "owned_resource_cleanup": "passed",
+      "schema": "private_installation_resources_qualification_v1",
+      "source_plan_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35"
+    },
+    "v2_four_image_render": {
+      "plan_manifest_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35",
+      "images": {
+        "api": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+        "ingress": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+        "postgres": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "redis": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec"
+      },
+      "architecture": "arm64",
+      "installation_qualified": false
+    },
+    "native_published_port_metadata": {
+      "image": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+      "image_exposed_ports": {
+        "80/tcp": {},
+        "8443/tcp": {}
+      },
+      "snapshots": [
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        },
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        },
+        {
+          "state": {
+            "Running": true,
+            "Restarting": false,
+            "ExitCode": 0
+          },
+          "requested": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": ""
+              }
+            ]
+          },
+          "actual": {
+            "8443/tcp": [
+              {
+                "HostIp": "127.0.0.1",
+                "HostPort": "57090"
+              }
+            ]
+          }
+        }
+      ],
+      "purpose": "actual Docker metadata semantics only; application not started",
+      "owned_cleanup": "passed"
+    },
+    "previous_focused": {
+      "passed": 476,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "expanded_focused_scope": "Includes 49 roadmap and all private runtime/frontend checks alongside prior handoff scope"
+  },
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "Linux_root_fixture": "initialization/preparation, synthetic pinned operator dependencies/migrations, four fixed services, malformed CA before start, no-recreation retry, changed-profile rejection without repair, elevated membership rejection preserving services, and owned cleanup",
+    "exact_image_binding": "fresh complete native image set and existing fixed-worker/full-metadata receipts must match",
+    "budgets": "all six existing jobs; unchanged scientific assertions, 120-second single-test/900-second full-suite outer budgets, 50-percent full coverage, 15 skips and existing two Playwright retries"
+  },
+  "retained_failures": [
+    {
+      "stage": "focused development",
+      "result": "duplicate environment fixture correctly rejected by environment_invalid; fixture changed to replace existing value so the intended altered-value boundary is tested; final 461 pass"
+    },
+    {
+      "stage": "final ARM64 Compose profile attempt",
+      "result": "Docker Desktop reports some exact owned bind sources with /host_mnt VM aliases. Raw controller comparison correctly blocks that Mac-only alias; native inspection fixture recognizes only this explicit owned path mapping and reports it. Linux controller source equality is unchanged; complete Linux-root acceptance remains required."
+    },
+    {
+      "stage": "initial exact-head hosted CI",
+      "run": 38148603377,
+      "head": "8ce95110fca898082fca190439db3a1078c731cd",
+      "result": "fresh Linux fixture failed at migration container start before adoption; failure receipt retained. Fixture now waits for final PostgreSQL TCP listener rather than a temporary Unix bootstrap server, and redacts synthetic values in retained command diagnostics. Final hosted acceptance remains required."
+    },
+    {
+      "stage": "revised exact-head hosted CI",
+      "run": 38149350447,
+      "head": "0be267795c72e0ae24191b82dd16ebf05ad44568",
+      "result": "redacted migration diagnostic identifies Django declaration startup creating /artifacts/data_files on the fixture read-only mount. Only synthetic migration preparation now has writable artifacts, consistent with the application profile; app secrets and both adoption preflight mounts remain read-only. No product isolation or acceptance budget is weakened; fresh hosted acceptance remains required."
+    },
+    {
+      "stage": "third exact-head hosted CI",
+      "run": 38150107559,
+      "head": "222519fc84a9d5df05c7bd822a0b34469435b291",
+      "result": "migration, sealed preflight and four fixed service startup reached, but HTTPS failed. Actual installation exposed v1 both-internal ingress publication defect already accounted for by the earlier ingress qualifier. New v2 plan separates internal data services and publishing-only fixed ingress; old plans keep exact verification semantics and cannot adopt. Actual published-port checks added; complete fresh hosted acceptance still required."
+    },
+    {
+      "stage": "superseded local v2 matrix",
+      "result": "2717 pass, 6 existing skips, one ingress-positive fixture failure: old collected fixture lacked actual Ports while controller was updated during this run. Run retained as mixed-source, not final evidence. New frozen full matrix with updated fixture and actual-publication regression is required."
+    },
+    {
+      "stage": "fourth exact-head hosted CI",
+      "run": 38151673820,
+      "head": "5ef24dced97650e57907520adc0ea201442c2107",
+      "result": "Actual port guard failed after startup. Exact ingress image exposes both 80/tcp and 8443/tcp; Docker may report image-declared unpublished ports as null. Actual comparison now accepts only null entries declared by the trusted image and still requires exact HTTPS binding. Owned fixture startup state/port/log diagnostics are retained with synthetic secret redaction; full fresh Linux acceptance required."
+    },
+    {
+      "stage": "actual port regression development",
+      "result": "Four failures identified shared dict identity between requested and actual port fixtures. Fixture now copies actual metadata independently; assertions unchanged. Failed local metadata hypothesis on Docker Desktop retained: this engine omits null unpublished entries, so Linux diagnostics remain required."
+    }
+  ],
+  "remaining": [
+    "operator dependency initialization/hardening",
+    "full storage encryption/capacity/retention",
+    "supply authenticity",
+    "upgrade/rollback",
+    "production disaster recovery",
+    "expert isolation",
+    "independent reproduction",
+    "complete accessibility",
+    "release/value/customer gates"
+  ],
+  "claims": {
+    "installation_qualified": false,
+    "release_qualified": false,
+    "expert_isolation_qualified": false,
+    "production_recovery_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false,
+    "host_firewall_qualified": false,
+    "ingress_egress_policy_qualified": false
+  }
+}

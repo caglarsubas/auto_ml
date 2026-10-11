@@ -9,6 +9,35 @@ class RuntimeUnavailable(Exception):
     pass
 
 
+def check_application_role():
+    """Initial installation profile excludes elevated application DB authority."""
+    if connection.vendor != "postgresql":
+        raise RuntimeUnavailable("job_private_postgresql_required")
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls,
+                    EXISTS (
+                        SELECT 1 FROM pg_roles privileged
+                        WHERE (privileged.rolsuper OR privileged.rolcreatedb
+                            OR privileged.rolcreaterole OR privileged.rolreplication
+                            OR privileged.rolbypassrls OR privileged.rolname IN (
+                            'pg_read_server_files', 'pg_write_server_files',
+                            'pg_execute_server_program', 'pg_signal_backend',
+                            'pg_read_all_data', 'pg_write_all_data'
+                        )) AND pg_has_role(current_user, privileged.oid, 'MEMBER')
+                    )
+                FROM pg_roles WHERE rolname = current_user
+            """)
+            row = cursor.fetchone()
+        if not row or len(row) != 6 or any(item is not False for item in row):
+            raise RuntimeUnavailable("job_application_role_elevated")
+    except RuntimeUnavailable:
+        raise
+    except Exception:
+        raise RuntimeUnavailable("job_application_role_unavailable") from None
+
+
 def check_runtime():
     if settings.DECLARAI_RUNTIME_PROFILE != "private" or not settings.DECLARAI_JOBS_ENABLED:
         raise RuntimeUnavailable("job_private_configuration_required")

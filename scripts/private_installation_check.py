@@ -30,9 +30,7 @@ def read_plan(directory):
             raise planner.PlanError("installation_plan_members_invalid")
         values = {}
         for name, limit in LIMITS.items():
-            fd = os.open(
-                name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=descriptor
-            )
+            fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=descriptor)
             with os.fdopen(fd, "rb") as stream:
                 info = os.fstat(stream.fileno())
                 if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= limit:
@@ -67,9 +65,8 @@ def verify(directory, expected):
                 "release_qualified",
                 "expert_isolation_qualified",
             }
-            or manifest["schema"] != "private_installation_plan_v1"
-            or manifest["scope"]
-            != "native_application_layer_with_operator_managed_dependencies"
+            or manifest["schema"] not in {"private_installation_plan_v1", planner.PLAN_SCHEMA}
+            or manifest["scope"] != "native_application_layer_with_operator_managed_dependencies"
             or manifest["archive_verified_at_render"] is not True
             or manifest["architecture"] not in {"arm64", "amd64"}
             or any(
@@ -92,10 +89,7 @@ def verify(directory, expected):
             ):
                 raise planner.PlanError("installation_plan_file_digest_mismatch")
         outer = planner.decode(files["image-set.json"])
-        if (
-            hashlib.sha256(files["image-set.json"]).hexdigest()
-            != manifest["image_set_manifest_sha256"]
-        ):
+        if hashlib.sha256(files["image-set.json"]).hexdigest() != manifest["image_set_manifest_sha256"]:
             raise planner.PlanError("installation_plan_image_set_mismatch")
         if (
             set(outer)
@@ -134,8 +128,7 @@ def verify(directory, expected):
             raise ValueError
         ingress = planner.decode(files["ingress.json"])
         if (
-            hashlib.sha256(files["ingress.json"]).hexdigest()
-            != outer["components"]["ingress"]["manifest_sha256"]
+            hashlib.sha256(files["ingress.json"]).hexdigest() != outer["components"]["ingress"]["manifest_sha256"]
             or set(ingress)
             != {
                 "schema",
@@ -172,12 +165,11 @@ def verify(directory, expected):
         planner.bind_ingress(request, ingress)
         compose, prerequisites = (
             planner.composition(request, images),
-            planner.prerequisites(request, images),
+            planner.prerequisites(request, images, legacy=manifest["schema"] == "private_installation_plan_v1"),
         )
-        if (
-            planner.encoded(planner.decode(files["compose.json"])) != planner.encoded(compose)
-            or planner.encoded(planner.decode(files["prerequisites.json"])) != planner.encoded(prerequisites)
-        ):
+        if planner.encoded(planner.decode(files["compose.json"])) != planner.encoded(compose) or planner.encoded(
+            planner.decode(files["prerequisites.json"])
+        ) != planner.encoded(prerequisites):
             raise planner.PlanError("installation_plan_profile_mismatch")
     except planner.PlanError:
         raise
@@ -203,9 +195,7 @@ def open_directory(path):
     descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
     try:
         for part in Path(path).parts[1:]:
-            child = os.open(
-                part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor
-            )
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
             os.close(descriptor)
             descriptor = child
             info = os.fstat(descriptor)
@@ -219,9 +209,7 @@ def open_directory(path):
 
 def no_directory_acl(descriptor):
     try:
-        if {"system.posix_acl_access", "system.posix_acl_default"} & set(
-            os.listxattr(descriptor)
-        ):
+        if {"system.posix_acl_access", "system.posix_acl_default"} & set(os.listxattr(descriptor)):
             raise planner.PlanError("installation_path_acl_unsupported")
     except OSError as error:
         if error.errno not in {errno.ENOTSUP, errno.EOPNOTSUPP}:
@@ -246,9 +234,7 @@ def check_paths(directory, expected):
             no_directory_acl(descriptor)
             roots.append(
                 {
-                    "kind": "artifacts"
-                    if spec["mount"] == "read_write"
-                    else Path(spec["path"]).name,
+                    "kind": "artifacts" if spec["mount"] == "read_write" else Path(spec["path"]).name,
                     "device": info.st_dev,
                     "inode": info.st_ino,
                 }
@@ -314,9 +300,7 @@ def main():
     result = (
         check_paths(args.directory, args.expected_plan_sha256)
         if args.action == "check-paths"
-        else receipt(
-            verify(args.directory, args.expected_plan_sha256), args.expected_plan_sha256
-        )
+        else receipt(verify(args.directory, args.expected_plan_sha256), args.expected_plan_sha256)
     )
     print(json.dumps(result))
 
@@ -326,9 +310,7 @@ if __name__ == "__main__":
         main()
     except (planner.PlanError, OSError, ValueError, UnicodeError) as error:
         print(
-            str(error)
-            if isinstance(error, planner.PlanError)
-            else "installation_check_io_failed",
+            str(error) if isinstance(error, planner.PlanError) else "installation_check_io_failed",
             file=sys.stderr,
         )
         sys.exit(1)

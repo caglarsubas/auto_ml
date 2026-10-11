@@ -64,7 +64,7 @@ def fixture_plan(plan, expected, identifier):
             "request.json": resources.checker.planner.encoded(request),
             "compose.json": resources.checker.planner.encoded(resources.checker.planner.composition(request, images)),
             "prerequisites.json": resources.checker.planner.encoded(
-                resources.checker.planner.prerequisites(request, images)
+                resources.checker.planner.prerequisites(request, images, legacy=manifest["schema"] == "private_installation_plan_v1")
             ),
         }
     )

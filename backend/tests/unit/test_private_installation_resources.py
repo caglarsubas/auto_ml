@@ -34,7 +34,7 @@ def network(spec, binding):
         "Labels": binding,
         "Driver": "bridge",
         "Scope": "local",
-        "Internal": True,
+        "Internal": spec["internal"],
         "EnableIPv6": False,
         "Attachable": False,
         "Ingress": False,
@@ -46,6 +46,20 @@ def network(spec, binding):
 
 def volume(spec, binding):
     return {"Name": spec["name"], "Labels": binding, "Driver": "local", "Scope": "local", "Options": None}
+
+
+@pytest.mark.parametrize("actual", [False, True, 0])
+def test_v2_ingress_requires_exact_publishing_bridge_without_changing_private_network(resources, binding, actual):
+    value, _, labels = binding
+    private, edge = value["prerequisites"]["networks"]
+    assert private["internal"] is True and edge["internal"] is False
+    info = network(edge, labels)
+    info["Internal"] = actual
+    if actual is False:
+        resources.validate_network(info, edge, labels)
+    else:
+        with pytest.raises(resources.checker.planner.PlanError, match="network_conflict"):
+            resources.validate_network(info, edge, labels)
 
 
 @pytest.mark.parametrize(
