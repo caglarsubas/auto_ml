@@ -1,0 +1,124 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P36",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "93f129668b6c17913a9a57b357a99e8ccd27ab78",
+  "base_pull_request": 125,
+  "base_main_ci": {
+    "run": 38139054217,
+    "status": "all_six_success"
+  },
+  "source_sha256": {
+    "scripts/private_installation_init.py": "924164fba0203dd5310d9024dfac8c235a201b4ef9cd5c0179ff7e99c8868f9d",
+    "scripts/qualify_private_installation_init.py": "086fe9c92fa2843cb25cc1031d174ae3537461549bdfafa9fc087736ca86c03e",
+    "scripts/qualify_private_installation_plan.py": "a8e087536a2cb812f5e729806016b80fcc3abb01e0d3653cb8953dc2bac3ec09",
+    "backend/tests/unit/test_private_installation_init.py": "a8c531559a8d728b8c140dc046f0a4d979edc3d4674608a8cf0ba3a2b4afaec5",
+    ".github/workflows/ci.yml": "96385c92c1e5c8e83c54ec51f99da2d269f2c47d8906f5d00a61eaded5555ca4",
+    "docs/PRIVATE_INSTALLATION_INIT_IMPLEMENTATION.md": "c602b3f587639b92dfdcff8110032618c9a74f5992c6ebdaed0fd496309b8042"
+  },
+  "checks": {
+    "focused": {
+      "passed": 270,
+      "new_security_cases": 45,
+      "prior_cases": 225
+    },
+    "actual_linux_initialization": {
+      "cases": [
+        {
+          "case": "clean",
+          "receipt": {
+            "architecture": "arm64",
+            "archives_reverified": false,
+            "certificate_trust_verified": false,
+            "dependencies_initialized": false,
+            "encrypted_storage_verified": false,
+            "expert_isolation_qualified": false,
+            "filesystem_initialized": true,
+            "initialization_id": "651fc8d266164f9194fa3a27968ee705",
+            "installation_id": "qualification",
+            "installation_qualified": false,
+            "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+            "plan_verified": true,
+            "release_qualified": false,
+            "schema": "private_installation_initialization_v1",
+            "secret_files_delivered": 7,
+            "secret_values_emitted": false,
+            "services_adopted": false
+          }
+        },
+        {
+          "blocked": "installation_init_secret_value_invalid",
+          "case": "bad_value"
+        },
+        {
+          "blocked": "installation_init_delivery_file_invalid",
+          "case": "hardlink"
+        },
+        {
+          "blocked": "installation_init_io_failed",
+          "case": "link"
+        },
+        {
+          "blocked": "installation_init_parent_unsafe",
+          "case": "unsafe_parent"
+        },
+        {
+          "blocked": "synthetic_write_failure",
+          "case": "write_failure"
+        },
+        {
+          "blocked": "installation_init_destination_exists",
+          "case": "competing_empty"
+        }
+      ],
+      "existing_destination_retry": "blocked",
+      "expert_isolation_qualified": false,
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "installation_qualified": false,
+      "native_no_replace_publication": "passed",
+      "operator_installation_modified": false,
+      "owned_volumes_removed": 14,
+      "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+      "schema": "private_installation_init_qualification_v1",
+      "secret_values_emitted": false,
+      "services_adopted": false
+    },
+    "runtime_source_parity": {
+      "source_count": 196,
+      "matched": true,
+      "api_image": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7"
+    },
+    "sqlite": {
+      "passed": 2595,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 328.157,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    }
+  },
+  "limits": [
+    "Filesystem initialization only; certificate contents remain opaque and trust/entropy are not certified.",
+    "Storage encryption, dependency/network/socket setup and service adoption remain separate.",
+    "Abrupt loss may leave private staging or incomplete published access; observed destinations are never resumed/overwritten.",
+    "The initializer is a trusted root controller, separate from sealed unprivileged services and expert isolation."
+  ],
+  "preservation": {
+    "prior_packets_preserved": true,
+    "implementation_queue_preserved": true,
+    "release_customer_gates_open": true,
+    "primary_checkout_preserved": true,
+    "acceptance_budgets_unchanged": true
+  },
+  "source_binding": "Final focused/native executable qualification is bound above. The corrected full SQLite fixture includes a dedicated owned Redis service and the final source. Hosted exact-head full PostgreSQL qualification, CI and merge evidence are retained externally.",
+  "retained_initial_fixture_failure": {
+    "passed": 2549,
+    "failures": 2,
+    "skipped": 45,
+    "reason": "The first isolated local full run omitted its Redis fixture. Two unchanged cache tests failed and Redis-dependent tests skipped. Retained logs and XML in ignored test-reports/p36; no assertions or budgets altered."
+  }
+}
