@@ -1,0 +1,206 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P32",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "80ceb7e457aebcef3d5a9a5958d96b549d4029e2",
+  "base_pull_request": 121,
+  "base_main_ci": {
+    "run": 38121140300,
+    "status": "all_six_success",
+    "head": "80ceb7e457aebcef3d5a9a5958d96b549d4029e2"
+  },
+  "source_binding": "Final executable packaging/qualification source is shared by real handoff and full metadata matrices. Final acceptance cases and generated ledger/projection are independently checked against the committed sources. Fresh exact-head CI is recorded on the PR.",
+  "source_sha256": {
+    "scripts/private_image_set.py": "ddd3fa89c084ead69a77a6ac780ee06930c61affb8a6e036b9680fd082d06f0e",
+    "scripts/qualify_private_image_set.py": "dc5ab0d6e2b72b1dcdc0f96ff0f415b1df1ba3ca6bc3f568fb60d7ae5e706ef7",
+    "scripts/qualify_postgres_fixture.py": "96e056011df62c1f0bffdc6e57d87c229d5e5f3cfc4942b044c5f24b3ba467f1",
+    "backend/tests/unit/test_private_image_set.py": "a0f9bbcd2cdc5d3e226dc0d3d78bc821be4a09861d7acf42c606a80466cf91a9",
+    ".github/workflows/ci.yml": "eb8e6ab0942a7ee64125aa45be372d0020e8e49c1bd621feb101bc1845590908",
+    "docs/PRIVATE_IMAGE_SET_IMPLEMENTATION.md": "0c138e84f553f7459b8541dc45bd5cad2da4e0953205010e054970cabef9a919",
+    "docs/PRIVATE_FRONTEND_IMPLEMENTATION.md": "0422348d07a968af8ee58ce9ec22f9bd46a8a11b20dbbf1e9627121f17a39589"
+  },
+  "checks": {
+    "focused": {
+      "passed": 247,
+      "new_image_set_cases": 67,
+      "existing_api_cases": 74,
+      "existing_frontend_cases": 20,
+      "existing_ingress_cases": 37,
+      "roadmap_cases": 49
+    },
+    "sqlite": {
+      "passed": 2399,
+      "skipped": 6,
+      "seconds": 359.162,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    },
+    "postgresql": {
+      "passed": 2399,
+      "skipped": 6,
+      "seconds": 357.601,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15
+    },
+    "image_set": {
+      "schema": "private_image_set_qualification_v1",
+      "manifest_sha256": "16020137a0442bd196578556d5b55e46d1eeb4a17e8f2f23130288b0872ff31a",
+      "images": {
+        "api": "sha256:e8dc15c7c198526f4210238e68937e872be9192294fd0adb9289cacedd0861e0",
+        "ingress": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+        "postgres": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "redis": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec"
+      },
+      "all_components_verified_before_import": "passed",
+      "changed_last_archive_before_docker": "blocked",
+      "wrong_manifest_before_docker": "blocked",
+      "native_runtime_after_load": "passed",
+      "repeat_digest_only_import": "passed",
+      "selected_image_tags": "unchanged",
+      "owned_slots_empty_before_import": false,
+      "services_started": false,
+      "installation_qualified": false,
+      "release_qualified": false
+    },
+    "prepared_dependencies": [
+      {
+        "role": "postgres",
+        "image_id": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "base_image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+        "architecture": "arm64",
+        "runtime": {
+          "version": "postgres (PostgreSQL) 17.11"
+        },
+        "installation_qualified": false
+      },
+      {
+        "role": "redis",
+        "image_id": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+        "base_image_id": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+        "architecture": "arm64",
+        "runtime": {
+          "version": "Redis server v=7.4.11 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=dc395baf3ab4da8b"
+        },
+        "installation_qualified": false
+      }
+    ],
+    "image_set_archives": {
+      "api": {
+        "bytes": 718325760,
+        "file": "image.tar",
+        "sha256": "cc88d027d372a9afd0f93ce13d86f5e234848bf7367915efad6524880ccd606d"
+      },
+      "ingress": {
+        "bytes": 45455360,
+        "file": "image.tar",
+        "sha256": "da70bfd6c238ded531b16b1cbc808ceb877fc55f4e4aee97b20edb3d053b15c8"
+      },
+      "postgres": {
+        "bytes": 115046400,
+        "file": "image.tar",
+        "sha256": "df331c31264a24d59e621f2422fa0146ee9b61cfc241a433d03660c6bf9015ec"
+      },
+      "redis": {
+        "bytes": 16783360,
+        "file": "image.tar",
+        "sha256": "5957f1091de93019bbafc83f22bc062763befe5b3fe592886127ee461f2771fe"
+      }
+    },
+    "private_tls_browser": {
+      "actual_https_session_csrf": "passed",
+      "secure_cookies": "passed",
+      "canonical_scheme_and_host": "passed",
+      "invalid_host_sni_ca": "blocked",
+      "tls_1_2_and_1_3": "passed",
+      "invalid_origin": "blocked",
+      "partial_upload_keeps_api_available": "passed",
+      "multipart_upload_and_protected_download": "passed",
+      "admitted_chunked_body": "passed",
+      "declared_and_chunked_body_limit": "passed",
+      "recorded_logout": "passed",
+      "frontend_browser": {
+        "compiled_private_browser": "passed",
+        "certificate": "exact_fixture_leaf_spki_pin",
+        "same_origin_session_csrf": "passed",
+        "project_selection_reload": "passed",
+        "local_fonts": "passed",
+        "pipeline_and_upload": "passed",
+        "protected_download_logout": "passed",
+        "missing_assets_metadata_admin_api_fallback": "blocked",
+        "media_as_application_script": "blocked_by_csp",
+        "protected_media_document": "attachment_and_sandbox",
+        "external_requests": 0,
+        "runtime_errors": 0,
+        "unexpected_csp_violations": 0,
+        "deliberate_script_violation": 1
+      },
+      "missing_cert_root_command_key_permissions": "blocked_before_listening",
+      "image_id": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+      "uid": 10001,
+      "read_only_root": true,
+      "shared_socket_read_only": true,
+      "private_service_network_access": false,
+      "host_ports": "owned_random_loopback",
+      "frontend": "baked_private_assets"
+    },
+    "private_metadata_recovery": {
+      "postgresql": "postgres (PostgreSQL) 17.11",
+      "image_id": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+      "redis_image_id": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "dependency_selection": "exact_local_no_pull",
+      "private_tls_session_api": "passed",
+      "wrong_ca": "rejected",
+      "wrong_hostname": "rejected",
+      "restart_persistence": "passed",
+      "quiescent_database_artifact_restore": "passed",
+      "full_postgresql_suite": "passed",
+      "private_job_broker_tls_authentication": "passed",
+      "job_wrong_ca_hostname_credentials": "blocked",
+      "actual_job_broker_loss": "passed",
+      "quiescent_job_database_artifact_restore_empty_broker": "passed",
+      "natural_orphan_lease_recovery": "passed",
+      "private_native_scoring_restore_parity": "passed",
+      "private_scoring_full_receipts_and_duplicate_completion": "passed",
+      "private_scoring_changed_missing_inputs_revocation": "blocked",
+      "private_scoring_source_scope_fault": "blocked",
+      "production_deployment_recovery": "not_qualified"
+    },
+    "api_source_parity": {
+      "packaged_application_files": 196,
+      "match_current_sources": true,
+      "image_source_manifest": "retained historical build record, not reconstructed"
+    },
+    "ruff": "passed",
+    "diff_check": "passed",
+    "frontend": "No frontend source/dependencies changed; base main all-six CI passed. Fresh PR CI retains unit/browser qualification."
+  },
+  "retained_failures": [
+    {
+      "stage": "first real upstream dependency export",
+      "error": "package_archive_oci_annotation_rejected",
+      "cause": "Official PostgreSQL image contained an OCI index and attestation graph outside the existing single-image profile.",
+      "resolution": "Prepare a fresh native dependency manifest from the exact trusted base with fixed role/base labels and provenance disabled. Existing raw-header/graph checks remain unchanged.",
+      "raw_save_retained": false,
+      "diagnostic": "Neutral member/metadata-key diagnostics are retained in the tool transcript; no installed data or config values were printed."
+    }
+  ],
+  "qualification_limits": [
+    "Local real import preserves existing slots/tags; empty-slot import of all four selected images is required in fresh PR CI.",
+    "Images are operator-trusted inputs. Hash/graph/inventory verification does not authenticate supply or certify vulnerability absence.",
+    "No complete restricted-network installation, operator profile, secrets/storage initialization, supervisor, upgrades/rollback or production recovery qualification.",
+    "Existing recovery uses the test runner; fixed-image worker task completion is not newly qualified.",
+    "Training/search migration, comprehensive egress/retention, expert isolation, independent refit/assessment reproduction, accessibility and all release/value/customer gates remain open."
+  ],
+  "release_status": "open; no deployment or customer acceptance",
+  "preservation": {
+    "primary_checkout": "exact status and 13 SHA256 baseline checks unchanged",
+    "existing_services": "untouched",
+    "existing_assertions_timeouts_retries_skips_coverage": "unchanged",
+    "canonical_history": "prior packets/evidence preserved; only D07 progress appended"
+  }
+}

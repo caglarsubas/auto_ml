@@ -8,6 +8,7 @@ checkout and are removed on exit. No existing installation is read or changed.
 import argparse
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -45,11 +46,19 @@ def main():
     parser.add_argument("--private-api-image", help="Exact local private API image sha256; adds real fixed-image socket smoke")
     parser.add_argument("--private-ingress-image", help="Exact local TLS ingress image for api.private.test:8443 with 1 MiB body limit")
     parser.add_argument("--private-frontend-browser", action="store_true", help="Qualify baked frontend with installed Node 24/Playwright Chromium")
+    parser.add_argument("--postgres-image", help="Exact local offline PostgreSQL image ID; never pulled")
+    parser.add_argument("--redis-image", help="Exact local offline Redis image ID; never pulled")
     args = parser.parse_args()
     if args.private_ingress_image and not args.private_api_image:
         parser.error("Private ingress qualification requires the fixed private API.")
     if args.private_frontend_browser and not args.private_ingress_image:
         parser.error("Private browser qualification requires the fixed private ingress.")
+    for image in [args.postgres_image, args.redis_image]:
+        if image is not None and not re.fullmatch(r"sha256:[0-9a-f]{64}", image):
+            parser.error("Offline fixture images must use exact sha256 image identities.")
+
+    def image_args(image, default):
+        return ["--pull", "never", image] if image else [default]
     reports = (ROOT / args.reports).resolve()
     if not reports.is_relative_to(ROOT / "test-reports"):
         parser.error("Reports must be inside the ignored test-reports directory.")
@@ -109,7 +118,7 @@ def main():
 
         def start_job_broker():
             command(["docker", "create", "--name", job_broker, "--network", network,
-                     "--network-alias", "job-broker", "-p", "127.0.0.1::6379", "redis:7-alpine",
+                     "--network-alias", "job-broker", "-p", "127.0.0.1::6379", *image_args(args.redis_image, "redis:7-alpine"),
                      "sh", "-c", "chown -R redis:redis /fixture; exec docker-entrypoint.sh redis-server /fixture/job-broker.conf"])
             command(["docker", "cp", str(job_tls), job_broker + ":/fixture"])
             command(["docker", "start", job_broker])
@@ -137,7 +146,7 @@ def main():
                     "POSTGRES_PASSWORD_FILE=/fixture/admin-password",
                     "-e",
                     "POSTGRES_USER=declarai_fixture_admin",
-                    "postgres:17-alpine",
+                    *image_args(args.postgres_image, "postgres:17-alpine"),
                     "sh",
                     "-c",
                     (
@@ -159,7 +168,7 @@ def main():
                     network,
                     "-p",
                     "127.0.0.1::6379",
-                    "redis:7-alpine",
+                    *image_args(args.redis_image, "redis:7-alpine"),
                 ]
             )
             job_broker_port = start_job_broker()
@@ -568,6 +577,8 @@ def main():
                 "image_id": command(["docker", "inspect", "-f", "{{.Image}}", db])
                 .decode()
                 .strip(),
+                "redis_image_id": command(["docker", "inspect", "-f", "{{.Image}}", job_broker]).decode().strip(),
+                "dependency_selection": "exact_local_no_pull" if args.postgres_image and args.redis_image else "legacy_fixture_defaults",
                 "private_tls_session_api": "passed",
                 "wrong_ca": "rejected",
                 "wrong_hostname": "rejected",

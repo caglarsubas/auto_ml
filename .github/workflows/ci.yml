@@ -171,8 +171,35 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write('DECLARAI_PRIVATE_INGRESS_IMAGE=' + record['image_id'] + '\n')
           PY
+      - name: Prepare and verify complete offline native image set
+        run: |
+          docker pull postgres:17-alpine
+          docker pull redis:7-alpine
+          python scripts/private_image_set.py prepare --role postgres \
+            --base-image "$(docker image inspect postgres:17-alpine --format '{{.Id}}')" \
+            --tag declarai-private-postgres:ci > test-reports/postgresql/postgres-prepare.json
+          python scripts/private_image_set.py prepare --role redis \
+            --base-image "$(docker image inspect redis:7-alpine --format '{{.Id}}')" \
+            --tag declarai-private-redis:ci > test-reports/postgresql/redis-prepare.json
+          postgres_image=$(python -c "import json; print(json.load(open('test-reports/postgresql/postgres-prepare.json'))['image_id'])")
+          redis_image=$(python -c "import json; print(json.load(open('test-reports/postgresql/redis-prepare.json'))['image_id'])")
+          python scripts/private_image_set.py export /tmp/declarai-private-image-set \
+            --api-image "$DECLARAI_PRIVATE_API_IMAGE" --ingress-image "$DECLARAI_PRIVATE_INGRESS_IMAGE" \
+            --postgres-image "$postgres_image" --redis-image "$redis_image" > test-reports/postgresql/image-set-export.json
+          expected=$(python -c "import json; print(json.load(open('test-reports/postgresql/image-set-export.json'))['manifest_sha256'])")
+          # Only this job's fresh image slots are removed; no existing installation.
+          docker image rm "$DECLARAI_PRIVATE_API_IMAGE" declarai-private-ingress:ci declarai-private-postgres:ci declarai-private-redis:ci
+          python scripts/qualify_private_image_set.py /tmp/declarai-private-image-set \
+            --expected-manifest-sha256 "$expected" --require-empty-slots --reports test-reports/postgresql
+          python - <<'PY'
+          import json, os
+          record = json.load(open('test-reports/postgresql/image-set-export.json'))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('DECLARAI_PRIVATE_POSTGRES_IMAGE=' + record['images']['postgres'] + '\n')
+              output.write('DECLARAI_PRIVATE_REDIS_IMAGE=' + record['images']['redis'] + '\n')
+          PY
       - name: Qualify disposable PostgreSQL fixture
-        run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE" --private-ingress-image "$DECLARAI_PRIVATE_INGRESS_IMAGE" --private-frontend-browser
+        run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE" --private-ingress-image "$DECLARAI_PRIVATE_INGRESS_IMAGE" --private-frontend-browser --postgres-image "$DECLARAI_PRIVATE_POSTGRES_IMAGE" --redis-image "$DECLARAI_PRIVATE_REDIS_IMAGE"
       - name: Enforce existing skip budget
         if: always()
         run: python .github/scripts/check_skip_budget.py test-reports/postgresql/postgresql.xml --max-skips 15
@@ -231,7 +258,7 @@ jobs:
         run: pip install "ruff>=0.9"
       - name: Ruff check
         working-directory: backend
-        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/private_ingress_package.py ../scripts/private_frontend_package.py ../scripts/qualify_private_ingress.py ../scripts/qualify_private_api_image.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
+        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/private_ingress_package.py ../scripts/private_frontend_package.py ../scripts/private_image_set.py ../scripts/qualify_private_image_set.py ../scripts/qualify_private_ingress.py ../scripts/qualify_private_api_image.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
 
   # ---------------------------------------------------------------------------
   # Frontend static analysis (ESLint + Prettier)
