@@ -9,6 +9,7 @@ describe('SessionInterceptor credential boundary', () => {
   let requests: HttpTestingController;
   const auth = { apiRoot: 'http://localhost:8002/api/', csrfToken: 'synthetic-csrf', invalidate: jasmine.createSpy('invalidate') };
   beforeEach(() => {
+    auth.apiRoot = 'http://localhost:8002/api/';
     auth.invalidate.calls.reset();
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
@@ -59,5 +60,27 @@ describe('SessionInterceptor credential boundary', () => {
       { detail: 'You do not have permission.' }, { status: 403, statusText: 'Forbidden' },
     );
     expect(auth.invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles relative private API and absolute same-origin media URLs', () => {
+    auth.apiRoot = '/api/';
+    for (const url of ['/api/pipeline/create/', `${window.location.origin}/media/evidence.json`]) {
+      http.post(url, {}).subscribe();
+      const request = requests.expectOne(url);
+      expect(request.request.withCredentials).toBeTrue();
+      expect(request.request.headers.get('X-CSRFToken')).toBe('synthetic-csrf');
+      request.flush({});
+    }
+  });
+
+  it('keeps private credentials out of protocol-relative and lookalike paths', () => {
+    auth.apiRoot = '/api/';
+    for (const url of ['//external.test/api/run/', '/api-elsewhere/run/', '/media-elsewhere/run/']) {
+      http.post(url, {}).subscribe();
+      const request = requests.expectOne(url);
+      expect(request.request.withCredentials).toBeFalse();
+      expect(request.request.headers.has('X-CSRFToken')).toBeFalse();
+      request.flush({});
+    }
   });
 });

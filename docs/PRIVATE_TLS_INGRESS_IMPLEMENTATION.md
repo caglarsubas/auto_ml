@@ -1,5 +1,7 @@
 # P30 — Fixed private TLS ingress
 
+P31 extends this ingress with [compiled private frontend assets](PRIVATE_FRONTEND_IMPLEMENTATION.md); the P30 results below describe the original API-only qualification.
+
 Updated 11 October 2026. Partial D06/D07 after verified [PR #119](https://github.com/caglarsubas/auto_ml/pull/119). This adds a real HTTPS boundary for the P29 Unix-socket API. Frontend/admin assets, a complete offline installation, expert Python isolation and release/customer acceptance remain open.
 
 ## Build and installation boundary

@@ -1,6 +1,8 @@
 """Real HTTPS boundary inside the explicitly disposable private API fixture."""
 
 import json
+import base64
+import hashlib
 import re
 import subprocess
 import uuid
@@ -70,7 +72,10 @@ assert request('GET','/api/auth/session/',extra=spoof)[0]==200
 for bad,expected in [('evil.test',421),('api.private.test',421),('api.private.test:9999',421),('api.private.test:8443.evil.test',400)]:
     actual=request('GET','/api/auth/session/',extra={'Host':bad})[0]
     assert actual==expected,(bad,actual,expected)
-assert request('GET','/')[0]==404 and request('GET','/admin/')[0]==404
+root=request('GET','/')
+assert root[0]==(200 if value.get('frontend') else 404)
+if value.get('frontend'):assert b'<app-root>' in root[2]
+assert request('GET','/admin/')[0]==404
 for ctx,host in [(ssl.create_default_context(cadata=value['wrong_ca']),'api.private.test'),(context,'evil.test')]:
     conn=connection(ctx,host)
     try:
@@ -138,7 +143,7 @@ print(json.dumps({'actual_https_session_csrf':'passed','secure_cookies':'passed'
 """
 
 
-def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, reports, probe):
+def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, reports, probe, frontend_browser=False):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) or not socket_volume.startswith("declarai-fixed-api-"):
         raise RuntimeError("Requires the owning disposable fixed API fixture.")
     prefix = "declarai-tls-ingress-" + uuid.uuid4().hex[:12]
@@ -150,13 +155,17 @@ def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, 
     key.chmod(0o600)
     try:
         command(["docker", "exec", "-i", api_container, "python", "-c", SEED_DEVELOPER], data=json.dumps(probe).encode())
-        command(["docker", "network", "create", "--internal", network]);created_network = True
+        # Docker intentionally does not publish ports from an internal bridge.
+        # Only the browser fixture uses an owned edge bridge plus a random
+        # loopback binding; it still has no private-service network membership.
+        command(["docker", "network", "create", *([] if frontend_browser else ["--internal"]), network]);created_network = True
         command(["docker", "volume", "create", volume]);created_volume = True
         command(["docker", "run", "--rm", "-i", "--pull=never", "--network", "none", "--read-only", "--user", "0:0",
                  "--cap-drop", "ALL", "--cap-add", "CHOWN", "--security-opt", "no-new-privileges", "-v", volume + ":/installation",
                  "--entrypoint", "python", api_image, "-c", PREPARE_TLS],
                 data=json.dumps({"tls.crt": cert.read_text(), "tls.key": key.read_text()}).encode())
-        command(["docker", "create", "--name", container, "--pull=never", "--network", network, "--network-alias", "ingress",
+        ports = ["-p", "127.0.0.1::8443"] if frontend_browser else []
+        command(["docker", "create", "--name", container, "--pull=never", "--network", network, "--network-alias", "ingress", *ports,
                  "--read-only", "--cpus", "1", "--memory", "256m", "--pids-limit", "32", "--cap-drop", "ALL",
                  "--security-opt", "no-new-privileges", "--tmpfs", "/tmp:rw,noexec,nosuid,size=268435456,uid=10001,gid=10001,mode=700",
                  "-v", volume + ":/installation:ro", "-v", socket_volume + ":/run/declarai:ro", image_id])
@@ -164,11 +173,16 @@ def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, 
         command(["docker", "start", container])
         output = command(["docker", "run", "--rm", "-i", "--pull=never", "--network", network, "--read-only", "--cap-drop", "ALL",
                           "--security-opt", "no-new-privileges", "--entrypoint", "python", api_image, "-c", PROBE_TLS],
-                         data=json.dumps({**probe, "ca": cert.read_text(), "wrong_ca": (fixture / "wrong-ca.crt").read_text()}).encode())
+                         data=json.dumps({**probe, "ca": cert.read_text(), "wrong_ca": (fixture / "wrong-ca.crt").read_text(), "frontend": frontend_browser}).encode())
         info = json.loads(command(["docker", "inspect", container]))[0]
         assert info["Config"]["User"] == "10001:10001" and info["HostConfig"]["ReadonlyRootfs"]
         assert info["Config"]["Entrypoint"] == ["/bin/sh", "/opt/declarai/start-ingress.sh"]
-        assert not info["HostConfig"]["Privileged"] and not info["HostConfig"]["PortBindings"]
+        assert not info["HostConfig"]["Privileged"]
+        if frontend_browser:
+            binding = info["NetworkSettings"]["Ports"]["8443/tcp"]
+            assert len(binding) == 1 and binding[0]["HostIp"] == "127.0.0.1"
+        else:
+            assert not info["HostConfig"]["PortBindings"]
         assert set(info["NetworkSettings"]["Networks"]) == {network}
         # Docker exposes tmpfs separately from ordinary volume/bind mounts.
         assert {m["Destination"] for m in info["Mounts"]} == {"/installation", "/run/declarai"}
@@ -177,6 +191,15 @@ def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, 
         assert info["HostConfig"]["Memory"] == 268435456 and info["HostConfig"]["PidsLimit"] == 32
         assert info["HostConfig"]["CapDrop"] == ["ALL"]
         status = json.loads(output)
+        if frontend_browser:
+            # Browser trust is restricted to this owned synthetic leaf, never
+            # ignoreHTTPSErrors. The raw TLS probe still checks the CA/name.
+            public = command(["openssl", "x509", "-in", str(cert), "-pubkey", "-noout"])
+            der = command(["openssl", "pkey", "-pubin", "-outform", "DER"], data=public)
+            pin = base64.b64encode(hashlib.sha256(der).digest()).decode()
+            browser = command(["node", str(Path(__file__).with_name("qualify_private_frontend.mjs"))],
+                              data=json.dumps({**probe, "port": int(binding[0]["HostPort"]), "pin": pin}).encode(), timeout=180)
+            status["frontend_browser"] = json.loads(browser)
         command(["docker", "stop", container])
         for extra, expected in [([], b"private_ingress_certificate_required"),
                                 (["--user", "0:0"], b"private_ingress_identity_or_command_rejected")]:
@@ -195,7 +218,8 @@ def qualify_ingress(image_id, api_image, api_container, socket_volume, fixture, 
         assert failed.returncode != 0 and b"private_ingress_key_permissions_required" in failed.stderr
         status["missing_cert_root_command_key_permissions"] = "blocked_before_listening"
         status.update(image_id=image_id, uid=10001, read_only_root=True, shared_socket_read_only=True,
-                      private_service_network_access=False, host_ports=False, frontend="not_packaged")
+                      private_service_network_access=False, host_ports="owned_random_loopback" if frontend_browser else False,
+                      frontend="baked_private_assets" if frontend_browser else "not_packaged")
         (reports / "fixed-ingress.json").write_text(json.dumps(status, indent=2) + "\n")
         return status
     except BaseException as error:

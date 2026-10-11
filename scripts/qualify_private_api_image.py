@@ -107,7 +107,7 @@ print(json.dumps({'actual_wsgi_session_csrf':'passed','secure_cookies':'passed',
 """
 
 
-def qualify_image(image_id, network, fixture, env, reports, ingress_image=None):
+def qualify_image(image_id, network, fixture, env, reports, ingress_image=None, frontend_browser=False):
     if (
         not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id)
         or env.get("DECLARAI_TEST_INSTALLATION") != "1"
@@ -147,7 +147,7 @@ def qualify_image(image_id, network, fixture, env, reports, ingress_image=None):
         "DJANGO_TRUST_PROXY_TLS": "true",
         "DJANGO_SECRET_KEY_FILE": "/installation/django-key",
         "DJANGO_ALLOWED_HOSTS": "api.private.test",
-        "DECLARAI_ALLOWED_ORIGINS": "https://console.private.test",
+        "DECLARAI_ALLOWED_ORIGINS": "https://console.private.test,https://api.private.test:8443",
         "DECLARAI_MEDIA_ROOT": "/artifacts",
         "DECLARAI_DB_ENGINE": "postgresql",
         "DECLARAI_DB_NAME": "declarai_fixture",
@@ -286,7 +286,7 @@ def qualify_image(image_id, network, fixture, env, reports, ingress_image=None):
         if ingress_image:
             from qualify_private_ingress import qualify_ingress
 
-            qualify_ingress(ingress_image, image_id, container, sockets, fixture, reports, probe)
+            qualify_ingress(ingress_image, image_id, container, sockets, fixture, reports, probe, frontend_browser)
         return status
     except BaseException as error:
         # Retain diagnostic text only after stripping every generated secret.

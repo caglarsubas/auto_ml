@@ -54,8 +54,8 @@ def test_generated_context_is_immutable_and_contains_no_installation_state(packa
     (root / ".env").write_text("PRIVATE_SENTINEL")
     destination = tmp_path / "context"
     receipt = package.context(destination, "api.customer.test", root=root)
-    assert set(p.name for p in destination.iterdir()) == {"Dockerfile", "start-ingress.sh", "nginx.conf", "source-manifest.json"}
-    assert all("PRIVATE_SENTINEL" not in p.read_text() for p in destination.iterdir())
+    assert set(p.name for p in destination.iterdir()) == {"Dockerfile", "start-ingress.sh", "nginx.conf", "source-manifest.json", "frontend"}
+    assert all("PRIVATE_SENTINEL" not in p.read_text() for p in destination.iterdir() if p.is_file())
     assert set(receipt["source_sha256"]) == {"Dockerfile", "start-ingress.sh", "nginx.conf"}
     with pytest.raises(package.IngressError, match="destination_exists"):
         package.context(destination, "api.customer.test", root=root)
