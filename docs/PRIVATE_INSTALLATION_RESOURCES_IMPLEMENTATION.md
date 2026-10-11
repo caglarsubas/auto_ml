@@ -1,0 +1,24 @@
+# Dedicated private networks and socket — P37
+
+After [fresh filesystem initialization](PRIVATE_INSTALLATION_INIT_IMPLEMENTATION.md), the operator can prepare the dedicated networks and empty API socket volume required by the reviewed application plan. P37 remains partial D07. It starts only a bounded filesystem initializer; database/cache/broker and application service adoption are separate steps.
+
+```sh
+sudo python scripts/private_installation_resources.py /approved/plan \
+  --expected-plan-sha256 TRUSTED_PLAN_MANIFEST_DIGEST
+```
+
+The Linux root controller verifies the saved plan, reads the root-owned initialization receipt through pinned descriptors, and repeats P35 filesystem checks before contacting Docker. The initialization must match the exact trusted plan and fresh P36 profile, including JSON value types. No secret contents or artifact descendants are read by preparation. The receipt's installation root must remain root-owned with GID 10001/mode 0750, and `initialization.json` must be an unlinked root-owned mode 0600 regular file.
+
+Use the host's default Docker context at `unix:///var/run/docker.sock`. Remote endpoints and Docker host/context/TLS overrides are rejected. The daemon must be Linux and have the plan's native architecture; the loaded API identity/architecture must match before resource mutations. This command does not reverify archives, certify supply-chain authenticity, or configure rootless/remote/swarm profiles.
+
+Two dedicated local internal IPv4 bridge networks and one local socket volume receive exact installation, plan-digest and initialization-ID labels. Their names come from the verified prerequisites. Existing names are accepted only with this exact binding and supported metadata. Networks must be internal, unattached, non-ingress/non-attachable and have no additional driver overrides. Docker's empty default options and its explicit default IPv4/disabled-IPv6 representation are both supported; custom bridge options fail. A local volume with host/NFS driver options is rejected. Listing/inspection failures are never interpreted as absence, and no foreign resource is repaired or removed.
+
+Preparation permits retries of owned empty resources. An attached network or a socket volume used by any running **or stopped** container blocks preparation; once services exist, reconcile them through adoption instead of running preparation again. Partial failures may leave labelled resources for inspection/retry. The controller does not roll back networks/volumes automatically and never prunes resources.
+
+The socket initializer uses the exact API image, a read-only root, no network, bounded CPU/memory/PIDs, no new privileges and only CHOWN/FOWNER/DAC_OVERRIDE capabilities. It receives exactly one labelled socket volume. Container creation is followed by mount/label checks before start, protecting against implicit recreation of a removed volume. It accepts only an empty, ACL-free default root-owned directory or an already prepared UID/GID 10001/mode 0750 directory; it never clears socket files or repairs other identities. Only this invocation's helper is removed. It is a trusted installation controller action, separate from sealed unprivileged service entrypoints and expert isolation.
+
+The resulting nonsecret receipt binds the two network IDs and socket readiness to the plan and initialization. `resources_prepared` records these checks; `dependencies_initialized`, `services_adopted`, installation/release/expert qualification remain false. Empty networks and a prepared socket do not establish firewall policy, encrypted storage, server TLS, database grants/migrations, attribution, runtime connectivity or production readiness.
+
+Qualification owns new UUID-named resources for seven cases: successful/repeated preparation, foreign network, non-internal network, foreign volume, stopped-container occupation, nonempty socket and incorrect socket mode. Foreign metadata and socket sentinels/modes remain unchanged; all fixture resources are removed. Native ARM64 exercises actual daemon/volume behavior. Hosted AMD64 CI additionally initializes a fresh synthetic root and runs the complete Linux root `prepare` entrypoint twice, then removes that root and its resources. Certificates remain deliberately opaque synthetic values; no operator installation or customer service is used. Existing offline image import, P34–P36, private TLS/browser/job/recovery/full-metadata gates and all budgets remain unchanged.
+
+[P37 source evidence](evidence/p37-qualification-2026-10-11.json) records observed qualification. Dependency initialization, controlled service adoption, full storage/security qualification, supply authentication, upgrades/rollback, production recovery, expert isolation, reproduction, accessibility and release/value/customer gates remain open.
