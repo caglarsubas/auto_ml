@@ -1,0 +1,161 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P35",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "dec1cd7670387226ebb092116c1d84795e08889a",
+  "base_pull_request": 124,
+  "preceding_exact_head_ci": {
+    "run": 38135227482,
+    "head": "1bfee166f576c3761a9e9e82b9425439de87e212",
+    "status": "all_six_success",
+    "browser_retry": "One existing regression scoring poll required its configured retry; retained in preceding PR evidence. No budget changed."
+  },
+  "source_binding": "Final local executable sources, focused cases and actual native path qualification are bound below. Final canonical ledger/projection are rechecked after evidence recording. Fresh exact-head CI is recorded externally on the PR; merge and its separate main run remain separate states.",
+  "source_sha256": {
+    "scripts/private_installation_check.py": "ddd82ae73d5626d9c7e81a292c0adb26aa0c885012add7c47e37b1fb526d180b",
+    "scripts/qualify_private_installation_check.py": "373afbd7bbf074e194ffa39ead6231458ada17e7bb24d324f0a318235b69a53a",
+    "scripts/qualify_private_installation_plan.py": "45a0f63e7a11f7fb8f5c618433ad6a019560cd6db0b383bdf1c0cddb691f398c",
+    "backend/tests/unit/test_private_installation_check.py": "07417709cbe4026b6909bab29bbb67cfe8a86187eedbe23a2869eedb6049aecd",
+    ".github/workflows/ci.yml": "c00b72e2224a4068810957b64a0b641558b3251b242f5c73501004ec460ed20d",
+    "docs/PRIVATE_INSTALLATION_CHECK_IMPLEMENTATION.md": "7af3d62541862041c6bc858a1ddaa78e89870bc55fec74305e3cbcdc34fae551"
+  },
+  "checks": {
+    "focused": {
+      "passed": 225,
+      "new_security_cases": 57,
+      "existing_plan_cases": 52,
+      "existing_image_set_cases": 67,
+      "roadmap_cases": 49
+    },
+    "sqlite": {
+      "tests": 2554,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 2548,
+      "seconds": 307.008,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15,
+      "source_scope": "Full regression before two added JSON-type rejection cases. Final focused/native qualification and hosted full suite run the corrected typed profile."
+    },
+    "offline_plan_and_actual_compose": {
+      "actual_compose_configuration": "passed",
+      "architecture": "arm64",
+      "images": {
+        "api": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+        "ingress": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+        "postgres": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "redis": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec"
+      },
+      "installation_qualified": false,
+      "missing_bind_auto_creation": "blocked",
+      "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+      "schema": "private_installation_plan_qualification_v1",
+      "secret_reads": false,
+      "service_adoption": false,
+      "services": [
+        "api",
+        "worker",
+        "dispatcher",
+        "ingress"
+      ]
+    },
+    "actual_linux_path_checks": {
+      "cases": [
+        {
+          "case": "clean",
+          "receipt": {
+            "architecture": "arm64",
+            "archives_reverified": false,
+            "artifact_descendants_inspected": false,
+            "encrypted_storage_verified": false,
+            "expert_isolation_qualified": false,
+            "filesystem_prerequisites": "passed",
+            "installation_id": "qualification",
+            "installation_qualified": false,
+            "networks_and_socket_verified": false,
+            "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+            "plan_verified": true,
+            "release_qualified": false,
+            "roots": [
+              {
+                "device": 65025,
+                "inode": 100943079,
+                "kind": "app"
+              },
+              {
+                "device": 65025,
+                "inode": 100943080,
+                "kind": "tls"
+              },
+              {
+                "device": 65025,
+                "inode": 100943081,
+                "kind": "artifacts"
+              }
+            ],
+            "runtime_connectivity_verified": false,
+            "schema": "private_installation_check_v1",
+            "secret_contents_read": false,
+            "secret_metadata_files": 7
+          }
+        },
+        {
+          "blocked": "installation_secret_metadata_invalid",
+          "case": "file_mode"
+        },
+        {
+          "blocked": "installation_secret_metadata_invalid",
+          "case": "hardlink"
+        },
+        {
+          "blocked": "installation_secret_metadata_invalid",
+          "case": "file_link"
+        },
+        {
+          "blocked": "installation_path_ancestor_unsafe",
+          "case": "ancestor_mode"
+        }
+      ],
+      "expert_isolation_qualified": false,
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "installation_qualified": false,
+      "operator_installation_modified": false,
+      "owned_volumes_removed": 10,
+      "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+      "schema": "private_installation_paths_qualification_v1",
+      "secret_contents_read": false,
+      "services_started": false
+    },
+    "application_runtime": {
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "exact_current_source_parity": true,
+      "source_files": 196,
+      "application_runtime_changed": false
+    },
+    "gates": "Existing six CI jobs, datasets/assertions, 900-second full-suite command timeout, per-test timeout/retry/skip/coverage budgets and prior private TLS/browser/jobs/recovery checks remain unchanged."
+  },
+  "preservation": {
+    "primary_exact_status_and_thirteen_hashes": "unchanged",
+    "prior_packets_items_queue_and_release_states": "unchanged",
+    "D07": "in_progress"
+  },
+  "limits": [
+    "The verifier checks saved-plan integrity and supported profile, not the image archives or loaded Docker runtime again.",
+    "Filesystem checks inspect point-in-time UID/mode/link/size/ACL metadata only; no secret contents/hashes or artifact descendants are read.",
+    "Secret semantics/certificate trust, storage encryption/capacity/retention, network/socket isolation, dependency initialization, runtime connectivity and service adoption remain unqualified.",
+    "Full installation, supply authentication, upgrade/rollback, production recovery, expert isolation, reproduction, accessibility and release/value/customer gates remain open."
+  ],
+  "retained_failures": [
+    {
+      "report": "ignored test-reports/p35/type-regression-before.xml",
+      "passed": 13,
+      "failed": 1,
+      "reason": "Python dictionary equality accepted JSON numeric 1 in place of a required boolean true.",
+      "correction": "Compare rederived Compose/prerequisites as canonical JSON, preserving boolean/integer/float types; add numeric-boolean and floating identity rejection cases. Final 225 focused and real native path cases pass; no runtime or acceptance budget changes."
+    }
+  ]
+}
