@@ -252,7 +252,10 @@ def host_case(plan, expected, parent):
             (value["request"]["root"] + "/secrets/app", "/installation"),
             (value["request"]["root"] + "/artifacts", "/artifacts"),
         ]:
-            args += ["--mount", "type=bind,src=" + source + ",dst=" + target + ",readonly"]
+            args += [
+                "--mount",
+                "type=bind,src=" + source + ",dst=" + target + (",readonly" if target == "/installation" else ""),
+            ]
         command(
             [*args, "--entrypoint", "python", value["images"]["api"], "/app/backend/manage.py", "migrate", "--noinput"]
         )

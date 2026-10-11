@@ -39,14 +39,14 @@
   },
   "source_sha256": {
     "scripts/private_installation_adopt.py": "d6fa0db5aa0d92b4f73c2ab490ff8119a33f49302b1c97f38fc62fa103afc808",
-    "scripts/qualify_private_installation_adopt.py": "cbe29715ba87a9a32f2ec736cb477b02e4f231c7024fca7e0e49ac6cd830ae19",
+    "scripts/qualify_private_installation_adopt.py": "d87df69a8e0dcf0d8b628450b7350f99412d37cd4e3c150e707aa7497d2f7a32",
     "scripts/private_service.py": "15368a08e5a2a1cc41a7e69bb8d7bba7e28a5021364348c26827f960dd221032",
     "scripts/qualify_private_installation_plan.py": "e9bb126d6269fbf45680f2bea3b8ecaf34d2c6579cae056e069d0ab238984662",
     "backend/execution_jobs/preflight.py": "cf9e5e8896879596fa452ba29b5e755a2eb365823474f117c71bff01ad6188f2",
     "backend/execution_jobs/management/commands/check_job_runtime.py": "33e7c11e03ed364f96f8025397347e00cbe5622fbb7068ce636a540e08380820",
     "backend/tests/unit/test_private_installation_adopt.py": "743a8b4f0b68f69a254ad45fb56cf3b2816d437c4699a362a6c16eb5b6b8cf38",
     ".github/workflows/ci.yml": "c30c335f2335d80880c42755df4d5d27211b9fafd33982e52d3444acd39bf1f8",
-    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "732cbe141bce49c2d17a40b362950d36fe404249e537b0b6c05c3fef412b3439"
+    "docs/PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md": "b444139712369dc43023c7c18be23a882b54c8b2811b7e05b8e3cc5bdf61b640"
   },
   "checks": {
     "focused": {
@@ -146,6 +146,12 @@
       "run": 38148603377,
       "head": "8ce95110fca898082fca190439db3a1078c731cd",
       "result": "fresh Linux fixture failed at migration container start before adoption; failure receipt retained. Fixture now waits for final PostgreSQL TCP listener rather than a temporary Unix bootstrap server, and redacts synthetic values in retained command diagnostics. Final hosted acceptance remains required."
+    },
+    {
+      "stage": "revised exact-head hosted CI",
+      "run": 38149350447,
+      "head": "0be267795c72e0ae24191b82dd16ebf05ad44568",
+      "result": "redacted migration diagnostic identifies Django declaration startup creating /artifacts/data_files on the fixture read-only mount. Only synthetic migration preparation now has writable artifacts, consistent with the application profile; app secrets and both adoption preflight mounts remain read-only. No product isolation or acceptance budget is weakened; fresh hosted acceptance remains required."
     }
   ],
   "remaining": [
