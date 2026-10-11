@@ -1,0 +1,114 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P34",
+  "date": "2026-10-11",
+  "status": "tested",
+  "base_main_commit": "7c48eb1535142a6ef09217113e0b3e75afa7c628",
+  "base_pull_request": 123,
+  "base_main_ci": {
+    "run": 38133274592,
+    "head": "7c48eb1535142a6ef09217113e0b3e75afa7c628",
+    "observed_status_at_source_record": "completed",
+    "observed_conclusion_at_source_record": "success",
+    "completion_is_separate_from_reported_merge": true,
+    "status": "all_six_success"
+  },
+  "source_binding": "Final local executable sources and real offline-set/Compose qualification are bound below. Canonical ledger/projection are independently checked after recording evidence. Fresh exact-head all-six CI and final main status are recorded externally on the PR.",
+  "source_sha256": {
+    "scripts/private_installation_plan.py": "10659de0495555ac4d9235c0e3a67d948c6407def4fe9f24c786894e8bb984d9",
+    "scripts/qualify_private_installation_plan.py": "ed77aba5d1cb29d35622d61da33f41424c217731f08c54c5225d06d9f767d7d5",
+    "backend/tests/unit/test_private_installation_plan.py": "7e77059c63f23ef21101526a70224f8c1164985eb0af139f632efee2db4b0f80",
+    ".github/workflows/ci.yml": "3199ec4d4b8bf4748322c6b4808bae67e8ec16c5f3d0194ee679fd5741501630",
+    "docs/PRIVATE_INSTALLATION_PLAN_IMPLEMENTATION.md": "d3746110853405feff19a9ee548ed9e9473f1e5bc5f5faddcedb78d7a9256b0f"
+  },
+  "checks": {
+    "focused": {
+      "passed": 168,
+      "new_cases": 52,
+      "existing_image_set_cases": 67,
+      "roadmap_cases": 49
+    },
+    "sqlite": {
+      "tests": 2498,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 2492,
+      "seconds": 310.407,
+      "line_coverage": 0.7389,
+      "branch_coverage": 0.6411,
+      "coverage_gate": 0.5,
+      "skip_budget": 15,
+      "source_scope": "Full regression before the one additional Compose serialization case; application runtime unchanged. Final hosted suite runs the complete corrected head."
+    },
+    "real_offline_plan": {
+      "actual_compose_configuration": "passed",
+      "architecture": "arm64",
+      "images": {
+        "api": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+        "ingress": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+        "postgres": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "redis": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec"
+      },
+      "installation_qualified": false,
+      "missing_bind_auto_creation": "blocked",
+      "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+      "schema": "private_installation_plan_qualification_v1",
+      "secret_reads": false,
+      "service_adoption": false,
+      "services": [
+        "api",
+        "worker",
+        "dispatcher",
+        "ingress"
+      ]
+    },
+    "application_runtime": {
+      "image_id": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+      "exact_current_source_parity": true,
+      "source_files": 196,
+      "application_runtime_changed": false
+    },
+    "existing_gates": "Datasets, scientific assertions, retry/timeout/skip/coverage budgets and all six CI jobs are retained. Hosted CI adds offline planning and actual Compose normalization to the existing real TLS/browser/fixed-job/recovery/PostgreSQL fixture.",
+    "compose_2_38_2": {
+      "actual_compose_configuration": "passed",
+      "architecture": "arm64",
+      "images": {
+        "api": "sha256:1b0cab343100c27632aa4cce5b848386b7aabed1e1c8f3f6c66d091046c9d4a7",
+        "ingress": "sha256:a6e7bb27b6f94034b194b923074b2a79166e22359313292a24b26b0d5441dd32",
+        "postgres": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+        "redis": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec"
+      },
+      "installation_qualified": false,
+      "missing_bind_auto_creation": "blocked",
+      "plan_manifest_sha256": "77d5f5d005b9f615d5ff2cc989655b098629036fc49a71da906e1962a8cba8a7",
+      "schema": "private_installation_plan_qualification_v1",
+      "secret_reads": false,
+      "service_adoption": false,
+      "services": [
+        "api",
+        "worker",
+        "dispatcher",
+        "ingress"
+      ]
+    }
+  },
+  "preservation": {
+    "primary_exact_status_and_thirteen_hashes": "unchanged",
+    "prior_packets_items_queue_and_release_states": "unchanged",
+    "D07": "in_progress"
+  },
+  "limits": [
+    "Application-layer plan only; operator-managed dependency initialization, secrets/storage/network preparation, host preflight, service adoption and full installation remain open.",
+    "Digest consistency and exact sealed configuration matching do not authenticate supply or qualify an installation.",
+    "Production recovery, upgrade/rollback, expert isolation, reproduction, accessibility and all release/value/customer gates remain open."
+  ],
+  "retained_failures": [
+    {
+      "ci_run": 38134439847,
+      "head": "918dd1589dfbe8a63f73a9c08ba3a3ecf05891fd",
+      "reason": "Compose 2 omits false CreateHostPath from normalized output, unlike local Compose 5; structural equality incorrectly rejected equivalent bind configuration.",
+      "correction": "Normalize only the omitted false bool; retain true/other mount rejection and add real missing-directory Docker create rejection. Both actual Compose 2.38.2 and 5.1.3 pass the corrected check. No runtime or acceptance budget is relaxed."
+    }
+  ]
+}
