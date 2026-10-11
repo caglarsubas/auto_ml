@@ -189,6 +189,32 @@ def prerequisites(value, binding, applications):
         raise checker.planner.PlanError("installation_adopt_socket_occupied")
 
 
+def active_applications(profile, digest, binding, images):
+    applications = {}
+    for info in project_containers(profile["name"]):
+        role = info.get("Config", {}).get("Labels", {}).get("com.docker.compose.service")
+        if role not in ROLES or role in applications:
+            raise checker.planner.PlanError("installation_adopt_application_conflict")
+        validate_application(
+            info,
+            role,
+            profile["services"][role],
+            profile,
+            digest,
+            binding,
+            images["ingress" if role == "ingress" else "api"],
+        )
+        state = info.get("State", {})
+        if state.get("Running") is not True or any(
+            state.get(key) is not False for key in ("Paused", "Restarting", "Dead")
+        ):
+            raise checker.planner.PlanError("installation_adopt_service_not_active")
+        applications[role] = info
+    if set(applications) != ROLES:
+        raise checker.planner.PlanError("installation_adopt_services_missing")
+    return applications
+
+
 def validate_preflight(info, value, environment, binding, image):
     config, host = info.get("Config", {}), info.get("HostConfig", {})
     wanted_env = parsed_environment(image["Config"].get("Env") or [])
@@ -426,25 +452,11 @@ def adoption(plan, expected, ca):
             raise checker.planner.PlanError("installation_adopt_start_unavailable") from None
         if result.returncode:
             raise checker.planner.PlanError("installation_adopt_start_failed")
-    adopted = {}
-    for info in project_containers(profile["name"]):
-        role = info.get("Config", {}).get("Labels", {}).get("com.docker.compose.service")
-        if role not in ROLES or role in adopted:
-            raise checker.planner.PlanError("installation_adopt_application_conflict")
-        validate_application(
-            info,
-            role,
-            profile["services"][role],
-            profile,
-            digest,
-            binding,
-            images["ingress" if role == "ingress" else "api"],
-        )
-        if info.get("State", {}).get("Running") is not True:
-            raise checker.planner.PlanError("installation_adopt_service_not_running")
-        adopted[role] = {"container_id": info["Id"], "image_id": info["Image"], "reused": role in existing}
-    if set(adopted) != ROLES:
-        raise checker.planner.PlanError("installation_adopt_services_missing")
+    active = active_applications(profile, digest, binding, images)
+    adopted = {
+        role: {"container_id": info["Id"], "image_id": info["Image"], "reused": role in existing}
+        for role, info in active.items()
+    }
     deadline = time.monotonic() + 60
     while True:
         try:
@@ -454,6 +466,13 @@ def adoption(plan, expected, ca):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(1)
+    # HTTPS may become ready after another service has stopped or changed.
+    # Receipt publication must sample the same complete active profiles again,
+    # with their bound dependency/socket membership still intact.
+    final = active_applications(profile, digest, binding, images)
+    if any(final[role]["Id"] != adopted[role]["container_id"] for role in ROLES):
+        raise checker.planner.PlanError("installation_adopt_service_identity_changed_during_readiness")
+    prerequisites(value, binding, final)
     return {
         **checker.receipt(value, expected),
         "schema": "private_installation_adoption_v1",
@@ -462,6 +481,7 @@ def adoption(plan, expected, ca):
         "services": adopted,
         "private_runtime_preflight": "passed",
         "anonymous_https_session": "passed",
+        "post_https_service_state": "verified",
         "services_adopted": True,
         "model_use_approved": False,
         "production_recovery_qualified": False,
