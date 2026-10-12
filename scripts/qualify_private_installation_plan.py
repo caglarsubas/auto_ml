@@ -103,6 +103,9 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                 from qualify_private_installation_adopt import qualify as qualify_adoption
 
                 qualify_adoption(plan, result["plan_manifest_sha256"], path_check_image, reports)
+                from qualify_private_dependency_start import qualify as qualify_dependency_start
+
+                qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports)
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))

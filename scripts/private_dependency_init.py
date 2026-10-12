@@ -28,7 +28,7 @@ IDENTITY = {"postgres": (70, 70), "job-broker": (999, 1000), "cache": (999, 1000
 def profile(value, expected, identifier):
     root = value["request"]["root"] + "/dependencies"
     result = {
-        "schema": "private_dependency_profile_v1",
+        "schema": "private_dependency_profile_v2",
         "plan_manifest_sha256": expected,
         "initialization_id": identifier,
         "installation_id": value["request"]["installation_id"],
@@ -210,15 +210,26 @@ def configurations(value, app):
         + '" 0.0.0.0/0 scram-sha-256\n'
         + "host all all 0.0.0.0/0 reject\nhost all all ::/0 reject\n"
     )
-    common = 'bind 0.0.0.0\nprotected-mode yes\nrename-command CONFIG ""\nrename-command DEBUG ""\nrename-command MODULE ""\n'
-    broker = common + (
-        "port 0\ntls-port 6379\ntls-cert-file /installation/server.crt\n"
-        "tls-key-file /installation/server.key\ntls-ca-cert-file /installation/server-ca.crt\n"
-        'tls-protocols "TLSv1.2 TLSv1.3"\ntls-auth-clients no\ndatabases 16\n'
-        'dir /data\nappendonly yes\nappendfsync everysec\nsave ""\n'
-        'maxmemory 384mb\nmaxmemory-policy noeviction\nrequirepass "' + secret + '"\n'
+    common = 'bind 0.0.0.0\nrename-command CONFIG ""\nrename-command DEBUG ""\nrename-command MODULE ""\n'
+    broker = (
+        common
+        + "protected-mode yes\n"
+        + (
+            "port 0\ntls-port 6379\ntls-cert-file /installation/server.crt\n"
+            "tls-key-file /installation/server.key\ntls-ca-cert-file /installation/server-ca.crt\n"
+            'tls-protocols "TLSv1.2 TLSv1.3"\ntls-auth-clients no\ndatabases 16\n'
+            'dir /data\nappendonly yes\nappendfsync everysec\nsave ""\n'
+            'maxmemory 384mb\nmaxmemory-policy noeviction\nrequirepass "' + secret + '"\n'
+        )
     )
-    cache = common + 'port 6379\ndir /data\nappendonly no\nsave ""\nmaxmemory 96mb\nmaxmemory-policy allkeys-lru\n'
+    # This historical app cache has no authentication interface. Redis 7.4
+    # protected mode rejects non-loopback clients even with an explicit bind.
+    # The exact private-only network and unpublished-port guards are mandatory;
+    # cache authentication/TLS remain separate release qualification.
+    cache = (
+        common
+        + 'protected-mode no\nport 6379\ndir /data\nappendonly no\nsave ""\nmaxmemory 96mb\nmaxmemory-policy allkeys-lru\n'
+    )
     return {
         "postgres/pg_hba.conf": hba.encode(),
         "job-broker/redis.conf": broker.encode(),

@@ -1,0 +1,140 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P41",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "afdf222d0033fe1de64229de4f532ba1ad35d5bc",
+  "base_pull_request": 130,
+  "base_exact_head_ci": {
+    "run": 38196272663,
+    "head": "2b27640e23e7c040a02c8335b568f051dab26e4c",
+    "status": "all_six_success",
+    "postgresql": {
+      "passed": 2785,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "line_coverage": 0.739,
+      "branch_coverage": 0.6411
+    },
+    "browser": {
+      "total": 37,
+      "expected": 37,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    }
+  },
+  "source_sha256": {
+    "scripts/private_dependency_start.py": "d434f1c7affb5f01975dc4a2809af5c4512144e2bcadbc4a64699d646fbf3049",
+    "scripts/qualify_private_dependency_start.py": "9947f9638ae39acfb28fb2e3f5d57bdbc4648ffc982a7e70ea9402b05ca2e8af",
+    "scripts/private_installation_adopt.py": "bf7f379d85e1b7e0e6d2dab5453fc9837817b23b30049e606ee9fcef587b03ff",
+    "scripts/qualify_private_installation_plan.py": "1483bffc33f52b6a9cf782da0f7b99436d2bb1f8bc41a2ae3242cd0b0a00d283",
+    "backend/tests/unit/test_private_dependency_start.py": "4cc3e7fc765462cd53aa41befd5ea09d7fa44e8bcb87c614f4d4e2fa24cda4cc",
+    ".github/workflows/ci.yml": "4f784bcc0cc3661bfe5402b42fd8a7e3e52d249e635676e2bee3fda67c1a4262",
+    "docs/PRIVATE_DEPENDENCY_START_IMPLEMENTATION.md": "c9a4952b1549d34cb81d462188f639611b3d961d91c035415e590e80ad99df48",
+    "scripts/private_dependency_init.py": "92480f0545662f970444772c34f5d21df90ca09ed516af2d2f1f4634ec1920bc",
+    "backend/tests/unit/test_private_dependency_init.py": "b9097e789f1749230b4369ebea1982283b74ec332245ea8cf5b9093b088ef8af"
+  },
+  "checks": {
+    "focused": {
+      "passed": 557,
+      "new_checks": 97,
+      "failed": 0,
+      "skipped": 0
+    },
+    "actual_native_created_profiles": {
+      "architecture": "arm64",
+      "profiles": [
+        {
+          "role": "postgres",
+          "image_id": "sha256:7fe570cd46c0c7f7ff3dd0610d697d42f6edbcc8e4ccdadb77ba19857709523b",
+          "created_not_started": true
+        },
+        {
+          "role": "job-broker",
+          "image_id": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+          "created_not_started": true
+        },
+        {
+          "role": "cache",
+          "image_id": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+          "created_not_started": true
+        }
+      ],
+      "owned_cleanup": "passed",
+      "fixture_only_desktop_bind_aliases": 0,
+      "linux_root_controller_qualified": false,
+      "services_started": false
+    },
+    "sealed_api_sources": "same 196 sources; no API runtime code added",
+    "primary_checkout": "exact status and 13 hashes preserved",
+    "ruff": "passed",
+    "actual_native_cache_configuration": {
+      "schema": "private_cache_configuration_check_v1",
+      "cases": [
+        {
+          "mode": "yes",
+          "public_ports": false,
+          "remote_denied": true
+        },
+        {
+          "mode": "no",
+          "public_ports": false,
+          "private_cache_ping": true,
+          "aof_disabled": true,
+          "config_disabled": true
+        }
+      ],
+      "owned_cleanup": "passed"
+    },
+    "preceding_source_sqlite_full": {
+      "tests": 2883,
+      "failures": 0,
+      "errors": 0,
+      "skips": 6,
+      "seconds": 295.774,
+      "line_rate": 0.7389,
+      "branch_rate": 0.6411
+    }
+  },
+  "retained_failures": [
+    {
+      "stage": "unit development",
+      "result": "SQL stdin regression fixture left a bootstrap mock installed; original function restored, assertions unchanged, final focused pass retained."
+    },
+    {
+      "stage": "native profile development",
+      "result": "Exact identity guard rejected inherited dependency-image preparation labels. Guard now includes only exact trusted-image labels plus installation binding and rejects changed/extra labels; all three real created profiles pass and own cleanup succeeds."
+    },
+    {
+      "stage": "first exact-head hosted qualification",
+      "head": "12fd9ec59cfe49c75478ea58b71ed2e7d9897ef8",
+      "run": 38202935969,
+      "result": "All three actual services started; authenticated readiness failed. Reproduced Redis 7.4 protected-mode denial on the passwordless private app-cache. Profile v2 corrects only this cache recipe; old prepared profiles block without rewrite, broker auth/TLS and exact private network/unpublished-port guards remain. Actual before/after native probe retains rejection and corrected connectivity/control-command/persistence checks with owned cleanup."
+    }
+  ],
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "fresh_linux_root": "P36/P37/P40 preparation, three exact services, non-elevated app role/DB, actual metadata/broker TLS/authentication, repeat/no-republication, graceful restart/app-DB persistence, profile/elevated-role/foreign-catalog guards, managed-adoption integration and owned cleanup",
+    "budgets": "unchanged six jobs, 120-second individual/900-second full-suite outer budgets, 50-percent coverage, 15 skips and two browser retries"
+  },
+  "claims": {
+    "migrations_applied": false,
+    "model_use_approved": false,
+    "installation_qualified": false,
+    "release_qualified": false,
+    "production_recovery_qualified": false,
+    "expert_isolation_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  },
+  "base_main_ci": {
+    "run": 38199722332,
+    "head": "afdf222d0033fe1de64229de4f532ba1ad35d5bc",
+    "status": "all_six_success",
+    "preceding_push_run": 38198536616,
+    "preceding_push_status": "cancelled_by_replacement_schedule"
+  }
+}
