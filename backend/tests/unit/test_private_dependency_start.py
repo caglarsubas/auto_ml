@@ -421,3 +421,26 @@ def test_managed_adoption_rechecks_exact_profiles_and_start_history(startup, con
         with pytest.raises(startup.checker.planner.PlanError):
             startup.adoption_check(value, binding, rows)
     assert closed == [99]
+
+
+@pytest.mark.parametrize("phase", ["postgres", "broker", "cache", "unknown"])
+def test_probe_errors_publish_only_fixed_phase_codes_and_clean_the_owned_helper(startup, context, monkeypatch, phase):
+    value, spec, receipt, _ = context
+    calls = []
+    identity = "d" * 64
+    output = ("private_dependency_" + phase + "_failed").encode() if phase != "unknown" else b"password=secret"
+
+    def command(args, **kwargs):
+        calls.append(args)
+        return identity.encode() if args[:2] == ["container", "create"] else output
+
+    monkeypatch.setattr(startup.resources, "command", command)
+    monkeypatch.setattr(startup.resources, "inspect", lambda *a: {"State": {"Running": False, "ExitCode": 1}})
+    monkeypatch.setattr(startup, "validate_probe", lambda *a: None)
+    error = (
+        "private_dependency_" + phase + "_failed" if phase != "unknown" else "dependency_authenticated_readiness_failed"
+    )
+    with pytest.raises(startup.checker.planner.PlanError, match=error) as caught:
+        startup.probe(value, spec, receipt)
+    assert "secret" not in str(caught.value)
+    assert calls[-1] == ["container", "rm", "--force", identity]

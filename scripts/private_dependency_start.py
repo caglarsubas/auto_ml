@@ -481,21 +481,27 @@ PROBE = r"""
 import os,ssl,uuid
 from pathlib import Path
 import psycopg,redis
-password=Path('/installation/app-password').read_text().rstrip('\r\n')
-with psycopg.connect(host='postgres',port=5432,dbname=os.environ['DEPENDENCY_DATABASE'],user=os.environ['DEPENDENCY_USER'],password=password,sslmode='verify-full',sslrootcert='/installation/postgres-ca.crt',connect_timeout=5) as db:
-    with db.cursor() as cursor:
-        cursor.execute('SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user')
-        row=cursor.fetchone();assert row[:3]==(os.environ['DEPENDENCY_DATABASE'],os.environ['DEPENDENCY_USER'],True) and all(x is False for x in row[3:])
-url=Path('/installation/job-broker-url').read_text().rstrip('\r\n')
-client=redis.Redis.from_url(url,ssl_ca_certs='/installation/job-ca.crt',ssl_cert_reqs='required',ssl_check_hostname=True,socket_connect_timeout=5,socket_timeout=5)
-assert client.ping() is True and client.info('persistence')['aof_enabled']==1
-key='declarai-dependency-probe:'+uuid.uuid4().hex
+phase='postgres'
 try:
-    client.set(key,b'bounded-readiness',ex=60);assert client.get(key)==b'bounded-readiness'
-finally:client.delete(key);client.close()
-cache=redis.Redis(host='cache',port=6379,socket_connect_timeout=5,socket_timeout=5)
-assert cache.ping() is True and cache.info('persistence')['aof_enabled']==0
-cache.close();print('private_dependencies_checked')
+    password=Path('/installation/app-password').read_text().rstrip('\r\n')
+    with psycopg.connect(host='postgres',port=5432,dbname=os.environ['DEPENDENCY_DATABASE'],user=os.environ['DEPENDENCY_USER'],password=password,sslmode='verify-full',sslrootcert='/installation/postgres-ca.crt',connect_timeout=5) as db:
+        with db.cursor() as cursor:
+            cursor.execute('SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user')
+            row=cursor.fetchone();assert row[:3]==(os.environ['DEPENDENCY_DATABASE'],os.environ['DEPENDENCY_USER'],True) and all(x is False for x in row[3:])
+    phase='broker'
+    url=Path('/installation/job-broker-url').read_text().rstrip('\r\n')
+    client=redis.Redis.from_url(url,ssl_ca_certs='/installation/job-ca.crt',ssl_cert_reqs='required',ssl_check_hostname=True,socket_connect_timeout=5,socket_timeout=5)
+    assert client.ping() is True and client.info('persistence')['aof_enabled']==1
+    key='declarai-dependency-probe:'+uuid.uuid4().hex
+    try:
+        client.set(key,b'bounded-readiness',ex=60);assert client.get(key)==b'bounded-readiness'
+    finally:client.delete(key);client.close()
+    phase='cache'
+    cache=redis.Redis(host='cache',port=6379,socket_connect_timeout=5,socket_timeout=5)
+    assert cache.ping() is True and cache.info('persistence')['aof_enabled']==0
+    cache.close();print('private_dependencies_checked')
+except Exception:
+    print('private_dependency_'+phase+'_failed');raise SystemExit(1)
 """
 
 
@@ -623,6 +629,12 @@ def probe(value, spec, receipt):
         validate_probe(info, value, spec, receipt, resources.inspect("image", value["images"]["api"]))
         output = resources.command(["container", "start", "--attach", identifier], allow_failure=True)
         state = resources.inspect("container", identifier)["State"]
+        if output.strip() in {
+            b"private_dependency_postgres_failed",
+            b"private_dependency_broker_failed",
+            b"private_dependency_cache_failed",
+        }:
+            raise checker.planner.PlanError(output.strip().decode())
         if (
             output.strip() != b"private_dependencies_checked"
             or state.get("Running") is not False

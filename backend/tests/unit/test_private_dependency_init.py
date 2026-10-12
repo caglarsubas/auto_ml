@@ -33,6 +33,7 @@ def test_fixed_profile_is_nonsecret_and_bound_to_exact_versions(dependency, save
     plan, expected = saved_plan
     value = dependency.checker.verify(plan, expected)
     p = dependency.profile(value, expected, "a" * 32)
+    assert p["schema"] == "private_dependency_profile_v2"
     assert p["plan_manifest_sha256"] == expected and p["initialization_id"] == "a" * 32
     assert p["services"]["postgres"]["image_id"] == value["images"]["postgres"]
     assert (p["services"]["postgres"]["uid"], p["services"]["postgres"]["gid"]) == (70, 70)
@@ -106,6 +107,18 @@ def test_percent_encoded_credentials_are_escaped_without_config_injection(depend
         and "appendfsync everysec\n" in broker
         and "noeviction\n" in broker
     )
+
+
+def test_network_only_cache_does_not_use_loopback_only_redis_mode(dependency, saved_plan, app):
+    plan, expected = saved_plan
+    value = dependency.checker.verify(plan, expected)
+    configs = dependency.configurations(value, app)
+    assert "protected-mode no\n" in configs["cache/redis.conf"].decode()
+    assert "protected-mode yes\n" in configs["job-broker/redis.conf"].decode()
+    assert "requirepass " in configs["job-broker/redis.conf"].decode()
+    profile = dependency.profile(value, expected, "a" * 32)
+    assert all(s["public_ports"] is False for s in profile["services"].values())
+    assert profile["private_network"] == value["prerequisites"]["networks"][0]["name"]
 
 
 def test_postgres_remote_owner_and_cleartext_access_are_rejected(dependency, saved_plan, app):
