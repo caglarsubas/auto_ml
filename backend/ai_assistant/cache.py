@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from .cache_connection import connection_options
+from .cache_connection import create_client
 
 from .prometa_config import (
     child_only_tool,
@@ -74,9 +74,7 @@ def _get_redis():
 
     client = None
     try:
-        import redis as redis_lib
-        url, options = connection_options()
-        client = redis_lib.from_url(url, decode_responses=True, socket_timeout=2, socket_connect_timeout=2, **options)
+        client = create_client(decode_responses=True)
         client.ping()
         _redis_client = client
         logger.info("AI Assistant cache connected")

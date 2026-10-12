@@ -72,11 +72,9 @@ def check_runtime():
     if any(name in os.environ for name in ("DECLARAI_CACHE_URL", "DECLARAI_CACHE_URL_FILE", "DECLARAI_CACHE_CA_FILE")):
         client = None
         try:
-            import redis
-            from ai_assistant.cache_connection import connection_options
+            from ai_assistant.cache_connection import create_client
 
-            url, options = connection_options()
-            client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2, **options)
+            client = create_client()
             if client.ping() is not True:
                 raise ValueError
             result["cache_connection"] = "authenticated_tls_verified"

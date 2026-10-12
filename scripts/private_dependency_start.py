@@ -501,9 +501,8 @@ try:
     phase='cache'
     import sys
     sys.path.insert(0,'/app/backend')
-    from ai_assistant.cache_connection import connection_options
-    cache_url,options=connection_options({'DECLARAI_CACHE_URL_FILE':'/installation/cache-url','DECLARAI_CACHE_CA_FILE':'/installation/cache-ca.crt'})
-    cache=redis.Redis.from_url(cache_url,socket_connect_timeout=5,socket_timeout=5,**options)
+    from ai_assistant.cache_connection import create_client
+    cache=create_client({'DECLARAI_CACHE_URL_FILE':'/installation/cache-url','DECLARAI_CACHE_CA_FILE':'/installation/cache-ca.crt'},socket_connect_timeout=5,socket_timeout=5)
     assert cache.ping() is True and cache.info('persistence')['aof_enabled']==0
     cache.close();print('private_dependencies_checked')
 except Exception:

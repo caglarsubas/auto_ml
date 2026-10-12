@@ -135,12 +135,15 @@ def test_selected_cache_preflight_blocks_launch_on_failure(checks, cache_env, mo
         client.ping.side_effect = RuntimeError('credential ' + SECRET)
     elif fault == 'bad_config':
         monkeypatch.setenv('REDIS_URL', 'redis://external:6379/0')
-    with patch('redis.Redis.from_url', return_value=client) as connect:
+    with patch('redis.Redis', return_value=client) as connect:
         if fault is None:
             result = check_runtime()
             assert result['cache_connection'] == 'authenticated_tls_verified'
-            assert connect.call_args.kwargs['ssl_check_hostname'] is True
-            assert connect.call_args.kwargs['ssl_cert_reqs'] == ssl.CERT_REQUIRED
+            pool = connect.call_args.kwargs['connection_pool']
+            from ai_assistant.cache_connection import SelectedCAConnection
+            assert pool.connection_class is SelectedCAConnection
+            assert pool.connection_kwargs['ssl_check_hostname'] is True
+            assert pool.connection_kwargs['ssl_cert_reqs'] == ssl.CERT_REQUIRED
         else:
             with pytest.raises(RuntimeUnavailable, match='^job_cache_unavailable$'):
                 check_runtime()
@@ -149,3 +152,31 @@ def test_selected_cache_preflight_blocks_launch_on_failure(checks, cache_env, mo
             client.close.assert_not_called()
         else:
             client.close.assert_called_once()
+
+
+def test_private_factory_uses_exclusive_ca_pool(cache_env):
+    from ai_assistant.cache_connection import create_client, SelectedCAConnection
+    client = create_client(cache_env)
+    try:
+        pool = client.connection_pool
+        assert pool.connection_class is SelectedCAConnection
+        assert pool.connection_kwargs['host'] == 'cache' and pool.connection_kwargs['db'] == 0
+        assert pool.connection_kwargs['password'] == SECRET
+        assert pool.connection_kwargs['ssl_ca_data'] == (open(cache_env['DECLARAI_CACHE_CA_FILE']).read())
+    finally:
+        client.close()
+
+
+def test_private_ssl_context_never_loads_system_trust(monkeypatch):
+    from unittest.mock import Mock
+    from ai_assistant.cache_connection import SelectedCAConnection
+    ctx = Mock()
+    monkeypatch.setattr(ssl, 'SSLContext', Mock(return_value=ctx))
+    monkeypatch.setattr(ssl, 'create_default_context', lambda *a, **k: pytest.fail('system trust must not be loaded'))
+    connection = SelectedCAConnection(host='cache', ssl_ca_data='captured-trust')
+    sock = object()
+    assert connection._wrap_socket_with_ssl(sock) is ctx.wrap_socket.return_value
+    ctx.load_verify_locations.assert_called_once_with(cadata='captured-trust')
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_2 and ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    ctx.wrap_socket.assert_called_once_with(sock, server_hostname='cache')

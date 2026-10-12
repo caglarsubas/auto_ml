@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import unquote,urlsplit
 sys.path.insert(0,'/app/backend')
 import redis
-from ai_assistant.cache_connection import connection_options
+from ai_assistant.cache_connection import connection_options,create_client
 from ai_assistant import cache
 from ai_assistant.rag.embeddings import _get_redis as embedding_redis
 phase,token=sys.argv[1:]
@@ -46,6 +46,20 @@ elif phase=='check':
         denied('plaintext',{'host':'cache','port':6379,'password':password},redis.exceptions.ConnectionError)
         denied('wrong_ca',{**base,'password':password,'ssl_ca_data':Path('/installation/postgres-ca.crt').read_text()},redis.exceptions.ConnectionError,'CERTIFICATE_VERIFY_FAILED')
         denied('wrong_hostname',{**base,'password':password,'host':socket.gethostbyname('cache')},redis.exceptions.ConnectionError,'CERTIFICATE_VERIFY_FAILED')
+        # Even a trusted ambient/system anchor must not override selected trust.
+        before=os.environ.get('SSL_CERT_FILE')
+        try:
+            os.environ['SSL_CERT_FILE']='/installation/cache-ca.crt'
+            alternate=create_client({**os.environ,'DECLARAI_CACHE_CA_FILE':'/installation/postgres-ca.crt'})
+            try:alternate.ping()
+            except redis.exceptions.ConnectionError as error:
+                assert 'CERTIFICATE_VERIFY_FAILED' in str(error)
+                failures['ambient_trust_cannot_override_selected_ca']='rejected'
+            else:raise AssertionError('ambient_trust_bypassed_selected_ca')
+            finally:alternate.close()
+        finally:
+            if before is None:os.environ.pop('SSL_CERT_FILE',None)
+            else:os.environ['SSL_CERT_FILE']=before
         assert client.info('persistence')['aof_enabled']==0
         assert client.info('memory')['maxmemory']==96*1024**2
         print(json.dumps({'api_worker_parity':'passed','denials':failures,'reconstructible_limits':'passed'}))
