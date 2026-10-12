@@ -1,0 +1,107 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P45",
+  "date": "2026-10-13",
+  "status": "tested",
+  "base_main_commit": "fcf0d1d107c598d115e297ce9d61186b505dd158",
+  "base_pull_request": 134,
+  "base_exact_head_ci": {
+    "run": 38277113429,
+    "head": "8369f6b711b11c62fd5255566faa73893ee853b1",
+    "status": "all_six_success"
+  },
+  "base_main_ci": {
+    "run": 38280995704,
+    "attempt": 2,
+    "head": "fcf0d1d107c598d115e297ce9d61186b505dd158",
+    "status": "all_six_success",
+    "first_attempt": "retained full PG timeout at 99 percent, no failed assertions; original 900-second budget preserved",
+    "final_postgresql": {
+      "passed": 3012,
+      "skipped": 6,
+      "failed": 0,
+      "time_seconds": 636.6
+    }
+  },
+  "source_sha256": {
+    "backend/ai_assistant/cache.py": "b001c6ea8982ab42422c3158c85021428540371b62c2ae88145052bd9ecbaa92",
+    "backend/ai_assistant/cache_connection.py": "46491eeb1d276372dff4a0c7faa851e7175ef4d07df602a94f40428e00b60d63",
+    "backend/tests/unit/test_cache_recovery.py": "e952dbbd5d597affd8bf18798cde2a0c6aa7e5ebd6adb7cad325b189ea742e48",
+    "backend/tests/unit/test_cache_recovery_scope.py": "eee29f0768ffc42c699201b7af93d004459a273a30b958a6e1ced229bc4c516d",
+    "scripts/qualify_private_cache.py": "f9265ba69d71e2b3b7a0e6ef45fadf572c062d208971d0f354e5029b072655ad",
+    "scripts/qualify_private_dependency_start.py": "696ccab39aba9506d80313a3380dbbf3eb5f3d684ebb3bef9a6a7d2a1abdd55e",
+    "docs/PRIVATE_CACHE_RECOVERY_IMPLEMENTATION.md": "0b527fa891f5a3fbc6fe687504839d1495124536dfa0dfc538a390345e90d6b1"
+  },
+  "checks": {
+    "focused": {
+      "passed": 244,
+      "new_cases": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3021,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.17,
+      "branch_coverage": 64.25,
+      "time_seconds": 285.866
+    },
+    "ruff": "passed",
+    "native_sealed_recovery": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:657c40abaa96b4b290e4a943ea9409ea892e53058f7f9eadd489bdb93fafae63",
+      "exact_redis_image": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "real_tls_client_and_recipe": {
+        "write": {
+          "api_authenticated_tls_write": "passed"
+        },
+        "worker": {
+          "worker_authenticated_tls_read_write": "passed"
+        },
+        "check": {
+          "api_worker_parity": "passed",
+          "denials": {
+            "unauthenticated": "rejected",
+            "wrong_password": "rejected",
+            "broker_credential": "rejected",
+            "plaintext": "rejected",
+            "wrong_ca": "rejected",
+            "wrong_hostname": "rejected",
+            "ambient_trust_cannot_override_selected_ca": "rejected"
+          },
+          "reconstructible_limits": "passed"
+        },
+        "recovery_candidate": {
+          "same_process_reconnection": "passed",
+          "cooldown_single_attempt": "passed",
+          "authenticated_tls_read_write": "passed",
+          "same_cache_container_id": "passed"
+        },
+        "warm_recovery_candidate": {
+          "warm_same_client_pool_reconnect": "passed",
+          "lost_cache_is_miss": "passed",
+          "authenticated_tls_read_write": "passed"
+        }
+      },
+      "host_linux_root_controller_qualified": false,
+      "candidate_code_is_separate_from_sealed_runtime": false,
+      "source_sha256": {
+        "backend/ai_assistant/cache.py": "b001c6ea8982ab42422c3158c85021428540371b62c2ae88145052bd9ecbaa92",
+        "backend/ai_assistant/cache_connection.py": "46491eeb1d276372dff4a0c7faa851e7175ef4d07df602a94f40428e00b60d63"
+      },
+      "owned_cleanup": "passed"
+    },
+    "primary_checkout": "exact status and 13 hashes preserved"
+  },
+  "retained_draft_failures": [
+    "Scope unit imported a planner fixture without its dependency; corrected to explicit monkeypatch.syspath_prepend.",
+    "Template E701 formatting failures corrected without semantic changes.",
+    "Early qualifier prototype lacked the preceding ambient trust denial; restored exact base seven-case qualifier before final native rerun."
+  ],
+  "budgets_changed": false,
+  "customer_installation_changed": false,
+  "release_qualified": false,
+  "final_exact_head_and_separate_main_ci": "Required and recorded on the PR after execution; not claimed by local evidence."
+}

@@ -1,0 +1,9 @@
+# Bounded private cache recovery
+
+P45 changes a failed first cache connection from process-lifetime disablement to a fixed five-second monotonic cooldown. A process lock serializes initialization; callers during cooldown get the existing cache-miss/failure behavior rather than multiplying connection attempts. Retry re-reads the declared protected-file transport and exclusive CA trust. There is no endpoint fallback or credential mutation. Mandatory private startup preflight remains unchanged.
+
+The private factory owns its fresh connection pool and disconnects it deterministically when a transient or failed client closes. A successful shared cache client stays live during normal use; redis-py's pool reconnects its transport after interruption. Lost cache entries remain misses. Model inputs, results, immutable evidence and approvals retain their existing contracts.
+
+Qualification tests cold failure/cooldown/recovery, continued failure, twenty concurrent callers with one attempt, changed invalid configuration, deterministic pool closure, and refusal of nonfixture scope before file/container access. The actual owned Linux fixture validates the exact cache profile before stop/restart, checks actual authenticated exclusive-CA TLS recovery in the same API helper process, and requires the same dependency IDs and byte-preserved startup receipt. It also tests warm same-client reconnection and lost-cache miss behavior. Only the fixture's generated root and bound cache may be interrupted; there is no customer recovery command.
+
+The preceding P44 main PostgreSQL run reached 99 percent before the unchanged 900-second limit; its timeout and partial report are retained. A same-commit failed-job rerun must be verified separately. Existing scientific, metadata, schema/account, package, HTTPS/browser, recovery, resource/identity and time/skip/coverage gates remain. D07 and release/value/customer gates stay open.

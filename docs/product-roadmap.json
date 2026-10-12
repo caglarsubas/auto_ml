@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-10-12",
+  "updated": "2026-10-13",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -1324,6 +1324,11 @@
       "date": "2026-10-12",
       "packet": "P44",
       "event": "Verified PR133 merge f094f229fdb85d33f762a2860f0ee2f5f65eeedb and separate main run 38238110064 with all six jobs successful. P44 adds cache authentication/TLS through fresh versioned profiles. Prior packet/queue/source mappings, customer/release states and all acceptance budgets remain unchanged."
+    },
+    {
+      "date": "2026-10-13",
+      "packet": "P45",
+      "event": "Verified PR134 merge fcf0d1d107c598d115e297ce9d61186b505dd158 after all six exact-head checks on 8369f6b711b11c62fd5255566faa73893ee853b1 passed. Separate main run 38280995704 passed all six after the same-commit failed-job rerun; retain first PG timeout at 99 percent under the unchanged 900-second limit. P45 adds bounded cache reconnection/owned-pool cleanup; preceding packet/queue/source mappings, acceptance budgets and release/customer states remain unchanged."
     }
   ],
   "implementation_packets": [
@@ -2082,6 +2087,22 @@
         "[P44 source qualification](evidence/p44-qualification-2026-10-12.json)"
       ],
       "remaining": "Final exact-head Linux acceptance is required before merge. Cache recovery, account/storage/egress/supply/upgrade/recovery/expert and release/value/customer gates remain open."
+    },
+    {
+      "id": "P45",
+      "title": "Bounded cache reconnection and owned-pool cleanup",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "tested",
+      "items": [
+        "D07"
+      ],
+      "description": "Recover from a failed initial cache connection through a fixed monotonic cooldown and serialized initialization; close owned pools deterministically. Qualify cold and warm authenticated exclusive-CA TLS recovery, same dependency identities/receipts, cache-loss misses and refusal of nonfixture interruption.",
+      "evidence": [
+        "[Bounded private cache recovery](PRIVATE_CACHE_RECOVERY_IMPLEMENTATION.md)",
+        "[P45 source qualification](evidence/p45-qualification-2026-10-13.json)"
+      ],
+      "remaining": "Final exact-head Linux acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

@@ -14,6 +14,8 @@ Reads/writes are fail-safe — if Redis is unavailable the app keeps working.
 
 import json
 import logging
+import threading
+import time
 from typing import Any, Optional
 
 from .cache_connection import create_client
@@ -60,34 +62,39 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 _redis_initialized = False
+_redis_retry_after = 0.0
+_redis_initialization_lock = threading.Lock()
+CACHE_RETRY_SECONDS = 5.0
 
 # Default TTL for cached artifacts (24 hours)
 DEFAULT_TTL = 60 * 60 * 24
 
 
 def _get_redis():
-    """Return a singleton Redis client, or None if unavailable."""
-    global _redis_client, _redis_initialized
-    if _redis_initialized:
+    """Serialize initialization and retry an unavailable cache after cooldown."""
+    global _redis_client, _redis_initialized, _redis_retry_after
+    with _redis_initialization_lock:
+        if _redis_initialized:
+            if _redis_client is not None or time.monotonic() < _redis_retry_after:
+                return _redis_client
+        _redis_initialized = True
+        client = None
+        try:
+            client = create_client(decode_responses=True)
+            client.ping()
+            _redis_client = client
+            _redis_retry_after = 0.0
+            logger.info("AI Assistant cache connected")
+        except Exception:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            _redis_client = None
+            _redis_retry_after = time.monotonic() + CACHE_RETRY_SECONDS
+            logger.warning("AI cache unavailable; cache disabled until bounded retry")
         return _redis_client
-    _redis_initialized = True
-
-    client = None
-    try:
-        client = create_client(decode_responses=True)
-        client.ping()
-        _redis_client = client
-        logger.info("AI Assistant cache connected")
-    except Exception:
-        if client is not None:
-            try:
-                client.close()
-            except Exception:
-                pass
-        logger.warning("AI cache unavailable; cache disabled")
-        _redis_client = None
-
-    return _redis_client
 
 
 def _key(file_id: int, artifact: str) -> str:

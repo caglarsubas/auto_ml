@@ -206,11 +206,13 @@ def host_case(plan, expected, parent):
             from qualify_private_account_enrollment import https_roles
 
             https_account_roles = https_roles(value, accounts, account_passwords, parent)
-            from qualify_private_cache import qualify as qualify_cache
+            from qualify_private_cache import qualify as qualify_cache, recovery as qualify_cache_recovery
 
             cache_qualification = qualify_cache(value, adopted, command)
+            cache_recovery = qualify_cache_recovery(value, adopted, first, parent, command)
             account_adoption = {
                 "cache_authentication_tls": cache_qualification,
+                "cache_recovery": cache_recovery,
                 "fresh_empty_root_schema_accounts_and_four_services": "passed",
                 "repeat_same_service_ids": "passed",
                 "first": adopted,
