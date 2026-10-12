@@ -20,11 +20,11 @@ v=json.load(sys.stdin);plan=Path('/plan');parent=Path('/srv/declarai')
 for name,data in v['files'].items(): (plan/name).write_text(data)
 parent.chmod(0o755)
 cert=parent/'server.crt';key=parent/'server.key'
-r=subprocess.run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=postgres','-addext','subjectAltName=DNS:postgres,DNS:job-broker,DNS:api.private.test','-addext','basicConstraints=critical,CA:TRUE'],capture_output=True,check=False)
+r=subprocess.run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=postgres','-addext','subjectAltName=DNS:postgres,DNS:job-broker,DNS:cache,DNS:api.private.test','-addext','basicConstraints=critical,CA:TRUE'],capture_output=True,check=False)
 assert r.returncode==0,'synthetic_certificate_generation_failed'
 pwd=secrets.token_urlsafe(32)
-app={'app/django-key':secrets.token_urlsafe(64).encode(),'app/app-password':secrets.token_urlsafe(32).encode(),'app/job-broker-url':('rediss://:'+pwd+'@job-broker:6379/1').encode(),'app/postgres-ca.crt':cert.read_bytes(),'app/job-ca.crt':cert.read_bytes(),'tls/tls.crt':cert.read_bytes(),'tls/tls.key':key.read_bytes()}
-delivered={'postgres/server.crt':cert.read_bytes(),'postgres/server.key':key.read_bytes(),'postgres/owner-password':secrets.token_urlsafe(32).encode(),'job-broker/server.crt':cert.read_bytes(),'job-broker/server.key':key.read_bytes()}
+app={'app/django-key':secrets.token_urlsafe(64).encode(),'app/app-password':secrets.token_urlsafe(32).encode(),'app/job-broker-url':('rediss://:'+pwd+'@job-broker:6379/1').encode(),'app/postgres-ca.crt':cert.read_bytes(),'app/job-ca.crt':cert.read_bytes(),'app/cache-url':('rediss://:'+secrets.token_urlsafe(32)+'@cache:6379/0').encode(),'app/cache-ca.crt':cert.read_bytes(),'tls/tls.crt':cert.read_bytes(),'tls/tls.key':key.read_bytes()}
+delivered={'postgres/server.crt':cert.read_bytes(),'postgres/server.key':key.read_bytes(),'postgres/owner-password':secrets.token_urlsafe(32).encode(),'job-broker/server.crt':cert.read_bytes(),'job-broker/server.key':key.read_bytes(),'cache/server.crt':cert.read_bytes(),'cache/server.key':key.read_bytes()}
 def delivery(root,files):
     root.mkdir(mode=0o700);os.chown(root,10001,10001)
     for group in {name.split('/')[0] for name in files}:
@@ -214,7 +214,7 @@ def qualify(plan, expected, image, reports):
                 if result.returncode:
                     raise dependency.checker.planner.PlanError("dependency_fixture_failed")
                 receipt = dependency.checker.planner.decode(result.stdout)
-                if receipt["delivered_files"] != 5 or receipt["dependencies_started"] is not False:
+                if receipt["delivered_files"] != 7 or receipt["dependencies_started"] is not False:
                     raise dependency.checker.planner.PlanError("dependency_fixture_receipt_invalid")
                 cases.append({"case": fault, "receipt": receipt})
                 retry = run("retry", RUN, fault, expected, "/does-not-exist")

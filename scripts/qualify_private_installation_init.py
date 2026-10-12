@@ -23,6 +23,7 @@ source=parent/'delivery';source.mkdir(mode=0o700);os.chown(source,10001,10001)
 files={'app/django-key':'Synthetic-Key-Only-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789',
 'app/app-password':'synthetic-not-a-real-password','app/job-broker-url':'rediss://:synthetic@job-broker:6379/1',
 'app/postgres-ca.crt':'synthetic opaque certificate','app/job-ca.crt':'synthetic opaque certificate',
+'app/cache-url':'rediss://:synthetic@cache:6379/0','app/cache-ca.crt':'synthetic opaque certificate',
 'tls/tls.crt':'synthetic opaque certificate','tls/tls.key':'synthetic opaque key'}
 for group in ['app','tls']:
     p=source/group;p.mkdir(mode=0o700);os.chown(p,10001,10001)
@@ -201,7 +202,7 @@ def qualify(plan, expected, image, reports):
                 if result.returncode:
                     raise checker.planner.PlanError("installation_init_fixture_failed")
                 receipt = checker.planner.decode(result.stdout)
-                if receipt["secret_files_delivered"] != 7 or receipt["services_adopted"] is not False:
+                if receipt["secret_files_delivered"] != 9 or receipt["services_adopted"] is not False:
                     raise checker.planner.PlanError("installation_init_fixture_receipt_invalid")
                 cases.append({"case": fault, "receipt": receipt})
                 again = run("retry", RUN, fault, expected)
@@ -217,7 +218,7 @@ def qualify(plan, expected, image, reports):
                     expected,
                     identity=["--user", "10001:10001"],
                 )
-                if checked.returncode or checker.planner.decode(checked.stdout)["secret_metadata_files"] != 7:
+                if checked.returncode or checker.planner.decode(checked.stdout)["secret_metadata_files"] != sum(map(len, value["prerequisites"]["secret_files"].values())):
                     raise checker.planner.PlanError("installation_init_fixture_path_check_failed")
             verified = run("verify", VERIFY, fault)
             if verified.returncode or verified.stdout.decode().strip() != "owned_fixture_verified":

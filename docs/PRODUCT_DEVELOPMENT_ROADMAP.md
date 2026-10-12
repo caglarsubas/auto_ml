@@ -486,6 +486,16 @@ Enroll ordinary accounts into an explicit project scope with actual private pref
 
 **Remaining:** Final exact-head Linux acceptance is required before merge. Complete account lifecycle, cache/storage/policy/supply/upgrade/recovery/expert qualification and release/value/customer gates remain open.
 
+### P44 — Private cache authentication and TLS
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Bind fresh v3 installation/dependency profiles to separately delivered cache credentials and selected trust. Require hostname-verified TLS with plaintext disabled, actual sealed API/worker cache parity and startup preflight, and credential-safe logs/traces. Preserve historical plans and existing roots without implicit migration.
+
+**Evidence:** [Private cache authentication and TLS](PRIVATE_CACHE_TLS_IMPLEMENTATION.md); [P44 source qualification](evidence/p44-qualification-2026-10-12.json)
+
+**Remaining:** Final exact-head Linux acceptance is required before merge. Cache recovery, account/storage/egress/supply/upgrade/recovery/expert and release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.

@@ -20,7 +20,7 @@ import private_image_set as image_set
 from private_ingress_package import IngressError, authority, configuration
 
 SCHEMA = "private_installation_request_v1"
-PLAN_SCHEMA = "private_installation_plan_v2"
+PLAN_SCHEMA = "private_installation_plan_v3"
 MAX_REQUEST = 16_384
 FILES = {"request.json", "compose.json", "prerequisites.json", "image-set.json", "ingress.json"}
 
@@ -117,7 +117,7 @@ def mounts(root, *, socket=False):
     return value
 
 
-def composition(request, images):
+def composition(request, images, cache_tls=True):
     host, port = authority(request["authority"])
     root, name = request["root"], "declarai-" + request["installation_id"]
     environment = {
@@ -132,6 +132,9 @@ def composition(request, images):
         "REDIS_URL": "redis://cache:6379/0", "PROMETA_DISABLE": "1", "OPENAI_API_KEY": "",
         "LLM_ENGINE_BASE_URL": "http://127.0.0.1:9/v1", "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
     }
+    if cache_tls:
+        environment.pop("REDIS_URL")
+        environment.update(DECLARAI_CACHE_URL_FILE="/installation/cache-url", DECLARAI_CACHE_CA_FILE="/installation/cache-ca.crt")
     services = {}
     for role in ("api", "worker", "dispatcher", "ingress"):
         ingress = role == "ingress"
@@ -159,24 +162,24 @@ def composition(request, images):
     }
 
 
-def prerequisites(request, images, legacy=False):
+def prerequisites(request, images, legacy=False, cache_tls=True):
     root, name = request["root"], "declarai-" + request["installation_id"]
     return {
-        "schema": "private_installation_prerequisites_v1" if legacy else "private_installation_prerequisites_v2",
+        "schema": "private_installation_prerequisites_v1" if legacy else ("private_installation_prerequisites_v3" if cache_tls else "private_installation_prerequisites_v2"),
         "scope": "native_application_layer_with_operator_managed_dependencies",
         "directories": [
             {"path": root + "/secrets/app", "uid": 10001, "gid": 10001, "mode": "0700", "mount": "read_only"},
             {"path": root + "/secrets/tls", "uid": 10001, "gid": 10001, "mode": "0700", "mount": "read_only"},
             {"path": root + "/artifacts", "uid": 10001, "gid": 10001, "mode": "0700", "mount": "read_write", "encrypted_storage_required": True},
         ],
-        "secret_files": {"app": ["django-key", "app-password", "job-broker-url", "postgres-ca.crt", "job-ca.crt"], "tls": ["tls.crt", "tls.key"]},
+        "secret_files": {"app": ["django-key", "app-password", "job-broker-url", "postgres-ca.crt", "job-ca.crt"] + (["cache-url", "cache-ca.crt"] if cache_tls else []), "tls": ["tls.crt", "tls.key"]},
         "secret_file_identity": {"uid": 10001, "gid": 10001, "mode": "0400", "regular_no_links": True},
         "networks": [{"name": name + "-" + key, "driver": "bridge", "internal": legacy or key == "private", "dedicated_installation": request["installation_id"]} for key in ("private", "edge")],
         "socket_volume": {"name": name + "-socket", "uid": 10001, "gid": 10001, "mode": "0750", "dedicated_installation": request["installation_id"]},
         "dependencies": {
             "postgres": {"image_id": images["postgres"], "alias": "postgres", "port": 5432, "tls": "verify-full", "database": request["database"], "application_superuser": False, "migrations": "approved_explicit_step"},
             "job_broker": {"image_id": images["redis"], "alias": "job-broker", "port": 6379, "tls": "required", "authentication": "required", "dedicated": True},
-            "cache": {"image_id": images["redis"], "alias": "cache", "port": 6379, "network": name + "-private", "reconstructible": True, "dedicated": True},
+            "cache": {"image_id": images["redis"], "alias": "cache", "port": 6379, "network": name + "-private", "reconstructible": True, "dedicated": True, **({"tls": "verify-full", "authentication": "required", "credential_source": "cache-url", "selected_ca": "cache-ca.crt"} if cache_tls else {})},
         },
         "operator_checks": ["Certificate trust, validity, key pairing and ingress/server names", "Approved secret-manager delivery and broker URL", "Encrypted storage, capacity, backup and retention policy", "Non-superuser database grants, current migrations and attributable account/project enrollment", "Dedicated internal service networks, socket ownership and host firewall", "PostgreSQL and dedicated TLS Redis initialization and supervision", "Runtime preflight, HTTPS sign-in, task completion and recovery qualification"],
         "installation_qualified": False, "release_qualified": False, "expert_isolation_qualified": False,

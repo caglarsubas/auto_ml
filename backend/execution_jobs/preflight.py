@@ -66,4 +66,24 @@ def check_runtime():
             broker.ensure_connection(max_retries=0)
     except Exception:
         raise RuntimeUnavailable("job_broker_unavailable") from None
-    return {"private_metadata_tls": "verified", "broker_connection": "verified", "migrations": "current"}
+    result = {"private_metadata_tls": "verified", "broker_connection": "verified", "migrations": "current"}
+    import os
+
+    if any(name in os.environ for name in ("DECLARAI_CACHE_URL", "DECLARAI_CACHE_URL_FILE", "DECLARAI_CACHE_CA_FILE")):
+        client = None
+        try:
+            from ai_assistant.cache_connection import create_client
+
+            client = create_client()
+            if client.ping() is not True:
+                raise ValueError
+            result["cache_connection"] = "authenticated_tls_verified"
+        except Exception:
+            raise RuntimeUnavailable("job_cache_unavailable") from None
+        finally:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+    return result

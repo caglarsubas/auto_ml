@@ -75,8 +75,8 @@ def _cache_get_vector(model: str, text: str) -> list[float] | None:
             return None
         try:
             raw = r.get(cache_key)
-        except Exception as exc:
-            logger.debug("Embedding cache get failed for %s: %s", cache_key, exc)
+        except Exception:
+            logger.debug("Embedding cache get failed")
             ch.miss()
             return None
         if raw is None:
@@ -101,8 +101,8 @@ def _cache_put_vector(model: str, text: str, vector: list[float]) -> None:
     cache_key = _embedding_cache_key(model, text)
     try:
         r.setex(cache_key, _cache_ttl(), json.dumps(vector))
-    except Exception as exc:
-        logger.debug("Embedding cache put failed for %s: %s", cache_key, exc)
+    except Exception:
+        logger.debug("Embedding cache put failed")
 
 
 def embed_texts(

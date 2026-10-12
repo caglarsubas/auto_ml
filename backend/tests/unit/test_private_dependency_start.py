@@ -363,7 +363,7 @@ def test_authenticated_probe_cannot_gain_admin_data_or_host_authority(startup, c
             "Destination": "/installation/" + file,
             "RW": False,
         }
-        for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt"]
+        for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt", "cache-url", "cache-ca.crt"]
     ]
     if fault == "script":
         info["Config"]["Cmd"] = ["-c", "expert.py"]
