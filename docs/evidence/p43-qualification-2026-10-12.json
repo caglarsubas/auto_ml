@@ -1,0 +1,180 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P43",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "faecfcc45fa01e285cdfd22c57a8d5210850ab11",
+  "base_pull_request": 132,
+  "base_exact_head_ci": {
+    "run": 38223192239,
+    "head": "2b4be7dd4f1d1c3c49e714ab6ea23fb0438adb27",
+    "status": "all_six_success",
+    "postgresql": {
+      "passed": 2924,
+      "skipped": 6,
+      "failed": 0
+    },
+    "browser": {
+      "first_attempt_passes": 36,
+      "retry_1_passes": 1,
+      "final_failures": 0,
+      "skipped": 0,
+      "retained_first_attempt": "scoring remained running at unchanged 30-second deadline"
+    }
+  },
+  "base_main_ci": {
+    "run": 38227341936,
+    "head": "faecfcc45fa01e285cdfd22c57a8d5210850ab11",
+    "status": "all_six_success"
+  },
+  "source_sha256": {
+    "backend/access_control/enrollment.py": "7f6ab6fabe75e31f6ca2b6049aaacd68c414542cc20caf04ad0536fa0631cba2",
+    "backend/access_control/management/commands/enroll_account.py": "379e84b0ca92d9693061194afc5b3099d4d7b3376bfd0bedb0b61b68c729208c",
+    "backend/tests/unit/test_account_enrollment.py": "e73889b9ca654d8beace2c5b11501800208195abd2b025a4e18e0f482a745754",
+    "backend/tests/unit/test_private_installation_adopt.py": "d4935e92a3791f6506efe9cd52705d1930a694c7e8968058879478976c074c6c",
+    "scripts/private_installation_adopt.py": "5614c1d421f16c1c4b2d2f757e692d28089bb8d1436e496f56461940f845898c",
+    "scripts/qualify_private_dependency_start.py": "f444d16333923783b32a8db2f2abad737e136a728f9adae8dc3464d4e7c9cfdb",
+    "scripts/qualify_private_account_enrollment.py": "9a9dc2058e0f432647939dc62266ab206fb71be076859fa1adca20662a484eb8",
+    "docs/PRIVATE_ACCOUNT_ENROLLMENT_IMPLEMENTATION.md": "b608000a961b71a0cffc92827c729b237346f07263af98c9f580c98a9cc26551"
+  },
+  "checks": {
+    "focused": {
+      "passed": 327,
+      "new_checks": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "primary_checkout": "exact status and 13 hashes preserved",
+    "ruff": "passed",
+    "actual_native_account_preceding_source": {
+      "architecture": "arm64",
+      "exact_image": "sha256:320d92e46be44148ce79659b5644b6341a94f2e2ae5f515fee302de2782d22b8",
+      "account_commands": {
+        "accounts": {
+          "admin": {
+            "authority_source": "installation_operator",
+            "event_id": "0d39fffa-eac2-5546-b902-2d6d0b011e53",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "5aac42ea-20f5-4306-aa8b-11b8a3eb7c5a",
+            "replayed_receipt": false,
+            "role": "admin",
+            "subject_user_id": 2
+          },
+          "developer": {
+            "authority_source": "installation_operator",
+            "event_id": "07e5aa23-a061-563b-a451-08d4fca05ec5",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "5aac42ea-20f5-4306-aa8b-11b8a3eb7c5a",
+            "replayed_receipt": false,
+            "role": "developer",
+            "subject_user_id": 3
+          },
+          "reviewer": {
+            "authority_source": "installation_operator",
+            "event_id": "a5956001-bcfd-53d7-9495-c1f0482e2044",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "5aac42ea-20f5-4306-aa8b-11b8a3eb7c5a",
+            "replayed_receipt": false,
+            "role": "reviewer",
+            "subject_user_id": 4
+          }
+        },
+        "atomic_failed_project_and_password": "passed",
+        "changed_assertion_and_privilege": "blocked_without_repair",
+        "exact_retry_preserves_credentials_revisions_history": "passed",
+        "model_use_approved": false,
+        "ordinary_exact_project_roles": "passed",
+        "password_values_or_hashes_emitted": false,
+        "project_id": "5aac42ea-20f5-4306-aa8b-11b8a3eb7c5a",
+        "schema": "private_account_fixture_v1"
+      },
+      "sealed_runtime_verified": true,
+      "host_linux_root_controller_qualified": false,
+      "fixture_only_relaxed_app_delivery_modes": true,
+      "owned_cleanup": "passed"
+    },
+    "actual_native_account": {
+      "architecture": "arm64",
+      "exact_image": "sha256:0a893f1eead7b18c0e183d6d8f41247c5c95b0153468f5f59ba486f90717eeb2",
+      "account_commands": {
+        "accounts": {
+          "admin": {
+            "authority_source": "installation_operator",
+            "event_id": "298ac3bf-5166-5152-9ff8-4ec37a7bbf28",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "db6205c1-6557-4cdc-b779-87cd5b9e8d9e",
+            "replayed_receipt": false,
+            "role": "admin",
+            "subject_user_id": 2
+          },
+          "developer": {
+            "authority_source": "installation_operator",
+            "event_id": "301c0001-7e2c-5617-a69f-eb4bc3ce4f83",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "db6205c1-6557-4cdc-b779-87cd5b9e8d9e",
+            "replayed_receipt": false,
+            "role": "developer",
+            "subject_user_id": 3
+          },
+          "reviewer": {
+            "authority_source": "installation_operator",
+            "event_id": "907f6b6d-b3a2-5b9d-9b94-66c4f1814fb8",
+            "global_privileges_granted": false,
+            "model_use_approved": false,
+            "project_id": "db6205c1-6557-4cdc-b779-87cd5b9e8d9e",
+            "replayed_receipt": false,
+            "role": "reviewer",
+            "subject_user_id": 4
+          }
+        },
+        "atomic_failed_project_and_password": "passed",
+        "changed_assertion_and_privilege": "blocked_without_repair",
+        "exact_retry_preserves_credentials_revisions_history": "passed",
+        "model_use_approved": false,
+        "ordinary_exact_project_roles": "passed",
+        "password_values_or_hashes_emitted": false,
+        "project_id": "db6205c1-6557-4cdc-b779-87cd5b9e8d9e",
+        "schema": "private_account_fixture_v1"
+      },
+      "sealed_runtime_verified": true,
+      "host_linux_root_controller_qualified": false,
+      "fixture_only_relaxed_app_delivery_modes": true,
+      "owned_cleanup": "passed"
+    }
+  },
+  "retained_failures": [
+    {
+      "stage": "native qualifier development",
+      "result": "Fixture run helper argument named role conflicted with the intentional role override in failed-project rollback scenario. Qualifier argument renamed; product command/policy and assertions unchanged."
+    },
+    {
+      "stage": "implementation review",
+      "result": "Added explicit rejection of an independently pre-existing derived project-operation receipt and altered operator/scope metadata before final qualification."
+    },
+    {
+      "stage": "audit ordering review before merge",
+      "head": "229e69b7de2e1f6a008aa552f6ffdbfa47ec1d20",
+      "run": 38232726154,
+      "result": "Enrollment start timestamp default was evaluated after the explicit finish timestamp. The command now captures request execution start before the transaction; regression asserts monotonic recorded start/finish. Final source/native/full/hosted qualification must rerun; prior-head results remain separate."
+    }
+  ],
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "fresh_linux_root": "Actual schema, ordinary role/account records, retry/rollback/changed authority, isolated empty-artifact preflight, four exact services, repeat and actual HTTPS/CSRF/project-role/escalation/logout, all previous dependency fault/restart/recovery checks and owned cleanup",
+    "budgets": "unchanged all six jobs, 120-second individual tests/900-second full suite, 300-second host fixture, coverage 50-percent, skip budget 15 and two browser retries"
+  },
+  "claims": {
+    "model_use_approved": false,
+    "installation_qualified": false,
+    "release_qualified": false,
+    "production_recovery_qualified": false,
+    "expert_isolation_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  }
+}

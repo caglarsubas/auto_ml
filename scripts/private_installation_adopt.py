@@ -274,7 +274,20 @@ def validate_preflight(
         raise checker.planner.PlanError("installation_adopt_preflight_profile_mismatch")
 
 
+PREFLIGHT_CODE = r"""
+from pathlib import Path
+import sys
+Path('/tmp/declarai-preflight-media').mkdir(mode=0o700)
+sys.path.insert(0,'/app/scripts')
+from private_service import launch
+launch(['preflight'])
+"""
+
+
 def preflight(value, environment, binding, image):
+    # Django app startup may create its media child. Preflight does not need
+    # customer artifacts, and must work before the actual app has started.
+    environment = {**environment, "DECLARAI_MEDIA_ROOT": "/tmp/declarai-preflight-media"}
     name = "declarai-adoption-preflight-" + uuid.uuid4().hex
     args = [
         "container",
@@ -300,23 +313,31 @@ def preflight(value, environment, binding, image):
         "64",
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=134217728,uid=10001,gid=10001,mode=700",
+        "--entrypoint",
+        "python",
     ]
     for key, item in {**binding, resources.LABEL + "role": "preflight"}.items():
         args += ["--label", key + "=" + item]
     for key, item in environment.items():
         args += ["--env", key + "=" + item]
-    for source, target in [
-        (value["request"]["root"] + "/secrets/app", "/installation"),
-        (value["request"]["root"] + "/artifacts", "/artifacts"),
-    ]:
+    for source, target in [(value["request"]["root"] + "/secrets/app", "/installation")]:
         args += ["--mount", "type=bind,src=" + source + ",dst=" + target + ",readonly"]
     created = None
     try:
-        created = resources.command([*args, value["images"]["api"], "preflight"]).decode().strip()
+        created = resources.command([*args, value["images"]["api"], "-I", "-c", PREFLIGHT_CODE]).decode().strip()
         if not resources.re.fullmatch(r"[0-9a-f]{64}", created):
             created = None
             raise checker.planner.PlanError("installation_adopt_preflight_response_invalid")
-        validate_preflight(resources.inspect("container", created), value, environment, binding, image)
+        validate_preflight(
+            resources.inspect("container", created),
+            value,
+            environment,
+            binding,
+            image,
+            entrypoint=["python"],
+            command=["-I", "-c", PREFLIGHT_CODE],
+            mount_sources={"/installation": value["request"]["root"] + "/secrets/app"},
+        )
         output = resources.command(["container", "start", "--attach", created], allow_failure=True)
         state = resources.inspect("container", created).get("State", {})
         if (

@@ -560,3 +560,25 @@ def test_https_success_cannot_publish_stale_service_or_dependency_evidence(
         with pytest.raises(adopter.checker.planner.PlanError, match=expected_error):
             adopter.adoption(plan, expected, tmp_path / "ca.crt")
         assert checks[:4] == ["initial_dependencies", "preflight", "compose", "https"]
+
+
+def test_fresh_preflight_uses_ephemeral_media_without_customer_artifacts(adopter, profile, monkeypatch):
+    value, composition, _, binding, image = profile
+    calls = []
+    identity = "a" * 64
+    validated = []
+
+    def command(args, **kwargs):
+        calls.append(args)
+        return identity.encode() if args[:2] == ["container", "create"] else b"private_service_preflight_passed"
+
+    monkeypatch.setattr(adopter.resources, "command", command)
+    monkeypatch.setattr(adopter.resources, "inspect", lambda *a: {"State": {"Running": False, "ExitCode": 0}})
+    monkeypatch.setattr(adopter, "validate_preflight", lambda *args, **kwargs: validated.append((args, kwargs)))
+    adopter.preflight(value, composition["services"]["api"]["environment"], binding, image)
+    assert calls[0][-3:] == ["-I", "-c", adopter.PREFLIGHT_CODE]
+    assert not any("dst=/artifacts" in a or "/dependencies/" in a for a in calls[0])
+    args, kw = validated[0]
+    assert args[2]["DECLARAI_MEDIA_ROOT"] == "/tmp/declarai-preflight-media" and kw["entrypoint"] == ["python"]
+    assert kw["mount_sources"] == {"/installation": value["request"]["root"] + "/secrets/app"}
+    assert calls[-1] == ["container", "rm", "--force", identity]
