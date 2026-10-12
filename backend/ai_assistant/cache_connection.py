@@ -86,4 +86,7 @@ def create_client(env=None, *, decode_responses=False, socket_timeout=2, socket_
         connection_class=SelectedCAConnection, host="cache", port=6379, db=0,
         password=unquote_to_bytes(parsed.password).decode("utf-8"), **common, **options,
     )
-    return redis.Redis(connection_pool=pool)
+    client = redis.Redis(connection_pool=pool)
+    # This factory creates a fresh pool; the client owns its shutdown.
+    client.auto_close_connection_pool = True
+    return client

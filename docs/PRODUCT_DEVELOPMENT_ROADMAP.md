@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-10-12. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-10-13. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.
 
@@ -495,6 +495,16 @@ Bind fresh v3 installation/dependency profiles to separately delivered cache cre
 **Evidence:** [Private cache authentication and TLS](PRIVATE_CACHE_TLS_IMPLEMENTATION.md); [P44 source qualification](evidence/p44-qualification-2026-10-12.json)
 
 **Remaining:** Final exact-head Linux acceptance is required before merge. Cache recovery, account/storage/egress/supply/upgrade/recovery/expert and release/value/customer gates remain open.
+
+### P45 — Bounded cache reconnection and owned-pool cleanup
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Recover from a failed initial cache connection through a fixed monotonic cooldown and serialized initialization; close owned pools deterministically. Qualify cold and warm authenticated exclusive-CA TLS recovery, same dependency identities/receipts, cache-loss misses and refusal of nonfixture interruption.
+
+**Evidence:** [Bounded private cache recovery](PRIVATE_CACHE_RECOVERY_IMPLEMENTATION.md); [P45 source qualification](evidence/p45-qualification-2026-10-13.json)
+
+**Remaining:** Final exact-head Linux acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
