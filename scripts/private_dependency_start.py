@@ -87,6 +87,8 @@ def prepared_value(value, expected):
             "profile.json",
             "start.lock",
             "started.json",
+            "schema-intent.json",
+            "schema.json",
             *ROLES,
         }:
             raise checker.planner.PlanError("dependency_stored_members_invalid")

@@ -124,6 +124,57 @@ def host_case(plan, expected, parent):
             or stored.read_bytes() != original
         ):
             raise startup.checker.planner.PlanError("dependency_start_fixture_recreated_or_republished")
+        import private_schema_init as schema_init
+
+        description = schema_init.initialize(plan, expected)
+        pin = description["schema_sha256"]
+        schema_root = parent / "installation" / "dependencies"
+        if description["state"] != "fresh" or (schema_root / "schema-intent.json").exists():
+            raise startup.checker.planner.PlanError("schema_fixture_description_mutated_state")
+        try:
+            schema_init.initialize(plan, expected, "f" * 64)
+        except startup.checker.planner.PlanError as error:
+            if str(error) != "schema_graph_changed":
+                raise
+        else:
+            raise startup.checker.planner.PlanError("schema_fixture_wrong_graph_not_blocked")
+        if (schema_root / "schema-intent.json").exists():
+            raise startup.checker.planner.PlanError("schema_fixture_wrong_graph_published_intent")
+        # Qualification-only post-DDL fault. No production code or approved
+        # intent is changed; normal controller execution follows this rollback.
+        original_code = schema_init.SCHEMA_CODE
+        marker = "            executor=MigrationExecutor(connection);loader=executor.loader"
+        if marker not in original_code:
+            raise startup.checker.planner.PlanError("schema_fixture_fault_marker_missing")
+        try:
+            schema_init.SCHEMA_CODE = original_code.replace(
+                marker, "            raise RuntimeError('qualification_only_rollback')\n" + marker
+            )
+            try:
+                schema_init.helper(
+                    value, prepared, startup.resources.inspect("image", value["images"]["api"]), "apply_fresh", pin
+                )
+            except startup.checker.planner.PlanError as error:
+                if str(error) != "private_schema_migration_failed":
+                    raise
+            else:
+                raise startup.checker.planner.PlanError("schema_fixture_ddl_failure_not_observed")
+        finally:
+            schema_init.SCHEMA_CODE = original_code
+        if schema_init.initialize(plan, expected)["state"] != "fresh" or (schema_root / "schema.json").exists():
+            raise startup.checker.planner.PlanError("schema_fixture_atomic_rollback_failed")
+        schema_first = schema_init.initialize(plan, expected, pin)
+        history = (schema_root / "schema.json").read_bytes()
+        schema_repeat = schema_init.initialize(plan, expected, pin)
+        if not schema_repeat["reused"] or (schema_root / "schema.json").read_bytes() != history:
+            raise startup.checker.planner.PlanError("schema_fixture_history_changed")
+        # A lost result publication retains exact intent. The product verifies
+        # current state and discloses recovery; it never reapplies migrations.
+        (schema_root / "schema.json").unlink()
+        recovered_schema = schema_init.initialize(plan, expected, pin)
+        if recovered_schema["migration_execution"] != "recovered_current_from_exact_intent":
+            raise startup.checker.planner.PlanError("schema_fixture_recovery_not_disclosed")
+        recovered_history = (schema_root / "schema.json").read_bytes()
         db = value["request"]["database"]
         # Only this fresh fixture database is seeded; no operator table enters.
         command(
@@ -170,6 +221,15 @@ def host_case(plan, expected, parent):
         )
         if data.strip() != b"retained":
             raise startup.checker.planner.PlanError("dependency_start_fixture_data_not_retained")
+        try:
+            schema_init.initialize(plan, expected, pin)
+        except startup.checker.planner.PlanError as error:
+            if str(error) != "schema_recorded_state_changed":
+                raise
+        else:
+            raise startup.checker.planner.PlanError("schema_fixture_foreign_table_not_blocked")
+        if (schema_root / "schema.json").read_bytes() != recovered_history:
+            raise startup.checker.planner.PlanError("schema_fixture_history_overwritten")
         command(["container", "update", "--memory", "1g", "--memory-swap", "1g", ids["postgres"]])
         try:
             try:
@@ -233,7 +293,18 @@ def host_case(plan, expected, parent):
             "foreign_catalog": "blocked_without_deletion",
             "existing_services_and_history_preserved": "passed",
             "managed_adoption_hardening": "verified_and_changed_profile_blocked",
-            "migrations_applied": False,
+            "dependency_start_does_not_migrate": True,
+            "schema_initialization": {
+                "description_without_execution": "passed",
+                "wrong_digest_without_intent": "blocked",
+                "first": schema_first,
+                "qualification_only_post_ddl_exception_rollback": "passed",
+                "repeat_without_execution_or_republication": "passed",
+                "lost_result_recovery": recovered_schema,
+                "foreign_table": "blocked_without_repair",
+                "history_preserved": "passed",
+                "accounts_enrolled": False,
+            },
             "operator_installation_modified": False,
         }
     except BaseException:
