@@ -29,6 +29,17 @@ def execution(schema, context, tmp_path, monkeypatch):
     stored = schema.startup.start_receipt(receipt["plan_manifest_sha256"], receipt, deps, set())
     (tmp_path / "started.json").write_bytes(schema.checker.planner.encoded(stored))
     (tmp_path / "started.json").chmod(0o600)
+    # Portable unit ownership simulation. The separate actual Linux-root
+    # qualification checks real owners; all production guards stay unchanged.
+    original_stat = schema.os.fstat
+
+    def root_owned_info(fd):
+        result = original_stat(fd)
+        attrs = {name: getattr(result, name) for name in dir(result) if name.startswith("st_")}
+        attrs.update(st_uid=0, st_gid=0)
+        return SimpleNamespace(**attrs)
+
+    monkeypatch.setattr(schema.os, "fstat", root_owned_info)
     calls = []
     state = {"state": "fresh"}
     pin = "e" * 64
@@ -347,3 +358,27 @@ def test_only_fixed_helper_phase_codes_are_exposed(schema, context, monkeypatch,
     with pytest.raises(schema.checker.planner.PlanError, match="private_schema_" + phase + "_failed"):
         schema.helper(value, receipt, image, "describe")
     assert calls[-1] == ["container", "rm", "--force", identity]
+
+
+@pytest.mark.parametrize("fault", ["mode", "hardlink", "owner"])
+def test_lock_metadata_guard_blocks_before_helpers(schema, execution, monkeypatch, fault):
+    x = execution
+    lock = x.root / "start.lock"
+    lock.write_bytes(b"")
+    lock.chmod(0o600)
+    if fault == "mode":
+        lock.chmod(0o644)
+    elif fault == "hardlink":
+        os.link(lock, x.root / "lock-link")
+    else:
+        previous = schema.os.fstat
+
+        def foreign_owner(fd):
+            result = previous(fd)
+            result.st_uid = 10001
+            return result
+
+        monkeypatch.setattr(schema.os, "fstat", foreign_owner)
+    with pytest.raises(schema.checker.planner.PlanError, match="dependency_lock_invalid"):
+        run(schema, x)
+    assert not x.calls and not (x.root / "schema-intent.json").exists()

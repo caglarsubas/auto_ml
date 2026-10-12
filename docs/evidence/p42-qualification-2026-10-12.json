@@ -15,13 +15,13 @@
     "scripts/private_dependency_start.py": "bea96df5629d2eee0d935d82b345d0cf704d39e4d22f3396e70d2225dec8fee7",
     "scripts/private_installation_adopt.py": "153c3d4c1ceaa30ac5417edba554793dd97bc566b81f564c58173a1b1fb40437",
     "scripts/qualify_private_dependency_start.py": "7496fbd53cb2f139847903c4f8c14ce4dbcc9bef2fdef997cd25dd19d2e5a925",
-    "backend/tests/unit/test_private_schema_init.py": "2b0ffe66e5e4fe7b5a05a5ff7c2a8a6605994644a6b9281bb51af58923751f8b",
+    "backend/tests/unit/test_private_schema_init.py": "81b26ca753799d6e51b14de8fccbae3523940c60309a6ef2189e39d0c1da2a79",
     "docs/PRIVATE_SCHEMA_INIT_IMPLEMENTATION.md": "55b1022d5fe75bbe080bb536a23647cfd106d5258100632302d962a893fc999b"
   },
   "checks": {
     "focused": {
-      "passed": 419,
-      "new_checks": 39,
+      "passed": 422,
+      "new_checks": 42,
       "failed": 0,
       "skipped": 0
     },
@@ -46,6 +46,13 @@
       "failures": 0,
       "errors": 0,
       "seconds": 278.39
+    },
+    "portable_nonroot_unit_execution": {
+      "uid": 10001,
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0,
+      "product_ownership_guards": "unchanged"
     }
   },
   "retained_failures": [
@@ -64,6 +71,12 @@
     {
       "stage": "native fixture preparation",
       "result": "Owned disposable configuration writer required FOWNER after setting PostgreSQL ownership; qualifier-only capability corrected. Product controller/service profiles unchanged; owned cleanup succeeded."
+    },
+    {
+      "stage": "first exact-head hosted unit matrix",
+      "head": "642ee4c06be0e21b37dea249bb0d5c3671ef3738",
+      "run": 38220110473,
+      "result": "Hosted unprivileged runner unit fixtures were not root-owned; production correctly rejected them at the unchanged lock guard. Portable unit owner simulation is now explicit, the real Linux-root acceptance remains separate, all 42 cases pass as UID 10001, and three added lock-owner/mode/hardlink faults verify rejection before helper execution."
     }
   ],
   "hosted_acceptance": {
