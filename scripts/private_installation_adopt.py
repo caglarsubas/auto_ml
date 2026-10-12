@@ -149,6 +149,7 @@ def prerequisites(value, binding, applications):
     private = value["prerequisites"]["networks"][0]
     edge = value["prerequisites"]["networks"][1]
     allowed, dependency_roles = {c["Id"] for c in applications.values()}, set()
+    dependencies = {}
     for spec in (private, edge):
         info = resources.inspect("network", spec["name"])
         empty = {**info, "Containers": {}}
@@ -177,8 +178,12 @@ def prerequisites(value, binding, applications):
             ):
                 raise checker.planner.PlanError("installation_adopt_dependency_conflict")
             dependency_roles.add(role)
+            dependencies[role] = container
     if dependency_roles != {"postgres", "cache", "job-broker"}:
         raise checker.planner.PlanError("installation_adopt_dependencies_required")
+    from private_dependency_start import adoption_check
+
+    adoption_check(value, binding, dependencies)
     volume = value["prerequisites"]["socket_volume"]
     resources.validate_volume(resources.inspect("volume", volume["name"]), volume, binding)
     attached = resources.command(
