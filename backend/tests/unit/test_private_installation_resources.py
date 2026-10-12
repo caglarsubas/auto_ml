@@ -285,7 +285,7 @@ def test_wrong_initialization_plan_blocks_before_paths_or_docker(resources, save
     [
         ("filesystem_initialized", 1),
         ("services_adopted", True),
-        ("secret_files_delivered", 7.0),
+        ("secret_files_delivered", 9.0),
         ("initialization_id", "NOT-A-UUID"),
         ("extra", True),
     ],
@@ -301,7 +301,7 @@ def test_initialization_record_shape_and_types_are_bound_to_fresh_profile(
         "schema": "private_installation_initialization_v1",
         "initialization_id": "a" * 32,
         "filesystem_initialized": True,
-        "secret_files_delivered": 7,
+        "secret_files_delivered": 9,
         "secret_values_emitted": False,
         "certificate_trust_verified": False,
         "encrypted_storage_verified": False,

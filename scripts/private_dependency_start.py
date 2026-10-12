@@ -64,7 +64,7 @@ def directory(parent, name, identity):
 def prepared(plan, expected):
     value = checker.verify(plan, expected)
     if sys.platform != "linux" or os.geteuid() != 0:
-        raise checker.planner.PlanError("dependency_v2_linux_root_required")
+        raise checker.planner.PlanError("dependency_v3_linux_root_required")
     checker.check_paths(plan, expected)
     return prepared_value(value, expected)
 
@@ -72,7 +72,7 @@ def prepared(plan, expected):
 def prepared_value(value, expected):
     """Consume a verified plan value; callers must first run P35 path checks."""
     if value["manifest"]["schema"] != checker.planner.PLAN_SCHEMA or sys.platform != "linux" or os.geteuid() != 0:
-        raise checker.planner.PlanError("dependency_v2_linux_root_required")
+        raise checker.planner.PlanError("dependency_v3_linux_root_required")
     initialized = resources.initialization(value)
     if initialized["plan_manifest_sha256"] != expected:
         raise checker.planner.PlanError("dependency_initialization_plan_mismatch")
@@ -107,7 +107,7 @@ def prepared_value(value, expected):
             "initialization_id": initialized["initialization_id"],
             "dependency_initialization_id": identifier,
             "dependency_profile_sha256": digest,
-            "delivered_files": 5,
+            "delivered_files": 7,
             "certificate_chain_hostname_and_key": "verified_at_initialization",
             "secret_values_or_hashes_emitted": False,
             "dependency_filesystem_initialized": True,
@@ -140,7 +140,7 @@ def prepared_value(value, expected):
                     names = set(preparation.DELIVERY.get(role, [])) | {
                         "pg_hba.conf" if role == "postgres" else "redis.conf"
                     }
-                    if role == "job-broker":
+                    if role in ("job-broker", "cache"):
                         names.add("server-ca.crt")
                     if set(os.listdir(config)) != names:
                         raise checker.planner.PlanError("dependency_stored_members_invalid")
@@ -156,7 +156,7 @@ def prepared_value(value, expected):
                         if name in preparation.DELIVERY.get(role, []):
                             delivered[role + "/" + name] = data
                         elif name == "server-ca.crt":
-                            if data != app["app/job-ca.crt"]:
+                            if data != app["app/job-ca.crt" if role == "job-broker" else "app/cache-ca.crt"]:
                                 raise checker.planner.PlanError("dependency_current_ca_changed")
                         elif data != configs[role + "/" + name]:
                             raise checker.planner.PlanError("dependency_configuration_changed")
@@ -499,7 +499,11 @@ try:
         client.set(key,b'bounded-readiness',ex=60);assert client.get(key)==b'bounded-readiness'
     finally:client.delete(key);client.close()
     phase='cache'
-    cache=redis.Redis(host='cache',port=6379,socket_connect_timeout=5,socket_timeout=5)
+    import sys
+    sys.path.insert(0,'/app/backend')
+    from ai_assistant.cache_connection import connection_options
+    cache_url,options=connection_options({'DECLARAI_CACHE_URL_FILE':'/installation/cache-url','DECLARAI_CACHE_CA_FILE':'/installation/cache-ca.crt'})
+    cache=redis.Redis.from_url(cache_url,socket_connect_timeout=5,socket_timeout=5,**options)
     assert cache.ping() is True and cache.info('persistence')['aof_enabled']==0
     cache.close();print('private_dependencies_checked')
 except Exception:
@@ -516,7 +520,7 @@ def validate_probe(info, value, spec, receipt, image):
     binding = {**(image["Config"].get("Labels") or {}), **labels(value, receipt), LABEL + "role": "dependency-check"}
     paths = {
         "/installation/" + file: value["request"]["root"] + "/secrets/app/" + file
-        for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt"]
+        for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt", "cache-url", "cache-ca.crt"]
     }
     mounts = info.get("Mounts", [])
     if (
@@ -567,7 +571,7 @@ def validate_probe(info, value, spec, receipt, image):
         raise checker.planner.PlanError("dependency_probe_profile_invalid")
     if (
         set(info.get("NetworkSettings", {}).get("Networks", {})) != {spec["private_network"]}
-        or len(mounts) != 4
+        or len(mounts) != 6
         or {m.get("Destination"): m.get("Source") for m in mounts} != paths
         or any(m.get("Type") != "bind" or m.get("RW") is not False for m in mounts)
     ):
@@ -610,7 +614,7 @@ def probe(value, spec, receipt):
         "DEPENDENCY_USER": value["request"]["database"]["user"],
     }.items():
         args += ["--env", key + "=" + data]
-    for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt"]:
+    for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt", "cache-url", "cache-ca.crt"]:
         args += [
             "--mount",
             "type=bind,src="

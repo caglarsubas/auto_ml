@@ -87,7 +87,7 @@ def initialization(value):
             "schema": "private_installation_initialization_v1",
             "initialization_id": identifier,
             "filesystem_initialized": True,
-            "secret_files_delivered": 7,
+            "secret_files_delivered": sum(map(len, value["prerequisites"]["secret_files"].values())),
             "secret_values_emitted": False,
             "certificate_trust_verified": False,
             "encrypted_storage_verified": False,

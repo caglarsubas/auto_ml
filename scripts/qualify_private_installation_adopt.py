@@ -77,7 +77,7 @@ def host_case(plan, expected, parent):
                 "-subj",
                 "/CN=api.private.test",
                 "-addext",
-                "subjectAltName=DNS:api.private.test,DNS:postgres,DNS:job-broker",
+                "subjectAltName=DNS:api.private.test,DNS:postgres,DNS:job-broker,DNS:cache",
                 "-addext",
                 "basicConstraints=critical,CA:TRUE",
             ],
@@ -105,10 +105,12 @@ def host_case(plan, expected, parent):
             "app/job-broker-url": ("rediss://:" + broker_password + "@job-broker:6379/1").encode(),
             "app/postgres-ca.crt": cert.read_bytes(),
             "app/job-ca.crt": cert.read_bytes(),
+            "app/cache-url": ("rediss://:" + (cache_password := secrets.token_urlsafe(32)) + "@cache:6379/0").encode(),
+            "app/cache-ca.crt": cert.read_bytes(),
             "tls/tls.crt": cert.read_bytes(),
             "tls/tls.key": key.read_bytes(),
         }
-        redactions.extend([app_password, admin_password, broker_password, files["app/django-key"].decode()])
+        redactions.extend([app_password, admin_password, broker_password, cache_password, files["app/django-key"].decode()])
         for name, data in files.items():
             p = delivery / name
             p.write_bytes(data)
@@ -118,7 +120,7 @@ def host_case(plan, expected, parent):
         m.prepare(plan, expected)
         binding = m.labels(value, expected, initialized["initialization_id"])
         private = value["prerequisites"]["networks"][0]["name"]
-        for role in ["postgres", "job-broker"]:
+        for role in ["postgres", "job-broker", "cache"]:
             config = parent / role
             config.mkdir(mode=0o700)
             (config / "server.crt").write_bytes(cert.read_bytes())
@@ -128,7 +130,7 @@ def host_case(plan, expected, parent):
             else:
                 (config / "redis.conf").write_text(
                     "port 0\ntls-port 6379\ntls-cert-file /fixture/server.crt\ntls-key-file /fixture/server.key\ntls-ca-cert-file /fixture/server.crt\ntls-auth-clients no\nappendonly no\nrequirepass "
-                    + broker_password
+                    + (broker_password if role == "job-broker" else cache_password)
                     + "\n"
                 )
         for role, name in names.items():
@@ -162,7 +164,7 @@ def host_case(plan, expected, parent):
                     "-c",
                     "chown -R postgres:postgres /fixture; chmod 600 /fixture/server.key; exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/fixture/server.crt -c ssl_key_file=/fixture/server.key",
                 ]
-            elif role == "job-broker":
+            elif role in ("job-broker", "cache"):
                 args += [
                     "--mount",
                     "type=bind,src=" + str(parent / role) + ",dst=/fixture",

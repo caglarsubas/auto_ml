@@ -21,14 +21,14 @@ import private_installation_resources as resources
 
 checker = resources.checker
 initializer = resources.initializer
-DELIVERY = {"postgres": ["server.crt", "server.key", "owner-password"], "job-broker": ["server.crt", "server.key"]}
+DELIVERY = {"postgres": ["server.crt", "server.key", "owner-password"], "job-broker": ["server.crt", "server.key"], "cache": ["server.crt", "server.key"]}
 IDENTITY = {"postgres": (70, 70), "job-broker": (999, 1000), "cache": (999, 1000)}
 
 
 def profile(value, expected, identifier):
     root = value["request"]["root"] + "/dependencies"
     result = {
-        "schema": "private_dependency_profile_v2",
+        "schema": "private_dependency_profile_v3",
         "plan_manifest_sha256": expected,
         "initialization_id": identifier,
         "installation_id": value["request"]["installation_id"],
@@ -100,7 +100,7 @@ def profile(value, expected, identifier):
             stop_timeout=60,
             tmpfs={"/tmp": f"rw,noexec,nosuid,size=16777216,uid={uid},gid={gid},mode=700"},
             mounts=[{"source": service["config"], "target": "/installation", "read_only": True}],
-            configuration_recipe="private_dependency_configuration_v1",
+            configuration_recipe="private_dependency_configuration_v2",
         )
         if postgres:
             service["tmpfs"]["/var/run/postgresql"] = "rw,noexec,nosuid,size=16777216,uid=70,gid=70,mode=700"
@@ -174,19 +174,20 @@ def password(data):
     return value
 
 
-def broker_password(data):
+def broker_password(data, host="job-broker", database=None):
     try:
         url = data.decode("utf-8").rstrip("\r\n")
         parsed = urlsplit(url)
         if (
             parsed.scheme != "rediss"
-            or parsed.hostname != "job-broker"
+            or parsed.hostname != host
             or parsed.port != 6379
             or parsed.username not in (None, "")
             or not parsed.password
             or parsed.query
             or parsed.fragment
             or parsed.path not in {"/" + str(n) for n in range(16)}
+            or (database is not None and parsed.path != "/" + str(database))
             or any(c.isspace() for c in url)
         ):
             raise ValueError
@@ -194,13 +195,17 @@ def broker_password(data):
             raise ValueError
         return password(unquote_to_bytes(parsed.password))
     except (UnicodeError, ValueError):
-        raise checker.planner.PlanError("dependency_broker_url_invalid") from None
+        raise checker.planner.PlanError("dependency_" + ("cache" if host == "cache" else "broker") + "_url_invalid") from None
 
 
 def configurations(value, app):
     db = value["request"]["database"]
     password(app["app/app-password"])
     secret = broker_password(app["app/job-broker-url"]).replace("\\", "\\\\").replace('"', '\\"')
+    cache_secret = broker_password(app["app/cache-url"], "cache", 0)
+    if cache_secret == broker_password(app["app/job-broker-url"]):
+        raise checker.planner.PlanError("dependency_cache_broker_credentials_must_differ")
+    cache_secret = cache_secret.replace("\\", "\\\\").replace('"', '\\"')
     hba = (
         "local all postgres peer\nlocal all all reject\n"
         + 'hostssl "'
@@ -222,13 +227,13 @@ def configurations(value, app):
             'maxmemory 384mb\nmaxmemory-policy noeviction\nrequirepass "' + secret + '"\n'
         )
     )
-    # This historical app cache has no authentication interface. Redis 7.4
-    # protected mode rejects non-loopback clients even with an explicit bind.
-    # The exact private-only network and unpublished-port guards are mandatory;
-    # cache authentication/TLS remain separate release qualification.
     cache = (
         common
-        + 'protected-mode no\nport 6379\ndir /data\nappendonly no\nsave ""\nmaxmemory 96mb\nmaxmemory-policy allkeys-lru\n'
+        + 'protected-mode yes\nport 0\ntls-port 6379\n'
+        + 'tls-cert-file /installation/server.crt\ntls-key-file /installation/server.key\n'
+        + 'tls-ca-cert-file /installation/server-ca.crt\ntls-protocols "TLSv1.2 TLSv1.3"\ntls-auth-clients no\n'
+        + 'databases 1\ndir /data\nappendonly no\nsave ""\nmaxmemory 96mb\nmaxmemory-policy allkeys-lru\n'
+        + 'requirepass "' + cache_secret + '"\n'
     )
     return {
         "postgres/pg_hba.conf": hba.encode(),
@@ -240,7 +245,7 @@ def configurations(value, app):
 def certificates(delivered, app):
     with tempfile.TemporaryDirectory(prefix="declarai-dependency-tls-") as temporary:
         parent = Path(temporary)
-        for role, ca in [("postgres", "postgres-ca.crt"), ("job-broker", "job-ca.crt")]:
+        for role, ca in [("postgres", "postgres-ca.crt"), ("job-broker", "job-ca.crt"), ("cache", "cache-ca.crt")]:
             paths = {name: parent / name for name in ["server.crt", "server.key", "ca.crt"]}
             for name, path in paths.items():
                 path.write_bytes(app["app/" + ca] if name == "ca.crt" else delivered[role + "/" + name])
@@ -286,7 +291,7 @@ def certificates(delivered, app):
 def initialize(plan, expected, source):
     value = checker.verify(plan, expected)
     if value["manifest"]["schema"] != checker.planner.PLAN_SCHEMA:
-        raise checker.planner.PlanError("dependency_v2_plan_required")
+        raise checker.planner.PlanError("dependency_v3_plan_required")
     if sys.platform != "linux" or os.geteuid() != 0:
         raise checker.planner.PlanError("dependency_linux_root_required")
     initialized = resources.initialization(value)
@@ -313,7 +318,7 @@ def initialize(plan, expected, source):
             "initialization_id": initialized["initialization_id"],
             "dependency_initialization_id": stage.removeprefix(".declarai-dependencies-"),
             "dependency_profile_sha256": digest,
-            "delivered_files": 5,
+            "delivered_files": 7,
             "certificate_chain_hostname_and_key": "verified_at_initialization",
             "secret_values_or_hashes_emitted": False,
             "dependency_filesystem_initialized": True,
@@ -341,8 +346,8 @@ def initialize(plan, expected, source):
                             for name, data in {**delivered, **configs}.items()
                             if name.startswith(role + "/")
                         }
-                        if role == "job-broker":
-                            files["server-ca.crt"] = app["app/job-ca.crt"]
+                        if role in ("job-broker", "cache"):
+                            files["server-ca.crt"] = app["app/job-ca.crt" if role == "job-broker" else "app/cache-ca.crt"]
                         for name, data in files.items():
                             initializer.write_file(config, name, data, 0, gid, 0o440)
                         os.fsync(config)

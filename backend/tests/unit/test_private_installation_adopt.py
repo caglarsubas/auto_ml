@@ -410,7 +410,8 @@ def test_client_ca_requires_exact_absolute_non_traversing_path(adopter, ca):
         adopter.client_context(Path(ca))
 
 
-def test_legacy_plan_remains_verifiable_but_cannot_adopt_or_touch_host(adopter, saved_plan, monkeypatch, tmp_path):
+@pytest.mark.parametrize("version", ["private_installation_plan_v1", "private_installation_plan_v2"])
+def test_legacy_plan_remains_verifiable_but_cannot_adopt_or_touch_host(adopter, saved_plan, monkeypatch, tmp_path, version):
     import hashlib
     import json
 
@@ -419,19 +420,22 @@ def test_legacy_plan_remains_verifiable_but_cannot_adopt_or_touch_host(adopter, 
     request = json.loads((plan / "request.json").read_text())
     outer = json.loads((plan / "image-set.json").read_text())
     images = {k: v["image_id"] for k, v in outer["components"].items()}
-    historical = adopter.checker.planner.prerequisites(request, images, legacy=True)
+    historical = adopter.checker.planner.prerequisites(request, images, legacy=version == "private_installation_plan_v1", cache_tls=False)
     (plan / "prerequisites.json").write_bytes(adopter.checker.planner.encoded(historical))
-    manifest["schema"] = "private_installation_plan_v1"
+    (plan / "compose.json").write_bytes(adopter.checker.planner.encoded(adopter.checker.planner.composition(request, images, cache_tls=False)))
+    manifest["schema"] = version
+    manifest["files"]["compose.json"] = hashlib.sha256((plan / "compose.json").read_bytes()).hexdigest()
     manifest["files"]["prerequisites.json"] = hashlib.sha256((plan / "prerequisites.json").read_bytes()).hexdigest()
     data = adopter.checker.planner.encoded(manifest)
     (plan / "manifest.json").write_bytes(data)
     expected = hashlib.sha256(data).hexdigest()
     before = {p.name: p.read_bytes() for p in plan.iterdir()}
     value = adopter.checker.verify(plan, expected)
-    assert value["manifest"]["schema"] == "private_installation_plan_v1"
-    assert all(n["internal"] is True for n in value["prerequisites"]["networks"])
+    assert value["manifest"]["schema"] == version
+    assert value["prerequisites"]["networks"][0]["internal"] is True
+    assert value["prerequisites"]["networks"][1]["internal"] is (version == "private_installation_plan_v1")
     monkeypatch.setattr(adopter.resources, "initialization", lambda *a: pytest.fail("legacy plan touched host"))
-    with pytest.raises(adopter.checker.planner.PlanError, match="v2_plan_required_render_new_root"):
+    with pytest.raises(adopter.checker.planner.PlanError, match="v3_plan_required_render_new_root"):
         adopter.adoption(plan, expected, tmp_path / "ca.pem")
     assert before == {p.name: p.read_bytes() for p in plan.iterdir()}
 

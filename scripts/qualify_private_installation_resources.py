@@ -31,6 +31,7 @@ try:
     contents={'app/django-key':'Synthetic-Key-Only-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789',
     'app/app-password':'synthetic-not-a-real-password','app/job-broker-url':'rediss://:synthetic@job-broker:6379/1',
     'app/postgres-ca.crt':'synthetic opaque certificate','app/job-ca.crt':'synthetic opaque certificate',
+'app/cache-url':'rediss://:synthetic@cache:6379/0','app/cache-ca.crt':'synthetic opaque certificate',
     'tls/tls.crt':'synthetic opaque certificate','tls/tls.key':'synthetic opaque key'}
     for name,data in contents.items():
         p=source/name;p.write_text(data);p.chmod(0o400);os.chown(p,10001,10001)

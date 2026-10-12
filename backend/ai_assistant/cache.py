@@ -14,8 +14,9 @@ Reads/writes are fail-safe — if Redis is unavailable the app keeps working.
 
 import json
 import logging
-import os
 from typing import Any, Optional
+
+from .cache_connection import connection_options
 
 from .prometa_config import (
     child_only_tool,
@@ -71,14 +72,21 @@ def _get_redis():
         return _redis_client
     _redis_initialized = True
 
-    url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    client = None
     try:
         import redis as redis_lib
-        _redis_client = redis_lib.from_url(url, decode_responses=True, socket_timeout=2)
-        _redis_client.ping()
-        logger.info("AI Assistant cache connected — %s", url)
-    except Exception as exc:
-        logger.warning("Redis unavailable (%s) — AI cache disabled: %s", url, exc)
+        url, options = connection_options()
+        client = redis_lib.from_url(url, decode_responses=True, socket_timeout=2, socket_connect_timeout=2, **options)
+        client.ping()
+        _redis_client = client
+        logger.info("AI Assistant cache connected")
+    except Exception:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
+        logger.warning("AI cache unavailable; cache disabled")
         _redis_client = None
 
     return _redis_client
@@ -126,10 +134,10 @@ def cache_put(file_id: int, artifact: str, data: Any, ttl: int = DEFAULT_TTL) ->
             r.setex(_key(file_id, artifact), ttl, payload)
             set_span_attr('declarai.cache.ok', True)
             return True
-        except Exception as exc:
+        except Exception:
             set_span_attr('declarai.cache.ok', False)
-            set_span_attr('declarai.cache.reason', str(exc)[:200])
-            logger.warning("cache_put failed (%s/%s): %s", file_id, artifact, exc)
+            set_span_attr('declarai.cache.reason', 'cache-operation-failed')
+            logger.warning("cache_put failed")
             return False
 
 
@@ -187,12 +195,12 @@ def cache_get(file_id: int, artifact: str) -> Optional[Any]:
                 # remaining TTL from span start_time if needed.
                 ch.hit()
                 return json.loads(raw)
-            except Exception as exc:
+            except Exception:
                 set_span_attr('declarai.cache.hit', False)
-                set_span_attr('declarai.cache.reason', str(exc)[:200])
+                set_span_attr('declarai.cache.reason', 'cache-operation-failed')
                 # Parse / decode errors are logical misses too.
                 ch.miss()
-                logger.warning("cache_get failed (%s/%s): %s", file_id, artifact, exc)
+                logger.warning("cache_get failed")
                 return None
 
 
@@ -236,10 +244,10 @@ def cache_put_bulk(file_id: int, artifacts: dict[str, Any], ttl: int = DEFAULT_T
             set_span_attr('declarai.cache.bytes', total_bytes)
             set_span_attr('declarai.cache.ok', True)
             return True
-        except Exception as exc:
+        except Exception:
             set_span_attr('declarai.cache.ok', False)
-            set_span_attr('declarai.cache.reason', str(exc)[:200])
-            logger.warning("cache_put_bulk failed (file_id=%s): %s", file_id, exc)
+            set_span_attr('declarai.cache.reason', 'cache-operation-failed')
+            logger.warning("cache_put_bulk failed")
             return False
 
 
@@ -269,10 +277,10 @@ def cache_delete(file_id: int, artifact: str) -> bool:
             r.delete(_key(file_id, artifact))
             set_span_attr('declarai.cache.ok', True)
             return True
-        except Exception as exc:
+        except Exception:
             set_span_attr('declarai.cache.ok', False)
-            set_span_attr('declarai.cache.reason', str(exc)[:200])
-            logger.warning("cache_delete failed (%s/%s): %s", file_id, artifact, exc)
+            set_span_attr('declarai.cache.reason', 'cache-operation-failed')
+            logger.warning("cache_delete failed")
             return False
 
 
@@ -307,10 +315,10 @@ def cache_list_artifacts(file_id: int) -> list[str]:
             set_span_attr('declarai.cache.key_count', len(artifacts))
             set_span_attr('declarai.cache.keys', ','.join(artifacts))
             return artifacts
-        except Exception as exc:
+        except Exception:
             set_span_attr('declarai.cache.key_count', 0)
-            set_span_attr('declarai.cache.reason', str(exc)[:200])
-            logger.warning("cache_list_artifacts failed (file_id=%s): %s", file_id, exc)
+            set_span_attr('declarai.cache.reason', 'cache-operation-failed')
+            logger.warning("cache_list_artifacts failed")
             return []
 
 

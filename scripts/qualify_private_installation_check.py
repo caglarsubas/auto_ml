@@ -23,7 +23,7 @@ plan.chmod(0o700);os.chown(plan,10001,10001)
 for relative in ['secrets/app','secrets/tls','artifacts']:
     directory=root/relative;directory.mkdir(parents=True,exist_ok=True)
     directory.chmod(0o700);os.chown(directory,10001,10001)
-for group,names in {'app':['django-key','app-password','job-broker-url','postgres-ca.crt','job-ca.crt'],'tls':['tls.crt','tls.key']}.items():
+for group,names in {'app':['django-key','app-password','job-broker-url','postgres-ca.crt','job-ca.crt','cache-url','cache-ca.crt'],'tls':['tls.crt','tls.key']}.items():
     for name in names:
         file=root/'secrets'/group/name;file.write_text('Synthetic metadata only; not installation secrets')
         file.chmod(0o400);os.chown(file,10001,10001)

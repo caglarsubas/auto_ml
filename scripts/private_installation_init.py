@@ -162,6 +162,13 @@ def validate_secrets(files):
             or any(c.isspace() for c in url)
         ):
             raise ValueError
+        if "app/cache-url" in files:
+            cache_url = files["app/cache-url"].decode("utf-8").rstrip("\r\n")
+            cache = urlsplit(cache_url)
+            if (cache.scheme != "rediss" or cache.hostname != "cache" or cache.port != 6379
+                    or cache.username not in (None, "") or not cache.password or cache.path != "/0"
+                    or cache.query or cache.fragment or any(c.isspace() for c in cache_url)):
+                raise ValueError
     except (UnicodeError, ValueError, KeyError):
         raise checker.planner.PlanError("installation_init_secret_value_invalid") from None
 

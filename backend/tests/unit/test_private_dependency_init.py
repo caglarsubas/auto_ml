@@ -26,6 +26,8 @@ def app():
         "app/job-broker-url": b"rediss://:Broker-Password-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789@job-broker:6379/1",
         "app/postgres-ca.crt": b"approved-postgres-ca",
         "app/job-ca.crt": b"approved-broker-ca",
+        "app/cache-url": b"rediss://:Cache-Password-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789@cache:6379/0",
+        "app/cache-ca.crt": b"approved-cache-ca",
     }
 
 
@@ -33,7 +35,7 @@ def test_fixed_profile_is_nonsecret_and_bound_to_exact_versions(dependency, save
     plan, expected = saved_plan
     value = dependency.checker.verify(plan, expected)
     p = dependency.profile(value, expected, "a" * 32)
-    assert p["schema"] == "private_dependency_profile_v2"
+    assert p["schema"] == "private_dependency_profile_v3"
     assert p["plan_manifest_sha256"] == expected and p["initialization_id"] == "a" * 32
     assert p["services"]["postgres"]["image_id"] == value["images"]["postgres"]
     assert (p["services"]["postgres"]["uid"], p["services"]["postgres"]["gid"]) == (70, 70)
@@ -109,11 +111,13 @@ def test_percent_encoded_credentials_are_escaped_without_config_injection(depend
     )
 
 
-def test_network_only_cache_does_not_use_loopback_only_redis_mode(dependency, saved_plan, app):
+def test_private_cache_requires_tls_auth_and_preserves_bounded_reconstructible_storage(dependency, saved_plan, app):
     plan, expected = saved_plan
     value = dependency.checker.verify(plan, expected)
     configs = dependency.configurations(value, app)
-    assert "protected-mode no\n" in configs["cache/redis.conf"].decode()
+    cache = configs["cache/redis.conf"].decode()
+    assert "protected-mode yes\n" in cache and "port 0\n" in cache and "tls-port 6379\n" in cache
+    assert "requirepass " in cache and "databases 1\n" in cache
     assert "protected-mode yes\n" in configs["job-broker/redis.conf"].decode()
     assert "requirepass " in configs["job-broker/redis.conf"].decode()
     profile = dependency.profile(value, expected, "a" * 32)
@@ -229,5 +233,27 @@ def test_exact_selected_ca_hostnames_and_key_pairs_are_checked(dependency, app, 
     monkeypatch.setattr(dependency.subprocess, "run", openssl)
     dependency.certificates(delivered, app)
     verify = [args for args in calls if "verify" in args]
-    assert [args[args.index("-verify_hostname") + 1] for args in verify] == ["postgres", "job-broker"]
-    assert len(calls) == 6 and all("-CAfile" in args and "-purpose" in args for args in verify)
+    assert [args[args.index("-verify_hostname") + 1] for args in verify] == ["postgres", "job-broker", "cache"]
+    assert len(calls) == 9 and all("-CAfile" in args and "-purpose" in args for args in verify)
+
+
+def test_cache_cannot_reuse_decoded_broker_credential(dependency, saved_plan, app):
+    from urllib.parse import quote
+    plan, expected = saved_plan
+    secret = dependency.broker_password(app['app/job-broker-url'])
+    app['app/cache-url'] = ('rediss://:' + quote(secret, safe='') + '@cache:6379/0').encode()
+    with pytest.raises(dependency.checker.planner.PlanError, match='cache_broker_credentials_must_differ'):
+        dependency.configurations(dependency.checker.verify(plan, expected), app)
+
+
+@pytest.mark.parametrize('url', ['redis://:strong@cache:6379/0', 'rediss://:strong@job-broker:6379/0', 'rediss://:strong@cache:6379/1', 'rediss://:strong@cache:6379/0?ssl_check_hostname=false'])
+def test_cache_recipe_rejects_alternate_transport_endpoint_database_or_overrides(dependency, url):
+    with pytest.raises(dependency.checker.planner.PlanError):
+        dependency.broker_password(url.encode(), 'cache', 0)
+
+
+def test_historical_plan_cannot_prepare_dependencies_or_read_secrets(dependency, monkeypatch, tmp_path):
+    monkeypatch.setattr(dependency.checker, 'verify', lambda *a: {'manifest': {'schema': 'private_installation_plan_v2'}})
+    monkeypatch.setattr(dependency.resources, 'initialization', lambda *a: pytest.fail('historical plan touched initialization'))
+    with pytest.raises(dependency.checker.planner.PlanError, match='v3_plan_required'):
+        dependency.initialize(tmp_path, 'a'*64, tmp_path/'credentials')

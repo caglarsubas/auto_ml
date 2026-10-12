@@ -65,7 +65,7 @@ def verify(directory, expected):
                 "release_qualified",
                 "expert_isolation_qualified",
             }
-            or manifest["schema"] not in {"private_installation_plan_v1", planner.PLAN_SCHEMA}
+            or manifest["schema"] not in {"private_installation_plan_v1", "private_installation_plan_v2", planner.PLAN_SCHEMA}
             or manifest["scope"] != "native_application_layer_with_operator_managed_dependencies"
             or manifest["archive_verified_at_render"] is not True
             or manifest["architecture"] not in {"arm64", "amd64"}
@@ -164,8 +164,8 @@ def verify(directory, expected):
             raise ValueError
         planner.bind_ingress(request, ingress)
         compose, prerequisites = (
-            planner.composition(request, images),
-            planner.prerequisites(request, images, legacy=manifest["schema"] == "private_installation_plan_v1"),
+            planner.composition(request, images, cache_tls=manifest["schema"] == planner.PLAN_SCHEMA),
+            planner.prerequisites(request, images, legacy=manifest["schema"] == "private_installation_plan_v1", cache_tls=manifest["schema"] == planner.PLAN_SCHEMA),
         )
         if planner.encoded(planner.decode(files["compose.json"])) != planner.encoded(compose) or planner.encoded(
             planner.decode(files["prerequisites.json"])

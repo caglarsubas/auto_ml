@@ -419,7 +419,7 @@ def https_check(request, context):
 def adoption(plan, expected, ca):
     value = checker.verify(plan, expected)
     if value["manifest"]["schema"] != checker.planner.PLAN_SCHEMA:
-        raise checker.planner.PlanError("installation_adopt_v2_plan_required_render_new_root")
+        raise checker.planner.PlanError("installation_adopt_v3_plan_required_render_new_root")
     if sys.platform != "linux" or os.geteuid() != 0:
         raise checker.planner.PlanError("installation_adopt_linux_root_required")
     initialized = resources.initialization(value)

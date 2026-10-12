@@ -1319,6 +1319,11 @@
       "date": "2026-10-12",
       "packet": "P43",
       "event": "Verified PR132 merge faecfcc45fa01e285cdfd22c57a8d5210850ab11 after all six final-head jobs on 2b4be7dd4f1d1c3c49e714ab6ea23fb0438adb27 passed. Separate main run 38227341936 passed all six jobs. P43 adds ordinary account/project enrollment and fresh adoption preflight. Prior packets/queue/release/customer states and acceptance budgets are preserved."
+    },
+    {
+      "date": "2026-10-12",
+      "packet": "P44",
+      "event": "Verified PR133 merge f094f229fdb85d33f762a2860f0ee2f5f65eeedb and separate main run 38238110064 with all six jobs successful. P44 adds cache authentication/TLS through fresh versioned profiles. Prior packet/queue/source mappings, customer/release states and all acceptance budgets remain unchanged."
     }
   ],
   "implementation_packets": [
@@ -2061,6 +2066,22 @@
         "[P43 source qualification](evidence/p43-qualification-2026-10-12.json)"
       ],
       "remaining": "Final exact-head Linux acceptance is required before merge. Complete account lifecycle, cache/storage/policy/supply/upgrade/recovery/expert qualification and release/value/customer gates remain open."
+    },
+    {
+      "id": "P44",
+      "title": "Private cache authentication and TLS",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "tested",
+      "items": [
+        "D07"
+      ],
+      "description": "Bind fresh v3 installation/dependency profiles to separately delivered cache credentials and selected trust. Require hostname-verified TLS with plaintext disabled, actual sealed API/worker cache parity and startup preflight, and credential-safe logs/traces. Preserve historical plans and existing roots without implicit migration.",
+      "evidence": [
+        "[Private cache authentication and TLS](PRIVATE_CACHE_TLS_IMPLEMENTATION.md)",
+        "[P44 source qualification](evidence/p44-qualification-2026-10-12.json)"
+      ],
+      "remaining": "Final exact-head Linux acceptance is required before merge. Cache recovery, account/storage/egress/supply/upgrade/recovery/expert and release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

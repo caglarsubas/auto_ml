@@ -74,7 +74,7 @@ def host_case(plan, expected, parent):
                 "-subj",
                 "/CN=postgres",
                 "-addext",
-                "subjectAltName=DNS:postgres,DNS:job-broker,DNS:api.private.test",
+                "subjectAltName=DNS:postgres,DNS:job-broker,DNS:cache,DNS:api.private.test",
                 "-addext",
                 "basicConstraints=critical,CA:TRUE",
             ],
@@ -84,14 +84,25 @@ def host_case(plan, expected, parent):
         )
         if result.returncode:
             raise startup.checker.planner.PlanError("dependency_start_fixture_certificate_failed")
-        app_password, broker_password, owner_password, django = [secrets.token_urlsafe(48) for _ in range(4)]
-        redactions.extend([app_password, broker_password, owner_password, django])
+        cache_cert, cache_key = parent / "cache.crt", parent / "cache.key"
+        cache_tls = subprocess.run([
+            "/usr/bin/openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(cache_key), "-out", str(cache_cert), "-days", "1",
+            "-subj", "/CN=cache", "-addext", "subjectAltName=DNS:cache",
+            "-addext", "basicConstraints=critical,CA:TRUE",
+        ], capture_output=True, timeout=30, check=False)
+        if cache_tls.returncode:
+            raise startup.checker.planner.PlanError("cache_fixture_certificate_failed")
+        app_password, broker_password, owner_password, django, cache_password = [secrets.token_urlsafe(48) for _ in range(5)]
+        redactions.extend([app_password, broker_password, owner_password, django, cache_password])
         app_files = {
             "app/django-key": django.encode(),
             "app/app-password": app_password.encode(),
             "app/job-broker-url": ("rediss://:" + broker_password + "@job-broker:6379/1").encode(),
             "app/postgres-ca.crt": cert.read_bytes(),
             "app/job-ca.crt": cert.read_bytes(),
+            "app/cache-url": ("rediss://:" + cache_password + "@cache:6379/0").encode(),
+            "app/cache-ca.crt": cache_cert.read_bytes(),
             "tls/tls.crt": cert.read_bytes(),
             "tls/tls.key": key.read_bytes(),
         }
@@ -107,6 +118,7 @@ def host_case(plan, expected, parent):
             for role, names in startup.preparation.DELIVERY.items()
             for name in names
         }
+        dep_files.update({"cache/server.crt": cache_cert.read_bytes(), "cache/server.key": cache_key.read_bytes()})
         delivery(parent / "dependency-delivery", dep_files)
         prepared = startup.preparation.initialize(plan, expected, parent / "dependency-delivery")
         first = startup.start(plan, expected)
@@ -194,7 +206,11 @@ def host_case(plan, expected, parent):
             from qualify_private_account_enrollment import https_roles
 
             https_account_roles = https_roles(value, accounts, account_passwords, parent)
+            from qualify_private_cache import qualify as qualify_cache
+
+            cache_qualification = qualify_cache(value, adopted, command)
             account_adoption = {
+                "cache_authentication_tls": cache_qualification,
                 "fresh_empty_root_schema_accounts_and_four_services": "passed",
                 "repeat_same_service_ids": "passed",
                 "first": adopted,

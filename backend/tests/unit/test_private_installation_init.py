@@ -28,6 +28,8 @@ def values():
         "app/job-broker-url": b"rediss://:synthetic@job-broker:6379/1",
         "app/postgres-ca.crt": b"synthetic opaque certificate",
         "app/job-ca.crt": b"synthetic opaque certificate",
+        "app/cache-url": b"rediss://:synthetic@cache:6379/0",
+        "app/cache-ca.crt": b"synthetic opaque certificate",
         "tls/tls.crt": b"synthetic opaque certificate",
         "tls/tls.key": b"synthetic opaque key",
     }
@@ -88,7 +90,7 @@ def test_fresh_publication_preserves_exact_secret_bytes_and_has_safe_receipt(
 ):
     plan, expected, target = fresh_plan
     result = initializer.initialize(plan, expected, secret_delivery)
-    assert result["filesystem_initialized"] and result["secret_files_delivered"] == 7
+    assert result["filesystem_initialized"] and result["secret_files_delivered"] == 9
     assert not result["services_adopted"] and not result["installation_qualified"]
     assert not result["certificate_trust_verified"] and not result["encrypted_storage_verified"]
     for name, data in values().items():

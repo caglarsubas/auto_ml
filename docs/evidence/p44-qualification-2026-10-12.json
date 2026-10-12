@@ -1,0 +1,94 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P44",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "f094f229fdb85d33f762a2860f0ee2f5f65eeedb",
+  "base_main_ci": {
+    "run": 38238110064,
+    "status": "all_six_success"
+  },
+  "source_sha256": {
+    "backend/ai_assistant/cache.py": "533c56b302671902e5acd347c91566d5c50f26c582543a7677e950b85448aff3",
+    "backend/ai_assistant/cache_connection.py": "44d52546a19531ee04d6b27b98471ce2410ce11545e962386a760d03c565f3f8",
+    "backend/ai_assistant/rag/embeddings.py": "1dfc90226637a05193f1837d05b37b2ff72dd693d33aff424ecad7eb47b2b911",
+    "backend/execution_jobs/preflight.py": "e9fd86900faef3af056b3a396811cf1143fa26d068e6a48d8e5636965a295fa2",
+    "backend/tests/unit/test_private_cache.py": "02d63c5086e9fd5e33b28f36e1e9d507ae60d17ff4428f74da1c2d31f2fa6470",
+    "backend/tests/unit/test_private_dependency_init.py": "49b0cf2f74625176651652d80fe8ad5ef23f551d6b2ffc8eb44f691ba3816401",
+    "backend/tests/unit/test_private_dependency_start.py": "9cb688e4f549ec7afe54bcc6f5fcb5cbd1820f7c85be134b818b8b40295f8949",
+    "backend/tests/unit/test_private_installation_adopt.py": "706c100142ce78b00f0346cba17f9bcb4405aef0a5174ba81aa12b61d99463e0",
+    "backend/tests/unit/test_private_installation_init.py": "648bd96987c7c73d6334c8d0b01e02d9173665a7e54c4ec90b9398bd406953ab",
+    "backend/tests/unit/test_private_installation_resources.py": "65d16676d56d15c09c68ad0711e4f5ebfce784844ee28ca89b4dcb6adfb97907",
+    "scripts/private_dependency_init.py": "4ac0bbfcce272da2a5ed715d375514ad5f223868365a8df42f7170f872e05f40",
+    "scripts/private_dependency_start.py": "8a89e36bcda68ae72fabcae1b23aa87cc21b6ec30fd939b5017c2ee703c1bcf5",
+    "scripts/private_installation_adopt.py": "84101e6513d25db474e2f4c977398aaaa446f7b59812545df958c9f06c54cd49",
+    "scripts/private_installation_check.py": "b47955a7a99f7447d79792f04ea5f122ddabda6901410e00fa326c75921052fe",
+    "scripts/private_installation_init.py": "72043646075b41e256bac57ff7e6e17419f06b58be6dc6cde2de3d6863283bd2",
+    "scripts/private_installation_plan.py": "4814e0a4757ec1dde46a05c4ce0f07bd63434087d048bec83d6943b3f5c48106",
+    "scripts/private_installation_resources.py": "cd8687ae0c9ab40543a708a8be6c08bead97b069f3d1131b99b1cebc59688d4a",
+    "scripts/qualify_private_cache.py": "d042a97f5e0412e0755dacd199cf22a14d5c9f6946d0506645fb5e30988413ba",
+    "scripts/qualify_private_dependency_init.py": "b76d1d05431f93c40e439901a6e9da15bc4ead09cabe47333c861471c117ac18",
+    "scripts/qualify_private_dependency_start.py": "b3997f8f017ad8d3a42fce767cad397b41ff91c3840f16457125f62937491178",
+    "scripts/qualify_private_installation_adopt.py": "a816e6beecec28234d2685afdbbcee599ed180f234d2c3a5d48f502605509641",
+    "scripts/qualify_private_installation_check.py": "a1481da20186242141710a65993c39e22901d349cf09b71694ae05bf8f057597",
+    "scripts/qualify_private_installation_init.py": "bab48bcdcec99d0a27c3ff9d1bd3dce63886a45c342773445c3ff2187b0dac71",
+    "scripts/qualify_private_installation_resources.py": "a90be3ef026f47622b24a52e67061b069c0d78579095b84a405551f98b8628d2"
+  },
+  "checks": {
+    "full_sqlite_before_four_additional_preflight_cases": {
+      "tests": 3012,
+      "passed": 3006,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "line_coverage": 74.03999999999999,
+      "branch_coverage": 64.13,
+      "time_seconds": 286.447
+    },
+    "native_cache": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:3a5eb3e8b0302dc012440dac94baec9e656d701d1140fd1b56e47f985195ecab",
+      "exact_redis_image": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "real_tls_client_and_recipe": {
+        "write": {
+          "api_authenticated_tls_write": "passed"
+        },
+        "worker": {
+          "worker_authenticated_tls_read_write": "passed"
+        },
+        "check": {
+          "api_worker_parity": "passed",
+          "denials": {
+            "unauthenticated": "rejected",
+            "wrong_password": "rejected",
+            "broker_credential": "rejected",
+            "plaintext": "rejected",
+            "wrong_ca": "rejected",
+            "wrong_hostname": "rejected"
+          },
+          "reconstructible_limits": "passed"
+        }
+      },
+      "host_linux_root_controller_qualified": false,
+      "owned_cleanup": "passed"
+    },
+    "primary_checkout": "exact status and 13 hashes preserved",
+    "focused": {
+      "passed": 498,
+      "failed": 0,
+      "skipped": 0,
+      "new_cases": 44
+    },
+    "ruff": "passed",
+    "roadmap_and_projection": "valid"
+  },
+  "retained_failures": [
+    "Initial metadata fixture expected two certificate checks/four probe mounts/old compose digest after version change; updated to three certificates/six mounts/byte-bound legacy compose.",
+    "Initial credential mutation fixture tried to write owner-read-only files; explicitly allowed fixture-owner mutation before unchanged production validation.",
+    "First focused telemetry run had no Redis; final full run used real exclusively owned private Redis and retained six existing optional skips."
+  ],
+  "budgets_changed": false,
+  "customer_installation_changed": false,
+  "release_qualified": false,
+  "final_exact_head_and_separate_main_ci": "Required and recorded on the PR after execution; not claimed by local source evidence."
+}
