@@ -175,6 +175,49 @@ def host_case(plan, expected, parent):
         if recovered_schema["migration_execution"] != "recovered_current_from_exact_intent":
             raise startup.checker.planner.PlanError("schema_fixture_recovery_not_disclosed")
         recovered_history = (schema_root / "schema.json").read_bytes()
+        from qualify_private_account_enrollment import qualify as qualify_accounts
+
+        accounts, account_passwords = qualify_accounts(value, prepared, parent)
+        redactions.extend(account_passwords.values())
+        artifacts = parent / "installation" / "artifacts"
+        if list(artifacts.iterdir()):
+            raise startup.checker.planner.PlanError("account_fixture_customer_artifacts_modified")
+        try:
+            adopted = adopter.adoption(plan, expected, parent / "server.crt")
+            repeated_adoption = adopter.adoption(plan, expected, parent / "server.crt")
+            if {r: v["container_id"] for r, v in adopted["services"].items()} != {
+                r: v["container_id"] for r, v in repeated_adoption["services"].items()
+            }:
+                raise startup.checker.planner.PlanError("account_fixture_application_recreated")
+            if not (artifacts / "data_files").is_dir():
+                raise startup.checker.planner.PlanError("account_fixture_application_media_missing")
+            from qualify_private_account_enrollment import https_roles
+
+            https_account_roles = https_roles(value, accounts, account_passwords, parent)
+            account_adoption = {
+                "fresh_empty_root_schema_accounts_and_four_services": "passed",
+                "repeat_same_service_ids": "passed",
+                "first": adopted,
+                "https_account_roles": https_account_roles,
+            }
+        finally:
+            # Only this owned project's exact labelled applications are removed.
+            project, digest, binding = adopter.application_profile(value, expected, initialized["initialization_id"])
+            for container in adopter.project_containers(project["name"]):
+                role = container.get("Config", {}).get("Labels", {}).get("com.docker.compose.service")
+                if role not in adopter.ROLES:
+                    raise startup.checker.planner.PlanError("account_fixture_cleanup_owner_invalid")
+                adopter.validate_application(
+                    container,
+                    role,
+                    project["services"][role],
+                    project,
+                    digest,
+                    binding,
+                    startup.resources.inspect("image", value["images"]["ingress" if role == "ingress" else "api"]),
+                )
+                command(["container", "stop", "--time", "30", container["Id"]])
+                command(["container", "rm", "--volumes", container["Id"]])
         db = value["request"]["database"]
         # Only this fresh fixture database is seeded; no operator table enters.
         command(
@@ -294,6 +337,8 @@ def host_case(plan, expected, parent):
             "existing_services_and_history_preserved": "passed",
             "managed_adoption_hardening": "verified_and_changed_profile_blocked",
             "dependency_start_does_not_migrate": True,
+            "account_enrollment": accounts,
+            "fresh_application_adoption": account_adoption,
             "schema_initialization": {
                 "description_without_execution": "passed",
                 "wrong_digest_without_intent": "blocked",
