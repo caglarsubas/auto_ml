@@ -73,6 +73,7 @@ def enroll(spec, request_id, password):
     digest = hashlib.sha256(
         json.dumps(spec, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
+    started = timezone.now()
     with transaction.atomic():
         if (
             not ProjectPolicy.objects.filter(pk=1).exists()
@@ -153,6 +154,7 @@ def enroll(spec, request_id, password):
             operator_label=spec["operator_label"],
             request_sha256=digest,
             session_revision=authority.revision,
+            started_at=started,
             finished_at=now,
             details={
                 "scope": spec,

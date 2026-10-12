@@ -35,6 +35,7 @@ def test_enrollment_is_ordinary_atomic_and_idempotent(enrollment, scope):
     hash = user.password
     revision = SessionAuthority.objects.get(user=user).revision
     assert user.is_active and not user.is_staff and not user.is_superuser and user.check_password(password)
+    assert event.started_at <= event.finished_at
     assert ProjectPolicy.objects.filter(pk=1).exists()
     assert ProjectMembership.objects.get(actor=user).role == "admin" and ProjectAuthorityEvent.objects.count() == 1
     again, replay = enrollment.enroll(scope, request, password)
