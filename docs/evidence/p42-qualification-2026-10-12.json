@@ -1,0 +1,84 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P42",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "76e915c348e9ea420b6fdc61a6a8528532e5c507",
+  "base_pull_request": 131,
+  "base_main_ci": {
+    "run": 38205896982,
+    "head": "76e915c348e9ea420b6fdc61a6a8528532e5c507",
+    "status": "all_six_success"
+  },
+  "source_sha256": {
+    "scripts/private_schema_init.py": "8952e09b345c8cc04d31474200c50418170aa1dbd57480f46945374176876924",
+    "scripts/private_dependency_start.py": "bea96df5629d2eee0d935d82b345d0cf704d39e4d22f3396e70d2225dec8fee7",
+    "scripts/private_installation_adopt.py": "153c3d4c1ceaa30ac5417edba554793dd97bc566b81f564c58173a1b1fb40437",
+    "scripts/qualify_private_dependency_start.py": "7496fbd53cb2f139847903c4f8c14ce4dbcc9bef2fdef997cd25dd19d2e5a925",
+    "backend/tests/unit/test_private_schema_init.py": "2b0ffe66e5e4fe7b5a05a5ff7c2a8a6605994644a6b9281bb51af58923751f8b",
+    "docs/PRIVATE_SCHEMA_INIT_IMPLEMENTATION.md": "55b1022d5fe75bbe080bb536a23647cfd106d5258100632302d962a893fc999b"
+  },
+  "checks": {
+    "focused": {
+      "passed": 419,
+      "new_checks": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "primary_checkout": "exact status and 13 hashes preserved",
+    "sealed_api_sources": "unchanged; helper executes trusted installer code in exact sealed image",
+    "native_schema_helper": {
+      "architecture": "arm64",
+      "exact_image": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "graph_vertices": 31,
+      "schema_sha256": "06022d6bbfe0353618d3f68848192888f13c7c380370953afa375fb3de4747d2",
+      "describe": "fresh",
+      "qualification_only_post_ddl_fault_rollback": "passed",
+      "actual_migrate_and_post_migrate": "passed",
+      "verify_current": "passed",
+      "host_linux_root_controller_qualified": false,
+      "fixture_only_relaxed_delivery_modes": true,
+      "owned_cleanup": "passed"
+    },
+    "preceding_source_full_sqlite": {
+      "passed": 2907,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 278.39
+    }
+  },
+  "retained_failures": [
+    {
+      "stage": "unit development",
+      "result": "Changed dependency identity correctly blocked before any helper call. Fixture expected a later description; corrected expectation to assert the earlier rejection, preserving all safety assertions."
+    },
+    {
+      "stage": "tooling",
+      "result": "Initial Ruff invocation used an incorrect test path; corrected path, no source gate weakened."
+    },
+    {
+      "stage": "native fresh-schema helper",
+      "result": "Django declaration app startup attempted to create data_files under the read-only artifact mount. Schema helper now receives an ephemeral media directory and no artifact mount; actual native DDL/rollback/current-state checks pass. Installer/runtime ownership, graph and isolation guards remain unchanged."
+    },
+    {
+      "stage": "native fixture preparation",
+      "result": "Owned disposable configuration writer required FOWNER after setting PostgreSQL ownership; qualifier-only capability corrected. Product controller/service profiles unchanged; owned cleanup succeeded."
+    }
+  ],
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "fresh_linux_root": "Exact sealed image description, wrong graph without intent, actual fresh DDL/post_migrate seeds, repeat/history preservation, lost-result disclosure, foreign table block, qualification-only post-DDL exception/transaction rollback and owned cleanup",
+    "budgets": "unchanged all six jobs, 120-second individual tests/900-second full suite, coverage 50-percent, skip budget 15 and two browser retries"
+  },
+  "claims": {
+    "accounts_enrolled": false,
+    "model_use_approved": false,
+    "installation_qualified": false,
+    "release_qualified": false,
+    "production_recovery_qualified": false,
+    "expert_isolation_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  }
+}

@@ -220,23 +220,29 @@ def active_applications(profile, digest, binding, images):
     return applications
 
 
-def validate_preflight(info, value, environment, binding, image):
+def validate_preflight(
+    info, value, environment, binding, image, *, role="preflight", entrypoint=None, command=None, mount_sources=None
+):
     config, host = info.get("Config", {}), info.get("HostConfig", {})
     wanted_env = parsed_environment(image["Config"].get("Env") or [])
     wanted_env.update(environment)
     mounts = info.get("Mounts", [])
-    wanted_mounts = {
-        "/installation": value["request"]["root"] + "/secrets/app",
-        "/artifacts": value["request"]["root"] + "/artifacts",
-    }
+    wanted_mounts = (
+        mount_sources
+        if mount_sources is not None
+        else {
+            "/installation": value["request"]["root"] + "/secrets/app",
+            "/artifacts": value["request"]["root"] + "/artifacts",
+        }
+    )
     if (
         info.get("Image") != value["images"]["api"]
-        or config.get("Labels") != {**binding, resources.LABEL + "role": "preflight"}
+        or config.get("Labels") != {**binding, resources.LABEL + "role": role}
         or config.get("User") != "10001:10001"
-        or config.get("Entrypoint") != image["Config"].get("Entrypoint")
+        or config.get("Entrypoint") != (image["Config"].get("Entrypoint") if entrypoint is None else entrypoint)
         or config.get("WorkingDir") != image["Config"].get("WorkingDir")
         or config.get("Healthcheck") != image["Config"].get("Healthcheck")
-        or config.get("Cmd") != ["preflight"]
+        or config.get("Cmd") != (["preflight"] if command is None else command)
         or parsed_environment(config.get("Env")) != wanted_env
         or host.get("ReadonlyRootfs") is not True
         or host.get("Privileged") is not False
@@ -261,7 +267,7 @@ def validate_preflight(info, value, environment, binding, image):
         or host.get("PortBindings") not in (None, {})
         or host.get("Tmpfs") != {"/tmp": "rw,noexec,nosuid,size=134217728,uid=10001,gid=10001,mode=700"}
         or set(info.get("NetworkSettings", {}).get("Networks", {})) != {value["prerequisites"]["networks"][0]["name"]}
-        or len(mounts) != 2
+        or len(mounts) != len(wanted_mounts)
         or {m.get("Destination"): m.get("Source") for m in mounts} != wanted_mounts
         or any(m.get("Type") != "bind" or m.get("RW") is not False for m in mounts)
     ):
