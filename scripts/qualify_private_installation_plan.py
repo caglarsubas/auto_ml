@@ -93,6 +93,9 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
             from qualify_private_installation_init import qualify as qualify_init
 
             qualify_init(plan, result["plan_manifest_sha256"], path_check_image, reports)
+            from qualify_private_dependency_init import qualify as qualify_dependencies
+
+            qualify_dependencies(plan, result["plan_manifest_sha256"], path_check_image, reports)
             from qualify_private_installation_resources import qualify as qualify_resources
 
             qualify_resources(plan, result["plan_manifest_sha256"], path_check_image, reports)

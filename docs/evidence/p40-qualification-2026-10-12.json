@@ -1,0 +1,204 @@
+{
+  "schema": "declarai_packet_qualification_v1",
+  "packet": "P40",
+  "date": "2026-10-12",
+  "status": "tested",
+  "base_main_commit": "1b729c96d814ab4d3428796d8e56d48e83b402aa",
+  "base_pull_request": 129,
+  "base_main_ci": {
+    "run": 38156547147,
+    "status": "all_six_success",
+    "postgresql": {
+      "passed": 2746,
+      "skipped": 6,
+      "failed": 0
+    }
+  },
+  "source_sha256": {
+    "scripts/private_dependency_init.py": "d5adc08985f9ed11118abe230caec92caee7870f9d04ca5d716e096a005daf36",
+    "scripts/qualify_private_dependency_init.py": "e4f2fcaffe7bc51681521ead841dcdae90c93d4fa526b1b886e61ddc6778a1d9",
+    "scripts/qualify_private_installation_plan.py": "8464e3bb1cb08d51ae1814ea4fc7c511f373b2eb538b6a6c60ad0faca7188b64",
+    "backend/tests/unit/test_private_dependency_init.py": "6df3e8a752783a07e70fa1f68786e46d62ee657bbe54b131e9a1bbbd1be630fa",
+    ".github/workflows/ci.yml": "6d17128305d56e987a4828a1c507044e65be2f30420d24206a82aa00912e7775",
+    "docs/PRIVATE_DEPENDENCY_INIT_IMPLEMENTATION.md": "b7f97aaf7621a648d55c62f622893c8a68fdf4137370f08745340a72790523a5"
+  },
+  "checks": {
+    "focused_current_source": {
+      "passed": 341,
+      "new_checks": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_prior_crypto_fs": {
+      "cases": [
+        {
+          "case": "clean",
+          "receipt": {
+            "certificate_chain_hostname_and_key": "verified_at_initialization",
+            "database_initialized": false,
+            "delivered_files": 5,
+            "dependencies_started": false,
+            "dependency_filesystem_initialized": true,
+            "dependency_initialization_id": "6388f794b43f4668b4255566955142f9",
+            "dependency_profile_sha256": "47ae26dde5cc2fac109de06647cf08182c28b1c1ce8cbc95e492495d41fb3a91",
+            "encrypted_storage_verified": false,
+            "expert_isolation_qualified": false,
+            "initialization_id": "fbc257c66db440d5a099452b9f49b848",
+            "installation_qualified": false,
+            "migrations_applied": false,
+            "plan_manifest_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35",
+            "release_qualified": false,
+            "schema": "private_dependency_initialization_v1",
+            "secret_values_or_hashes_emitted": false
+          }
+        },
+        {
+          "blocked": "dependency_password_invalid",
+          "case": "weak_password"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "bad_ca"
+        },
+        {
+          "blocked": "dependency_certificate_key_mismatch",
+          "case": "wrong_key"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "wrong_hostname"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "encrypted_key"
+        },
+        {
+          "blocked": "dependency_delivery_file_invalid",
+          "case": "hardlink"
+        },
+        {
+          "blocked": "dependency_init_io_failed",
+          "case": "symlink"
+        },
+        {
+          "blocked": "dependency_delivery_members_invalid",
+          "case": "extra_file"
+        },
+        {
+          "blocked": "installation_init_parent_unsafe",
+          "case": "unsafe_parent"
+        },
+        {
+          "blocked": "synthetic_dependency_write_failure",
+          "case": "write_failure"
+        },
+        {
+          "blocked": "installation_init_destination_exists",
+          "case": "competing_empty"
+        }
+      ],
+      "dependency_services_started": false,
+      "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "installation_qualified": false,
+      "operator_installation_modified": false,
+      "owned_volumes_removed": 24,
+      "plan_manifest_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35",
+      "schema": "private_dependency_init_qualification_v1"
+    },
+    "native_current_source": {
+      "cases": [
+        {
+          "case": "clean",
+          "receipt": {
+            "certificate_chain_hostname_and_key": "verified_at_initialization",
+            "database_initialized": false,
+            "delivered_files": 5,
+            "dependencies_started": false,
+            "dependency_filesystem_initialized": true,
+            "dependency_initialization_id": "9465821466e041bca44eadbbd2e5afb6",
+            "dependency_profile_sha256": "4227b0b36d2b2c371ab2230c9f3f19d99256e4614dfa24bb992ec4afe8918e48",
+            "encrypted_storage_verified": false,
+            "expert_isolation_qualified": false,
+            "initialization_id": "9b1e664350714fb7983a8aea46c2662d",
+            "installation_qualified": false,
+            "migrations_applied": false,
+            "plan_manifest_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35",
+            "release_qualified": false,
+            "schema": "private_dependency_initialization_v1",
+            "secret_values_or_hashes_emitted": false
+          }
+        },
+        {
+          "blocked": "dependency_password_invalid",
+          "case": "weak_password"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "bad_ca"
+        },
+        {
+          "blocked": "dependency_certificate_key_mismatch",
+          "case": "wrong_key"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "wrong_hostname"
+        },
+        {
+          "blocked": "dependency_certificate_invalid",
+          "case": "encrypted_key"
+        },
+        {
+          "blocked": "dependency_delivery_file_invalid",
+          "case": "hardlink"
+        },
+        {
+          "blocked": "dependency_init_io_failed",
+          "case": "symlink"
+        },
+        {
+          "blocked": "dependency_delivery_members_invalid",
+          "case": "extra_file"
+        },
+        {
+          "blocked": "installation_init_parent_unsafe",
+          "case": "unsafe_parent"
+        },
+        {
+          "blocked": "synthetic_dependency_write_failure",
+          "case": "write_failure"
+        },
+        {
+          "blocked": "installation_init_destination_exists",
+          "case": "competing_empty"
+        }
+      ],
+      "dependency_services_started": false,
+      "image_id": "sha256:b42a083f8a4b58c6d361852d0b0dbbde9ae1ee936a9da26546975d08a94e2493",
+      "installation_qualified": false,
+      "operator_installation_modified": false,
+      "owned_volumes_removed": 24,
+      "plan_manifest_sha256": "e4fc2ddf996caf831deea62d7d7d00340c33c583307ab4760dfd07b2b900fa35",
+      "schema": "private_dependency_init_qualification_v1"
+    },
+    "primary_checkout": "exact status and 13 hashes preserved",
+    "sealed_api_runtime": "196 sources unchanged; host-only initializer/qualification additions",
+    "ruff": "passed"
+  },
+  "hosted_acceptance": {
+    "status": "required_before_merge",
+    "scope": "all six existing jobs, new native AMD64 dependency filesystem/crypto cases and every prior private/native/full metadata/recovery/browser gate",
+    "budgets": "unchanged 120-second individual-test/900-second full-suite outer limits, 50-percent coverage, 15 skips and two browser retries"
+  },
+  "claims": {
+    "dependency_services_started": false,
+    "database_initialized": false,
+    "migrations_applied": false,
+    "installation_qualified": false,
+    "release_qualified": false,
+    "expert_isolation_qualified": false,
+    "production_recovery_qualified": false,
+    "customer_accepted": false,
+    "operator_installation_modified": false
+  }
+}
