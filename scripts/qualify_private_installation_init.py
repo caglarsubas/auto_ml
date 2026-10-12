@@ -218,7 +218,7 @@ def qualify(plan, expected, image, reports):
                     expected,
                     identity=["--user", "10001:10001"],
                 )
-                if checked.returncode or checker.planner.decode(checked.stdout)["secret_metadata_files"] != 7:
+                if checked.returncode or checker.planner.decode(checked.stdout)["secret_metadata_files"] != sum(map(len, value["prerequisites"]["secret_files"].values())):
                     raise checker.planner.PlanError("installation_init_fixture_path_check_failed")
             verified = run("verify", VERIFY, fault)
             if verified.returncode or verified.stdout.decode().strip() != "owned_fixture_verified":

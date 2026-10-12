@@ -85,7 +85,8 @@
   "retained_failures": [
     "Initial metadata fixture expected two certificate checks/four probe mounts/old compose digest after version change; updated to three certificates/six mounts/byte-bound legacy compose.",
     "Initial credential mutation fixture tried to write owner-read-only files; explicitly allowed fixture-owner mutation before unchanged production validation.",
-    "First focused telemetry run had no Redis; final full run used real exclusively owned private Redis and retained six existing optional skips."
+    "First focused telemetry run had no Redis; final full run used real exclusively owned private Redis and retained six existing optional skips.",
+    "PR134 initial head eced485985a2a8caf6d69d12524060e2133d7dcb: hosted run 38274370497 rejected a valid nine-file v3 metadata receipt because two legacy qualification postconditions still expected seven. Qualifiers now derive the exact required count from the verified plan; all identity/isolation/budget conditions remain unchanged."
   ],
   "budgets_changed": false,
   "customer_installation_changed": false,

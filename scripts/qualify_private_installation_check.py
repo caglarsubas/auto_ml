@@ -162,7 +162,7 @@ def qualify(plan, expected, image, reports):
                 result = checker.planner.decode(checked.stdout)
                 if (
                     result["filesystem_prerequisites"] != "passed"
-                    or result["secret_metadata_files"] != 7
+                    or result["secret_metadata_files"] != sum(map(len, value["prerequisites"]["secret_files"].values()))
                     or result["secret_contents_read"] is not False
                     or result["artifact_descendants_inspected"] is not False
                     or result["installation_qualified"] is not False
