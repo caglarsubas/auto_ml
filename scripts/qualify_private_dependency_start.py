@@ -222,7 +222,11 @@ def host_case(plan, expected, parent):
             from qualify_private_tls_capture import qualify as qualify_tls_inputs
 
             tls_capture = qualify_tls_inputs(value, adopted, command)
+            from qualify_private_postgres_tls import qualify as qualify_postgres_tls
+
+            postgres_tls = qualify_postgres_tls(value, adopted, command)
             account_adoption = {
+                "postgresql_tls": postgres_tls,
                 "cache_authentication_tls": cache_qualification,
                 "cache_recovery": cache_recovery,
                 "broker_ca_only_tls": broker_qualification,

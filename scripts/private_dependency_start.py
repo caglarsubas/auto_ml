@@ -486,7 +486,10 @@ import psycopg,redis
 phase='postgres'
 try:
     password=Path('/installation/app-password').read_text().rstrip('\r\n')
-    with psycopg.connect(host='postgres',port=5432,dbname=os.environ['DEPENDENCY_DATABASE'],user=os.environ['DEPENDENCY_USER'],password=password,sslmode='verify-full',sslrootcert='/installation/postgres-ca.crt',connect_timeout=5) as db:
+    import sys
+    sys.path.insert(0,'/app/backend')
+    from backend.runtime_config import private_postgres_tls_options
+    with psycopg.connect(host='postgres',port=5432,dbname=os.environ['DEPENDENCY_DATABASE'],user=os.environ['DEPENDENCY_USER'],password=password,**private_postgres_tls_options('/installation/postgres-ca.crt',connect_timeout=5)) as db:
         with db.cursor() as cursor:
             cursor.execute('SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user')
             row=cursor.fetchone();assert row[:3]==(os.environ['DEPENDENCY_DATABASE'],os.environ['DEPENDENCY_USER'],True) and all(x is False for x in row[3:])

@@ -123,6 +123,13 @@ def _origins(value, private):
     return list(dict.fromkeys(result))
 
 
+def private_postgres_tls_options(ca, *, connect_timeout=10):
+    """Private PostgreSQL always uses hostname-verified TLS, not GSS transport."""
+    return {"sslmode": "verify-full", "sslrootcert": str(ca),
+            "gssencmode": "disable", "ssl_min_protocol_version": "TLSv1.2",
+            "connect_timeout": connect_timeout}
+
+
 def load_runtime(base_dir, development_secret, env=None):
     env = os.environ if env is None else env
     profile = env.get("DECLARAI_RUNTIME_PROFILE", "development")
@@ -184,6 +191,8 @@ def load_runtime(base_dir, development_secret, env=None):
             if not ca.is_absolute() or not ca.is_file():
                 _error("DECLARAI_DB_SSLROOTCERT", "use an existing absolute PostgreSQL CA certificate path")
             options["sslrootcert"] = str(ca)
+            if private:
+                options = private_postgres_tls_options(ca)
         database = {
             "ENGINE": "django.db.backends.postgresql",
             **fields,

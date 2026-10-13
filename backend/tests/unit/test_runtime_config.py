@@ -53,6 +53,8 @@ def test_private_requires_exact_configuration_and_verified_database(private, tmp
         "sslmode": "verify-full",
         "sslrootcert": private["DECLARAI_DB_SSLROOTCERT"],
         "connect_timeout": 10,
+        "gssencmode": "disable",
+        "ssl_min_protocol_version": "TLSv1.2",
     }
     assert result["DATABASES"]["default"]["CONN_HEALTH_CHECKS"] is True
     assert result["SECURE_PROXY_SSL_HEADER"] is None

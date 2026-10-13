@@ -1,0 +1,13 @@
+# Explicit private PostgreSQL TLS (P50)
+
+Private database connections now explicitly select `verify-full`, the declared CA path, `gssencmode=disable` and a TLS 1.2 minimum. Django and the prepared-dependency readiness probe share these options; readiness retains its five-second connection budget. Development PostgreSQL retains its existing driver policy.
+
+Previously the private runtime set hostname/CA verification but left GSS transport preference and the protocol minimum to driver defaults and environment. PostgreSQL documents that available GSS encryption takes precedence over `sslmode`; disabling it is necessary to require the declared TLS transport. The explicit minimum also prevents ambient libpq variables from weakening that part of the contract. [PostgreSQL 17 connection parameters](https://www.postgresql.org/docs/17/libpq-connect.html)
+
+Nine new tests cover Django connection parameters under conflicting ambient defaults, development compatibility and qualification scope refusal. Four transport-contract cases fail against the preceding runtime. The owned ARM fixture uses the actual sealed API, Django database wrapper and PostgreSQL server to prove authenticated TLS, ordinary database authority, effective libpq options and wrong-CA/hostname rejection. It does not qualify the Linux-root controller or three adopted roles locally. CI additionally runs the same checks in each fresh adopted API, worker and dispatcher, preserving all earlier installation, authentication, recovery, image-binding and cleanup checks.
+
+The probe reads effective `PQconninfo` options internally and emits only fixed outcomes/protocol version. It never serializes the parameter map, passwords or private data. `ConnectionInfo.get_parameters()` omits default-valued settings and is unsuitable for this assertion. [Psycopg connection information](https://www.psycopg.org/psycopg3/docs/api/objects.html#psycopg.ConnectionInfo.get_parameters)
+
+No Kerberos infrastructure is present in these fixtures: they prove explicit GSS refusal in effective parameters, rather than a live Kerberos negotiation. The CA remains a libpq file path read for connections; protected installation custody remains necessary, and selected CA-file preflight is the next packet. This does not freeze CA bytes across reconnects, rotate trust/credentials, modify installations or qualify upgrade, complete production recovery, expert isolation, release or customer acceptance.
+
+Local receipts and retained fixture failures: [P50 source qualification](evidence/p50-qualification-2026-10-13.json). Exact-head all-six CI and separate main receipts remain independently required before adoption claims.

@@ -1,0 +1,73 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P50",
+  "date": "2026-10-13",
+  "base_commit": "9c71c3ab65dd2a17d78905d6bc2fe126bdc4ea4d",
+  "base_pull_request": 139,
+  "base_main_ci": {
+    "run": 38371199700,
+    "status": "all_six_success",
+    "full_sqlite_postgresql": "3096 passed/six existing skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native": "all preceding installation/trust/capture/recovery/image/cleanup receipts verified"
+  },
+  "source_sha256": {
+    "backend/backend/runtime_config.py": "1f9ab688a2b4b4ecc0522d88052886f2ae8de97bda8aacad6a06673a3c33822c",
+    "backend/tests/unit/test_runtime_config.py": "f2776cdd9ad6817caac596d009732644c9a2d63a87f78dc34e655da77e73da9f",
+    "backend/tests/unit/test_private_postgres_tls.py": "a85383c7f1a8ef38f2bca5587dd982f4d49c2a33e9faeadd1e7faf8be0de0125",
+    "scripts/private_dependency_start.py": "f1b1fcc3721157b4222adb638375a38173a476059d9720077f51a4135cec92f7",
+    "scripts/qualify_private_postgres_tls.py": "0b16e9bfa43593840a30afa7f11360ac89a9219194a4d16a68c6a022ea49a049",
+    "scripts/qualify_private_dependency_start.py": "d65a57a701ffb94c351e076e77d17a2a35d484cdbbe9f9cbe9703b7e974b2e9d",
+    "docs/PRIVATE_POSTGRES_TLS_IMPLEMENTATION.md": "ec24913fbbaec0ff222d0ad56321f4fa0d1818e6f1e75d9b779918ff4b5d8761"
+  },
+  "checks": {
+    "focused": {
+      "passed": 172,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "new_cases": 9
+    },
+    "full_sqlite": {
+      "passed": 3105,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.28,
+      "branch_coverage": 64.35
+    },
+    "native_sealed_arm_postgresql": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:ce76a90f1590ceef63a53c9b5d7abd35c116619b79c9cf7aee7c404e3fdae6a5",
+      "actual_sealed_django_postgresql": {
+        "django_authenticated_tls": "passed",
+        "ordinary_database_role": "passed",
+        "explicit_tls_despite_ambient_defaults": "passed",
+        "tls_version": "TLSv1.3",
+        "denials": {
+          "wrong_ca": "rejected",
+          "wrong_hostname": "rejected"
+        },
+        "private_values_emitted": false
+      },
+      "linux_root_adopted_roles_qualified": false,
+      "installed_files_modified": false,
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Four transport-contract cases fail against the preceding runtime.",
+    "Initial unit fixture omitted Django TIME_ZONE; corrected test setup, retained failures.",
+    "Initial native assertion used default-filtering get_parameters; corrected to effective PQconninfo, retained failures and cleanup."
+  ],
+  "limitations": [
+    "No active Kerberos infrastructure; explicit effective GSS parameter refusal qualified.",
+    "CA is a protected libpq path, not frozen captured bytes.",
+    "Fresh adopted Linux API/worker/dispatcher qualification pending exact-head CI."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
