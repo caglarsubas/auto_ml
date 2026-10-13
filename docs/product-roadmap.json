@@ -1329,6 +1329,11 @@
       "date": "2026-10-13",
       "packet": "P45",
       "event": "Verified PR134 merge fcf0d1d107c598d115e297ce9d61186b505dd158 after all six exact-head checks on 8369f6b711b11c62fd5255566faa73893ee853b1 passed. Separate main run 38280995704 passed all six after the same-commit failed-job rerun; retain first PG timeout at 99 percent under the unchanged 900-second limit. P45 adds bounded cache reconnection/owned-pool cleanup; preceding packet/queue/source mappings, acceptance budgets and release/customer states remain unchanged."
+    },
+    {
+      "date": "2026-10-13",
+      "packet": "P46",
+      "event": "Verified PR135 merge ef35fc222fcaea736e969d6d84c3c4c95362fb6b and all six separate main checks in run 38292818524. Retained SQLite/PostgreSQL each 3021 passed, six existing skips; all 37 main browser cases passed first attempts. P46 corrects private broker ambient TLS trust through a captured-CA-only per-application transport, with preceding native/cache/recovery/queue/scientific gates and budgets unchanged. All prior packets, source mappings, queue, outcomes and release/customer gates remain."
     }
   ],
   "implementation_packets": [
@@ -2103,6 +2108,22 @@
         "[P45 source qualification](evidence/p45-qualification-2026-10-13.json)"
       ],
       "remaining": "Final exact-head Linux acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open."
+    },
+    {
+      "id": "P46",
+      "title": "Private broker CA-only TLS trust",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "tested",
+      "items": [
+        "D07"
+      ],
+      "description": "Capture bounded declared broker CA bytes and select a private Celery/Kombu transport with exclusive roots, hostname verification and TLS minimum. Use the same TLS class for dependency readiness; qualify actual producer/consumer/application roles and ambient-root bypass refusal without altering development transports or saved roots.",
+      "evidence": [
+        "[Private broker CA-only trust](PRIVATE_BROKER_TLS_IMPLEMENTATION.md)",
+        "[P46 source qualification](evidence/p46-qualification-2026-10-13.json)"
+      ],
+      "remaining": "Final exact-head Linux/private-role/queue/recovery acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

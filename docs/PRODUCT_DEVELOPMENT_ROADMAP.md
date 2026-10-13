@@ -506,6 +506,16 @@ Recover from a failed initial cache connection through a fixed monotonic cooldow
 
 **Remaining:** Final exact-head Linux acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open.
 
+### P46 — Private broker CA-only TLS trust
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Capture bounded declared broker CA bytes and select a private Celery/Kombu transport with exclusive roots, hostname verification and TLS minimum. Use the same TLS class for dependency readiness; qualify actual producer/consumer/application roles and ambient-root bypass refusal without altering development transports or saved roots.
+
+**Evidence:** [Private broker CA-only trust](PRIVATE_BROKER_TLS_IMPLEMENTATION.md); [P46 source qualification](evidence/p46-qualification-2026-10-13.json)
+
+**Remaining:** Final exact-head Linux/private-role/queue/recovery acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
