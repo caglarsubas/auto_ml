@@ -1,0 +1,94 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P46",
+  "date": "2026-10-13",
+  "base_commit": "ef35fc222fcaea736e969d6d84c3c4c95362fb6b",
+  "base_pull_request": 135,
+  "base_main_ci": {
+    "run": 38292818524,
+    "status": "all_six_success",
+    "sqlite_postgresql": {
+      "passed": 3021,
+      "skipped": 6,
+      "failed": 0
+    },
+    "browser": {
+      "first_attempt_passed": 37,
+      "flaky": 0,
+      "failed": 0
+    }
+  },
+  "source_sha256": {
+    "backend/execution_jobs/broker_transport.py": "20f2cbc940cdc218fbafb1913d535a31f0f9e60aafafeba0bd7c327a966a81c6",
+    "backend/execution_jobs/config.py": "c7033da19ebbf6710024ed81b6d998a39c9354acfea405684a60cf478175d92a",
+    "backend/tests/unit/test_private_broker_tls.py": "69b7fc543d3617bab67b39b2bb7e4be98979583710aaf9bdd8e7fd18b54eedf4",
+    "scripts/private_dependency_start.py": "326ffc2be62348ab79337d3acdc9a7f2f070d33eb20302233666fe1e23706df5",
+    "scripts/qualify_private_broker.py": "d119afbfa106850178849b42b84e14420825ed252e2f0501dbd23b4ae6c5ec85",
+    "scripts/qualify_private_dependency_start.py": "a0921bc1fc11501582fa9eaef77d23885980ad0b85bbc709fd64729e4f8e232a",
+    "docs/PRIVATE_BROKER_TLS_IMPLEMENTATION.md": "ef27b7ae75f76b517f9191b46870038b0e4edd175699133acfbe3c61b344dc8e"
+  },
+  "checks": {
+    "focused": {
+      "passed": 195,
+      "new_cases": 24,
+      "failed": 0
+    },
+    "full_sqlite": {
+      "passed": 3045,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.26,
+      "branch_coverage": 64.32,
+      "time_seconds": 297.827
+    },
+    "native_sealed_arm_component": {
+      "architecture": "arm64",
+      "api_image": "sha256:fc083d3b0491437898c066be8dcfc757c52873de91d6b11cd72a7638494393c0",
+      "redis_image": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "component_tls_queue_checks": {
+        "api": {
+          "api_selected_ca_publish": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "worker": {
+          "worker_selected_ca_consume": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "dispatcher": {
+          "dispatcher_selected_ca_publish": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "check": {
+          "dispatcher_payload_acknowledged": "passed",
+          "denials": {
+            "unauthenticated": "rejected",
+            "wrong_password": "rejected",
+            "cache_credential": "rejected",
+            "wrong_ca": "rejected",
+            "wrong_hostname": "rejected",
+            "ambient_trust_cannot_override_selected_ca": "rejected",
+            "plaintext": "rejected"
+          },
+          "ambient_anchor_positive_control": "passed",
+          "aof_retained": "passed"
+        }
+      },
+      "full_linux_root_and_adopted_services_qualified": false,
+      "external_candidate_modules_loaded": false,
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Initial compatibility fixture passed pool-only max_connections directly to a connection; two failures fixed by using the actual Redis ConnectionPool boundary.",
+    "Two local harness setup failures lacked request nesting/app-password; no dependency was created and no product assertion changed.",
+    "Preceding ARM result retained separately before addition of the ambient-root positive control."
+  ],
+  "hosted_exact_head_qualification": "required_before_merge",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false,
+  "primary_checkout_preserved": "status and 13 source hashes verified"
+}

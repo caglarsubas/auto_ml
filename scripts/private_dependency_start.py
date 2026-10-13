@@ -491,8 +491,10 @@ try:
             cursor.execute('SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user')
             row=cursor.fetchone();assert row[:3]==(os.environ['DEPENDENCY_DATABASE'],os.environ['DEPENDENCY_USER'],True) and all(x is False for x in row[3:])
     phase='broker'
-    url=Path('/installation/job-broker-url').read_text().rstrip('\r\n')
-    client=redis.Redis.from_url(url,ssl_ca_certs='/installation/job-ca.crt',ssl_cert_reqs='required',ssl_check_hostname=True,socket_connect_timeout=5,socket_timeout=5)
+    import sys
+    sys.path.insert(0,'/app/backend')
+    from execution_jobs.broker_transport import create_client as broker_client
+    client=broker_client({'DECLARAI_JOB_BROKER_URL_FILE':'/installation/job-broker-url','DECLARAI_JOB_BROKER_CA_FILE':'/installation/job-ca.crt'})
     assert client.ping() is True and client.info('persistence')['aof_enabled']==1
     key='declarai-dependency-probe:'+uuid.uuid4().hex
     try:

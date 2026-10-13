@@ -23,6 +23,7 @@ def load_job_config(profile, env=None):
             or url.fragment
             or not url.path.removeprefix("/").isdigit()
             or url.port == 0
+            or ";" in value
             or any(c.isspace() for c in value)
         ):
             raise ValueError
@@ -37,5 +38,15 @@ def load_job_config(profile, env=None):
         ca = Path(env.get("DECLARAI_JOB_BROKER_CA_FILE", ""))
         if not ca.is_absolute() or not ca.is_file() or ca.is_symlink():
             raise ImproperlyConfigured("DECLARAI_JOB_BROKER_CA_FILE: use an existing absolute CA certificate file")
-        tls = {"ssl_cert_reqs": ssl.CERT_REQUIRED, "ssl_ca_certs": str(ca), "ssl_check_hostname": True}
-    return {"DECLARAI_JOBS_ENABLED": True, "CELERY_BROKER_URL": value, "CELERY_BROKER_USE_SSL": tls}
+        if profile == "private":
+            from execution_jobs.broker_transport import captured_tls
+
+            tls = captured_tls(ca)
+        else:
+            tls = {"ssl_cert_reqs": ssl.CERT_REQUIRED, "ssl_ca_certs": str(ca), "ssl_check_hostname": True}
+    result = {"DECLARAI_JOBS_ENABLED": True, "CELERY_BROKER_URL": value, "CELERY_BROKER_USE_SSL": tls}
+    if profile == "private":
+        from execution_jobs.broker_transport import TRANSPORT
+
+        result["CELERY_BROKER_TRANSPORT"] = TRANSPORT
+    return result
