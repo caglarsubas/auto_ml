@@ -536,6 +536,16 @@ Require absolute, regular, single-link mode-0400/0600 private credential files. 
 
 **Remaining:** Exact-head full/native/Linux acceptance is required before merge. Complete secret lifecycle, upgrade/rollback, production recovery, expert isolation and release/value/customer gates remain open.
 
+### P49 — Stable selected TLS input capture
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Compare repeated bounded bytes and complete descriptor metadata for protected cache URL/CA and selected public broker CA capture. Reject inter-read byte/mode/link changes even with coarse timestamps while preserving owner/mode policy, CA-only trust and transport interfaces. Qualify actual sealed configuration using only owned temporary copies.
+
+**Evidence:** [Stable TLS input capture](PRIVATE_TLS_INPUT_CAPTURE_IMPLEMENTATION.md); [P49 source qualification](evidence/p49-qualification-2026-10-13.json)
+
+**Remaining:** Exact-head full/native/Linux and separate base-main receipts are required before merge. Complete rotation/secret lifecycle, upgrade/rollback, production recovery, expert isolation and release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
