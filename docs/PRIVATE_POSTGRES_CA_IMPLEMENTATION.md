@@ -1,0 +1,13 @@
+# Selected PostgreSQL CA preflight (P51)
+
+Private Django configuration and dependency readiness now validate the selected public PostgreSQL CA before returning connection options. Previously runtime configuration checked only path existence and accepted final symlinks and malformed contents. Both consumers use the P50 shared TLS options, so neither silently bypasses this preflight.
+
+The file must be absolute, regular, single-link, non-group/other-writable and between 1 and 65,536 bytes. Opening refuses a final symlink and uses nonblocking mode to avoid special-file hangs. Two bounded reads must agree, alongside complete descriptor identity, size, ownership, mode, link and timestamp metadata. An isolated SSL context must load the UTF-8 PEM certificate data. Failure produces an actionable static configuration error with underlying path/driver diagnostics suppressed.
+
+Public certificate deliveries retain compatible 0400, 0600, 0444 and 0644 modes; secret-file restrictions are separate. The supported installer still enforces directory, ownership, ACL and read-only mount custody. This generic preflight does not replace those controls or authenticate a certificate owner. Development retains its existing explicit PostgreSQL configuration behavior.
+
+Twenty-six new cases cover safe public modes, special/unsafe files, malformed input, changes during reading with coarse timestamps, runtime entrypoints, development compatibility and fixture scope. Seventeen cases fail against the preceding implementation. Existing runtime tests now use one disposable synthetic certificate per test process; assertions and budgets remain. A fresh sealed ARM API exercises four compatible modes and seven refusals using temporary copies, and actual Django/PostgreSQL TLS plus wrong-CA/hostname controls. Linux CI repeats the preflight in the fresh adopted API and retains all three roles' P50 TLS qualification and preceding installation/recovery/image/cleanup evidence.
+
+This establishes observed consistency during startup preflight. **Libpq continues to reopen the CA path for connections.** These checks neither freeze CA bytes across reconnects nor provide atomicity against arbitrary authorized writers. They do not rotate trust/credentials, repair installation files or qualify a complete secret lifecycle, upgrade/rollback, production recovery, expert isolation, release or customer acceptance.
+
+Local source qualification: [P51 receipts](evidence/p51-qualification-2026-10-13.json). All-six exact-head CI, complete fresh Linux receipts and separate main verification remain required for merge/adoption claims.

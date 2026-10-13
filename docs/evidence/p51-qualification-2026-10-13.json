@@ -1,0 +1,101 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P51",
+  "date": "2026-10-13",
+  "base_commit": "9339cbd4177e46410eeb88c5727ecfc3626fa34f",
+  "base_pull_request": 140,
+  "base_exact_head_ci": {
+    "run": 38387812539,
+    "head": "5787c629898b420335873b8ff23646c6d7d1399a",
+    "status": "all_six_success",
+    "full_postgresql": "3105 passed/six existing skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native": "three adopted role TLS/negative controls and all preceding installation/recovery/image/cleanup receipts verified"
+  },
+  "base_main_ci": {
+    "run": 38391230300,
+    "status": "in qualification; independent receipts required before merge"
+  },
+  "source_sha256": {
+    "backend/backend/runtime_config.py": "67766646bf84811427d518716361ddaa2890a0ee4ae14f3516fa9f5895777c51",
+    "backend/tests/unit/test_runtime_config.py": "ea2ad036f139b5d47cf71174001eb54446f99a9b86259ad14b05be8aa952d2e8",
+    "backend/tests/unit/test_private_postgres_ca.py": "eec344bedf720d66e44ffe859d2ee109e72402dd7afd8b08039d3b14aee11651",
+    "scripts/qualify_private_postgres_ca.py": "33442eaaf46c27b67c3b6d2cc52d2f8cdabf0f20c07445637fa47a2f17a1ed38",
+    "scripts/qualify_private_dependency_start.py": "2257eae2178ca2bfccb01350aa2176129dca2b7033b3c53136e0225c22a125b1",
+    "docs/PRIVATE_POSTGRES_CA_IMPLEMENTATION.md": "41ec472994ce98028a2990aac388dbc8d533e3233dc0d155322939f921080972",
+    "docs/private-runtime-configuration.md": "a73dbde114e9d3dc86c2270d539c43ccbf0f0d2a8e89a1c4932e4f3d9a89601d"
+  },
+  "checks": {
+    "focused": {
+      "passed": 232,
+      "new_cases": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3131,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.28,
+      "branch_coverage": 64.35
+    },
+    "native_sealed_arm_ca_preflight": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:2717afc9ff5f59b3ec763ccab74070a3c6e956c1e613c9bf50502ddf4fc000a8",
+      "actual_sealed_configuration": {
+        "actual_sealed_postgres_ca_preflight": {
+          "postgres_ca": {
+            "stable_selected_input": "passed",
+            "public_ca_modes": "passed",
+            "symlink": "rejected",
+            "hardlink": "rejected",
+            "shared_write": "rejected",
+            "malformed": "rejected",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected"
+          }
+        },
+        "installed_inputs_modified": false,
+        "private_values_emitted": false
+      },
+      "linux_root_adopted_service_qualification": false,
+      "installed_files_modified": false,
+      "owned_cleanup": "passed"
+    },
+    "native_sealed_arm_django_postgresql": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:2717afc9ff5f59b3ec763ccab74070a3c6e956c1e613c9bf50502ddf4fc000a8",
+      "actual_sealed_django_postgresql": {
+        "django_authenticated_tls": "passed",
+        "ordinary_database_role": "passed",
+        "explicit_tls_despite_ambient_defaults": "passed",
+        "tls_version": "TLSv1.3",
+        "denials": {
+          "wrong_ca": "rejected",
+          "wrong_hostname": "rejected"
+        },
+        "private_values_emitted": false
+      },
+      "linux_root_adopted_roles_qualified": false,
+      "installed_files_modified": false,
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "17 final cases fail against preceding runtime; isolated prototype passes26.",
+    "Earlier19-case before/prototype receipts and explicitly marked native prototype are retained; not presented as sealed P51 source."
+  ],
+  "limitations": [
+    "Public CA mode compatibility is separate from secret protection and installer UID/directory/ACL custody.",
+    "Observed input consistency, not atomicity against arbitrary authorized writers.",
+    "Libpq retains a protected CA path and reopens it; no frozen trust across reconnects.",
+    "Fresh Linux adopted-service qualification required in exact-head CI."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

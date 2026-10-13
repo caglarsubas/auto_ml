@@ -4,6 +4,7 @@ import ipaddress
 import os
 import re
 import stat
+import ssl
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -123,8 +124,33 @@ def _origins(value, private):
     return list(dict.fromkeys(result))
 
 
+def _postgres_ca(path):
+    try:
+        ca = Path(path)
+        if not ca.is_absolute() or not hasattr(os, "O_NOFOLLOW"):
+            raise ValueError
+        fd = os.open(ca, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or stat.S_IMODE(before.st_mode) & 0o022 or not 0 < before.st_size <= 65536):
+                raise ValueError
+            data = stream.read(65537)
+            stream.seek(0)
+            repeated = stream.read(65537)
+            after = os.fstat(stream.fileno())
+            fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+            if data != repeated or len(data) != before.st_size or any(getattr(before, key) != getattr(after, key) for key in fields):
+                raise ValueError
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(cadata=data.decode("utf-8"))
+    except (OSError, ValueError, UnicodeError, ssl.SSLError):
+        _error("DECLARAI_DB_SSLROOTCERT", "use a stable absolute regular single-link PEM CA file of at most 65536 bytes without group/other write access")
+
+
 def private_postgres_tls_options(ca, *, connect_timeout=10):
     """Private PostgreSQL always uses hostname-verified TLS, not GSS transport."""
+    _postgres_ca(ca)
     return {"sslmode": "verify-full", "sslrootcert": str(ca),
             "gssencmode": "disable", "ssl_min_protocol_version": "TLSv1.2",
             "connect_timeout": connect_timeout}
@@ -188,11 +214,12 @@ def load_runtime(base_dir, development_secret, env=None):
         options = {"sslmode": sslmode, "connect_timeout": 10}
         if sslmode in ("verify-ca", "verify-full"):
             ca = Path(env.get("DECLARAI_DB_SSLROOTCERT", ""))
-            if not ca.is_absolute() or not ca.is_file():
-                _error("DECLARAI_DB_SSLROOTCERT", "use an existing absolute PostgreSQL CA certificate path")
-            options["sslrootcert"] = str(ca)
             if private:
                 options = private_postgres_tls_options(ca)
+            else:
+                if not ca.is_absolute() or not ca.is_file():
+                    _error("DECLARAI_DB_SSLROOTCERT", "use an existing absolute PostgreSQL CA certificate path")
+                options["sslrootcert"] = str(ca)
         database = {
             "ENGINE": "django.db.backends.postgresql",
             **fields,
