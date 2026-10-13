@@ -1,0 +1,11 @@
+# Stable selected TLS input capture (P49)
+
+The cache URL/CA and public broker CA readers previously compared one bounded read against size/mtime/ctime. The P48 filesystem observation and nine deterministic failing-before cases showed that inter-read byte, mode and link changes can pass when timestamps appear unchanged. These readers now compare two bounded reads through the same descriptor and complete identity/size/mode/ownership/link/timestamp metadata before returning captured values.
+
+Cache protected-file modes and effective-owner checks remain. Broker CA certificates are public: existing non-group/other-writable certificate deliveries retain their explicit compatibility. Size limits, final-symlink refusal, regular/single-link requirements, UTF-8/PEM validation, static errors, TLS 1.2 minimum, hostname verification and exclusive declared anchors remain. Private pools and the per-application Kombu transport are unchanged; this neither rotates credentials/trust nor rewrites plans, roots or historical artifacts.
+
+These checks establish observed input consistency across capture, rather than authenticating a filesystem owner or guaranteeing atomicity against an arbitrary writer. Protected delivery, read-only mounts and installation custody remain independent requirements. Future dependency upgrades must retain native transport and provenance qualification.
+
+Unit cases reject byte/mode/link mutation at all three boundaries with explicitly unchanged timestamps. The fresh Linux fixture performs the same checks through actual sealed API code using private temporary copies; stable selected inputs pass, installed files are preserved and private values are not emitted. All preceding private-secret, authentication/TLS/ambient-root positive controls, cache/broker recovery, schema/accounts/HTTPS, image/receipt identity, scientific/metadata and browser checks remain mandatory under unchanged budgets.
+
+P48's first full PostgreSQL attempt timed out at 99 percent under 900 seconds and its browser classification required retry 1; both are retained separately from its successful same-commit failed-job rerun. Base-main verification and final exact-head receipts are required before merge. D07 and complete rotation, secret lifecycle, upgrade/rollback, production recovery, expert isolation and release/customer gates remain open.

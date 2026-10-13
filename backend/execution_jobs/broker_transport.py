@@ -30,8 +30,11 @@ def captured_tls(path):
                     or stat.S_IMODE(before.st_mode) & 0o022 or not 0 < before.st_size <= 65536):
                 raise ValueError
             data = stream.read(65537)
+            stream.seek(0)
+            repeated = stream.read(65537)
             after = os.fstat(stream.fileno())
-            if len(data) != before.st_size or (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+            if data != repeated or len(data) != before.st_size or any(getattr(before, key) != getattr(after, key) for key in fields):
                 raise ValueError
         ca = data.decode("utf-8")
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)

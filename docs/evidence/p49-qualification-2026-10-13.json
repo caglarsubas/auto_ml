@@ -1,0 +1,85 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P49",
+  "date": "2026-10-13",
+  "base_commit": "b139a7c09a257584d2f37cfdc9079325dfe94596",
+  "base_pull_request": 138,
+  "base_exact_head_ci": {
+    "run": 38356813058,
+    "attempt": 2,
+    "head": "c91a4253501cb9764f9d0394e67428e49ddf10aa",
+    "status": "all_six_success",
+    "full_postgresql": "3083 passed/six skips/zero failures",
+    "first_attempt": "PG full900-second timeout at99%; partial log no failed assertions; incomplete final report retained",
+    "browser": "36 first attempts; classification raw replay queued at30-second poll; retry1 passed; original retry budget"
+  },
+  "base_main_ci": {
+    "run": 38364735863,
+    "status": "in qualification; independent receipts required before merge"
+  },
+  "source_sha256": {
+    "backend/ai_assistant/cache_connection.py": "fe670e8710f3597729eb1a708996b91693a759a5f53392da644b8b69910382f7",
+    "backend/execution_jobs/broker_transport.py": "0001dbd4c63a4e37d7a7c3216c99ea3749111604729d9af25c84044392f1dd41",
+    "backend/tests/unit/test_private_tls_snapshot.py": "1ed23d34b8ce43299c5e4538c2ef6bd2dba5765d70edf1aa42e93da0f76b2fbe",
+    "scripts/qualify_private_tls_capture.py": "8d3b440a44f856d9c35fd84d64d8bd414f5eca57fd556cbcc8ff9e3a5f91bdd8",
+    "scripts/qualify_private_dependency_start.py": "016548c6f63512c813072cd75844af9c81559a5dd46415fa81dbbf5402ff8fbe",
+    "docs/PRIVATE_TLS_INPUT_CAPTURE_IMPLEMENTATION.md": "61937015c8b0afe144b458ea401987380390744f385e1954e64eb5281de3788e"
+  },
+  "checks": {
+    "focused": {
+      "passed": 115,
+      "new_cases": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3096,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.28,
+      "branch_coverage": 64.35,
+      "time_seconds": 286.004
+    },
+    "native_sealed_arm_tls_capture": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:8b5bde6b8c597026cb2ae9559eda46a4dc2ce1d19ca6333736728dcae3ac6ea6",
+      "actual_sealed_configuration": {
+        "actual_sealed_selected_tls_capture": {
+          "cache_url": {
+            "stable_selected_input": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected"
+          },
+          "cache_ca": {
+            "stable_selected_input": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected"
+          },
+          "broker_ca": {
+            "stable_selected_input": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected"
+          }
+        },
+        "installed_inputs_modified": false,
+        "private_values_emitted": false
+      },
+      "linux_root_adopted_service_qualification": false,
+      "installed_files_modified": false,
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Nine failing-before cases accept byte/mode/link mutation at three TLS input boundaries under unchanged timestamps. Same nine pass in isolated prototypes and final runtime.",
+    "An initial reproduction outside the backend pytest configuration emitted an unknown-marker warning; reran unchanged reproduction under the repository configuration and retained both results."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
