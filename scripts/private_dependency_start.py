@@ -38,13 +38,13 @@ def read_file(parent, name, uid, gid, mode, limit):
             raise checker.planner.PlanError("dependency_stored_file_invalid")
         checker.no_directory_acl(stream.fileno())
         data = stream.read(limit + 1)
+        stream.seek(0)
+        repeated = stream.read(limit + 1)
         after = os.fstat(stream.fileno())
-        if len(data) != before.st_size or (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ctime_ns,
-        ):
+        fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+        if data != repeated or len(data) != before.st_size or any(getattr(before, key) != getattr(after, key) for key in fields):
             raise checker.planner.PlanError("dependency_stored_file_changed")
+        checker.no_directory_acl(stream.fileno())
         return data
 
 
