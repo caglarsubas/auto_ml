@@ -1,0 +1,102 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P53",
+  "date": "2026-10-13",
+  "base_commit": "00aae42e74288ea23a3329ae87e2077c424c2ab4",
+  "base_pull_request": 142,
+  "base_ci": {
+    "run": 38410279337,
+    "status": "all_six_success",
+    "full_postgresql": "3144 passed/six existing skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native": "six stored-capture faults and all preceding CA/TLS/capture/recovery/schema/account/image/cleanup receipts verified"
+  },
+  "source_sha256": {
+    "scripts/private_installation_init.py": "afa32e0139c8e9355074636654a448f946a097e8df3d2205497d090c9bda8deb",
+    "scripts/private_dependency_init.py": "40f753b22ae1ea76a76f86f9fdcce7ec2ea9a4f76e7b7158bca480630cbb5056",
+    "scripts/qualify_private_delivery_capture.py": "0d33b7b0b66a60ab1f90a7db00f9712b34c3ff3c0932b96def38e33017b43e6c",
+    "scripts/qualify_private_dependency_start.py": "afee047c45d726b904b84ecd013e8ab135ea2fb1d35a4e351291c3d6cb667db4",
+    "backend/tests/unit/test_private_delivery_capture.py": "a78160c7a41ffad94771696cb9f76f0098fd3ad69977318bd1a8111239d05e8d",
+    "docs/PRIVATE_DELIVERY_CAPTURE_IMPLEMENTATION.md": "7f115a0eaee94ae1d6039c6a80b8f81b5aef7ae94f1bebf4e1d80db78b0de140"
+  },
+  "checks": {
+    "focused": {
+      "passed": 286,
+      "new_cases": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3173,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.28,
+      "branch_coverage": 64.35
+    },
+    "native_linux_delivery_component": {
+      "actual_linux_delivery_component": {
+        "controller_delivery_capture": {
+          "application": {
+            "exact_delivered_bytes": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected",
+            "uid": "rejected",
+            "gid": "rejected",
+            "acl": "rejected",
+            "initial_acl": "rejected",
+            "copied_inputs_restored": "passed"
+          },
+          "dependency": {
+            "exact_delivered_bytes": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected",
+            "uid": "rejected",
+            "gid": "rejected",
+            "acl": "rejected",
+            "initial_acl": "rejected",
+            "copied_inputs_restored": "passed"
+          },
+          "prepared_app": {
+            "exact_delivered_bytes": "passed",
+            "bytes": "rejected",
+            "mode": "rejected",
+            "link": "rejected",
+            "uid": "rejected",
+            "gid": "rejected",
+            "acl": "rejected",
+            "initial_acl": "rejected",
+            "copied_inputs_restored": "passed"
+          }
+        },
+        "installed_inputs_modified": false,
+        "private_values_emitted": false
+      },
+      "full_host_installation_qualified": false,
+      "owned_namespace_cleanup": "passed",
+      "source_mounted_readonly": true
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Nineteen cases fail against preceding readers: eighteen inter-read faults plus initial application-file ACL. Ten remaining cases pass.",
+    "Initial 24 new unit failures arose from emulated identities beneath writable pytest /tmp ancestors; fixture direct-opening scoped to unit delivery. Production ancestor custody unchanged; failed results retained."
+  ],
+  "limitations": [
+    "Per-file consistency is observed, not atomicity across files or against arbitrary authorized writers.",
+    "Synthetic opaque certificate copy capture does not qualify certificate trust; existing actual initialization checks remain required.",
+    "Local isolated delivery component is not the complete Linux-root host installation.",
+    "Fresh Linux exact-head acceptance and independent main receipts required before merge/adoption claims."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false,
+  "base_source_head": "d2a3945a991b7bc9bc3cf4a5b5e0de6b4c396e2f",
+  "base_main_ci": {
+    "run": 38414815525,
+    "status": "pending; verify separately before successor merge"
+  }
+}

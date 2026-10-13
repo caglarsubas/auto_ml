@@ -108,16 +108,17 @@ def delivery(path, names):
                             or not 0 < info.st_size <= maximum
                         ):
                             raise checker.planner.PlanError("installation_init_delivery_file_invalid")
+                        checker.no_directory_acl(stream.fileno())
                         data = stream.read(maximum + 1)
+                        stream.seek(0)
+                        repeated = stream.read(maximum + 1)
                         if len(data) != info.st_size or not 0 < len(data) <= maximum:
                             raise checker.planner.PlanError("installation_init_delivery_file_changed")
                         after = os.fstat(stream.fileno())
-                        if (info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (
-                            after.st_size,
-                            after.st_mtime_ns,
-                            after.st_ctime_ns,
-                        ):
+                        fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+                        if data != repeated or any(getattr(info, key) != getattr(after, key) for key in fields):
                             raise checker.planner.PlanError("installation_init_delivery_file_changed")
+                        checker.no_directory_acl(stream.fileno())
                         files[group + "/" + name] = data
             finally:
                 os.close(descriptor)
