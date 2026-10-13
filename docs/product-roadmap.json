@@ -1339,6 +1339,11 @@
       "date": "2026-10-13",
       "packet": "P47",
       "event": "Verified PR136 exact-head run 38342754698 passed all six and retained native evidence on 8e86ae9b645adc55f5e1c5bc067d1bfb02e1df93; observed merge ea71cde515125155407b8e696e4e8447c053d187. Separate main 38345397295 remains in qualification. P47 qualifies same-process/pool broker CA trust and AOF replay across restart, repeated ordinary role preflight, and unchanged dependencies/application identities and receipts. Preserve all preceding packets, queue, outcome/release/customer states and budgets."
+    },
+    {
+      "date": "2026-10-13",
+      "packet": "P48",
+      "event": "Verified PR137 merge 9d0382e63d780612b01a7380c6ce4064d71065c3 and separate main 38350188836 with all six checks and retained native recovery/image/cleanup receipts. Both full matrices passed 3049 with six existing skips; all 37 browser cases passed first attempts. P48 hardens bounded private secret capture; preserve all earlier packets, queue, outcomes, source mappings and release/customer gates."
     }
   ],
   "implementation_packets": [
@@ -2145,6 +2150,22 @@
         "[P47 source qualification](evidence/p47-qualification-2026-10-13.json)"
       ],
       "remaining": "Exact-head hosted Linux controller and current main receipts required before merge. Full production recovery, upgrade/rollback, expert isolation and all release/value/customer gates remain open."
+    },
+    {
+      "id": "P48",
+      "title": "Stable protected private secret capture",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "tested",
+      "items": [
+        "D07"
+      ],
+      "description": "Require absolute, regular, single-link mode-0400/0600 private credential files. Compare bounded repeated bytes and descriptor metadata before accepting Django, PostgreSQL or broker configuration; suppress underlying credential/path diagnostics. Qualify protected deliveries and unsafe copies in the actual sealed API without modifying installed files.",
+      "evidence": [
+        "[Protected private secret capture](PRIVATE_SECRET_CAPTURE_IMPLEMENTATION.md)",
+        "[P48 source qualification](evidence/p48-qualification-2026-10-13.json)"
+      ],
+      "remaining": "Exact-head full/native/Linux acceptance is required before merge. Complete secret lifecycle, upgrade/rollback, production recovery, expert isolation and release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

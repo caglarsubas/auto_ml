@@ -526,6 +526,16 @@ Extend the exclusively owned Linux fixture with validated broker interruption, s
 
 **Remaining:** Exact-head hosted Linux controller and current main receipts required before merge. Full production recovery, upgrade/rollback, expert isolation and all release/value/customer gates remain open.
 
+### P48 — Stable protected private secret capture
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Require absolute, regular, single-link mode-0400/0600 private credential files. Compare bounded repeated bytes and descriptor metadata before accepting Django, PostgreSQL or broker configuration; suppress underlying credential/path diagnostics. Qualify protected deliveries and unsafe copies in the actual sealed API without modifying installed files.
+
+**Evidence:** [Protected private secret capture](PRIVATE_SECRET_CAPTURE_IMPLEMENTATION.md); [P48 source qualification](evidence/p48-qualification-2026-10-13.json)
+
+**Remaining:** Exact-head full/native/Linux acceptance is required before merge. Complete secret lifecycle, upgrade/rollback, production recovery, expert isolation and release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
