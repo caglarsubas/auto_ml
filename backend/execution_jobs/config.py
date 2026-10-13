@@ -13,7 +13,7 @@ def load_job_config(profile, env=None):
     name = "DECLARAI_JOB_BROKER_URL"
     if name not in env and name + "_FILE" not in env:
         return {"DECLARAI_JOBS_ENABLED": False, "CELERY_BROKER_URL": None}
-    value = _secret(env, name)
+    value = _secret(env, name, private=profile == "private")
     try:
         url = urlsplit(value)
         if (

@@ -14,7 +14,7 @@ DEVELOPMENT_ORIGINS = "http://localhost:4200,http://localhost:4300,http://localh
 
 def _error(name, message):
     # Never interpolate credential values, connection strings or secret paths.
-    raise ImproperlyConfigured(f"{name}: {message}")
+    raise ImproperlyConfigured(f"{name}: {message}") from None
 
 
 def _boolean(env, name, default=False):
@@ -33,20 +33,35 @@ def _integer(env, name, default, low, high):
     return int(value)
 
 
-def _secret(env, name, default=None):
+def _secret(env, name, default=None, *, private=False):
     direct, file_name = env.get(name), env.get(name + "_FILE")
     if direct is not None and file_name is not None:
         _error(name, "configure the value or its _FILE source, not both")
     if file_name is not None:
         try:
+            if private and (not Path(file_name).is_absolute() or not hasattr(os, "O_NOFOLLOW")):
+                raise ValueError
             descriptor = os.open(file_name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
             with os.fdopen(descriptor, "rb") as stream:
                 info = os.fstat(stream.fileno())
                 if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 4096:
                     raise ValueError
-                direct = stream.read(4097).decode("utf-8").rstrip("\r\n")
+                if private and (info.st_nlink != 1 or stat.S_IMODE(info.st_mode) not in (0o400, 0o600)):
+                    raise ValueError
+                data = stream.read(4097)
+                if private:
+                    # Timestamp precision varies by filesystem. Compare bounded
+                    # bytes as well as metadata before accepting the snapshot.
+                    stream.seek(0)
+                    repeated = stream.read(4097)
+                    after = os.fstat(stream.fileno())
+                    fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+                    if data != repeated or len(data) != info.st_size or any(getattr(info, key) != getattr(after, key) for key in fields):
+                        raise ValueError
+                direct = data.decode("utf-8").rstrip("\r\n")
         except (OSError, ValueError, UnicodeError):
-            _error(name, "use a readable regular UTF-8 secret file of at most 4096 bytes")
+            _error(name, "use a stable absolute single-link UTF-8 secret file of at most 4096 bytes, mode 0400 or 0600"
+                   if private else "use a readable regular UTF-8 secret file of at most 4096 bytes")
     value = default if direct is None else direct
     if not value or len(value) > 4096 or any(c in value for c in "\x00\r\n"):
         _error(name, "a nonempty single-line secret is required")
@@ -117,7 +132,7 @@ def load_runtime(base_dir, development_secret, env=None):
     debug = _boolean(env, "DJANGO_DEBUG", not private)
     if private and debug:
         _error("DJANGO_DEBUG", "private mode requires false")
-    secret = _secret(env, "DJANGO_SECRET_KEY", None if private else development_secret)
+    secret = _secret(env, "DJANGO_SECRET_KEY", None if private else development_secret, private=private)
     if private and (
         len(secret) < 50
         or len(set(secret)) < 5
@@ -172,7 +187,7 @@ def load_runtime(base_dir, development_secret, env=None):
         database = {
             "ENGINE": "django.db.backends.postgresql",
             **fields,
-            "PASSWORD": _secret(env, "DECLARAI_DB_PASSWORD"),
+            "PASSWORD": _secret(env, "DECLARAI_DB_PASSWORD", private=private),
             "PORT": _integer(env, "DECLARAI_DB_PORT", 5432, 1, 65535),
             "CONN_MAX_AGE": 60,
             "CONN_HEALTH_CHECKS": True,

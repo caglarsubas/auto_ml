@@ -143,6 +143,7 @@ def test_secret_file_support_and_no_credential_echo(private, tmp_path):
         value = private.pop(name)
         secret = tmp_path / name
         secret.write_text(value + "\n")
+        secret.chmod(0o600)
         private[name + "_FILE"] = str(secret)
     result = load_runtime(tmp_path, DEV_KEY, private)
     assert result["SECRET_KEY"] == KEY
@@ -168,6 +169,8 @@ def test_invalid_secret_files_fail_closed(private, tmp_path, kind):
         path.write_text("")
     elif kind == "multiline":
         path.write_text(KEY + "\nsecond-line")
+    if path.is_file() and not path.is_symlink():
+        path.chmod(0o600)
     del private["DJANGO_SECRET_KEY"]
     private["DJANGO_SECRET_KEY_FILE"] = str(path)
     with pytest.raises(ImproperlyConfigured):

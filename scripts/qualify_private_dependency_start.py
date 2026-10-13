@@ -216,11 +216,15 @@ def host_case(plan, expected, parent):
             from qualify_private_broker_recovery import recovery as qualify_broker_recovery
 
             broker_recovery = qualify_broker_recovery(value, adopted, first, parent, command)
+            from qualify_private_secret_capture import qualify as qualify_secrets
+
+            secret_capture = qualify_secrets(value, adopted, command)
             account_adoption = {
                 "cache_authentication_tls": cache_qualification,
                 "cache_recovery": cache_recovery,
                 "broker_ca_only_tls": broker_qualification,
                 "broker_tls_recovery": broker_recovery,
+                "private_secret_capture": secret_capture,
                 "fresh_empty_root_schema_accounts_and_four_services": "passed",
                 "repeat_same_service_ids": "passed",
                 "first": adopted,

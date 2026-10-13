@@ -1,0 +1,79 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P48",
+  "date": "2026-10-13",
+  "base_commit": "9d0382e63d780612b01a7380c6ce4064d71065c3",
+  "base_pull_request": 137,
+  "base_main_ci": {
+    "run": 38350188836,
+    "status": "all_six_success",
+    "full_sqlite_postgresql": "3049 passed/six skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native_recovery_images_cleanup": "independently verified"
+  },
+  "source_sha256": {
+    "backend/backend/runtime_config.py": "2153de2d9a38a658278a0096e367f3b8cde93acdc49b9f951378860f2f47105c",
+    "backend/execution_jobs/config.py": "b57a42cafb0a7694ca50e60076c9030211cb609b7061d27a0529f02ea6c667fd",
+    "backend/tests/unit/test_private_secret_capture.py": "bb4bea9ec6eed7bd0bd0e6d9b2329015c43a77cf2c0e4942fb443012a0409e7a",
+    "backend/tests/unit/test_runtime_config.py": "8b597c277d7a64c3687061c20cd4e1c54ffb5e0fea42dc63bc422093ff74853f",
+    "scripts/qualify_private_secret_capture.py": "5321e588ee1f062266e6c02a02a84e32cfe472d117eaa3e9fbf382cc8207ea36",
+    "scripts/qualify_private_dependency_start.py": "634c9a3540e86150ec3ad1d057b6cbad83ef1e4086dfc97639c09875c0a145f9",
+    "docs/PRIVATE_SECRET_CAPTURE_IMPLEMENTATION.md": "0e1660add554e35c63b4a06fe0301317592462d1316285cc847f35609405f14b"
+  },
+  "checks": {
+    "focused": {
+      "passed": 257,
+      "new_cases": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3083,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.26,
+      "branch_coverage": 64.32,
+      "time_seconds": 292.072
+    },
+    "native_sealed_arm_configuration": {
+      "architecture": "arm64",
+      "exact_api_image": "sha256:ad80837cdac551530b1376c8026723c1aeab35ed0ddf6ed69fa7b647e60be0de",
+      "actual_sealed_configuration": {
+        "actual_sealed_private_configuration": {
+          "DJANGO_SECRET_KEY": {
+            "protected_delivery": "passed",
+            "shared_read": "rejected",
+            "hardlink": "rejected"
+          },
+          "DECLARAI_DB_PASSWORD": {
+            "protected_delivery": "passed",
+            "shared_read": "rejected",
+            "hardlink": "rejected"
+          },
+          "DECLARAI_JOB_BROKER_URL": {
+            "protected_delivery": "passed",
+            "shared_read": "rejected",
+            "hardlink": "rejected"
+          }
+        },
+        "installed_delivery_modified": false,
+        "private_values_emitted": false
+      },
+      "linux_root_adopted_service_qualification": false,
+      "installed_files_modified": false,
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Initial focused run: one same-size mutation was not rejected by metadata-only capture. A native tmpfs rewrite preserved nanosecond timestamp values. Added repeated bounded byte comparison and a deterministic coarse-timestamp inconsistency case; original failure retained.",
+    "Existing valid secret-file fixture now explicitly delivers mode0600. Invalid regular fixtures use private modes so malformed-data assertions remain exercised. No product file modes were altered."
+  ],
+  "hosted_exact_head_linux_qualification": "required_before_merge",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false,
+  "primary_checkout_preserved": "status and 13 hashes verified"
+}
