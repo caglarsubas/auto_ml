@@ -516,6 +516,16 @@ Capture bounded declared broker CA bytes and select a private Celery/Kombu trans
 
 **Remaining:** Final exact-head Linux/private-role/queue/recovery acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open.
 
+### P47 — Managed broker trust and replay through restart
+
+**Packet status:** tested. **Mapped outcomes:** D07.
+
+Extend the exclusively owned Linux fixture with validated broker interruption, same-process/pool CA-only reconnection, unavailable-state refusal and single AOF payload replay. Require unchanged dependency IDs/startup receipt and current API/worker/dispatcher ordinary preflight plus same-ID repeat application admission.
+
+**Evidence:** [Managed broker restart qualification](PRIVATE_BROKER_RECOVERY_QUALIFICATION.md); [P47 source qualification](evidence/p47-qualification-2026-10-13.json)
+
+**Remaining:** Exact-head hosted Linux controller and current main receipts required before merge. Full production recovery, upgrade/rollback, expert isolation and all release/value/customer gates remain open.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.

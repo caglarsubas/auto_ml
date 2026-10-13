@@ -1334,6 +1334,11 @@
       "date": "2026-10-13",
       "packet": "P46",
       "event": "Verified PR135 merge ef35fc222fcaea736e969d6d84c3c4c95362fb6b and all six separate main checks in run 38292818524. Retained SQLite/PostgreSQL each 3021 passed, six existing skips; all 37 main browser cases passed first attempts. P46 corrects private broker ambient TLS trust through a captured-CA-only per-application transport, with preceding native/cache/recovery/queue/scientific gates and budgets unchanged. All prior packets, source mappings, queue, outcomes and release/customer gates remain."
+    },
+    {
+      "date": "2026-10-13",
+      "packet": "P47",
+      "event": "Verified PR136 exact-head run 38342754698 passed all six and retained native evidence on 8e86ae9b645adc55f5e1c5bc067d1bfb02e1df93; observed merge ea71cde515125155407b8e696e4e8447c053d187. Separate main 38345397295 remains in qualification. P47 qualifies same-process/pool broker CA trust and AOF replay across restart, repeated ordinary role preflight, and unchanged dependencies/application identities and receipts. Preserve all preceding packets, queue, outcome/release/customer states and budgets."
     }
   ],
   "implementation_packets": [
@@ -2124,6 +2129,22 @@
         "[P46 source qualification](evidence/p46-qualification-2026-10-13.json)"
       ],
       "remaining": "Final exact-head Linux/private-role/queue/recovery acceptance is required before merge. Complete policy/account/storage/supply/upgrade/production-recovery/expert and release/value/customer gates remain open."
+    },
+    {
+      "id": "P47",
+      "title": "Managed broker trust and replay through restart",
+      "kind": "product_implementation",
+      "owner": "Platform/Backend/Security",
+      "status": "tested",
+      "items": [
+        "D07"
+      ],
+      "description": "Extend the exclusively owned Linux fixture with validated broker interruption, same-process/pool CA-only reconnection, unavailable-state refusal and single AOF payload replay. Require unchanged dependency IDs/startup receipt and current API/worker/dispatcher ordinary preflight plus same-ID repeat application admission.",
+      "evidence": [
+        "[Managed broker restart qualification](PRIVATE_BROKER_RECOVERY_QUALIFICATION.md)",
+        "[P47 source qualification](evidence/p47-qualification-2026-10-13.json)"
+      ],
+      "remaining": "Exact-head hosted Linux controller and current main receipts required before merge. Full production recovery, upgrade/rollback, expert isolation and all release/value/customer gates remain open."
     }
   ],
   "release_qualification": {

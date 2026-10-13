@@ -1,0 +1,100 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P47",
+  "date": "2026-10-13",
+  "base_commit": "ea71cde515125155407b8e696e4e8447c053d187",
+  "base_pull_request": 136,
+  "base_exact_head_ci": {
+    "run": 38342754698,
+    "head": "8e86ae9b645adc55f5e1c5bc067d1bfb02e1df93",
+    "status": "all_six_success",
+    "postgresql": {
+      "passed": 3045,
+      "skipped": 6,
+      "failed": 0
+    },
+    "browser": "37 first-attempt passes",
+    "native_broker_roles_denials_positive_control_and_cleanup": "verified"
+  },
+  "base_main_ci": {
+    "run": 38345397295,
+    "status": "in_progress; independently verify before merge"
+  },
+  "source_sha256": {
+    "scripts/qualify_private_broker_recovery.py": "176a93fcbc03034ee6afab603e4e4ef7691ac3ce216fb103e60831d35b565616",
+    "scripts/qualify_private_dependency_start.py": "83b43c3550d17c8c62148e06b10971b738fa1ee8e19f60ef9483539b486a037f",
+    "backend/tests/unit/test_broker_recovery_scope.py": "874712693017b09bb30e4f95ab3554d19a248b93922a7d81112d17f5e6a79b05",
+    "docs/PRIVATE_BROKER_RECOVERY_QUALIFICATION.md": "2eac0637ce1ac0a594a82e59d5c823adabebe7c11d181a2ca69a4e33a9c12c9a"
+  },
+  "checks": {
+    "focused": {
+      "passed": 224,
+      "new_cases": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3049,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.26,
+      "branch_coverage": 64.32,
+      "time_seconds": 292.129
+    },
+    "native_sealed_arm_component_prototype": {
+      "architecture": "arm64",
+      "api_image": "sha256:fc083d3b0491437898c066be8dcfc757c52873de91d6b11cd72a7638494393c0",
+      "redis_image": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+      "component_tls_queue_checks": {
+        "api": {
+          "api_selected_ca_publish": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "worker": {
+          "worker_selected_ca_consume": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "dispatcher": {
+          "dispatcher_selected_ca_publish": "passed",
+          "producer_and_async_consumer_class": "passed"
+        },
+        "check": {
+          "dispatcher_payload_acknowledged": "passed",
+          "denials": {
+            "unauthenticated": "rejected",
+            "wrong_password": "rejected",
+            "cache_credential": "rejected",
+            "wrong_ca": "rejected",
+            "wrong_hostname": "rejected",
+            "ambient_trust_cannot_override_selected_ca": "rejected",
+            "plaintext": "rejected"
+          },
+          "ambient_anchor_positive_control": "passed",
+          "aof_retained": "passed"
+        },
+        "recovery": {
+          "same_process_pool_reconnect": "passed",
+          "captured_ca_preserved": "passed",
+          "broker_unavailable_refused": "passed",
+          "aof_payload_replayed_once": "passed"
+        }
+      },
+      "full_linux_root_and_adopted_services_qualified": false,
+      "external_candidate_modules_loaded": false,
+      "recovery_scope": "component prototype, fixed production transport in sealed P46 runtime; private application and managed-root controller remain unqualified",
+      "owned_cleanup": "passed"
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Initial packet draft used an unsupported kind; renderer rejected it. Restored the supported kind without changing validation.",
+    "Inspection disproved an initial HTTPS concern: create_default_context(cadata=...) skips default roots. No HTTPS product change was made; the source-review correction is retained."
+  ],
+  "hosted_exact_head_linux_controller_qualification": "required_before_merge",
+  "production_runtime_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
