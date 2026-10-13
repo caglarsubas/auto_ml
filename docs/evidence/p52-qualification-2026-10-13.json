@@ -1,0 +1,70 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P52",
+  "date": "2026-10-13",
+  "base_commit": "b9cc0245e141ac412a19b295749a775507582f02",
+  "base_pull_request": 141,
+  "base_main_ci": {
+    "run": 38400846557,
+    "status": "all_six_success",
+    "full_sqlite_postgresql": "3131 passed/six existing skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native": "all prior CA/TLS/capture/recovery/schema/accounts/image/cleanup receipts verified"
+  },
+  "source_sha256": {
+    "scripts/private_dependency_start.py": "5da0430ae65c814890c3434257f32c6836d29a682e059187849d763e92d97346",
+    "scripts/qualify_private_controller_capture.py": "893a345afe2c5f5a7d89d7412e85269aa6ed488eae476627286d8bbe44714b99",
+    "scripts/qualify_private_dependency_start.py": "8efb4a542140c87aa7ad44a8ef6c00f3bb5b647dc067448c881fb424a64ad64a",
+    "backend/tests/unit/test_private_controller_capture.py": "45277392202ffef1f14e2603a8e86dfc396ee2a88570b91a16d010c192b793af",
+    "docs/PRIVATE_CONTROLLER_CAPTURE_IMPLEMENTATION.md": "6317800384863c9a6cde3eaf3f63a64cb7aa7f7463c2b4cc28860ca105d732db"
+  },
+  "checks": {
+    "focused": {
+      "passed": 251,
+      "new_cases": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_sqlite": {
+      "passed": 3144,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.28,
+      "branch_coverage": 64.35
+    },
+    "native_linux_reader_component": {
+      "actual_linux_reader_component": {
+        "controller_stored_capture": {
+          "exact_stored_bytes": "passed",
+          "bytes": "rejected",
+          "mode": "rejected",
+          "link": "rejected",
+          "uid": "rejected",
+          "gid": "rejected",
+          "acl": "rejected"
+        },
+        "installed_inputs_modified": false,
+        "private_values_emitted": false
+      },
+      "full_host_installation_qualified": false,
+      "owned_namespace_cleanup": "passed",
+      "source_mounted_readonly": true
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Six inter-read cases fail against preceding stored-file reader.",
+    "Initial unit ownership proxy changed both snapshots retroactively; corrected fixture and retained two failures.",
+    "Local tmpfs lacks POSIX ACL support; failed attempt retained. Actual UID/GID/zero-extra-access ACL faults passed on owned ACL-capable volume."
+  ],
+  "limitations": [
+    "Read consistency is observed, not atomicity against arbitrary authorized writers or across files.",
+    "Local isolated reader component is not the complete Linux-root host installation.",
+    "Fresh Linux exact-head acceptance and independent main receipts required before merge/adoption claims."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

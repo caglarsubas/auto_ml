@@ -228,7 +228,11 @@ def host_case(plan, expected, parent):
             from qualify_private_postgres_ca import qualify as qualify_postgres_ca
 
             postgres_ca = qualify_postgres_ca(value, adopted, command)
+            from qualify_private_controller_capture import qualify as qualify_controller_capture
+
+            controller_capture = qualify_controller_capture(value, parent)
             account_adoption = {
+                "controller_stored_capture": controller_capture,
                 "postgresql_ca_preflight": postgres_ca,
                 "postgresql_tls": postgres_tls,
                 "cache_authentication_tls": cache_qualification,
