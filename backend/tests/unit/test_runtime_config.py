@@ -1,6 +1,9 @@
 """Private startup must fail before an invalid configuration can serve requests."""
 
 from pathlib import Path
+from functools import lru_cache
+import subprocess
+import tempfile
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
@@ -12,12 +15,26 @@ DEV_KEY = "django-insecure-synthetic-development-key-not-a-real-credential"
 KEY = "synthetic-private-key-that-is-distinct-and-long-for-runtime-tests-123456"
 
 
+@lru_cache(maxsize=1)
+def _runtime_ca():
+    # One disposable synthetic certificate per test process; no installed CA.
+    with tempfile.TemporaryDirectory(prefix="declarai-runtime-ca-") as temporary:
+        root = Path(temporary)
+        result = subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(root / "key.pem"), "-out", str(root / "ca.pem"),
+            "-days", "1", "-subj", "/CN=synthetic-runtime-ca",
+        ], capture_output=True, timeout=15)
+        assert result.returncode == 0
+        return (root / "ca.pem").read_bytes()
+
+
 @pytest.fixture
 def private(tmp_path):
     media = tmp_path / "artifacts"
     media.mkdir()
     ca = tmp_path / "ca.pem"
-    ca.write_text("synthetic CA: runtime parser does not authenticate certificates")
+    ca.write_bytes(_runtime_ca())
     return {
         "DECLARAI_RUNTIME_PROFILE": "private",
         "DJANGO_SECRET_KEY": KEY,

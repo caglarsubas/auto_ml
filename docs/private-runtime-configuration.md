@@ -34,7 +34,7 @@ Private configuration requires the following inputs:
 | `DECLARAI_DB_PASSWORD` or `DECLARAI_DB_PASSWORD_FILE` | Required nonempty single-line password. |
 | `DECLARAI_DB_PORT` | Integer 1–65535; default 5432. |
 | `DECLARAI_DB_SSLMODE` | Defaults to and requires `verify-full`; weaker modes are rejected. |
-| `DECLARAI_DB_SSLROOTCERT` | Existing absolute CA certificate file; the driver verifies trust and server hostname during connection. |
+| `DECLARAI_DB_SSLROOTCERT` | Private mode: absolute regular single-link PEM CA file, 1–65,536 bytes, without group/other write access or a final symlink. Startup compares bounded repeated bytes/metadata and validates PEM; libpq still reopens the protected path for connections and verifies trust/hostname. Public 0400/0600/0444/0644 deliveries remain compatible. See [CA preflight](PRIVATE_POSTGRES_CA_IMPLEMENTATION.md) and [explicit TLS policy](PRIVATE_POSTGRES_TLS_IMPLEMENTATION.md). |
 
 Secrets accept a direct value **or** its `_FILE` source, never both. Secret files
 must be readable regular UTF-8 files, at most 4096 bytes, without embedded NUL or

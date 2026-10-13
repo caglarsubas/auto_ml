@@ -225,7 +225,11 @@ def host_case(plan, expected, parent):
             from qualify_private_postgres_tls import qualify as qualify_postgres_tls
 
             postgres_tls = qualify_postgres_tls(value, adopted, command)
+            from qualify_private_postgres_ca import qualify as qualify_postgres_ca
+
+            postgres_ca = qualify_postgres_ca(value, adopted, command)
             account_adoption = {
+                "postgresql_ca_preflight": postgres_ca,
                 "postgresql_tls": postgres_tls,
                 "cache_authentication_tls": cache_qualification,
                 "cache_recovery": cache_recovery,
