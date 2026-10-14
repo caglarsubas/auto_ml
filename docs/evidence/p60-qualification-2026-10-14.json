@@ -1,0 +1,56 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P60",
+  "date": "2026-10-14",
+  "base_commit": "02ab294bb501e57152d5397d406adc5a3aa83a0a",
+  "base_pull_request": 149,
+  "base_source_head": "ca7e76f6290eef31cc3702667b1d9014bf06938f",
+  "base_ci": 38535883535,
+  "base_main_ci": {
+    "run": 38546092115,
+    "status": "failed",
+    "reason": "900-second full PostgreSQL suite timeout at99 percent; partial native receipts retained, complete suite unavailable"
+  },
+  "source_sha256": {
+    "backend/evaluation/eval_utils.py": "d0ea30293648c3c4174ebe542a7cd5ad123f665d32cfefee47918eb8c1cdd32c",
+    "backend/tests/unit/test_threshold_table_parity.py": "670285f1082f2ffe1142d31eb807af67f265c021cb697e81f98f3513220050ef",
+    "docs/BINARY_THRESHOLD_PERFORMANCE_IMPLEMENTATION.md": "c31ecf0efed1fa689719faac54ea5696e74201cedab81ed22c84d550779ab1b9"
+  },
+  "checks": {
+    "focused": {
+      "passed": 65,
+      "new_cases": 28,
+      "failed": 0
+    },
+    "profiled_postgresql_subset": {
+      "passed_before": 36,
+      "passed_after": 36,
+      "threshold_calls_each": 128,
+      "threshold_cumulative_seconds_before": 27.997,
+      "threshold_cumulative_seconds_after": 0.043,
+      "suite_seconds_before": 53.7,
+      "suite_seconds_after": 46.215,
+      "database_wait_seconds_before": 2.998,
+      "controlled_capacity_benchmark": false
+    },
+    "ruff": "passed",
+    "full_sqlite": {
+      "passed": 3315,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.13,
+      "branch_coverage": 65.24,
+      "seconds": 288.554
+    },
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Host-level timing variation has not been established; timing observations do not guarantee capacity.",
+    "All-six exact-head/private Linux and independent main required.",
+    "D07 lifecycle/upgrade/restore, expert isolation, release/value/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

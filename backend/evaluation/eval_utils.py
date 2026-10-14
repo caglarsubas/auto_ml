@@ -108,9 +108,43 @@ def threshold_table(
 ) -> List[Dict[str, Any]]:
     if thresholds is None:
         thresholds = [round(x, 2) for x in np.linspace(0.05, 0.95, 19)]
+    # The governed binary path already supplies one-dimensional 0/1 outcomes.
+    # Derive all threshold metrics from the same counts rather than validating
+    # the same arrays through seven sklearn metric calls for every threshold.
+    # Preserve sklearn's legacy validation for other input shapes/types.
+    truth = np.asarray(y_true)
+    scores = np.asarray(y_proba)
+    binary_counts = (
+        truth.ndim == scores.ndim == 1
+        and len(truth) == len(scores) > 0
+        and truth.dtype.kind in 'biuf'
+        and scores.dtype.kind in 'biuf'
+        and np.isin(truth, [0, 1]).all()
+    )
+    positives = truth == 1 if binary_counts else None
     rows = []
     for thr in thresholds:
         y_pred = (y_proba >= thr).astype(int)
+        if binary_counts and y_pred.shape == truth.shape:
+            predicted = y_pred.astype(bool)
+            tp = int(np.count_nonzero(positives & predicted))
+            fn = int(np.count_nonzero(positives & ~predicted))
+            fp = int(np.count_nonzero(~positives & predicted))
+            tn = int(np.count_nonzero(~positives & ~predicted))
+            # Float factors avoid fixed-width integer overflow. A missing
+            # predicted/actual class has the same MCC convention as sklearn.
+            denominator = math.sqrt(float(tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+            rows.append({
+                'threshold': thr,
+                'precision': tp / (tp + fp) if tp + fp else 0.0,
+                'recall': tp / (tp + fn) if tp + fn else 0.0,
+                'f1': 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else 0.0,
+                'f2': 5 * tp / (5 * tp + fp + 4 * fn) if 5 * tp + fp + 4 * fn else 0.0,
+                'accuracy': (tp + tn) / len(truth),
+                'mcc': (float(tp) * tn - float(fp) * fn) / denominator if denominator else 0.0,
+                'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn,
+            })
+            continue
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
         rows.append({
             'threshold': thr,
