@@ -147,7 +147,14 @@ def test_background_final_write_failure_preserves_correlated_checkpoint(monkeypa
         kwargs["status_callback"]({"status": "running", "completed_steps": [
             {"direction": "forward", "step": 1, "selected_features": ["x"]}]})
         checkpoint.append(path.read_bytes())
-        return {"status": "completed", "forward": [], "invalid": None, "baselines": {"score": float("nan")}}
+        return {"status": "completed", "forward": [], "baselines": {"score": 0.5}}
+
+    actual_write = views.write_sfs_record
+
+    def write(path, record):
+        if record["status"] == "completed":
+            record = {**record, "invalid": float("nan")}
+        return actual_write(path, record)
 
     class InlineThread:
         def __init__(self, target):
@@ -157,6 +164,7 @@ def test_background_final_write_failure_preserves_correlated_checkpoint(monkeypa
             self.target()
 
     monkeypatch.setattr(views, "run_sfs_with_progress", search)
+    monkeypatch.setattr(views, "write_sfs_record", write)
     monkeypatch.setattr(views.threading, "Thread", InlineThread)
     factory = APIRequestFactory()
     try:
