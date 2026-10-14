@@ -640,7 +640,7 @@ Share strict recorded-state validation across tuning status/results, retain exac
 
 **Packet status:** tested. **Mapped outcomes:** D07.
 
-Reject malformed, terminal, foreign or contradictory SFS resume evidence before work; preserve byte history and reconstruct only validated directional feature state. Record active merged-direction keys, fingerprint recovery/admission code, normalize accepted file IDs and serialize process-local owner registration without holding a lock during fitting.
+Reject malformed, terminal, foreign or contradictory SFS resume evidence before work; preserve byte history and reconstruct only validated directional feature state. Record active merged-direction keys, fingerprint recovery/admission code, normalize accepted file IDs and serialize process-local owner registration without holding a lock during fitting. Derive tuning completion after copying saved fields so imported flags cannot contradict status.
 
 **Evidence:** [Explicit SFS resume and search admission](SFS_RESUME_ADMISSION_IMPLEMENTATION.md); [P59 source qualification](evidence/p59-qualification-2026-10-14.json)
 

@@ -2589,7 +2589,7 @@ class HyperparamResultsView(APIView):
                 hp_data = read_recorded_hyperparam(hp_path)
             except HyperparamStateUnavailable as error:
                 return Response(unavailable_hyperparam(error), status=status.HTTP_503_SERVICE_UNAVAILABLE)
-            return Response({'hyperparam_completed': hp_data.get('status') == 'completed', **hp_data},
+            return Response({**hp_data, 'hyperparam_completed': hp_data['status'] == 'completed'},
                             status=status.HTTP_200_OK)
         except Exception as e:
             import traceback

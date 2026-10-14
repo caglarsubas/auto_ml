@@ -10,19 +10,20 @@
     "backend/modeling/sfs_resume.py": "a84221193c3998fa9553c08876da9f9aa5acc46aa17200dd748eca159aafbfeb",
     "backend/modeling/search_admission.py": "a1ed9c3afd49c6356dcb9d3c66b2cac31eb248477bd1d95db8777ecc775b6c99",
     "backend/modeling/sfs_objective.py": "72e7629168cd3dab2f1126b1fe478287d6af6e6d7492a6250aa134cfbeb0bac2",
-    "backend/modeling/views.py": "f831f90b945ee490a58dc241de936ace3344e9bbb0135230de4e6c255d075782",
+    "backend/modeling/views.py": "3ae399dad9aba086240195d813fa13cadaf4737e82e6ae01bc08de3eafaa6e09",
     "backend/tests/unit/test_sfs_resume_admission.py": "9c529922735125ec9048ab04d9282e3db108cf1d521ccd3fac117c5beef346b7",
-    "docs/SFS_RESUME_ADMISSION_IMPLEMENTATION.md": "e65f87d26ddfc33ddce5b5cf15a927e3b808fe080901931a8ddfc70326535c9a"
+    "backend/tests/unit/test_hyperparam_failure_recovery.py": "cccc124b76b0bb41379ced867d7f1741eeef1649403039eb29ac074a3fb4a79f",
+    "docs/SFS_RESUME_ADMISSION_IMPLEMENTATION.md": "2d8f0e709d502b28bccef2c4066b38b21f0c030ec4652657a63c17bfe2e90a67"
   },
   "checks": {
     "focused": {
-      "passed": 191,
-      "new_cases": 36,
+      "passed": 193,
+      "new_cases": 38,
       "failed": 0
     },
     "before": "12 selected pre-admission/identity cases fail against preceding SFS/tuning view classes",
     "full_sqlite": {
-      "passed": 3285,
+      "passed": 3287,
       "skipped": 6,
       "failed": 0,
       "errors": 0,
@@ -32,7 +33,8 @@
     "native_resume": "Later-direction stop/resume restores the prior direction features and matches uninterrupted native execution",
     "ruff": "passed",
     "roadmap_projection": "passed",
-    "parent_merge_same_tree": "passed; source hashes unchanged"
+    "parent_merge_same_tree": "passed; source hashes unchanged",
+    "derived_flag_before": "Both conflicting derived-flag cases fail against the preceding response merge order"
   },
   "limitations": [
     "Resume shape and consistency checks do not authenticate externally edited metadata or replace independent scientific review.",
@@ -42,5 +44,10 @@
   ],
   "release_qualified": false,
   "customer_installation_modified": false,
-  "budgets_changed": false
+  "budgets_changed": false,
+  "retained_findings": [
+    "Initial 3285/6 full qualification and source hashes retained separately before the final-review derived-flag correction.",
+    "Saved completion flag could override explicit status; final response derives it after copied fields and preserves saved bytes.",
+    "Runtime changed, so full qualification repeated with unchanged budgets."
+  ]
 }
