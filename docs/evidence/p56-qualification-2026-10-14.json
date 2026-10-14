@@ -1,0 +1,42 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P56",
+  "date": "2026-10-14",
+  "base_commit": "9e08f8bdba21990eb6c1a480bd11c1382959578c",
+  "base_pull_request": 145,
+  "base_main_ci": 38512111497,
+  "source_sha256": {
+    "backend/modeling/sfs_evidence.py": "f48b0b6bb24058cc877a295e3b039eee7e493243da7ecd3516efb53064763673",
+    "backend/modeling/views.py": "e055fda401b4c1b7c9bba2d00503b9cf020c9090f7dfbab2c9092add99094c65",
+    "backend/tests/unit/test_sfs_atomic_evidence.py": "5319fa95b9684cd3f19686f3c170321160cbe3f8f01aa942a09b9dc34457d305",
+    "backend/tests/unit/test_sfs_async_failures.py": "16d7ecc8b5b4a1d89cd73b94ea78d9ad66efc512874e44065e5584fa29ba19f8",
+    "docs/SFS_ATOMIC_EVIDENCE_IMPLEMENTATION.md": "669bf773cc8765a82e88c90b9d43d959b10e4d0e20966a58c36c78271592bd6e"
+  },
+  "checks": {
+    "focused": {
+      "passed": 76,
+      "new_cases": 10,
+      "failed": 0
+    },
+    "before": "10 cases fail against the former direct-write primitive",
+    "full_sqlite": {
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "passed": 3208,
+      "line_coverage": 74.65,
+      "branch_coverage": 64.65
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Atomic visibility and synchronization are qualified on the controlled local Linux filesystem, not arbitrary network filesystems or power-loss hardware.",
+    "Post-replacement directory-sync failure leaves complete visible bytes with uncertain crash durability and a live error.",
+    "No multi-owner serialization, cross-store transaction, immutable archive gate or distributed SFS qualification.",
+    "Exact-head all-six/private Linux and independent main qualification required."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

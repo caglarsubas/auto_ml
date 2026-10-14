@@ -42,6 +42,7 @@ from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 from pathlib import Path
 from modeling.sfs_state import read_recorded_sfs, recorded_progress, unavailable_payload, SFSStateUnavailable
+from modeling.sfs_evidence import write_sfs_record
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -1946,13 +1947,13 @@ class SFSStartView(APIView):
                         'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
                         'status': 'running',
                         'error': None,
+                        'operation_id': failure_context['operation_id'],
                         'task': sfs_task,
                         'selection_objective': selection_objective,
                         'resume_basis': resume_basis,
                         'search_bases': {**existing.get('search_bases', {}), resume_basis['sha256']: resume_basis},
                     }
-                    with open(sfs_path, 'w', encoding='utf-8') as f:
-                        json.dump(intermediate, f, indent=2, allow_nan=False)
+                    write_sfs_record(sfs_path, intermediate)
                 except Exception as save_err:
                     record_failure(save_err, 'intermediate_evidence_write', failure_context)
 
@@ -2082,8 +2083,7 @@ class SFSStartView(APIView):
                         sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
                     failure_stage = 'final_evidence_write'
-                    with open(sfs_path, 'w', encoding='utf-8') as f:
-                        json.dump(sfs_data, f, indent=2, allow_nan=False)
+                    write_sfs_record(sfs_path, sfs_data)
 
                     # Archive completed (non-stopped) runs for CRISP-DM SFS history
                     if results.get('status') != 'stopped':

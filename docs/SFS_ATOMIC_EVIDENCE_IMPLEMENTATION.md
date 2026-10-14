@@ -1,0 +1,11 @@
+# Atomic SFS checkpoints (P56)
+
+SFS previously opened its current result with truncation before serializing. A serialization, write or storage failure could destroy the last readable checkpoint, and concurrent status/results readers could encounter partial JSON.
+
+Intermediate and final saves now serialize strict JSON before creating a private same-directory staging file, synchronize its bytes, replace the pointer atomically and synchronize the directory. Readers on the supported local Linux filesystem see the complete previous or complete replacement record. Pre-replacement failures preserve previous bytes and remove staging files. A directory-sync failure happens after replacement: complete new bytes are visible, but crash durability is uncertain and the live operation reports a final-save error rather than completion. Files abandoned by abrupt process termination are hidden staging files; readers do not consider them results or authorize their adoption.
+
+Intermediate records retain the accepted operation ID. If final saving fails, the existing live failure diagnostic remains actionable; losing the process leaves the previous running checkpoint interrupted, with the same operation ID. No missing exception is reconstructed after restart. This change does not serialize competing SFS owners, make publication across database/models/results transactional, qualify network filesystems or implement distributed SFS. Immutable history and its completion gate are a separate follow-up. Legacy files remain readable and are replaced only by an explicitly started operation.
+
+Ten new regression cases inject serialization, partial-write, flush, file-sync and replacement failures; hold a real writer before replacement while reading; distinguish post-replacement directory-sync uncertainty; and exercise background final-save failure with checkpoint preservation and restart interpretation. Scientific fixtures, timeout, retry, coverage and skip gates are unchanged.
+
+Source qualification: [P56 receipt](evidence/p56-qualification-2026-10-14.json). Exact-head six-check/private Linux qualification and independent main verification are required before adoption claims. D07 lifecycle, upgrade/rollback, comprehensive restore, expert isolation and release/customer gates remain open.
