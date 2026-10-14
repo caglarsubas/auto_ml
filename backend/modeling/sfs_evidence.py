@@ -47,19 +47,24 @@ def _sync_directory(path):
 
 def archive_sfs_record(directory, record):
     """Publish one immutable archive per operation; identical retries reuse it."""
+    return _archive_search_record(directory, record, "sfs", read_recorded_sfs, "SFS")
+
+
+def _archive_search_record(directory, record, prefix, reader, label):
+    """Shared no-overwrite publication with an operation-specific strict reader."""
     operation_id = record.get("operation_id")
     if not isinstance(operation_id, str) or str(uuid.UUID(operation_id)) != operation_id:
-        raise ValueError("SFS archive requires a canonical operation ID.")
+        raise ValueError(f"{label} archive requires a canonical operation ID.")
     if "archived_at" in record:
         raise ValueError("Archive metadata cannot be supplied as search evidence.")
     expected = json.dumps(record, sort_keys=True, allow_nan=False)
-    path = Path(directory) / f"sfs_run_{operation_id}.json"
+    path = Path(directory) / f"{prefix}_run_{operation_id}.json"
 
     def verify_existing():
-        existing = read_recorded_sfs(path)
+        existing = reader(path)
         existing.pop("archived_at", None)
         if json.dumps(existing, sort_keys=True, allow_nan=False) != expected:
-            raise ValueError("Recorded SFS operation has different evidence; archive preserved.")
+            raise ValueError(f"Recorded {label} operation has different evidence; archive preserved.")
         # Reconcile a prior directory-sync failure without republishing or changing bytes.
         _sync_directory(path.parent)
 

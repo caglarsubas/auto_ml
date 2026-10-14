@@ -1,10 +1,11 @@
 """Recorded tuning results disclose unavailable evidence and retain failures."""
 
-from modeling.search_state import read_recorded_search
+from modeling.search_state import read_recorded_search, validate_recorded_search
 from modeling.sfs_evidence import write_sfs_record as write_hyperparam_record
+from modeling.sfs_evidence import _archive_search_record
 
 __all__ = ["write_hyperparam_record", "read_recorded_hyperparam", "HyperparamStateUnavailable",
-           "unavailable_hyperparam", "recorded_hyperparam_progress"]
+           "unavailable_hyperparam", "recorded_hyperparam_progress", "archive_hyperparam_record"]
 
 
 class HyperparamStateUnavailable(ValueError):
@@ -14,6 +15,15 @@ class HyperparamStateUnavailable(ValueError):
 def read_recorded_hyperparam(path):
     return read_recorded_search(path, "hyperparam", ("trials", "trial_attempts", "validation_curves"),
                                 HyperparamStateUnavailable)
+
+
+def archive_hyperparam_record(directory, record):
+    """Retain terminal tuning evidence once per operation, including failures/stops."""
+    validate_recorded_search(record, "hyperparam", ("trials", "trial_attempts", "validation_curves"),
+                             HyperparamStateUnavailable)
+    if record.get("status") not in ("completed", "stopped", "error"):
+        raise ValueError("Tuning archives require explicit terminal evidence.")
+    return _archive_search_record(directory, record, "hyperparam", read_recorded_hyperparam, "tuning")
 
 
 def unavailable_hyperparam(error):
@@ -30,5 +40,5 @@ def recorded_hyperparam_progress(record, file_id):
         "file_id": file_id, "status": state, "progress": 1.0 if state == "completed" else 0.0,
         "message": ("Tuning has no live owner in this process. Inspect the recorded evidence."
                     if state == "interrupted" else f"Recorded hyperparameter tuning {state}"),
-        **{key: record.get(key) for key in ("error", "failure", "operation_id", "duration_seconds")},
+        **{key: record.get(key) for key in ("error", "failure", "operation_id", "duration_seconds", "archive_path")},
     }

@@ -140,7 +140,7 @@ def test_swallowed_native_search_exception_keeps_correlation_without_logging_val
 
 
 @pytest.fixture
-def api_operation(monkeypatch, _use_tmp_media, settings):
+def api_operation(monkeypatch, _use_tmp_media, settings, db):
     from rest_framework.test import APIRequestFactory
     from modeling import views
     from tests.unit.test_sfs_objective import data

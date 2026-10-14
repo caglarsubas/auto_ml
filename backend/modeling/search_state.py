@@ -20,6 +20,11 @@ def read_recorded_search(path, operation, list_fields, unavailable):
         raise
     except (ValueError, OSError):
         raise unavailable(f"{operation}_record_unreadable") from None
+    return validate_recorded_search(record, operation, list_fields, unavailable)
+
+
+def validate_recorded_search(record, operation, list_fields, unavailable):
+    """Apply the same state contract to newly archived and recorded evidence."""
     if not isinstance(record, dict) or record.get("status") not in (
         "completed", "running", "stopped", "error", "interrupted"
     ):
