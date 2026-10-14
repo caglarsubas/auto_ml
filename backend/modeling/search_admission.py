@@ -13,6 +13,17 @@ def claim_search(registry, file_id, progress):
         return True
 
 
+def update_search_progress(registry, file_id, owner, operation_id, changes, *, running_only=False):
+    """Publish only to the accepted owner, pinning identity and terminal callbacks."""
+    with _lock:
+        if registry.get(file_id) is not owner or owner is None or owner.get("operation_id") != operation_id:
+            return False
+        if running_only and owner.get("status") != "running":
+            return False
+        owner.update({**changes, "operation_id": operation_id})
+        return True
+
+
 def fail_search_launch(registry, file_id, owner, operation_id, failure, may_have_started, message):
     """Fail only a known unstarted current owner; retain uncertain/terminal owners."""
     with _lock:

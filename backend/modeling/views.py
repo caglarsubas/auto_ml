@@ -50,7 +50,7 @@ from modeling.hyperparam_state import (
     archive_hyperparam_record,
 )
 from modeling.sfs_resume import restore_sfs_resume
-from modeling.search_admission import claim_search
+from modeling.search_admission import claim_search, update_search_progress
 from modeling.search_worker import launch_search_worker
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
@@ -1953,7 +1953,10 @@ class SFSStartView(APIView):
                 # Pollers may observe completion only after those operations finish.
                 if public_info.get('status') in ('completed', 'stopped', 'error'):
                     public_info.update(status='running', message='Saving feature-selection evidence...')
-                SFS_PROGRESS[file_id].update(public_info)
+                public_info.update(status='running', operation_id=failure_context['operation_id'])
+                if not update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                               failure_context['operation_id'], public_info, running_only=True):
+                    return
                 # Save intermediate results to disk after each new completed step
                 completed = status_info.get('completed_steps', [])
                 if len(completed) > _last_saved_step_count[0]:
@@ -1980,7 +1983,7 @@ class SFSStartView(APIView):
                         initial_features=initial_features,
                         n_jobs=n_jobs,
                         top_k=top_k,
-                        stop_flag=SFS_PROGRESS[file_id],
+                        stop_flag=initial_progress,
                         resume_state=resume_state,
                         task=sfs_task,
                         validation_context=context,
@@ -2084,26 +2087,25 @@ class SFSStartView(APIView):
                     elapsed = round(_time.time() - sfs_start_time, 1)
 
                     if sfs_data.get('status') == 'error':
-                        SFS_PROGRESS[file_id].update(status='error', error=sfs_data.get('error'), failure=sfs_data.get('failure'), message=sfs_data.get('error'), duration_seconds=elapsed)
+                        terminal = dict(status='error', error=sfs_data.get('error'), failure=sfs_data.get('failure'), message=sfs_data.get('error'), duration_seconds=elapsed)
                     elif results.get('status') == 'stopped':
-                        SFS_PROGRESS[file_id]['status'] = 'stopped'
-                        SFS_PROGRESS[file_id]['message'] = 'SFS stopped by user'
-                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
-                        print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
+                        terminal = dict(status='stopped', message='SFS stopped by user', duration_seconds=elapsed)
                     else:
-                        SFS_PROGRESS[file_id]['status'] = 'completed'
-                        SFS_PROGRESS[file_id]['message'] = 'SFS completed successfully'
-                        SFS_PROGRESS[file_id]['progress'] = 1.0
-                        SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
+                        terminal = dict(status='completed', message='SFS completed successfully', progress=1.0, duration_seconds=elapsed)
+                    published = update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                                       failure_context['operation_id'], terminal)
+                    if published and terminal['status'] == 'completed':
                         print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
+                    elif published and terminal['status'] == 'stopped':
+                        print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
                     
                 except Exception as e:
                     elapsed = round(_time.time() - sfs_start_time, 1)
-                    SFS_PROGRESS[file_id]['status'] = 'error'
-                    SFS_PROGRESS[file_id]['message'] = f'SFS failed: {str(e)}'
-                    SFS_PROGRESS[file_id]['error'] = str(e)
-                    SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
-                    SFS_PROGRESS[file_id]['failure'] = record_failure(e, failure_stage, failure_context)
+                    failure = record_failure(e, failure_stage, failure_context)
+                    update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                           failure_context['operation_id'], {
+                                               'status': 'error', 'message': f'SFS failed: {str(e)}',
+                                               'error': str(e), 'duration_seconds': elapsed, 'failure': failure})
             
             # Start thread
             launch_failure = launch_search_worker(SFS_PROGRESS, file_id, run_sfs_thread, failure_context,
@@ -2368,7 +2370,8 @@ class HyperparamStartView(APIView):
             hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
 
             def update_progress(info):
-                HYPERPARAM_PROGRESS[file_id].update({**info, 'status': 'running'})
+                update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                       failure_context['operation_id'], {**info, 'status': 'running'}, running_only=True)
 
             def run_thread():
                 results = {'status': 'running'}
@@ -2384,7 +2387,7 @@ class HyperparamStartView(APIView):
                         search_method=search_method, grid_points_per_param=grid_points_per_param,
                         grid_points_per_param_map=grid_points_per_param_map,
                         status_callback=update_progress,
-                        stop_flag=HYPERPARAM_PROGRESS[file_id],
+                        stop_flag=initial_progress,
                         scale_pos_weight=hp_scale_pos_weight,
                         early_stopping_rounds=50,
                         task=hp_task,
@@ -2397,7 +2400,7 @@ class HyperparamStartView(APIView):
                         raise ValueError('Tuning did not return a supported terminal state.')
                     results['operation_id'] = failure_context['operation_id']
                     # Only a completed search can publish its exact winning configuration.
-                    if results.get('status') == 'completed' and not HYPERPARAM_PROGRESS[file_id].get('stop_requested'):
+                    if results.get('status') == 'completed' and not initial_progress.get('stop_requested'):
                         try:
                             failure_stage = 'candidate_refit'
                             from modeling.tuning_evidence import fit_for_tuning
@@ -2462,13 +2465,14 @@ class HyperparamStartView(APIView):
                     safe = _hp_sanitize_json(results)
                     failure_stage = 'history_evidence_write'
                     _archive_hyperparam_run(file_id, safe)
-                    HYPERPARAM_PROGRESS[file_id]['archive_path'] = safe['archive_path']
+                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                           failure_context['operation_id'], {'archive_path': safe['archive_path']})
                     failure_stage = 'final_evidence_write'
                     write_hyperparam_record(hp_path, safe)
                     final_status = results['status']
-                    HYPERPARAM_PROGRESS[file_id].update({
+                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
                         'status': final_status,
-                        'progress': 1.0 if final_status == 'completed' else HYPERPARAM_PROGRESS[file_id].get('progress', 0.0),
+                        'progress': 1.0 if final_status == 'completed' else initial_progress.get('progress', 0.0),
                         'message': ('Hyperparameter tuning completed' if final_status == 'completed'
                                     else f'Hyperparameter tuning {final_status}'),
                         'duration_seconds': elapsed,
@@ -2489,16 +2493,19 @@ class HyperparamStartView(APIView):
                             safe = _hp_sanitize_json(results)
                             _archive_hyperparam_run(file_id, safe)
                         except Exception as save_error:
-                            HYPERPARAM_PROGRESS[file_id]['storage_failure'] = record_failure(
-                                save_error, 'failure_history_write', failure_context)
+                            storage_failure = record_failure(save_error, 'failure_history_write', failure_context)
+                            update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                                   failure_context['operation_id'], {'storage_failure': storage_failure})
                         else:
-                            HYPERPARAM_PROGRESS[file_id]['archive_path'] = safe['archive_path']
+                            update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                                   failure_context['operation_id'], {'archive_path': safe['archive_path']})
                             try:
                                 write_hyperparam_record(hp_path, safe)
                             except Exception as save_error:
-                                HYPERPARAM_PROGRESS[file_id]['storage_failure'] = record_failure(
-                                    save_error, 'failure_evidence_write', failure_context)
-                    HYPERPARAM_PROGRESS[file_id].update({
+                                storage_failure = record_failure(save_error, 'failure_evidence_write', failure_context)
+                                update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                                       failure_context['operation_id'], {'storage_failure': storage_failure})
+                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
                         'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
                         'error': str(e), 'duration_seconds': elapsed,
                         'failure': failure,
