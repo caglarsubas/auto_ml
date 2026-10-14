@@ -169,7 +169,7 @@ def test_search_basis_binds_raw_inputs_and_budget_but_excludes_protected_rows():
 
 
 @pytest.mark.parametrize('failure', ['search', 'stopped', 'refit', 'publication', 'configuration'])
-def test_api_failures_never_publish_or_report_completed(monkeypatch, _use_tmp_media, settings, failure):
+def test_api_failures_never_publish_or_report_completed(monkeypatch, _use_tmp_media, settings, failure, db):
     from rest_framework.test import APIRequestFactory
     from modeling import views
     X, y, V, z, context = data()
@@ -250,7 +250,7 @@ def test_missing_optuna_fallback_is_explicit_and_bound_to_basis(monkeypatch):
     assert any('falling back' in warning for warning in result['space_warnings'])
 
 
-def test_api_refit_reuses_search_weight_when_parent_has_no_fixed_weight(monkeypatch, _use_tmp_media, settings):
+def test_api_refit_reuses_search_weight_when_parent_has_no_fixed_weight(monkeypatch, _use_tmp_media, settings, db):
     from rest_framework.test import APIRequestFactory
     from modeling import views
     X, y, V, z, context = data('classification', 'roc_auc')

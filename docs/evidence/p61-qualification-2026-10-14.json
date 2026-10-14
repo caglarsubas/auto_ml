@@ -1,0 +1,47 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P61",
+  "date": "2026-10-14",
+  "base_commit": "aa371a4f2dcf4f99b99cf8d8da795c7ca7481930",
+  "base_pull_request": 150,
+  "base_source_head": "f75ca211e400a37e3ad3285c5337f2b25f9c2b1a",
+  "base_ci": 38552202484,
+  "base_main_ci": 38555841490,
+  "source_sha256": {
+    "backend/modeling/hyperparam_state.py": "bfa177b21bd7a7b358620a40607cb4513224c5cc02b9521980de2caa28a2385e",
+    "backend/modeling/search_state.py": "69b4897a0e6c7aa1339bc3bdcb715338652162607ba9328027808e31a807c43c",
+    "backend/modeling/sfs_evidence.py": "175f3e718dc2f2e8ef4a104e5c5ff512a6b68ecc01412bf5f38e3a5b91c23cb4",
+    "backend/modeling/views.py": "3730677c60e428507702bbb6e5a5c89820fadfe1c2a08d9a3faefdf52758fe65",
+    "backend/tests/unit/test_hyperparam_immutable_history.py": "55bdcfc5d8bb01f9dccb454fe084e3122af0627778a90ab427563966a4703eef",
+    "backend/tests/unit/test_hyperparam_failure_recovery.py": "9e6f7d6f0b794611fb4b8372a3a23ca44a6463a72e7b03da0e9f47ad0702712b",
+    "backend/tests/unit/test_tuning_evidence.py": "0b8aea5f68cc32785a25842580eb2b3dc4f4f2222b281d1998afd3729011e348",
+    "docs/TUNING_IMMUTABLE_HISTORY_IMPLEMENTATION.md": "3dab5b120b459bd3cd3f6c30d1650718a92068f6d2fb060e2efdda54b3121ab2"
+  },
+  "checks": {
+    "focused": {
+      "passed": 146,
+      "new_cases": 36,
+      "failed": 0
+    },
+    "before": "Eight selected archive/current/failure/iteration cases fail against preceding tuning handler",
+    "full_sqlite": {
+      "passed": 3351,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.18,
+      "branch_coverage": 65.27,
+      "seconds": 195.639
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Candidate adoption, registration, archive and current-pointer saving are not one transaction.",
+    "Current-pointer save failure can leave completed computation history with a live publication failure.",
+    "Full operation journal/distributed search and D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

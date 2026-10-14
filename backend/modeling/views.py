@@ -47,6 +47,7 @@ from modeling.sfs_evidence import write_sfs_record, archive_sfs_record
 from modeling.hyperparam_state import (
     write_hyperparam_record, read_recorded_hyperparam, HyperparamStateUnavailable,
     unavailable_hyperparam, recorded_hyperparam_progress,
+    archive_hyperparam_record,
 )
 from modeling.sfs_resume import restore_sfs_resume
 from modeling.search_admission import claim_search
@@ -2457,6 +2458,9 @@ class HyperparamStartView(APIView):
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed
                     safe = _hp_sanitize_json(results)
+                    failure_stage = 'history_evidence_write'
+                    _archive_hyperparam_run(file_id, safe)
+                    HYPERPARAM_PROGRESS[file_id]['archive_path'] = safe['archive_path']
                     failure_stage = 'final_evidence_write'
                     write_hyperparam_record(hp_path, safe)
                     final_status = results['status']
@@ -2468,6 +2472,7 @@ class HyperparamStartView(APIView):
                         'duration_seconds': elapsed,
                         'error': results.get('error'),
                         'failure': results.get('failure'),
+                        'archive_path': safe['archive_path'],
                     })
                     print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
                 except Exception as e:
@@ -2477,12 +2482,20 @@ class HyperparamStartView(APIView):
                                    operation_id=failure_context['operation_id'], failure=failure)
                     # A failed final replacement must preserve the preceding record.
                     # Other failures can retain their diagnostic as an atomic error result.
-                    if failure_stage != 'final_evidence_write':
+                    if failure_stage not in ('history_evidence_write', 'final_evidence_write'):
                         try:
-                            write_hyperparam_record(hp_path, _hp_sanitize_json(results))
+                            safe = _hp_sanitize_json(results)
+                            _archive_hyperparam_run(file_id, safe)
                         except Exception as save_error:
                             HYPERPARAM_PROGRESS[file_id]['storage_failure'] = record_failure(
-                                save_error, 'failure_evidence_write', failure_context)
+                                save_error, 'failure_history_write', failure_context)
+                        else:
+                            HYPERPARAM_PROGRESS[file_id]['archive_path'] = safe['archive_path']
+                            try:
+                                write_hyperparam_record(hp_path, safe)
+                            except Exception as save_error:
+                                HYPERPARAM_PROGRESS[file_id]['storage_failure'] = record_failure(
+                                    save_error, 'failure_evidence_write', failure_context)
                     HYPERPARAM_PROGRESS[file_id].update({
                         'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
                         'error': str(e), 'duration_seconds': elapsed,
@@ -2884,6 +2897,19 @@ def _archive_sfs_run(file_id: int, sfs_data: dict) -> str:
     runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
     os.makedirs(runs_dir, exist_ok=True)
     path = archive_sfs_record(runs_dir, sfs_data)
+    return os.path.relpath(path, settings.MEDIA_ROOT)
+
+
+def _archive_hyperparam_run(file_id: int, record: dict) -> str:
+    """Preserve exact terminal tuning evidence before replacing its current pointer."""
+    from access_control import projects
+
+    runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+    os.makedirs(runs_dir, exist_ok=True)
+    record['archive_path'] = os.path.join('modeling', f'{file_id}_runs',
+                                        f"hyperparam_run_{record['operation_id']}.json")
+    path = archive_hyperparam_record(runs_dir, record)
+    projects.register_artifact(path, file_id=file_id)
     return os.path.relpath(path, settings.MEDIA_ROOT)
 
 
