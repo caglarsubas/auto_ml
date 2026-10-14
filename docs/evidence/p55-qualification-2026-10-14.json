@@ -1,0 +1,53 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P55",
+  "date": "2026-10-14",
+  "base_commit": "6257c10cb5b64ee71f65567fb2e8a7323b2dc3c3",
+  "base_pull_request": 144,
+  "base_ci": {
+    "run": 38506145464,
+    "status": "all_six_success",
+    "full_postgresql": "3179 passed/six existing skips/zero failures",
+    "browser": "37 first-attempt passes",
+    "native": "all previous delivery/stored/CA/TLS/recovery/schema/account/image/cleanup receipts verified"
+  },
+  "source_sha256": {
+    "backend/modeling/sfs_state.py": "ff07881dcea479f42372f83e722e968175b4cc699dfe5a203ad85661a92b29c0",
+    "backend/modeling/views.py": "1676e948f08fc386c79339cc64503956e8679e2447fd80ce979cb8268bf8191c",
+    "backend/ai_assistant/tool_executor.py": "5bc36647ecd09f3168c102de27c4fc794b2070afe78aa09673b0f4ac4adefcc5",
+    "backend/tests/unit/test_sfs_persisted_status.py": "271a95e021114d2085928786c330b9ee13910eb4107d7875fd4e79cc3e189c55",
+    "docs/SFS_PERSISTED_STATUS_IMPLEMENTATION.md": "c360b0a22b78c2838a478bd3f50acfdbff1535a1f1a9eb33acc266c164851716"
+  },
+  "checks": {
+    "focused": {
+      "passed": 126,
+      "new_cases": 19,
+      "failed": 0,
+      "note": "Final full suite includes the added unavailable banner assertions."
+    },
+    "full_sqlite": {
+      "passed": 3198,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.52,
+      "branch_coverage": 64.53
+    },
+    "before": "15 cases fail/4 pass against preceding views and assistant readers",
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Before-source loader initially lacked backend module path; corrected loader and original error retained.",
+    "Read-only cross-reader cases preserve saved bytes and expose failure metadata; invalid existing records remain unavailable rather than completed or absent."
+  ],
+  "limitations": [
+    "Explicit recorded state does not prove independent scientific evaluation or artifact authenticity.",
+    "Local owner absence is not a qualified distributed-liveness check; thread-based SFS remains limited.",
+    "Exact-head full/private Linux and separate main qualification required before adoption claims."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false,
+  "base_source_head": "17eadb82a12306a704c91a35eade1288ed48dddf"
+}
