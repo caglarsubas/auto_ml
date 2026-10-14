@@ -1,10 +1,11 @@
-from access_control.storage import managed_path
+from access_control.storage import managed_path, positive_file_id
 import uuid
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from declaration.models import Declaration
 import os
 from django.conf import settings
@@ -47,6 +48,8 @@ from modeling.hyperparam_state import (
     write_hyperparam_record, read_recorded_hyperparam, HyperparamStateUnavailable,
     unavailable_hyperparam, recorded_hyperparam_progress,
 )
+from modeling.sfs_resume import restore_sfs_resume
+from modeling.search_admission import claim_search
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -1739,6 +1742,14 @@ class SFSStartView(APIView):
             # Validate required parameters
             if not file_id:
                 return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                file_id = positive_file_id(file_id)
+            except ValidationError as error:
+                return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
+
+            if SFS_PROGRESS.get(file_id, {}).get('status') == 'running':
+                return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
+                                status=status.HTTP_409_CONFLICT)
             
             if not methods or len(methods) == 0:
                 return Response({'error': 'At least one method (forward/backward) must be selected'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1826,7 +1837,7 @@ class SFSStartView(APIView):
                     f"top_k={candidate_top_k} n={len(initial_features)} meta={sorter_meta}"
                 )
             
-            from modeling.sfs_objective import prepare_search, validate_resume, json_record
+            from modeling.sfs_objective import prepare_search, json_record
             try:
                 _, _, selection_objective, effective_criteria, resume_basis = prepare_search(
                     X_train, y_train, X_valid, y_valid, sfs_task, sfs_algorithm, objective_context,
@@ -1847,46 +1858,13 @@ class SFSStartView(APIView):
                 sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
                 if os.path.exists(sfs_path):
                     try:
-                        with open(sfs_path, 'r', encoding='utf-8') as rf:
-                            saved = json.load(rf)
-                        validate_resume({'resume_basis': saved.get('resume_basis')}, resume_basis)
-                        if saved.get('resume_state'):
-                            # Graceful stop — resume_state was explicitly saved
-                            resume_state = saved['resume_state']
-                            print(f"[SFS] Loaded resume_state for file_id={file_id}: keys={list(resume_state.keys())}")
-                        elif saved.get('status') in ('running', 'interrupted', 'stopped'):
-                            # Interrupted (server restart) or stopped without resume_state —
-                            # build resume_state from the intermediate results on disk
-                            resume_state = {'resume_basis': saved.get('resume_basis'), 'baselines': saved.get('baselines', {})}
-                            fwd = saved.get('forward', [])
-                            bwd = saved.get('backward', [])
-                            if fwd:
-                                last_fwd = fwd[-1]
-                                resume_state['forward_results'] = fwd
-                                resume_state['forward_selected_features'] = last_fwd.get('selected_features', [])
-                                resume_state['forward_previous_metrics'] = {
-                                    k: last_fwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_fwd
-                                }
-                                resume_state['forward_start_step'] = last_fwd['step'] + 1
-                            if bwd:
-                                last_bwd = bwd[-1]
-                                resume_state['backward_results'] = bwd
-                                resume_state['backward_current_features'] = last_bwd.get('selected_features', [])
-                                resume_state['backward_previous_metrics'] = {
-                                    k: last_bwd[k] for k in ('cv_roc_auc', 'cv_pr_auc') if k in last_bwd
-                                }
-                                resume_state['backward_start_step'] = last_bwd['step'] + 1
-                            # Rebuild completed_steps from forward + backward results
-                            resume_state['completed_steps'] = fwd + bwd
-                            print(f"[SFS] Built resume_state from intermediate results: fwd={len(fwd)}, bwd={len(bwd)}")
-                        else:
-                            raise ValueError('Recorded selection is not resumable. Start a fresh search.')
+                        resume_state = restore_sfs_resume(sfs_path, resume_basis)
                     except (ValueError, OSError, KeyError) as re_err:
-                        return Response({'error': str(re_err)}, status=status.HTTP_409_CONFLICT)
+                        return Response({'status': 'resume_blocked', 'error': str(re_err)}, status=status.HTTP_409_CONFLICT)
                 else:
                     return Response({'error': 'No recorded feature-selection evidence to resume. Start a fresh search.'}, status=status.HTTP_409_CONFLICT)
 
-            SFS_PROGRESS[file_id] = {
+            initial_progress = {
                 'status': 'running',
                 'message': 'Resuming SFS...' if resume_state else 'Starting SFS...',
                 'progress': 0.0,
@@ -1902,7 +1880,10 @@ class SFSStartView(APIView):
                 'file_id': int(file_id),
                 'execution_id': train_data.get('execution_id'),
             }
-            SFS_PROGRESS[file_id]['operation_id'] = failure_context['operation_id']
+            initial_progress['operation_id'] = failure_context['operation_id']
+            if not claim_search(SFS_PROGRESS, file_id, initial_progress):
+                return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
+                                status=status.HTTP_409_CONFLICT)
             
             # Prepare paths and helpers shared by callback and thread
             sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
@@ -1955,6 +1936,8 @@ class SFSStartView(APIView):
                         'task': sfs_task,
                         'selection_objective': selection_objective,
                         'resume_basis': resume_basis,
+                        'resume_direction_keys': {mode: ('forward_from_backward' if is_fwd_from_bwd else 'forward')
+                                                  if mode == 'forward' else 'backward' for mode in methods},
                         'search_bases': {**existing.get('search_bases', {}), resume_basis['sha256']: resume_basis},
                     }
                     write_sfs_record(sfs_path, intermediate)
@@ -2036,6 +2019,8 @@ class SFSStartView(APIView):
                         'task': sfs_task,
                         'selection_objective': selection_objective,
                         'resume_basis': resume_basis,
+                        'resume_direction_keys': {mode: ('forward_from_backward' if is_forward_from_backward else 'forward')
+                                                  if mode == 'forward' else 'backward' for mode in methods},
                         'search_bases': {**existing_data.get('search_bases', {}), resume_basis['sha256']: resume_basis},
                     }
 
@@ -2248,7 +2233,10 @@ class HyperparamStartView(APIView):
             file_id = data.get('file_id')
             if not file_id:
                 return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+            try:
+                file_id = positive_file_id(file_id)
+            except ValidationError as error:
+                return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
             # ── in-flight guard — refuse to spawn a duplicate run ──
             current = HYPERPARAM_PROGRESS.get(file_id)
             if current and current.get('status') == 'running':
@@ -2357,7 +2345,7 @@ class HyperparamStartView(APIView):
                 'operation': 'hyperparameter_tuning', 'operation_id': str(uuid.uuid4()),
                 'file_id': int(file_id), 'execution_id': train_data.get('execution_id'),
             }
-            HYPERPARAM_PROGRESS[file_id] = {
+            initial_progress = {
                 'status': 'running',
                 'message': 'Starting hyperparameter tuning...',
                 'progress': 0.0,
@@ -2368,6 +2356,9 @@ class HyperparamStartView(APIView):
                 'stop_requested': False,
                 'operation_id': failure_context['operation_id'],
             }
+            if not claim_search(HYPERPARAM_PROGRESS, file_id, initial_progress):
+                return Response({'status': 'already_running', 'error': 'Hyperparameter tuning is already running. Inspect or stop the current operation.'},
+                                status=status.HTTP_409_CONFLICT)
 
             hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
             os.makedirs(hp_dir, exist_ok=True)

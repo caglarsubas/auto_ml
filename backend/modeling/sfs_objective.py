@@ -118,6 +118,8 @@ def search_basis(
         for name in (
             "sfs_utils.py",
             "sfs_objective.py",
+            "sfs_resume.py",
+            "search_admission.py",
             "development_validation.py",
             "development_assessment.py",
             "booster_adapters.py",
