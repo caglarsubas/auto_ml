@@ -651,6 +651,7 @@ def run_hyperparam_search_with_progress(
     algorithm: str = 'xgboost',
     validation_context=None,
     execution_id=None,
+    failure_context=None,
 ) -> Dict[str, Any]:
     """Run a hyperparameter search + validation curves with progress + stop support.
 
@@ -1093,12 +1094,11 @@ def run_hyperparam_search_with_progress(
         return json_record(results)
 
     except Exception as e:
+        from modeling.async_failures import record_failure
         results['status'] = 'error'
         results['error'] = str(e)
+        results['failure'] = record_failure(e, 'search', {"operation": "hyperparameter_tuning", **(failure_context or {})})
         if status_callback:
             status_callback({'message': f'Hyperparameter tuning failed: {e}',
-                             'progress': 0.0, 'status': 'error', 'error': str(e)})
-        print(f"[Hyperparam] Error: {e}")
-        import traceback
-        traceback.print_exc()
+                             'progress': 0.0, 'status': 'error', 'error': str(e), 'failure': results['failure']})
         return json_record(results)

@@ -6,7 +6,13 @@ export async function expectAsyncStatus(
   testInfo: TestInfo,
   endpoint: string,
   expected: string,
-  context: { operation: string; file_id: number; execution_id?: string; job_id?: string },
+  context: {
+    operation: string;
+    file_id: number;
+    execution_id?: string;
+    job_id?: string;
+    operation_id?: string;
+  },
   field: 'status' | 'state' = 'status',
 ) {
   let latest: Record<string, unknown> = {};
@@ -19,12 +25,20 @@ export async function expectAsyncStatus(
           responseStatus = response.status();
           const body = await response.json();
           latest = Object.fromEntries(
-            ['status', 'state', 'error', 'message', 'failure', 'duration_seconds'].map((key) => [
-              key,
-              body[key],
-            ]),
+            [
+              'status',
+              'state',
+              'error',
+              'message',
+              'failure',
+              'storage_failure',
+              'operation_id',
+              'duration_seconds',
+            ].map((key) => [key, body[key]]),
           );
-          return body[field];
+          return context.operation_id && body.operation_id !== context.operation_id
+            ? 'different_operation'
+            : body[field];
         },
         { timeout: 30_000 },
       )

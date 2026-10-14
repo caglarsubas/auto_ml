@@ -366,14 +366,15 @@ for (const task of ['classification', 'regression'] as const) {
         },
       });
       expect(tuned.status()).toBe(200);
-      expect((await tuned.json()).parent_execution_id).toBe(child.execution_id);
-      await expect
-        .poll(
-          async () =>
-            (await (await api.get(`modeling/hyperparam/status/${fileId}/`)).json()).status,
-          { timeout: 30_000 },
-        )
-        .toBe('completed');
+      const acceptedTuning = await tuned.json();
+      expect(acceptedTuning.parent_execution_id).toBe(child.execution_id);
+      expect(acceptedTuning.operation_id).toBeTruthy();
+      await expectAsyncStatus(api, testInfo, `modeling/hyperparam/status/${fileId}/`, 'completed', {
+        operation: 'hyperparameter_tuning',
+        file_id: fileId,
+        execution_id: child.execution_id,
+        operation_id: acceptedTuning.operation_id,
+      });
       const tuning = await (await api.get(`modeling/hyperparam/${fileId}/`)).json();
       expect(tuning.hyperparam_completed).toBe(true);
       expect(tuning.search_basis.execution_id).toBe(child.execution_id);

@@ -43,6 +43,10 @@ import threading
 from pathlib import Path
 from modeling.sfs_state import read_recorded_sfs, recorded_progress, unavailable_payload, SFSStateUnavailable
 from modeling.sfs_evidence import write_sfs_record, archive_sfs_record
+from modeling.hyperparam_state import (
+    write_hyperparam_record, read_recorded_hyperparam, HyperparamStateUnavailable,
+    unavailable_hyperparam, recorded_hyperparam_progress,
+)
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -2348,6 +2352,11 @@ class HyperparamStartView(APIView):
 
             import time as _time
             start_time = _time.time()
+            from modeling.async_failures import record_failure
+            failure_context = {
+                'operation': 'hyperparameter_tuning', 'operation_id': str(uuid.uuid4()),
+                'file_id': int(file_id), 'execution_id': train_data.get('execution_id'),
+            }
             HYPERPARAM_PROGRESS[file_id] = {
                 'status': 'running',
                 'message': 'Starting hyperparameter tuning...',
@@ -2357,6 +2366,7 @@ class HyperparamStartView(APIView):
                 'error': None,
                 'duration_seconds': None,
                 'stop_requested': False,
+                'operation_id': failure_context['operation_id'],
             }
 
             hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
@@ -2368,6 +2378,7 @@ class HyperparamStartView(APIView):
 
             def run_thread():
                 results = {'status': 'running'}
+                failure_stage = 'search'
                 try:
                     results = run_hyperparam_search_with_progress(
                         X_train=X_train, y_train=y_train,
@@ -2386,10 +2397,15 @@ class HyperparamStartView(APIView):
                         validation_context=train_data.get('validation_context'),
                         algorithm=hp_algorithm,
                         execution_id=train_data.get('execution_id'),
+                        failure_context=failure_context,
                     )
+                    if results.get('status') not in ('completed', 'stopped', 'error'):
+                        raise ValueError('Tuning did not return a supported terminal state.')
+                    results['operation_id'] = failure_context['operation_id']
                     # Only a completed search can publish its exact winning configuration.
                     if results.get('status') == 'completed' and not HYPERPARAM_PROGRESS[file_id].get('stop_requested'):
                         try:
+                            failure_stage = 'candidate_refit'
                             from modeling.tuning_evidence import fit_for_tuning
                             best_params = results.get('selected_params') or {}
                             if not best_params:
@@ -2407,6 +2423,7 @@ class HyperparamStartView(APIView):
                                 results['refit_receipt'] = adapter.fit_receipt
                                 parent_id = train_data.get('execution_id')
                                 if parent_id:
+                                    failure_stage = 'candidate_publication'
                                     published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search', selection_evidence=results)
                                     results['refit_model_path'] = published['model']['model_path']
                                     results['execution_id'] = published['execution_id']
@@ -2423,6 +2440,7 @@ class HyperparamStartView(APIView):
                                     results['refit_model_path'] = model_rel
                                     results['refit_params'] = best_params
                                     # Update modeling status artifact
+                                    failure_stage = 'legacy_model_projection'
                                     st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
                                     if os.path.exists(st_path):
                                         with open(st_path, 'r', encoding='utf-8') as sf:
@@ -2439,8 +2457,8 @@ class HyperparamStartView(APIView):
                                             json.dump(st, sf, indent=2)
                                     print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
                         except Exception as refit_err:
-                            print(f"[Hyperparam] Refit skipped/failed: {refit_err}")
                             results.update(status='error', error=f'Winning configuration could not be published: {refit_err}', refit_error=str(refit_err))
+                            results['failure'] = record_failure(refit_err, failure_stage, failure_context)
 
                     elif results.get('status') == 'completed':
                         results['status'] = 'stopped'
@@ -2448,9 +2466,9 @@ class HyperparamStartView(APIView):
                     elapsed = round(_time.time() - start_time, 1)
                     results['duration_seconds'] = elapsed
                     safe = _hp_sanitize_json(results)
-                    with open(hp_path, 'w', encoding='utf-8') as wf:
-                        json.dump(safe, wf, indent=2)
-                    final_status = results.get('status', 'completed')
+                    failure_stage = 'final_evidence_write'
+                    write_hyperparam_record(hp_path, safe)
+                    final_status = results['status']
                     HYPERPARAM_PROGRESS[file_id].update({
                         'status': final_status,
                         'progress': 1.0 if final_status == 'completed' else HYPERPARAM_PROGRESS[file_id].get('progress', 0.0),
@@ -2458,23 +2476,27 @@ class HyperparamStartView(APIView):
                                     else f'Hyperparameter tuning {final_status}'),
                         'duration_seconds': elapsed,
                         'error': results.get('error'),
+                        'failure': results.get('failure'),
                     })
                     print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
                 except Exception as e:
                     elapsed = round(_time.time() - start_time, 1)
-                    results.update(status='error', error=str(e), duration_seconds=elapsed)
-                    try:
-                        with open(hp_path, 'w', encoding='utf-8') as stream:
-                            json.dump(_hp_sanitize_json(results), stream, indent=2, allow_nan=False)
-                    except OSError:
-                        pass  # Progress still exposes a persistence failure.
+                    failure = record_failure(e, failure_stage, failure_context)
+                    results.update(status='error', error=str(e), duration_seconds=elapsed,
+                                   operation_id=failure_context['operation_id'], failure=failure)
+                    # A failed final replacement must preserve the preceding record.
+                    # Other failures can retain their diagnostic as an atomic error result.
+                    if failure_stage != 'final_evidence_write':
+                        try:
+                            write_hyperparam_record(hp_path, _hp_sanitize_json(results))
+                        except Exception as save_error:
+                            HYPERPARAM_PROGRESS[file_id]['storage_failure'] = record_failure(
+                                save_error, 'failure_evidence_write', failure_context)
                     HYPERPARAM_PROGRESS[file_id].update({
                         'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
                         'error': str(e), 'duration_seconds': elapsed,
+                        'failure': failure,
                     })
-                    print(f"[Hyperparam] Error for file_id={file_id}: {e}")
-                    import traceback
-                    traceback.print_exc()
 
             thread = threading.Thread(target=run_thread)
             thread.daemon = True
@@ -2494,6 +2516,7 @@ class HyperparamStartView(APIView):
                 'primary_metric': primary_metric,
                 'selection_objective': objective,
                 'parent_execution_id': train_data.get('execution_id'),
+                'operation_id': failure_context['operation_id'],
                 'validation_curve_points': curve_points,
                 'search_method': resolved_method,
                 'search_method_requested': search_method,
@@ -2521,20 +2544,11 @@ class HyperparamStatusView(APIView):
                 hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
                 if os.path.exists(hp_path):
                     try:
-                        with open(hp_path, 'r', encoding='utf-8') as rf:
-                            file_status = json.load(rf).get('status', 'completed')
-                    except Exception:
-                        file_status = 'completed'
-                    if file_status == 'running':
-                        return Response({
-                            'status': 'interrupted',
-                            'message': 'Tuning was interrupted (server restart). Re-run to continue.',
-                            'progress': 0.0, 'file_id': file_id
-                        }, status=status.HTTP_200_OK)
-                    return Response({
-                        'status': file_status, 'message': f'Hyperparameter tuning {file_status}',
-                        'progress': 1.0 if file_status == 'completed' else 0.0, 'file_id': file_id
-                    }, status=status.HTTP_200_OK)
+                        recorded = read_recorded_hyperparam(hp_path)
+                    except HyperparamStateUnavailable as error:
+                        return Response({'file_id': file_id, **unavailable_hyperparam(error)},
+                                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                    return Response(recorded_hyperparam_progress(recorded, file_id), status=status.HTTP_200_OK)
                 return Response({
                     'status': 'not_started',
                     'message': 'Hyperparameter tuning has not been started yet',
@@ -2580,8 +2594,10 @@ class HyperparamResultsView(APIView):
             if not os.path.exists(hp_path):
                 return Response({'error': 'Hyperparameter results not found', 'hyperparam_completed': False},
                                 status=status.HTTP_404_NOT_FOUND)
-            with open(hp_path, 'r', encoding='utf-8') as f:
-                hp_data = json.load(f)
+            try:
+                hp_data = read_recorded_hyperparam(hp_path)
+            except HyperparamStateUnavailable as error:
+                return Response(unavailable_hyperparam(error), status=status.HTTP_503_SERVICE_UNAVAILABLE)
             return Response({'hyperparam_completed': hp_data.get('status') == 'completed', **hp_data},
                             status=status.HTTP_200_OK)
         except Exception as e:
