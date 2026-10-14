@@ -1,0 +1,44 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P63",
+  "date": "2026-10-14",
+  "base_commit": "06eb41dae0f50a75d17024aeba226bc13a541c4b",
+  "base_pull_request": 152,
+  "base_source_head": "ed481d327379e46fbb5e3c2ae3842aa4f46a9df7",
+  "base_ci": 38574368081,
+  "base_main_ci": 38579094834,
+  "source_sha256": {
+    "backend/modeling/search_admission.py": "99ce2d749867b446602e4ac722b09f4b41d20a9cce5211d3aa74d2368c76f462",
+    "backend/modeling/views.py": "c7c2a92ab3f679f3a2032a7e7db9632a7f18149bb5a374b0a7562c9d7ecd1aa8",
+    "backend/tests/unit/test_search_progress_ownership.py": "f2a13fcf0536914a3a9098533c131a8433fa92e2d37979310e04381245c0f594",
+    "docs/SEARCH_PROGRESS_OWNERSHIP_IMPLEMENTATION.md": "d303605136fe26ba60a4d0c8fb6cdc6e91326a9d3321eecee8626adaa9c7c0cd"
+  },
+  "checks": {
+    "focused": {
+      "passed": 155,
+      "new_cases": 28,
+      "failed": 0
+    },
+    "before": "20 selected cases fail against preceding handlers; two selected reference cases already pass",
+    "full_sqlite": {
+      "passed": 3399,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.25,
+      "branch_coverage": 65.42,
+      "seconds": 198.665
+    },
+    "ruff": "passed full CI lint scope",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Process-local progress ownership is not distributed leases or durable worker recovery.",
+    "Forced registry replacement midexecution is not complete artifact/adoption fencing.",
+    "Implementation-mismatched SFS resume remains inspectable and blocked.",
+    "D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
