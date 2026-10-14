@@ -1,0 +1,44 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P64",
+  "date": "2026-10-15",
+  "base_commit": "0174c02397533c78f999f31074659cd16e357af0",
+  "base_pull_request": 153,
+  "base_source_head": "e0f77fe00ed5dbfadeb67b2f8a7481aae675a591",
+  "base_ci": 38587801076,
+  "base_main_ci": 38592635221,
+  "source_sha256": {
+    "backend/modeling/search_worker.py": "76fcfb11e17b1501c9eb97cb073abf5e622cb5fb59f85ac70c9dbb42cf8d7f60",
+    "backend/tests/unit/test_search_worker_connections.py": "6b0d515219e1408461e2719f3eb478328808ce4806ac20063432c25d92b5eb54",
+    "docs/SEARCH_WORKER_CONNECTIONS_IMPLEMENTATION.md": "b9fe12d1b764deedb88f533689848ca496048d711fe5c4bef21a9a8f2d959c9e"
+  },
+  "checks": {
+    "focused": {
+      "passed": 172,
+      "new_cases": 17,
+      "failed": 0
+    },
+    "before": "16 cases fail against preceding worker launcher; inline caller isolation already passes",
+    "real_connections": "Retained file-backed SQLite worker wrapper and raw connection prove closure after completion/stop/error; caller connection remains usable. Exact-head PostgreSQL must repeat the same assertions on the qualified TLS configuration.",
+    "full_sqlite": {
+      "passed": 3416,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.28,
+      "branch_coverage": 65.45,
+      "seconds": 200.846
+    },
+    "ruff": "passed full CI lint scope",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Thread-owned connection cleanup does not provide forced-process cleanup or distributed recovery.",
+    "Cleanup diagnostics are process-local/structured logs; process-loss persistence remains open.",
+    "Cleanup uncertainty must not authorize replay or invalidate completed model evidence.",
+    "D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
