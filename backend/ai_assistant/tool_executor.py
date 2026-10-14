@@ -251,6 +251,8 @@ def read_sfs_status(file_id: int) -> dict:
             'completed_step_count': len(completed) if isinstance(completed, list) else 0,
             'duration_seconds': mem.get('duration_seconds'),
             'error': mem.get('error'),
+            'failure': mem.get('failure'),
+            'operation_id': mem.get('operation_id'),
             'source': 'memory',
         }
         set_span_attr('declarai.sfs_status.source', 'memory')
@@ -264,15 +266,10 @@ def read_sfs_status(file_id: int) -> dict:
             settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json',
         )
         if _os.path.exists(sfs_path):
-            with open(sfs_path, 'r', encoding='utf-8') as f:
-                disk = json.load(f) or {}
-            disk_status = disk.get('status', 'completed')
-            # If the disk file says "running" but in-memory has nothing,
-            # the SFS thread was killed (server restart) — surface it
-            # as ``interrupted`` to match SFSStatusView and so the LLM
-            # can suggest the user click Continue.
-            if disk_status == 'running':
-                disk_status = 'interrupted'
+            from modeling.sfs_state import read_recorded_sfs, recorded_progress
+            disk = read_recorded_sfs(sfs_path)
+            persisted = recorded_progress(disk, file_id)
+            disk_status = persisted['status']
             completed = []
             for direction in ('forward', 'backward', 'forward_from_backward'):
                 completed.extend(disk.get(direction, []) or [])
@@ -288,14 +285,22 @@ def read_sfs_status(file_id: int) -> dict:
                 ),
                 'completed_step_count': len(completed),
                 'error': disk.get('error'),
+                'failure': persisted.get('failure'),
+                'operation_id': persisted.get('operation_id'),
                 'source': 'disk',
             }
             set_span_attr('declarai.sfs_status.source', 'disk')
             set_span_attr('declarai.sfs_status.status', out['status'])
             return out
-    except Exception as exc:
-        logger.warning("read_sfs_status: disk fallback failed for file_id=%s: %s",
-                       file_id, exc)
+    except Exception:
+        # An existing unreadable/invalid record is distinct from no run.
+        return {
+            **default_payload,
+            'status': 'unavailable',
+            'message': 'Recorded SFS state is unavailable. Inspect saved evidence before continuing.',
+            'error': 'Recorded SFS state could not be verified.',
+            'source': 'disk',
+        }
 
     # ── 3) Nothing on either side ──
     set_span_attr('declarai.sfs_status.source', 'absent')
@@ -345,6 +350,8 @@ def _format_sfs_status_line(status_payload: dict) -> Optional[str]:
     elif status == 'error':
         err = status_payload.get('error') or 'unknown error'
         line = f'⚠ SFS FAILED with error: {err}. The user may need to retry.'
+    elif status == 'unavailable':
+        line = 'SFS recorded state is UNAVAILABLE. Inspect saved evidence before continuing or starting another search.'
     else:
         line = f'SFS status: {status}'
     return line

@@ -41,6 +41,7 @@ from modeling.cv_strategy import build_cv_splitter, iter_cv_splits, pick_group_c
 from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 from pathlib import Path
+from modeling.sfs_state import read_recorded_sfs, recorded_progress, unavailable_payload, SFSStateUnavailable
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -1688,8 +1689,10 @@ class SFSResultsView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            with open(sfs_path, 'r', encoding='utf-8') as f:
-                sfs_data = json.load(f)
+            try:
+                sfs_data = read_recorded_sfs(sfs_path)
+            except SFSStateUnavailable as error:
+                return Response(unavailable_payload(error), status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
             return Response({
                 'sfs_completed': sfs_data.get('status', 'completed') in ('completed', 'stopped'),
@@ -2188,35 +2191,11 @@ class SFSStatusView(APIView):
                 sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
                 if os.path.exists(sfs_path):
                     try:
-                        with open(sfs_path, 'r', encoding='utf-8') as rf:
-                            file_data = json.load(rf)
-                        file_status = file_data.get('status', 'completed')
-                    except Exception:
-                        file_status = 'completed'
-
-                    if file_status == 'running':
-                        # File says "running" but no in-memory progress → process was interrupted
-                        # (e.g. server restart killed the background thread)
-                        return Response({
-                            'status': 'interrupted',
-                            'message': 'SFS was interrupted (server restart). Partial results saved — you can continue.',
-                            'progress': 0.0,
-                            'file_id': file_id
-                        }, status=status.HTTP_200_OK)
-                    elif file_status == 'stopped':
-                        return Response({
-                            'status': 'stopped',
-                            'message': 'SFS was stopped by user. Partial results available.',
-                            'progress': 0.0,
-                            'file_id': file_id
-                        }, status=status.HTTP_200_OK)
-                    else:
-                        return Response({
-                            'status': 'completed',
-                            'message': 'SFS already completed',
-                            'progress': 1.0,
-                            'file_id': file_id
-                        }, status=status.HTTP_200_OK)
+                        file_data = read_recorded_sfs(sfs_path)
+                    except SFSStateUnavailable as error:
+                        return Response({'file_id': file_id, **unavailable_payload(error)},
+                                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                    return Response(recorded_progress(file_data, file_id), status=status.HTTP_200_OK)
                 else:
                     return Response({
                         'status': 'not_started',
