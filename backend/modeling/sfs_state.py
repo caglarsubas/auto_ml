@@ -1,6 +1,6 @@
 """Recorded SFS state never infers completion from missing or invalid evidence."""
 
-import json
+from modeling.search_state import read_recorded_search
 
 
 class SFSStateUnavailable(ValueError):
@@ -8,32 +8,7 @@ class SFSStateUnavailable(ValueError):
 
 
 def read_recorded_sfs(path):
-    def invalid_constant(value):
-        raise SFSStateUnavailable("sfs_record_malformed")
-
-    def unique_object(pairs):
-        result = dict(pairs)
-        if len(result) != len(pairs):
-            raise SFSStateUnavailable("sfs_record_malformed")
-        return result
-
-    try:
-        with open(path, encoding="utf-8") as stream:
-            record = json.load(stream, parse_constant=invalid_constant, object_pairs_hook=unique_object)
-    except SFSStateUnavailable:
-        raise
-    except (ValueError, OSError):
-        raise SFSStateUnavailable("sfs_record_unreadable") from None
-    if not isinstance(record, dict) or record.get("status") not in (
-        "completed", "running", "stopped", "error", "interrupted"
-    ):
-        raise SFSStateUnavailable("sfs_record_state_invalid")
-    if record["status"] == "completed" and (record.get("error") or record.get("failure")):
-        raise SFSStateUnavailable("sfs_record_contradictory")
-    if any(record.get(direction) is not None and not isinstance(record[direction], list)
-           for direction in ("forward", "backward", "forward_from_backward")):
-        raise SFSStateUnavailable("sfs_record_shape_invalid")
-    return record
+    return read_recorded_search(path, "sfs", ("forward", "backward", "forward_from_backward"), SFSStateUnavailable)
 
 
 def unavailable_payload(error):

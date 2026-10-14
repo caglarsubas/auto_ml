@@ -13,7 +13,7 @@ def record_failure(error, stage, context=None):
     context = context or {}
     record = {
         "schema_version": 1,
-        "operation": "sfs",
+        "operation": context.get("operation", "sfs"),
         "operation_id": context.get("operation_id") or str(uuid.uuid4()),
         "file_id": context.get("file_id"),
         "execution_id": context.get("execution_id"),

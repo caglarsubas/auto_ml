@@ -1,0 +1,51 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P58",
+  "date": "2026-10-14",
+  "base_commit": "0d9d5b5c385aa97f76c5db53c59ee07c21890996",
+  "base_pull_request": 147,
+  "base_main_ci": 38521540640,
+  "source_sha256": {
+    "backend/modeling/search_state.py": "4962f80de800784f66cc90f6c73e3ae54d149912c980567c5c676bca6be78130",
+    "backend/modeling/sfs_state.py": "451695abb485fa831eeaa44d23d4796002e10058c1f78066f89f8f21995654a1",
+    "backend/modeling/hyperparam_state.py": "12e37137c265d029cdfa76e60162d9a447ae38e8d6da3390f332f10b9415368f",
+    "backend/modeling/sfs_evidence.py": "85864cf87587c7cbed71883372a17915f0662afd38e5975e0055696ca01eb3bc",
+    "backend/modeling/async_failures.py": "25949e0f91304a0306b2565fe0c7f6479b87479058fd6a6b1c0908d99d61db63",
+    "backend/modeling/hyperparam_utils.py": "03d7156eb111e9cfc63f5e93a2ff1f03ae98954a8784f5724044d46d08ecaf3c",
+    "backend/modeling/views.py": "b7b78734bca88e3b8183fd83e5b85f12c6678eb4ea880fd6e67aef3737e814c8",
+    "backend/tests/unit/test_hyperparam_failure_recovery.py": "e78127da9e405a4b856d7530573aa301ee53bec53cfd16b2a9c2209ed12a7e84",
+    "frontend/e2e/fixtures/async-status.ts": "af22bb479cdc9f13e20e56f4b43c0f8765c4b588b628f3a11132d7361b7a1a09",
+    "frontend/e2e/raw-replay-api.spec.ts": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+    "docs/HYPERPARAM_FAILURE_RECOVERY_IMPLEMENTATION.md": "f6dcc19441c647e7d67d40b4c415f60413fa589617ba8a6ba7e8415f1b2e8b60"
+  },
+  "checks": {
+    "focused": {
+      "passed": 140,
+      "new_cases": 28,
+      "failed": 0
+    },
+    "before": "14 cases fail/6 pass against the preceding status/results view classes",
+    "full_sqlite": {
+      "passed": 3249,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.92,
+      "branch_coverage": 64.89
+    },
+    "ruff": "passed",
+    "prettier": "passed",
+    "typescript": "targeted helper/replay type check passed",
+    "browser_identity": "Standalone stale-to-current fixture requires the accepted operation on poll2; preceding helper incorrectly accepts the old record on poll1",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Saved record shape does not prove authenticity, scientific review, adoption or deployment.",
+    "Final-save failure can preserve a preceding result under its own operation ID; process loss cannot reconstruct the newer attempt without an operation journal.",
+    "Tuning remains a process-local thread service; complete immutable history, distributed ownership and lifecycle recovery remain open.",
+    "Exact-head all-six/full private Linux and separate main required."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
