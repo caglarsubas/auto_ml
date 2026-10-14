@@ -1,0 +1,67 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P54",
+  "date": "2026-10-14",
+  "base_commit": "487311cab8874061691db854bbf2287d7cb819ad",
+  "base_pull_request": 143,
+  "base_main_ci": {
+    "run": 38420230012,
+    "status": "all_six_success",
+    "sqlite_postgresql": "3173 passed/six existing skips/zero failures",
+    "browser": "36 first-attempt plus one retry1 pass; original SFS error lacked details",
+    "native": "all delivery/stored/CA/TLS/recovery/schema/account/image/cleanup receipts verified"
+  },
+  "source_sha256": {
+    "backend/backend/runtime_config.py": "432dc5dc01ff711964eb20844e973ad1db1f9c6dc2555eaebcc42edd933d95bf",
+    "backend/modeling/async_failures.py": "d65519525b974bd9836c03d398c5081aa640160773bf34d17bfe49bdde43efba",
+    "backend/modeling/sfs_utils.py": "34471e1d3fb3a30bef8a7cee7c9e2be085c5099e18248d358488d4dba0204e1c",
+    "backend/modeling/views.py": "409e9be99cadebc892e3cb81bdbb475d90463fbbb4773ba68749760d047fb2d4",
+    "backend/tests/unit/test_sfs_async_failures.py": "685579c0346b5c8cd38562f75acbbb3b7603f5a215029c6966fad282498cdd76",
+    "backend/tests/unit/test_sqlite_writer_reservation.py": "664618aadedbc0985940d2beb09560e7cd30606d74ec55f1ebc726d4ef3ba6c3",
+    "frontend/e2e/fixtures/async-status.ts": "8ff1fe75eb5496bae7c6886cc69c9222e55504ddb84015f134bf064c4f9aa8ed",
+    "frontend/e2e/raw-replay-api.spec.ts": "81ab117b7b3b28fabff814be3c3c0617d0f8d91818d9bf27e7da518972dfa652",
+    "docs/SFS_ASYNC_FAILURE_IMPLEMENTATION.md": "381cca39e1ae973f32f5c4a7b5d0757a11529f7a6ccdadb16ae693be0725f0e5"
+  },
+  "checks": {
+    "focused": {
+      "passed": 130,
+      "new_cases": 6,
+      "failed": 0
+    },
+    "full_sqlite": {
+      "passed": 3179,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.41,
+      "branch_coverage": 64.42
+    },
+    "before_native_reservation": "one case fails against preceding configuration",
+    "owned_synthetic_browser": {
+      "ordinary_repeated_cases": 12,
+      "ordinary_repeated_failures": 0,
+      "publication_contention_before": "OperationalError/database is locked; first SFS status error plus a timeout retry retained",
+      "publication_contention_after": "first-attempt pass in7.3s, all original scientific assertions unchanged",
+      "trace": "candidate_publication/publish_candidate/publish_execution/register_artifact",
+      "cleanup": "all owned containers/network/preview removed",
+      "private_installation_qualified": false
+    },
+    "ruff": "passed",
+    "typescript": "targeted helper passed with Node types",
+    "prettier": "passed",
+    "roadmap_projection": "passed"
+  },
+  "retained_findings": [
+    "Original historic SFS exception unavailable; reproduced matching publication failure is observed, historical cause cannot be retroactively certain.",
+    "Local fixture startup __file__, omitted native services and invalid cache identity failures retained separately; SFS completed in those fixtures.",
+    "Initial injected search test modeled an unhandled boundary rather than the actual caught search path; fixture corrected and failure retained."
+  ],
+  "limitations": [
+    "SQLite still has bounded single-writer capacity; timeout unchanged and PostgreSQL remains required for private deployment.",
+    "In-memory thread-based SFS is not a qualified distributed job service; disk-only status honesty follows.",
+    "Exact-head full/private Linux and independent main qualification required before adoption claims."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

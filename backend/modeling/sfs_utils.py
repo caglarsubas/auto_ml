@@ -868,6 +868,7 @@ def run_sfs_with_progress(
     validation_context=None,
     execution_id=None,
     prediction_contract=None,
+    failure_context=None,
 ):
     """Native exploratory selection; unavailable evidence never means zero/success."""
     from modeling.sfs_objective import prepare_search, validate_resume, current_metrics, stopping_decision
@@ -1012,12 +1013,16 @@ def run_sfs_with_progress(
         results["status"] = "completed"
         update("Feature selection completed; evidence is exploratory", 1.0, "completed")
     except Exception as error:
-        results.update(status="error", error=str(error))
+        from modeling.async_failures import record_failure
+
+        failure = record_failure(error, "search", failure_context)
+        results.update(status="error", error=str(error), failure=failure)
         if status_callback:
             status_callback(
                 {
                     "status": "error",
                     "error": str(error),
+                    "failure": failure,
                     "message": f"Feature selection failed: {error}",
                     "progress": 0.0,
                     "completed_steps": completed.copy(),

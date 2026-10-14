@@ -1694,6 +1694,8 @@ class SFSResultsView(APIView):
             return Response({
                 'sfs_completed': sfs_data.get('status', 'completed') in ('completed', 'stopped'),
                 'status': sfs_data.get('status', 'completed'),
+                'failure': sfs_data.get('failure'),
+                'operation_id': sfs_data.get('operation_id'),
                 **{key: sfs_data.get(key) for key in ('selection_objective', 'resume_basis', 'search_bases', 'stopping_criteria', 'baselines', 'rejected_steps', 'change_semantics')},
                 'forward': sfs_data.get('forward', []),
                 'backward': sfs_data.get('backward', []),
@@ -1886,6 +1888,13 @@ class SFSStartView(APIView):
                 'duration_seconds': None,
                 'stop_requested': False
             }
+            from modeling.async_failures import record_failure
+            failure_context = {
+                'operation_id': str(uuid.uuid4()),
+                'file_id': int(file_id),
+                'execution_id': train_data.get('execution_id'),
+            }
+            SFS_PROGRESS[file_id]['operation_id'] = failure_context['operation_id']
             
             # Prepare paths and helpers shared by callback and thread
             sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
@@ -1942,7 +1951,7 @@ class SFSStartView(APIView):
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(intermediate, f, indent=2, allow_nan=False)
                 except Exception as save_err:
-                    print(f"[SFS] Intermediate save error: {save_err}")
+                    record_failure(save_err, 'intermediate_evidence_write', failure_context)
 
             # Define status callback
             def update_progress(status_info):
@@ -1957,10 +1966,12 @@ class SFSStartView(APIView):
                 if len(completed) > _last_saved_step_count[0]:
                     _last_saved_step_count[0] = len(completed)
                     _save_intermediate(completed)
-                print(f"[SFS-Progress] {status_info.get('message', '')}")
+                if status_info.get('status') != 'error':
+                    print(f"[SFS-Progress] {status_info.get('message', '')}")
             
             # Run SFS in background thread
             def run_sfs_thread():
+                failure_stage = 'search'
                 try:
                     results = run_sfs_with_progress(
                         X_train=X_train,
@@ -1983,6 +1994,7 @@ class SFSStartView(APIView):
                         prediction_contract=contract,
                         algorithm=sfs_algorithm,
                         execution_id=train_data.get('execution_id'),
+                        failure_context=failure_context,
                     )
                     
                     # Final save — merge with existing results to preserve previous runs
@@ -2011,6 +2023,8 @@ class SFSStartView(APIView):
                         'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
                         'status': results.get('status', 'completed'),
                         'error': results.get('error', None),
+                        'failure': results.get('failure'),
+                        'operation_id': failure_context['operation_id'],
                         'task': sfs_task,
                         'selection_objective': selection_objective,
                         'resume_basis': resume_basis,
@@ -2034,12 +2048,14 @@ class SFSStartView(APIView):
                             valid_features = final_features
                             if valid_features:
                                 try:
+                                    failure_stage = 'candidate_refit'
                                     from modeling.sfs_utils import _sfs_fit, _sfs_booster_params
                                     fit_params = _sfs_booster_params(sfs_task, 0)
                                     adapter = _sfs_fit(sfs_algorithm, X_train[valid_features], y_train,
                                         X_valid[valid_features], y_valid, fit_params, task=sfs_task, context=train_data.get('validation_context'))
                                     parent_id = train_data.get('execution_id')
                                     if parent_id:
+                                        failure_stage = 'candidate_publication'
                                         candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
                                             fit_params, f'sfs_{direction_key}', adopt=False)
                                         sfs_data[f'{direction_key}_model_path'] = candidate['model']['model_path']
@@ -2055,13 +2071,14 @@ class SFSStartView(APIView):
                                 except Exception as model_err:
                                     sfs_data[f'{direction_key}_refit_error'] = str(model_err)
                                     sfs_data.update(status='error', error=f'Candidate publication failed: {model_err}')
-                                    print(f"[SFS] Failed to save {direction_key} final model: {model_err}")
+                                    sfs_data['failure'] = record_failure(model_err, failure_stage, failure_context)
 
                     # Persist resume_state if stopped (for continue later)
                     if results.get('status') == 'stopped' and results.get('resume_state'):
                         sfs_data['resume_state'] = results['resume_state']
                         sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
+                    failure_stage = 'final_evidence_write'
                     with open(sfs_path, 'w', encoding='utf-8') as f:
                         json.dump(sfs_data, f, indent=2, allow_nan=False)
 
@@ -2075,7 +2092,7 @@ class SFSStartView(APIView):
                     elapsed = round(_time.time() - sfs_start_time, 1)
 
                     if sfs_data.get('status') == 'error':
-                        SFS_PROGRESS[file_id].update(status='error', error=sfs_data.get('error'), message=sfs_data.get('error'), duration_seconds=elapsed)
+                        SFS_PROGRESS[file_id].update(status='error', error=sfs_data.get('error'), failure=sfs_data.get('failure'), message=sfs_data.get('error'), duration_seconds=elapsed)
                     elif results.get('status') == 'stopped':
                         SFS_PROGRESS[file_id]['status'] = 'stopped'
                         SFS_PROGRESS[file_id]['message'] = 'SFS stopped by user'
@@ -2094,9 +2111,7 @@ class SFSStartView(APIView):
                     SFS_PROGRESS[file_id]['message'] = f'SFS failed: {str(e)}'
                     SFS_PROGRESS[file_id]['error'] = str(e)
                     SFS_PROGRESS[file_id]['duration_seconds'] = elapsed
-                    print(f"[SFS] Error for file_id={file_id}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    SFS_PROGRESS[file_id]['failure'] = record_failure(e, failure_stage, failure_context)
             
             # Start thread
             thread = threading.Thread(target=run_sfs_thread)
@@ -2113,6 +2128,7 @@ class SFSStartView(APIView):
                 'status': 'started',
                 'message': msg,
                 'file_id': file_id,
+                'operation_id': failure_context['operation_id'],
                 'methods': methods,
                 'stopping_criteria': stopping_criteria,
                 'excluded_features': excluded_features or []

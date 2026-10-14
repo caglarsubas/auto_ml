@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/session';
 import { API_BASE_URL } from './fixtures/credentials';
+import { expectAsyncStatus } from './fixtures/async-status';
 import { randomUUID, createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -216,11 +217,11 @@ for (const task of ['classification', 'regression'] as const) {
         },
       });
       expect(selected.status()).toBe(200);
-      await expect
-        .poll(async () => (await (await api.get(`modeling/sfs/status/${fileId}/`)).json()).status, {
-          timeout: 30_000,
-        })
-        .toBe('completed');
+      await expectAsyncStatus(api, testInfo, `modeling/sfs/status/${fileId}/`, 'completed', {
+        operation: 'sfs',
+        file_id: fileId,
+        execution_id: run.execution_id,
+      });
       const selectionResponse = await api.get(`modeling/sfs/${fileId}/`);
       expect(selectionResponse.status()).toBe(200);
       const selection = await selectionResponse.json();
