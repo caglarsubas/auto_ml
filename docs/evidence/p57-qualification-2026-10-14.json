@@ -1,0 +1,43 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P57",
+  "date": "2026-10-14",
+  "base_commit": "7b13eded8a1913d1ba780f21b6d23fd004943e9b",
+  "base_pull_request": 146,
+  "base_source_head": "8dc6c7bdee0fecee4046b4b6b4247d8f873c95ff",
+  "base_ci": 38515547356,
+  "source_sha256": {
+    "backend/modeling/sfs_evidence.py": "85864cf87587c7cbed71883372a17915f0662afd38e5975e0055696ca01eb3bc",
+    "backend/modeling/views.py": "657a2cac62f2321ae30eb4fb38267b29162119e9fbc69be87a9fd54ad8c1057f",
+    "backend/tests/unit/test_sfs_immutable_history.py": "c69ab6c3dc28757f58dbc932734f973eb558f411665c469158452c35c8977093",
+    "backend/tests/unit/test_sfs_atomic_evidence.py": "45775ea9005fd5d6defad164171d5236bf4ebf277a1fd16603ee0bd4cfd3e48a",
+    "docs/SFS_IMMUTABLE_HISTORY_IMPLEMENTATION.md": "7815642ff37dd867f8ae0b5904b3b90dafaa7f6510a1071c0c1f366c33c604b8"
+  },
+  "checks": {
+    "focused": {
+      "passed": 89,
+      "new_cases": 13,
+      "failed": 0
+    },
+    "full_sqlite": {
+      "passed": 3221,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 74.79,
+      "branch_coverage": 64.81
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed",
+    "parent_merge_same_tree": "passed, qualified source hashes unchanged"
+  },
+  "limitations": [
+    "Archive immutability is application enforced, not a cryptographic signature or protection against privileged edits.",
+    "An archive is search evidence; separate current-result saving, candidate adoption, independent review and deployment may fail or remain pending.",
+    "No distributed SFS, cross-store transaction, arbitrary network filesystem or power-loss hardware qualification.",
+    "Exact-head all-six/private Linux and separate parent/main qualification required."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

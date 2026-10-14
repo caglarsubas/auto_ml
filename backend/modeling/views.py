@@ -42,7 +42,7 @@ from modeling.leakage_heuristics import scan_leakage_risks
 import threading
 from pathlib import Path
 from modeling.sfs_state import read_recorded_sfs, recorded_progress, unavailable_payload, SFSStateUnavailable
-from modeling.sfs_evidence import write_sfs_record
+from modeling.sfs_evidence import write_sfs_record, archive_sfs_record
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -2082,15 +2082,13 @@ class SFSStartView(APIView):
                         sfs_data['resume_state'] = results['resume_state']
                         sfs_data['stopped_at'] = results.get('stopped_at', {})
                     
+                    # Preserve immutable search evidence before publishing the current result.
+                    # History failure blocks completion and leaves the prior checkpoint intact.
+                    if results.get('status') != 'stopped':
+                        failure_stage = 'history_evidence_write'
+                        _archive_sfs_run(file_id, sfs_data)
                     failure_stage = 'final_evidence_write'
                     write_sfs_record(sfs_path, sfs_data)
-
-                    # Archive completed (non-stopped) runs for CRISP-DM SFS history
-                    if results.get('status') != 'stopped':
-                        try:
-                            _archive_sfs_run(file_id, sfs_data)
-                        except Exception as arch_err:
-                            print(f"[SFS] History archive skipped: {arch_err}")
                     
                     elapsed = round(_time.time() - sfs_start_time, 1)
 
@@ -2875,19 +2873,10 @@ class PipelineReportView(APIView):
 
 
 def _archive_sfs_run(file_id: int, sfs_data: dict) -> str:
-    """Copy current SFS results into modeling/{file_id}_runs/ for history."""
-    from datetime import datetime, timezone
+    """Retain a completed search record without overwriting another operation."""
     runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
     os.makedirs(runs_dir, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    existing = [n for n in os.listdir(runs_dir) if n.startswith('sfs_')]
-    run_k = len(existing) + 1
-    path = os.path.join(runs_dir, f'sfs_run_{run_k}_{stamp}.json')
-    payload = dict(sfs_data or {})
-    payload['archived_at'] = datetime.now(timezone.utc).isoformat()
-    payload['run_index'] = run_k
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(payload, f, indent=2, default=str)
+    path = archive_sfs_record(runs_dir, sfs_data)
     return os.path.relpath(path, settings.MEDIA_ROOT)
 
 
@@ -2899,11 +2888,14 @@ class SFSHistoryView(APIView):
         runs_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
         history = []
         if os.path.isdir(runs_dir):
-            files = sorted(
-                [f for f in os.listdir(runs_dir) if f.startswith('sfs_') and f.endswith('.json')],
-                reverse=True,
-            )
-            for fn in files[:20]:
+            files = []
+            for fn in os.listdir(runs_dir):
+                if fn.startswith('sfs_') and fn.endswith('.json'):
+                    try:
+                        files.append((os.stat(os.path.join(runs_dir, fn)).st_mtime_ns, fn))
+                    except OSError:
+                        continue
+            for _, fn in sorted(files, reverse=True)[:20]:
                 path = os.path.join(runs_dir, fn)
                 try:
                     with open(path, 'r', encoding='utf-8') as f:
@@ -2913,6 +2905,9 @@ class SFSHistoryView(APIView):
                         'path': os.path.relpath(path, settings.MEDIA_ROOT),
                         'run_index': data.get('run_index'),
                         'archived_at': data.get('archived_at'),
+                        'operation_id': data.get('operation_id'),
+                        'id': data.get('operation_id') or fn,
+                        'created_at': data.get('archived_at'),
                         'n_forward': len(data.get('forward') or []),
                         'n_backward': len(data.get('backward') or []),
                         'task': data.get('task'),
