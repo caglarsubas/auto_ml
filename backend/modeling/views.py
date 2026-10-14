@@ -51,6 +51,7 @@ from modeling.hyperparam_state import (
 )
 from modeling.sfs_resume import restore_sfs_resume
 from modeling.search_admission import claim_search
+from modeling.search_worker import launch_search_worker
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered')
@@ -2105,9 +2106,10 @@ class SFSStartView(APIView):
                     SFS_PROGRESS[file_id]['failure'] = record_failure(e, failure_stage, failure_context)
             
             # Start thread
-            thread = threading.Thread(target=run_sfs_thread)
-            thread.daemon = True
-            thread.start()
+            launch_failure = launch_search_worker(SFS_PROGRESS, file_id, run_sfs_thread, failure_context,
+                                                   thread_factory=threading.Thread)
+            if launch_failure is not None:
+                return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
             excluded_count = len([c for c in (excluded_features or []) if c in train_data['X_train'].columns])
             msg = f'SFS started in background ({X_train.shape[1]} features'
@@ -2502,9 +2504,10 @@ class HyperparamStartView(APIView):
                         'failure': failure,
                     })
 
-            thread = threading.Thread(target=run_thread)
-            thread.daemon = True
-            thread.start()
+            launch_failure = launch_search_worker(HYPERPARAM_PROGRESS, file_id, run_thread, failure_context,
+                                                   thread_factory=threading.Thread)
+            if launch_failure is not None:
+                return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
             return Response({
                 'status': 'started',

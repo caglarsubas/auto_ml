@@ -1,0 +1,46 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P62",
+  "date": "2026-10-14",
+  "base_commit": "be36161d5bcdcc2cb8225819f07fa3267154e439",
+  "base_pull_request": 151,
+  "base_source_head": "bb52bf715ff975de7606a737038616e77c9af1fa",
+  "base_ci": 38565202956,
+  "base_main_ci": 38569086167,
+  "source_sha256": {
+    "backend/modeling/search_admission.py": "1ae492bd3fc4384c37c00564850b78ada10174fe4ae738dc725ea416d51a7e7a",
+    "backend/modeling/search_worker.py": "1a13d22d34b6bf5bab766a6b39ebfa8a9b688c55d874549234331e50fd011cd1",
+    "backend/modeling/views.py": "ae80a5452d493d846102ff8f7b3dbc43a93ca54f2068945d3a6fa5b02bc1284e",
+    "backend/tests/unit/test_search_worker_launch.py": "ef2bc1284ae102a8ee3443487f87025b898e63b2d9c4d5a88a21d885fd79bc1b",
+    "docs/SEARCH_WORKER_LAUNCH_IMPLEMENTATION.md": "9107668c78dc26fd90888fa979cc28a83eed01c574cdfc67328a65301412b7ed"
+  },
+  "checks": {
+    "focused": {
+      "passed": 127,
+      "new_cases": 20,
+      "failed": 0
+    },
+    "before": "14 selected startup/owner/uncertainty API cases fail against preceding handlers",
+    "real_uncertain_worker": "A real started thread retains a running owner and blocks a duplicate claim until completion",
+    "full_sqlite": {
+      "passed": 3371,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.22,
+      "branch_coverage": 65.33,
+      "seconds": 280.331
+    },
+    "ruff": "passed",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Process-local startup safety is not durable/distributed ownership or a launch journal.",
+    "Uncertain launch must not authorize duplicate execution; terminal and different-owner evidence remains unchanged.",
+    "Implementation-mismatched SFS resume remains blocked under the existing basis contract.",
+    "D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
