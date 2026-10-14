@@ -1,6 +1,5 @@
 """Failure evidence survives swallowed search errors and background boundaries."""
 
-import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -58,14 +57,7 @@ def test_api_background_failure_never_claims_completion_and_preserves_stage(monk
         return_value={"model": {"model_path": "synthetic-model"}, "execution_id": "candidate-run"})
     monkeypatch.setattr(views, "publish_candidate", publication)
     if stage == "final_evidence_write":
-        actual_dump = json.dump
-
-        def dump(value, stream, **kwargs):
-            if stream.name.endswith("1_sfs_results.json"):
-                fail()
-            return actual_dump(value, stream, **kwargs)
-
-        monkeypatch.setattr(views.json, "dump", dump)
+        monkeypatch.setattr(views, "write_sfs_record", fail)
 
     class InlineThread:
         def __init__(self, target):
