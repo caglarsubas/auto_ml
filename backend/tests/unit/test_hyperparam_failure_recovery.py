@@ -45,6 +45,17 @@ def test_saved_failure_retains_exact_diagnostic_and_operation(recorded):
     assert recorded.read_bytes() == before
 
 
+@pytest.mark.parametrize("state,stored_flag", [("error", True), ("completed", False)])
+def test_saved_derived_flag_cannot_override_the_explicit_state(recorded, state, stored_flag):
+    recorded.write_text(json.dumps({"status": state, "hyperparam_completed": stored_flag, "trials": []}))
+    before = recorded.read_bytes()
+    progress, results = readers()
+    assert progress.status_code == results.status_code == 200
+    assert progress.data["status"] == results.data["status"] == state
+    assert results.data["hyperparam_completed"] is (state == "completed")
+    assert recorded.read_bytes() == before
+
+
 @pytest.mark.parametrize("content", [
     "{", "[]", "null", "{}", '{"status":"unknown"}', '{"status":null}',
     '{"status":"completed","error":"failed"}',

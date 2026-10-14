@@ -1,0 +1,53 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P59",
+  "date": "2026-10-14",
+  "base_commit": "986b94508ff584e996cc03ded0e1370737e400f6",
+  "base_pull_request": 148,
+  "base_source_head": "b2a1cc514228303ef61ceb3780852b06b363743a",
+  "base_ci": 38527904652,
+  "source_sha256": {
+    "backend/modeling/sfs_resume.py": "a84221193c3998fa9553c08876da9f9aa5acc46aa17200dd748eca159aafbfeb",
+    "backend/modeling/search_admission.py": "a1ed9c3afd49c6356dcb9d3c66b2cac31eb248477bd1d95db8777ecc775b6c99",
+    "backend/modeling/sfs_objective.py": "72e7629168cd3dab2f1126b1fe478287d6af6e6d7492a6250aa134cfbeb0bac2",
+    "backend/modeling/views.py": "3ae399dad9aba086240195d813fa13cadaf4737e82e6ae01bc08de3eafaa6e09",
+    "backend/tests/unit/test_sfs_resume_admission.py": "9c529922735125ec9048ab04d9282e3db108cf1d521ccd3fac117c5beef346b7",
+    "backend/tests/unit/test_hyperparam_failure_recovery.py": "cccc124b76b0bb41379ced867d7f1741eeef1649403039eb29ac074a3fb4a79f",
+    "docs/SFS_RESUME_ADMISSION_IMPLEMENTATION.md": "2d8f0e709d502b28bccef2c4066b38b21f0c030ec4652657a63c17bfe2e90a67"
+  },
+  "checks": {
+    "focused": {
+      "passed": 193,
+      "new_cases": 38,
+      "failed": 0
+    },
+    "before": "12 selected pre-admission/identity cases fail against preceding SFS/tuning view classes",
+    "full_sqlite": {
+      "passed": 3287,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.11,
+      "branch_coverage": 65.23
+    },
+    "native_resume": "Later-direction stop/resume restores the prior direction features and matches uninterrupted native execution",
+    "ruff": "passed",
+    "roadmap_projection": "passed",
+    "parent_merge_same_tree": "passed; source hashes unchanged",
+    "derived_flag_before": "Both conflicting derived-flag cases fail against the preceding response merge order"
+  },
+  "limitations": [
+    "Resume shape and consistency checks do not authenticate externally edited metadata or replace independent scientific review.",
+    "Older ambiguous or implementation-mismatched state is blocked, retained and not reconstructed as certainty.",
+    "Admission locking protects one process; distributed ownership, crash-safe starts, operation journaling and full lifecycle remain open.",
+    "Exact-head all-six/private Linux plus parent/main qualification required."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false,
+  "retained_findings": [
+    "Initial 3285/6 full qualification and source hashes retained separately before the final-review derived-flag correction.",
+    "Saved completion flag could override explicit status; final response derives it after copied fields and preserves saved bytes.",
+    "Runtime changed, so full qualification repeated with unchanged budgets."
+  ]
+}
