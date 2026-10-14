@@ -192,7 +192,11 @@ def load_runtime(base_dir, development_secret, env=None):
     if engine == "sqlite":
         if any(name.startswith("DECLARAI_DB_") and name != "DECLARAI_DB_ENGINE" for name in env):
             _error("DECLARAI_DB_ENGINE", "PostgreSQL fields cannot silently select SQLite; set postgresql explicitly")
-        database = {"ENGINE": "django.db.backends.sqlite3", "NAME": base_dir / "db.sqlite3"}
+        # Reserve writes at atomic entry, before reads can form a snapshot
+        # that cannot be upgraded under a concurrent metadata writer. Keep
+        # sqlite3's existing timeout; private installations use PostgreSQL.
+        database = {"ENGINE": "django.db.backends.sqlite3", "NAME": base_dir / "db.sqlite3",
+                    "OPTIONS": {"transaction_mode": "IMMEDIATE"}}
     else:
         fields = {}
         for name in ("NAME", "USER", "HOST"):
