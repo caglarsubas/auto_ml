@@ -93,10 +93,11 @@ def test_late_callback_cannot_modify_a_later_legitimately_claimed_operation(sear
     original = case["registry"][1]
     before, current = copy.deepcopy(original), case["path"].read_bytes()
     newer = {"status": "running", "operation_id": str(uuid.uuid4()), "stop_requested": True, "sentinel": "newer"}
+    expected = copy.deepcopy(newer)
     assert claim_search(case["registry"], 1, newer)
     case["searches"][0]["status_callback"]({"status": "running", "message": "old callback", "completed_steps": [
         {"direction": "forward", "step": 1, "selected_features": ["x"]}]})
-    assert case["registry"][1] == newer and original == before
+    assert case["registry"][1] == expected and original == before
     assert case["path"].read_bytes() == current
     assert case["searches"][0]["stop_flag"] is original
 
@@ -160,6 +161,7 @@ def test_deferred_worker_receives_its_own_stop_flag_and_cannot_write_new_progres
     original = case["registry"][1]
     original["stop_requested"] = True
     newer = {"status": "running", "operation_id": str(uuid.uuid4()), "stop_requested": False}
+    expected = copy.deepcopy(newer)
     case["registry"][1] = newer
     observed = []
 
@@ -170,7 +172,7 @@ def test_deferred_worker_receives_its_own_stop_flag_and_cannot_write_new_progres
 
     monkeypatch.setattr(case["views"], "run_sfs_with_progress" if case["sfs"] else "run_hyperparam_search_with_progress", search)
     case["pending"][0]()
-    assert observed == [original] and case["registry"][1] == newer
+    assert observed == [original] and case["registry"][1] == expected
 
 
 def test_failure_is_fully_diagnosed_before_a_new_request_can_claim(search_api, monkeypatch):

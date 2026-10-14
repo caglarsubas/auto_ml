@@ -25,8 +25,8 @@ storage-failure progress fields use the same owner check.
 
 Twenty-eight new API regressions cover both handlers, terminal states, legitimate
 subsequent claims, replaced/retokened/missing owners, callback UUID/state changes,
-bound stop flags and diagnostic publication. All 155 focused checks pass. Twenty
-selected cases fail against the preceding handlers; two selected reference cases
+bound stop flags and diagnostic publication. All 155 focused checks pass. Twenty-one
+selected cases fail against the preceding handlers; one selected reference case
 already passed there.
 
 Full SQLite and exact-head/private Linux qualification are recorded in the
