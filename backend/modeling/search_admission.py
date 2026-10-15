@@ -5,12 +5,24 @@ import uuid
 from collections.abc import Mapping
 
 _lock = threading.Lock()
+ACTIVE_SEARCH_LIMIT = 2
 
 
-def claim_search(registry, file_id, progress):
+class SearchCapacityExceeded(Exception):
+    """All process-local active search slots are occupied."""
+
+
+def claim_search(registry, file_id, progress, *, other_registries=()):
     with _lock:
         if registry.get(file_id, {}).get("status") == "running":
             return False
+        # Count SFS and tuning together, including cooperative stops and launches
+        # whose acknowledgement is uncertain. Terminal evidence is not a slot.
+        registries = {id(item): item for item in (registry, *other_registries)}
+        active = sum(owner.get("status") == "running"
+                     for item in registries.values() for owner in item.values())
+        if active >= ACTIVE_SEARCH_LIMIT:
+            raise SearchCapacityExceeded
         registry[file_id] = progress
         return True
 

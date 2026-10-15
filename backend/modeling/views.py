@@ -50,7 +50,10 @@ from modeling.hyperparam_state import (
     archive_hyperparam_record,
 )
 from modeling.sfs_resume import restore_sfs_resume
-from modeling.search_admission import claim_search, update_search_progress, request_search_stop
+from modeling.search_admission import (
+    ACTIVE_SEARCH_LIMIT, SearchCapacityExceeded, claim_search,
+    update_search_progress, request_search_stop,
+)
 from modeling.search_worker import launch_search_worker
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
@@ -63,6 +66,14 @@ SFS_PROGRESS = {}
 # SFS_PROGRESS).  The background thread updates it via a status callback and
 # checks 'stop_requested' cooperatively for graceful stop.
 HYPERPARAM_PROGRESS = {}
+
+
+def _search_capacity_response(file_id):
+    return Response({
+        'status': 'busy', 'error_code': 'search_capacity_exhausted',
+        'error': 'Search capacity is full. Wait for an operation to finish, then retry.',
+        'file_id': file_id, 'active_search_limit': ACTIVE_SEARCH_LIMIT,
+    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
 def _hp_sanitize_json(o):
@@ -1883,7 +1894,12 @@ class SFSStartView(APIView):
                 'execution_id': train_data.get('execution_id'),
             }
             initial_progress['operation_id'] = failure_context['operation_id']
-            if not claim_search(SFS_PROGRESS, file_id, initial_progress):
+            try:
+                claimed = claim_search(SFS_PROGRESS, file_id, initial_progress,
+                                       other_registries=(HYPERPARAM_PROGRESS,))
+            except SearchCapacityExceeded:
+                return _search_capacity_response(file_id)
+            if not claimed:
                 return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
                                 status=status.HTTP_409_CONFLICT)
             
@@ -2379,7 +2395,12 @@ class HyperparamStartView(APIView):
                 'stop_requested': False,
                 'operation_id': failure_context['operation_id'],
             }
-            if not claim_search(HYPERPARAM_PROGRESS, file_id, initial_progress):
+            try:
+                claimed = claim_search(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                       other_registries=(SFS_PROGRESS,))
+            except SearchCapacityExceeded:
+                return _search_capacity_response(file_id)
+            if not claimed:
                 return Response({'status': 'already_running', 'error': 'Hyperparameter tuning is already running. Inspect or stop the current operation.'},
                                 status=status.HTTP_409_CONFLICT)
 
