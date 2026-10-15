@@ -1,0 +1,70 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P71",
+  "date": "2026-10-15",
+  "base_commit": "99a36557c01775466ba1675aa9314952d079c23c",
+  "base_pull_request": 160,
+  "base_ci": 38719749204,
+  "base_main_ci": 38723167994,
+  "source_sha256": {
+    "backend/execution_jobs/management/commands/dispatch_jobs.py": "457c67f33512b02cf544b2c8211754302e73ce022ea8b678e396dc9d9ed75484",
+    "backend/tests/unit/test_dispatcher_database_recovery.py": "70cd4c04452e62f6311cb5f80e677ba0b636fb3b77b410e2474c5d4982b891b7",
+    "backend/tests/unit/test_dispatcher_shutdown.py": "c10888e951082de13d1f8ffdbcf037ba7b3a4b204d9ea6f735c777791ab9de02",
+    "docs/DISPATCHER_DATABASE_RECOVERY_IMPLEMENTATION.md": "862928a44a66107d4031876dbaaf5c2d7903a284269677f1a353b8a226113da8"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 124,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 13.791
+    },
+    "focused_development_postgresql": {
+      "passed": 124,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 35.504
+    },
+    "full_sqlite": {
+      "passed": 3553,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 223.746,
+      "line_coverage": 75.47,
+      "branch_coverage": 65.73
+    },
+    "before_development_postgresql": {
+      "passed": 0,
+      "failed": 11,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.73
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 11,
+  "initial_findings": [
+    "InterfaceError was outside the original storage handler.",
+    "Signal mocks interfered with pytest SIGALRM on assertion failure; isolate ownership without changing timeout.",
+    "Non-DB shutdown tests need isolated cleanup; SQLite deliberately retains an in-memory test connection.",
+    "Full local suite began before final test-only assertion refinements; final 124-case SQLite/PostgreSQL runs and required exact-head CI qualify the final tests."
+  ],
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "Terminated owned session recovery is not full server-restart or coordinated installation recovery.",
+    "Complete exact-head private TLS/application-role receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}
