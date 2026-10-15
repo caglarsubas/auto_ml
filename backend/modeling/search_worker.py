@@ -7,7 +7,7 @@ from modeling.async_failures import record_failure
 from modeling.search_admission import fail_search_launch, update_search_progress
 
 
-def launch_search_worker(registry, file_id, target, context, *, thread_factory=None):
+def launch_search_worker(registry, file_id, target, context, *, thread_factory=None, prepare=None):
     owner, thread = registry.get(file_id), None
     caller_thread = threading.get_ident()
 
@@ -19,6 +19,9 @@ def launch_search_worker(registry, file_id, target, context, *, thread_factory=N
         try:
             if owns_connections:
                 close_old_connections()
+            if prepare is not None:
+                stage = "worker_storage_setup"
+                prepare()
             stage = "worker_execution"
             target()
         except Exception as error:
