@@ -34,9 +34,11 @@ def test_signal_finishes_current_dispatch_without_starting_another(monkeypatch, 
             handlers[selected] = handler
         return original
 
-    def dispatch():
+    def dispatch(**kwargs):
+        assert set(kwargs) == {'should_stop'} and not kwargs['should_stop']()
         calls.append('entered')
         handlers[signum](signum, None)
+        assert kwargs['should_stop']()
         calls.append('finished')
         if database_failure:
             raise DatabaseError('private-credential-sentinel')
@@ -55,7 +57,8 @@ def test_once_preserves_rejection_without_installing_signal_handlers(monkeypatch
     def unexpected(*args):
         raise AssertionError('Once mode changed signal ownership')
 
-    def dispatch():
+    def dispatch(**kwargs):
+        assert kwargs == {}
         raise failure
 
     monkeypatch.setattr(dispatch_jobs.signal, 'signal', unexpected)
@@ -74,7 +77,7 @@ def test_continuous_fatal_rejection_restores_signal_ownership(monkeypatch):
             restored.append(signum)
         return original
 
-    def dispatch():
+    def dispatch(**kwargs):
         raise JobConflict('job_scope_changed')
 
     monkeypatch.setattr(dispatch_jobs.signal, 'signal', install)
@@ -92,7 +95,7 @@ def test_signal_during_idle_wait_returns_without_reentrant_lock(monkeypatch):
         handlers[signum] = handler
         return original
 
-    def dispatch():
+    def dispatch(**kwargs):
         calls.append('dispatch')
         return {'delivered': 0}
 
