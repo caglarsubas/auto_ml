@@ -1,0 +1,63 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P70",
+  "date": "2026-10-15",
+  "base_commit": "d6242f464489390630f17fd788cae4f24f07168d",
+  "base_pull_request": 159,
+  "base_ci": 38712257192,
+  "base_main_ci": 38715077943,
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "d111085e1e4a64c37d6f012926107cf81005e42272dc4b59f63a8510526f7e6e",
+    "backend/tests/unit/test_job_expiry_fencing.py": "051ca50277306b23f5b17718560185d874e96fe8fbacc68cdeed1c1f8e849187",
+    "docs/NATIVE_JOB_EXPIRY_IMPLEMENTATION.md": "5e1481b816d2d6799f3be35816ee02877b92cf02d61a87e30ef011b1fbf0927e"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 105,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 13.667
+    },
+    "focused_development_postgresql": {
+      "passed": 105,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 32.927
+    },
+    "full_sqlite": {
+      "passed": 3542,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 288.946,
+      "line_coverage": 75.47,
+      "branch_coverage": 65.73
+    },
+    "before_development_postgresql": {
+      "passed": 2,
+      "failed": 23,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 7.706
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 25,
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "Refreshed transition checks do not guarantee that a database commit completes by a wall-clock deadline or undo external scoring effects.",
+    "Local PostgreSQL semantic fixtures are not private TLS/application-role qualification; complete exact-head native receipts remain required.",
+    "Runtime fingerprints continue to bind exact code; durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}

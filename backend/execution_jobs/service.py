@@ -376,8 +376,12 @@ def claim(identifier):
         ):
             close(job, "blocked", "job_runtime_changed")
             return None
+        now = timezone.now()
+        if now >= job.expires_at:
+            close(job, "failed", "job_expired")
+            return None
         job.state, job.lease_token = "running", uuid.uuid4()
-        job.lease_until = timezone.now() + timedelta(seconds=LIMITS["lease_seconds"])
+        job.lease_until = now + timedelta(seconds=LIMITS["lease_seconds"])
         job.attempts += 1
         record(job, "started", detail={"attempt": job.attempts})
         return job, job.lease_token
@@ -394,15 +398,20 @@ def checkpoint(identifier, token, deadline):
     recheck_execution(job)
 
 
+def _owns_live_lease(job, token, now):
+    return job.lease_token == token and job.state in ACTIVE and now < job.lease_until
+
+
 def finish(identifier, token, state, reason="", result=None):
     with locked():
         job = NativeJob.objects.select_for_update().get(pk=identifier)
-        if job.lease_token != token or job.state not in ACTIVE or timezone.now() >= job.lease_until:
+        now = timezone.now()
+        if not _owns_live_lease(job, token, now):
             return
         if job.state == "cancel_requested":
             close(job, "cancelled", "actor_cancelled")
             return
-        if timezone.now() >= job.expires_at:
+        if now >= job.expires_at:
             close(job, "failed", "job_expired")
             return
         try:
@@ -415,10 +424,20 @@ def finish(identifier, token, state, reason="", result=None):
                 lock_authority(actor, job.source_dataset_id, None)
             recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
-            close(job, "blocked", "job_authority_changed")
+            if _owns_live_lease(job, token, timezone.now()):
+                close(job, "blocked", "job_authority_changed")
             return
-        job.result = result if state == "succeeded" else None
-        job.result_sha256 = digest(result) if job.result else ""
+        prepared_result = result if state == "succeeded" else None
+        prepared_digest = digest(prepared_result) if prepared_result else ""
+        # Authority locks and result preparation can outlast the first check.
+        # Fence again before changing durable results or terminal receipts.
+        now = timezone.now()
+        if not _owns_live_lease(job, token, now):
+            return
+        if now >= job.expires_at:
+            close(job, "failed", "job_expired")
+            return
+        job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)
 
 
@@ -492,8 +511,8 @@ def execute(identifier):
 
 
 def reconcile():
-    now = timezone.now()
     with locked():
+        now = timezone.now()
         for job in NativeJob.objects.select_for_update().filter(state__in=ACTIVE, lease_until__lte=now):
             if job.state == "cancel_requested":
                 close(job, "cancelled", "actor_cancelled_after_lease")
