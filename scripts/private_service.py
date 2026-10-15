@@ -33,7 +33,7 @@ def launch(args):
             sys.executable,
             "manage.py",
             "check_job_runtime",
-            *(["--require-application-role"] if args[0] == "preflight" else []),
+            "--require-application-role",
         ],
         capture_output=True,
         timeout=60,

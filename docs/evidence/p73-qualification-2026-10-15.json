@@ -1,0 +1,71 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P73",
+  "date": "2026-10-15",
+  "base_commit": "25ade9e71972ae5ddf5f80fa148d112b107fe5ae",
+  "base_pull_request": 162,
+  "base_ci": 38738923493,
+  "base_main_ci": 38742095226,
+  "source_sha256": {
+    "scripts/private_service.py": "8ba432597eed2ad481066f065ffa1e82bcd06317362056284eae08ce8e5f35b6",
+    "docker/private-job-entrypoint.sh": "761934945e062e4e79f4bf91716dc05beef898581835ebbea7bd24d37043623b",
+    "backend/tests/unit/test_service_role_preflight.py": "d514704061cf2eaba91f52d5178126b90854f218dcf1deb9c1bb121149367389",
+    "backend/tests/fixtures/role_launch/python": "c62b2da048a238bc9ece92236e63862b200f41b9c8bb8ab931f6fca709d0a99d",
+    "docs/PRIVATE_SERVICE_ROLE_PREFLIGHT_IMPLEMENTATION.md": "2bff95be03e21531fb3601554289c8b87b5aa7c8ec468034670c95d995ada21a"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 236,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.688
+    },
+    "focused_development_postgresql": {
+      "passed": 236,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.427
+    },
+    "full_sqlite": {
+      "passed": 3578,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 229.946,
+      "line_coverage": 75.48,
+      "branch_coverage": 65.75
+    },
+    "before_development_postgresql": {
+      "passed": 3,
+      "failed": 13,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.024
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 16,
+  "initial_findings": [
+    "Corrected test expectation: shell argv0 is sh, executable is /bin/sh.",
+    "Moved controlled command seam out of intentionally noexec /tmp without relaxing mount restrictions.",
+    "Initial full run retired after known fixture defects; no full receipt claimed for that interrupted run."
+  ],
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "Repeats the existing current-role startup check; no continuous authority monitoring or query semantics change.",
+    "Local PostgreSQL authority tests use explicit transport/process seams and are not full sealed-image startup proof.",
+    "Complete exact-head private/native receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}
