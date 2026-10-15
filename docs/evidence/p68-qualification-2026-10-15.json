@@ -1,0 +1,51 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P68",
+  "date": "2026-10-15",
+  "base_commit": "2e064351142a755448525a66c543719e4ddb28f3",
+  "base_pull_request": 157,
+  "base_ci": 38694009405,
+  "base_main_ci": 38697357961,
+  "source_sha256": {
+    "backend/modeling/search_worker.py": "4c6e3cd25b917394be0e8d9d7f209047082c99ff640640bf907c111cd3e5ac17",
+    "backend/modeling/views.py": "856c452fd7ef6737ce2a56c9df3b64b513a542cdd734bc2d0553f26b0c079f06",
+    "backend/tests/unit/test_search_storage_setup.py": "3b27c2ebeb53f6c867b56a634a546cde04cd162387cbfe894c98796281f464cd",
+    "docs/SEARCH_STORAGE_SETUP_IMPLEMENTATION.md": "208cc3821803e0e91f8877c5e5207a97a4ba094095172584d8d24704a045d4d9"
+  },
+  "checks": {
+    "focused": {
+      "passed": 185,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 5.073
+    },
+    "full_sqlite": {
+      "passed": 3500,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 212.518,
+      "line_coverage": 75.41,
+      "branch_coverage": 65.68
+    },
+    "before_endpoint_cases": {
+      "passed": 0,
+      "failed": 8,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.213
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 17,
+  "limitations": [
+    "Launch acknowledgement does not guarantee storage preparation or scientific success; live operation status remains authoritative.",
+    "Preparation errors are operation-bound live diagnostics, not a durable failure journal across process loss.",
+    "The process-local capacity and execution boundary do not establish distributed search, complete lifecycle/upgrade/restore, expert isolation or release/customer qualification."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

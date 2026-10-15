@@ -1905,7 +1905,6 @@ class SFSStartView(APIView):
             
             # Prepare paths and helpers shared by callback and thread
             sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
-            os.makedirs(sfs_dir, exist_ok=True)
             sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
 
             def sanitize_sfs(results_list):
@@ -2125,7 +2124,8 @@ class SFSStartView(APIView):
             
             # Start thread
             launch_failure = launch_search_worker(SFS_PROGRESS, file_id, run_sfs_thread, failure_context,
-                                                   thread_factory=threading.Thread)
+                                                   thread_factory=threading.Thread,
+                                                   prepare=lambda: os.makedirs(sfs_dir, exist_ok=True))
             if launch_failure is not None:
                 return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
@@ -2405,7 +2405,6 @@ class HyperparamStartView(APIView):
                                 status=status.HTTP_409_CONFLICT)
 
             hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
-            os.makedirs(hp_dir, exist_ok=True)
             hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
 
             def update_progress(info):
@@ -2551,7 +2550,8 @@ class HyperparamStartView(APIView):
                     })
 
             launch_failure = launch_search_worker(HYPERPARAM_PROGRESS, file_id, run_thread, failure_context,
-                                                   thread_factory=threading.Thread)
+                                                   thread_factory=threading.Thread,
+                                                   prepare=lambda: os.makedirs(hp_dir, exist_ok=True))
             if launch_failure is not None:
                 return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
