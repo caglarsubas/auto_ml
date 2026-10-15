@@ -10,7 +10,7 @@ case "$1" in
   worker|dispatcher) ;;
   *) echo 'Select worker or dispatcher.' >&2; exit 1 ;;
 esac
-python manage.py check_job_runtime
+python manage.py check_job_runtime --require-application-role
 if [ "$1" = worker ]; then
   exec python -m celery -A backend.celery:app worker --pool=prefork --concurrency=2 --without-gossip --without-mingle --without-heartbeat --loglevel=WARNING
 fi

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Test-only command seam: execute the controlled probe using its real interpreter.
+exec "$ROLE_PROBE_PYTHON" -c "$ROLE_PROBE_CODE" "$@"
