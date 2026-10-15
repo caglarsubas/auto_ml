@@ -1,0 +1,64 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P69",
+  "date": "2026-10-15",
+  "base_commit": "7b6681b0c28f8e5c61f90dcde7aa54af3f815552",
+  "base_pull_request": 158,
+  "base_ci": 38701709280,
+  "base_main_ci": 38705531780,
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "cbca493a367cf92d0c21322d6b7ad1e06c24401bcb246dd0d4bcd00de1540362",
+    "backend/tests/unit/test_job_lock_waits.py": "c71811f2b720681f375d23b22645400de5ef28c2ee3bb8579f94c162e24c315f",
+    "docs/NATIVE_JOB_LOCK_WAITS_IMPLEMENTATION.md": "f297cc586ed169215d1a4aa4b43fa4c42458e5e086bbdadedd46a8da9b0d9103"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 80,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.649
+    },
+    "focused_development_postgresql": {
+      "passed": 80,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 34.767
+    },
+    "full_sqlite": {
+      "passed": 3517,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 215.778,
+      "line_coverage": 75.44999999999999,
+      "branch_coverage": 65.68
+    },
+    "before_development_postgresql": {
+      "passed": 2,
+      "failed": 6,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.814
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 17,
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "The five-second bound applies per PostgreSQL lock acquisition, not to an entire transaction or non-locking/network/filesystem work.",
+    "SQLite retains its existing development locking behavior.",
+    "Local PostgreSQL semantic fixtures do not establish private TLS or ordinary application-role acceptance; complete exact-head native receipts remain required.",
+    "Runtime fingerprint changes do not authorize old-runtime jobs; durable search, full lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}

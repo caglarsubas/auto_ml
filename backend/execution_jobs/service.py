@@ -37,6 +37,7 @@ LIMITS = {
     "lease_seconds": 180,
 }
 KIND = "package_integrity_v1"
+LOCK_WAIT_MILLISECONDS = 5_000
 
 
 class JobConflict(ValueError):
@@ -89,9 +90,25 @@ def locked():
             yield
     else:
         with transaction.atomic():
+            previous_lock_timeout = None
+            if connection.vendor == "postgresql":
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT current_setting('lock_timeout'), setting::bigint "
+                        "FROM pg_settings WHERE name = 'lock_timeout'"
+                    )
+                    previous_lock_timeout, configured = cursor.fetchone()
+                    bounded = min(configured or LOCK_WAIT_MILLISECONDS, LOCK_WAIT_MILLISECONDS)
+                    cursor.execute("SELECT set_config('lock_timeout', %s, true)", [f"{bounded}ms"])
             QueueLock.objects.get_or_create(pk=1)
             QueueLock.objects.select_for_update().get(pk=1)
             yield
+            # Exceptions/explicit rollback revert SET LOCAL with this atomic
+            # block. Successful nested callers need their original setting back
+            # before their outer transaction continues.
+            if previous_lock_timeout is not None and not transaction.get_rollback():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT set_config('lock_timeout', %s, true)", [previous_lock_timeout])
 
 
 def record(job, kind, *, actor=None, detail=None):
