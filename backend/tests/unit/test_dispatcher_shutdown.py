@@ -1,6 +1,7 @@
 """Signals stop the pump after its current dispatch and restore caller handlers."""
 
 import signal
+from types import SimpleNamespace
 
 import pytest
 from django.core.management.base import CommandError
@@ -9,6 +10,15 @@ from execution_jobs.management.commands import dispatch_jobs
 from execution_jobs.service import JobConflict
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def isolated_signals(monkeypatch):
+    # Keep ownership assertions local to the command; pytest-timeout owns
+    # SIGALRM and must retain its real handler even when an assertion fails.
+    monkeypatch.setattr(dispatch_jobs, 'signal', SimpleNamespace(
+        SIGTERM=signal.SIGTERM, SIGINT=signal.SIGINT, signal=signal.signal))
+    monkeypatch.setattr(dispatch_jobs, 'close_old_connections', lambda: None)
 
 
 @pytest.mark.parametrize('signum', [signal.SIGTERM, signal.SIGINT])

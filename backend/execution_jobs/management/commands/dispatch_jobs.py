@@ -4,7 +4,7 @@ import signal
 import time
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import DatabaseError
+from django.db import DatabaseError, InterfaceError, close_old_connections
 from execution_jobs.service import dispatch_once, JobConflict
 
 
@@ -27,15 +27,21 @@ class Command(BaseCommand):
                 previous[signum] = signal.signal(signum, stop)
         try:
             while not stop_requested:
+                # Management commands do not receive Django's request lifecycle
+                # hooks. Retire broken/obsolete connections between cycles so
+                # the next durable outbox read can reconnect after a DB outage.
+                close_old_connections()
                 try:
                     result = dispatch_once()
                     self.stdout.write(str(result))
                 except JobConflict as exc:
                     raise CommandError(exc.code) from None
-                except DatabaseError:
+                except (DatabaseError, InterfaceError):
                     if options["once"]:
                         raise CommandError("job_storage_unavailable") from None
                     self.stderr.write("job_storage_unavailable; retrying")
+                finally:
+                    close_old_connections()
                 if options["once"]:
                     return
                 # The signal handler only assigns a flag: acquiring an Event's
