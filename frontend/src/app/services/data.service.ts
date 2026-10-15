@@ -6,6 +6,7 @@ import { environment } from '../../environments/environment';
 import { AssistantStep } from './ai-assistant.service';
 import { ProjectWorkspaceService } from './project-workspace.service';
 import { AuthService } from './auth.service';
+import { isSearchOperationId } from './search-operation';
 
 @Injectable({
   providedIn: 'root'
@@ -254,13 +255,18 @@ export class DataService {
   }
 
   // Stop SFS gracefully
-  stopSfs(fileId: number): Observable<any> {
-    return this.http.post(`${this.apiUrl}modeling/sfs/stop/${fileId}/`, {}).pipe(
-      catchError((error: any) => {
-        console.error('Error stopping SFS:', error);
-        return throwError(() => error);
-      }),
-    );
+  stopSfs(fileId: number, operationId: string): Observable<any> {
+    if (!isSearchOperationId(operationId)) {
+      return throwError(() => new Error('Refresh status before stopping this operation.'));
+    }
+    return this.http
+      .post(`${this.apiUrl}modeling/sfs/stop/${fileId}/`, { operation_id: operationId })
+      .pipe(
+        catchError((error: any) => {
+          console.error('Error stopping SFS:', error);
+          return throwError(() => error);
+        }),
+      );
   }
 
   // Resume SFS from where it was stopped
@@ -360,13 +366,18 @@ export class DataService {
   }
 
   // Request a graceful stop of an in-flight tuning run.
-  stopHyperparam(fileId: number): Observable<any> {
-    return this.http.post(`${this.apiUrl}modeling/hyperparam/stop/${fileId}/`, {}).pipe(
-      catchError((error: any) => {
-        console.error('Error stopping hyperparameter tuning:', error);
-        return throwError(() => new Error(error.message || 'Failed to stop hyperparameter tuning'));
-      })
-    );
+  stopHyperparam(fileId: number, operationId: string): Observable<any> {
+    if (!isSearchOperationId(operationId)) {
+      return throwError(() => new Error('Refresh status before stopping this operation.'));
+    }
+    return this.http
+      .post(`${this.apiUrl}modeling/hyperparam/stop/${fileId}/`, { operation_id: operationId })
+      .pipe(
+        catchError((error: any) => {
+          console.error('Error stopping hyperparameter tuning:', error);
+          return throwError(() => error);
+        }),
+      );
   }
 
   // Get persisted hyperparameter-tuning results.
