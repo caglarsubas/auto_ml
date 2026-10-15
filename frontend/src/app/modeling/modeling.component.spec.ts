@@ -1806,10 +1806,14 @@ describe('ModelingComponent', () => {
     });
 
     it('stopHyperparam signals a stop while running', () => {
-      const spy = spyOn(dataService, 'stopHyperparam').and.returnValue(of({ status: 'stop_requested' }));
-      component.hpRunning = true;
+      const operation_id = '11111111-1111-4111-8111-111111111111';
+      const spy = spyOn(dataService, 'stopHyperparam').and.returnValue(of({ status: 'stop_requested', file_id: 1, operation_id }));
+      spyOn(dataService, 'startHyperparam').and.returnValue(of({ status: 'started', file_id: 1, operation_id }));
+      spyOn(component as any, 'startHyperparamStatusPolling');
+      spyOn(component as any, 'pushModelingCheckpoint');
+      component.startHyperparam();
       component.stopHyperparam();
-      expect(spy).toHaveBeenCalledWith(1);
+      expect(spy).toHaveBeenCalledWith(1, operation_id);
       expect(component.hpStopping).toBeTrue();
     });
 

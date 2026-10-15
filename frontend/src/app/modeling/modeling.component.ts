@@ -17,6 +17,7 @@ import { Subscription, interval } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
+import { SearchKind, SearchOperation, readSearchOperation } from '../services/search-operation';
 
 interface PurifierOption {
   id: number;
@@ -39,7 +40,23 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   tableColumns: string[] = [];
   processedFilePath: string | null = null;
   encodedFilePath: string | null = null;
-  currentFileId: number | null = null;
+  private searchOperations: Record<SearchKind, SearchOperation | null> = {
+    sfs: null,
+    hyperparam: null,
+  };
+  private activeFileId: number | null = null;
+  get currentFileId(): number | null {
+    return this.activeFileId;
+  }
+  set currentFileId(fileId: number | null) {
+    if (fileId !== this.activeFileId) {
+      this.searchOperations = { sfs: null, hyperparam: null };
+      this.sfsStopping = false;
+      this.hpStopping = false;
+    }
+    this.activeFileId = fileId;
+  }
+
   isStarting: boolean = false;
   modelingStatus: any | null = null;
   private pollingSub: Subscription | null = null;
@@ -1939,6 +1956,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   restoreFromCheckpoint(state: any): void {
     if (!state) return;
+    this.searchOperations = { sfs: null, hyperparam: null };
+    this.sfsStopping = false;
+    this.hpStopping = false;
     console.log('[Modeling] Restoring from checkpoint:', state.substep);
     this._currentSubstep = state.substep || '';
 
@@ -2053,6 +2073,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Check backend status for a process that was running when user left, and resume or show results */
   private resumeActiveProcess(proc: { type: string; file_id: number }): void {
+    if ((proc.type === 'sfs' || proc.type === 'hyperparam') && proc.file_id !== this.currentFileId) return;
     console.log('[Modeling] Resuming active process:', proc);
 
     if (proc.type === 'modeling') {
@@ -2097,13 +2118,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     } else if (proc.type === 'sfs') {
       // Check SFS status from backend
+      this.searchOperations.sfs = null;
       this.sfsRunning = true;
       this.sfsMessage = 'Checking SFS status...';
       this.dataService.getSfsStatus(proc.file_id).subscribe({
         next: (statusData: any) => {
+          if (!this.bindSearchOperation('sfs', proc.file_id, statusData.status === 'running' ? statusData : null)) return;
           const s = statusData.status;
           if (s === 'completed') {
             console.log('[Modeling] Resume: SFS completed while away');
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsProgress = 1.0;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
@@ -2119,6 +2143,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.startSfsStatusPolling();
           } else if (s === 'stopped' || s === 'interrupted') {
             console.log(`[Modeling] Resume: SFS ${s} while away`);
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsStopped = true;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
@@ -2130,6 +2155,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.fetchSfsResults(), 500);
           } else if (s === 'error') {
             console.warn('[Modeling] Resume: SFS failed while away');
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
             this.sfsMessage = 'SFS failed: ' + (statusData.error || 'Unknown error');
@@ -2137,6 +2163,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           } else {
             // not_started — SFS progress lost (server restart), results may exist
             console.warn('[Modeling] Resume: SFS status not_started, checking for results');
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsMessage = '';
             this.sharedService.setActiveProcess(null);
@@ -2145,17 +2172,21 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         },
         error: (err: any) => {
+          if (this.currentFileId !== proc.file_id) return;
           console.warn('[Modeling] Resume: could not fetch SFS status:', err);
+          this.searchOperations.sfs = null;
           this.sfsRunning = false;
           this.sfsMessage = '';
           this.sharedService.setActiveProcess(null);
         },
       });
     } else if (proc.type === 'hyperparam') {
+      this.searchOperations.hyperparam = null;
       this.hpRunning = true;
       this.hpMessage = 'Checking hyperparameter tuning status...';
       this.dataService.getHyperparamStatus(proc.file_id).subscribe({
         next: (statusData: any) => {
+          if (!this.bindSearchOperation('hyperparam', proc.file_id, statusData.status === 'running' ? statusData : null)) return;
           const s = statusData.status;
           this.hpProgress = statusData.progress || 0;
           this.hpMessage = statusData.message || 'Tuning running...';
@@ -2163,6 +2194,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.hpCompletedTrials = statusData.completed_trials;
           if (statusData.current_best) this.hpCurrentBest = statusData.current_best;
           if (s === 'completed') {
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpProgress = 1.0;
             this.hpDurationSeconds = statusData.duration_seconds || null;
@@ -2173,6 +2205,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.startHyperparamStatusPolling();
             this.pushModelingCheckpoint('hyperparam_running');
           } else if (s === 'stopped' || s === 'interrupted') {
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpStopped = true;
             this.hpDurationSeconds = statusData.duration_seconds || null;
@@ -2184,11 +2217,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.fetchHyperparamResults(), 400);
             this.pushModelingCheckpoint('hyperparam_stopped');
           } else if (s === 'error') {
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpDurationSeconds = statusData.duration_seconds || null;
             this.hpMessage = 'Tuning failed: ' + (statusData.error || 'Unknown error');
             this.sharedService.setActiveProcess(null);
           } else {
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpMessage = '';
             this.sharedService.setActiveProcess(null);
@@ -2196,7 +2231,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         },
         error: (err: any) => {
+          if (this.currentFileId !== proc.file_id) return;
           console.warn('[Modeling] Resume: could not fetch hyperparameter status:', err);
+          this.searchOperations.hyperparam = null;
           this.hpRunning = false;
           this.hpMessage = '';
           this.sharedService.setActiveProcess(null);
@@ -3245,6 +3282,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sfsForwardFromBackwardResults = [];
     this.sfsBackwardCutStep = null;
     this.sfsBackwardCutFeatures = [];
+    this.searchOperations.sfs = null;
     this.sfsRunning = false;
     this.sfsStopping = false;
     this.sfsStopped = false;
@@ -3286,6 +3324,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   startSfs(): void {
     if (!this.currentFileId) return;
+    const fileId = this.currentFileId;
 
     // Validate: at least one method must be selected
     if (!this.sfsMethodForward && !this.sfsMethodBackward) {
@@ -3345,6 +3384,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       sorterOpts,
     });
 
+    this.searchOperations.sfs = null;
     this.sfsRunning = true;
     this.sfsStopping = false;
     this.sfsStopped = false;
@@ -3358,7 +3398,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
     this.dataService
       .startSfs(
-        this.currentFileId,
+        fileId,
         methods,
         stoppingCriteria,
         excludedFeatures,
@@ -3369,13 +3409,16 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (resp: any) => {
+          if (!this.bindSearchOperation('sfs', fileId, resp)) return;
           console.log('[SFS] Started:', resp);
           this.sfsMessage = resp.message || 'SFS running...';
           // Start polling for progress
           this.startSfsStatusPolling();
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[SFS] Failed to start:', err);
+          this.searchOperations.sfs = null;
           this.sfsRunning = false;
           this.sfsMessage = 'Failed to start SFS: ' + (err.error?.error || err.message || err);
           this.sharedService.setActiveProcess(null); // clear on error
@@ -3387,16 +3430,77 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    * Stop SFS gracefully — sends signal, current step finishes, then partial results are saved
    */
   stopSfs(): void {
-    if (!this.currentFileId || !this.sfsRunning) return;
-    this.sfsStopping = true;
-    this.sfsMessage = 'Stopping SFS after current step completes...';
-    this.dataService.stopSfs(this.currentFileId).subscribe({
-      next: (resp: any) => {
-        console.log('[SFS] Stop signal sent:', resp);
+    this.requestSearchStop('sfs');
+  }
+
+  private bindSearchOperation(kind: SearchKind, fileId: number, reply: any): boolean {
+    if (this.currentFileId !== fileId) return false;
+    const next = readSearchOperation(reply, fileId);
+    if (this.searchOperations[kind]?.operationId !== next?.operationId) {
+      if (kind === 'sfs') this.sfsStopping = false;
+      else this.hpStopping = false;
+    }
+    this.searchOperations[kind] = next;
+    return true;
+  }
+
+  private stopState(kind: SearchKind, stopping: boolean, message: string): void {
+    if (kind === 'sfs') {
+      this.sfsStopping = stopping;
+      this.sfsMessage = message;
+    } else {
+      this.hpStopping = stopping;
+      this.hpMessage = message;
+    }
+  }
+
+  private requestSearchStop(kind: SearchKind): void {
+    const running = kind === 'sfs' ? this.sfsRunning : this.hpRunning;
+    const stopping = kind === 'sfs' ? this.sfsStopping : this.hpStopping;
+    if (!this.currentFileId || !running || stopping) return;
+    const operation = this.searchOperations[kind];
+    if (!operation || operation.fileId !== this.currentFileId) {
+      this.stopState(kind, false, 'Refresh status before stopping this operation.');
+      return;
+    }
+    const stillCurrent = () =>
+      this.currentFileId === operation.fileId &&
+      this.searchOperations[kind]?.operationId === operation.operationId;
+    this.stopState(kind, true, 'Stopping after the current step or trial completes...');
+    const request =
+      kind === 'sfs'
+        ? this.dataService.stopSfs(operation.fileId, operation.operationId)
+        : this.dataService.stopHyperparam(operation.fileId, operation.operationId);
+    request.subscribe({
+      next: (reply: any) => {
+        if (!stillCurrent()) return;
+        const acknowledged = readSearchOperation(reply, operation.fileId);
+        if (
+          acknowledged?.operationId === operation.operationId &&
+          reply.status === 'stop_requested'
+        )
+          return;
+        this.searchOperations[kind] = null;
+        const terminal =
+          acknowledged?.operationId === operation.operationId &&
+          ['not_running', 'stopped', 'completed', 'error'].includes(reply.status);
+        this.stopState(
+          kind,
+          false,
+          terminal
+            ? 'This operation is no longer running. Refresh status.'
+            : 'The stop acknowledgement could not be verified. Refresh status.',
+        );
       },
-      error: (err: any) => {
-        console.error('[SFS] Stop request failed:', err);
-        this.sfsStopping = false;
+      error: (error: any) => {
+        if (!stillCurrent()) return;
+        if (error?.status === 409) this.searchOperations[kind] = null;
+        this.stopState(
+          kind,
+          false,
+          'Stop request failed: ' +
+            (error?.error?.error || error?.message || 'Refresh status before trying again.'),
+        );
       },
     });
   }
@@ -3406,6 +3510,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   resumeSfs(): void {
     if (!this.currentFileId) return;
+    const fileId = this.currentFileId;
 
     // Rebuild methods and stopping criteria from current config
     const methods: string[] = [];
@@ -3425,6 +3530,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     console.log('[SFS] Resuming with config:', { methods, stoppingCriteria, excludedFeatures });
 
+    this.searchOperations.sfs = null;
     this.sfsRunning = true;
     this.sfsStopping = false;
     this.sfsStopped = false;
@@ -3434,7 +3540,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
     this.dataService
       .resumeSfs(
-        this.currentFileId,
+        fileId,
         methods,
         stoppingCriteria,
         excludedFeatures,
@@ -3445,6 +3551,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (resp: any) => {
+          if (!this.bindSearchOperation('sfs', fileId, resp)) return;
           console.log('[SFS] Resume started:', resp);
           this.sfsMessage = resp.message || 'SFS resuming...';
           this.startSfsStatusPolling();
@@ -3452,7 +3559,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.pushModelingCheckpoint('sfs_running');
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[SFS] Resume failed:', err);
+          this.searchOperations.sfs = null;
           this.sfsRunning = false;
           this.sfsStopped = true; // revert to stopped state on failure
           this.sfsMessage = 'Failed to resume SFS: ' + (err.error?.error || err.message || err);
@@ -3466,6 +3575,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   startForwardFromBackwardFeatures(): void {
     if (!this.currentFileId) return;
+    const fileId = this.currentFileId;
     const featuresToUse =
       this.sfsBackwardCutFeatures.length > 0
         ? this.sfsBackwardCutFeatures
@@ -3482,6 +3592,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       max_features: this.sfsMaxFeatures,
     };
 
+    this.searchOperations.sfs = null;
     this.sfsRunning = true;
     this.sfsProgress = 0;
     this.sfsMessage = `Starting forward selection with ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
@@ -3494,7 +3605,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const algo = this.selectedAlgorithm || this.modelingStatus?.model?.algorithm || undefined;
     this.dataService
       .startSfsWithInitialFeatures(
-        this.currentFileId,
+        fileId,
         ['forward'],
         stoppingCriteria,
         featuresToUse,
@@ -3505,12 +3616,15 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (resp: any) => {
+          if (!this.bindSearchOperation('sfs', fileId, resp)) return;
           console.log('[SFS-Chain] Forward from backward started:', resp);
           this.sfsMessage = `Running forward selection on ${featuresToUse.length} features from cut step ${this.sfsBackwardCutStep}...`;
           this.startSfsStatusPolling();
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[SFS-Chain] Failed to start:', err);
+          this.searchOperations.sfs = null;
           this.sfsRunning = false;
           this.sfsMessage = 'Failed to start forward selection: ' + (err.message || err);
           this.sharedService.setActiveProcess(null); // clear on error
@@ -3532,8 +3646,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sfsPolling = interval(1000).subscribe(() => {
       if (this.currentFileId == null) return;
 
-      this.dataService.getSfsStatus(this.currentFileId).subscribe({
+      const fileId = this.currentFileId;
+      this.dataService.getSfsStatus(fileId).subscribe({
         next: (statusData: any) => {
+          if (!this.bindSearchOperation('sfs', fileId, statusData.status === 'running' ? statusData : null)) return;
           console.log('[SFS-Status]', statusData);
 
           this.sfsProgress = statusData.progress || 0;
@@ -3544,6 +3660,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const status = statusData.status;
           if (status === 'completed') {
             this.stopSfsStatusPolling();
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsStopping = false;
             this.sfsStopped = false;
@@ -3555,6 +3672,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.fetchSfsResults(), 500);
           } else if (status === 'stopped' || status === 'interrupted') {
             this.stopSfsStatusPolling();
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsStopping = false;
             this.sfsStopped = true;
@@ -3570,6 +3688,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.pushModelingCheckpoint('sfs_stopped');
           } else if (status === 'error') {
             this.stopSfsStatusPolling();
+            this.searchOperations.sfs = null;
             this.sfsRunning = false;
             this.sfsStopping = false;
             this.sfsDurationSeconds = statusData.duration_seconds || null;
@@ -3579,8 +3698,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[SFS-Status] Polling error:', err);
           this.stopSfsStatusPolling();
+          this.searchOperations.sfs = null;
           this.sfsRunning = false;
           this.sfsMessage = 'Failed to get SFS status';
         },
@@ -3937,6 +4058,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Start hyperparameter tuning with the current editable config. */
   startHyperparam(): void {
     if (!this.currentFileId) return;
+    const fileId = this.currentFileId;
     const enabled = this.hpParamSpace.filter((r) => r.enabled);
     if (enabled.length === 0) {
       alert('Enable at least one hyperparameter to tune.');
@@ -3949,6 +4071,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
+    this.searchOperations.hyperparam = null;
     this.hpRunning = true;
     this.hpStopping = false;
     this.hpStopped = false;
@@ -3961,7 +4084,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     const features = this.getFinalSelectedFeatures();
     this.sharedService.setActiveProcess({ type: 'hyperparam', file_id: this.currentFileId });
     this.dataService
-      .startHyperparam(this.currentFileId, {
+      .startHyperparam(fileId, {
         executionId: this.modelingStatus?.execution_id,
         paramSpace: this.buildHpParamSpacePayload(),
         features: features.length ? features : undefined,
@@ -3977,6 +4100,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       })
       .subscribe({
         next: (resp: any) => {
+          if (!this.bindSearchOperation('hyperparam', fileId, resp)) return;
           console.log('[Hyperparam] Started:', resp);
           this.hpMessage = resp.message || 'Tuning running...';
           this.hpSpaceWarnings = resp.space_warnings || [];
@@ -3984,7 +4108,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           this.pushModelingCheckpoint('hyperparam_running');
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[Hyperparam] Failed to start:', err);
+          this.searchOperations.hyperparam = null;
           this.hpRunning = false;
           const msg = err?.error?.error || err?.message || err;
           this.hpMessage = 'Failed to start tuning: ' + msg;
@@ -3995,16 +4121,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Request a graceful stop (current trial finishes, then partial results saved). */
   stopHyperparam(): void {
-    if (!this.currentFileId || !this.hpRunning) return;
-    this.hpStopping = true;
-    this.hpMessage = 'Stopping after the current trial completes...';
-    this.dataService.stopHyperparam(this.currentFileId).subscribe({
-      next: (resp: any) => console.log('[Hyperparam] Stop signal sent:', resp),
-      error: (err: any) => {
-        console.error('[Hyperparam] Stop request failed:', err);
-        this.hpStopping = false;
-      },
-    });
+    this.requestSearchStop('hyperparam');
   }
 
   /** Reset tuning UI to the config panel (keeps the edited space). */
@@ -4017,6 +4134,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.hpGuidance = [];
     this.hpSelectedRanges = {};
     this.hpStopped = false;
+    this.searchOperations.hyperparam = null;
     this.hpRunning = false;
     this.hpProgress = 0;
     this.hpMessage = '';
@@ -4029,8 +4147,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.hpPolling = interval(1000).subscribe(() => {
       if (this.currentFileId == null) return;
-      this.dataService.getHyperparamStatus(this.currentFileId).subscribe({
+      const fileId = this.currentFileId;
+      this.dataService.getHyperparamStatus(fileId).subscribe({
         next: (st: any) => {
+          if (!this.bindSearchOperation('hyperparam', fileId, st.status === 'running' ? st : null)) return;
           this.hpProgress = st.progress || 0;
           this.hpMessage = st.message || 'Running...';
           if (typeof st.completed_trials === 'number') this.hpCompletedTrials = st.completed_trials;
@@ -4039,6 +4159,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           const status = st.status;
           if (status === 'completed') {
             this.stopHyperparamStatusPolling();
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpStopping = false;
             this.hpStopped = false;
@@ -4049,6 +4170,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.fetchHyperparamResults(), 400);
           } else if (status === 'stopped' || status === 'interrupted') {
             this.stopHyperparamStatusPolling();
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpStopping = false;
             this.hpStopped = true;
@@ -4062,6 +4184,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.pushModelingCheckpoint('hyperparam_stopped');
           } else if (status === 'error') {
             this.stopHyperparamStatusPolling();
+            this.searchOperations.hyperparam = null;
             this.hpRunning = false;
             this.hpStopping = false;
             this.hpDurationSeconds = st.duration_seconds || null;
@@ -4071,8 +4194,10 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         },
         error: (err: any) => {
+          if (this.currentFileId !== fileId) return;
           console.error('[Hyperparam-Status] Polling error:', err);
           this.stopHyperparamStatusPolling();
+          this.searchOperations.hyperparam = null;
           this.hpRunning = false;
           this.hpMessage = 'Failed to get tuning status';
         },

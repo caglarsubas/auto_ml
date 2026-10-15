@@ -1,0 +1,56 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P66",
+  "date": "2026-10-15",
+  "base_commit": "85cfab3cd2d0d06bf1fcb303639bbb9a7c71130c",
+  "base_pull_request": 155,
+  "base_source_head": "eca5418804400846f4e477cbc82e67db5989a401",
+  "base_ci": 38680392962,
+  "base_main_ci": 38682651478,
+  "source_sha256": {
+    "frontend/src/app/modeling/modeling.component.ts": "b8ec3f101f0278f1c225452c08168eac696f25ed4449acd72345b7f23c702f87",
+    "frontend/src/app/modeling/modeling.component.spec.ts": "3b11a9583f1336707208658f31037dc8061d4b1db49cded4931ea75260d7c1af",
+    "frontend/src/app/modeling/modeling-stop.spec.ts": "a3d4be1d96219231d0cb84d390757a90fedd5e56a19bf3228eede61a44936d05",
+    "frontend/src/app/services/data.service.ts": "8d6666a7a8deece39f9220e4fd68b9a5fc68eb056e00b0a38f8ec0e40bf10784",
+    "frontend/src/app/services/data.service.spec.ts": "b3d6a04610fe0c8ae20c260d594c9f9fb5df658f57f6bf89afbcddcb0bfb8ba2",
+    "frontend/src/app/services/data-stop.spec.ts": "272d2e0acfced8e6eb889dca3f89dc38c7c5b1eac922990a2d3cf7382e8dd844",
+    "frontend/src/app/services/search-operation.ts": "8fd70c5ca2d21fe6927b03c40712bf00f48434a943fdef217533220e2d07e9ad",
+    "docs/BROWSER_SEARCH_STOP_IMPLEMENTATION.md": "fdb08763fdaaf941a41b878d410c80903876923858bd607763c199a39a278a5c"
+  },
+  "checks": {
+    "frontend": {
+      "passed": 651,
+      "new_cases": 52,
+      "failed": 0,
+      "statements_coverage": 41.17,
+      "branches_coverage": 34.26,
+      "functions_coverage": 40.91,
+      "lines_coverage": 43.03
+    },
+    "before": {
+      "failed": 51,
+      "passed": 1,
+      "comparison": "Isolated predecessor export with erased overload declarations only; implementation parameters and request/control bodies unchanged."
+    },
+    "typescript": "passed",
+    "eslint": "zero errors;172 warnings retained",
+    "private_frontend_build": "passed",
+    "local_runtime": {
+      "node": "v24.16.0",
+      "angular": "22.2.1",
+      "typescript": "6.0.3",
+      "chrome": "129.0.0.0"
+    },
+    "backend": "Unchanged; independent base main full SQLite/PostgreSQL each3466 passed,six existing skips,zero failures. Exact-head matrices remain required.",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Legacy non-browser callers can still use the server current-run cancellation contract.",
+    "Older same-dataset responses may require another status refresh; server UUID matching is the final guard.",
+    "Service/component regressions and private build do not establish complete accessibility or customer acceptance.",
+    "Durable/distributed recovery,D07 lifecycle/upgrade/restore,expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}

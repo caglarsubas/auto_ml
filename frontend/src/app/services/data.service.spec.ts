@@ -438,9 +438,11 @@ describe('DataService', () => {
     });
 
     it('stopSfs should POST to stop endpoint', () => {
-      service.stopSfs(5).subscribe();
+      const operation = '11111111-1111-4111-8111-111111111111';
+      service.stopSfs(5, operation).subscribe();
       const req = httpMock.expectOne(`${apiUrl}modeling/sfs/stop/5/`);
       expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ operation_id: operation });
       req.flush({});
     });
 
