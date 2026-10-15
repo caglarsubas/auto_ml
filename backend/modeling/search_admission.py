@@ -1,6 +1,8 @@
 """Serialize process-local search registration after request validation."""
 
 import threading
+import uuid
+from collections.abc import Mapping
 
 _lock = threading.Lock()
 
@@ -11,6 +13,34 @@ def claim_search(registry, file_id, progress):
             return False
         registry[file_id] = progress
         return True
+
+
+def request_search_stop(registry, file_id, parameters, *, message=None):
+    """Validate optional operation identity and stop one owner atomically."""
+    if not isinstance(parameters, Mapping):
+        return {"outcome": "invalid"}
+    expected = parameters.get("operation_id")
+    if "operation_id" in parameters:
+        try:
+            if not isinstance(expected, str) or str(uuid.UUID(expected)) != expected:
+                return {"outcome": "invalid"}
+        except ValueError:
+            return {"outcome": "invalid"}
+    with _lock:
+        owner = registry.get(file_id)
+        operation = owner.get("operation_id") if owner is not None else None
+        if expected is not None and operation != expected:
+            return {"outcome": "conflict", "operation_id": operation}
+        if owner is None:
+            return {"outcome": "missing", "operation_id": None}
+        current_status = owner.get("status")
+        if current_status != "running":
+            return {"outcome": "not_running", "operation_id": operation, "run_status": current_status}
+        changes = {"stop_requested": True}
+        if message is not None:
+            changes["message"] = message
+        owner.update(changes)
+        return {"outcome": "stop_requested", "operation_id": operation}
 
 
 def update_search_progress(registry, file_id, owner, operation_id, changes, *, running_only=False):

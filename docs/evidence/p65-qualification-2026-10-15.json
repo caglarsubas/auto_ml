@@ -1,0 +1,46 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P65",
+  "date": "2026-10-15",
+  "base_commit": "635031b7eeab3e9da5028b35a01d12a07ed56b05",
+  "base_pull_request": 154,
+  "base_source_head": "fe13af369c200e8c92478f8d71ff81fb35890cd7",
+  "base_ci": 38599331702,
+  "base_main_ci": 38603527434,
+  "base_latest_scheduled_ci": 38675147079,
+  "source_sha256": {
+    "backend/modeling/search_admission.py": "05a520e78ea1cf083dace88d2f0512ecf03e79527564ec7086b2fc156a412b34",
+    "backend/modeling/views.py": "1cf07cbf1b593179f6801e2561ae9133e6c568f6c4e18146d43b8ce3f5eb70ee",
+    "backend/tests/unit/test_search_stop_ownership.py": "3eed1b5697a50cd230cdec94c37bb9aa75b5e1dcc74198245be188e08710ad8c",
+    "docs/SEARCH_STOP_OWNERSHIP_IMPLEMENTATION.md": "f747ac2f1cf51750a10049059e3d1b6f25b57b242f3b92a39d664e58638ab58a"
+  },
+  "checks": {
+    "focused": {
+      "passed": 222,
+      "new_cases": 50,
+      "failed": 0
+    },
+    "before": "28 selected cases fail against preceding stop handlers; six parser/media reference cases already pass",
+    "real_threads": "Paused stop transition serializes terminal publication and fresh claim; only the original owner receives cancellation.",
+    "full_sqlite": {
+      "passed": 3466,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.39,
+      "branch_coverage": 65.65,
+      "seconds": 297.69
+    },
+    "ruff": "passed full scope and final changed files",
+    "roadmap_projection": "passed"
+  },
+  "limitations": [
+    "Legacy requests omitting operation_id retain current-run intent; browser identity binding is a successor.",
+    "Process-local cooperative cancellation is not distributed ownership, forced termination or durable recovery.",
+    "Implementation-mismatched SFS resumes remain inspectable and blocked.",
+    "D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
