@@ -1,0 +1,52 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P67",
+  "date": "2026-10-15",
+  "base_commit": "2e1d58e18f9e28d2646769cf57261be9ba522c68",
+  "base_pull_request": 156,
+  "base_ci": 38686071261,
+  "base_main_ci": 38688607967,
+  "source_sha256": {
+    "backend/modeling/search_admission.py": "802e585ca77608b67762cb7b3ab6092ff9333da3b7cb2186cb4265c0e17f6d12",
+    "backend/modeling/views.py": "2e828abbc5909d9cd24ab8f713420fcbe10001258887871b958b536bfef3f03c",
+    "backend/tests/unit/test_search_capacity.py": "9c76d4d0d287712728e5b8bae39fb5e576f7c99adeb5c2aedebeedfb0f78279b",
+    "docs/SEARCH_CAPACITY_IMPLEMENTATION.md": "606ad981e73ae3357400182981a0f63af8575bfc7151723176ebda2b0947ad2f"
+  },
+  "checks": {
+    "focused": {
+      "passed": 168,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.722
+    },
+    "full_sqlite": {
+      "passed": 3483,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 198.254,
+      "line_coverage": 75.41,
+      "branch_coverage": 65.66
+    },
+    "before_endpoint_cases": {
+      "passed": 0,
+      "failed": 6,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.742
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 17,
+  "limitations": [
+    "The two-owner bound is process-local, across SFS/tuning; native durable job leases remain separate.",
+    "Input preparation precedes admission and terminal worker cleanup can overlap a subsequent logical owner.",
+    "Checkpoint implementation fingerprints change; historical results remain inspectable and mismatched resumes fail closed.",
+    "Durable/distributed search, full D07 lifecycle/upgrade/restore, expert isolation and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "budgets_changed": false
+}
