@@ -1,0 +1,90 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P74",
+  "date": "2026-10-15",
+  "base_commit": "7ac4f9802da8bc2755981aecf6fb0c494ed0f760",
+  "base_pull_request": 163,
+  "base_ci": 38748692807,
+  "base_main_ci": 38752994785,
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "8d476b5aae6df62b47509c67414fed32b439f7a0a9a56f243aa98b77b2eb5525",
+    "backend/tests/unit/test_session_role_preflight.py": "c710933e41e45d318c211f0539b79d0edbfb974ed4b1bca5af9cd8df7dd78a30",
+    "docs/PRIVATE_SESSION_ROLE_AUTHORITY_IMPLEMENTATION.md": "ad859fd69290438473c81931ae471eab57a88567a008d33db4ca25522fcbdebf"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 247,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.885
+    },
+    "focused_development_postgresql": {
+      "passed": 247,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.414
+    },
+    "full_sqlite": {
+      "passed": 3589,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 226.406,
+      "line_coverage": 75.49,
+      "branch_coverage": 65.75
+    },
+    "before_development_postgresql": {
+      "passed": 4,
+      "failed": 7,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.11
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 11,
+  "owned_role_switch_probe": {
+    "before": {
+      "role_switched": true,
+      "current_role_elevated": false,
+      "session_role_elevated": true,
+      "preflight_accepted": true,
+      "session_restored": true,
+      "private_qualification": false,
+      "source_sha256": "81d8b472348f4439dd276f159e9ad249e3e160fe847151c1412ed4d3ebdc9e1e"
+    },
+    "after": {
+      "role_switched": true,
+      "current_role_elevated": false,
+      "session_role_elevated": true,
+      "preflight_accepted": false,
+      "session_restored": true,
+      "private_qualification": false,
+      "source_sha256": "8d476b5aae6df62b47509c67414fed32b439f7a0a9a56f243aa98b77b2eb5525"
+    },
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "initial_findings": [
+    "Ignored standalone probe initially needed its explicit backend import path.",
+    "First focused run passed before final setup/assertion cleanup refinement; final focused and full runs qualify the final harness."
+  ],
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "Scope covers current/session principals and SET ROLE,not original authenticated identity after superuser-controlled session authorization.",
+    "No continuous privilege monitoring or resistance to privileged database tampering.",
+    "Complete exact-head private/native receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}
