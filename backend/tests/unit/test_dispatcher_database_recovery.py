@@ -34,7 +34,7 @@ def test_once_releases_connections_on_every_exit(monkeypatch, outcome):
                 "policy": service.JobConflict("job_service_disabled"),
                 "unexpected": RuntimeError("unexpected-sentinel")}
 
-    def dispatch():
+    def dispatch(**kwargs):
         calls.append("dispatch")
         if outcome in failures:
             raise failures[outcome]
@@ -59,7 +59,7 @@ def test_continuous_storage_failure_cleans_before_the_next_cycle(monkeypatch, fa
     command, handlers, output, errors = controller(monkeypatch)
     calls, cycles = [], []
 
-    def dispatch():
+    def dispatch(**kwargs):
         calls.append("dispatch")
         cycles.append(1)
         if len(cycles) == 1:
@@ -80,7 +80,7 @@ def test_continuous_fatal_failure_still_retires_connections(monkeypatch, failure
     command, _, _, _ = controller(monkeypatch)
     calls = []
 
-    def dispatch():
+    def dispatch(**kwargs):
         raise failure
 
     monkeypatch.setattr(dispatch_jobs, "close_old_connections", lambda: calls.append("cleanup"), raising=False)
@@ -100,7 +100,7 @@ def test_actual_terminated_postgresql_session_recovers_without_restarting_dispat
     attempts, sessions = [], []
     killer = connections["default"].copy(alias="dispatcher-termination-fixture")
 
-    def dispatch():
+    def dispatch(**kwargs):
         attempts.append(1)
         assert len(attempts) <= 2, "dispatcher retained its unusable database session"
         if connection.vendor == "postgresql":
@@ -147,7 +147,7 @@ def test_obsolete_connection_is_retired_before_first_cycle(monkeypatch):
     connection.close_at = -1
     observed = []
 
-    def dispatch():
+    def dispatch(**kwargs):
         observed.append(connection.connection)
         assert service.reconcile() == []
         return {"delivered": 0, "broker_unavailable": 0}

@@ -1,0 +1,116 @@
+{
+  "schema": "source_qualification_v1",
+  "packet": "P72",
+  "date": "2026-10-15",
+  "base_commit": "e46016e860abd245366a5fe59c3bfb899d86a1b5",
+  "base_pull_request": 161,
+  "base_ci": 38730607737,
+  "base_main_ci": 38734225902,
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "50d839c100b515c9504fe8c7bc8ed1b9359d33515cba2dd0687dad53404548a9",
+    "backend/execution_jobs/management/commands/dispatch_jobs.py": "48cb2805c5f487d479fc5d684f159ee8ec4268797a555b86866bfbe48fd82806",
+    "backend/tests/unit/test_dispatcher_database_recovery.py": "8bca841e9809ed09c76fc695cc625e5f9d41cf5c874866dd210cad59616e98fd",
+    "backend/tests/unit/test_dispatcher_shutdown.py": "02ec346b34d950c7bd82618a49bbdf5ceb914658d261264f71fa64ef859a0879",
+    "backend/tests/unit/test_dispatcher_batch_shutdown.py": "49a1fb6421268c7fb8659d556027c6ee972261de9c07c0c7a118ec8b64eeaf87",
+    "backend/tests/fixtures/native_dispatch_shutdown.py": "f5c024b1b0b26f2c0c6d933b5f5a9d64839529df555baa31c6fc3757cf2341a6",
+    "docs/DISPATCHER_BATCH_SHUTDOWN_IMPLEMENTATION.md": "703e6a3d69e1fb80c5494cf375611a086a267be446396243ce57b8723bc425a5"
+  },
+  "checks": {
+    "focused_sqlite": {
+      "passed": 133,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 16.221
+    },
+    "focused_development_postgresql": {
+      "passed": 133,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 38.831
+    },
+    "full_sqlite": {
+      "passed": 3562,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 222.616,
+      "line_coverage": 75.48,
+      "branch_coverage": 65.75
+    },
+    "before_development_postgresql_selected": {
+      "passed": 1,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.569
+    },
+    "ruff": "passed full workflow command",
+    "roadmap_projection": "passed"
+  },
+  "new_cases": 9,
+  "owned_linux_pid1_signal_probes": {
+    "before_sigterm": {
+      "pid": 1,
+      "signal": "SIGTERM",
+      "published": 3,
+      "finalized": 3,
+      "ids": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003"
+      ],
+      "actual_broker_or_database_used": false
+    },
+    "before_sigint": {
+      "pid": 1,
+      "signal": "SIGINT",
+      "published": 3,
+      "finalized": 3,
+      "ids": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003"
+      ],
+      "actual_broker_or_database_used": false
+    },
+    "after_sigterm": {
+      "pid": 1,
+      "signal": "SIGTERM",
+      "published": 1,
+      "finalized": 1,
+      "ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "handlers_restored": true,
+      "actual_broker_or_database_used": false
+    },
+    "after_sigint": {
+      "pid": 1,
+      "signal": "SIGINT",
+      "published": 1,
+      "finalized": 1,
+      "ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "handlers_restored": true,
+      "actual_broker_or_database_used": false
+    }
+  },
+  "owned_postgresql_fixture": {
+    "internal_network_only": true,
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "limitations": [
+    "Stop checks are cooperative observation points; no preemption or total wall-clock shutdown deadline.",
+    "Signal probes use synthetic broker/storage seams and are not real broker/database recovery evidence.",
+    "Complete exact-head private/native receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}

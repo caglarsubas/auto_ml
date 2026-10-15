@@ -530,13 +530,20 @@ def reconcile():
         )
 
 
-def dispatch_once():
+def dispatch_once(*, should_stop=None):
+    def stopped():
+        return should_stop is not None and should_stop()
+
+    if stopped():
+        return {"delivered": 0, "broker_unavailable": 0}
     if not settings.DECLARAI_JOBS_ENABLED:
         raise JobConflict("job_service_disabled")
     from execution_jobs.tasks import run_native_job
 
     delivered, unavailable = 0, 0
     for identifier in reconcile():
+        if stopped():
+            break
         try:
             # Commit exists before publish. Duplicate delivery is intentional and
             # harmless; the metadata lease, not Celery task ID, controls execution.

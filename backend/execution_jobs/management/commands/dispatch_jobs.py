@@ -17,7 +17,7 @@ class Command(BaseCommand):
         previous = {}
 
         def stop(signum, frame):
-            # Finish the current bounded outbox transaction, then return cleanly.
+            # Finish the current publish/metadata unit, then return cleanly.
             # Explicit handling is required when this process is container PID 1.
             nonlocal stop_requested
             stop_requested = True
@@ -32,7 +32,7 @@ class Command(BaseCommand):
                 # the next durable outbox read can reconnect after a DB outage.
                 close_old_connections()
                 try:
-                    result = dispatch_once()
+                    result = dispatch_once() if options["once"] else dispatch_once(should_stop=lambda: stop_requested)
                     self.stdout.write(str(result))
                 except JobConflict as exc:
                     raise CommandError(exc.code) from None
