@@ -50,7 +50,7 @@ from modeling.hyperparam_state import (
     archive_hyperparam_record,
 )
 from modeling.sfs_resume import restore_sfs_resume
-from modeling.search_admission import claim_search, update_search_progress
+from modeling.search_admission import claim_search, update_search_progress, request_search_stop
 from modeling.search_worker import launch_search_worker
 
 # Suppress NumPy warnings for invalid values during correlation/metrics calculations
@@ -2135,35 +2135,53 @@ class SFSStartView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def _search_stop_rejection(stopped, file_id):
+    if stopped['outcome'] == 'invalid':
+        return Response({'error_code': 'invalid_stop_operation', 'file_id': file_id,
+                         'error': 'Use a JSON object with an optional canonical operation UUID.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if stopped['outcome'] == 'conflict':
+        return Response({'error_code': 'search_operation_changed', 'file_id': file_id,
+                         'operation_id': stopped['operation_id'],
+                         'error': 'The displayed operation is no longer current. Refresh status before requesting stop.'},
+                        status=status.HTTP_409_CONFLICT)
+    return None
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class SFSStopView(APIView):
     """Request SFS to stop gracefully for a given file_id.
     The background thread checks stop_requested flag at each step."""
 
     def post(self, request, file_id: int, *args, **kwargs):
+        parameters = request.data  # Let DRF report parser/media errors before the execution boundary.
         try:
-            if file_id not in SFS_PROGRESS:
+            stopped = request_search_stop(SFS_PROGRESS, file_id, parameters)
+            rejection = _search_stop_rejection(stopped, file_id)
+            if rejection is not None:
+                return rejection
+            if stopped['outcome'] == 'missing':
                 return Response({
                     'error': 'No SFS process found for this file_id',
                     'file_id': file_id
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            current_status = SFS_PROGRESS[file_id].get('status')
-            if current_status != 'running':
+            if stopped['outcome'] == 'not_running':
+                current_status = stopped['run_status']
                 return Response({
                     'message': f'SFS is not running (status: {current_status})',
                     'file_id': file_id,
-                    'status': current_status
+                    'status': current_status,
+                    'operation_id': stopped['operation_id'],
                 }, status=status.HTTP_200_OK)
             
-            # Set the stop flag — the background thread checks this before each step
-            SFS_PROGRESS[file_id]['stop_requested'] = True
             print(f"[SFS] Stop requested for file_id={file_id}")
             
             return Response({
                 'message': 'Stop signal sent. SFS will stop after the current step completes.',
                 'file_id': file_id,
-                'status': 'stop_requested'
+                'status': 'stop_requested',
+                'operation_id': stopped['operation_id'],
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -2582,15 +2600,21 @@ class HyperparamStopView(APIView):
     """Request a graceful stop of an in-flight hyperparameter-tuning run."""
 
     def post(self, request, file_id: int, *args, **kwargs):
+        parameters = request.data
         try:
-            if file_id in HYPERPARAM_PROGRESS and HYPERPARAM_PROGRESS[file_id].get('status') == 'running':
-                HYPERPARAM_PROGRESS[file_id]['stop_requested'] = True
-                HYPERPARAM_PROGRESS[file_id]['message'] = 'Stop requested — finishing current trial...'
-                return Response({'status': 'stop_requested', 'file_id': file_id}, status=status.HTTP_200_OK)
+            stopped = request_search_stop(HYPERPARAM_PROGRESS, file_id, parameters,
+                                          message='Stop requested — finishing current trial...')
+            rejection = _search_stop_rejection(stopped, file_id)
+            if rejection is not None:
+                return rejection
+            if stopped['outcome'] == 'stop_requested':
+                return Response({'status': 'stop_requested', 'file_id': file_id,
+                                 'operation_id': stopped['operation_id']}, status=status.HTTP_200_OK)
             return Response({
                 'status': 'not_running',
                 'message': 'No hyperparameter tuning is currently running for this file_id',
-                'file_id': file_id
+                'file_id': file_id,
+                'operation_id': stopped['operation_id'],
             }, status=status.HTTP_200_OK)
         except Exception as e:
             import traceback
