@@ -4,6 +4,7 @@ import io
 import csv
 import json
 import os
+import stat
 from pathlib import Path
 import pandas as pd
 from django.conf import settings
@@ -40,15 +41,30 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     projects.path_authority(actor_id, str(path), file_id=file_id)
     # Bound reads using the opened descriptor, including a concurrently enlarged
     # file. The job consumes these exact bytes, never a mutable path after parsing.
-    with path.open("rb") as stream:
-        if os.fstat(stream.fileno()).st_size > BUDGET["max_input_bytes"]:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        # Preserve existing missing-input API and durable worker diagnostics.
+        raise
+    except OSError:
+        raise JobConflict("job_input_unavailable") from None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise JobConflict("job_input_unavailable")
+        if info.st_size > BUDGET["max_input_bytes"]:
             raise JobConflict("job_input_budget_exceeded")
         raw = bytearray()
-        while chunk := stream.read(min(1024**2, BUDGET["max_input_bytes"] + 1 - len(raw))):
-            check()
-            raw.extend(chunk)
-            if len(raw) > BUDGET["max_input_bytes"]:
-                raise JobConflict("job_input_budget_exceeded")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            while chunk := stream.read(min(1024**2, BUDGET["max_input_bytes"] + 1 - len(raw))):
+                check()
+                raw.extend(chunk)
+                if len(raw) > BUDGET["max_input_bytes"]:
+                    raise JobConflict("job_input_budget_exceeded")
+    except OSError:
+        raise JobConflict("job_input_unavailable") from None
+    finally:
+        os.close(descriptor)
     check()
     projects.recheck(authority)
     receipt = {"file_id": file_id, "name": dataset.original_name, "relative_path": relative, **csv_input(raw)}

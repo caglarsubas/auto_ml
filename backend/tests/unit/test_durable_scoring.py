@@ -109,6 +109,18 @@ def test_scoring_requires_developer_authority(world, source, role):
     assert not NativeJob.objects.exists()
 
 
+def test_missing_input_preserves_the_existing_durable_failure_receipt(world, source):
+    response, _ = submit(world, source)
+    assert response.status_code == 202
+    identifier = response.json()["id"]
+    Path(source.get_file_path()).unlink()
+    service.execute(identifier)
+    job = NativeJob.objects.get(pk=identifier)
+    assert job.state == "blocked" and job.reason_code == "job_package_or_budget_invalid"
+    assert job.result is None and not job.result_sha256
+    assert job.events.filter(event_type="blocked").count() == 1
+
+
 @pytest.mark.parametrize("case", ["sha", "id", "extra", "cross_project", "header", "symlink", "bytes"])
 def test_bad_or_cross_project_source_never_admitted(world, source, case, settings):
     if case == "sha":
