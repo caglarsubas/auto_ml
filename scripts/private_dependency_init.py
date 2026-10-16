@@ -164,9 +164,11 @@ def capture(path, groups, root_identity=(10001, 10001, 0o700)):
     return result
 
 
-def password(data):
+def password(data, *, strip_file_newlines=True):
     try:
-        value = data.decode("utf-8").rstrip("\r\n")
+        value = data.decode("utf-8")
+        if strip_file_newlines:
+            value = value.rstrip("\r\n")
         if len(value) < 32 or len(set(value)) < 5 or any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError
     except (UnicodeError, ValueError):
@@ -193,7 +195,7 @@ def broker_password(data, host="job-broker", database=None):
             raise ValueError
         if resources.re.search(r"%(?![a-fA-F0-9]{2})", parsed.password):
             raise ValueError
-        return password(unquote_to_bytes(parsed.password))
+        return password(unquote_to_bytes(parsed.password), strip_file_newlines=False)
     except (UnicodeError, ValueError):
         raise checker.planner.PlanError("dependency_" + ("cache" if host == "cache" else "broker") + "_url_invalid") from None
 
