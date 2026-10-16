@@ -48,7 +48,8 @@ def worker(package, monkeypatch):
         hashes.append(artifact_digest(out / "native.bin"))
         return package.manifest, package.sha
 
-    def finish(identifier, token, state, reason="", result=None):
+    def finish(identifier, token, state, reason="", result=None, *, deadline=None):
+        assert state != "succeeded" or deadline is not None
         receipts.append({"state": state, "reason": reason, "result": result})
 
     monkeypatch.setattr(service, "verify_bundle", verify)
