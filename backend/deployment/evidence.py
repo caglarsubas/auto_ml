@@ -1,6 +1,7 @@
 """Exact native handoff evidence and package integrity (not storage signatures)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -96,24 +97,36 @@ def resolve_handoff(file_id, execution_id=None, assessment_id=None):
             'execution_id': execution_id, 'assessment_id': assessment_id}
 
 
-def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file):
+def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, metadata_bytes=None):
     out = Path(out)
     manifest_path = out / 'manifest.json'
     if not manifest_path.is_file():
         raise FileNotFoundError('Deployment bundle not found. Create the bundle first.')
-    manifest = read_json(manifest_path)
+    # Native jobs supply bounded, regular-file capture. Default/offline callers
+    # keep their existing reader; integrity does not provide filesystem custody.
+    raw_manifest = metadata_bytes(manifest_path) if metadata_bytes else None
+    manifest = json.loads(raw_manifest.decode('utf-8')) if raw_manifest is not None else read_json(manifest_path)
+
+    def manifest_digest():
+        if raw_manifest is None:
+            return digest_file(manifest_path)
+        if metadata_bytes(manifest_path) != raw_manifest:
+            raise ValueError('Package manifest changed during verification.')
+        return hashlib.sha256(raw_manifest).hexdigest()
+
     if not isinstance(manifest, dict):
         raise ValueError('Package manifest must be an object.')
     selected_id = bundle_id or (out.name if out.parent.name == 'versions' else None)
     if manifest.get('file_id') != file_id or (selected_id and manifest.get('bundle_id') != str(selected_id)):
         raise ValueError('Scoring bundle identity does not match the requested dataset/version.')
-    publication = read_json(out / 'publication.json', {})
+    publication = (json.loads(metadata_bytes(out / 'publication.json').decode('utf-8'))
+                   if metadata_bytes else read_json(out / 'publication.json', {}))
     if not isinstance(publication, dict):
         raise ValueError('Package publication receipt must be an object.')
     handoff = manifest.get('handoff_schema_version')
     if handoff or publication.get('manifest_sha256'):
         identity = {key: manifest.get(key) for key in ('file_id', 'bundle_id', 'execution_id', 'assessment_id')}
-        if handoff != 1 or any(publication.get(key) != value for key, value in identity.items()) or publication.get('manifest_sha256') != digest_file(manifest_path):
+        if handoff != 1 or any(publication.get(key) != value for key, value in identity.items()) or publication.get('manifest_sha256') != manifest_digest():
             raise ValueError('Package manifest does not match its publication receipt.')
     files = manifest.get('artifact_integrity') or {}
     if not isinstance(files, dict):
@@ -141,5 +154,4 @@ def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file):
         name = manifest.get(key)
         if name and (not isinstance(name, str) or Path(name).name != name or (out / name).is_symlink()):
             raise ValueError('Scoring manifest contains an invalid artifact path.')
-    manifest_digest = digest_file(manifest_path)
-    return manifest, manifest_digest
+    return manifest, manifest_digest()

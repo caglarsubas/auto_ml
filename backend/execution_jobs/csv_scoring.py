@@ -80,7 +80,7 @@ def prepare(actor, file_id):
     return {k: v for k, v in receipt.items() if k != "relative_path"} | {"budget": BUDGET}
 
 
-def score(job, manifest, out, hashed, check):
+def score(job, manifest, out, hashed, check, metadata_bytes=None):
     from execution_jobs.service import JobConflict
     from deployment.offline_verify import NATIVE_ALGORITHMS
     from deployment.deploy_utils import score_bundle_directory
@@ -115,7 +115,9 @@ def score(job, manifest, out, hashed, check):
     if frame.empty or len(frame) > BUDGET["max_rows"] or len(frame.columns) > BUDGET["max_columns"]:
         raise JobConflict("job_input_budget_exceeded")
     check()
-    result = score_bundle_directory(out, job.dataset_id, frame, job.specification["bundle_id"], artifact_digest=hashed)
+    result = score_bundle_directory(
+        out, job.dataset_id, frame, job.specification["bundle_id"], artifact_digest=hashed, metadata_bytes=metadata_bytes
+    )
     check()
     if result["manifest_sha256"] != job.specification["manifest_sha256"]:
         raise JobConflict("job_manifest_changed")
