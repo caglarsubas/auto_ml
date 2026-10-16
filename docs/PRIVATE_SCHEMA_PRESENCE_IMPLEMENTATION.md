@@ -25,8 +25,8 @@ PostgreSQL DDL is enclosed in rolled-back transactions and actual production
 catalog SQL checks the resulting schema. The predecessor fails twenty-four cases
 and passes four healthy/additive-column references. SQLite's development reference
 adapts actual SQLite metadata after the corresponding DDL; the product has no
-SQLite catalog fallback. Only TLS/broker transport is stubbed in these focused
-tests. Existing migration-history/connectivity fixtures explicitly isolate this
+SQLite catalog fallback. Physical catalog SQL remains actual PostgreSQL. TLS/broker transport and the
+independent P86 privilege phase are isolated in these focused tests. Existing migration-history/connectivity fixtures explicitly isolate this
 new physical check, preserving all their previous assertions. Full private hosted
 qualification independently checks TLS and fresh Linux installation/service use.
 
