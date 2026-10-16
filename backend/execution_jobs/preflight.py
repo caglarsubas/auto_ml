@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.db import connection
+from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.migrations.executor import MigrationExecutor
 
 
@@ -54,8 +55,16 @@ def check_runtime():
         if not row or row[0] is not True:
             raise RuntimeUnavailable("job_metadata_tls_required")
         executor = MigrationExecutor(connection)
+        # The sealed private profile requires an exact, consistent history.
+        # Django's plan alone ignores unknown applied migrations, so rolling
+        # back an image could otherwise start it against a newer schema.
+        executor.loader.check_consistent_history(connection)
+        if set(executor.loader.applied_migrations) - set(executor.loader.disk_migrations):
+            raise RuntimeUnavailable("job_migration_history_invalid")
         if executor.migration_plan(executor.loader.graph.leaf_nodes()):
             raise RuntimeUnavailable("job_migrations_required")
+    except InconsistentMigrationHistory:
+        raise RuntimeUnavailable("job_migration_history_invalid") from None
     except RuntimeUnavailable:
         raise
     except Exception:

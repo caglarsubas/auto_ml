@@ -1,0 +1,67 @@
+{
+  "packet": "P83",
+  "date": "2026-10-16",
+  "source_base": "d19ded130336747bdffc572ff6eec9f3318536c8",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "9fe004325187bd697eb17914a9fe76d578ff11e1cfc131d100ec42f4fe77ec76",
+    "backend/tests/unit/test_private_migration_history.py": "cfd53ebc64caa6cb536c2619be958d8bbeaef13e4b0766029324822fb41f9608"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 8,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.061
+    },
+    "focused-sqlite": {
+      "passed": 164,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.309
+    },
+    "focused-postgresql": {
+      "passed": 164,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.836
+    },
+    "sqlite-full": {
+      "passed": 3825,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 237.971
+    }
+  },
+  "coverage": {
+    "line": 75.68,
+    "branch": 65.96
+  },
+  "new_cases": 12,
+  "reproduction": "Actual PostgreSQL migration records: eight predecessor cases incorrectly accepted unknown/inconsistent history; four references passed. Final actual loader/recorder checks block before broker connectivity, preserve pending/current behavior and never edit history.",
+  "fixture_scope": "Database-backed SQLite/PostgreSQL history; TLS-only transport seam. Actual TLS/install/service adoption remains an independent hosted requirement.",
+  "draft_failures": {
+    "focused": "Two pending-reference failures per profile: draft migration had an applied dependent. Corrected to an actual graph leaf; product checks were not weakened. Original logs/XML retained.",
+    "full": "Early draft run intentionally stopped with exit137 before qualification; log retained. Final complete run passed."
+  },
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in full suite",
+  "limitations": [
+    "Exact recorded history does not establish physical schema/data integrity.",
+    "Current sealed private profile requires known unsquashed migration files; squash/removal and all upgrade/rollback policies remain unqualified.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "D07 durable search, supported dependency findings, complete lifecycle/recovery, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
