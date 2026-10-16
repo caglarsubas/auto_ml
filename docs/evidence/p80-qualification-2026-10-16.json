@@ -1,0 +1,62 @@
+{
+  "packet": "P80",
+  "date": "2026-10-16",
+  "source_base": "b06c35e66b0e7f7bbd2a8f72daa77b00834609d7",
+  "source_sha256": {
+    "backend/execution_jobs/views.py": "1e618ffffc5ffdfd58be495f96ce5a31c4db99af64e5756761cfbcb7eaf8309c",
+    "backend/tests/unit/test_native_job_pagination.py": "587310c9602277fac81918a55d7df0fb3ba3d156fda52449ccb2d6f371e76c69"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 16,
+      "failed": 9,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 5.848
+    },
+    "focused-sqlite": {
+      "passed": 224,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 34.281
+    },
+    "focused-postgresql": {
+      "passed": 224,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 43.142
+    },
+    "sqlite-full": {
+      "passed": 3772,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 252.974
+    }
+  },
+  "coverage": {
+    "line": 75.66000000000001,
+    "branch": 65.93
+  },
+  "new_cases": 25,
+  "reproduction": "Nine actual PostgreSQL cases return 503 for unsupported offsets; 16 references pass. The fix returns the existing static 400 before native job storage access, preserving authorization precedence and valid pagination.",
+  "fixture_scope": "Owned queue-summary metadata only; no model training, dispatch or scoring. Tests preserve supported signs/whitespace/Unicode digits, 50-row order/response and the maximum supported offset.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "Not query-rate limiting or deployment-capacity qualification.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "D07 durable search, lifecycle/upgrade/restore, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

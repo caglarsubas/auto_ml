@@ -32,7 +32,7 @@ class DatasetJobsView(APIView):
         try:
             current = service.scope(request.user, file_id)
             offset = int(request.query_params.get("offset", "0"))
-            if offset < 0:
+            if not 0 <= offset <= 2**63 - 1:
                 raise ValueError
             rows = NativeJob.objects.filter(dataset_id=file_id, project_id=current["project_id"]).order_by(
                 "-created_at", "-pk"
