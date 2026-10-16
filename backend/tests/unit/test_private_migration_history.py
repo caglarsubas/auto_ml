@@ -33,6 +33,9 @@ def private_history(settings, monkeypatch):
 
     monkeypatch.setattr(preflight, "connection", database)
     monkeypatch.setattr(preflight, "MigrationExecutor", executor)
+    # Physical catalog behavior is independently exercised by schema-presence
+    # tests. This fixture isolates real migration-history behavior from TLS.
+    monkeypatch.setattr(preflight, "check_schema", lambda: None)
     monkeypatch.setattr("backend.celery.app.connection_for_write", lambda: broker)
     # check_consistent_history must receive the real database as well.
     database.alias = connection.alias
