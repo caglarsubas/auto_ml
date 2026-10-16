@@ -1,0 +1,70 @@
+{
+  "packet": "P84",
+  "date": "2026-10-16",
+  "source_base": "07b4c73c3b60e28f12c4b15c09a56c3647f8d140",
+  "source_sha256": {
+    "scripts/private_installation_resources.py": "f7a3a1a1d269d2b6e24d325052401143b4d18474fe472d9036cb60cafd94e33a",
+    "scripts/private_dependency_start.py": "5402b74c92716a472bd38a9f35f12617e3904e862f296385753435c37b65a334",
+    "scripts/private_installation_adopt.py": "e216fbd23072ba078a9ee290d602d42f985acb541f160b030244e349aeaffc39",
+    "backend/tests/unit/test_private_service_dns.py": "d778efa385d40842d6b07961c12865c10996939efc915779d7b9fa73896e0753",
+    "backend/tests/unit/test_private_dependency_start.py": "c52f28a21f6a29f81d11102947ee62bb9c94a00b1983d108fc155b35eb73d13a"
+  },
+  "checks": {
+    "before-sqlite": {
+      "passed": 11,
+      "failed": 36,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.461
+    },
+    "focused-sqlite": {
+      "passed": 345,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.117
+    },
+    "sqlite-full": {
+      "passed": 3872,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 227.833
+    }
+  },
+  "coverage": {
+    "line": 75.68,
+    "branch": 65.96
+  },
+  "new_cases": 47,
+  "reproduction": "Predecessor controller validators accepted 36 conflicting/ill-typed DNS identities;11 valid references passed. Final guard is exercised through dependency, application, probe and shared preflight validators.",
+  "docker_dns_observation": {
+    "collision_reproduced": true,
+    "query": "cache",
+    "intended_role": "cache",
+    "other_role": "job-broker",
+    "resolved_endpoints": 2,
+    "published_ports": false,
+    "private_tls_qualification": false,
+    "customer_installation_modified": false,
+    "owned_cleanup": "passed",
+    "reproduction_script_sha256": "b0b4ee4ade1f8239428a0be7f10665e1d78fafe663d45b4279ab21423262005e",
+    "runner_tag_observed_after_run": "declarai-core-p22:local",
+    "runner_image_observed_after_run": "sha256:95d75ebfe82ca1913ee84320012f8a351f818f5688b45160e2a83808cbff08d4",
+    "redis_image": "sha256:ff1e295d685eb00abd4997b08c2e6b0e73aacb9ac29b7f6856aaaca2dcf794ec",
+    "scope": "Owned Docker DNS-only development reproduction; not private TLS or release qualification."
+  },
+  "fixture_scope": "Pure Docker metadata validation; local focused SQLite runner has no database-specific product behavior. Native Linux/TLS/adoption and full PostgreSQL are separate hosted requirements. Existing probe fixture extracted with a unique helper name and no inherited PostgreSQL alias; original profile assertions retained.",
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 current invariants included in full suite",
+  "limitations": [
+    "Validation observes current Docker metadata; it is not a transactional reservation against later control-plane changes.",
+    "Nonreserved aliases retain existing behavior. TLS/authentication and exact network/profile controls remain required.",
+    "Owned DNS-only development reproduction is not sealed-image, private TLS or release qualification.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "Supported dependency findings, durable search, complete lifecycle/upgrade/restore, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

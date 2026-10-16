@@ -21,6 +21,7 @@ import private_installation_init as initializer
 
 PREFIX = ["docker", "--context", "default"]
 LABEL = "org.declarai.installation."
+SERVICE_DNS_NAMES = {"postgres", "cache", "job-broker", "api", "worker", "dispatcher", "ingress"}
 
 SOCKET_INIT = r"""
 import os,stat
@@ -53,6 +54,32 @@ def record(args):
         return checker.planner.decode(command(args))
     except (ValueError, UnicodeError):
         raise checker.planner.PlanError("installation_resources_response_invalid") from None
+
+
+def validate_service_dns(info, role):
+    """A container may advertise its own reserved role, never another service."""
+    names = []
+    name = info.get("Name")
+    if name is not None:
+        names.append(name)
+    networks = info.get("NetworkSettings", {}).get("Networks", {})
+    if not isinstance(networks, dict):
+        raise checker.planner.PlanError("installation_service_dns_conflict")
+    for endpoint in networks.values():
+        if not isinstance(endpoint, dict):
+            raise checker.planner.PlanError("installation_service_dns_conflict")
+        for field in ("Aliases", "DNSNames"):
+            values = endpoint.get(field)
+            if values is not None:
+                if not isinstance(values, list):
+                    raise checker.planner.PlanError("installation_service_dns_conflict")
+                names.extend(values)
+    for name in names:
+        if not isinstance(name, str) or not name:
+            raise checker.planner.PlanError("installation_service_dns_conflict")
+        normalized = name.removeprefix("/").rstrip(".").casefold()
+        if normalized in SERVICE_DNS_NAMES - {role}:
+            raise checker.planner.PlanError("installation_service_dns_conflict")
 
 
 def initialization(value):

@@ -109,6 +109,7 @@ def validate_application(info, role, service, profile, digest, binding, image):
     wanted_networks = {profile["networks"][n]["name"] for n in service["networks"]}
     if set(info.get("NetworkSettings", {}).get("Networks", {})) != wanted_networks:
         raise checker.planner.PlanError("installation_adopt_application_network_mismatch")
+    resources.validate_service_dns(info, role)
     actual_mounts = info.get("Mounts", [])
     if len(actual_mounts) != len(service["volumes"]):
         raise checker.planner.PlanError("installation_adopt_application_mount_mismatch")
@@ -272,6 +273,7 @@ def validate_preflight(
         or any(m.get("Type") != "bind" or m.get("RW") is not False for m in mounts)
     ):
         raise checker.planner.PlanError("installation_adopt_preflight_profile_mismatch")
+    resources.validate_service_dns(info, role)
 
 
 PREFLIGHT_CODE = r"""
