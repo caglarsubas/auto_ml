@@ -378,15 +378,31 @@ def assert_evidence_scope(value, file_id):
         else {file_id}
     )
 
-    def inspect(item):
+    # Iterate in the same depth-first order without imposing Python's call-stack
+    # limit on JSON the decoder accepts. Iterators avoid copying wide containers.
+    stack = [(iter((value,)), None)]
+    active = set()
+    while stack:
+        try:
+            item = next(stack[-1][0])
+        except StopIteration:
+            _, owner = stack.pop()
+            if owner is not None:
+                active.remove(owner)
+            continue
         if isinstance(item, dict):
             if item.get("relation") in {"same_final_rows", "overlapping_final_rows", "historical_identity_unknown"}:
                 if item.get("file_id") is not None and item["file_id"] not in allowed:
                     raise ProjectDenied("cross_project_evidence_requires_new_assessment")
-            for child in item.values():
-                inspect(child)
+            children = item.values()
         elif isinstance(item, list):
-            for child in item:
-                inspect(child)
-
-    inspect(value)
+            children = item
+        else:
+            continue
+        owner = id(item)
+        if owner in active:
+            # Parsed JSON cannot contain cycles. Preserve the unexpected-error
+            # boundary for internally constructed cyclic values.
+            raise RecursionError("Cyclic evidence is unsupported.")
+        active.add(owner)
+        stack.append((iter(children), owner))

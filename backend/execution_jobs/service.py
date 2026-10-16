@@ -1,7 +1,6 @@
 """Bounded native jobs. DB leases fence every result publication."""
 
 import hashlib
-import json
 import os
 import stat
 import sys
@@ -20,7 +19,7 @@ from django.utils import timezone
 from access_control import projects
 from access_control.authority import actor_snapshot
 from deployment.deploy_utils import bundle_dir
-from deployment.evidence import verify_bundle
+from deployment.evidence import parse_metadata, verify_bundle
 from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import QueueLock, NativeJob, JobEvent
@@ -174,7 +173,7 @@ def header(file_id, bundle_id, expected_sha):
         if out.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > bound:
             raise JobConflict("job_package_unavailable")
         raw = _artifact_bytes(path, bound, "job_package_unavailable", "job_package_budget_exceeded")
-        values[name] = json.loads(raw)
+        values[name] = parse_metadata(raw)
         if name == "manifest.json" and hashlib.sha256(raw).hexdigest() != expected_sha:
             raise JobConflict("job_manifest_changed")
     manifest, publication = values["manifest.json"], values["publication.json"]
@@ -508,7 +507,7 @@ def execute(identifier):
         out = Path(bundle_dir(job.dataset_id, spec["bundle_id"]))
         for name in ["evaluation.json", "model_card.json"]:
             raw = _artifact_bytes(out / name, 8 * 1024**2, "job_evidence_budget_exceeded")
-            projects.assert_evidence_scope(json.loads(raw.decode("utf-8")), job.dataset_id)
+            projects.assert_evidence_scope(parse_metadata(raw.decode("utf-8")), job.dataset_id)
         check()
         if spec["kind"] == csv_scoring.KIND:
             result = csv_scoring.score(job, manifest, out, hashed, check, metadata_bytes=metadata)
