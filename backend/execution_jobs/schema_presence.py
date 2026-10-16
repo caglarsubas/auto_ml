@@ -13,10 +13,14 @@ class SchemaMismatch(Exception):
     pass
 
 
-def check_schema():
+def required_schema():
     models = [m for m in apps.get_models(include_auto_created=True) if m._meta.managed and not m._meta.proxy]
     models.append(MigrationRecorder.Migration)
-    required = {m._meta.db_table: {f.column for f in m._meta.local_concrete_fields} for m in models}
+    return {m._meta.db_table: {f.column for f in m._meta.local_concrete_fields} for m in models}
+
+
+def check_schema():
+    required = required_schema()
     with connection.cursor() as cursor:
         # Read catalogs only, without querying substituted views or model rows.
         # Public relations must be visible to the actual connection search path.

@@ -1,0 +1,79 @@
+{
+  "packet": "P86",
+  "date": "2026-10-17",
+  "source_base": "73a73781d6448135bc090c887a36c60594e8b318",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "6e7c9e0cb01906aeccb5801c8248e2875bbfc499f208676554b836adc3096111",
+    "backend/execution_jobs/schema_privileges.py": "a8ac7f3aa00c52cb5dbf8a9949d17a7042e303df1ee3b23d1b7ca950932e9487",
+    "backend/execution_jobs/preflight.py": "29210f88f105b8020635a87067eeed1e85c45c453f604b70311fde48921b39fe",
+    "backend/tests/unit/test_private_schema_privileges.py": "947ff7424102ec33a561c48b06053721da8115491a1e344814fb5b6c6bc5ec30",
+    "backend/tests/unit/test_job_preflight.py": "d0b1978828d0234e1b86331243a3d45c3e12ed105466c9595470705f71a34459",
+    "backend/tests/unit/test_private_migration_history.py": "aadb93109dd2da7cebd7b0608d6478fc8dbd0ac4510a6207c81a998d3b2a3bbb",
+    "backend/tests/unit/test_private_schema_presence.py": "3100cb5d8f02d5f642c285736659f4456a025521ab89f58f72ec900ff04f1693"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 2,
+      "failed": 28,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.315
+    },
+    "focused-sqlite": {
+      "passed": 222,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 4.578
+    },
+    "focused-postgresql": {
+      "passed": 222,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.365
+    },
+    "sqlite-full": {
+      "passed": 3930,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 239.734
+    }
+  },
+  "full_local_suite": "passed final 30-case source",
+  "new_cases": 30,
+  "reproduction": "Owned non-elevated owner: actual SELECT/INSERT/UPDATE/DELETE operations denied after individual revocation, but preceding full startup accepted each state. TLS/broker transport stubbed; history and catalogs actual PostgreSQL. All owned resources removed.",
+  "fixture_scope": "PostgreSQL production SQL and transactional REVOKE under non-superuser test owner; SQLite explicit catalog-response references, no product fallback. Existing independent-phase mocks preserve their assertions.",
+  "harness_drafts": "Import path, broker initialization and wrong column name corrected in ignored reproduction harness; original logs retained. Final reproduction exit0. No production change to make the probe pass.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "limitations": [
+    "Current private table-level owner profile only; no grant or ownership repair.",
+    "Not full ACL, sequence, RLS, data, physical-schema or lifecycle equivalence; later changes outside startup observation.",
+    "All-six exact-commit/private receipts and separate main remain required.",
+    "D07 dependency findings, durable search, lifecycle/recovery, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "preceding_full_run": {
+    "passed": 3928,
+    "skipped": 6,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 238.407,
+    "scope": "Before two between-query relation-loss cases; retained separately, not final suite qualification"
+  },
+  "coverage": {
+    "line": 75.74,
+    "branch": 66.03999999999999
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 ledger invariants in full suite",
+  "local_owned_fixtures": "absent after successful cleanup"
+}
