@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import os
+import stat
 import sys
 import time
 import uuid
@@ -129,6 +131,29 @@ def scope(actor, file_id):
     return projects.dataset_authority(actor.pk, file_id, "read")
 
 
+@contextmanager
+def _regular_artifact(path):
+    """Pin the final component without waiting for a FIFO writer or following a link."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError("regular artifact required")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            yield stream
+    finally:
+        os.close(descriptor)
+
+
+def _artifact_bytes(path, bound, initial_reason, growth_reason=None):
+    with _regular_artifact(path) as stream:
+        if os.fstat(stream.fileno()).st_size > bound:
+            raise JobConflict(initial_reason)
+        raw = stream.read(bound + 1)
+        if len(raw) > bound:
+            raise JobConflict(growth_reason or initial_reason)
+        return raw
+
+
 def header(file_id, bundle_id, expected_sha):
     """Cheap admission pins small metadata; expensive artifact hashes run only in worker."""
     out = Path(bundle_dir(file_id, bundle_id))
@@ -143,9 +168,7 @@ def header(file_id, bundle_id, expected_sha):
         path = out / name
         if out.is_symlink() or path.is_symlink() or not path.is_file() or path.stat().st_size > bound:
             raise JobConflict("job_package_unavailable")
-        raw = path.read_bytes()
-        if len(raw) > bound:
-            raise JobConflict("job_package_budget_exceeded")
+        raw = _artifact_bytes(path, bound, "job_package_unavailable", "job_package_budget_exceeded")
         values[name] = json.loads(raw)
         if name == "manifest.json" and hashlib.sha256(raw).hexdigest() != expected_sha:
             raise JobConflict("job_manifest_changed")
@@ -456,7 +479,7 @@ def execute(identifier):
         nonlocal total
         check()
         sha = hashlib.sha256()
-        with Path(path).open("rb") as stream:
+        with _regular_artifact(path) as stream:
             while chunk := stream.read(1024**2):
                 total += len(chunk)
                 if total > LIMITS["max_bytes"]:
@@ -472,9 +495,8 @@ def execute(identifier):
             raise JobConflict("job_package_identity_changed")
         out = Path(bundle_dir(job.dataset_id, spec["bundle_id"]))
         for name in ["evaluation.json", "model_card.json"]:
-            if (out / name).stat().st_size > 8 * 1024**2:
-                raise JobConflict("job_evidence_budget_exceeded")
-            projects.assert_evidence_scope(json.loads((out / name).read_text()), job.dataset_id)
+            raw = _artifact_bytes(out / name, 8 * 1024**2, "job_evidence_budget_exceeded")
+            projects.assert_evidence_scope(json.loads(raw.decode("utf-8")), job.dataset_id)
         check()
         if spec["kind"] == csv_scoring.KIND:
             result = csv_scoring.score(job, manifest, out, hashed, check)

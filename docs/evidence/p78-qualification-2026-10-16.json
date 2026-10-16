@@ -1,0 +1,63 @@
+{
+  "packet": "P78",
+  "date": "2026-10-16",
+  "source_base": "1158b69b7832c4beba0bcc9fb71fde4bd061abeb",
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "795c532da21eed87bbe79385549f12209f6b2d233c150f51e45701447da02cde",
+    "backend/tests/unit/test_native_package_files.py": "6c731473d86088da7b39827e4dfb7b94b0978d13bbe47bbba83d0ce6949cc232"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 11,
+      "failed": 18,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 15.47
+    },
+    "focused-sqlite": {
+      "passed": 157,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 13.85
+    },
+    "focused-postgresql": {
+      "passed": 157,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 35.466
+    },
+    "sqlite-full": {
+      "passed": 3705,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 238.075
+    }
+  },
+  "coverage": {
+    "line": 75.56,
+    "branch": 65.86999999999999
+  },
+  "new_cases": 29,
+  "owned_fifo_proof": "Five actual predecessor FIFO opens block in owned forked children; changed reads refuse before waiting. Controlled metadata/worker seams perform no database work. Owned children and fixtures are joined/closed and removed.",
+  "predecessor_evidence": "18 fail/11 pass: five blocking FIFOs,five followed late symlinks,four unbounded/grown JSON reads and four descriptor regressions. Draft comparison fixture import error retained separately; corrected comparison demonstrates actual IO failures.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "No atomic ancestor resolution,stable filesystem snapshot or kernel IO deadline for regular files is claimed.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer qualification remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "csv_capture_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
