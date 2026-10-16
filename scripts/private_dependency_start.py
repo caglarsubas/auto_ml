@@ -260,6 +260,7 @@ def validate(info, role, spec, binding, image, name, active=False):
     ):
         raise checker.planner.PlanError("dependency_container_profile_mismatch")
     networks = info.get("NetworkSettings", {}).get("Networks", {})
+    resources.validate_service_dns(info, role)
     if set(networks) != {spec["private_network"]} or role not in (
         networks[spec["private_network"]].get("Aliases") or []
     ):
@@ -580,6 +581,7 @@ def validate_probe(info, value, spec, receipt, image):
         or any(m.get("Type") != "bind" or m.get("RW") is not False for m in mounts)
     ):
         raise checker.planner.PlanError("dependency_probe_profile_invalid")
+    resources.validate_service_dns(info, "dependency-check")
 
 
 def probe(value, spec, receipt):

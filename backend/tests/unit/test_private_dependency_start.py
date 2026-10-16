@@ -316,27 +316,8 @@ def test_owner_command_errors_never_expose_secrets(startup, monkeypatch):
     assert str(error.value) == "dependency_database_owner_unavailable"
 
 
-@pytest.mark.parametrize(
-    "fault",
-    [
-        None,
-        "script",
-        "env",
-        "privileged",
-        "caps",
-        "memory",
-        "pids",
-        "tmpfs",
-        "device",
-        "dns",
-        "namespace",
-        "mount_source",
-        "mount_writable",
-        "network",
-    ],
-)
-def test_authenticated_probe_cannot_gain_admin_data_or_host_authority(startup, context, fault):
-    value, spec, receipt, image = context
+def probe_container(startup, context):
+    value, spec, receipt, _ = context
     info = copy.deepcopy(container(startup, context, "postgres"))
     info["Image"] = value["images"]["api"]
     info["Config"].update(
@@ -365,6 +346,33 @@ def test_authenticated_probe_cannot_gain_admin_data_or_host_authority(startup, c
         }
         for file in ["app-password", "postgres-ca.crt", "job-broker-url", "job-ca.crt", "cache-url", "cache-ca.crt"]
     ]
+    info["Name"] = "/declarai-dependency-probe-fixture"
+    info["NetworkSettings"]["Networks"] = {spec["private_network"]: {}}
+    return info
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "script",
+        "env",
+        "privileged",
+        "caps",
+        "memory",
+        "pids",
+        "tmpfs",
+        "device",
+        "dns",
+        "namespace",
+        "mount_source",
+        "mount_writable",
+        "network",
+    ],
+)
+def test_authenticated_probe_cannot_gain_admin_data_or_host_authority(startup, context, fault):
+    value, spec, receipt, image = context
+    info = probe_container(startup, context)
     if fault == "script":
         info["Config"]["Cmd"] = ["-c", "expert.py"]
     elif fault == "env":
