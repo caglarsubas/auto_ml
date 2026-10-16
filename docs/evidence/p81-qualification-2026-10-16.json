@@ -1,0 +1,68 @@
+{
+  "packet": "P81",
+  "date": "2026-10-16",
+  "source_base": "25d375eee0ef09f32011c4758d64b95cfd238c26",
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "9a910603d8d44beac41cec3b6b14938d7bc7c4ee025e80a2cea0d47fc3af3407",
+    "backend/tests/unit/test_native_publication_deadline.py": "cc178080369084873087ca7c3e26b8f0577e55013aeb804e7b077dbe48c08156",
+    "backend/tests/unit/test_native_package_files.py": "94c20c1e3b2e6a1e01c7859b7c8acf011b953ab96801e6e4100db47c3bc55e07"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 19,
+      "failed": 22,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.848
+    },
+    "focused-sqlite": {
+      "passed": 265,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 25.249
+    },
+    "focused-postgresql": {
+      "passed": 265,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 51.045
+    },
+    "sqlite-full": {
+      "passed": 3813,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 402.809
+    }
+  },
+  "coverage": {
+    "line": 75.67,
+    "branch": 65.95
+  },
+  "new_cases": 41,
+  "reproduction": "22 actual PostgreSQL cases published success after the cooperative work deadline; 19 references passed. Final worker publication refuses late results with the original deadline, preserves cancellation/lease/request precedence and leaves unexpected failures leased.",
+  "fixture_scope": "Real native integrity and 650-row CSV scoring paths; only the monotonic clock advances at publication boundaries. Original 120-second work, 180-second lease, attempt/concurrency and test/CI budgets remain unchanged.",
+  "draft_failures": {
+    "sqlite": "13 scratch-media read-only fixture failures and one existing worker-stub signature failure; all 41 new cases passed.",
+    "postgresql": "One existing worker-stub signature failure; all 41 new cases passed.",
+    "correction": "Use owned SQLite scratch tmpfs and accept/assert the new deadline in the existing probe; original assertions preserved. Draft logs/XML retained separately."
+  },
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "Transition-time check, not a commit-time SLA or forced interruption of blocked I/O.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "D07 durable search, lifecycle/upgrade/restore, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

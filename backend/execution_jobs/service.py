@@ -429,7 +429,7 @@ def _owns_live_lease(job, token, now):
     return job.lease_token == token and job.state in ACTIVE and now < job.lease_until
 
 
-def finish(identifier, token, state, reason="", result=None):
+def finish(identifier, token, state, reason="", result=None, *, deadline=None):
     with locked():
         job = NativeJob.objects.select_for_update().get(pk=identifier)
         now = timezone.now()
@@ -440,6 +440,9 @@ def finish(identifier, token, state, reason="", result=None):
             return
         if now >= job.expires_at:
             close(job, "failed", "job_expired")
+            return
+        if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
+            close(job, "blocked", "job_time_budget_exceeded")
             return
         try:
             # Same project/binding/member locks as authoritative membership edits.
@@ -457,12 +460,15 @@ def finish(identifier, token, state, reason="", result=None):
         prepared_result = result if state == "succeeded" else None
         prepared_digest = digest(prepared_result) if prepared_result else ""
         # Authority locks and result preparation can outlast the first check.
-        # Fence again before changing durable results or terminal receipts.
+        # Fence again, including the work deadline, before adopting a result.
         now = timezone.now()
         if not _owns_live_lease(job, token, now):
             return
         if now >= job.expires_at:
             close(job, "failed", "job_expired")
+            return
+        if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
+            close(job, "blocked", "job_time_budget_exceeded")
             return
         job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)
@@ -511,7 +517,7 @@ def execute(identifier):
         check()
         if spec["kind"] == csv_scoring.KIND:
             result = csv_scoring.score(job, manifest, out, hashed, check, metadata_bytes=metadata)
-            finish(identifier, token, "succeeded", result=result)
+            finish(identifier, token, "succeeded", result=result, deadline=deadline)
             return
         manifest, sha = verify_bundle(
             out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed, metadata_bytes=metadata
@@ -532,7 +538,7 @@ def execute(identifier):
             "review_approved": False,
             "production_use_approved": False,
         }
-        finish(identifier, token, "succeeded", result=result)
+        finish(identifier, token, "succeeded", result=result, deadline=deadline)
     except JobStopped:
         finish(identifier, token, "cancelled", "job_stopped")
     except projects.ProjectDenied:
