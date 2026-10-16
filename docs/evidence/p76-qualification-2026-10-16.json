@@ -1,0 +1,60 @@
+{
+  "packet": "P76",
+  "date": "2026-10-16",
+  "source_base": "bedb230534308f2fbdd9614a2140dd9ce37b1106",
+  "source_sha256": {
+    "scripts/private_dependency_init.py": "d6e2912d112aeb02e18b16ba038a643a323b248937596f1e7d8330bbdf7a0922",
+    "backend/tests/unit/test_dependency_credential_bytes.py": "824e779089f4a5c042c7aadbec6d79b40c19ac90a20327afa0cd8203848428e2"
+  },
+  "checks": {
+    "before": {
+      "passed": 14,
+      "skipped": 0,
+      "failed": 18,
+      "errors": 0,
+      "seconds": 0.438
+    },
+    "focused": {
+      "passed": 279,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 2.598
+    },
+    "focused-postgresql": {
+      "passed": 279,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 3.296
+    },
+    "sqlite-full": {
+      "passed": 3653,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 457.243
+    }
+  },
+  "coverage": {
+    "line": 75.5,
+    "branch": 65.81
+  },
+  "new_cases": 32,
+  "negative_boundary": "Real initialize function with controlled capture/host seams and an owned empty temporary root; no certificate handling or staging after invalid decoded credentials.",
+  "owned_development_postgresql": {
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "All-six exact-head and independent main verification remain required.",
+    "Existing secrets or installations are not rewritten; rotation/recovery/migration is not introduced.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}
