@@ -43,7 +43,7 @@ def worker(package, monkeypatch):
     monkeypatch.setattr(service, "header", lambda *args: (package.manifest, package.identity))
     monkeypatch.setattr(service.projects, "assert_evidence_scope", lambda *args: None)
 
-    def verify(out, file_id, bundle_id, *, artifact_digest):
+    def verify(out, file_id, bundle_id, *, artifact_digest, metadata_bytes=None):
         hashes.append(artifact_digest(out / "native.bin"))
         return package.manifest, package.sha
 
@@ -261,3 +261,31 @@ def test_worker_closes_owned_artifact_descriptor_on_failure(package, worker, mon
     assert len(descriptors) == 1, "worker must pin its artifact with an owned descriptor"
     with pytest.raises(OSError):
         os.fstat(descriptors[0])
+
+
+@pytest.mark.parametrize("name", ["manifest.json", "publication.json"])
+def test_real_verifier_rejects_late_fifo_after_header(package, worker, monkeypatch, tmp_path, name):
+    from deployment.evidence import verify_bundle
+
+    def verifying(*args, **kwargs):
+        late_replacement(monkeypatch, package.out / name, "fifo", tmp_path)
+        return verify_bundle(*args, **kwargs)
+
+    monkeypatch.setattr(service, "verify_bundle", verifying)
+
+    def probe():
+        service.execute("owned-job")
+        return worker[0]
+
+    assert bounded_child(probe) == [{"state": "blocked", "reason": "job_package_or_budget_invalid", "result": None}]
+
+
+@pytest.mark.parametrize("name,bound", [("manifest.json", 1024**2), ("publication.json", 65536)])
+def test_real_verifier_bounds_growth_after_header(package, worker, monkeypatch, name, bound):
+    from deployment.evidence import verify_bundle
+
+    requested = grow_during_read(monkeypatch, package.out / name, bound)
+    monkeypatch.setattr(service, "verify_bundle", verify_bundle)
+    service.execute("owned-job")
+    assert worker[0] == [{"state": "blocked", "reason": "job_package_budget_exceeded", "result": None}]
+    assert requested and all(0 <= size <= bound + 1 for size in requested)

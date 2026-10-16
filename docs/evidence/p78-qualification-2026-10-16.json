@@ -3,10 +3,74 @@
   "date": "2026-10-16",
   "source_base": "1158b69b7832c4beba0bcc9fb71fde4bd061abeb",
   "source_sha256": {
-    "backend/execution_jobs/service.py": "795c532da21eed87bbe79385549f12209f6b2d233c150f51e45701447da02cde",
-    "backend/tests/unit/test_native_package_files.py": "6c731473d86088da7b39827e4dfb7b94b0978d13bbe47bbba83d0ce6949cc232"
+    "backend/execution_jobs/service.py": "a14dd808e6fd732674c85e01060f0379604cecd65294cc164f380f0a417bfe70",
+    "backend/execution_jobs/csv_scoring.py": "0abad87c57947fe934ff875e35f82ea7231f3676d7b94164937dc6af8454d108",
+    "backend/deployment/evidence.py": "599be1f1fe50ea231889314e0378978fbdff98063f5fbf1a84dfb10f146579b9",
+    "backend/deployment/deploy_utils.py": "f356f2d03206fbdfb7c836a299567c4347fb08e8411bcd2716fa55081b768ce4",
+    "backend/tests/unit/test_native_package_files.py": "e7d9c65a550cc44b67f409fd43671ada82e16c11f558fabbb737c6bcacc27e20"
   },
   "checks": {
+    "before-postgresql": {
+      "passed": 11,
+      "failed": 18,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 15.47
+    },
+    "verifier-before": {
+      "passed": 0,
+      "failed": 4,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.315
+    },
+    "focused-sqlite": {
+      "passed": 161,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.028
+    },
+    "focused-postgresql": {
+      "passed": 161,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 34.784
+    },
+    "sqlite-full": {
+      "passed": 3709,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 231.129
+    }
+  },
+  "coverage": {
+    "line": 75.57000000000001,
+    "branch": 65.88000000000001
+  },
+  "new_cases": 33,
+  "owned_fifo_proof": "Seven actual predecessor FIFO opens block in owned forked children: five direct reads and two downstream-verifier reads. Controlled metadata/worker seams perform no database work. Changed reads refuse before waiting; all owned processes/resources are joined/closed/removed.",
+  "predecessor_evidence": "18 fail/11 pass: five blocking FIFOs,five followed late symlinks,four unbounded/grown JSON reads and four descriptor regressions. Draft comparison fixture import error retained separately; corrected comparison demonstrates actual IO failures.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "No atomic ancestor resolution,stable filesystem snapshot or kernel IO deadline for regular files is claimed.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer qualification remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "csv_capture_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "initial_checks": {
     "before-postgresql": {
       "passed": 11,
       "failed": 18,
@@ -36,28 +100,18 @@
       "seconds": 238.075
     }
   },
-  "coverage": {
-    "line": 75.56,
-    "branch": 65.86999999999999
+  "initial_source_sha256": {
+    "backend/execution_jobs/service.py": "795c532da21eed87bbe79385549f12209f6b2d233c150f51e45701447da02cde",
+    "backend/tests/unit/test_native_package_files.py": "6c731473d86088da7b39827e4dfb7b94b0978d13bbe47bbba83d0ce6949cc232"
   },
-  "new_cases": 29,
-  "owned_fifo_proof": "Five actual predecessor FIFO opens block in owned forked children; changed reads refuse before waiting. Controlled metadata/worker seams perform no database work. Owned children and fixtures are joined/closed and removed.",
-  "predecessor_evidence": "18 fail/11 pass: five blocking FIFOs,five followed late symlinks,four unbounded/grown JSON reads and four descriptor regressions. Draft comparison fixture import error retained separately; corrected comparison demonstrates actual IO failures.",
-  "owned_postgresql_fixture": {
-    "owned_cleanup": "passed",
-    "published_ports": false,
-    "private_qualification": false,
-    "customer_installation_modified": false
-  },
-  "ruff": "passed full workflow command",
-  "roadmap_projection": "passed",
-  "limitations": [
-    "No atomic ancestor resolution,stable filesystem snapshot or kernel IO deadline for regular files is claimed.",
-    "All-six exact-head/private receipts and independent main remain required.",
-    "Durable search,lifecycle/upgrade/restore,expert and release/customer qualification remain open."
-  ],
-  "existing_execution_budgets_changed": false,
-  "csv_capture_changed": false,
-  "release_qualified": false,
-  "customer_installation_modified": false
+  "verification_followthrough": "Four added real-verifier regressions fail initial PR head02c1aae091afcb2eaa477f8beaa884b8c357b0ec: two FIFO blocks and two unbounded metadata reads. Native integrity/scoring pass the bounded callback; manifest digests use captured bytes. Default offline readers retain existing behavior.",
+  "csv_capture_proof": {
+    "source_base": "1158b69b7832c4beba0bcc9fb71fde4bd061abeb",
+    "unchanged_functions": [
+      "input_bytes",
+      "prepare",
+      "canonical_bytes"
+    ],
+    "verification_callback_only": true
+  }
 }

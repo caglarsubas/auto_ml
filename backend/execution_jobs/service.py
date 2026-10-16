@@ -154,6 +154,11 @@ def _artifact_bytes(path, bound, initial_reason, growth_reason=None):
         return raw
 
 
+def _package_metadata(path):
+    bound = 1024**2 if Path(path).name == "manifest.json" else 65536
+    return _artifact_bytes(path, bound, "job_package_unavailable", "job_package_budget_exceeded")
+
+
 def header(file_id, bundle_id, expected_sha):
     """Cheap admission pins small metadata; expensive artifact hashes run only in worker."""
     out = Path(bundle_dir(file_id, bundle_id))
@@ -499,10 +504,12 @@ def execute(identifier):
             projects.assert_evidence_scope(json.loads(raw.decode("utf-8")), job.dataset_id)
         check()
         if spec["kind"] == csv_scoring.KIND:
-            result = csv_scoring.score(job, manifest, out, hashed, check)
+            result = csv_scoring.score(job, manifest, out, hashed, check, metadata_bytes=_package_metadata)
             finish(identifier, token, "succeeded", result=result)
             return
-        manifest, sha = verify_bundle(out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed)
+        manifest, sha = verify_bundle(
+            out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed, metadata_bytes=_package_metadata
+        )
         if sha != spec["manifest_sha256"]:
             raise JobConflict("job_manifest_changed")
         result = {

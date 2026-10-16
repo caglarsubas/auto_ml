@@ -834,7 +834,7 @@ Reject late special files during native package admission,evidence reads and wor
 
 **Evidence:** [Bounded native package reads](NATIVE_PACKAGE_FILES_IMPLEMENTATION.md); [P78 source qualification](evidence/p78-qualification-2026-10-16.json)
 
-**Remaining:** Twenty-nine new cases reproduce five actual blocking FIFO reads,late symlink acceptance and unbounded metadata growth in predecessor. Final157 focused each SQLite/development PostgreSQL and full SQLite3705 pass with six existing skips/zero failures. Ruff and roadmap checks pass. All-six exact-head/private receipts and independent main remain required;durable search,lifecycle/expert/release/customer gates remain open.
+**Remaining:** Thirty-three new cases;seven actual predecessor FIFO blocks plus late symlink and unbounded metadata-growth failures reproduced. Four added real-verifier cases fail the initial PR head; native integrity/scoring verification now uses bounded metadata capture and hashes captured manifest bytes. Final161 focused each SQLite/development PostgreSQL and full SQLite3709 pass with six existing skips/zero failures. Ruff and roadmap checks pass. All-six exact-head/private receipts and independent main remain required;durable search,lifecycle/expert/release/customer gates remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
