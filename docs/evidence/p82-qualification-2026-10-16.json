@@ -1,0 +1,97 @@
+{
+  "packet": "P82",
+  "date": "2026-10-16",
+  "source_base": "072e467ba2035c26b163f062f2f0241f169b92ef",
+  "source_sha256": {
+    "README.md": "52db39d3005d761191c17dde7589a364147c827d8e63dcac0d78007c5b75f4f9",
+    "frontend/README.md": "0ea24dbbbfa9293fb620eb10e45ee68a5e56b0a4ab067b80adba95a17ddd1914",
+    "frontend/package.json": "db7cfd37b04b1e304cb014fe53ac1c390fec1333c4c36292ebd9c13ed90ca626",
+    "frontend/package-lock.json": "dd213fdb3d7338e28e15e1e2f7d8808b95eea49a5e353fdec4ebd709b69cd59e",
+    "frontend/vendor/xlsx-0.20.3.tgz": "8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8"
+  },
+  "retired_root_manifests": {
+    "package.json": "9c013b9270c0739b68efc4f20431f42d2e0c58511de49788f3cff829861789eb",
+    "package-lock.json": "28b61624094aafb9256d4fb88463e98f583cdd41263da471a5cf84fdf494234c"
+  },
+  "supported_frontend_dependency_bytes": "unchanged",
+  "executable_source_and_workflow_changes": false,
+  "new_test_cases": 0,
+  "packaging_checks": {
+    "passed": 278,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 7.59
+  },
+  "unchanged_application_baseline": {
+    "run": 38888687099,
+    "head": "072e467ba2035c26b163f062f2f0241f169b92ef",
+    "attempt": 1,
+    "all_six": "passed",
+    "full_postgresql": {
+      "passed": 3813,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "line_coverage": 75.64999999999999,
+      "branch_coverage": 65.95
+    },
+    "postgresql_seconds": 781.397,
+    "new_cases": 41,
+    "frontend": 651,
+    "browser": {
+      "total": 37,
+      "expected": 37,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "native_images_match_exported_set": true,
+    "actual_linux_schema_accounts_adoption_https": "passed",
+    "owned_cleanup": "passed",
+    "release_qualified": false,
+    "customer_installation_modified": false
+  },
+  "manifest_only_audits": {
+    "retired_root": {
+      "info": 0,
+      "low": 4,
+      "moderate": 9,
+      "high": 21,
+      "critical": 1,
+      "total": 35
+    },
+    "supported_frontend": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 11,
+      "critical": 0,
+      "total": 11
+    },
+    "all_supported_affected_nodes_dev_only": true,
+    "packages_installed": false,
+    "lifecycle_scripts_executed": false,
+    "interpretation": "Observed graph findings, not runtime reachability or release acceptance. Supported high findings remain open."
+  },
+  "primary_advisory": {
+    "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+    "checked": "2026-10-16",
+    "status": "braces <=3.0.3 affected; no patched version listed."
+  },
+  "roadmap_checks": {
+    "passed": 49,
+    "projection": "passed",
+    "ruff": "passed full workflow command"
+  },
+  "limitations": [
+    "Unused root install path removed; existing local root packages are not uninstalled.",
+    "Supported frontend development-tool findings remain unresolved.",
+    "Exact-head six checks/private reports and independent main remain required.",
+    "D07 lifecycle/upgrade/restore, durable search, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
