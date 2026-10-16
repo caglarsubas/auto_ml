@@ -1,7 +1,10 @@
 # DeclarAI Frontend
 
 Angular 22 single-page application for the DeclarAI AutoML platform. Use Node 24
-and `npm ci` to install the locked dependencies. Generated
+and run `npm ci` from `frontend/` to install the locked dependencies. From the
+repository root, the equivalent command is `npm --prefix frontend ci`. The
+package manifest, lockfile and vendored SheetJS archive in this directory define
+the frontend installation. Generated
 with the [Angular CLI](https://github.com/angular/angular-cli) and served on
 port `4300` in the docker-compose stack.
 

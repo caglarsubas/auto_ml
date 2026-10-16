@@ -496,14 +496,24 @@ auto-ml/
 
 ### Frontend
 
+Use Node 24 and install the locked frontend dependencies from `frontend/`:
+
+```bash
+cd frontend
+npm ci
+```
+
+That directory's package manifest, lockfile and vendored SheetJS archive are
+shared by development, Docker, CI and private frontend packaging.
+
 | Package | Version | Purpose |
 |---------|---------|---------|
 | Angular | 22.2 | Single-page application framework |
 | Angular Material | 22.2 | UI component library (dropdowns, dialogs, progress bars) |
 | Plotly.js | ≥ 2.35 | Interactive charts (beeswarm, ROC, PR, SFS progression) |
-| mathjs | ≥ 13.1 | Numeric utilities |
+| mathjs | ≥ 15.2 | Numeric utilities |
 | RxJS | ~7.8 | Reactive state management, observables, polling |
-| xlsx | ≥ 0.18 | Client-side spreadsheet utilities |
+| xlsx | 0.20.3 (vendored) | Client-side spreadsheet utilities |
 
 ---
 
