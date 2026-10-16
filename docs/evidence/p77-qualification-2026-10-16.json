@@ -1,0 +1,61 @@
+{
+  "packet": "P77",
+  "date": "2026-10-16",
+  "source_base": "8f5cf78fc1f9cec606db13acb5342e130cbed1a3",
+  "source_sha256": {
+    "backend/execution_jobs/csv_scoring.py": "ed7a52e1b7ca3f44fcb93c2686d7704c44e433774d918305d999461014a64e9b",
+    "backend/tests/unit/test_native_csv_input_files.py": "6ec35eaf1bd9fe52401a20ff06099142572335e0933d58e307f57dff9d03ab77"
+  },
+  "checks": {
+    "before-final": {
+      "passed": 4,
+      "failed": 16,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.623
+    },
+    "focused-final": {
+      "passed": 125,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 47.663
+    },
+    "focused-postgresql": {
+      "passed": 125,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 39.2
+    },
+    "sqlite-full": {
+      "passed": 3673,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 334.161
+    }
+  },
+  "coverage": {
+    "line": 75.52,
+    "branch": 65.82000000000001
+  },
+  "new_cases": 20,
+  "owned_fifo_proof": "Four predecessor probes block; final probes reject before waiting for a writer. Forked children use controlled metadata/authority seams,no DB work,and are joined/closed; only owned children are terminated on failure.",
+  "initial_evidence": "First focused SQLite run125 passed before cleanup assertions were strengthened. Final focused,predecessor and full runs use final assertions and the same product source.",
+  "owned_postgresql_fixture": {
+    "published_ports": false,
+    "owned_cleanup": "passed",
+    "private_qualification": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "No atomic ancestor resolution,stable filesystem snapshot or regular-file kernel I/O deadline is claimed.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}
