@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import connection
 from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.migrations.executor import MigrationExecutor
+from execution_jobs.schema_presence import check_schema, SchemaMismatch
 
 
 class RuntimeUnavailable(Exception):
@@ -63,6 +64,9 @@ def check_runtime():
             raise RuntimeUnavailable("job_migration_history_invalid")
         if executor.migration_plan(executor.loader.graph.leaf_nodes()):
             raise RuntimeUnavailable("job_migrations_required")
+        check_schema()
+    except SchemaMismatch:
+        raise RuntimeUnavailable("job_schema_invalid") from None
     except InconsistentMigrationHistory:
         raise RuntimeUnavailable("job_migration_history_invalid") from None
     except RuntimeUnavailable:

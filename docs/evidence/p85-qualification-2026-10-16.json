@@ -1,0 +1,67 @@
+{
+  "packet": "P85",
+  "date": "2026-10-16",
+  "source_base": "eae04d97c27106d9ed50da73af4abe4716091f5a",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "17ef6bce0ad1156c611afe5957db76e3664c72f3052afa55b7fec3d0452f843b",
+    "backend/execution_jobs/preflight.py": "a9b1049f0ed029b207e97dce4a2b5c3f5fc07c1d32ade029c061ec3e3435249d",
+    "backend/tests/unit/test_private_schema_presence.py": "b75551aeceba0c94c13b70c59e0cfd69c5e918e5bd6f95bd97684b80b70dc1cd",
+    "backend/tests/unit/test_job_preflight.py": "0b21243d01cfc0a3331f92b02ee3ff6daf0d63317541530ab1dcb515c7c89719",
+    "backend/tests/unit/test_private_migration_history.py": "4d6f4a135166c806ae98307abf908d8b510d4c1bddc00ade0ff0f723103ee955"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 24,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.733
+    },
+    "focused-sqlite": {
+      "passed": 192,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 5.228
+    },
+    "focused-postgresql": {
+      "passed": 192,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.388
+    },
+    "sqlite-full": {
+      "passed": 3900,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 248.161
+    }
+  },
+  "coverage": {
+    "line": 75.71,
+    "branch": 66.0
+  },
+  "new_cases": 28,
+  "reproduction": "Actual PostgreSQL transactional DDL: current migration history did not prevent lost table/column, substituted-view and search-path-shadow acceptance. Twenty-two schema cases and two catalog-failure phase cases fail against predecessor; four healthy/additive references pass.",
+  "fixture_scope": "Actual PostgreSQL production catalog SQL; SQLite development reference adapts actual SQLite metadata after corresponding DDL. Only focused transport seams are mocked; product has no SQLite catalog fallback. Existing preflight/history mocks isolate the new physical phase without weakening prior assertions. All test DDL rolls back.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 current invariants included in full suite",
+  "limitations": [
+    "Startup observation does not fence later DDL.",
+    "Presence does not prove types/defaults/constraints/indexes/privileges/data or upgrade/restore equivalence.",
+    "No schema or grant repair; existing positive receipt fields remain unchanged.",
+    "All-six exact-commit/private receipts and independent main remain required.",
+    "D07 supported dependency findings, durable search, full lifecycle/recovery, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
