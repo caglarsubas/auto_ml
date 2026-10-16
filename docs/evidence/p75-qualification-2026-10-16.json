@@ -1,0 +1,72 @@
+{
+  "packet": "P75",
+  "date": "2026-10-16",
+  "source_base": "979507b7209706e9a27c7e31356a6e7889a119aa",
+  "source_sha256": {
+    "backend/execution_jobs/config.py": "554eb784feb88fac0af0f70032ce1c901c198769ea85f8296368f6276ebcf0e7",
+    "backend/tests/unit/test_private_broker_authentication.py": "8e20d9940f1f80cd30874907b1da69953a5e02c236193b91e346cd3b3cbcb1f4"
+  },
+  "checks": {
+    "before": {
+      "passed": 9,
+      "skipped": 0,
+      "failed": 23,
+      "errors": 0,
+      "seconds": 0.498
+    },
+    "focused": {
+      "passed": 138,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 7.515
+    },
+    "focused-postgresql": {
+      "passed": 138,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 11.396
+    },
+    "sqlite-full": {
+      "passed": 3621,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 293.366
+    }
+  },
+  "coverage": {
+    "line": 75.5,
+    "branch": 65.81
+  },
+  "new_cases": 32,
+  "owned_tls_unauthenticated_probe": {
+    "before": {
+      "accepted": true,
+      "tls_only": true,
+      "authentication_configured": false
+    },
+    "after": {
+      "accepted": false,
+      "reason": "private_broker_authentication_required",
+      "tls_only": true,
+      "authentication_configured": false
+    }
+  },
+  "owned_cleanup": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "All-six exact-head and independent main verification remain required.",
+    "This validates supplied authentication,not password strength,server ACLs or rotation.",
+    "Durable search,lifecycle/upgrade/restore,expert and release/customer gates remain open."
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "existing_execution_budgets_changed": false
+}

@@ -1,9 +1,10 @@
 """Explicit dedicated broker; no cache/local fallback or eager execution."""
 
 import os
+import re
 import ssl
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote_to_bytes, urlsplit
 from django.core.exceptions import ImproperlyConfigured
 from backend.runtime_config import _secret
 
@@ -33,6 +34,19 @@ def load_job_config(profile, env=None):
         raise ImproperlyConfigured(
             "DECLARAI_JOB_BROKER_URL: use an explicit Redis database URL; private mode requires TLS"
         ) from None
+    if profile == "private":
+        try:
+            if not url.password:
+                raise ValueError
+            for credential in (url.username, url.password):
+                if credential is not None:
+                    if re.search(r"%(?![a-fA-F0-9]{2})", credential):
+                        raise ValueError
+                    decoded = unquote_to_bytes(credential).decode("utf-8")
+                    if any(ord(c) < 32 or ord(c) == 127 for c in decoded):
+                        raise ValueError
+        except (ValueError, UnicodeError):
+            raise ImproperlyConfigured("private_broker_authentication_required") from None
     tls = None
     if url.scheme == "rediss":
         ca = Path(env.get("DECLARAI_JOB_BROKER_CA_FILE", ""))
