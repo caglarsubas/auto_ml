@@ -3,11 +3,11 @@
   "date": "2026-10-16",
   "source_base": "1158b69b7832c4beba0bcc9fb71fde4bd061abeb",
   "source_sha256": {
-    "backend/execution_jobs/service.py": "a14dd808e6fd732674c85e01060f0379604cecd65294cc164f380f0a417bfe70",
+    "backend/execution_jobs/service.py": "3162b696aeb6e6bac76b2b2b5f1259741d760b6bae4ee1e1069f9f061bf9d6ec",
     "backend/execution_jobs/csv_scoring.py": "0abad87c57947fe934ff875e35f82ea7231f3676d7b94164937dc6af8454d108",
-    "backend/deployment/evidence.py": "599be1f1fe50ea231889314e0378978fbdff98063f5fbf1a84dfb10f146579b9",
+    "backend/deployment/evidence.py": "efa83d0b8f7d8abe95ded766fad7ef5ab08b5ad4d67f0edf4b8b036004ec898f",
     "backend/deployment/deploy_utils.py": "f356f2d03206fbdfb7c836a299567c4347fb08e8411bcd2716fa55081b768ce4",
-    "backend/tests/unit/test_native_package_files.py": "e7d9c65a550cc44b67f409fd43671ada82e16c11f558fabbb737c6bcacc27e20"
+    "backend/tests/unit/test_native_package_files.py": "8933ff4ae59989096a9f25ee9b01dadda455fcfa6b0456dcbfcc9a92ba3783ae"
   },
   "checks": {
     "before-postgresql": {
@@ -24,33 +24,47 @@
       "skipped": 0,
       "seconds": 6.315
     },
-    "focused-sqlite": {
-      "passed": 161,
+    "manifest-fence-before": {
+      "passed": 0,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.297
+    },
+    "manifest-fence-reference": {
+      "passed": 1,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "seconds": 12.028
+      "seconds": 0.311
+    },
+    "focused-sqlite": {
+      "passed": 162,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 14.726
     },
     "focused-postgresql": {
-      "passed": 161,
+      "passed": 162,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "seconds": 34.784
+      "seconds": 38.983
     },
     "sqlite-full": {
-      "passed": 3709,
+      "passed": 3710,
       "failed": 0,
       "errors": 0,
       "skipped": 6,
-      "seconds": 231.129
+      "seconds": 235.14
     }
   },
   "coverage": {
-    "line": 75.57000000000001,
-    "branch": 65.88000000000001
+    "line": 75.58,
+    "branch": 65.89
   },
-  "new_cases": 33,
+  "new_cases": 34,
   "owned_fifo_proof": "Seven actual predecessor FIFO opens block in owned forked children: five direct reads and two downstream-verifier reads. Controlled metadata/worker seams perform no database work. Changed reads refuse before waiting; all owned processes/resources are joined/closed/removed.",
   "predecessor_evidence": "18 fail/11 pass: five blocking FIFOs,five followed late symlinks,four unbounded/grown JSON reads and four descriptor regressions. Draft comparison fixture import error retained separately; corrected comparison demonstrates actual IO failures.",
   "owned_postgresql_fixture": {
@@ -113,5 +127,43 @@
       "canonical_bytes"
     ],
     "verification_callback_only": true
-  }
+  },
+  "verifier_checks": {
+    "before-postgresql": {
+      "passed": 11,
+      "failed": 18,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 15.47
+    },
+    "verifier-before": {
+      "passed": 0,
+      "failed": 4,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.315
+    },
+    "focused-sqlite": {
+      "passed": 161,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.028
+    },
+    "focused-postgresql": {
+      "passed": 161,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 34.784
+    },
+    "sqlite-full": {
+      "passed": 3709,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 231.129
+    }
+  },
+  "manifest_change_fence": "An added tamper case passes the original verifier,fails intermediate bounded-reader headb345f692da1c2161710be72f3ec9dc2fdea7489b,and passes the correction. Native bounded metadata capture pins each manifest read to the accepted digest; bounded rechecks retain the final manifest-change fence and existing job_manifest_changed receipt."
 }

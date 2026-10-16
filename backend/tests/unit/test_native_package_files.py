@@ -36,6 +36,7 @@ def package(tmp_path, settings, monkeypatch):
 @pytest.fixture
 def worker(package, monkeypatch):
     spec = {**package.identity, "kind": service.KIND, "manifest_sha256": package.sha, "runtime": {"fixture": "pinned"}}
+    package.spec = spec
     job = SimpleNamespace(specification=spec, dataset_id=7)
     receipts, hashes = [], []
     monkeypatch.setattr(service, "claim", lambda identifier: (job, "owned-token"))
@@ -289,3 +290,27 @@ def test_real_verifier_bounds_growth_after_header(package, worker, monkeypatch, 
     service.execute("owned-job")
     assert worker[0] == [{"state": "blocked", "reason": "job_package_budget_exceeded", "result": None}]
     assert requested and all(0 <= size <= bound + 1 for size in requested)
+
+
+def test_manifest_change_during_verification_preserves_the_existing_fence(package, worker, monkeypatch):
+    from deployment.evidence import verify_bundle
+
+    # A minimal legacy bundle lets the real verifier reach its final digest.
+    # Header/lease seams are controlled; the file mutation and hashing are real.
+    manifest = {"file_id": 7, "bundle_id": package.identity["bundle_id"],
+                "artifact_integrity": {"native.bin": {"bytes": 5, "sha256": hashlib.sha256(b"model").hexdigest()}}}
+    raw = json.dumps(manifest).encode()
+    (package.out / "manifest.json").write_bytes(raw)
+    (package.out / "publication.json").write_text("{}")
+    package.spec["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
+
+    def verifying(*args, artifact_digest, **kwargs):
+        def changed(path):
+            result = artifact_digest(path)
+            (package.out / "manifest.json").write_bytes(raw + b" ")
+            return result
+        return verify_bundle(*args, artifact_digest=changed, **kwargs)
+
+    monkeypatch.setattr(service, "verify_bundle", verifying)
+    service.execute("owned-job")
+    assert worker[0] == [{"state": "blocked", "reason": "job_manifest_changed", "result": None}]

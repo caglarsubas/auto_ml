@@ -14,7 +14,8 @@ Hashing retains its 1 MiB chunks, aggregate byte limit and authority, cancellati
 and deadline checkpoints. Descriptors have one explicit owner and close on
 success, failure or cancellation. Native integrity and CSV-scoring verification
 receive the same bounded metadata reader; the manifest digest uses the captured
-bytes instead of reopening the path. Missing-file and existing budget reason
+bytes, with bounded rechecks that retain the final manifest-change fence.
+Each native metadata read checks the accepted manifest digest. Missing-file and existing budget reason
 codes are preserved. CSV capture and scoring semantics are unchanged; default
 non-job/offline verification retains its existing reader.
 
@@ -25,7 +26,8 @@ cleanup after failure or cancellation. FIFO probes use exclusively owned forked
 children with controlled metadata/worker seams and no database work; their
 three-second join only detects blocking and does not change worker/test budgets.
 Four additional regressions reproduce the downstream verifier's reopen gap in
-the first PR head; the final change includes all thirty-three new cases.
+the first PR head. A further regression preserves rejection when a manifest
+changes during artifact verification; the final change includes thirty-four new cases.
 Only an owned child is terminated if the predecessor blocks. Full private
 qualification remains required for PostgreSQL, immutable images, TLS, scoring,
 installation, recovery and cleanup.

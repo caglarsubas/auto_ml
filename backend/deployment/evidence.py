@@ -108,7 +108,11 @@ def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, 
     manifest = json.loads(raw_manifest.decode('utf-8')) if raw_manifest is not None else read_json(manifest_path)
 
     def manifest_digest():
-        return hashlib.sha256(raw_manifest).hexdigest() if raw_manifest is not None else digest_file(manifest_path)
+        if raw_manifest is None:
+            return digest_file(manifest_path)
+        if metadata_bytes(manifest_path) != raw_manifest:
+            raise ValueError('Package manifest changed during verification.')
+        return hashlib.sha256(raw_manifest).hexdigest()
 
     if not isinstance(manifest, dict):
         raise ValueError('Package manifest must be an object.')

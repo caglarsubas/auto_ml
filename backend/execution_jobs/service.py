@@ -480,6 +480,13 @@ def execute(identifier):
     def check():
         checkpoint(identifier, token, deadline)
 
+    def metadata(path):
+        check()
+        raw = _package_metadata(path)
+        if Path(path).name == "manifest.json" and hashlib.sha256(raw).hexdigest() != spec["manifest_sha256"]:
+            raise JobConflict("job_manifest_changed")
+        return raw
+
     def hashed(path):
         nonlocal total
         check()
@@ -504,11 +511,11 @@ def execute(identifier):
             projects.assert_evidence_scope(json.loads(raw.decode("utf-8")), job.dataset_id)
         check()
         if spec["kind"] == csv_scoring.KIND:
-            result = csv_scoring.score(job, manifest, out, hashed, check, metadata_bytes=_package_metadata)
+            result = csv_scoring.score(job, manifest, out, hashed, check, metadata_bytes=metadata)
             finish(identifier, token, "succeeded", result=result)
             return
         manifest, sha = verify_bundle(
-            out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed, metadata_bytes=_package_metadata
+            out, job.dataset_id, spec["bundle_id"], artifact_digest=hashed, metadata_bytes=metadata
         )
         if sha != spec["manifest_sha256"]:
             raise JobConflict("job_manifest_changed")
