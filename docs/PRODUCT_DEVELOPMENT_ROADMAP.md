@@ -824,7 +824,7 @@ Reject special CSV inputs and late final-component symlinks through an owned non
 
 **Evidence:** [Native CSV regular-file capture](NATIVE_CSV_INPUT_FILES_IMPLEMENTATION.md); [P77 source qualification](evidence/p77-qualification-2026-10-16.json)
 
-**Remaining:** Twenty new cases,125 final focused cases each SQLite/development PostgreSQL,and full SQLite3673 passed/six existing skips/zero failures. Sixteen predecessor cases fail;four byte/receipt references pass. Owned FIFOs no longer wait for writers; late final symlinks and special files block with static diagnostics; descriptor cleanup passes. Full Ruff and roadmap checks pass. Exact-head all-six/private receipts and independent main remain required. Lifecycle/expert/release/customer gates remain open.
+**Remaining:** Twenty-two new capture cases plus one durable receipt regression;128 focused each SQLite/development PostgreSQL;full SQLite3676 passed/six existing skips/zero failures. Initial private CI38849035202 caught changed missing-input diagnostics; source preserves original FileNotFoundError/worker reason and original qualification assertion. Three added regressions fail the initial PR head and pass the fix. Ruff and roadmap checks pass. New-head all-six/private receipts and independent main remain required; lifecycle/expert/release/customer gates remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

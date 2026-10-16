@@ -113,6 +113,13 @@ def test_regular_csv_bytes_and_receipts_remain_exact(input_file, raw):
     assert csv_scoring.prepare(SimpleNamespace(pk=1), 7)["sha256"] == receipt["sha256"]
 
 
+@pytest.mark.parametrize("entrypoint", ["prepare", "worker"])
+def test_missing_input_retains_the_existing_io_failure_boundary(input_file, entrypoint):
+    input_file.unlink()
+    with pytest.raises(FileNotFoundError):
+        capture(entrypoint)
+
+
 @pytest.mark.parametrize("failure", ["budget", "read", "checkpoint", "wrapper"])
 def test_owned_descriptor_is_closed_on_failed_capture(input_file, monkeypatch, failure):
     descriptor = None

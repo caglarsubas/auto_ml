@@ -43,6 +43,9 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     # file. The job consumes these exact bytes, never a mutable path after parsing.
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        # Preserve existing missing-input API and durable worker diagnostics.
+        raise
     except OSError:
         raise JobConflict("job_input_unavailable") from None
     try:
