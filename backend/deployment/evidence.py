@@ -19,6 +19,14 @@ def read_json(path, default=None):
         return json.load(stream)
 
 
+def parse_metadata(raw):
+    """Keep the JSON decoder's nesting ceiling inside the invalid-input boundary."""
+    try:
+        return json.loads(raw)
+    except RecursionError:
+        raise ValueError('Package metadata nesting is unsupported.') from None
+
+
 def current_selection(file_id):
     root = Path(settings.MEDIA_ROOT)
     try:
@@ -105,7 +113,7 @@ def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, 
     # Native jobs supply bounded, regular-file capture. Default/offline callers
     # keep their existing reader; integrity does not provide filesystem custody.
     raw_manifest = metadata_bytes(manifest_path) if metadata_bytes else None
-    manifest = json.loads(raw_manifest.decode('utf-8')) if raw_manifest is not None else read_json(manifest_path)
+    manifest = parse_metadata(raw_manifest.decode('utf-8')) if raw_manifest is not None else read_json(manifest_path)
 
     def manifest_digest():
         if raw_manifest is None:
@@ -119,7 +127,7 @@ def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, 
     selected_id = bundle_id or (out.name if out.parent.name == 'versions' else None)
     if manifest.get('file_id') != file_id or (selected_id and manifest.get('bundle_id') != str(selected_id)):
         raise ValueError('Scoring bundle identity does not match the requested dataset/version.')
-    publication = (json.loads(metadata_bytes(out / 'publication.json').decode('utf-8'))
+    publication = (parse_metadata(metadata_bytes(out / 'publication.json').decode('utf-8'))
                    if metadata_bytes else read_json(out / 'publication.json', {}))
     if not isinstance(publication, dict):
         raise ValueError('Package publication receipt must be an object.')

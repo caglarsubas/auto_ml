@@ -1,0 +1,65 @@
+{
+  "packet": "P79",
+  "date": "2026-10-16",
+  "source_base": "619f9efa72e16712bd5fe6ecc510d96352287b46",
+  "source_sha256": {
+    "backend/access_control/projects.py": "fb98732f8f456ad399751f3f12e5874ace8bc1eff8111f88151a976f66621582",
+    "backend/deployment/evidence.py": "5682477b1b07068a3c7fe3a5b48d6e65d1d9c798044c42ef5709a16507c97a4d",
+    "backend/execution_jobs/service.py": "62f743f233d9de3caef15ac53150501e7238671603ae1e54bbe0ec815465fc4c",
+    "backend/tests/unit/test_native_metadata_parsing.py": "74493feeb1eee01e00e2aee6b86800b123a193768b030e15b86a00494a6bde90"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 13,
+      "failed": 24,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 68.149
+    },
+    "focused-sqlite": {
+      "passed": 199,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 16.028
+    },
+    "focused-postgresql": {
+      "passed": 199,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 38.591
+    },
+    "sqlite-full": {
+      "passed": 3747,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 242.227
+    }
+  },
+  "coverage": {
+    "line": 75.58,
+    "branch": 65.89
+  },
+  "new_cases": 37,
+  "reproduction": "Actual decoder overflow and decoder-supported scope traversal: 24 predecessor failures and 13 passing references. Covers real HTTP admission, durable terminal receipts, fresh-request recovery, cross-project denials and unexpected-error boundaries.",
+  "draft_fixture": "The initial 2,000-level draft and diagnostic probe are retained separately. This CPython 3.12 C decoder accepts 2,000 levels despite a Python recursion limit of 1,000. Corrected 10,000-level compact array/object fixtures fit 64 KiB and exceed the actual decoder ceiling. Decoder-supported 2,000-level fixtures exercise the independent Python scope-walk failure.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed",
+  "limitations": [
+    "Native bounded decoding only; default non-job/offline readers retain existing behavior.",
+    "No sandbox or complete hostile-input resource guarantee. Existing filesystem custody, byte/execution budgets and authority checks remain required.",
+    "All-six exact-head/private receipts and independent main remain required.",
+    "D07 durable search, lifecycle/upgrade/restore, expert and release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
