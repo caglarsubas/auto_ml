@@ -56,7 +56,11 @@ def check_runtime():
     try:
         connection.ensure_connection()
         with connection.cursor() as cursor:
-            cursor.execute("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+            # Evidence must describe this backend, regardless of search path.
+            cursor.execute("""
+                SELECT ssl FROM pg_catalog.pg_stat_ssl
+                WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()
+            """)
             row = cursor.fetchone()
         if not row or row[0] is not True:
             raise RuntimeUnavailable("job_metadata_tls_required")
