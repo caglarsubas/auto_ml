@@ -1,0 +1,117 @@
+{
+  "packet": "P89",
+  "date": "2026-10-17",
+  "source_base": "bb12b1004b6d65cdb4ec09577282d9d8b7400918",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "164a46c291241887f4d523299b0d4b4548e171bebee1c8b990b0f1c0a56bf0fd",
+    "backend/tests/unit/test_private_role_namespace.py": "b85e816482441ce72a37055575ada1de1e0d1951ce39657b3d63f8357eaf34ba"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 0,
+      "failed": 24,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.804
+    },
+    "focused-postgresql": {
+      "passed": 288,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 13.231
+    },
+    "focused-sqlite": {
+      "passed": 388,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.678
+    },
+    "sqlite-full": {
+      "passed": 3996,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 290.39
+    }
+  },
+  "new_cases": 24,
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "reproduction": {
+    "actual_postgresql_gap_reproduced": true,
+    "observations": [
+      {
+        "shadow": "catalog",
+        "session_createdb": true,
+        "active_role_switched": false,
+        "authority_check": "accepted"
+      },
+      {
+        "shadow": "function",
+        "session_createdb": true,
+        "active_role_switched": true,
+        "authority_check": "accepted"
+      },
+      {
+        "shadow": "combined",
+        "session_createdb": true,
+        "active_role_switched": true,
+        "authority_check": "accepted"
+      }
+    ],
+    "owned_transaction_cleanup": "passed",
+    "customer_installation_modified": false
+  },
+  "operator_before": {
+    "role_operator_gap_reproduced": true,
+    "actual_privileged_membership": "pg_read_all_data",
+    "session_createdb": false,
+    "ordinary_namespace": "denied",
+    "public_operator_namespace": "accepted",
+    "qualified_catalog_and_functions_alone": "insufficient",
+    "owned_transaction_cleanup": "passed",
+    "customer_installation_modified": false
+  },
+  "operator_after": {
+    "role_operator_gap_closed": true,
+    "actual_privileged_membership": "pg_read_all_data",
+    "session_createdb": false,
+    "ordinary_namespace": "denied",
+    "public_operator_namespace": "denied",
+    "qualified_catalog_functions_and_operators": "passed",
+    "owned_transaction_cleanup": "passed",
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual PostgreSQL public view/function/operator substitutions, genuine elevated session, six entrypoints and rollback. SQLite explicit denial references only, with 100 additional existing adoption cases. Ordinary NOCREATEDB role plus actual pg_read_all_data membership independently proves operator bypass and fix.",
+  "draft_test_assumption": {
+    "retained": "test-reports/p89/draft-transport-order-assumption",
+    "each_matrix": {
+      "passed": 267,
+      "failed": 15,
+      "errors": 0
+    },
+    "reason": "New tests wrongly assumed command transport/schema check followed role check. Corrected new assertions to preserve actual prior command order; no product order or existing assertions changed."
+  },
+  "superseded_full": {
+    "qualification": false,
+    "reason": "Stopped owned local full run with SIGINT before source changes after actual operator bypass reproduction; fresh final-source run required.",
+    "CI_rerun": false,
+    "budgets_changed": false
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 ledger invariants included in final full suite",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Explicit catalog/function/operator trust for shared startup role predicate, not all database queries.",
+    "Existing attribute and active/session membership policy, command order, errors and positive receipts preserved.",
+    "Six operator-trap regression cases expose unexpected SQL execution and wrong denial diagnostic; separate ordinary-role proof demonstrates the actual membership bypass.",
+    "Startup observation only, not continuous authority monitoring, full authenticated-identity binding or lifecycle/release/customer qualification.",
+    "Exact-commit all-six/private and independent main required before completion."
+  ]
+}
