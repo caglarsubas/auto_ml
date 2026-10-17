@@ -27,6 +27,7 @@ def checks(settings):
         patch.object(preflight, "MigrationExecutor", return_value=executor),
         patch.object(preflight, "check_schema"),
         patch.object(preflight, "check_schema_privileges"),
+        patch.object(preflight, "check_schema_row_security"),
         patch("backend.celery.app.connection_for_write", return_value=broker),
     ):
         yield database, executor, broker.__enter__.return_value

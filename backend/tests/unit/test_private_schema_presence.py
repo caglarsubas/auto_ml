@@ -24,6 +24,7 @@ def physical_database(settings, monkeypatch):
     settings.DECLARAI_JOBS_ENABLED = True
     # Privileges are independently tested against actual PostgreSQL REVOKE.
     monkeypatch.setattr(preflight, "check_schema_privileges", lambda: None)
+    monkeypatch.setattr(preflight, "check_schema_row_security", lambda: None)
     transport = MagicMock(vendor="postgresql")
     transport.alias = connection.alias
     transport.introspection = connection.introspection

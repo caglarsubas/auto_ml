@@ -37,6 +37,7 @@ def private_history(settings, monkeypatch):
     # tests. This fixture isolates real migration-history behavior from TLS.
     monkeypatch.setattr(preflight, "check_schema", lambda: None)
     monkeypatch.setattr(preflight, "check_schema_privileges", lambda: None)
+    monkeypatch.setattr(preflight, "check_schema_row_security", lambda: None)
     monkeypatch.setattr("backend.celery.app.connection_for_write", lambda: broker)
     # check_consistent_history must receive the real database as well.
     database.alias = connection.alias
