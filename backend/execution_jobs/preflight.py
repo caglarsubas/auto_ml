@@ -20,22 +20,24 @@ def check_application_role():
         raise RuntimeUnavailable("job_private_postgresql_required")
     try:
         with connection.cursor() as cursor:
+            # Caller-controlled search paths must not replace authority evidence.
             cursor.execute("""
                 SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls,
                     EXISTS (
-                        SELECT 1 FROM pg_roles privileged
+                        SELECT 1 FROM pg_catalog.pg_roles privileged
                         WHERE (privileged.rolsuper OR privileged.rolcreatedb
                             OR privileged.rolcreaterole OR privileged.rolreplication
-                            OR privileged.rolbypassrls OR privileged.rolname IN (
+                            OR privileged.rolbypassrls
+                            OR privileged.rolname OPERATOR(pg_catalog.=) ANY (ARRAY[
                             'pg_read_server_files', 'pg_write_server_files',
                             'pg_execute_server_program', 'pg_signal_backend',
                             'pg_read_all_data', 'pg_write_all_data'
-                        )) AND (
-                            pg_has_role(current_user, privileged.oid, 'MEMBER')
-                            OR pg_has_role(session_user, privileged.oid, 'MEMBER')
+                        ]::pg_catalog.name[])) AND (
+                            pg_catalog.pg_has_role(current_user, privileged.oid, 'MEMBER')
+                            OR pg_catalog.pg_has_role(session_user, privileged.oid, 'MEMBER')
                         )
                     )
-                FROM pg_roles WHERE rolname = current_user
+                FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.=) current_user
             """)
             row = cursor.fetchone()
         if not row or len(row) != 6 or any(item is not False for item in row):
