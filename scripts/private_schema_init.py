@@ -45,10 +45,10 @@ try:
     phase='authority'
     with connection.cursor() as c:
         c.execute("SET lock_timeout='5s'; SET statement_timeout='45s'")
-        c.execute("SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user")
+        c.execute("SELECT pg_catalog.current_database(),current_user,(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()),rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member OPERATOR(pg_catalog.=) r.oid) FROM pg_catalog.pg_roles r WHERE rolname OPERATOR(pg_catalog.=) current_user")
         row=c.fetchone()
         assert row[:4]==(os.environ['DECLARAI_DB_NAME'],os.environ['DECLARAI_DB_USER'],True,True) and all(x is False for x in row[4:])
-        c.execute("SELECT pg_get_userbyid(datdba)=current_user AND pg_encoding_to_char(encoding)='UTF8' FROM pg_database WHERE datname=current_database()")
+        c.execute("SELECT pg_catalog.pg_get_userbyid(datdba) OPERATOR(pg_catalog.=) current_user AND pg_catalog.pg_encoding_to_char(encoding) OPERATOR(pg_catalog.=) 'UTF8'::pg_catalog.name FROM pg_catalog.pg_database WHERE datname OPERATOR(pg_catalog.=) pg_catalog.current_database()")
         assert c.fetchone()==(True,)
         c.execute("SELECT pg_catalog.pg_try_advisory_lock(1584948041,42)")
         assert c.fetchone()==(True,)
