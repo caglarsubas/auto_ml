@@ -1,0 +1,180 @@
+{
+  "packet": "P88",
+  "date": "2026-10-17",
+  "source_base": "3a2381d474fec450495f2a536855233aa4e02aed",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "f5edbb3619c728427cadbff24452d43a57cf3214a3ccb08c1042a1624765a4ce",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/unit/test_private_metadata_write_mode.py": "35e589cdab5603099f3d171bedb9448c8bf5226bb95d4030eead53c901bf2d61",
+    "backend/tests/unit/test_job_preflight.py": "6a706ed040cf56881288129fea49e4e1f2eb51d78d8145cc52f2edbafcfe9bec",
+    "backend/tests/unit/test_private_migration_history.py": "fbb97074f81ff04e8a45ce2abba2e09e8f9c7b42a4ecde1bfe14fddd36b9cd58",
+    "backend/tests/unit/test_private_schema_presence.py": "45ba9d449d1c2a525049c1624287105b106d45ced149e5ef3d47313479338cf3",
+    "backend/tests/unit/test_private_schema_privileges.py": "d6adac9b865bc2e56372918c5e129165b27ed6eeb539a51903ca9cf4fecfe533",
+    "backend/tests/unit/test_private_schema_row_security.py": "4e17dda3b9001ff011731aec3a16ca6c36c9b7885f9a90c88504ebbcdcd14857"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 2,
+      "failed": 10,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.381
+    },
+    "focused-postgresql": {
+      "passed": 264,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 11.828
+    },
+    "focused-sqlite": {
+      "passed": 264,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.083
+    },
+    "draft-unqualified-postgresql": {
+      "passed": 262,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.337
+    },
+    "sqlite-full": {
+      "passed": 3972,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 301.375
+    }
+  },
+  "new_cases": 12,
+  "full_local_suite": "passed frozen final 12-case source",
+  "reproduction": {
+    "full_startup_gap_reproduced": true,
+    "application_role_elevated": false,
+    "effective_crud_rights": "all present",
+    "read_only_modes": [
+      "on",
+      "on"
+    ],
+    "actual_write": "denied with SQLSTATE25006",
+    "full_startup_check": "accepted",
+    "fixture_rows_preserved": true,
+    "transport_only": "TLS/broker mocked; real PostgreSQL history, presence, privileges, RLS flags and read-only semantics",
+    "customer_installation_modified": false
+  },
+  "variant_reproduction": {
+    "read_only_variants_reproduced": true,
+    "fixture_rows_preserved": true,
+    "observations": [
+      {
+        "mode": "current_only",
+        "settings": [
+          "on",
+          "off"
+        ],
+        "operation": "denied with SQLSTATE25006",
+        "full_startup_check": "accepted"
+      },
+      {
+        "mode": "default_only",
+        "settings": [
+          "off",
+          "on"
+        ],
+        "operation": "allowed in active transaction; later default is read-only",
+        "full_startup_check": "accepted"
+      },
+      {
+        "mode": "both",
+        "settings": [
+          "on",
+          "on"
+        ],
+        "operation": "denied with SQLSTATE25006",
+        "full_startup_check": "accepted"
+      },
+      {
+        "mode": "session_default_commit_transition",
+        "active_transaction_before_commit": [
+          "off",
+          "on"
+        ],
+        "new_transaction_after_commit": [
+          "on",
+          "on"
+        ],
+        "future_write": "denied with SQLSTATE25006",
+        "fixture_rows_preserved": true
+      }
+    ],
+    "transport_only": "TLS/broker mocked; actual PostgreSQL state and operations"
+  },
+  "fixture_scope": "Actual PostgreSQL current/session-default settings and ORM write semantics. Default-only case can still write in active transaction; final separate commit proof shows later read-only mode. SQLite explicit response references; no product fallback. Earlier LOCAL-setting reference retained separately, not persistence evidence.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "limitations": [
+    "Read-only query of current metadata connection settings, not general write-success or availability proof.",
+    "No SET, write probe, reconnect, grant, schema or history repair in product.",
+    "Startup observation does not fence future changes or qualify failover/primary fencing, sequence/schema/data/lifecycle equivalence.",
+    "Exact-commit all-six/private and independent main remain required; D07 release/customer gates stay open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "superseded_full_run": {
+    "passed": 3970,
+    "skipped": 6,
+    "failed": 0,
+    "errors": 0,
+    "seconds": 371.625,
+    "scope": "Run started before namespace fix; source/tests changed while active. Retained, not used to qualify final source."
+  },
+  "namespace_reproduction": {
+    "draft_unqualified_guard_bypassed": true,
+    "actual_modes": [
+      "off",
+      "on"
+    ],
+    "unqualified_modes": [
+      "off",
+      "off"
+    ],
+    "full_startup_check": "accepted",
+    "fixture_rows_preserved": true,
+    "transport_only": "TLS/broker mocked; actual PostgreSQL namespace and settings"
+  },
+  "local_fixture_startup": {
+    "attempts": [
+      {
+        "stage": "before-final12",
+        "postgres": "declarai-p88-postgres-2cbb677abe3e4475b88f897f51cd2f81",
+        "exit": 2
+      },
+      {
+        "stage": "focused-final264",
+        "postgres": "declarai-p88-postgres-cb70c923f9a7448dbd9d7898833d458c",
+        "exit": 2
+      }
+    ],
+    "phase": "psql role initialization before pytest; old XML files do not qualify final source",
+    "stderr": "not retained by prior helper capture; no inferred stderr message",
+    "source_observation": "Pinned entrypoint temporary initialization server uses no TCP listen addresses; prior readiness observed Unix socket",
+    "owned_cleanup": "helper finally completed; no customer resources modified",
+    "correction": "Use TCP readiness and matching TCP psql on owned localhost, with unchanged startup/test deadlines"
+  },
+  "namespace_qualification": "Both setting function calls use pg_catalog.current_setting; actual PostgreSQL public shadow no longer bypasses the guard. SQLite cases are mode-response references, not namespace semantics.",
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "roadmap_projection": "passed;49 ledger invariants included in full suite",
+  "local_owned_fixtures": "absent after successful cleanup"
+}

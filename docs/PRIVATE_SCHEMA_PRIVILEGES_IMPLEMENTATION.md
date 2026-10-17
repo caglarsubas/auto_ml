@@ -35,7 +35,8 @@ identified development references supply catalog responses for existing tables,
 not a production fallback or a claim of real permission enforcement. Existing
 history, presence and transport fixtures isolate the independent privilege phase
 without changing their assertions. The separate P87 RLS phase is also isolated
-here and exercised by its own actual PostgreSQL tests. Full hosted native/private qualification
+here and exercised by its own actual PostgreSQL tests. P88 write-mode checks
+are similarly isolated and independently exercised. Full hosted native/private qualification
 independently checks the packaged roles and fresh Linux installation.
 
 See [P86 source evidence](evidence/p86-qualification-2026-10-17.json).

@@ -25,6 +25,7 @@ def checks(settings):
     with (
         patch.object(preflight, "connection", database),
         patch.object(preflight, "MigrationExecutor", return_value=executor),
+        patch.object(preflight, "check_metadata_write_mode"),
         patch.object(preflight, "check_schema"),
         patch.object(preflight, "check_schema_privileges"),
         patch.object(preflight, "check_schema_row_security"),

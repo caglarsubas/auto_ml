@@ -26,7 +26,7 @@ catalog SQL checks the resulting schema. The predecessor fails twenty-four cases
 and passes four healthy/additive-column references. SQLite's development reference
 adapts actual SQLite metadata after the corresponding DDL; the product has no
 SQLite catalog fallback. Physical catalog SQL remains actual PostgreSQL. TLS/broker transport and the
-independent privilege and row-security phases are isolated in these focused tests. Existing migration-history/connectivity fixtures explicitly isolate this
+independent write-mode, privilege and row-security phases are isolated in these focused tests. Existing migration-history/connectivity fixtures explicitly isolate this
 new physical check, preserving all their previous assertions. Full private hosted
 qualification independently checks TLS and fresh Linux installation/service use.
 

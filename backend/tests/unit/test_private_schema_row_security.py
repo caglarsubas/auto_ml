@@ -24,6 +24,8 @@ MODES = {"enabled": (True, False), "enabled_forced": (True, True), "force_only":
 def row_security_database(settings, monkeypatch):
     settings.DECLARAI_RUNTIME_PROFILE = "private"
     settings.DECLARAI_JOBS_ENABLED = True
+    # The independent write-mode phase has its own actual PostgreSQL tests.
+    monkeypatch.setattr(preflight, "check_metadata_write_mode", lambda: None)
     transport = MagicMock(vendor="postgresql")
     transport.alias = connection.alias
     transport.introspection = connection.introspection

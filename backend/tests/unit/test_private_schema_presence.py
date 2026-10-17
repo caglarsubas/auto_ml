@@ -22,6 +22,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.django_db(transaction=True)]
 def physical_database(settings, monkeypatch):
     settings.DECLARAI_RUNTIME_PROFILE = "private"
     settings.DECLARAI_JOBS_ENABLED = True
+    monkeypatch.setattr(preflight, "check_metadata_write_mode", lambda: None)
     # Privileges are independently tested against actual PostgreSQL REVOKE.
     monkeypatch.setattr(preflight, "check_schema_privileges", lambda: None)
     monkeypatch.setattr(preflight, "check_schema_row_security", lambda: None)

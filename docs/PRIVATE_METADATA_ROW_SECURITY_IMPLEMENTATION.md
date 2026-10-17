@@ -36,7 +36,8 @@ their DDL. Forced auth-group cases prove the row is hidden before rejection and
 visible after rollback. SQLite has no PostgreSQL RLS: explicitly identified
 catalog-response references provide development coverage, not a product fallback
 or real RLS qualification. Existing independent-phase fixtures preserve all their
-assertions while isolating this new phase.
+assertions while isolating this new phase. The P88 write-mode check is also
+isolated in RLS-specific cases and independently tested.
 
 See [P87 source evidence](evidence/p87-qualification-2026-10-17.json).
 Exact-commit all-six checks, complete private/native reports and independent

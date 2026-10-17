@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import connection
 from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.migrations.executor import MigrationExecutor
+from execution_jobs.metadata_write_mode import check_metadata_write_mode, MetadataWriteModeMismatch
 from execution_jobs.schema_presence import check_schema, SchemaMismatch
 from execution_jobs.schema_privileges import check_schema_privileges, SchemaPrivilegesMismatch
 from execution_jobs.schema_row_security import check_schema_row_security, SchemaRowSecurityMismatch
@@ -57,6 +58,7 @@ def check_runtime():
             row = cursor.fetchone()
         if not row or row[0] is not True:
             raise RuntimeUnavailable("job_metadata_tls_required")
+        check_metadata_write_mode()
         executor = MigrationExecutor(connection)
         # The sealed private profile requires an exact, consistent history.
         # Django's plan alone ignores unknown applied migrations, so rolling
@@ -69,6 +71,8 @@ def check_runtime():
         check_schema()
         check_schema_privileges()
         check_schema_row_security()
+    except MetadataWriteModeMismatch:
+        raise RuntimeUnavailable("job_metadata_read_only") from None
     except SchemaRowSecurityMismatch:
         raise RuntimeUnavailable("job_schema_row_security_invalid") from None
     except SchemaPrivilegesMismatch:
