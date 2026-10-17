@@ -50,7 +50,7 @@ try:
         assert row[:4]==(os.environ['DECLARAI_DB_NAME'],os.environ['DECLARAI_DB_USER'],True,True) and all(x is False for x in row[4:])
         c.execute("SELECT pg_get_userbyid(datdba)=current_user AND pg_encoding_to_char(encoding)='UTF8' FROM pg_database WHERE datname=current_database()")
         assert c.fetchone()==(True,)
-        c.execute("SELECT pg_try_advisory_lock(1584948041,42)")
+        c.execute("SELECT pg_catalog.pg_try_advisory_lock(1584948041,42)")
         assert c.fetchone()==(True,)
     phase='graph'
     executor=MigrationExecutor(connection)

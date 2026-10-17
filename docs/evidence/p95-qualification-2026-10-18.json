@@ -1,0 +1,95 @@
+{
+  "packet": "P95",
+  "date": "2026-10-18",
+  "source_base": "e7815f167d7562898e616c76245566d50e77b5f1",
+  "source_sha256": {
+    "scripts/private_schema_init.py": "a0520a72601b4d7871b8f009dfea55b50e6b551590d710cb0c4a66d2a0eeab1a",
+    "backend/tests/unit/test_private_schema_lock_namespace.py": "efc1fa86849d2fd054186b8488db5cb925872cee3137ecfd46d6e68878f30dc9"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 5,
+      "failed": 5,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.823
+    },
+    "focused-postgresql": {
+      "passed": 477,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 11.644
+    },
+    "focused-sqlite": {
+      "passed": 577,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.58
+    },
+    "sqlite-full": {
+      "passed": 4047,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 269.698
+    }
+  },
+  "new_cases": 10,
+  "before_regressions": 5,
+  "before_controls": 5,
+  "reproduction": {
+    "observations": [
+      {
+        "contender_holds_real_lock": false,
+        "actual_production_acceptance": true,
+        "initializer_owns_real_lock": false
+      },
+      {
+        "contender_holds_real_lock": true,
+        "actual_production_acceptance": true,
+        "initializer_owns_real_lock": false
+      }
+    ],
+    "ordinary_nocreatedb_role": true,
+    "actual_production_lock_statement_and_assertion": true,
+    "original_row_and_empty_history_preserved": true,
+    "scope": "Isolated lock attestation; runtime, manifest, role/TLS authority, graph/state/migration and controller publication are separate",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "observations": [
+      {
+        "contender_holds_real_lock": false,
+        "actual_production_acceptance": true,
+        "initializer_owns_real_lock": true
+      },
+      {
+        "contender_holds_real_lock": true,
+        "actual_production_acceptance": false,
+        "initializer_owns_real_lock": false
+      }
+    ],
+    "ordinary_nocreatedb_role": true,
+    "actual_production_lock_statement_and_assertion": true,
+    "original_row_and_empty_history_preserved": true,
+    "scope": "Isolated lock attestation; runtime, manifest, role/TLS authority, graph/state/migration and controller publication are separate",
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual production lock SQL and assertion with two native sessions and genuine pg_locks evidence; SQLite response references only. Ordinary NOCREATEDB-role reproduction excludes runtime/manifest, other authority, graph/state/migration and controller publication. Not a complete migration concurrency bypass.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Cooperative session advisory lock only; no continuous schema/admin fencing.",
+    "Other initializer authority SQL remains outside this packet.",
+    "Full lifecycle, upgrade/rollback, coordinated restore and release/customer gates remain open."
+  ],
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08000000000001
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
