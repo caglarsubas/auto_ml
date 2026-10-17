@@ -23,6 +23,8 @@ RIGHTS = ("SELECT", "INSERT", "UPDATE", "DELETE")
 def permission_database(settings, monkeypatch):
     settings.DECLARAI_RUNTIME_PROFILE = "private"
     settings.DECLARAI_JOBS_ENABLED = True
+    # Actual RLS behavior is independently exercised by row-security tests.
+    monkeypatch.setattr(preflight, "check_schema_row_security", lambda: None)
     transport = MagicMock(vendor="postgresql")
     transport.alias = connection.alias
     transport.introspection = connection.introspection

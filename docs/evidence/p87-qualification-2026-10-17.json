@@ -1,0 +1,82 @@
+{
+  "packet": "P87",
+  "date": "2026-10-17",
+  "source_base": "e6519609504ba71a4d0dfe425d8d1f5a486fb577",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "fa3ec3fe85429b9447ac15bc556b54427b957b4e71e01e93208f663e1605f29c",
+    "backend/execution_jobs/schema_row_security.py": "8f9c1ded5e12c1f98d8148eda860969fdf163ba7a4092a5bfdb46761770c386f",
+    "backend/tests/unit/test_private_schema_row_security.py": "5427691ce4437c03e1e73dddafdabc9fc69fc116a240781a6e4467f6a52d2450",
+    "backend/tests/unit/test_job_preflight.py": "f5370bc003293797ca2ed4dae88b81dd1f42ea15be2c04b6a9b449f089ecb141",
+    "backend/tests/unit/test_private_migration_history.py": "e6c8cae75b733efb768b0614f7a60620bd239d541f2717e7b3c08e7647279dcd",
+    "backend/tests/unit/test_private_schema_presence.py": "c6d36f91c80b23f76371f61d65c585328d9e3cc8a245f02a08aea2a024ec5750",
+    "backend/tests/unit/test_private_schema_privileges.py": "67e6a779ec34587cc26e8b8b6e3a0689bd5b977a54297d7979c2c155b48918de"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 2,
+      "failed": 28,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.94
+    },
+    "focused-postgresql": {
+      "passed": 252,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.869
+    },
+    "focused-sqlite": {
+      "passed": 252,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.077
+    },
+    "sqlite-full": {
+      "passed": 3960,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 281.508
+    }
+  },
+  "new_cases": 30,
+  "full_local_suite": "passed",
+  "reproduction": {
+    "full_startup_gap_reproduced": true,
+    "application_role_elevated": false,
+    "effective_crud_rights": "all present",
+    "fixture_group_rows": {
+      "before": 1,
+      "under_forced_rls": 0,
+      "after_rollback": 1
+    },
+    "full_startup_check": "accepted",
+    "transport_only": "TLS and broker mocked; real PostgreSQL history, presence, privileges and RLS",
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Real PostgreSQL transactional RLS DDL and production catalog SQL; actual forced-RLS group row hidden and visible after rollback. Explicit SQLite catalog-response references, no product RLS fallback. Prior independent-phase fixtures preserve assertions.",
+  "owned_postgresql_fixture": {
+    "owned_cleanup": "passed",
+    "published_ports": false,
+    "private_qualification": false,
+    "customer_installation_modified": false
+  },
+  "ruff": "passed full workflow command",
+  "limitations": [
+    "Current metadata profile rejects both RLS flags, including owner-bypassed and force-only latent configurations; not all refused states currently hide rows.",
+    "No policy/grant/ownership/schema repair or model-row reads by product check.",
+    "Not continuous fencing, arbitrary RLS/ACL support, sequence/full schema/data or lifecycle qualification.",
+    "Exact-commit all-six/private and independent main still required; D07 lifecycle/expert/release/customer gates remain open."
+  ],
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "coverage": {
+    "line": 75.76,
+    "branch": 66.07
+  },
+  "roadmap_projection": "passed;49 ledger invariants included in full suite",
+  "local_owned_fixtures": "absent after successful cleanup"
+}
