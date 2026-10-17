@@ -1,0 +1,148 @@
+{
+  "packet": "P96",
+  "date": "2026-10-18",
+  "source_base": "aff3e9e69970f78ccab5bd43dd1f2ca84e4f84d0",
+  "source_sha256": {
+    "scripts/private_schema_init.py": "4e98b22ccc9cf90ca9bda2a5e3e0252bbb633fa0f43ecaa8b54904977539ec20",
+    "backend/tests/unit/test_private_schema_authority_namespace.py": "44c120f5c1bb36766a0160f0d3c0a82b70bcdc7e73620e189eeb8cbdd0245d8b"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 2,
+      "failed": 12,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.193
+    },
+    "focused-postgresql": {
+      "passed": 491,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 16.389
+    },
+    "focused-sqlite": {
+      "passed": 591,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 9.358
+    },
+    "sqlite-full": {
+      "passed": 4061,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 269.051
+    }
+  },
+  "new_cases": 14,
+  "before_regressions": 12,
+  "before_genuine_controls": 2,
+  "reproduction": {
+    "observations": [
+      {
+        "profile": "ordinary_plaintext",
+        "actual_tls": false,
+        "actual_createdb": false,
+        "actual_explicit_membership": false,
+        "actual_full_authority_block_accepted": true,
+        "reported_tls": true,
+        "reported_createdb": false,
+        "reported_explicit_membership": false
+      },
+      {
+        "profile": "createdb_plaintext",
+        "actual_tls": false,
+        "actual_createdb": true,
+        "actual_explicit_membership": false,
+        "actual_full_authority_block_accepted": true,
+        "reported_tls": true,
+        "reported_createdb": false,
+        "reported_explicit_membership": false
+      },
+      {
+        "profile": "membership_plaintext",
+        "actual_tls": false,
+        "actual_createdb": false,
+        "actual_explicit_membership": true,
+        "actual_full_authority_block_accepted": true,
+        "reported_tls": true,
+        "reported_createdb": false,
+        "reported_explicit_membership": false
+      },
+      {
+        "profile": "foreign_database_owner",
+        "actual_database_owner_matches": false,
+        "actual_owner_statement_accepted": true
+      }
+    ],
+    "initial_and_final_application_role_nocreatedb": true,
+    "administrative_setup_disposable_cluster_only": true,
+    "actual_production_authority_block_and_separate_owner_statement": true,
+    "original_row_and_empty_history_preserved": true,
+    "scope": "Isolated authority SQL/assertions; runtime/manifest, verified transport, graph/state/migration and controller publication are outside proof. CREATEDB/membership are deliberate owned fixture profiles, not production roles.",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "observations": [
+      {
+        "profile": "ordinary_plaintext",
+        "actual_tls": false,
+        "actual_createdb": false,
+        "actual_explicit_membership": false,
+        "actual_full_authority_block_accepted": false,
+        "reported_tls": false,
+        "reported_createdb": false,
+        "reported_explicit_membership": false
+      },
+      {
+        "profile": "createdb_plaintext",
+        "actual_tls": false,
+        "actual_createdb": true,
+        "actual_explicit_membership": false,
+        "actual_full_authority_block_accepted": false,
+        "reported_tls": false,
+        "reported_createdb": true,
+        "reported_explicit_membership": false
+      },
+      {
+        "profile": "membership_plaintext",
+        "actual_tls": false,
+        "actual_createdb": false,
+        "actual_explicit_membership": true,
+        "actual_full_authority_block_accepted": false,
+        "reported_tls": false,
+        "reported_createdb": false,
+        "reported_explicit_membership": true
+      },
+      {
+        "profile": "foreign_database_owner",
+        "actual_database_owner_matches": false,
+        "actual_owner_statement_accepted": false
+      }
+    ],
+    "initial_and_final_application_role_nocreatedb": true,
+    "administrative_setup_disposable_cluster_only": true,
+    "actual_production_authority_block_and_separate_owner_statement": true,
+    "original_row_and_empty_history_preserved": true,
+    "scope": "Isolated authority SQL/assertions; runtime/manifest, verified transport, graph/state/migration and controller publication are outside proof. CREATEDB/membership are deliberate owned fixture profiles, not production roles.",
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual authority cursor block on owned plaintext ordinary/CREATEDB/membership profiles with independent reported-field assertions; separate actual owner statement/assertion against genuinely foreign database owner. Administrative setup is disposable-cluster fixture-only. Original row/empty history preserved. SQLite response references only.",
+  "preliminary_evidence": "Initial acceptance-only before/fixed receipts retained separately; final proof adds independent reported TLS/CREATEDB/membership assertions. No product assertion weakened.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Isolated authority evidence, not a full controller/bootstrap or verified-transport bypass.",
+    "Selected-controller observations only; no later-state fencing or full physical-schema/data equivalence.",
+    "Other helper boundaries, full lifecycle/upgrade/rollback/coordinated restore and release/customer gates remain open."
+  ],
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08000000000001
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
