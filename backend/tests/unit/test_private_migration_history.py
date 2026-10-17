@@ -32,6 +32,7 @@ def private_history(settings, monkeypatch):
         return value
 
     monkeypatch.setattr(preflight, "connection", database)
+    monkeypatch.setattr(preflight, "check_metadata_write_mode", lambda: None)
     monkeypatch.setattr(preflight, "MigrationExecutor", executor)
     # Physical catalog behavior is independently exercised by schema-presence
     # tests. This fixture isolates real migration-history behavior from TLS.
