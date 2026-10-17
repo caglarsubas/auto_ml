@@ -1,0 +1,117 @@
+{
+  "packet": "P90",
+  "date": "2026-10-17",
+  "source_base": "419deb6308e164f792f51152a4491693f4c32df5",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "d17a47369460c49828d89ddcf66321a72ea9cf0816114a2332b68eaf967f068e",
+    "backend/tests/unit/test_private_tls_namespace.py": "df92f426040a2d93c74232581ada1ab7fe83fac0815bf731d3bc5427837fe74f"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 0,
+      "failed": 8,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.992
+    },
+    "prototype-postgresql": {
+      "passed": 296,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.842
+    },
+    "focused-postgresql": {
+      "passed": 296,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.367
+    },
+    "focused-sqlite": {
+      "passed": 396,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.65
+    },
+    "sqlite-full": {
+      "passed": 4004,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 253.923
+    }
+  },
+  "new_cases": 8,
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "reproduction": {
+    "candidate_only": true,
+    "plaintext_metadata_tls_gap_reproduced": true,
+    "observations": [
+      {
+        "namespace": "public",
+        "actual_metadata_tls": false,
+        "startup_receipt": "verified"
+      },
+      {
+        "namespace": "temporary",
+        "actual_metadata_tls": false,
+        "startup_receipt": "verified"
+      },
+      {
+        "namespace": "combined",
+        "actual_metadata_tls": false,
+        "startup_receipt": "verified"
+      }
+    ],
+    "application_role": "non_elevated",
+    "broker_only": "stubbed; actual PostgreSQL TLS state, history, schema, privileges and modes",
+    "private_runtime_qualification": false,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "plaintext_metadata_tls_gap_closed": true,
+    "observations": [
+      {
+        "namespace": "public",
+        "actual_metadata_tls": false,
+        "startup_result": "job_metadata_tls_required"
+      },
+      {
+        "namespace": "temporary",
+        "actual_metadata_tls": false,
+        "startup_result": "job_metadata_tls_required"
+      },
+      {
+        "namespace": "combined",
+        "actual_metadata_tls": false,
+        "startup_result": "job_metadata_tls_required"
+      }
+    ],
+    "application_role": "non_elevated",
+    "broker_only": "stubbed; actual PostgreSQL TLS state, history, schema, privileges and modes",
+    "private_runtime_qualification": false,
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual plaintext copy of pytest-owned PostgreSQL connection; public/temp statistics views, combined PID function and operator traps; transactional rollback and closure; original options/PID/TLS preserved. SQLite explicit denial references, not PostgreSQL semantics; 100 additional existing adoption cases in SQLite focused matrix.",
+  "case_semantics": "Six view/PID substitutions yield false verified-TLS evidence before the fix. Two operator-trap cases expose untrusted SQL execution/wrong diagnostic, not a separately claimed local TLS attestation bypass.",
+  "candidate_setup_failure": {
+    "retained": "test-reports/p90/draft-broker-import-order.log",
+    "reason": "Owned probe imported Celery before enabling jobs; moved import after setting jobs enabled. Product and tests unchanged by this harness correction."
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 ledger invariants included in final full suite",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Startup observation of actual current metadata TLS, not continuous monitoring or every-query namespace hardening.",
+    "No product SSL mode, connection, role policy, static diagnostic or successful receipt changes.",
+    "Local focused native default is plaintext; required full private CI uses TLS by default and verifies copied negative fixtures preserve original connection state.",
+    "Exact-commit all-six/private and independent main required; D07 lifecycle/release/customer gates remain open."
+  ]
+}
