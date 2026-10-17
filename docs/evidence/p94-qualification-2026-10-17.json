@@ -1,0 +1,93 @@
+{
+  "packet": "P94",
+  "date": "2026-10-17",
+  "source_base": "03c4c906abe45dab303a8bae480f0bd314a32688",
+  "source_sha256": {
+    "scripts/private_schema_init.py": "1ead801419d6e38d4d6df56137e5ea0da9c0ff2680162342df1a4e9bdc652cbd",
+    "backend/tests/unit/test_private_schema_state_catalog.py": "290db913e057ec26c7891a284936ed9cdf1942b8a2fbdf561bb7b9eb41d691b0"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 1,
+      "failed": 8,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.2
+    },
+    "prototype-postgresql": {
+      "passed": 9,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.159
+    },
+    "focused-postgresql": {
+      "passed": 467,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.489
+    },
+    "focused-sqlite": {
+      "passed": 567,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 7.322
+    },
+    "sqlite-full": {
+      "passed": 4037,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 405.986
+    }
+  },
+  "new_cases": 9,
+  "object_hiding_regressions": 6,
+  "forged_foreign_evidence_regressions": 2,
+  "healthy_control": 1,
+  "reproduction": {
+    "observations": {
+      "initial_state": "fresh",
+      "fresh_apply": "executed_and_reported_current",
+      "verify_current": "accepted",
+      "migration_calls": 1,
+      "recorded_migrations_during_probe": 31
+    },
+    "ordinary_nocreatedb_role": true,
+    "actual_state_graph_and_migrate_branch": true,
+    "scope": "Runtime/authority/TLS/controller publication are outside this owned graph/state/migration proof",
+    "owned_row_and_empty_history_preserved_after_rollback": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "observations": {
+      "initial_state": "partial_or_foreign",
+      "fresh_apply": "blocked_before_migrate",
+      "verify_current": "blocked",
+      "migration_calls": 0,
+      "recorded_migrations_during_probe": 0
+    },
+    "ordinary_nocreatedb_role": true,
+    "actual_state_graph_and_migrate_branch": true,
+    "scope": "Runtime/authority/TLS/controller publication are outside this owned graph/state/migration proof",
+    "owned_row_and_empty_history_preserved_after_rollback": true,
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual graph/state/migration branch on an owned ordinary NOCREATEDB PostgreSQL role; coherent temporary class/dependency aliases hide a genuine foreign public table. Original row/empty history preserved through outer rollback. Runtime/manifest, authority, TLS and controller publication are outside local proof. Native tests exercise actual object/dependency/function/aggregate/operator and forged catalog evidence; SQLite genuine-state response references only.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Selected-controller state observations; not subsequent-change fencing or full physical-schema/data equivalence.",
+    "Other authority/advisory-lock SQL remains outside this packet.",
+    "Full lifecycle, upgrade/rollback, coordinated restore and release/customer gates remain open."
+  ],
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}

@@ -69,20 +69,20 @@ try:
         with connection.cursor() as c:
             c.execute("SELECT nspname FROM pg_catalog.pg_namespace WHERE nspname OPERATOR(pg_catalog.<>) 'public'::pg_catalog.name AND nspname OPERATOR(pg_catalog.<>) 'information_schema'::pg_catalog.name AND pg_catalog.left(nspname::pg_catalog.text,3) OPERATOR(pg_catalog.<>) 'pg_'::pg_catalog.text")
             if c.fetchall():return 'foreign'
-            c.execute("SELECT extname FROM pg_extension WHERE extname<>'plpgsql'")
+            c.execute("SELECT extname FROM pg_catalog.pg_extension WHERE extname OPERATOR(pg_catalog.<>) 'plpgsql'::pg_catalog.name")
             if c.fetchall():return 'foreign'
-            c.execute("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'")
+            c.execute("SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) p.pronamespace WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name")
             if c.fetchone()!=(0,):return 'foreign'
-            c.execute("SELECT count(*) FROM pg_event_trigger")
+            c.execute("SELECT pg_catalog.count(*) FROM pg_catalog.pg_event_trigger")
             if c.fetchone()!=(0,):return 'foreign'
-            c.execute("SELECT n.nspname,c.relname,c.relkind,pg_get_userbyid(c.relowner) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','S','f')")
+            c.execute("SELECT n.nspname,c.relname,c.relkind,pg_catalog.pg_get_userbyid(c.relowner) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name AND c.relkind OPERATOR(pg_catalog.=) ANY(ARRAY['r','p','v','m','S','f']::pg_catalog.\"char\"[])")
             relations=c.fetchall()
         if not relations and not applied:return 'fresh'
         tables={name for _,name,kind,_ in relations if kind!='S'}
         wanted={'django_migrations'}|{m._meta.db_table for m in apps.get_models(include_auto_created=True) if m._meta.managed and not m._meta.proxy}
         if any(owner!=os.environ['DECLARAI_DB_USER'] for _,_,_,owner in relations):return 'foreign'
         with connection.cursor() as c:
-            c.execute("SELECT seq.relname,t.relname FROM pg_class seq JOIN pg_namespace n ON n.oid=seq.relnamespace LEFT JOIN pg_depend d ON d.classid='pg_class'::regclass AND d.objid=seq.oid AND d.deptype IN ('a','i') LEFT JOIN pg_class t ON t.oid=d.refobjid WHERE n.nspname='public' AND seq.relkind='S'")
+            c.execute("SELECT seq.relname,t.relname FROM pg_catalog.pg_class seq JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) seq.relnamespace LEFT JOIN pg_catalog.pg_depend d ON d.classid OPERATOR(pg_catalog.=) 'pg_catalog.pg_class'::pg_catalog.regclass::pg_catalog.oid AND d.objid OPERATOR(pg_catalog.=) seq.oid AND d.deptype OPERATOR(pg_catalog.=) ANY(ARRAY['a','i']::pg_catalog.\"char\"[]) LEFT JOIN pg_catalog.pg_class t ON t.oid OPERATOR(pg_catalog.=) d.refobjid WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name AND seq.relkind OPERATOR(pg_catalog.=) 'S'::pg_catalog.\"char\"")
             if any(table not in wanted for _,table in c.fetchall()):return 'foreign'
         if applied==set(loader.disk_migrations) and not executor.migration_plan(loader.graph.leaf_nodes()) and tables==wanted:return 'current'
         return 'partial_or_foreign'
