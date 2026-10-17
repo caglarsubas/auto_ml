@@ -24,13 +24,16 @@ def check_schema():
     with connection.cursor() as cursor:
         # Read catalogs only, without querying substituted views or model rows.
         # Public relations must be visible to the actual connection search path.
+        # Pin comparisons too: a caller operator can substitute joined evidence.
         cursor.execute("""
             SELECT c.relname, c.relkind, pg_catalog.pg_table_is_visible(c.oid), a.attname
             FROM pg_catalog.pg_class c
-            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
             LEFT JOIN pg_catalog.pg_attribute a
-                ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-            WHERE n.nspname = 'public' AND c.relname = ANY(%s::text[])
+                ON a.attrelid OPERATOR(pg_catalog.=) c.oid
+                AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped
+            WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name
+                AND c.relname OPERATOR(pg_catalog.=) ANY(%s::pg_catalog.name[])
         """, [list(required)])
         present = {}
         for table, kind, visible, column in cursor.fetchall():

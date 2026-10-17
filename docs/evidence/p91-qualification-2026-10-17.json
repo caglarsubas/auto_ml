@@ -1,0 +1,114 @@
+{
+  "packet": "P91",
+  "date": "2026-10-17",
+  "source_base": "67f8141043c53b1eb83ef816b5e911d8fdbaa455",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "6cf3ec60d19fa6793834bbf32c083711abbc4cdff8431a05f08d463ed497f7f3",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/schema_row_security.py": "9aa2848e27b6e9e3415ef05f63e9df4a124d64335785c9a9e993f398ed8282e3",
+    "backend/tests/unit/test_private_schema_catalog_namespace.py": "6603d8dd3d158135cb899c3f71065ce3d99aa8c0513c38736cbb58ee1dd0b4a7"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 0,
+      "failed": 8,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.777
+    },
+    "focused-postgresql": {
+      "passed": 304,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.117
+    },
+    "focused-sqlite": {
+      "passed": 404,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 6.339
+    },
+    "sqlite-full": {
+      "passed": 4012,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 239.052
+    }
+  },
+  "new_cases": 8,
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "reproduction": {
+    "catalog_operator_gap_reproduced": true,
+    "observations": [
+      {
+        "mode": "attribute_join",
+        "startup": "accepted",
+        "physical_issue": "missing column"
+      },
+      {
+        "mode": "namespace",
+        "startup": "accepted",
+        "physical_issue": "required public table missing"
+      },
+      {
+        "mode": "after_presence",
+        "startup": "accepted",
+        "physical_issue": "required public table missing"
+      },
+      {
+        "mode": "after_privileges",
+        "startup": "accepted",
+        "physical_issue": "required public table missing"
+      }
+    ],
+    "history_and_owned_row_preserved": true,
+    "transport_only": "TLS/broker stubbed; actual non-elevated role and PostgreSQL migration/schema/permissions/RLS/mode semantics",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "catalog_operator_gap_closed": true,
+    "observations": [
+      {
+        "mode": "attribute_join",
+        "startup": "denied",
+        "physical_issue": "missing column"
+      },
+      {
+        "mode": "namespace",
+        "startup": "denied",
+        "physical_issue": "required public table missing"
+      },
+      {
+        "mode": "after_presence",
+        "startup": "denied",
+        "physical_issue": "required public table missing"
+      },
+      {
+        "mode": "after_privileges",
+        "startup": "denied",
+        "physical_issue": "required public table missing"
+      }
+    ],
+    "history_and_owned_row_preserved": true,
+    "transport_only": "TLS/broker stubbed; actual non-elevated role and PostgreSQL migration/schema/permissions/RLS/mode semantics",
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual PostgreSQL OID/name operator substitutions; lost column raises SQLSTATE42703; alternate-schema table substitutes for missing required public table, before or between three catalog phases. Transaction rollback preserves owned row and migration history. TLS/broker transport only stubbed. SQLite phase-denial references, not PostgreSQL semantics;100 additional existing adoption cases in SQLite focused matrix.",
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 ledger invariants included in final full suite",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Startup observations; no atomic or continuous fencing after later schema changes.",
+    "Actual visibility, required public profile, effective permission/RLS policies and static phase diagnostics preserved; no search-path or database repair.",
+    "Not full physical constraint/data/restore proof or every-query namespace hardening.",
+    "Exact-commit all-six/private and independent main required; D07 lifecycle/release/customer gates remain open."
+  ]
+}

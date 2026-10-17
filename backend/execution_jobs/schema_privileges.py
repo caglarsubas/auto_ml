@@ -20,8 +20,9 @@ def check_schema_privileges():
                 pg_catalog.has_table_privilege(c.oid, 'UPDATE'),
                 pg_catalog.has_table_privilege(c.oid, 'DELETE')
             FROM pg_catalog.pg_class c
-            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'public' AND c.relname = ANY(%s::text[])
+            JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+            WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name
+                AND c.relname OPERATOR(pg_catalog.=) ANY(%s::pg_catalog.name[])
         """, [sorted(required)])
         present = set()
         for table, *rights in cursor.fetchall():

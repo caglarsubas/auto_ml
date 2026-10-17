@@ -14,8 +14,9 @@ def check_schema_row_security():
         cursor.execute("""
             SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
             FROM pg_catalog.pg_class c
-            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'public' AND c.relname = ANY(%s::text[])
+            JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+            WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name
+                AND c.relname OPERATOR(pg_catalog.=) ANY(%s::pg_catalog.name[])
         """, [sorted(required)])
         present = set()
         for table, enabled, forced in cursor.fetchall():
