@@ -492,7 +492,7 @@ try:
     from backend.runtime_config import private_postgres_tls_options
     with psycopg.connect(host='postgres',port=5432,dbname=os.environ['DEPENDENCY_DATABASE'],user=os.environ['DEPENDENCY_USER'],password=password,**private_postgres_tls_options('/installation/postgres-ca.crt',connect_timeout=5)) as db:
         with db.cursor() as cursor:
-            cursor.execute('SELECT current_database(),current_user,(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) FROM pg_roles r WHERE rolname=current_user')
+            cursor.execute('SELECT pg_catalog.current_database(),current_user,(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member OPERATOR(pg_catalog.=) r.oid) FROM pg_catalog.pg_roles r WHERE rolname OPERATOR(pg_catalog.=) current_user')
             row=cursor.fetchone();assert row[:3]==(os.environ['DEPENDENCY_DATABASE'],os.environ['DEPENDENCY_USER'],True) and all(x is False for x in row[3:])
     phase='broker'
     import sys
