@@ -1,0 +1,178 @@
+{
+  "packet": "P92",
+  "date": "2026-10-17",
+  "source_base": "6ba7bb4dee7881b92675c06eab6a4ca602657f08",
+  "source_sha256": {
+    "scripts/private_dependency_start.py": "d60b05e6799b51fcbdf3ec944f3937e11ce5b4cd1efc493e31c8f95ee3df2209",
+    "backend/tests/unit/test_private_dependency_probe_namespace.py": "d3442e988dccd75157adc3f927c09a5ff8768e9f96635b2790aa7a6af136dfc9"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 0,
+      "failed": 7,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.756
+    },
+    "prototype-postgresql": {
+      "passed": 7,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.727
+    },
+    "focused-postgresql": {
+      "passed": 407,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.552
+    },
+    "focused-sqlite": {
+      "passed": 507,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 5.918
+    },
+    "sqlite-full": {
+      "passed": 4019,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 277.058
+    }
+  },
+  "new_cases": 7,
+  "reproduction": {
+    "authority_block_scenarios": 7,
+    "observations": [
+      {
+        "profile": "role",
+        "mode": "role_view",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "role",
+        "mode": "role_operator",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "member",
+        "mode": "member_view",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "member",
+        "mode": "member_operator",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "tls",
+        "mode": "public",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "tls",
+        "mode": "temporary",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      },
+      {
+        "profile": "tls",
+        "mode": "combined",
+        "authority_block": "accepted",
+        "reports_genuine_fields": false
+      }
+    ],
+    "owned_metadata_preserved": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "authority_block_scenarios": 7,
+    "observations": [
+      {
+        "profile": "role",
+        "mode": "role_view",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "role",
+        "mode": "role_operator",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "member",
+        "mode": "member_view",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "member",
+        "mode": "member_operator",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "tls",
+        "mode": "public",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "tls",
+        "mode": "temporary",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      },
+      {
+        "profile": "tls",
+        "mode": "combined",
+        "authority_block": "denied",
+        "reports_genuine_fields": true
+      }
+    ],
+    "owned_metadata_preserved": true,
+    "customer_installation_modified": false
+  },
+  "fixture_scope": "Actual source SQL/fetch/assertion block on three disposable owned PostgreSQL profiles; not full transport/controller/bootstrap bypass. Native CI fixture CREATEDB/no-membership with separate plaintext connection; member-view false evidence and OID trap are distinct from actual owned membership-hiding proof. SQLite unsafe-authority response references only. Default connection/settings and owned metadata preserved.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Selected-controller startup observation; not continuous authority monitoring.",
+    "Administrator bootstrap, CA/hostname verified transport and stricter no-explicit-membership policy unchanged.",
+    "Other owner/schema initialization queries and every-query namespace hardening remain outside this packet.",
+    "Full lifecycle, coordinated recovery, upgrade/rollback and release/customer gates remain open."
+  ],
+  "owned_profiles": {
+    "role": {
+      "createdb": true,
+      "explicit_membership": false,
+      "tls": false
+    },
+    "member": {
+      "createdb": false,
+      "explicit_membership": true,
+      "tls": false
+    },
+    "tls": {
+      "createdb": false,
+      "explicit_membership": false,
+      "tls": false
+    }
+  },
+  "coverage": {
+    "line": 75.78,
+    "branch": 66.08
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 ledger invariants included in final full suite"
+}
