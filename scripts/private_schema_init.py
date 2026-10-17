@@ -67,7 +67,7 @@ try:
     def state():
         applied=set(loader.applied_migrations)
         with connection.cursor() as c:
-            c.execute("SELECT nspname FROM pg_namespace WHERE nspname<>'public' AND nspname<>'information_schema' AND nspname NOT LIKE 'pg_%'")
+            c.execute("SELECT nspname FROM pg_catalog.pg_namespace WHERE nspname OPERATOR(pg_catalog.<>) 'public'::pg_catalog.name AND nspname OPERATOR(pg_catalog.<>) 'information_schema'::pg_catalog.name AND pg_catalog.left(nspname::pg_catalog.text,3) OPERATOR(pg_catalog.<>) 'pg_'::pg_catalog.text")
             if c.fetchall():return 'foreign'
             c.execute("SELECT extname FROM pg_extension WHERE extname<>'plpgsql'")
             if c.fetchall():return 'foreign'
