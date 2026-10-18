@@ -1,0 +1,86 @@
+{
+  "packet": "P98",
+  "date": "2026-10-18",
+  "source_base": "4911c242fcae903cf040df5035b95122e53fdca1",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "403ce49148aa6bd017f83c188fb4d491e03518108014e39f15368b6d8c9e62da",
+    "backend/tests/unit/test_private_schema_type_modifiers.py": "7fc05614aadfb22d90b58f275ef99d86ef76de03db5be4a3f0879f6dd01ac2ae"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 16,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.715
+    },
+    "focused-postgresql": {
+      "passed": 531,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 21.878
+    },
+    "focused-sqlite": {
+      "passed": 631,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 11.869
+    },
+    "sqlite-full": {
+      "passed": 4101,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 300.71
+    }
+  },
+  "new_cases": 20,
+  "before_regressions": 16,
+  "before_genuine_controls": 4,
+  "fixture_scope": "Actual PostgreSQL ALTER TYPE for shorter/wider/unbounded varchar and explicit timestamp precisions 0/3/6; API and management command enforce exact sealed modifiers. Genuine schema and extra varchar(1) columns remain supported. SQLite supplies explicit modifier-denial references, not native typmod emulation. Native pytest CREATEDB role is disposable test setup only; separate probe uses ordinary NOCREATEDB authority.",
+  "preliminary_evidence": "Sixteen expected predecessor regressions and four genuine controls retained; no failed candidate or assertion/fixture changes.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Exact declared modifiers on required supported fields, not general schema compatibility inference. Default timestamp modifier -1 differs from explicit precision 6 even where representable precision matches.",
+    "Constraints/defaults/indexes/collations, full schema/data equivalence, continuous fencing and full lifecycle/restore remain open.",
+    "Probe transport attestation and broker are explicit fixtures; full controller/verified transport and release/customer gates remain separate."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_varchar_length": 150,
+    "physical_varchar_length": 1,
+    "declared_valid_write_rejected_by_database": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM write is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_varchar_length": 150,
+    "physical_varchar_length": 1,
+    "declared_valid_write_rejected_by_database": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM write is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.1
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
