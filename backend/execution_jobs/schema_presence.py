@@ -1,8 +1,8 @@
 """Read-only presence and storage-type checks for sealed private PostgreSQL.
 
 Migration records alone do not establish that required physical relations still
-exist with their declared base storage types. Type modifiers, constraints and
-complete schema/restore equivalence remain outside this check.
+exist with their declared storage types and modifiers. Constraints and complete
+schema/restore equivalence remain outside this check.
 """
 
 import json
@@ -26,7 +26,7 @@ STORAGE_TYPES = {
 }
 
 
-def required_storage_types():
+def required_storage_contract():
     # Use the sealed migration graph's final storage declarations. Runtime
     # auto-created auth through-model IDs can differ from their historical DDL.
     # Loading the graph with no connection executes no migrations or data reads.
@@ -42,9 +42,16 @@ def required_storage_types():
         for field in model._meta.local_concrete_fields:
             target = field.target_field if field.is_relation else field
             try:
-                expected[model._meta.db_table][field.column] = STORAGE_TYPES[target.get_internal_type()]
+                datatype = STORAGE_TYPES[target.get_internal_type()]
             except KeyError:
                 raise SchemaMismatch from None
+            modifier = -1
+            if datatype == "varchar" and target.max_length is not None:
+                if type(target.max_length) is not int or target.max_length <= 0:
+                    raise SchemaMismatch
+                # PostgreSQL stores varchar(n) as n plus its four-byte header.
+                modifier = target.max_length + 4
+            expected[model._meta.db_table][field.column] = {"type": datatype, "modifier": modifier}
     required = required_schema()
     if any(not columns <= expected.get(table, {}).keys() for table, columns in required.items()):
         raise SchemaMismatch
@@ -61,8 +68,8 @@ def check_schema():
     required = required_schema()
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
-        # pg_catalog storage OIDs. A same-named domain or array is not the sealed
-        # plain type. Extra columns retain the existing permissive policy.
+        # pg_catalog storage OIDs and declared modifiers. A same-named domain or
+        # array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
             WITH required_relations AS (
@@ -74,19 +81,25 @@ def check_schema():
             ), profile AS (SELECT %s::pg_catalog.jsonb AS types)
             SELECT c.relname, c.relkind,
                 pg_catalog.pg_table_is_visible(c.oid)
-                    AND (wanted.name IS NULL OR a.atttypid OPERATOR(pg_catalog.=) t.oid), a.attname
+                    AND (wanted.name IS NULL OR (
+                        a.atttypid OPERATOR(pg_catalog.=) t.oid
+                        AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier)), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
                 AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped
             LEFT JOIN LATERAL (
-                SELECT ((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) a.attname::pg_catalog.text)::pg_catalog.name AS name
+                SELECT (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'type'::pg_catalog.text)::pg_catalog.name AS name,
+                    (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'modifier'::pg_catalog.text)::pg_catalog.int4 AS modifier
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid
                     AND t.typname OPERATOR(pg_catalog.=) wanted.name
-        """, [list(required), json.dumps(required_storage_types())])
+        """, [list(required), json.dumps(required_storage_contract())])
         present = {}
         for table, kind, compatible, column in cursor.fetchall():
             if kind != "r" or compatible is not True:
