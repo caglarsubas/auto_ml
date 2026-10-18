@@ -1,0 +1,111 @@
+{
+  "packet": "P97",
+  "date": "2026-10-18",
+  "source_base": "1bed86bea5d46f24622ff028e098486563f0405d",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "fb7517ec59f2b033a83898858263bf57a5ced4d3dbe5dc954915820ba445c075",
+    "backend/tests/unit/test_private_schema_storage_types.py": "697c8a63022c73262825d1d85a005d78ea606a01e198f0134850ab921c75d6d1"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 16,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.446
+    },
+    "candidate-initial-focused-postgresql": {
+      "passed": 437,
+      "failed": 74,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 27.438
+    },
+    "focused-postgresql": {
+      "passed": 511,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 17.822
+    },
+    "focused-sqlite": {
+      "passed": 611,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.504
+    },
+    "sqlite-full": {
+      "passed": 4081,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 274.213
+    }
+  },
+  "new_cases": 20,
+  "before_regressions": 16,
+  "before_genuine_controls": 4,
+  "fixture_scope": "Eight actual PostgreSQL type substitutions through API and command, with rollback and seed/history checks; four genuine/extra-column controls. SQLite uses explicit compatible/incompatible catalog response references, not PostgreSQL type emulation. Native focused pytest role is CREATEDB only for disposable test database creation; separate owned probe uses an ordinary NOCREATEDB application role. Initial TLS attestation and broker are explicit fixtures, not verified transport.",
+  "preliminary_evidence": {
+    "initial_candidate": "Runtime model declarations falsely rejected three genuine auth through-table bigint IDs: 74 failed/437 passed native. Resolve expected types from the disconnected sealed migration graph instead; corrected diagnostic: 232 rows, zero mismatches. Original tests/fixtures/assertions unchanged.",
+    "diagnostic_provenance": {
+      "preliminary_candidate": "Runtime-model-only expected types rejected three legitimate auth through-table bigint IDs; the failed native candidate XML/log and cleanup receipt are retained. No assertion was weakened.",
+      "initial_diagnostic": "The first native-type-diagnosis.log was overwritten by the corrected run. native-type-diagnosis-initial-from-tool.log copies the exact four diagnostic JSON lines from the captured read-tool output; it is explicitly a retained tool-output copy, not the original filesystem log.",
+      "correction": "Resolve required physical type declarations from the disconnected sealed MigrationLoader project state, retaining current required column selection and the migration recorder. Corrected diagnostic reports232 rows/zero bad."
+    },
+    "inventory": "Invalid Docker readonly volume mode did not start; missing host setting then stopped a read-only inventory. Corrected preparations and original logs retained; neither attempt ran product tests.",
+    "probe": {
+      "preliminary": "Probe imported Celery before enabling its explicit job fixture setting. Startup refused before any migrations or target assertions. Enable the job setting before import; original failed log and cleanup retained. No product policy or assertions changed.",
+      "second_preliminary": "Transport response wrapper lacked Django introspection required by MigrationRecorder, so the existing preflight rejected storage before the target stage. Add the real connection introspection to the explicit transport fixture; retain failed assertion and cleanup. Product checks remain unchanged."
+    }
+  },
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Storage base OIDs only; type modifiers/lengths, constraints, defaults, indexes and complete schema/data equivalence remain open.",
+    "Read-only selected-startup observation, without later-state fencing or automatic data/schema repair.",
+    "Transport/controller admission, full lifecycle/upgrade/rollback/coordinated restore and release/customer gates remain separate."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "physical_boolean_replaced_by_text": true,
+    "orm_observation": {
+      "value": "false",
+      "python_type": "str",
+      "truthiness": true
+    },
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "physical_boolean_replaced_by_text": true,
+    "orm_observation": {
+      "value": "false",
+      "python_type": "str",
+      "truthiness": true
+    },
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.09
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
