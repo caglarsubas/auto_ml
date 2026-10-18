@@ -1,0 +1,94 @@
+{
+  "packet": "P99",
+  "date": "2026-10-18",
+  "source_base": "d66d2aaf6deae8c5c2ffd6ee492ae1737965528a",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "7f4eb7507b20f9812b04da9bc7a44bbe89f6664ba4c764a054edf08797ac62ac",
+    "backend/tests/unit/test_private_schema_nullability.py": "a429bd00f3039bf0423b39fd99fa39d1960cfd9c2c1cc48664cf6661a280d8a6",
+    "backend/tests/unit/test_product_roadmap.py": "d18157d05e55cf8d99250b49ff3d453d1f78a1de5a9188d5bacdc3f3a245d19e"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 16,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.375
+    },
+    "focused-postgresql": {
+      "passed": 551,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 30.579
+    },
+    "focused-sqlite": {
+      "passed": 651,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 17.903
+    },
+    "sqlite-full": {
+      "passed": 4121,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 328.406
+    },
+    "initial-sqlite-full": {
+      "passed": 4120,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 363.99
+    }
+  },
+  "new_cases": 20,
+  "before_regressions": 16,
+  "before_genuine_controls": 4,
+  "fixture_scope": "Actual PostgreSQL transactional SET/DROP NOT NULL on required metadata, including nullable foreign keys. API and command enforce local-field nullability. Healthy migrated schema and nullable/nonnullable extra columns remain supported. SQLite supplies explicit denial references, not native nullability emulation. Native pytest CREATEDB role is disposable setup only; separate probe uses ordinary NOCREATEDB authority.",
+  "preliminary_evidence": "Sixteen expected predecessor regressions and four genuine controls retained. Initial full local suite: 4,120 passed, six existing skips, one failure because the roadmap non-promotion test used synthetic packet P99, colliding with the new real packet. Preserve initial report; choose the next unused synthetic ID without changing any assertion, then rerun the complete suite. No scientific fixture changes.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Selected required-column nullability, not complete constraints/defaults/indexes/collations or schema/data equivalence.",
+    "Startup observation only; later-state fencing and full lifecycle/restore/release/customer gates remain open.",
+    "Probe TLS attestation and broker are explicit fixtures; not full controller/verified transport or endpoint proof."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_last_login_nullable": true,
+    "physical_last_login_not_null": true,
+    "declared_valid_write_rejected_by_database": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM write is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_last_login_nullable": true,
+    "physical_last_login_not_null": true,
+    "declared_valid_write_rejected_by_database": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability, permissions and RLS checks; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM write is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.1
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
