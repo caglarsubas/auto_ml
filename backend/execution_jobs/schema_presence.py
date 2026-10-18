@@ -2,7 +2,7 @@
 
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
-writable storage, identity modes, immediate primary keys and field uniqueness. Other constraints
+writable storage, identity modes, immediate primary keys and declared uniqueness. Other constraints
 and complete schema/restore equivalence remain outside this check.
 """
 
@@ -10,6 +10,7 @@ import json
 
 from django.apps import apps
 from django.db import connection
+from django.db.models import UniqueConstraint
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
 
@@ -70,6 +71,7 @@ def required_storage_contract():
                 # A primary key implies uniqueness but needs no second UNIQUE
                 # constraint. Ordinary FKs must not inherit target uniqueness.
                 "unique_field": field.unique and not field.primary_key,
+                "unique_groups": [],
                 # Django 5.2's selected PostgreSQL backend emits BY DEFAULT
                 # identity for these local auto fields. A foreign key targets
                 # an auto key but must not inherit its generation behavior.
@@ -77,8 +79,31 @@ def required_storage_contract():
                     "AutoField", "BigAutoField", "SmallAutoField",
                 } else "",
             }
+        groups = list(model._meta.unique_together)
+        for constraint in model._meta.constraints:
+            if not isinstance(constraint, UniqueConstraint):
+                continue
+            # These forms need separately qualified contracts rather than
+            # silently losing their declarations at startup.
+            if (not constraint.fields or constraint.expressions or constraint.condition is not None
+                    or constraint.deferrable is not None or constraint.include or constraint.opclasses
+                    or constraint.nulls_distinct is not None):
+                raise SchemaMismatch
+            groups.append(constraint.fields)
+        local = {f.name: f for f in model._meta.local_concrete_fields}
+        for fields in groups:
+            if not fields or len(set(fields)) != len(fields) or any(f not in local for f in fields):
+                raise SchemaMismatch
+            columns = [local[f].column for f in fields]
+            expected[model._meta.db_table][columns[0]]["unique_groups"].append({
+                "columns": columns,
+                "not_null": all(local[f].primary_key or not local[f].null for f in fields),
+            })
     required = required_schema()
     if any(not columns <= expected.get(table, {}).keys() for table, columns in required.items()):
+        raise SchemaMismatch
+    if any(not set(group["columns"]) <= required.get(table, set())
+           for table, columns in expected.items() for field in columns.values() for group in field["unique_groups"]):
         raise SchemaMismatch
     return {table: {column: expected[table][column] for column in columns} for table, columns in required.items()}
 
@@ -143,7 +168,40 @@ def check_schema():
                                 -- Field.unique permits multiple NULLs by default.
                                 -- NULL modes are equivalent for a non-null field.
                                 AND (wanted.not_null OR NOT i.indnullsnotdistinct)
-                        )))), a.attname
+                        ))
+                        AND NOT EXISTS (
+                            SELECT 1 FROM pg_catalog.jsonb_array_elements(
+                                COALESCE(wanted.unique_groups, '[]'::pg_catalog.jsonb)
+                            ) AS g(value)
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM pg_catalog.pg_constraint k
+                                JOIN pg_catalog.pg_index i
+                                    ON i.indexrelid OPERATOR(pg_catalog.=) k.conindid
+                                    AND i.indrelid OPERATOR(pg_catalog.=) c.oid
+                                WHERE k.conrelid OPERATOR(pg_catalog.=) c.oid
+                                    AND k.contype OPERATOR(pg_catalog.=) 'u'::pg_catalog."char"
+                                    AND k.convalidated AND NOT k.condeferrable AND NOT k.condeferred
+                                    AND i.indisunique AND i.indisvalid AND i.indisready
+                                    AND i.indislive AND i.indimmediate
+                                    AND i.indpred IS NULL AND i.indexprs IS NULL
+                                    AND i.indnkeyatts::pg_catalog.int4 OPERATOR(pg_catalog.=)
+                                        pg_catalog.jsonb_array_length(g.value OPERATOR(pg_catalog.->) 'columns'::pg_catalog.text)
+                                    -- Membership governs uniqueness; key order and
+                                    -- non-key INCLUDE columns do not change it.
+                                    AND ARRAY(SELECT members.number FROM pg_catalog.unnest(k.conkey) AS members(number)
+                                        ORDER BY members.number USING OPERATOR(pg_catalog.<)) OPERATOR(pg_catalog.=)
+                                        ARRAY(SELECT ga.attnum FROM pg_catalog.pg_attribute ga
+                                            WHERE ga.attrelid OPERATOR(pg_catalog.=) c.oid
+                                                AND ga.attnum OPERATOR(pg_catalog.>) 0 AND NOT ga.attisdropped
+                                                AND ga.attname OPERATOR(pg_catalog.=) ANY(ARRAY(
+                                                    SELECT names.name::pg_catalog.name FROM pg_catalog.jsonb_array_elements_text(
+                                                        g.value OPERATOR(pg_catalog.->) 'columns'::pg_catalog.text
+                                                    ) AS names(name)))
+                                            ORDER BY ga.attnum USING OPERATOR(pg_catalog.<))
+                                    AND ((g.value OPERATOR(pg_catalog.->>) 'not_null'::pg_catalog.text)::pg_catalog.bool
+                                        OR NOT i.indnullsnotdistinct)
+                            )
+                        ))), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
@@ -166,7 +224,10 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'primary_key'::pg_catalog.text)::pg_catalog.bool AS primary_key,
                     (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) 'unique_field'::pg_catalog.text)::pg_catalog.bool AS unique_field
+                    OPERATOR(pg_catalog.->>) 'unique_field'::pg_catalog.text)::pg_catalog.bool AS unique_field,
+                    ((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) 'unique_groups'::pg_catalog.text AS unique_groups
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid
