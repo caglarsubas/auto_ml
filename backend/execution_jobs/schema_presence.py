@@ -2,8 +2,8 @@
 
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
-writable storage and identity modes. Other constraints and schema/restore equivalence
-remain outside this check.
+writable storage, identity modes and immediate primary keys. Other constraints
+and complete schema/restore equivalence remain outside this check.
 """
 
 import json
@@ -39,6 +39,10 @@ def required_storage_contract():
     models.append(MigrationRecorder.Migration)
     expected = {}
     for model in models:
+        # Composite/absent primary-key declarations need a separately qualified
+        # contract; a virtual CompositePrimaryKey is not a concrete column.
+        if sum(field.primary_key for field in model._meta.local_concrete_fields) != 1:
+            raise SchemaMismatch
         expected[model._meta.db_table] = {}
         for field in model._meta.local_concrete_fields:
             # This profile supports ordinary writable fields, including
@@ -62,6 +66,7 @@ def required_storage_contract():
                 # A nullable FK still points to a non-null primary key. Its
                 # local declaration, not its target, governs this column.
                 "not_null": field.primary_key or not field.null,
+                "primary_key": field.primary_key,
                 # Django 5.2's selected PostgreSQL backend emits BY DEFAULT
                 # identity for these local auto fields. A foreign key targets
                 # an auto key but must not inherit its generation behavior.
@@ -86,7 +91,7 @@ def check_schema():
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
         # pg_catalog storage OIDs, modifiers, nullability and non-generated
-        # storage plus declared identity mode. A same-named
+        # storage, declared identity mode and immediate primary-key semantics. A same-named
         # domain or array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
@@ -104,7 +109,21 @@ def check_schema():
                         AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier
                         AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null
                         AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char"
-                        AND a.attidentity OPERATOR(pg_catalog.=) wanted.identity)), a.attname
+                        AND a.attidentity OPERATOR(pg_catalog.=) wanted.identity
+                        AND (NOT wanted.primary_key OR EXISTS (
+                            SELECT 1 FROM pg_catalog.pg_constraint k
+                            JOIN pg_catalog.pg_index i
+                                ON i.indexrelid OPERATOR(pg_catalog.=) k.conindid
+                                AND i.indrelid OPERATOR(pg_catalog.=) c.oid
+                            WHERE k.conrelid OPERATOR(pg_catalog.=) c.oid
+                                AND k.contype OPERATOR(pg_catalog.=) 'p'::pg_catalog."char"
+                                AND k.conkey OPERATOR(pg_catalog.=) ARRAY[a.attnum]::pg_catalog.int2[]
+                                AND k.convalidated AND NOT k.condeferrable AND NOT k.condeferred
+                                AND i.indisprimary AND i.indisunique AND i.indisvalid
+                                AND i.indisready AND i.indislive AND i.indimmediate
+                                AND i.indnkeyatts OPERATOR(pg_catalog.=) 1::pg_catalog.int2
+                                AND i.indpred IS NULL AND i.indexprs IS NULL
+                        )))), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
@@ -121,7 +140,10 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'not_null'::pg_catalog.text)::pg_catalog.bool AS not_null,
                     (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) 'identity'::pg_catalog.text)::pg_catalog."char" AS identity
+                    OPERATOR(pg_catalog.->>) 'identity'::pg_catalog.text)::pg_catalog."char" AS identity,
+                    (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'primary_key'::pg_catalog.text)::pg_catalog.bool AS primary_key
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid

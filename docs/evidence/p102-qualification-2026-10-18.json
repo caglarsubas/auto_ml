@@ -1,0 +1,98 @@
+{
+  "packet": "P102",
+  "date": "2026-10-18",
+  "source_base": "e6a0c40ef6c2339313fe5b429fa7b2d8b5bbca20",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "3d8ab8061cdfc07b14050bdc3354da809ed3d8dcd68ed76869ad9f4c5d824aa5",
+    "backend/tests/unit/test_private_schema_primary_keys.py": "c3bd9293432c3f0c0241a7e88012e33279fd922ba9659cbbc29699b0b43fe2b3"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 6,
+      "failed": 32,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.441
+    },
+    "focused-postgresql": {
+      "passed": 635,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 29.031
+    },
+    "focused-sqlite": {
+      "passed": 735,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 13.812
+    },
+    "sqlite-full": {
+      "passed": 4205,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 269.471
+    }
+  },
+  "new_cases": 38,
+  "before_regressions": 32,
+  "before_genuine_controls": 6,
+  "fixture_scope": "Actual PostgreSQL missing manual/auth/through/recorder/bigint/UUID/text/relation primary keys; UNIQUE-only, wrong-column, composite/deferred substitutes; temporary catalog and public array-operator forgery; unsupported real migration-state composite declarations; healthy genuine/renamed/covering keys with implicit/manual/FK writes and duplicate rejection through API and command. Fixture CASCADE dependencies return on rollback. SQLite supplies explicit denials and ordinary extra columns, not PostgreSQL constraint/index/namespace/operator emulation. Native pytest CREATEDB is disposable setup only; a separate ordinary NOCREATEDB probe supplies the actual integrity failure and fixed startup denial.",
+  "preliminary_evidence": "All 32 predecessor failures are missing expected denials; six healthy controls pass, with no fixture SQL errors. No failed candidate or original assertion/fixture changes.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "The selected profile supports exactly one concrete local primary key with an immediate nondeferrable validated constraint and a live, ready, valid, unique, immediate backing primary index. Composite declarations require an explicit versioned compatibility decision.",
+    "Other unique/foreign-key/check/default/sequence/trigger semantics, index operator classes/collations, complete schema/data equivalence, write availability and later-state fencing remain outside this startup observation. Full lifecycle/restore/release/customer gates remain open.",
+    "The predecessor probe runs actual history/write-mode/schema/privileges/RLS checks; fixed startup stops at schema before later guards. Initial TLS and broker responses are explicit fixtures over plaintext, without verified transport/full controller/endpoint evidence. Deliberate direct ORM fixture evidence does not imply admission through fixed startup."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_manual_primary_key": true,
+    "primary_key_before_count": 1,
+    "primary_key_during_count": 0,
+    "primary_key_after_count": 1,
+    "duplicate_key_insert_accepted": true,
+    "orm_lookup_ambiguous": true,
+    "ordinary_lookup_after_restore": true,
+    "restored_duplicate_insert_rejected": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "column_storage_type_modifier_nullability_generation_identity_unchanged": true,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL history, write-mode, schema storage/modifier/nullability/generation/identity, permissions and RLS startup checks. Dropping the manual queue-lock primary key admits startup and allows duplicate keys with an ambiguous direct ORM lookup. Initial TLS and broker responses are explicit fixtures over plaintext. Not verified transport, a full controller admission or an endpoint bypass. Deliberate direct ORM evidence is rolled back; primary-key enforcement, original rows and all migration history are preserved. Fixed admission is not implemented in this predecessor baseline.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_manual_primary_key": true,
+    "primary_key_before_count": 1,
+    "primary_key_during_count": 0,
+    "primary_key_after_count": 1,
+    "duplicate_key_insert_accepted": true,
+    "orm_lookup_ambiguous": true,
+    "ordinary_lookup_after_restore": true,
+    "restored_duplicate_insert_rejected": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "column_storage_type_modifier_nullability_generation_identity_unchanged": true,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "The predecessor runs actual owned PostgreSQL history, write-mode, schema storage/modifier/nullability/generation/identity, permissions and RLS startup checks; fixed startup stops at schema validation before later guards and broker access. Dropping the manual queue-lock primary key admits startup and allows duplicate keys with an ambiguous direct ORM lookup. Initial TLS and broker responses are explicit fixtures over plaintext. Not verified transport, a full controller admission or an endpoint bypass. Deliberate direct ORM evidence is rolled back; primary-key enforcement, original rows and all migration history are preserved. The direct ORM operations establish the physical mismatch, not execution admitted through fixed startup.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.8,
+    "branch": 66.12
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed; all 49 invariants included in final full suite"
+}
