@@ -1,0 +1,92 @@
+{
+  "packet": "P101",
+  "date": "2026-10-18",
+  "source_base": "a46af09f3716da4b4368fb7551eb47fee4dda184",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "34f927dc3b099a52975afd6ae8effcb75514e5ae79b6b9ecfc2a20a78fdfaa87",
+    "backend/tests/unit/test_private_schema_identity.py": "bd100247d06f9d95963c25ff507dcd95146cf5934f9cfd800cf8ba8b4f63371f"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 22,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.126
+    },
+    "focused-postgresql": {
+      "passed": 597,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 20.174
+    },
+    "focused-sqlite": {
+      "passed": 697,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 10.385
+    },
+    "sqlite-full": {
+      "passed": 4167,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 259.613
+    }
+  },
+  "new_cases": 26,
+  "before_regressions": 22,
+  "before_genuine_controls": 4,
+  "fixture_scope": "Native PostgreSQL transactional DROP/SET/ADD IDENTITY on required int4/int8 auto keys, ordinary int2 manual keys/counters and foreign keys; healthy BY DEFAULT implicit/explicit keys, ordinary manual/FK writes and extra identity columns through API and command. SQLite supplies explicit denials and ordinary extra-column references, not native identity emulation. Native pytest CREATEDB is disposable setup only; a separate owned NOCREATEDB probe demonstrates the actual write failure and fixed startup denial.",
+  "preliminary_evidence": "All 22 predecessor failures are missing expected denials; four healthy controls pass, with no fixture SQL errors. No failed candidate or original assertion/fixture changes.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Exact BY DEFAULT identity is the selected Django 5.2 PostgreSQL auto-field contract; ordinary and foreign-key fields require no identity. Other modes, including legacy serial, require an explicit versioned compatibility decision.",
+    "No sequence-state/ACL/default/other-constraint/write-availability or full schema/data equivalence claim. Startup observation only without later-state fencing. Full lifecycle/restore/release/customer gates remain open.",
+    "Actual owned history/write-mode/schema/privileges/RLS evidence in predecessor probe; fixed startup stops at schema before later guards. Initial TLS attestation and broker are explicit fixtures over plaintext, not verified transport, full controller or endpoint authorization evidence."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_auto_primary_key": true,
+    "identity_before": "d",
+    "physical_identity_during_probe": "",
+    "identity_after": "d",
+    "ordinary_insert_after_restore": true,
+    "declared_valid_insert_rejected_by_database": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability/non-generated storage, permissions and RLS checks; a separate catalog observation confirms lost identity storage; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM insert is deliberate fixture evidence. Fixed admission is not implemented in this predecessor baseline.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_auto_primary_key": true,
+    "identity_before": "d",
+    "physical_identity_during_probe": "",
+    "identity_after": "d",
+    "ordinary_insert_after_restore": true,
+    "declared_valid_insert_rejected_by_database": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability/non-generated storage, permissions and RLS checks; a separate catalog observation confirms lost identity storage; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM insert is deliberate fixture evidence. Fixed startup stops at schema validation before later guards and broker access; the direct owned insert remains deliberate physical-mismatch evidence, not an endpoint bypass.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.11
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed; all 49 invariants included in the final full suite"
+}

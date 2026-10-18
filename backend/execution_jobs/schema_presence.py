@@ -1,8 +1,8 @@
 """Read-only physical-column checks for sealed private PostgreSQL.
 
 Migration records alone do not establish that required physical relations still
-exist with their declared storage types, modifiers, nullability and ordinary
-writable storage. Other constraints and complete schema/restore equivalence
+exist with their declared storage types, modifiers, nullability, ordinary
+writable storage and identity modes. Other constraints and schema/restore equivalence
 remain outside this check.
 """
 
@@ -62,6 +62,12 @@ def required_storage_contract():
                 # A nullable FK still points to a non-null primary key. Its
                 # local declaration, not its target, governs this column.
                 "not_null": field.primary_key or not field.null,
+                # Django 5.2's selected PostgreSQL backend emits BY DEFAULT
+                # identity for these local auto fields. A foreign key targets
+                # an auto key but must not inherit its generation behavior.
+                "identity": "d" if not field.is_relation and field.get_internal_type() in {
+                    "AutoField", "BigAutoField", "SmallAutoField",
+                } else "",
             }
     required = required_schema()
     if any(not columns <= expected.get(table, {}).keys() for table, columns in required.items()):
@@ -80,7 +86,7 @@ def check_schema():
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
         # pg_catalog storage OIDs, modifiers, nullability and non-generated
-        # storage. Identity keys use attidentity, not attgenerated. A same-named
+        # storage plus declared identity mode. A same-named
         # domain or array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
@@ -97,7 +103,8 @@ def check_schema():
                         a.atttypid OPERATOR(pg_catalog.=) t.oid
                         AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier
                         AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null
-                        AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char")), a.attname
+                        AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char"
+                        AND a.attidentity OPERATOR(pg_catalog.=) wanted.identity)), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
@@ -111,7 +118,10 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'modifier'::pg_catalog.text)::pg_catalog.int4 AS modifier,
                     (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) 'not_null'::pg_catalog.text)::pg_catalog.bool AS not_null
+                    OPERATOR(pg_catalog.->>) 'not_null'::pg_catalog.text)::pg_catalog.bool AS not_null,
+                    (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'identity'::pg_catalog.text)::pg_catalog."char" AS identity
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid
