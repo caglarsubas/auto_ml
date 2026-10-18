@@ -3357,7 +3357,7 @@
         "[Declared metadata field uniqueness](PRIVATE_SCHEMA_UNIQUE_FIELDS_IMPLEMENTATION.md)",
         "[P103 source qualification](evidence/p103-qualification-2026-10-18.json)"
       ],
-      "remaining": "Twenty-four predecessor denials fail while twelve genuine controls pass; all 36 pass after the fix. Focused native 671 and reference/adoption 771 pass. Full local native suite passes 4,241 tests with six identical existing skips, preserved original case inventory and verified worker isolation under the unchanged 900s limit. Exact-head all-six/private and independent main qualification remain required. Other model/compound/foreign-key/check/default/sequence/trigger semantics, index operator classes/collations, inheritance, extra restrictive constraints, later-state fencing and full lifecycle/release/customer gates remain open."
+      "remaining": "Twenty-four predecessor denials fail while twelve genuine controls pass; all 36 pass after the fix. Focused native 671 and reference/adoption 771 pass. Full local native suite passes 4,241 tests with six identical existing skips, preserved original case inventory and verified worker isolation under the unchanged 900s limit. Exact-head all-six/private and independent main qualification remain required. Other model/compound/foreign-key/check/default/sequence/trigger semantics, index operator classes/collations, inheritance, extra restrictive constraints, later-state fencing and full lifecycle/release/customer gates remain open. Initial PR CI passed all six but one browser test retried before pipeline restore. Add an explicit loaded-pipeline assertion and qualify the revised exact head with the same zero-flaky gate; preserve initial reports."
     }
   ],
   "release_qualification": {

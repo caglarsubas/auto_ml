@@ -5,7 +5,8 @@
   "qualified_predecessor_main": 39131552309,
   "source_sha256": {
     "backend/execution_jobs/schema_presence.py": "99fc4321d75bd1a51d8fdc366411a6a1e0927ec303b15f7ebc5a4b0129b28261",
-    "backend/tests/unit/test_private_schema_unique_fields.py": "46e4b970286aa7b10d0e2cfefc11eb1f66a3b6f85c5b1a0247f5f1e9bbfeadc0"
+    "backend/tests/unit/test_private_schema_unique_fields.py": "46e4b970286aa7b10d0e2cfefc11eb1f66a3b6f85c5b1a0247f5f1e9bbfeadc0",
+    "frontend/e2e/assistant-approval-api.spec.ts": "2b22077b415f68877b2ddc3ba45cf2dcf6b85af4369a4339a958127ec1d6ba1a"
   },
   "new_cases": 36,
   "before_expected_denials": 24,
@@ -114,5 +115,25 @@
   "roadmap_projection": "passed; all 49 invariants included in full suite",
   "owned_cleanup": "passed",
   "fixed_scope": "The predecessor runs actual history, role, write-mode, schema, privilege and RLS checks. Fixed startup stops at schema validation before later privilege/RLS checks or broker access. Initial TLS/broker responses are explicit fixtures over plaintext; direct ORM operations prove physical integrity loss, not verified transport, a full controller or endpoint admission.",
-  "existing_full_suite_timeout_seconds": 900
+  "existing_full_suite_timeout_seconds": 900,
+  "initial_pr_qualification": {
+    "run": 39137969852,
+    "head": "b5904b3cdab1dd6cbc07f0c30c19feee678ea3ae",
+    "attempt": 1,
+    "github_all_six": "passed",
+    "full_postgresql_passed": 4241,
+    "existing_native_skips": 6,
+    "postgresql_seconds": 538.87,
+    "browser": {
+      "total": 37,
+      "expected": 36,
+      "unexpected": 0,
+      "flaky": 1,
+      "skipped": 0,
+      "ok": false
+    },
+    "qualification": "not accepted: existing zero-flaky report gate retained",
+    "failure": "keyboard review preceded asynchronous pipeline restore; snapshot says Load a dataset before reviewing an action",
+    "correction": "Add an explicit loaded-pipeline assertion before keyboard review. Existing authority assertions and all timeout/retry/test budgets remain intact. No CI rerun requested."
+  }
 }

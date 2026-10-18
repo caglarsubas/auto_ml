@@ -55,6 +55,13 @@ native tests pass 4,241 with the same six existing skips in 216.181s.
 Every original case/skip identity is preserved; worker isolation verifies. Line
 coverage is 75.77%, branch coverage 66.12%.
 
+The initial PR workflow passed all six checks, but its browser report retained
+one failed keyboard-review attempt before a passing retry. The snapshot showed
+review attempted before a dataset was loaded. Add an explicit assertion that the
+saved pipeline is active before entering that flow. Existing authority assertions,
+timeouts and retry limits stay intact; the original report is retained and the
+zero-flaky qualification gate still applies to the revised exact head.
+
 Results and source hashes are retained in
 [P103 source qualification](evidence/p103-qualification-2026-10-18.json).
 The separate ordinary NOCREATEDB probe exercises actual history, role,
