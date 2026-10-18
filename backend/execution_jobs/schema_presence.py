@@ -1,8 +1,8 @@
-"""Read-only presence and storage-type checks for sealed private PostgreSQL.
+"""Read-only physical-column checks for sealed private PostgreSQL.
 
 Migration records alone do not establish that required physical relations still
-exist with their declared storage types and modifiers. Constraints and complete
-schema/restore equivalence remain outside this check.
+exist with their declared storage types, modifiers and nullability. Other
+constraints and complete schema/restore equivalence remain outside this check.
 """
 
 import json
@@ -51,7 +51,12 @@ def required_storage_contract():
                     raise SchemaMismatch
                 # PostgreSQL stores varchar(n) as n plus its four-byte header.
                 modifier = target.max_length + 4
-            expected[model._meta.db_table][field.column] = {"type": datatype, "modifier": modifier}
+            expected[model._meta.db_table][field.column] = {
+                "type": datatype, "modifier": modifier,
+                # A nullable FK still points to a non-null primary key. Its
+                # local declaration, not its target, governs this column.
+                "not_null": field.primary_key or not field.null,
+            }
     required = required_schema()
     if any(not columns <= expected.get(table, {}).keys() for table, columns in required.items()):
         raise SchemaMismatch
@@ -68,8 +73,8 @@ def check_schema():
     required = required_schema()
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
-        # pg_catalog storage OIDs and declared modifiers. A same-named domain or
-        # array is not the sealed plain type. Extra columns remain permitted.
+        # pg_catalog storage OIDs, modifiers and nullability. A same-named domain
+        # or array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
             WITH required_relations AS (
@@ -83,7 +88,8 @@ def check_schema():
                 pg_catalog.pg_table_is_visible(c.oid)
                     AND (wanted.name IS NULL OR (
                         a.atttypid OPERATOR(pg_catalog.=) t.oid
-                        AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier)), a.attname
+                        AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier
+                        AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null)), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
@@ -94,7 +100,10 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'type'::pg_catalog.text)::pg_catalog.name AS name,
                     (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) 'modifier'::pg_catalog.text)::pg_catalog.int4 AS modifier
+                    OPERATOR(pg_catalog.->>) 'modifier'::pg_catalog.text)::pg_catalog.int4 AS modifier,
+                    (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'not_null'::pg_catalog.text)::pg_catalog.bool AS not_null
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid

@@ -39,7 +39,8 @@ def test_documentation_evidence_does_not_promote_mapped_outcomes(ledger):
     ledger['items'].append(future)
     packet = copy.deepcopy(next(packet for packet in ledger['implementation_packets']
                                 if packet.get('kind') == 'roadmap_reconciliation'))
-    packet.update(id='P99', status='tested', items=['D27'], evidence=['Documentation checks'])
+    future_packet_id = f"P{max(int(p['id'][1:]) for p in ledger['implementation_packets']) + 1}"
+    packet.update(id=future_packet_id, status='tested', items=['D27'], evidence=['Documentation checks'])
     ledger['implementation_packets'].append(packet)
     before = copy.deepcopy(ledger)
     roadmap.render(ledger)
