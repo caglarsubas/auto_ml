@@ -202,6 +202,8 @@ test('keyboard review confirms a synthetic proposal through real authority endpo
       .locator('..')
       .getByRole('button', { name: 'Load', exact: true })
       .click();
+    // Loading is asynchronous; review must exercise the restored dataset.
+    await expect(page.getByText(`Active: ${runName}`, { exact: true })).toBeVisible();
     const panel = page.locator('app-ai-chat-panel');
     if (!(await panel.locator('.chat-input').isVisible()))
       await page.getByTitle('Toggle AI Assistant', { exact: true }).click();

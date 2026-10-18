@@ -2,7 +2,7 @@
 
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
-writable storage, identity modes and immediate primary keys. Other constraints
+writable storage, identity modes, immediate primary keys and field uniqueness. Other constraints
 and complete schema/restore equivalence remain outside this check.
 """
 
@@ -67,6 +67,9 @@ def required_storage_contract():
                 # local declaration, not its target, governs this column.
                 "not_null": field.primary_key or not field.null,
                 "primary_key": field.primary_key,
+                # A primary key implies uniqueness but needs no second UNIQUE
+                # constraint. Ordinary FKs must not inherit target uniqueness.
+                "unique_field": field.unique and not field.primary_key,
                 # Django 5.2's selected PostgreSQL backend emits BY DEFAULT
                 # identity for these local auto fields. A foreign key targets
                 # an auto key but must not inherit its generation behavior.
@@ -91,7 +94,7 @@ def check_schema():
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
         # pg_catalog storage OIDs, modifiers, nullability and non-generated
-        # storage, declared identity mode and immediate primary-key semantics. A same-named
+        # storage, identity, immediate primary-key and field-unique semantics. A same-named
         # domain or array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
@@ -123,6 +126,23 @@ def check_schema():
                                 AND i.indisready AND i.indislive AND i.indimmediate
                                 AND i.indnkeyatts OPERATOR(pg_catalog.=) 1::pg_catalog.int2
                                 AND i.indpred IS NULL AND i.indexprs IS NULL
+                        ))
+                        AND (NOT wanted.unique_field OR EXISTS (
+                            SELECT 1 FROM pg_catalog.pg_constraint k
+                            JOIN pg_catalog.pg_index i
+                                ON i.indexrelid OPERATOR(pg_catalog.=) k.conindid
+                                AND i.indrelid OPERATOR(pg_catalog.=) c.oid
+                            WHERE k.conrelid OPERATOR(pg_catalog.=) c.oid
+                                AND k.contype OPERATOR(pg_catalog.=) 'u'::pg_catalog."char"
+                                AND k.conkey OPERATOR(pg_catalog.=) ARRAY[a.attnum]::pg_catalog.int2[]
+                                AND k.convalidated AND NOT k.condeferrable AND NOT k.condeferred
+                                AND i.indisunique AND i.indisvalid AND i.indisready
+                                AND i.indislive AND i.indimmediate
+                                AND i.indnkeyatts OPERATOR(pg_catalog.=) 1::pg_catalog.int2
+                                AND i.indpred IS NULL AND i.indexprs IS NULL
+                                -- Field.unique permits multiple NULLs by default.
+                                -- NULL modes are equivalent for a non-null field.
+                                AND (wanted.not_null OR NOT i.indnullsnotdistinct)
                         )))), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
@@ -143,7 +163,10 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'identity'::pg_catalog.text)::pg_catalog."char" AS identity,
                     (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->>) 'primary_key'::pg_catalog.text)::pg_catalog.bool AS primary_key
+                    OPERATOR(pg_catalog.->>) 'primary_key'::pg_catalog.text)::pg_catalog.bool AS primary_key,
+                    (((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'unique_field'::pg_catalog.text)::pg_catalog.bool AS unique_field
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid

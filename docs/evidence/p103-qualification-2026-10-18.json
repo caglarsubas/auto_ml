@@ -1,0 +1,139 @@
+{
+  "packet": "P103",
+  "date": "2026-10-18",
+  "source_base": "bd7bf71a8214497864860a1d6f9535a260a74441",
+  "qualified_predecessor_main": 39131552309,
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "99fc4321d75bd1a51d8fdc366411a6a1e0927ec303b15f7ebc5a4b0129b28261",
+    "backend/tests/unit/test_private_schema_unique_fields.py": "46e4b970286aa7b10d0e2cfefc11eb1f66a3b6f85c5b1a0247f5f1e9bbfeadc0",
+    "frontend/e2e/assistant-approval-api.spec.ts": "2b22077b415f68877b2ddc3ba45cf2dcf6b85af4369a4339a958127ec1d6ba1a"
+  },
+  "new_cases": 36,
+  "before_expected_denials": 24,
+  "before_genuine_controls": 12,
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_nonprimary_username_unique": true,
+    "unique_constraint_before_count": 1,
+    "unique_constraint_during_count": 0,
+    "unique_constraint_after_count": 1,
+    "all_primary_keys_unchanged": true,
+    "column_storage_modifier_nullability_generation_identity_unchanged": true,
+    "duplicate_username_insert_accepted": true,
+    "orm_username_lookup_ambiguous": true,
+    "ordinary_lookup_after_restore": true,
+    "restored_duplicate_insert_rejected": true,
+    "other_unique_username_write_supported": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "administrative_setup_disposable_cluster_only": true,
+    "scope": "Actual owned PostgreSQL history, role, write-mode, column/primary-key, permission and RLS startup checks. Only auth_user.username uniqueness is dropped; primary keys and storage remain intact. Initial TLS and broker responses are explicit fixtures over plaintext. A duplicate and ambiguous direct ORM lookup establish physical integrity loss; not verified transport, a full controller or an endpoint bypass. DDL/data are rolled back, restored uniqueness rejects a duplicate, ordinary writes and original rows/history remain intact.",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_nonprimary_username_unique": true,
+    "unique_constraint_before_count": 1,
+    "unique_constraint_during_count": 0,
+    "unique_constraint_after_count": 1,
+    "all_primary_keys_unchanged": true,
+    "column_storage_modifier_nullability_generation_identity_unchanged": true,
+    "duplicate_username_insert_accepted": true,
+    "orm_username_lookup_ambiguous": true,
+    "ordinary_lookup_after_restore": true,
+    "restored_duplicate_insert_rejected": true,
+    "other_unique_username_write_supported": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "administrative_setup_disposable_cluster_only": true,
+    "scope": "Actual owned PostgreSQL history, role, write-mode, column/primary-key, permission and RLS startup checks. Only auth_user.username uniqueness is dropped; primary keys and storage remain intact. Initial TLS and broker responses are explicit fixtures over plaintext. A duplicate and ambiguous direct ORM lookup establish physical integrity loss; not verified transport, a full controller or an endpoint bypass. DDL/data are rolled back, restored uniqueness rejects a duplicate, ordinary writes and original rows/history remain intact.",
+    "customer_installation_modified": false
+  },
+  "local_qualification": "passed",
+  "original_tests_and_execution_limits_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "checks": {
+    "before-postgresql": {
+      "passed": 12,
+      "failed": 24,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.201
+    },
+    "focused-postgresql": {
+      "passed": 671,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 35.437
+    },
+    "focused-sqlite": {
+      "passed": 771,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 20.266
+    },
+    "full-native": {
+      "passed": 4241,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 216.181
+    }
+  },
+  "preliminary_native_fixture_state_leak": "96 failures in wider checks retained; corrected by cloning only the new nullable fixture Field; no original tests changed",
+  "coverage": {
+    "line": 75.77,
+    "branch": 66.12
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_test_and_execution_configuration_files_unchanged": 158,
+  "original_native_inventory_and_skip_identities_preserved": true,
+  "ruff": "full workflow command passed",
+  "roadmap_projection": "passed; all 49 invariants included in full suite",
+  "owned_cleanup": "passed",
+  "fixed_scope": "The predecessor runs actual history, role, write-mode, schema, privilege and RLS checks. Fixed startup stops at schema validation before later privilege/RLS checks or broker access. Initial TLS/broker responses are explicit fixtures over plaintext; direct ORM operations prove physical integrity loss, not verified transport, a full controller or endpoint admission.",
+  "existing_full_suite_timeout_seconds": 900,
+  "initial_pr_qualification": {
+    "run": 39137969852,
+    "head": "b5904b3cdab1dd6cbc07f0c30c19feee678ea3ae",
+    "attempt": 1,
+    "github_all_six": "passed",
+    "full_postgresql_passed": 4241,
+    "existing_native_skips": 6,
+    "postgresql_seconds": 538.87,
+    "browser": {
+      "total": 37,
+      "expected": 36,
+      "unexpected": 0,
+      "flaky": 1,
+      "skipped": 0,
+      "ok": false
+    },
+    "qualification": "not accepted: existing zero-flaky report gate retained",
+    "failure": "keyboard review preceded asynchronous pipeline restore; snapshot says Load a dataset before reviewing an action",
+    "correction": "Add an explicit loaded-pipeline assertion before keyboard review. Existing authority assertions and all timeout/retry/test budgets remain intact. No CI rerun requested."
+  }
+}
