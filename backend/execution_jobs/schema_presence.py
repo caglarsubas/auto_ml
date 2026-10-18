@@ -1,8 +1,9 @@
 """Read-only physical-column checks for sealed private PostgreSQL.
 
 Migration records alone do not establish that required physical relations still
-exist with their declared storage types, modifiers and nullability. Other
-constraints and complete schema/restore equivalence remain outside this check.
+exist with their declared storage types, modifiers, nullability and ordinary
+writable storage. Other constraints and complete schema/restore equivalence
+remain outside this check.
 """
 
 import json
@@ -40,6 +41,11 @@ def required_storage_contract():
     for model in models:
         expected[model._meta.db_table] = {}
         for field in model._meta.local_concrete_fields:
+            # This profile supports ordinary writable fields, including
+            # identity-backed keys. GeneratedField reports its output's plain
+            # internal type, so type mapping alone cannot reject generation.
+            if field.generated:
+                raise SchemaMismatch
             target = field.target_field if field.is_relation else field
             try:
                 datatype = STORAGE_TYPES[target.get_internal_type()]
@@ -73,8 +79,9 @@ def check_schema():
     required = required_schema()
     with connection.cursor() as cursor:
         # Catalog-only evidence: visible ordinary public relations and exact
-        # pg_catalog storage OIDs, modifiers and nullability. A same-named domain
-        # or array is not the sealed plain type. Extra columns remain permitted.
+        # pg_catalog storage OIDs, modifiers, nullability and non-generated
+        # storage. Identity keys use attidentity, not attgenerated. A same-named
+        # domain or array is not the sealed plain type. Extra columns remain permitted.
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
             WITH required_relations AS (
@@ -89,7 +96,8 @@ def check_schema():
                     AND (wanted.name IS NULL OR (
                         a.atttypid OPERATOR(pg_catalog.=) t.oid
                         AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier
-                        AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null)), a.attname
+                        AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null
+                        AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char")), a.attname
             FROM required_relations c CROSS JOIN profile p
             LEFT JOIN pg_catalog.pg_attribute a
                 ON a.attrelid OPERATOR(pg_catalog.=) c.oid
