@@ -554,6 +554,14 @@ def main():
                 [
                     "-m",
                     "pytest",
+                    "-p", "tests.postgresql_parallel",
+                    # Use the existing two-CPU budget; pytest-django gives each
+                    # worker its own migrated database. Keep each file together
+                    # and fail on worker loss rather than restarting tests.
+                    "-n", "2",
+                    "--dist=loadfile",
+                    "--max-worker-restart=0",
+                    f"--postgresql-isolation-report=../{relative}/postgresql-isolation.json",
                     "-m",
                     "unit or functional or regression or integration or uat",
                     "--tb=short",
