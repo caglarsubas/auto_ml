@@ -1,0 +1,338 @@
+{
+  "packet": "P104",
+  "date": "2026-10-19",
+  "source_base": "7bdada8adf41b0c80a3bc77052b9ab20c988470e",
+  "qualified_predecessor_main": 39142173604,
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "5315b175de3c6b33a225b1dd727e1434c1c55b6420f5ff7c75f89493f19af9fd",
+    "backend/tests/unit/test_private_schema_compound_unique.py": "58d3975d5774669618fc90486b11474cf75226a89fbed19ae5b0e6060dca7114"
+  },
+  "new_cases": 76,
+  "declared_groups": 11,
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "declared_compound_groups": [
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "columns": [
+          "actor_id",
+          "dataset_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "mcp_actor_dataset_unique"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "columns": [
+          "project_id",
+          "actor_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "project_actor_unique"
+      },
+      {
+        "table": "auth_permission",
+        "columns": [
+          "content_type_id",
+          "codename"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_group_permissions",
+        "columns": [
+          "group_id",
+          "permission_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_user_groups",
+        "columns": [
+          "user_id",
+          "group_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "columns": [
+          "user_id",
+          "permission_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "django_content_type",
+        "columns": [
+          "app_label",
+          "model"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "declaration_datadictionary",
+        "columns": [
+          "data_file_id",
+          "column_name"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "deployment_packagereview",
+        "columns": [
+          "dataset_id",
+          "bundle_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "review_dataset_bundle_unique"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "columns": [
+          "review_id",
+          "revision"
+        ],
+        "source": "UniqueConstraint",
+        "name": "review_event_revision_unique"
+      },
+      {
+        "table": "execution_jobs_jobevent",
+        "columns": [
+          "job_id",
+          "revision"
+        ],
+        "source": "UniqueConstraint",
+        "name": "job_event_revision_unique"
+      }
+    ],
+    "compound_constraint_before_count": 1,
+    "compound_constraint_during_count": 0,
+    "compound_constraint_after_count": 1,
+    "all_primary_keys_unchanged": true,
+    "all_scalar_unique_constraints_unchanged": true,
+    "all_other_constraints_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "startup_error": null,
+    "broker_fixture_calls_during": 1,
+    "duplicate_project_actor_membership_inserted": true,
+    "conflicting_role_and_active_values": true,
+    "orm_membership_lookup_ambiguous": true,
+    "healthy_startup_before_and_after_restore": true,
+    "restored_duplicate_rejected": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 and ordinary NOCREATEDB owner. Only declared project/actor compound uniqueness is dropped. Actual history, role, write-mode, schema, privilege and RLS startup checks; initial TLS and broker responses are explicit fixtures over plaintext. Direct ORM duplicate and ambiguous lookup demonstrate physical integrity loss, not verified transport, controller or endpoint admission. Transaction rollback restores constraints and rows; all 31 migrations, primary keys, scalar field uniqueness and column storage remain intact.",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "declared_compound_groups": [
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "columns": [
+          "actor_id",
+          "dataset_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "mcp_actor_dataset_unique"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "columns": [
+          "project_id",
+          "actor_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "project_actor_unique"
+      },
+      {
+        "table": "auth_permission",
+        "columns": [
+          "content_type_id",
+          "codename"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_group_permissions",
+        "columns": [
+          "group_id",
+          "permission_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_user_groups",
+        "columns": [
+          "user_id",
+          "group_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "columns": [
+          "user_id",
+          "permission_id"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "django_content_type",
+        "columns": [
+          "app_label",
+          "model"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "declaration_datadictionary",
+        "columns": [
+          "data_file_id",
+          "column_name"
+        ],
+        "source": "unique_together"
+      },
+      {
+        "table": "deployment_packagereview",
+        "columns": [
+          "dataset_id",
+          "bundle_id"
+        ],
+        "source": "UniqueConstraint",
+        "name": "review_dataset_bundle_unique"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "columns": [
+          "review_id",
+          "revision"
+        ],
+        "source": "UniqueConstraint",
+        "name": "review_event_revision_unique"
+      },
+      {
+        "table": "execution_jobs_jobevent",
+        "columns": [
+          "job_id",
+          "revision"
+        ],
+        "source": "UniqueConstraint",
+        "name": "job_event_revision_unique"
+      }
+    ],
+    "compound_constraint_before_count": 1,
+    "compound_constraint_during_count": 0,
+    "compound_constraint_after_count": 1,
+    "all_primary_keys_unchanged": true,
+    "all_scalar_unique_constraints_unchanged": true,
+    "all_other_constraints_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls_during": 0,
+    "duplicate_project_actor_membership_inserted": true,
+    "conflicting_role_and_active_values": true,
+    "orm_membership_lookup_ambiguous": true,
+    "healthy_startup_before_and_after_restore": true,
+    "restored_duplicate_rejected": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 and ordinary NOCREATEDB owner. Only declared project/actor compound uniqueness is dropped. Actual history, role, write-mode, schema, privilege and RLS startup checks; initial TLS and broker responses are explicit fixtures over plaintext. Direct ORM duplicate and ambiguous lookup demonstrate physical integrity loss, not verified transport, controller or endpoint admission. Transaction rollback restores constraints and rows; all 31 migrations, primary keys, scalar field uniqueness and column storage remain intact.",
+    "customer_installation_modified": false
+  },
+  "local_qualification": "passed",
+  "checks": {
+    "before-postgresql": {
+      "passed": 14,
+      "failed": 62,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 17.979
+    },
+    "focused-postgresql": {
+      "passed": 747,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 89.518
+    },
+    "focused-sqlite": {
+      "passed": 847,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 42.054
+    },
+    "full-native": {
+      "passed": 4317,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 445.479
+    }
+  },
+  "original_test_and_execution_files_unchanged": 161,
+  "original_tests_or_execution_limits_changed": false,
+  "preliminary_reports": "Invalid new pg_attribute full-copy fixture (pseudo-type anyarray) corrected to selected catalog columns. Focused local storage failures retained; captured PostgreSQL logs show pg_wal/xlogtemp: No space left on device in the old 128 MiB data tmpfs. The focused harness now uses the existing full-qualification owned Docker data-volume layout, with unchanged CPU/RAM/PID/test/timeout limits and owned-volume cleanup. Product CI/resources, scientific workloads and all original tests remain unchanged.",
+  "existing_full_suite_timeout_seconds": 900,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      },
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_inventory_and_skip_identities_preserved": true,
+  "ruff": "full workflow command passed",
+  "roadmap_projection": "passed; 49 invariants included in full native suite",
+  "owned_cleanup": "passed",
+  "fixed_scope": "The ordinary predecessor probe exercises actual history/role/write-mode/schema/permission/RLS startup checks. Fixed startup stops at schema validation before later checks and broker access. Initial TLS and broker responses are explicit fixtures over actual plaintext; direct ORM operations prove physical integrity loss, not transport, controller or endpoint admission.",
+  "owned_catalog_profile": {
+    "before": {
+      "schema_seconds": [
+        0.01982858299743384,
+        0.01667325000744313,
+        0.016502499987836927
+      ],
+      "planning_ms": 0.792,
+      "execution_ms": 1.18,
+      "cost": 1839.75,
+      "jit": null,
+      "source": "/work/backend/execution_jobs/schema_presence.py"
+    },
+    "fixed": {
+      "schema_seconds": [
+        0.022006583050824702,
+        0.018897625035606325,
+        0.019495666958391666
+      ],
+      "planning_ms": 1.533,
+      "execution_ms": 2.145,
+      "cost": 1984.53,
+      "jit": null,
+      "source": "/work/backend/execution_jobs/schema_presence.py"
+    }
+  },
+  "catalog_profile_scope": "Three ordinary-schema guard calls and one EXPLAIN ANALYZE on separate owned PostgreSQL instances; illustrative local metadata evidence, not a capacity or deployment SLA."
+}
