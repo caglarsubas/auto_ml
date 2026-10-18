@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-18",
+  "scope": "D07 P102 CI execution follow-up; P103 remains gated until independently qualified main",
+  "source_base": "584cc7173fdb085c005f10c26753b819b42ddb41",
+  "original_failed_main_run": 39118117480,
+  "original_failure_retained": true,
+  "ci_rerun_requested": false,
+  "original_pr_suite_seconds": 864.682,
+  "source_sha256": {
+    "backend/requirements.txt": "cfae5712140228b3a8ec8f3eb2a83b5c05a440ef9f64d83120632d19d0212a1c",
+    "scripts/qualify_postgres_fixture.py": "8f586f02d75012257198bb3df9ed47f4f652279639ddb185f4e30463d0f2ae57",
+    "backend/tests/postgresql_parallel.py": "c02e17ff64c1712911dedff58f8ca8bda2bf2127cba48db8847a6f16d09e8bbd"
+  },
+  "checks": {
+    "full_postgresql": {
+      "passed": 4205,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 250.316,
+      "case_inventory_and_skip_identities_match_p102": true
+    },
+    "worker_isolation": {
+      "workers": {
+        "gw1": {
+          "worker": "gw1",
+          "cache_database": 3,
+          "database": "test_lock_fixture_gw1"
+        },
+        "gw0": {
+          "worker": "gw0",
+          "cache_database": 2,
+          "database": "test_lock_fixture_gw0"
+        }
+      },
+      "isolated": true
+    },
+    "unavailable_worker_cache": "qualification blocked with no tests run",
+    "original_test_and_configuration_files_unchanged": 154,
+    "ruff": "full workflow command passed",
+    "roadmap": "deterministic projection passed; all 49 invariants included in full suite"
+  },
+  "coverage": {
+    "line": 75.77,
+    "branch": 66.12
+  },
+  "limits": {
+    "suite_timeout_seconds": 900,
+    "per_test_timeout_seconds": 120,
+    "workers": 2,
+    "worker_restarts": 0,
+    "skip_budget": 15,
+    "coverage_gate_percent": 50,
+    "native_pool_threads": 2,
+    "existing_ci_resource_limits_changed": false,
+    "original_tests_assertions_fixtures_or_scientific_workloads_changed": false
+  },
+  "preliminary_local_runs": [
+    {
+      "path": "test-reports/pg-runtime",
+      "tests": "4428",
+      "failures": "219",
+      "errors": "521",
+      "skipped": "45",
+      "time": "254.015",
+      "qualified": false
+    },
+    {
+      "path": "test-reports/pg-runtime/complete",
+      "tests": "4211",
+      "failures": "10",
+      "errors": "15",
+      "skipped": "6",
+      "time": "206.717",
+      "qualified": false
+    },
+    {
+      "path": "test-reports/pg-runtime/qualified",
+      "tests": "4211",
+      "failures": "3",
+      "errors": "0",
+      "skipped": "6",
+      "time": "267.925",
+      "qualified": false
+    }
+  ],
+  "local_fixture": "Owned Linux ARM64 PostgreSQL 17/Redis; full-suite disk storage matches CI arrangement. Runner remains 2 CPUs/2 GiB, database 1 CPU/512 MiB and cache 1 CPU/128 MiB. Disposable CREATEDB is test database setup only; not private TLS or ordinary-role production qualification.",
+  "preliminary_failures": "First local harness omitted Redis and exhausted the 128 MiB focused database mount. Second exhausted the 256 MiB focused runner temporary mount. Third used a macOS bind mount with nonstandard temporary-directory permissions and file-lock/replace semantics; three unchanged assertions failed. Native Linux volume storage addresses those fixture discrepancies. Both raw reports are retained; no assertions changed and neither is counted as qualification. Corrected storage matches existing CI rather than changing its limits.",
+  "owned_cleanup": "passed",
+  "exact_head_ci": "required before merge",
+  "independent_main": "required before P103",
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
