@@ -1,0 +1,86 @@
+{
+  "packet": "P100",
+  "date": "2026-10-18",
+  "source_base": "86f279fc2402970eac8d00bbc23a2a315a4f539e",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "f08108d0941f6e2a45676eb79c55a0d165f55ead7e6746d0e9f85258e74dc22f",
+    "backend/tests/unit/test_private_schema_generated_columns.py": "097041c7b6ecb96275a44a0e632d3ec85c4a54d6041307b2a592530fa320c6f4"
+  },
+  "checks": {
+    "before-postgresql": {
+      "passed": 4,
+      "failed": 16,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 11.234
+    },
+    "focused-postgresql": {
+      "passed": 571,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 122.735
+    },
+    "focused-sqlite": {
+      "passed": 671,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 62.876
+    },
+    "sqlite-full": {
+      "passed": 4141,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 499.901
+    }
+  },
+  "new_cases": 20,
+  "before_regressions": 16,
+  "before_genuine_controls": 4,
+  "fixture_scope": "Actual PostgreSQL stored generated replacements on required varchar/bool/int2/nullable JSON/nullable timestamp/text columns; unsupported stored/virtual migration-state GeneratedField declarations; healthy identity insert/update and generated extra-column controls through API and command. SQLite supplies explicit denials and ordinary extra-column references, not native generation/identity emulation. Native pytest CREATEDB is disposable setup only; the separate probe uses ordinary NOCREATEDB authority.",
+  "preliminary_evidence": "Sixteen predecessor failures are missing expected denials, with four genuine controls passing and no fixture SQL errors. No failed candidate or existing assertion/fixture changes.",
+  "existing_execution_budgets_changed": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "limitations": [
+    "Current profile explicitly excludes generated model fields; supporting them requires a versioned contract and qualification. Identity modes/defaults/other constraints/triggers/collations/general write availability and full schema/data equivalence remain open.",
+    "Startup observation only; later-state fencing and full lifecycle/restore/release/customer gates remain open.",
+    "Predecessor probe executes actual history/write-mode/schema/permissions/RLS checks; fixed startup stops at schema before later guards. TLS attestation and broker are explicit response fixtures, not verified transport or full controller/endpoint evidence."
+  ],
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_password_generated": false,
+    "physical_password_generation": "s",
+    "declared_valid_update_rejected_by_database": true,
+    "startup_error": null,
+    "broker_fixture_calls": 1,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability, permissions and RLS checks; a separate catalog observation confirms generated storage; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM update is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_unprivileged": true,
+    "declared_password_generated": false,
+    "physical_password_generation": "s",
+    "declared_valid_update_rejected_by_database": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls": 0,
+    "original_row_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Actual owned PostgreSQL migration history, write mode, schema presence/type/modifier/nullability, permissions and RLS checks; a separate catalog observation confirms generated storage; initial TLS attestation and broker connection are explicit response fixtures. Not verified transport, full controller admission or an endpoint authorization proof. Direct owned ORM update is deliberate fixture evidence, not a bypass of fixed startup admission.",
+    "administrative_setup_disposable_cluster_only": true,
+    "customer_installation_modified": false
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.11
+  },
+  "ruff": "passed full workflow command",
+  "roadmap_projection": "passed;49 invariants included in final full suite"
+}
