@@ -2,15 +2,16 @@
 
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
-writable storage, identity modes, immediate primary keys and declared uniqueness. Other constraints
-and complete schema/restore equivalence remain outside this check.
+writable storage, identity modes, immediate primary keys, declared uniqueness
+and foreign-key metadata. Trigger enforcement and complete schema/restore
+equivalence remain outside this check.
 """
 
 import json
 
 from django.apps import apps
 from django.db import connection
-from django.db.models import UniqueConstraint
+from django.db.models import ForeignKey, UniqueConstraint
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
 
@@ -51,6 +52,8 @@ def required_storage_contract():
             # internal type, so type mapping alone cannot reject generation.
             if field.generated:
                 raise SchemaMismatch
+            if field.is_relation and (not isinstance(field, ForeignKey) or not field.db_constraint):
+                raise SchemaMismatch
             target = field.target_field if field.is_relation else field
             try:
                 datatype = STORAGE_TYPES[target.get_internal_type()]
@@ -72,6 +75,9 @@ def required_storage_contract():
                 # constraint. Ordinary FKs must not inherit target uniqueness.
                 "unique_field": field.unique and not field.primary_key,
                 "unique_groups": [],
+                "foreign_key": {
+                    "table": target.model._meta.db_table, "column": target.column,
+                } if field.is_relation else None,
                 # Django 5.2's selected PostgreSQL backend emits BY DEFAULT
                 # identity for these local auto fields. A foreign key targets
                 # an auto key but must not inherit its generation behavior.
@@ -104,6 +110,9 @@ def required_storage_contract():
         raise SchemaMismatch
     if any(not set(group["columns"]) <= required.get(table, set())
            for table, columns in expected.items() for field in columns.values() for group in field["unique_groups"]):
+        raise SchemaMismatch
+    if any(field["foreign_key"]["column"] not in required.get(field["foreign_key"]["table"], set())
+           for columns in expected.values() for field in columns.values() if field["foreign_key"] is not None):
         raise SchemaMismatch
     return {table: {column: expected[table][column] for column in columns} for table, columns in required.items()}
 
@@ -138,6 +147,29 @@ def check_schema():
                         AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null
                         AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char"
                         AND a.attidentity OPERATOR(pg_catalog.=) wanted.identity
+                        AND (wanted.foreign_table IS NULL OR EXISTS (
+                            SELECT 1 FROM pg_catalog.pg_constraint k
+                            JOIN pg_catalog.pg_class target ON target.oid OPERATOR(pg_catalog.=) k.confrelid
+                            JOIN pg_catalog.pg_namespace target_namespace
+                                ON target_namespace.oid OPERATOR(pg_catalog.=) target.relnamespace
+                            JOIN pg_catalog.pg_attribute target_column
+                                ON target_column.attrelid OPERATOR(pg_catalog.=) target.oid
+                                AND target_column.attnum OPERATOR(pg_catalog.>) 0 AND NOT target_column.attisdropped
+                            WHERE k.conrelid OPERATOR(pg_catalog.=) c.oid
+                                AND k.contype OPERATOR(pg_catalog.=) 'f'::pg_catalog."char"
+                                AND k.conkey OPERATOR(pg_catalog.=) ARRAY[a.attnum]::pg_catalog.int2[]
+                                AND k.confkey OPERATOR(pg_catalog.=) ARRAY[target_column.attnum]::pg_catalog.int2[]
+                                AND target_namespace.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name
+                                AND target.relname OPERATOR(pg_catalog.=) wanted.foreign_table
+                                AND target.relkind OPERATOR(pg_catalog.=) 'r'::pg_catalog."char"
+                                AND target_column.attname OPERATOR(pg_catalog.=) wanted.foreign_column
+                                AND k.convalidated AND k.condeferrable AND k.condeferred
+                                -- Selected Django PostgreSQL DDL defers checks.
+                                -- ORM on_delete is separate from database actions.
+                                AND k.confmatchtype OPERATOR(pg_catalog.=) 's'::pg_catalog."char"
+                                AND k.confupdtype OPERATOR(pg_catalog.=) 'a'::pg_catalog."char"
+                                AND k.confdeltype OPERATOR(pg_catalog.=) 'a'::pg_catalog."char"
+                        ))
                         AND (NOT wanted.primary_key OR EXISTS (
                             SELECT 1 FROM pg_catalog.pg_constraint k
                             JOIN pg_catalog.pg_index i
@@ -227,7 +259,15 @@ def check_schema():
                     OPERATOR(pg_catalog.->>) 'unique_field'::pg_catalog.text)::pg_catalog.bool AS unique_field,
                     ((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
                     OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
-                    OPERATOR(pg_catalog.->) 'unique_groups'::pg_catalog.text AS unique_groups
+                    OPERATOR(pg_catalog.->) 'unique_groups'::pg_catalog.text AS unique_groups,
+                    ((((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) 'foreign_key'::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'table'::pg_catalog.text)::pg_catalog.name AS foreign_table,
+                    ((((p.types OPERATOR(pg_catalog.->) c.relname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) a.attname::pg_catalog.text)
+                    OPERATOR(pg_catalog.->) 'foreign_key'::pg_catalog.text)
+                    OPERATOR(pg_catalog.->>) 'column'::pg_catalog.text)::pg_catalog.name AS foreign_column
             ) wanted ON true
             LEFT JOIN pg_catalog.pg_type t
                 ON t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace::pg_catalog.oid

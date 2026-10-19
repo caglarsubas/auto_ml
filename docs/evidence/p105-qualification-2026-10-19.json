@@ -1,0 +1,619 @@
+{
+  "packet": "P105",
+  "date": "2026-10-19",
+  "source_base": "bdd1fedacea292f7d8b467abac0f1d7a4f56ad65",
+  "qualified_predecessor_main": 39148062920,
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "ed2bd29eb34625de40bfac3cb0297a8ab7674a535329f05e29e7ffaaf01da237",
+    "backend/tests/unit/test_private_schema_foreign_keys.py": "a05b2c8c51a18fee597325adb5914d36a6d9655c8cf27fc366d0172678340286"
+  },
+  "new_cases": 122,
+  "declared_foreign_keys": 38,
+  "reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "declared_foreign_keys": [
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpaccessevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpaccessevent",
+        "column": "grant_id",
+        "target_table": "access_control_mcpdatasetgrant",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_assistantactionapproval",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_sessionauthority",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_authenticationevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectartifact",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectartifact",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectauthorityevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectauthorityevent",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectdataset",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectdataset",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectpipeline",
+        "column": "pipeline_id",
+        "target_table": "modeling_pipelinerun",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectpipeline",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "django_admin_log",
+        "column": "content_type_id",
+        "target_table": "django_content_type",
+        "target_column": "id"
+      },
+      {
+        "table": "django_admin_log",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_permission",
+        "column": "content_type_id",
+        "target_table": "django_content_type",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_group_permissions",
+        "column": "group_id",
+        "target_table": "auth_group",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_group_permissions",
+        "column": "permission_id",
+        "target_table": "auth_permission",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_groups",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_groups",
+        "column": "group_id",
+        "target_table": "auth_group",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "column": "permission_id",
+        "target_table": "auth_permission",
+        "target_column": "id"
+      },
+      {
+        "table": "declaration_datadictionary",
+        "column": "data_file_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereview",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereview",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "review_id",
+        "target_table": "deployment_packagereview",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "evidence_job_id",
+        "target_table": "execution_jobs_nativejob",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "source_dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_jobevent",
+        "column": "job_id",
+        "target_table": "execution_jobs_nativejob",
+        "target_column": "id"
+      },
+      {
+        "table": "modeling_holdoutaccess",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      }
+    ],
+    "foreign_key_before_count": 1,
+    "foreign_key_during_count": 0,
+    "foreign_key_after_count": 1,
+    "selected_physical_foreign_key": {
+      "local_relation_oid": 16678,
+      "name": "access_control_proje_actor_id_12228c5d_fk_auth_user",
+      "local_column_number": 6,
+      "target_relation_oid": 16431,
+      "target_column_number": 1,
+      "validated": true,
+      "deferrable": true,
+      "initially_deferred": true,
+      "update_action": "NO ACTION",
+      "delete_action": "NO ACTION",
+      "match": "SIMPLE",
+      "definition": "FOREIGN KEY (actor_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED"
+    },
+    "all_primary_keys_unchanged": true,
+    "all_scalar_and_compound_unique_constraints_unchanged": true,
+    "compound_unique_groups_preserved": 11,
+    "all_other_constraints_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "startup_error": null,
+    "broker_fixture_calls_during": 1,
+    "orphan_project_membership_inserted": true,
+    "direct_related_user_lookup_missing": true,
+    "existing_compound_duplicate_rejected": true,
+    "restored_orphan_rejected_at_transaction_commit": true,
+    "healthy_startup_before_and_after_restore": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 and ordinary NOCREATEDB owner. Only the declared membership actor foreign key is dropped. Actual history, role, write-mode, schema, privilege and RLS startup checks; initial TLS and broker responses are explicit fixtures over plaintext. A direct ORM orphan insertion and missing related user demonstrate physical referential-integrity loss, not verified transport, controller or endpoint admission. Transaction rollback restores the exact constraints and rows; the genuine initially deferred foreign key rejects at atomic commit. All 31 migrations, primary keys, scalar and 11 compound UNIQUE constraints, and column storage remain intact.",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "declared_foreign_keys": [
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpdatasetgrant",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpaccessevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_mcpaccessevent",
+        "column": "grant_id",
+        "target_table": "access_control_mcpdatasetgrant",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_assistantactionapproval",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_sessionauthority",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_authenticationevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectartifact",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectartifact",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectauthorityevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectauthorityevent",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectdataset",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectdataset",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectpipeline",
+        "column": "pipeline_id",
+        "target_table": "modeling_pipelinerun",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectpipeline",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "access_control_projectmembership",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "django_admin_log",
+        "column": "content_type_id",
+        "target_table": "django_content_type",
+        "target_column": "id"
+      },
+      {
+        "table": "django_admin_log",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_permission",
+        "column": "content_type_id",
+        "target_table": "django_content_type",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_group_permissions",
+        "column": "group_id",
+        "target_table": "auth_group",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_group_permissions",
+        "column": "permission_id",
+        "target_table": "auth_permission",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_groups",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_groups",
+        "column": "group_id",
+        "target_table": "auth_group",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "column": "user_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "auth_user_user_permissions",
+        "column": "permission_id",
+        "target_table": "auth_permission",
+        "target_column": "id"
+      },
+      {
+        "table": "declaration_datadictionary",
+        "column": "data_file_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereview",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereview",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "review_id",
+        "target_table": "deployment_packagereview",
+        "target_column": "id"
+      },
+      {
+        "table": "deployment_packagereviewevent",
+        "column": "evidence_job_id",
+        "target_table": "execution_jobs_nativejob",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "project_id",
+        "target_table": "access_control_project",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_nativejob",
+        "column": "source_dataset_id",
+        "target_table": "declaration_declaration",
+        "target_column": "id"
+      },
+      {
+        "table": "execution_jobs_jobevent",
+        "column": "job_id",
+        "target_table": "execution_jobs_nativejob",
+        "target_column": "id"
+      },
+      {
+        "table": "modeling_holdoutaccess",
+        "column": "actor_id",
+        "target_table": "auth_user",
+        "target_column": "id"
+      }
+    ],
+    "foreign_key_before_count": 1,
+    "foreign_key_during_count": 0,
+    "foreign_key_after_count": 1,
+    "selected_physical_foreign_key": {
+      "local_relation_oid": 16678,
+      "name": "access_control_proje_actor_id_12228c5d_fk_auth_user",
+      "local_column_number": 6,
+      "target_relation_oid": 16431,
+      "target_column_number": 1,
+      "validated": true,
+      "deferrable": true,
+      "initially_deferred": true,
+      "update_action": "NO ACTION",
+      "delete_action": "NO ACTION",
+      "match": "SIMPLE",
+      "definition": "FOREIGN KEY (actor_id) REFERENCES auth_user(id) DEFERRABLE INITIALLY DEFERRED"
+    },
+    "all_primary_keys_unchanged": true,
+    "all_scalar_and_compound_unique_constraints_unchanged": true,
+    "compound_unique_groups_preserved": 11,
+    "all_other_constraints_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls_during": 0,
+    "orphan_project_membership_inserted": true,
+    "direct_related_user_lookup_missing": true,
+    "existing_compound_duplicate_rejected": true,
+    "restored_orphan_rejected_at_transaction_commit": true,
+    "healthy_startup_before_and_after_restore": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 and ordinary NOCREATEDB owner. Only the declared membership actor foreign key is dropped. Actual history, role, write-mode, schema, privilege and RLS startup checks; initial TLS and broker responses are explicit fixtures over plaintext. A direct ORM orphan insertion and missing related user demonstrate physical referential-integrity loss, not verified transport, controller or endpoint admission. Transaction rollback restores the exact constraints and rows; the genuine initially deferred foreign key rejects at atomic commit. All 31 migrations, primary keys, scalar and 11 compound UNIQUE constraints, and column storage remain intact.",
+    "customer_installation_modified": false
+  },
+  "predecessor_new_tests": {
+    "failed": 110,
+    "passed": 12,
+    "errors": 0,
+    "skipped": 0,
+    "reason": "All failures are expected DID NOT RAISE"
+  },
+  "local_qualification": "passed",
+  "original_test_and_execution_files_unchanged": 162,
+  "original_tests_or_execution_limits_changed": false,
+  "existing_full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "fixed_scope": "Owned ordinary NOCREATEDB PostgreSQL proof; actual TLS and broker responses are explicit fixtures over plaintext. Original checks run on the predecessor; the fixed missing-FK case stops at schema validation before later checks. Direct ORM integrity demonstrations are not controller/endpoint admission or transport qualification.",
+  "limits": "Selected catalog metadata only; RI trigger state, replication/session modes, operator-class/collation semantics, extra constraints, inherited/partitioned structures, full data/schema equivalence and continuous fencing are not qualified.",
+  "checks": {
+    "before-postgresql": {
+      "passed": 12,
+      "failed": 110,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 9.865
+    },
+    "focused-postgresql": {
+      "passed": 869,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 55.828
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 28.293
+    },
+    "full-native": {
+      "passed": 4439,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 261.516
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_inventory_and_skip_identities_preserved": true,
+  "ruff": "full workflow command passed",
+  "roadmap_projection": "49 invariants in the full native suite; deterministic projection required",
+  "owned_cleanup": "passed"
+}
