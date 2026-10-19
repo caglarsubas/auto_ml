@@ -31,7 +31,7 @@ def check_application_role():
                             OR privileged.rolname OPERATOR(pg_catalog.=) ANY (ARRAY[
                             'pg_read_server_files', 'pg_write_server_files',
                             'pg_execute_server_program', 'pg_signal_backend',
-                            'pg_read_all_data', 'pg_write_all_data'
+                            'pg_read_all_data', 'pg_write_all_data', 'pg_checkpoint'
                         ]::pg_catalog.name[])
                             OR pg_catalog.has_parameter_privilege(
                                 privileged.oid, 'session_replication_role'::pg_catalog.text,

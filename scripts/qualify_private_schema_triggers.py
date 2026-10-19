@@ -376,6 +376,122 @@ def main():
             assert application("replication_controls") == receipt["replication_baseline"]
             assert application("controls") == receipt["restored_controls"]
             assert application("snapshot") == baseline
+            # P109: append checkpoint-role admission cases; all 510 original
+            # schema/runtime/parameter cases and expectations remain unchanged.
+            def checkpoint_case(name, denied=False, unavailable=False):
+                for entry in ("role", "role_command"):
+                    started = time.monotonic()
+                    result = application(entry=entry)
+                    error = "job_application_role_unavailable" if unavailable else (
+                        "job_application_role_elevated" if denied else None)
+                    expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                    cases.append(dict(name="checkpoint_authority/" + name + "/" + entry,
+                        passed=result == expected, expected=expected, observed=result,
+                        seconds=time.monotonic() - started))
+
+            receipt["checkpoint_baseline"] = authority_catalog()
+            receipt["checkpoint_denied_baseline"] = application("checkpoint_operation")
+            assert receipt["checkpoint_denied_baseline"] == dict(status=None,sqlstate="42501")
+            for value in ("origin", "local"):
+                mode(value)
+                checkpoint_case("baseline_" + value)
+            mode("origin")
+            admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;""")
+            receipt["checkpoint_profiles"] = []
+
+            def clear_checkpoint():
+                application("checkpoint_switch", role="reset")
+                admin("""REVOKE pg_checkpoint FROM ri_application,ri_cap_carrier,ri_cap_child;
+                    REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                    REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;""")
+
+            try:
+                for profile in ("direct", "inherited", "switch_only", "transitive",
+                                "session_only", "active_only", "options_disabled", "unrelated"):
+                    try:
+                        grantee = {"direct":"ri_application", "session_only":"ri_application",
+                                   "active_only":"ri_cap_child"}.get(profile, "ri_cap_carrier")
+                        admin("GRANT pg_checkpoint TO " + grantee + ";")
+                        if profile in {"inherited", "switch_only", "options_disabled"}:
+                            admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                "TRUE" if profile == "inherited" else "FALSE") + ", SET " + (
+                                "FALSE" if profile == "options_disabled" else "TRUE") + ";")
+                        elif profile == "transitive":
+                            admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                        elif profile in {"session_only", "active_only"}:
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("checkpoint_switch", role="ri_cap_child")
+                        state = application("checkpoint_state")
+                        assert state["current_member"] == (profile not in {"session_only", "unrelated"})
+                        assert state["session_member"] == (profile != "unrelated")
+                        assert state["current_usage"] == (profile in {"direct", "inherited", "active_only"})
+                        assert state["session_usage"] == (profile in {"direct", "inherited", "session_only"})
+                        assert state["state"]["mode"] == "origin"
+                        assert not any(state["state"][k] for k in (
+                            "current_set", "current_alter_system", "session_set", "session_alter_system"))
+                        operation = application("checkpoint_operation")
+                        assert operation == (dict(status="CHECKPOINT",sqlstate=None) if state["current_usage"]
+                                             else dict(status=None,sqlstate="42501"))
+                        checkpoint_case(profile, denied=profile != "unrelated")
+                        switched = None
+                        if profile in {"switch_only", "transitive"}:
+                            switched = application("checkpoint_switch", role="ri_cap_carrier")
+                            assert switched["current_usage"] is True
+                            assert application("checkpoint_operation") == dict(status="CHECKPOINT",sqlstate=None)
+                        receipt["checkpoint_profiles"].append(dict(profile=profile,state=state,
+                            operation=operation,switched=switched,catalog=authority_catalog()))
+                    finally:
+                        clear_checkpoint()
+                for variant in ("catalog", "membership_function", "operator", "combined"):
+                    admin("CREATE TABLE public.checkpoint_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.checkpoint_lookup_effect TO ri_application;")
+                    try:
+                        if variant in {"catalog", "combined"}:
+                            admin("CREATE VIEW public.pg_roles AS SELECT oid,rolname,false AS rolsuper,false AS rolcreatedb,false AS rolcreaterole,false AS rolreplication,false AS rolbypassrls FROM pg_catalog.pg_roles WHERE rolname<>'pg_checkpoint'; GRANT SELECT ON public.pg_roles TO PUBLIC;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.checkpoint_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                        if variant in {"operator", "combined"}:
+                            admin("CREATE FUNCTION public.checkpoint_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.checkpoint_lookup_effect VALUES ('operator'); RETURN false; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.checkpoint_equal);")
+                        application("authority_search_path", public_first=True)
+                        checkpoint_case("shadow_" + variant + "/healthy")
+                        try:
+                            admin("GRANT pg_checkpoint TO ri_application;")
+                            checkpoint_case("shadow_" + variant + "/direct", denied=True)
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("checkpoint_switch", role="ri_cap_child")
+                            checkpoint_case("shadow_" + variant + "/session_only", denied=True)
+                        finally:
+                            clear_checkpoint()
+                        assert admin("SELECT count(*) FROM public.checkpoint_lookup_effect;").strip() == b"0"
+                    finally:
+                        application("authority_search_path", public_first=False)
+                        if variant in {"catalog", "combined"}:
+                            admin("DROP VIEW public.pg_roles;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                        if variant in {"operator", "combined"}:
+                            admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.checkpoint_equal(pg_catalog.name,pg_catalog.name);")
+                        admin("DROP TABLE public.checkpoint_lookup_effect;")
+                receipt["checkpoint_forged_lookup_side_effects"] = 0
+                assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                try:
+                    admin("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) FROM PUBLIC;")
+                    checkpoint_case("unavailable_lookup", unavailable=True)
+                finally:
+                    admin("GRANT EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;")
+                checkpoint_case("restored_lookup")
+            finally:
+                clear_checkpoint()
+                admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+            receipt["checkpoint_restored"] = authority_catalog()
+            assert receipt["checkpoint_restored"] == receipt["checkpoint_baseline"]
+            assert application("checkpoint_operation") == receipt["checkpoint_denied_baseline"]
+            checkpoint_case("restored_authority")
+            assert application("replication_controls") == receipt["replication_baseline"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -396,7 +512,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 510:
+    if receipt["failed"] or len(cases) != 560:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 
