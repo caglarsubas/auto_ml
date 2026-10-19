@@ -3,8 +3,9 @@
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
 writable storage, identity modes, immediate primary keys, declared uniqueness
-and foreign-key metadata. Trigger enforcement and complete schema/restore
-equivalence remain outside this check.
+and the selected foreign-key/RI-trigger profile. Session replication modes,
+historical row integrity and complete schema/restore equivalence remain outside
+this check.
 """
 
 import json
@@ -133,7 +134,7 @@ def check_schema():
         # Bind every catalog/operator/type so namespaces cannot forge evidence.
         cursor.execute("""
             WITH required_relations AS (
-                SELECT c.relname,c.relkind,c.oid
+                SELECT c.relname,c.relkind,c.oid,c.relhastriggers
                 FROM pg_catalog.pg_class c
                 JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
                 WHERE n.nspname OPERATOR(pg_catalog.=) 'public'::pg_catalog.name
@@ -164,11 +165,43 @@ def check_schema():
                                 AND target.relkind OPERATOR(pg_catalog.=) 'r'::pg_catalog."char"
                                 AND target_column.attname OPERATOR(pg_catalog.=) wanted.foreign_column
                                 AND k.convalidated AND k.condeferrable AND k.condeferred
+                                AND c.relhastriggers AND target.relhastriggers
                                 -- Selected Django PostgreSQL DDL defers checks.
                                 -- ORM on_delete is separate from database actions.
                                 AND k.confmatchtype OPERATOR(pg_catalog.=) 's'::pg_catalog."char"
                                 AND k.confupdtype OPERATOR(pg_catalog.=) 'a'::pg_catalog."char"
                                 AND k.confdeltype OPERATOR(pg_catalog.=) 'a'::pg_catalog."char"
+                                -- Four internal AFTER ROW roles enforce this
+                                -- selected NO ACTION, initially deferred profile.
+                                -- Names are not evidence; bind exact built-in
+                                -- functions, constraint/index and both relations.
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM (VALUES
+                                        ('pg_catalog."RI_FKey_check_ins"()'::pg_catalog.regprocedure::pg_catalog.oid, 5, true),
+                                        ('pg_catalog."RI_FKey_check_upd"()'::pg_catalog.regprocedure::pg_catalog.oid, 17, true),
+                                        ('pg_catalog."RI_FKey_noaction_del"()'::pg_catalog.regprocedure::pg_catalog.oid, 9, false),
+                                        ('pg_catalog."RI_FKey_noaction_upd"()'::pg_catalog.regprocedure::pg_catalog.oid, 17, false)
+                                    ) AS role(function_oid, event_type, child)
+                                    WHERE NOT EXISTS (
+                                        SELECT 1 FROM pg_catalog.pg_trigger tr
+                                        WHERE tr.tgconstraint OPERATOR(pg_catalog.=) k.oid
+                                            AND tr.tgisinternal
+                                            AND tr.tgfoid OPERATOR(pg_catalog.=) role.function_oid
+                                            AND tr.tgtype::pg_catalog.int4 OPERATOR(pg_catalog.=) role.event_type
+                                            AND tr.tgrelid OPERATOR(pg_catalog.=)
+                                                CASE WHEN role.child THEN k.conrelid ELSE k.confrelid END
+                                            AND tr.tgconstrrelid OPERATOR(pg_catalog.=)
+                                                CASE WHEN role.child THEN k.confrelid ELSE k.conrelid END
+                                            AND tr.tgconstrindid OPERATOR(pg_catalog.=) k.conindid
+                                            AND tr.tgparentid OPERATOR(pg_catalog.=) 0::pg_catalog.oid
+                                            AND tr.tgenabled OPERATOR(pg_catalog.=) ANY(ARRAY['O','A']::pg_catalog."char"[])
+                                            AND tr.tgdeferrable AND tr.tginitdeferred
+                                            AND tr.tgnargs OPERATOR(pg_catalog.=) 0::pg_catalog.int2
+                                            AND tr.tgargs OPERATOR(pg_catalog.=) ''::pg_catalog.bytea
+                                            AND tr.tgattr::pg_catalog.text OPERATOR(pg_catalog.=) ''::pg_catalog.text
+                                            AND tr.tgqual IS NULL
+                                    )
+                                )
                         ))
                         AND (NOT wanted.primary_key OR EXISTS (
                             SELECT 1 FROM pg_catalog.pg_constraint k

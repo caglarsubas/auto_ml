@@ -1,0 +1,163 @@
+{
+  "packet": "P106",
+  "date": "2026-10-19",
+  "base_commit": "76ad605907cfbe3e6c2acd399385323c7db48128",
+  "predecessor_pr": 196,
+  "predecessor_exact_ci": 39182891428,
+  "predecessor_main_ci": 39185092208,
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "6d390b6b41a220ac13a3e4893a223a09175c40bf1f44ca6d5cf2fd704a04e0a8",
+    "backend/tests/qualification/private_schema_triggers.py": "89934c8f7276d54d5be55802e5a2c65664841cebd0b74797fedb14076ef9ae34",
+    "scripts/qualify_private_schema_triggers.py": "c2a6b914d85b15cc29f37c0f114c28a3c90216b3631a0493536acb199939ddba",
+    ".github/workflows/ci.yml": "19af72930f1376483463c05410990d1868e74e8a7e6c4541eae3f58855ea1251"
+  },
+  "before_trigger_matrix": {
+    "passed": 30,
+    "failed": 362,
+    "errors": 0,
+    "skipped": 0
+  },
+  "fixed_trigger_matrix": {
+    "passed": 392,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "required_roles_individually_disabled": 152
+  },
+  "predecessor_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "application_session_replication_role": "origin",
+    "application_owner_cannot_disable_internal_trigger": true,
+    "ordinary_disable_sqlstate": "42501",
+    "fault_injection_role": "separate postgres administrator of the disposable fixture",
+    "selected_constraint_oid": 16732,
+    "selected_constraint_name": "access_control_proje_actor_id_12228c5d_fk_auth_user",
+    "selected_trigger_oid": 16735,
+    "selected_trigger_name": "RI_ConstraintTrigger_c_16735",
+    "selected_trigger_function": "RI_FKey_check_ins",
+    "trigger_mode_before": "O",
+    "trigger_mode_during": "D",
+    "trigger_mode_after": "O",
+    "all_foreign_primary_scalar_compound_unique_and_other_constraint_metadata_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "all_other_trigger_metadata_unchanged": true,
+    "full_trigger_metadata_restored": true,
+    "startup_error": null,
+    "broker_fixture_calls_during": 1,
+    "orphan_membership_committed": true,
+    "independent_ordinary_connection_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "committed_orphan_removed_before_trigger_restore": true,
+    "restored_orphan_rejected_at_transaction_commit": true,
+    "existing_compound_duplicate_rejected": true,
+    "healthy_startup_before_and_after_restore": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "catalog_snapshots": "before-catalog-snapshots.json",
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 with application queries through an ordinary NOCREATEDB owner in origin mode. That owner cannot disable the internal trigger; a separate disclosed disposable-fixture administrator disables only the membership actor INSERT check trigger and restores it. All FK/primary/unique/other constraint metadata, column storage, other trigger metadata and all 31 migration records stay intact. A second ordinary connection observes an actually committed orphan, which is removed before trigger restoration. Restored deferred enforcement rejects at commit. Initial TLS and broker responses are explicit fixtures over plaintext. This models privileged fixture corruption and startup observation, not an ordinary-owner trigger-disable exploit, verified transport, controller/endpoint admission or continuous fencing.",
+    "customer_installation_modified": false
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "application_role_nocreatedb_and_non_elevated": true,
+    "application_session_replication_role": "origin",
+    "application_owner_cannot_disable_internal_trigger": true,
+    "ordinary_disable_sqlstate": "42501",
+    "fault_injection_role": "separate postgres administrator of the disposable fixture",
+    "selected_constraint_oid": 16732,
+    "selected_constraint_name": "access_control_proje_actor_id_12228c5d_fk_auth_user",
+    "selected_trigger_oid": 16735,
+    "selected_trigger_name": "RI_ConstraintTrigger_c_16735",
+    "selected_trigger_function": "RI_FKey_check_ins",
+    "trigger_mode_before": "O",
+    "trigger_mode_during": "D",
+    "trigger_mode_after": "O",
+    "all_foreign_primary_scalar_compound_unique_and_other_constraint_metadata_unchanged": true,
+    "all_column_storage_modifiers_nullability_generation_identity_unchanged": true,
+    "all_other_trigger_metadata_unchanged": true,
+    "full_trigger_metadata_restored": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls_during": 0,
+    "orphan_membership_committed": true,
+    "independent_ordinary_connection_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "committed_orphan_removed_before_trigger_restore": true,
+    "restored_orphan_rejected_at_transaction_commit": true,
+    "existing_compound_duplicate_rejected": true,
+    "healthy_startup_before_and_after_restore": true,
+    "same_project_other_actor_supported": true,
+    "same_actor_other_project_supported": true,
+    "original_rows_and_history_preserved": true,
+    "catalog_snapshots": "fixed-catalog-snapshots.json",
+    "actual_transport_tls": false,
+    "scope": "Owned PostgreSQL 17 with application queries through an ordinary NOCREATEDB owner in origin mode. That owner cannot disable the internal trigger; a separate disclosed disposable-fixture administrator disables only the membership actor INSERT check trigger and restores it. All FK/primary/unique/other constraint metadata, column storage, other trigger metadata and all 31 migration records stay intact. A second ordinary connection observes an actually committed orphan, which is removed before trigger restoration. Restored deferred enforcement rejects at commit. Initial TLS and broker responses are explicit fixtures over plaintext. This models privileged fixture corruption and startup observation, not an ordinary-owner trigger-disable exploit, verified transport, controller/endpoint admission or continuous fencing.",
+    "customer_installation_modified": false
+  },
+  "original_suite_audit": {
+    "original_files": 163,
+    "byte_identical_original_files": 162,
+    "sole_config_change": ".github/workflows/ci.yml",
+    "workflow_byte_identical_after_removing_only_new_qualification_and_new_lint_targets": true,
+    "original_workloads_tests_assertions_limits_coverage_skips_retries_unchanged": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Selected PostgreSQL 17/Django initially deferred NO ACTION trigger catalog profile; ordinary origin-mode application, separate privileged disposable controller. TLS/broker response fixtures in semantic qualifier; actual private deployment evidence separate. No historical data-integrity, later-state fencing or full schema/restore claim.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 46.398
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 26.799
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 218.461
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      },
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "ruff": "complete workflow command passed",
+  "roadmap_projection": "deterministic projection and 49 original invariants",
+  "owned_cleanup": "passed"
+}

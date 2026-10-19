@@ -202,6 +202,8 @@ jobs:
           PY
       - name: Qualify disposable PostgreSQL fixture
         run: python scripts/qualify_postgres_fixture.py --private-api-image "$DECLARAI_PRIVATE_API_IMAGE" --private-ingress-image "$DECLARAI_PRIVATE_INGRESS_IMAGE" --private-frontend-browser --postgres-image "$DECLARAI_PRIVATE_POSTGRES_IMAGE" --redis-image "$DECLARAI_PRIVATE_REDIS_IMAGE"
+      - name: Qualify RI-trigger enforcement with separate fixture administrator
+        run: python scripts/qualify_private_schema_triggers.py --runner-image "$DECLARAI_PRIVATE_API_IMAGE" --postgres-image "$DECLARAI_PRIVATE_POSTGRES_IMAGE"
       - name: Enforce existing skip budget
         if: always()
         run: python .github/scripts/check_skip_budget.py test-reports/postgresql/postgresql.xml --max-skips 15
@@ -260,7 +262,7 @@ jobs:
         run: pip install "ruff>=0.9"
       - name: Ruff check
         working-directory: backend
-        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/private_ingress_package.py ../scripts/private_frontend_package.py ../scripts/private_image_set.py ../scripts/private_installation_plan.py ../scripts/private_installation_check.py ../scripts/private_installation_init.py ../scripts/private_dependency_init.py ../scripts/qualify_private_dependency_init.py ../scripts/private_dependency_start.py ../scripts/qualify_private_dependency_start.py ../scripts/private_installation_resources.py ../scripts/private_installation_adopt.py ../scripts/qualify_private_installation_adopt.py ../scripts/qualify_private_installation_resources.py ../scripts/qualify_private_installation_init.py ../scripts/qualify_private_installation_check.py ../scripts/qualify_private_installation_plan.py ../scripts/qualify_private_image_set.py ../scripts/qualify_private_ingress.py ../scripts/qualify_private_api_image.py ../scripts/qualify_private_image_jobs.py ../scripts/qualify_postgres_fixture.py ../docker/private-gunicorn.py
+        run: ruff check . ../scripts/private_api_package.py ../scripts/private_runtime_manifest.py ../scripts/private_service.py ../scripts/private_ingress_package.py ../scripts/private_frontend_package.py ../scripts/private_image_set.py ../scripts/private_installation_plan.py ../scripts/private_installation_check.py ../scripts/private_installation_init.py ../scripts/private_dependency_init.py ../scripts/qualify_private_dependency_init.py ../scripts/private_dependency_start.py ../scripts/qualify_private_dependency_start.py ../scripts/private_installation_resources.py ../scripts/private_installation_adopt.py ../scripts/qualify_private_installation_adopt.py ../scripts/qualify_private_installation_resources.py ../scripts/qualify_private_installation_init.py ../scripts/qualify_private_installation_check.py ../scripts/qualify_private_installation_plan.py ../scripts/qualify_private_image_set.py ../scripts/qualify_private_ingress.py ../scripts/qualify_private_api_image.py ../scripts/qualify_private_image_jobs.py ../scripts/qualify_postgres_fixture.py ../scripts/qualify_private_schema_triggers.py tests/qualification/private_schema_triggers.py ../docker/private-gunicorn.py
 
   # ---------------------------------------------------------------------------
   # Frontend static analysis (ESLint + Prettier)
