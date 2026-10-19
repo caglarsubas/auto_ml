@@ -3,8 +3,8 @@
 Migration records alone do not establish that required physical relations still
 exist with their declared storage types, modifiers, nullability, ordinary
 writable storage, identity modes, immediate primary keys, declared uniqueness
-and the selected foreign-key/RI-trigger profile. Session replication modes,
-historical row integrity and complete schema/restore equivalence remain outside
+and the selected foreign-key/RI-trigger profile in an origin/local connection.
+Historical row integrity and complete schema/restore equivalence remain outside
 this check.
 """
 
@@ -142,6 +142,11 @@ def check_schema():
             ), profile AS (SELECT %s::pg_catalog.jsonb AS types)
             SELECT c.relname, c.relkind,
                 pg_catalog.pg_table_is_visible(c.oid)
+                    -- Login-default repairs do not change an already-open
+                    -- connection. Normal RI triggers fire in origin/local;
+                    -- replica is outside the sealed metadata profile.
+                    AND pg_catalog.current_setting('session_replication_role')
+                        OPERATOR(pg_catalog.=) ANY(ARRAY['origin','local']::pg_catalog.text[])
                     AND (wanted.name IS NULL OR (
                         a.atttypid OPERATOR(pg_catalog.=) t.oid
                         AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier

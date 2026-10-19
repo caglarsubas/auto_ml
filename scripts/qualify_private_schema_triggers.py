@@ -76,17 +76,19 @@ def main():
             raise RuntimeError("application_qualification_failed")
         return response["result"]
 
-    def case(name, entry, rejected):
+    def case(name, entry, rejected, unavailable=False):
         started = time.monotonic()
         result = application(entry=entry)
         expected = dict(error="job_schema_invalid" if rejected else None,
                         broker_calls=0 if rejected or entry == "schema" else 1)
+        if unavailable:
+            expected = dict(error="database_error" if entry == "schema" else "job_storage_unavailable", broker_calls=0)
         cases.append(dict(name=name + "/" + entry, passed=result == expected,
                           expected=expected, observed=result, seconds=time.monotonic() - started))
 
-    def check_all(name, rejected):
+    def check_all(name, rejected, unavailable=False):
         for entry in ("schema", "runtime", "command"):
-            case(name, entry, rejected)
+            case(name, entry, rejected, unavailable)
 
     try:
         command(["network", "create", "--internal", network])
@@ -194,6 +196,75 @@ def main():
             assert receipt["restored"] == baseline
             receipt["restored_controls"] = application("controls")
             check_all("restored_healthy", False)
+            # P107: preserve the complete P106 matrix above; append physical
+            # current-session, default-disagreement and namespace regressions.
+            receipt["replication_baseline"] = application("replication_controls")
+            receipt["replication_states"] = []
+
+            def mode(value):
+                assert value in {"origin", "local", "replica"}
+                try:
+                    admin("ALTER ROLE ri_application SET session_replication_role TO " + value + ";")
+                    state = application("reconnect")
+                    assert state["mode"] == value and state["can_set"] is False
+                finally:
+                    admin("ALTER ROLE ri_application RESET session_replication_role;")
+                state = application("state")
+                assert state["mode"] == value and state["login_default"] is None
+                receipt["replication_states"].append(state)
+                return state
+
+            for value in ("origin", "local", "replica"):
+                mode(value)
+                check_all("replication/current_" + value + "_after_default_reset", value == "replica")
+                if value == "replica":
+                    receipt["replication_committed_orphan"] = application("orphan")
+                else:
+                    assert application("controls") == receipt["restored_controls"]
+                assert application("snapshot") == baseline
+            for value in ("origin", "local"):
+                mode(value)
+                try:
+                    admin("ALTER ROLE ri_application SET session_replication_role TO replica;")
+                    state = application("state")
+                    assert state["mode"] == value and state["login_default"] == ["session_replication_role=replica"]
+                    check_all("replication/active_" + value + "_default_replica", False)
+                finally:
+                    admin("ALTER ROLE ri_application RESET session_replication_role;")
+            for variant in ("function", "operator", "both"):
+                admin("CREATE TABLE public.replication_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.replication_lookup_effect TO ri_application;")
+                try:
+                    if variant in {"function", "both"}:
+                        admin("CREATE FUNCTION public.current_setting(pg_catalog.text) RETURNS pg_catalog.text LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.replication_lookup_effect VALUES ('function'); RETURN 'origin'; END$$;")
+                    if variant in {"operator", "both"}:
+                        admin("CREATE FUNCTION public.replication_equal(pg_catalog.text,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.replication_lookup_effect VALUES ('operator'); RETURN true; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.text,RIGHTARG=pg_catalog.text,PROCEDURE=public.replication_equal);")
+                    for value in ("origin", "local", "replica"):
+                        mode(value)
+                        application("search_path", public_first=True)
+                        check_all("replication/shadow_" + variant + "/" + value, value == "replica")
+                        assert admin("SELECT count(*) FROM public.replication_lookup_effect;").strip() == b"0"
+                finally:
+                    application("search_path", public_first=False)
+                    if variant in {"function", "both"}:
+                        admin("DROP FUNCTION public.current_setting(pg_catalog.text);")
+                    if variant in {"operator", "both"}:
+                        admin("DROP OPERATOR public.= (pg_catalog.text,pg_catalog.text); DROP FUNCTION public.replication_equal(pg_catalog.text,pg_catalog.text);")
+                    admin("DROP TABLE public.replication_lookup_effect;")
+            receipt["replication_forged_lookup_side_effects"] = 0
+            mode("origin")
+            assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.current_setting(text)'::pg_catalog.regprocedure;").strip() == b"t"
+            try:
+                # A genuine PostgreSQL permission failure, not a fabricated GUC
+                # response; restore the original NULL ACL after this fault.
+                admin("REVOKE EXECUTE ON FUNCTION pg_catalog.current_setting(pg_catalog.text) FROM PUBLIC;")
+                check_all("replication/unavailable_lookup", True, unavailable=True)
+            finally:
+                admin("GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.current_setting(text)'::pg_catalog.regprocedure;")
+            check_all("replication/restored_lookup", False)
+            receipt["replication_restored"] = application("replication_controls")
+            assert receipt["replication_baseline"] == receipt["replication_restored"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -214,7 +285,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 392:
+    if receipt["failed"] or len(cases) != 440:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

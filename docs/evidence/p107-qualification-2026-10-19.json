@@ -1,0 +1,155 @@
+{
+  "packet": "P107",
+  "date": "2026-10-19",
+  "base_commit": "ab5e07393c3bfddc141f093aff9e81a1465187ce",
+  "predecessor_pr": 197,
+  "predecessor_exact_ci": 39190265351,
+  "predecessor_main_ci": 39193789662,
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/preflight.py": "d17a47369460c49828d89ddcf66321a72ea9cf0816114a2332b68eaf967f068e",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "ccd16a9f60fcf074ebb08678e4a28350d6975f7affcf193e207c71a7990e406d",
+    "scripts/qualify_private_schema_triggers.py": "166179b88e2d42605e312619ce8beb8556b67319fddd9b3baecdea84ee983fc2"
+  },
+  "before_new_physical_cases": {
+    "passed": 35,
+    "failed": 13,
+    "errors": 0,
+    "skipped": 0
+  },
+  "fixed_new_physical_cases": {
+    "passed": 48,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "original_392_physical_cases_preserved": true,
+  "combined_physical_cases": 440,
+  "predecessor_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "application_role_non_elevated_and_nocreatedb": true,
+    "application_cannot_set_replication_mode": true,
+    "ordinary_set_sqlstate": "42501",
+    "application_parameter_set_privilege": false,
+    "fault_injection": "separate disposable-fixture administrator temporarily installs replica login default",
+    "role_default_reset_before_invalid_startup": true,
+    "role_attributes_memberships_and_defaults_restored_before_invalid_startup": true,
+    "active_connection_mode_before": "origin",
+    "active_connection_mode_during": "replica",
+    "active_connection_mode_after": "origin",
+    "all_152_trigger_attributes_and_oids_unchanged": true,
+    "all_constraint_and_column_metadata_unchanged": true,
+    "startup_error": null,
+    "broker_fixture_calls_during": 1,
+    "orphan_membership_committed": true,
+    "independent_ordinary_origin_session_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "orphan_removed_before_reconnection": true,
+    "restored_deferred_orphan_rejection": true,
+    "existing_duplicate_rejection": true,
+    "local_mode_healthy_control": true,
+    "original_rows_and_history_preserved": true,
+    "healthy_startup_before_and_after_restore": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17; actual ordinary-role connections with no SET authority. Separate administrator temporarily changes the role login default, then resets it before the invalid startup. The existing application session retains replica while fresh ordinary observer sessions use origin. All 152 genuine enabled triggers, FK/other constraints, column metadata and 31 migration records stay intact. Initial TLS and broker responses are explicit fixtures over plaintext. Direct committed-data evidence, not verified transport, controller/endpoint admission, ordinary-owner parameter authority, historical integrity certification or continuous fencing."
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "application_role_non_elevated_and_nocreatedb": true,
+    "application_cannot_set_replication_mode": true,
+    "ordinary_set_sqlstate": "42501",
+    "application_parameter_set_privilege": false,
+    "fault_injection": "separate disposable-fixture administrator temporarily installs replica login default",
+    "role_default_reset_before_invalid_startup": true,
+    "role_attributes_memberships_and_defaults_restored_before_invalid_startup": true,
+    "active_connection_mode_before": "origin",
+    "active_connection_mode_during": "replica",
+    "active_connection_mode_after": "origin",
+    "all_152_trigger_attributes_and_oids_unchanged": true,
+    "all_constraint_and_column_metadata_unchanged": true,
+    "startup_error": "job_schema_invalid",
+    "broker_fixture_calls_during": 0,
+    "orphan_membership_committed": true,
+    "independent_ordinary_origin_session_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "orphan_removed_before_reconnection": true,
+    "restored_deferred_orphan_rejection": true,
+    "existing_duplicate_rejection": true,
+    "local_mode_healthy_control": true,
+    "original_rows_and_history_preserved": true,
+    "healthy_startup_before_and_after_restore": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17; actual ordinary-role connections with no SET authority. Separate administrator temporarily changes the role login default, then resets it before the invalid startup. The existing application session retains replica while fresh ordinary observer sessions use origin. All 152 genuine enabled triggers, FK/other constraints, column metadata and 31 migration records stay intact. Initial TLS and broker responses are explicit fixtures over plaintext. Direct committed-data evidence, not verified transport, controller/endpoint admission, ordinary-owner parameter authority, historical integrity certification or continuous fencing."
+  },
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P107_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Actual origin/local mode in the current PostgreSQL metadata connection; read-only built-in evidence, no mode repair or parameter grant. TLS/broker response fixtures in owned semantic/physical tests; actual private qualification remains separate. Historical integrity, broad parameter authority, later-state fencing and full lifecycle gates remain open.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 53.584
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 25.52
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 243.255
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      },
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "original_392_physical_case_identities_and_expectations_preserved": true,
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and 49 original invariants",
+  "owned_cleanup": "passed"
+}
