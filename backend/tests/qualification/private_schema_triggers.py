@@ -257,6 +257,43 @@ def main():
         connection.set_autocommit(True)
         return dict(released=True)
 
+    def subscription_state():
+        state = authority_state()
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT
+                pg_catalog.pg_has_role(current_user,'pg_create_subscription'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(current_user,'pg_create_subscription'::pg_catalog.name,'USAGE'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_create_subscription'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_create_subscription'::pg_catalog.name,'USAGE'::pg_catalog.text),
+                pg_catalog.has_database_privilege(current_user,pg_catalog.current_database(),'CREATE')
+            """)
+            row = cursor.fetchone()
+        return dict(state=state,current_member=row[0],current_usage=row[1],session_member=row[2],session_usage=row[3],database_create=row[4])
+
+    def subscription_create():
+        assert connection.get_autocommit() and not connection.in_atomic_block
+        try:
+            with connection.cursor() as cursor:
+                # No publisher connection, slot, worker or data copy. Even an
+                # accidental connection would target an absent fixture socket.
+                cursor.execute("""CREATE SUBSCRIPTION ri_subscription_fixture
+                    CONNECTION 'host=/nonexistent-fixture-only dbname=fixture_never_connect user=fixture_unused password=fixture_unused connect_timeout=1'
+                    PUBLICATION ri_never_connected
+                    WITH (connect=false,enabled=false,create_slot=false,copy_data=false,slot_name=NONE)
+                """)
+                assert cursor.statusmessage == "CREATE SUBSCRIPTION"
+        except DatabaseError as exc:
+            assert exc.__cause__.sqlstate == "42501"
+            return dict(status=None,sqlstate="42501")
+        return dict(status="CREATE SUBSCRIPTION",sqlstate=None)
+
+    def subscription_drop():
+        assert connection.get_autocommit() and not connection.in_atomic_block
+        with connection.cursor() as cursor:
+            cursor.execute("DROP SUBSCRIPTION ri_subscription_fixture")
+            assert cursor.statusmessage == "DROP SUBSCRIPTION"
+        return dict(dropped=True)
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -332,6 +369,17 @@ def main():
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
                 result = maintain_state()
+            elif request["action"] == "subscription_state":
+                result = subscription_state()
+            elif request["action"] == "subscription_create":
+                result = subscription_create()
+            elif request["action"] == "subscription_drop":
+                result = subscription_drop()
+            elif request["action"] == "subscription_switch":
+                assert request["role"] in {"ri_cap_carrier", "ri_cap_child", "reset"}
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
+                result = subscription_state()
             elif request["action"] == "authority_state":
                 result = authority_state()
             elif request["action"] == "authority_switch":

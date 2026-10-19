@@ -664,6 +664,179 @@ def main():
             admin("DROP SCHEMA maintain_fixture CASCADE;")
             assert admin("SELECT pg_catalog.to_regnamespace('maintain_fixture') IS NULL;").strip() == b"t"
             receipt["maintain_fixture_removed"] = True
+            def subscription_catalog():
+                return json.loads(admin("""SELECT pg_catalog.json_build_object(
+                    'subscriptions',COALESCE((SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
+                        'name',subname,'owner',pg_catalog.pg_get_userbyid(subowner),
+                        'enabled',subenabled,'slot',subslotname,'connection',subconninfo,
+                        'publications',subpublications) ORDER BY subname)
+                        FROM pg_catalog.pg_subscription), '[]'::pg_catalog.json),
+                    'database_acl',(SELECT datacl::pg_catalog.text FROM pg_catalog.pg_database
+                        WHERE datname=pg_catalog.current_database()),
+                    'replication_slots',(SELECT count(*) FROM pg_catalog.pg_replication_slots),
+                    'active_workers',(SELECT count(*) FROM pg_catalog.pg_stat_subscription WHERE pid IS NOT NULL));
+                """))
+
+            receipt["subscription_catalog_baseline"] = subscription_catalog()
+            assert receipt["subscription_catalog_baseline"] == dict(subscriptions=[],database_acl=None,
+                replication_slots=0,active_workers=0)
+            receipt["subscription_observations"] = []
+
+            def subscription_operation():
+                before = subscription_catalog()
+                assert before["subscriptions"] == []
+                operation = application("subscription_create")
+                if operation["status"] is None:
+                    assert operation == dict(status=None,sqlstate="42501")
+                    assert subscription_catalog() == before
+                    return operation
+                assert operation == dict(status="CREATE SUBSCRIPTION",sqlstate=None)
+                try:
+                    observed = subscription_catalog()
+                    state = application("subscription_state")
+                    assert observed["subscriptions"] == [dict(name="ri_subscription_fixture",
+                        owner=state["state"]["current_user"],enabled=False,slot=None,
+                        connection="host=/nonexistent-fixture-only dbname=fixture_never_connect user=fixture_unused password=fixture_unused connect_timeout=1",
+                        publications=["ri_never_connected"])]
+                    assert observed["database_acl"] == before["database_acl"]
+                    assert observed["replication_slots"] == observed["active_workers"] == 0
+                    receipt["subscription_observations"].append(observed["subscriptions"][0])
+                finally:
+                    assert application("subscription_drop") == dict(dropped=True)
+                assert subscription_catalog() == before
+                return operation
+
+            # P111: append subscription-role admission cases; all 610 original
+            # schema/runtime/authority cases and expectations remain unchanged.
+            def subscription_case(name, denied=False, unavailable=False):
+                for entry in ("role", "role_command"):
+                    started = time.monotonic()
+                    result = application(entry=entry)
+                    error = "job_application_role_unavailable" if unavailable else (
+                        "job_application_role_elevated" if denied else None)
+                    expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                    cases.append(dict(name="subscription_authority/" + name + "/" + entry,
+                        passed=result == expected, expected=expected, observed=result,
+                        seconds=time.monotonic() - started))
+
+            receipt["subscription_baseline"] = authority_catalog()
+            receipt["subscription_denied_baseline"] = subscription_operation()
+            assert receipt["subscription_denied_baseline"] == dict(status=None,sqlstate="42501")
+            for value in ("origin", "local"):
+                mode(value)
+                subscription_case("baseline_" + value)
+            mode("origin")
+            admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;
+                GRANT CREATE ON DATABASE ri_fixture TO ri_cap_child,ri_cap_carrier,ri_cap_bridge;""")
+            receipt["subscription_profiles"] = []
+
+            def clear_subscription():
+                application("subscription_switch", role="reset")
+                admin("""REVOKE pg_create_subscription FROM ri_application,ri_cap_carrier,ri_cap_child;
+                    REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                    REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;""")
+
+            try:
+                for profile in ("direct", "inherited", "switch_only", "transitive",
+                                "session_only", "active_only", "options_disabled", "unrelated"):
+                    try:
+                        grantee = {"direct":"ri_application", "session_only":"ri_application",
+                                   "active_only":"ri_cap_child"}.get(profile, "ri_cap_carrier")
+                        admin("GRANT pg_create_subscription TO " + grantee + ";")
+                        if profile in {"inherited", "switch_only", "options_disabled"}:
+                            admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                "TRUE" if profile == "inherited" else "FALSE") + ", SET " + (
+                                "FALSE" if profile == "options_disabled" else "TRUE") + ";")
+                        elif profile == "transitive":
+                            admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                        elif profile in {"session_only", "active_only"}:
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("subscription_switch", role="ri_cap_child")
+                        state = application("subscription_state")
+                        assert state["current_member"] == (profile not in {"session_only", "unrelated"})
+                        assert state["session_member"] == (profile != "unrelated")
+                        assert state["current_usage"] == (profile in {"direct", "inherited", "active_only"})
+                        assert state["session_usage"] == (profile in {"direct", "inherited", "session_only"})
+                        assert state["database_create"] is True
+                        assert state["state"]["mode"] == "origin"
+                        assert not any(state["state"][k] for k in (
+                            "current_set", "current_alter_system", "session_set", "session_alter_system"))
+                        operation = subscription_operation()
+                        assert operation == (dict(status="CREATE SUBSCRIPTION",sqlstate=None) if state["current_usage"]
+                                             else dict(status=None,sqlstate="42501"))
+                        missing_database_create = None
+                        if profile == "active_only":
+                            try:
+                                admin("REVOKE CREATE ON DATABASE ri_fixture FROM ri_cap_child;")
+                                assert application("subscription_state")["database_create"] is False
+                                missing_database_create = subscription_operation()
+                                assert missing_database_create == dict(status=None,sqlstate="42501")
+                            finally:
+                                admin("GRANT CREATE ON DATABASE ri_fixture TO ri_cap_child;")
+                        subscription_case(profile, denied=profile != "unrelated")
+                        switched = None
+                        if profile in {"switch_only", "transitive"}:
+                            switched = application("subscription_switch", role="ri_cap_carrier")
+                            assert switched["current_usage"] is True
+                            assert subscription_operation() == dict(status="CREATE SUBSCRIPTION",sqlstate=None)
+                        receipt["subscription_profiles"].append(dict(profile=profile,state=state,
+                            operation=operation,switched=switched,missing_database_create=missing_database_create,catalog=authority_catalog()))
+                    finally:
+                        clear_subscription()
+                for variant in ("catalog", "membership_function", "operator", "combined"):
+                    admin("CREATE TABLE public.subscription_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.subscription_lookup_effect TO ri_application;")
+                    try:
+                        if variant in {"catalog", "combined"}:
+                            admin("CREATE VIEW public.pg_roles AS SELECT oid,rolname,false AS rolsuper,false AS rolcreatedb,false AS rolcreaterole,false AS rolreplication,false AS rolbypassrls FROM pg_catalog.pg_roles WHERE rolname<>'pg_create_subscription'; GRANT SELECT ON public.pg_roles TO PUBLIC;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.subscription_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                        if variant in {"operator", "combined"}:
+                            admin("CREATE FUNCTION public.subscription_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.subscription_lookup_effect VALUES ('operator'); RETURN false; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.subscription_equal);")
+                        application("authority_search_path", public_first=True)
+                        subscription_case("shadow_" + variant + "/healthy")
+                        try:
+                            admin("GRANT pg_create_subscription TO ri_application;")
+                            subscription_case("shadow_" + variant + "/direct", denied=True)
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("subscription_switch", role="ri_cap_child")
+                            subscription_case("shadow_" + variant + "/session_only", denied=True)
+                        finally:
+                            clear_subscription()
+                        assert admin("SELECT count(*) FROM public.subscription_lookup_effect;").strip() == b"0"
+                    finally:
+                        application("authority_search_path", public_first=False)
+                        if variant in {"catalog", "combined"}:
+                            admin("DROP VIEW public.pg_roles;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                        if variant in {"operator", "combined"}:
+                            admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.subscription_equal(pg_catalog.name,pg_catalog.name);")
+                        admin("DROP TABLE public.subscription_lookup_effect;")
+                receipt["subscription_forged_lookup_side_effects"] = 0
+                assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                try:
+                    admin("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) FROM PUBLIC;")
+                    subscription_case("unavailable_lookup", unavailable=True)
+                finally:
+                    admin("GRANT EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;")
+                subscription_case("restored_lookup")
+            finally:
+                clear_subscription()
+                admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; REVOKE CREATE ON DATABASE ri_fixture FROM ri_cap_child,ri_cap_carrier,ri_cap_bridge; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+            receipt["subscription_restored"] = authority_catalog()
+            assert receipt["subscription_restored"] == receipt["subscription_baseline"]
+            assert subscription_operation() == receipt["subscription_denied_baseline"]
+            subscription_case("restored_authority")
+            assert application("replication_controls") == receipt["replication_baseline"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
+            admin("UPDATE pg_catalog.pg_database SET datacl=NULL WHERE datname=pg_catalog.current_database();")
+            receipt["subscription_catalog_restored"] = subscription_catalog()
+            assert receipt["subscription_catalog_restored"] == receipt["subscription_catalog_baseline"]
+            assert len(receipt["subscription_observations"]) == 5
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -684,7 +857,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 610:
+    if receipt["failed"] or len(cases) != 660:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 
