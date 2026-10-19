@@ -1,0 +1,143 @@
+{
+  "packet": "P111",
+  "date": "2026-10-19",
+  "source_base": "b6277b1c3f0596eab4170dadda5d44a4c9f49fe0",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "bac55764f9b968a2d401e7f74579e60d210c336a1fcf52ecccbd5f6daba59849",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "d66935c7e4f38842fe8b796fad954ea627f8034dce0ab9fe9faefb9d92233d28",
+    "scripts/qualify_private_schema_triggers.py": "f90cd8fe59e49d4504ab67e4f3856b54a1d3d0631c694ba0662430d7c079f5b1"
+  },
+  "predecessor_reproduction": {
+    "before_passed": 630,
+    "before_failed": 30,
+    "original_610_passed": true,
+    "new_startup_cases": 50,
+    "administrator_deliberately_delegated_pg_create_subscription": true,
+    "disabled_disconnected_catalog_definitions_independently_observed": 5,
+    "replication_slots": 0,
+    "active_workers": 0,
+    "database_create_dependency_verified": true,
+    "all_scoped_catalogs_acls_roles_metadata_rows_restored": true,
+    "actual_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17; the host administrator deliberately grants pg_create_subscription to otherwise restricted fixture principals. Current admission accepts it, and effective use plus database CREATE permits actual disabled/disconnected subscription definitions. The administrator independently observes each definition; application DROP restores it. No publisher connection, slot, worker, data copy, egress exploitation or customer operation is exercised. Initial TLS/broker results are fixtures; original 610 physical cases and metadata restore verify."
+  },
+  "fixed_qualification": {
+    "startup_checks": {
+      "healthy": 18,
+      "elevated": 30,
+      "unavailable": 2,
+      "all_passed": true
+    },
+    "profiles": [
+      "direct",
+      "inherited",
+      "switch_only",
+      "transitive",
+      "session_only",
+      "active_only",
+      "options_disabled",
+      "unrelated"
+    ],
+    "disabled_disconnected_definitions_independently_observed": 5,
+    "owners": {
+      "ri_application": 2,
+      "ri_cap_carrier": 2,
+      "ri_cap_child": 1
+    },
+    "missing_database_create_sqlstate": "42501",
+    "catalog_baseline": {
+      "subscriptions": [],
+      "database_acl": null,
+      "replication_slots": 0,
+      "active_workers": 0
+    },
+    "catalog_restored": {
+      "subscriptions": [],
+      "database_acl": null,
+      "replication_slots": 0,
+      "active_workers": 0
+    },
+    "forged_lookup_side_effects": 0,
+    "all_role_and_membership_snapshots_restored": true,
+    "actual_replication_or_publisher_connection_exercised": false
+  },
+  "predecessor_physical_cases": 660,
+  "predecessor_passed": 630,
+  "predecessor_failed": 30,
+  "standalone_physical_cases": 660,
+  "new_subscription_cases": 50,
+  "original_610_case_identities_and_expectations_preserved": true,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Bounded pg_create_subscription current/session admission for the initial application profile. Actual disabled/disconnected subscription definitions and database-CREATE dependency are independently observed, then removed; scoped catalogs/ACLs/memberships/metadata restore. Initial physical TLS/broker responses are fixtures. Actual replication, egress capability demonstration, historical subscriptions, all-role/object-authority certification, continuous fencing and release/customer readiness are outside this change.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 63.35
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 26.013
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 236.406
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "frontend_unit_passed": 651,
+  "frontend_production_build": "passed",
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and original invariants preserved",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P111_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "sole_product_change": "add pg_create_subscription to existing builtin-qualified authority predicate",
+    "primary_status_and_13_hashes_match": true
+  },
+  "receipts_scope": "Ignored local raw reports retained in this checkout; committed source receipt is self-contained. Exact PR and main receipts are qualified separately."
+}
