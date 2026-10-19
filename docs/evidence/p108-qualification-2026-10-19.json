@@ -1,0 +1,160 @@
+{
+  "packet": "P108",
+  "date": "2026-10-19",
+  "base_commit": "653711f4d4f7f23ee37ae2dcaea6ddcc51a3ba99",
+  "predecessor_pr": 198,
+  "predecessor_exact_ci": 39198249456,
+  "predecessor_main_ci": 39200639141,
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "bec25e835eb31ebc1a8db502a86abaebcb6efe4b94a8d34e67cbe9f8cdaf593a",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "01bb0ac877a27605644c6505d68daac3a317cdbaecd3b806b820cf8953242adc",
+    "scripts/qualify_private_schema_triggers.py": "2d7c739f24d7d5b3042140b4a0c40e387ef8b81679bc5152fbc6f551409aaee7"
+  },
+  "before_new_physical_cases": {
+    "passed": 20,
+    "failed": 50,
+    "errors": 0,
+    "skipped": 0
+  },
+  "fixed_new_physical_cases": {
+    "passed": 70,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "original_440_physical_cases_preserved": true,
+  "combined_physical_cases": 510,
+  "predecessor_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_application_cannot_set_replication_mode": true,
+    "baseline_set_denied_sqlstate": "42501",
+    "parameter_set_privilege_before": false,
+    "parameter_set_privilege_during": true,
+    "parameter_set_privilege_after": false,
+    "administrator_explicitly_grants_parameter_set_authority": true,
+    "role_superuser_createdb_createrole_replication_bypassrls_and_memberships_unchanged": true,
+    "existing_role_check_accepts_delegated_parameter_authority": true,
+    "require_application_role_command_error": null,
+    "command_broker_fixture_calls": 1,
+    "P107_replica_mode_guard_preserved": "job_schema_invalid",
+    "broker_fixture_calls_in_replica": 0,
+    "application_can_set_replica_after_admission": true,
+    "orphan_membership_committed": true,
+    "independent_origin_connection_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "subsequent_origin_startup_accepts_with_orphan_still_present": true,
+    "all_152_trigger_attributes_and_oids_unchanged": true,
+    "all_constraint_and_column_metadata_unchanged": true,
+    "orphan_removed": true,
+    "exact_parameter_acl_catalog_restored": true,
+    "restored_deferred_orphan_rejection": true,
+    "existing_duplicate_rejection": true,
+    "original_rows_and_history_preserved": true,
+    "owned_fault_scope": "explicit delegated parameter authority",
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17. A separate fixture administrator deliberately grants SET authority for session_replication_role while the application remains non-superuser and starts in origin. That delegated capability is the unsupported authority profile under test. Current role admission and require-application-role command accept it. The application then changes its own mode, commits an orphan, and returns to origin; the existing P107 mode guard correctly rejects replica but cannot certify historical rows after origin is restored. Independent origin-session observation, exact metadata/ACL restoration, orphan removal and deferred rejection controls pass. Initial TLS and broker responses are explicit fixtures, not verified transport, controller/endpoint admission, an ordinary-role-without-grant exploit or continuous fencing."
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_application_cannot_set_replication_mode": true,
+    "baseline_set_denied_sqlstate": "42501",
+    "parameter_set_privilege_before": false,
+    "parameter_set_privilege_during": true,
+    "parameter_set_privilege_after": false,
+    "administrator_explicitly_grants_parameter_set_authority": true,
+    "role_superuser_createdb_createrole_replication_bypassrls_and_memberships_unchanged": true,
+    "existing_role_check_accepts_delegated_parameter_authority": false,
+    "require_application_role_command_error": "job_application_role_elevated",
+    "command_broker_fixture_calls": 1,
+    "P107_replica_mode_guard_preserved": "job_schema_invalid",
+    "broker_fixture_calls_in_replica": 0,
+    "application_can_set_replica_after_admission": true,
+    "orphan_membership_committed": true,
+    "independent_origin_connection_observed_committed_orphan": true,
+    "direct_related_user_lookup_missing": true,
+    "subsequent_origin_startup_accepts_with_orphan_still_present": true,
+    "all_152_trigger_attributes_and_oids_unchanged": true,
+    "all_constraint_and_column_metadata_unchanged": true,
+    "orphan_removed": true,
+    "exact_parameter_acl_catalog_restored": true,
+    "restored_deferred_orphan_rejection": true,
+    "existing_duplicate_rejection": true,
+    "original_rows_and_history_preserved": true,
+    "owned_fault_scope": "explicit delegated parameter authority",
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17. A separate fixture administrator deliberately grants replication-parameter SET authority. Fixed real role admission and the flagged command reject it with job_application_role_elevated while current mode is origin. The command preserves runtime-before-role ordering, so its broker response fixture is called once. Subsequent deliberately forced direct SQL is an integrity control after admission denial, not a service bypass: P107 still rejects replica, a committed orphan is independently observed, then removed, and the exact original role/ACL/schema/rows/history are restored with ordinary constraint enforcement. Unflagged runtime is a separate current-state check. TLS/broker responses are explicit fixtures over plaintext; no verified transport, controller/endpoint, no-grant exploit, history certification, continuous fencing or release/customer claim."
+  },
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 98.141
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 45.898
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 293.209
+    }
+  },
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Read-only replication-parameter authority at existing application-role admission; current/session effective and conservative membership policy, direct/PUBLIC/inherited/switch/transitive profiles, genuine lookup denial and builtin namespace evidence. Existing command runtime-before-role order remains. No setting/permission repair, all-parameter/predefined-role authority, historical integrity or continuous fencing qualification. TLS/broker response fixtures are distinct from required actual private receipts.",
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "original_440_physical_case_identities_and_expectations_preserved": true,
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and 49 original invariants",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P108_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "primary_status_and_13_hashes_match": true
+  }
+}

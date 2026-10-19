@@ -181,6 +181,22 @@ def main():
             raise AssertionError("ordinary_application_changed_replication_mode")
         return dict(state=state,ordinary_set_sqlstate="42501")
 
+    def authority_state():
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT current_user,session_user,
+                pg_catalog.current_setting('session_replication_role'),
+                pg_catalog.has_parameter_privilege(current_user,'session_replication_role','SET'),
+                pg_catalog.has_parameter_privilege(current_user,'session_replication_role','ALTER SYSTEM'),
+                pg_catalog.has_parameter_privilege(session_user,'session_replication_role','SET'),
+                pg_catalog.has_parameter_privilege(session_user,'session_replication_role','ALTER SYSTEM'),
+                r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolreplication,r.rolbypassrls,r.rolconfig
+                FROM pg_catalog.pg_roles r WHERE r.rolname OPERATOR(pg_catalog.=) current_user""")
+            row = cursor.fetchone()
+        assert row[7:12] == (False,) * 5 and row[12] is None
+        return dict(current_user=row[0],session_user=row[1],mode=row[2],current_set=row[3],
+                    current_alter_system=row[4],session_set=row[5],session_alter_system=row[6],
+                    elevated_attributes=list(row[7:12]),login_default=row[12])
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -192,6 +208,15 @@ def main():
                 preflight.check_runtime()
             elif entry == "command":
                 call_command("check_job_runtime", stdout=io.StringIO())
+            elif entry == "role":
+                transport = preflight.connection
+                try:
+                    preflight.connection = connection
+                    preflight.check_application_role()
+                finally:
+                    preflight.connection = transport
+            elif entry == "role_command":
+                call_command("check_job_runtime", require_application_role=True, stdout=io.StringIO())
             else:
                 raise AssertionError("unknown_entry")
         except schema_presence.SchemaMismatch:
@@ -227,6 +252,17 @@ def main():
                 with connection.cursor() as cursor:
                     cursor.execute("SET search_path TO public,pg_catalog" if request["public_first"] else "RESET search_path")
                 result = connection_state()
+            elif request["action"] == "authority_state":
+                result = authority_state()
+            elif request["action"] == "authority_switch":
+                assert request["role"] in {"ri_cap_child", "reset"}
+                with connection.cursor() as cursor:
+                    cursor.execute("SET ROLE ri_cap_child" if request["role"] == "ri_cap_child" else "RESET ROLE")
+                result = authority_state()
+            elif request["action"] == "authority_search_path":
+                with connection.cursor() as cursor:
+                    cursor.execute("SET search_path TO public,pg_catalog" if request["public_first"] else "RESET search_path")
+                result = authority_state()
             else:
                 result = check(request["entry"])
             print(json.dumps(dict(ok=True, result=result)), flush=True)
