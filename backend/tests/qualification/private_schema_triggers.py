@@ -149,6 +149,38 @@ def main():
             ProjectMembership.objects.filter(pk=orphan.pk).delete()
         return dict(committed_orphan_observed_by_independent_ordinary_connection=True, orphan_removed=True)
 
+    def connection_state():
+        # Attest the actual ordinary role; do not consume the TLS response fixture.
+        transport = preflight.connection
+        try:
+            preflight.connection = connection
+            preflight.check_application_role()
+        finally:
+            preflight.connection = transport
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT current_user,session_user,
+                pg_catalog.current_setting('session_replication_role'),
+                pg_catalog.has_parameter_privilege(current_user,'session_replication_role','SET'),
+                r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolreplication,r.rolbypassrls,r.rolconfig
+                FROM pg_catalog.pg_roles r WHERE r.rolname OPERATOR(pg_catalog.=) current_user""")
+            row = cursor.fetchone()
+        assert row[:2] == ("ri_application", "ri_application")
+        assert row[3:9] == (False, False, False, False, False, False)
+        return dict(current_user=row[0],session_user=row[1],mode=row[2],can_set=row[3],
+                    elevated_attributes=list(row[4:9]),login_default=row[9])
+
+    def replication_controls():
+        state = connection_state()
+        assert state["mode"] == "origin" and state["login_default"] is None
+        try:
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute("SET session_replication_role TO replica")
+        except DatabaseError as exc:
+            assert exc.__cause__.sqlstate == "42501"
+        else:
+            raise AssertionError("ordinary_application_changed_replication_mode")
+        return dict(state=state,ordinary_set_sqlstate="42501")
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -164,6 +196,11 @@ def main():
                 raise AssertionError("unknown_entry")
         except schema_presence.SchemaMismatch:
             error = "job_schema_invalid"
+        except DatabaseError:
+            # Direct schema callers receive the actual database error. Runtime
+            # and command entrypoints must use the product's redacted failure.
+            assert entry == "schema"
+            error = "database_error"
         except (preflight.RuntimeUnavailable, CommandError) as exc:
             error = str(exc)
         return dict(error=error, broker_calls=broker.__enter__.return_value.ensure_connection.call_count)
@@ -178,6 +215,18 @@ def main():
                 result = controls()
             elif request["action"] == "orphan":
                 result = committed_orphan()
+            elif request["action"] == "reconnect":
+                connection.close()
+                connection.ensure_connection()
+                result = connection_state()
+            elif request["action"] == "state":
+                result = connection_state()
+            elif request["action"] == "replication_controls":
+                result = replication_controls()
+            elif request["action"] == "search_path":
+                with connection.cursor() as cursor:
+                    cursor.execute("SET search_path TO public,pg_catalog" if request["public_first"] else "RESET search_path")
+                result = connection_state()
             else:
                 result = check(request["entry"])
             print(json.dumps(dict(ok=True, result=result)), flush=True)
