@@ -265,6 +265,117 @@ def main():
             assert receipt["replication_baseline"] == receipt["replication_restored"]
             assert application("controls") == receipt["restored_controls"]
             assert application("snapshot") == baseline
+            # P108: append role-authority qualification without changing the
+            # original 440 schema/runtime cases or their expected outcomes.
+            def authority_case(name, denied=False, unavailable=False):
+                for entry in ("role", "role_command"):
+                    started = time.monotonic()
+                    result = application(entry=entry)
+                    error = "job_application_role_unavailable" if unavailable else (
+                        "job_application_role_elevated" if denied else None)
+                    # Preserve the command's existing runtime-before-role order.
+                    expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                    cases.append(dict(name="parameter_authority/" + name + "/" + entry,
+                        passed=result == expected, expected=expected, observed=result,
+                        seconds=time.monotonic() - started))
+
+            def authority_catalog():
+                return json.loads(admin("""SELECT pg_catalog.json_build_object(
+                    'parameters',(SELECT pg_catalog.json_agg(pg_catalog.json_build_array(parname,paracl::pg_catalog.text) ORDER BY parname) FROM pg_catalog.pg_parameter_acl),
+                    'roles',(SELECT pg_catalog.json_agg(pg_catalog.json_build_array(oid,rolname,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolconfig) ORDER BY oid) FROM pg_catalog.pg_roles),
+                    'memberships',(SELECT pg_catalog.json_agg(pg_catalog.json_build_array(roleid,member,grantor,admin_option,inherit_option,set_option) ORDER BY roleid,member,grantor) FROM pg_catalog.pg_auth_members),
+                    'relation_acls',(SELECT pg_catalog.json_agg(pg_catalog.json_build_array(oid,relacl::pg_catalog.text) ORDER BY oid) FROM pg_catalog.pg_class WHERE relnamespace='public'::pg_catalog.regnamespace)
+                    );"""))
+
+            receipt["authority_baseline"] = authority_catalog()
+            assert not receipt["authority_baseline"]["parameters"]
+            assert all(row[1] is None for row in receipt["authority_baseline"]["relation_acls"])
+            receipt["authority_profiles"] = []
+            for value in ("origin", "local"):
+                mode(value)
+                authority_case("baseline_" + value)
+            mode("origin")
+            admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;""")
+
+            def clear_authority():
+                application("authority_switch", role="reset")
+                admin("""REVOKE ALL PRIVILEGES ON PARAMETER session_replication_role FROM ri_application,ri_cap_carrier,ri_cap_child,PUBLIC;
+                    REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                    REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;
+                    DELETE FROM pg_catalog.pg_parameter_acl WHERE parname='session_replication_role';""")
+
+            try:
+                for privilege in ("SET", "ALTER SYSTEM"):
+                    key = "set" if privilege == "SET" else "alter_system"
+                    for profile in ("direct", "public", "inherited", "switch_only", "transitive",
+                                    "session_only", "active_only", "unrelated"):
+                        try:
+                            grantee = {"direct":"ri_application", "public":"PUBLIC", "session_only":"ri_application",
+                                       "active_only":"ri_cap_child"}.get(profile, "ri_cap_carrier")
+                            admin("GRANT " + privilege + " ON PARAMETER session_replication_role TO " + grantee + ";")
+                            if profile in {"inherited", "switch_only"}:
+                                admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                    "TRUE" if profile == "inherited" else "FALSE") + ", SET TRUE;")
+                            elif profile == "transitive":
+                                admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            elif profile in {"session_only", "active_only"}:
+                                admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                                application("authority_switch", role="ri_cap_child")
+                            state = application("authority_state")
+                            assert state["mode"] == "origin"
+                            assert state["current_" + key] == (profile in {"direct", "public", "inherited", "active_only"})
+                            assert state["session_" + key] == (profile in {"direct", "public", "inherited", "session_only"})
+                            receipt["authority_profiles"].append(dict(privilege=privilege, profile=profile, state=state,
+                                catalog=authority_catalog()))
+                            authority_case(privilege + "/" + profile, denied=profile != "unrelated")
+                        finally:
+                            clear_authority()
+                for variant in ("parameter_function", "membership_function", "both_functions", "operator", "combined"):
+                    admin("CREATE TABLE public.authority_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.authority_lookup_effect TO ri_application;")
+                    try:
+                        if variant in {"parameter_function", "both_functions", "combined"}:
+                            admin("CREATE FUNCTION public.has_parameter_privilege(pg_catalog.oid,pg_catalog.text,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.authority_lookup_effect VALUES ('parameter'); RETURN false; END$$;")
+                        if variant in {"membership_function", "both_functions", "combined"}:
+                            admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.authority_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                        if variant in {"operator", "combined"}:
+                            admin("CREATE FUNCTION public.authority_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.authority_lookup_effect VALUES ('operator'); RETURN true; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.authority_equal);")
+                        application("authority_search_path", public_first=True)
+                        authority_case("shadow_" + variant + "/healthy")
+                        for privilege in ("SET", "ALTER SYSTEM"):
+                            try:
+                                admin("GRANT " + privilege + " ON PARAMETER session_replication_role TO ri_application;")
+                                authority_case("shadow_" + variant + "/" + privilege, denied=True)
+                            finally:
+                                clear_authority()
+                        assert admin("SELECT count(*) FROM public.authority_lookup_effect;").strip() == b"0"
+                    finally:
+                        application("authority_search_path", public_first=False)
+                        if variant in {"parameter_function", "both_functions", "combined"}:
+                            admin("DROP FUNCTION public.has_parameter_privilege(pg_catalog.oid,pg_catalog.text,pg_catalog.text);")
+                        if variant in {"membership_function", "both_functions", "combined"}:
+                            admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                        if variant in {"operator", "combined"}:
+                            admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.authority_equal(pg_catalog.name,pg_catalog.name);")
+                        admin("DROP TABLE public.authority_lookup_effect;")
+                receipt["authority_forged_lookup_side_effects"] = 0
+                assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.has_parameter_privilege(oid,text,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                try:
+                    admin("REVOKE EXECUTE ON FUNCTION pg_catalog.has_parameter_privilege(pg_catalog.oid,pg_catalog.text,pg_catalog.text) FROM PUBLIC;")
+                    authority_case("unavailable_lookup", unavailable=True)
+                finally:
+                    admin("GRANT EXECUTE ON FUNCTION pg_catalog.has_parameter_privilege(pg_catalog.oid,pg_catalog.text,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.has_parameter_privilege(oid,text,text)'::pg_catalog.regprocedure;")
+                authority_case("restored_lookup")
+            finally:
+                clear_authority()
+                admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+            receipt["authority_restored"] = authority_catalog()
+            assert receipt["authority_restored"] == receipt["authority_baseline"]
+            assert application("replication_controls") == receipt["replication_baseline"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -285,7 +396,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 440:
+    if receipt["failed"] or len(cases) != 510:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

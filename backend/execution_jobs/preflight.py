@@ -32,7 +32,13 @@ def check_application_role():
                             'pg_read_server_files', 'pg_write_server_files',
                             'pg_execute_server_program', 'pg_signal_backend',
                             'pg_read_all_data', 'pg_write_all_data'
-                        ]::pg_catalog.name[])) AND (
+                        ]::pg_catalog.name[])
+                            OR pg_catalog.has_parameter_privilege(
+                                privileged.oid, 'session_replication_role'::pg_catalog.text,
+                                'SET'::pg_catalog.text)
+                            OR pg_catalog.has_parameter_privilege(
+                                privileged.oid, 'session_replication_role'::pg_catalog.text,
+                                'ALTER SYSTEM'::pg_catalog.text)) AND (
                             pg_catalog.pg_has_role(current_user, privileged.oid, 'MEMBER')
                             OR pg_catalog.pg_has_role(session_user, privileged.oid, 'MEMBER')
                         )
