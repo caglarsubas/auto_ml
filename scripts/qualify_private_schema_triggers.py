@@ -492,6 +492,178 @@ def main():
             assert application("replication_controls") == receipt["replication_baseline"]
             assert application("controls") == receipt["restored_controls"]
             assert application("snapshot") == baseline
+            admin("""CREATE SCHEMA maintain_fixture;
+                CREATE TABLE maintain_fixture.protected(id integer PRIMARY KEY, payload text);
+                INSERT INTO maintain_fixture.protected VALUES (1,'unchanged');
+                GRANT USAGE ON SCHEMA maintain_fixture TO ri_application;
+            """)
+            def maintain_target():
+                return json.loads(admin("""SELECT pg_catalog.json_build_object(
+                    'owner',pg_catalog.pg_get_userbyid(c.relowner),
+                    'acl',c.relacl::pg_catalog.text,
+                    'rows',(SELECT pg_catalog.json_agg(t ORDER BY id) FROM maintain_fixture.protected t))
+                    FROM pg_catalog.pg_class c WHERE c.oid='maintain_fixture.protected'::pg_catalog.regclass;
+                """))
+
+            receipt["maintain_target_baseline"] = maintain_target()
+            assert receipt["maintain_target_baseline"] == dict(owner="postgres",acl=None,
+                rows=[dict(id=1,payload="unchanged")])
+            admin("""CREATE FUNCTION maintain_fixture.lock_probe() RETURNS text LANGUAGE plpgsql AS $$
+                BEGIN
+                    LOCK TABLE maintain_fixture.protected IN ACCESS SHARE MODE NOWAIT;
+                    RETURN 'LOCK TABLE';
+                EXCEPTION WHEN lock_not_available THEN RETURN SQLSTATE;
+                END$$;
+                REVOKE ALL ON FUNCTION maintain_fixture.lock_probe() FROM PUBLIC;
+            """)
+            receipt["maintain_lock_observations"] = []
+
+            def maintain_operation():
+                operation = application("maintain_lock")
+                if operation["status"] is None:
+                    assert operation == dict(status=None,sqlstate="42501")
+                    return operation
+                assert operation["status"] == "LOCK TABLE" and operation["sqlstate"] is None
+                pid = operation["backend_pid"]
+                assert isinstance(pid,int) and pid > 0
+                try:
+                    observed = json.loads(admin("""SELECT pg_catalog.json_build_object(
+                        'granted',(SELECT count(*) FROM pg_catalog.pg_locks WHERE pid=""" + str(pid) + """
+                            AND relation='maintain_fixture.protected'::pg_catalog.regclass
+                            AND mode='AccessExclusiveLock' AND granted),
+                        'conflict_sqlstate',maintain_fixture.lock_probe());"""))
+                    assert observed == dict(granted=1,conflict_sqlstate="55P03")
+                finally:
+                    assert application("maintain_unlock") == dict(released=True)
+                assert admin("SELECT maintain_fixture.lock_probe();").strip() == b"LOCK TABLE"
+                assert admin("SELECT count(*) FROM pg_catalog.pg_locks WHERE pid=" + str(pid) +
+                    " AND relation='maintain_fixture.protected'::pg_catalog.regclass;").strip() == b"0"
+                assert maintain_target() == receipt["maintain_target_baseline"]
+                receipt["maintain_lock_observations"].append(dict(**observed,transaction_end_released=True))
+                return dict(status="LOCK TABLE",sqlstate=None)
+
+            # P110: append maintenance-role admission cases; all 560 original
+            # schema/runtime/authority cases and expectations remain unchanged.
+            def maintain_case(name, denied=False, unavailable=False):
+                for entry in ("role", "role_command"):
+                    started = time.monotonic()
+                    result = application(entry=entry)
+                    error = "job_application_role_unavailable" if unavailable else (
+                        "job_application_role_elevated" if denied else None)
+                    expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                    cases.append(dict(name="maintain_authority/" + name + "/" + entry,
+                        passed=result == expected, expected=expected, observed=result,
+                        seconds=time.monotonic() - started))
+
+            receipt["maintain_baseline"] = authority_catalog()
+            receipt["maintain_denied_baseline"] = maintain_operation()
+            assert receipt["maintain_denied_baseline"] == dict(status=None,sqlstate="42501")
+            for value in ("origin", "local"):
+                mode(value)
+                maintain_case("baseline_" + value)
+            mode("origin")
+            admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;
+                GRANT USAGE ON SCHEMA maintain_fixture TO ri_cap_child,ri_cap_carrier,ri_cap_bridge;""")
+            receipt["maintain_profiles"] = []
+
+            def clear_maintain():
+                application("maintain_switch", role="reset")
+                admin("""REVOKE pg_maintain FROM ri_application,ri_cap_carrier,ri_cap_child;
+                    REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                    REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;""")
+
+            try:
+                for profile in ("direct", "inherited", "switch_only", "transitive",
+                                "session_only", "active_only", "options_disabled", "unrelated"):
+                    try:
+                        grantee = {"direct":"ri_application", "session_only":"ri_application",
+                                   "active_only":"ri_cap_child"}.get(profile, "ri_cap_carrier")
+                        admin("GRANT pg_maintain TO " + grantee + ";")
+                        if profile in {"inherited", "switch_only", "options_disabled"}:
+                            admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                "TRUE" if profile == "inherited" else "FALSE") + ", SET " + (
+                                "FALSE" if profile == "options_disabled" else "TRUE") + ";")
+                        elif profile == "transitive":
+                            admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                        elif profile in {"session_only", "active_only"}:
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("maintain_switch", role="ri_cap_child")
+                        state = application("maintain_state")
+                        assert state["current_member"] == (profile not in {"session_only", "unrelated"})
+                        assert state["session_member"] == (profile != "unrelated")
+                        assert state["current_usage"] == (profile in {"direct", "inherited", "active_only"})
+                        assert state["session_usage"] == (profile in {"direct", "inherited", "session_only"})
+                        assert state["state"]["mode"] == "origin"
+                        assert not any(state["state"][k] for k in (
+                            "current_set", "current_alter_system", "session_set", "session_alter_system"))
+                        operation = maintain_operation()
+                        assert operation == (dict(status="LOCK TABLE",sqlstate=None) if state["current_usage"]
+                                             else dict(status=None,sqlstate="42501"))
+                        maintain_case(profile, denied=profile != "unrelated")
+                        switched = None
+                        if profile in {"switch_only", "transitive"}:
+                            switched = application("maintain_switch", role="ri_cap_carrier")
+                            assert switched["current_usage"] is True
+                            assert maintain_operation() == dict(status="LOCK TABLE",sqlstate=None)
+                        receipt["maintain_profiles"].append(dict(profile=profile,state=state,
+                            operation=operation,switched=switched,catalog=authority_catalog()))
+                    finally:
+                        clear_maintain()
+                for variant in ("catalog", "membership_function", "operator", "combined"):
+                    admin("CREATE TABLE public.maintain_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.maintain_lookup_effect TO ri_application;")
+                    try:
+                        if variant in {"catalog", "combined"}:
+                            admin("CREATE VIEW public.pg_roles AS SELECT oid,rolname,false AS rolsuper,false AS rolcreatedb,false AS rolcreaterole,false AS rolreplication,false AS rolbypassrls FROM pg_catalog.pg_roles WHERE rolname<>'pg_maintain'; GRANT SELECT ON public.pg_roles TO PUBLIC;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.maintain_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                        if variant in {"operator", "combined"}:
+                            admin("CREATE FUNCTION public.maintain_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.maintain_lookup_effect VALUES ('operator'); RETURN false; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.maintain_equal);")
+                        application("authority_search_path", public_first=True)
+                        maintain_case("shadow_" + variant + "/healthy")
+                        try:
+                            admin("GRANT pg_maintain TO ri_application;")
+                            maintain_case("shadow_" + variant + "/direct", denied=True)
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("maintain_switch", role="ri_cap_child")
+                            maintain_case("shadow_" + variant + "/session_only", denied=True)
+                        finally:
+                            clear_maintain()
+                        assert admin("SELECT count(*) FROM public.maintain_lookup_effect;").strip() == b"0"
+                    finally:
+                        application("authority_search_path", public_first=False)
+                        if variant in {"catalog", "combined"}:
+                            admin("DROP VIEW public.pg_roles;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                        if variant in {"operator", "combined"}:
+                            admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.maintain_equal(pg_catalog.name,pg_catalog.name);")
+                        admin("DROP TABLE public.maintain_lookup_effect;")
+                receipt["maintain_forged_lookup_side_effects"] = 0
+                assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                try:
+                    admin("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) FROM PUBLIC;")
+                    maintain_case("unavailable_lookup", unavailable=True)
+                finally:
+                    admin("GRANT EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;")
+                maintain_case("restored_lookup")
+            finally:
+                clear_maintain()
+                admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; REVOKE USAGE ON SCHEMA maintain_fixture FROM ri_cap_child,ri_cap_carrier,ri_cap_bridge; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+            receipt["maintain_restored"] = authority_catalog()
+            assert receipt["maintain_restored"] == receipt["maintain_baseline"]
+            assert maintain_operation() == receipt["maintain_denied_baseline"]
+            maintain_case("restored_authority")
+            assert application("replication_controls") == receipt["replication_baseline"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
+            receipt["maintain_target_restored"] = maintain_target()
+            assert receipt["maintain_target_restored"] == receipt["maintain_target_baseline"]
+            admin("DROP SCHEMA maintain_fixture CASCADE;")
+            assert admin("SELECT pg_catalog.to_regnamespace('maintain_fixture') IS NULL;").strip() == b"t"
+            receipt["maintain_fixture_removed"] = True
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -512,7 +684,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 560:
+    if receipt["failed"] or len(cases) != 610:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

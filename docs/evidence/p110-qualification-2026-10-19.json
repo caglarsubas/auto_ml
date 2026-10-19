@@ -1,0 +1,133 @@
+{
+  "packet": "P110",
+  "date": "2026-10-19",
+  "source_base": "ccf670d27351efdcdc36c199197cba952c9a1bc8",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "9c96db9e6646de1014e827d65b7d143359a07219d6bf20c5ff445c04509f76f6",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "a82563c7f1bdbf383cc7aa4b92863da10d3b67a2440297909292c2424ce9b9b5",
+    "scripts/qualify_private_schema_triggers.py": "0ab64b2c7e9b87c98d30091c8008342414a357f3d04653a358bb2d67eb0e5eca"
+  },
+  "predecessor_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_and_restored_other_owner_lock_denied_sqlstate": "42501",
+    "administrator_deliberately_grants_pg_maintain": true,
+    "role_flags_defaults_and_parameter_authority_unchanged": true,
+    "role_check_accepts_maintenance_authority": true,
+    "require_application_role_command_error": null,
+    "command_broker_fixture_calls": 1,
+    "ordinary_application_lock_command": "LOCK TABLE",
+    "independent_observer_saw_granted_access_exclusive_lock": true,
+    "independent_observer_conflict_sqlstate": "55P03",
+    "application_transaction_end_releases_lock": true,
+    "other_owner_table_acl_and_rows_unchanged": true,
+    "grant_revoked_and_original_membership_restored": true,
+    "original_schema_triggers_rows_and_history_preserved": true,
+    "restored_deferred_orphan_and_duplicate_rejection": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17. A separate explicit fixture-administrator connection deliberately delegates pg_maintain to an otherwise restricted application login. Existing role admission and the flagged command accept it. Actual ordinary-role ACCESS EXCLUSIVE LOCK succeeds on an administrator-owned table without SELECT/UPDATE or direct table grants; independent administrator observation sees the held lock and an ACCESS SHARE NOWAIT attempt fails with 55P03. Transaction end releases it. Revocation restores actual 42501 denial and original membership; the temporary schema is removed, target data/ACLs and all original metadata/rows/history are preserved. Initial TLS/broker responses are fixtures over plaintext. This development proof has an explicit administrator control connection inside the harness; it is not the separately administered physical qualifier, verified transport, a no-grant exploit, customer operation, all-role certification or continuous fencing."
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_and_restored_other_owner_lock_denied_sqlstate": "42501",
+    "administrator_deliberately_grants_pg_maintain": true,
+    "role_flags_defaults_and_parameter_authority_unchanged": true,
+    "role_check_accepts_maintenance_authority": false,
+    "require_application_role_command_error": "job_application_role_elevated",
+    "command_broker_fixture_calls": 1,
+    "ordinary_application_lock_command": "LOCK TABLE",
+    "independent_observer_saw_granted_access_exclusive_lock": true,
+    "independent_observer_conflict_sqlstate": "55P03",
+    "application_transaction_end_releases_lock": true,
+    "other_owner_table_acl_and_rows_unchanged": true,
+    "grant_revoked_and_original_membership_restored": true,
+    "original_schema_triggers_rows_and_history_preserved": true,
+    "restored_deferred_orphan_and_duplicate_rejection": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Fixed admission rejects job_application_role_elevated; deliberately forced SQL afterward is a fixture capability control, not admitted service execution. Owned PostgreSQL 17. A separate explicit fixture-administrator connection deliberately delegates pg_maintain to an otherwise restricted application login. The role and flagged-command expectations depend on the frozen predecessor or fixed source profile. Actual ordinary-role ACCESS EXCLUSIVE LOCK succeeds on an administrator-owned table without SELECT/UPDATE or direct table grants; independent administrator observation sees the held lock and an ACCESS SHARE NOWAIT attempt fails with 55P03. Transaction end releases it. Revocation restores actual 42501 denial and original membership; the temporary schema is removed, target data/ACLs and all original metadata/rows/history are preserved. Initial TLS/broker responses are fixtures over plaintext. This development proof has an explicit administrator control connection inside the harness; it is not the separately administered physical qualifier, verified transport, a no-grant exploit, customer operation, all-role certification or continuous fencing."
+  },
+  "predecessor_physical_cases": 610,
+  "predecessor_passed": 580,
+  "predecessor_failed": 30,
+  "standalone_physical_cases": 610,
+  "new_maintain_cases": 50,
+  "original_560_case_identities_and_expectations_preserved": true,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Bounded pg_maintain current/session role admission; conservative membership, actual other-owner lock and independent conflicting-lock/release controls, forged and unavailable built-in evidence. Command runtime-before-role order remains. No all-role/object-privilege attestation, historical integrity, continuous fencing, no-grant exploit or release/customer claim; initial physical TLS/broker are fixtures, private installation/transport qualification is separate.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 49.611
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 21.374
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 223.58
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "frontend_unit_passed": 651,
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and original invariants preserved",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P110_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "sole_product_change": "add pg_maintain to existing builtin-qualified authority predicate",
+    "primary_status_and_13_hashes_match": true
+  },
+  "local_fixture_adjustments": [
+    "Retained first incomplete physical run: switched principals lacked fixture schema USAGE; explicit USAGE added, without table rights, before re-running complete predecessor/fixed matrices.",
+    "Retained predecessor-only development probe rejection; adapted fixed-mode expectations in a separate retained version. Original predecessor receipt and probe bytes preserved."
+  ],
+  "receipts_scope": "Ignored local raw reports are retained by this checkout; committed source receipt is self-contained. Exact PR and main receipts are collected separately."
+}

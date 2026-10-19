@@ -220,6 +220,43 @@ def main():
             return dict(status=None,sqlstate="42501")
         return dict(status="CHECKPOINT",sqlstate=None)
 
+    def maintain_state():
+        state = authority_state()
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT
+                pg_catalog.pg_has_role(current_user,'pg_maintain'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(current_user,'pg_maintain'::pg_catalog.name,'USAGE'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_maintain'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_maintain'::pg_catalog.name,'USAGE'::pg_catalog.text)
+            """)
+            row = cursor.fetchone()
+        return dict(state=state,current_member=row[0],current_usage=row[1],session_member=row[2],session_usage=row[3])
+
+    def maintain_lock():
+        assert connection.get_autocommit() and not connection.in_atomic_block
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_catalog.pg_backend_pid()")
+            pid = cursor.fetchone()[0]
+        connection.set_autocommit(False)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("LOCK TABLE maintain_fixture.protected IN ACCESS EXCLUSIVE MODE NOWAIT")
+                assert cursor.statusmessage == "LOCK TABLE"
+        except DatabaseError as exc:
+            connection.rollback()
+            connection.set_autocommit(True)
+            assert exc.__cause__.sqlstate == "42501"
+            return dict(status=None,sqlstate="42501")
+        # Deliberately hold the ordinary application's lock until the separate
+        # host administrator observes it and attempts a conflicting lock.
+        return dict(status="LOCK TABLE",sqlstate=None,backend_pid=pid)
+
+    def maintain_unlock():
+        assert not connection.get_autocommit() and not connection.in_atomic_block
+        connection.rollback()
+        connection.set_autocommit(True)
+        return dict(released=True)
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -284,6 +321,17 @@ def main():
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
                 result = checkpoint_state()
+            elif request["action"] == "maintain_state":
+                result = maintain_state()
+            elif request["action"] == "maintain_lock":
+                result = maintain_lock()
+            elif request["action"] == "maintain_unlock":
+                result = maintain_unlock()
+            elif request["action"] == "maintain_switch":
+                assert request["role"] in {"ri_cap_carrier", "ri_cap_child", "reset"}
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
+                result = maintain_state()
             elif request["action"] == "authority_state":
                 result = authority_state()
             elif request["action"] == "authority_switch":
