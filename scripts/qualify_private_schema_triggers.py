@@ -837,6 +837,156 @@ def main():
             receipt["subscription_catalog_restored"] = subscription_catalog()
             assert receipt["subscription_catalog_restored"] == receipt["subscription_catalog_baseline"]
             assert len(receipt["subscription_observations"]) == 5
+            # P112: synthetic cross-principal activity only. Administrator
+            # access remains in the host controller, outside the application.
+            statistics_observer = subprocess.Popen(["docker", "exec", "-i", database,
+                "psql", "-U", "postgres", "-d", "ri_fixture", "-qAt", "-v", "ON_ERROR_STOP=1"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, bufsize=1)
+            try:
+                statistics_observer.stdin.write("SELECT pg_catalog.json_build_object('pid',pg_catalog.pg_backend_pid(),'canary','declarai_statistics_fixture_only');\n")
+                statistics_observer.stdin.flush()
+                selector = selectors.DefaultSelector()
+                try:
+                    selector.register(statistics_observer.stdout, selectors.EVENT_READ)
+                    assert selector.select(30)
+                    observer = json.loads(statistics_observer.stdout.readline())
+                finally:
+                    selector.close()
+                observer_pid = observer["pid"]
+                assert type(observer_pid) is int and observer_pid > 0
+                assert observer["canary"] == "declarai_statistics_fixture_only"
+
+                def statistics_observation():
+                    row = json.loads(admin("SELECT pg_catalog.json_build_object('pid',pid,'user',usename,'query',query) FROM pg_catalog.pg_stat_activity WHERE pid=" + str(observer_pid) + ";"))
+                    assert row["pid"] == observer_pid and row["user"] == "postgres"
+                    assert "declarai_statistics_fixture_only" in row["query"]
+                    return row
+
+                receipt["statistics_observer"] = statistics_observation()
+                receipt["statistics_baseline"] = authority_catalog()
+                state = application("statistics_state", observer_pid=observer_pid)
+                assert not any(state[k] for k in ("current_member", "current_usage", "session_member", "session_usage"))
+                assert state["observer_query"] == "<insufficient privilege>"
+                receipt["statistics_redacted_baseline"] = state
+
+                def statistics_case(name, denied=False, unavailable=False):
+                    for entry in ("role", "role_command"):
+                        started = time.monotonic()
+                        result = application(entry=entry)
+                        error = "job_application_role_unavailable" if unavailable else (
+                            "job_application_role_elevated" if denied else None)
+                        expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                        cases.append(dict(name="statistics_authority/" + name + "/" + entry,
+                            passed=result == expected, expected=expected, observed=result,
+                            seconds=time.monotonic() - started))
+
+                for value in ("origin", "local"):
+                    mode(value)
+                    statistics_case("baseline_" + value)
+                mode("origin")
+                admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                    CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                    CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                    GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;""")
+                receipt["statistics_profiles"] = []
+
+                def clear_statistics():
+                    application("statistics_switch", role="reset", observer_pid=observer_pid)
+                    admin("""REVOKE pg_read_all_stats,pg_monitor FROM ri_application,ri_cap_carrier,ri_cap_child;
+                        REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                        REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;""")
+
+                try:
+                    for profile in ("direct", "inherited", "switch_only", "transitive", "session_only",
+                                    "active_only", "options_disabled", "unrelated", "monitor", "monitor_session_only"):
+                        try:
+                            grantee = {"direct":"ri_application", "session_only":"ri_application",
+                                "active_only":"ri_cap_child", "monitor":"ri_application",
+                                "monitor_session_only":"ri_application"}.get(profile, "ri_cap_carrier")
+                            delegated = "pg_monitor" if profile.startswith("monitor") else "pg_read_all_stats"
+                            admin("GRANT " + delegated + " TO " + grantee + ";")
+                            if profile in {"inherited", "switch_only", "options_disabled"}:
+                                admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                    "TRUE" if profile == "inherited" else "FALSE") + ", SET " + (
+                                    "FALSE" if profile == "options_disabled" else "TRUE") + ";")
+                            elif profile == "transitive":
+                                admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            elif profile in {"session_only", "active_only", "monitor_session_only"}:
+                                admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                                application("statistics_switch", role="ri_cap_child", observer_pid=observer_pid)
+                            state = application("statistics_state", observer_pid=observer_pid)
+                            assert state["current_member"] == (profile not in {"session_only", "monitor_session_only", "unrelated"})
+                            assert state["session_member"] == (profile != "unrelated")
+                            assert state["current_usage"] == (profile in {"direct", "inherited", "active_only", "monitor"})
+                            assert state["session_usage"] == (profile in {"direct", "inherited", "session_only", "monitor", "monitor_session_only"})
+                            assert state["state"]["mode"] == "origin"
+                            assert not any(state["state"][k] for k in (
+                                "current_set", "current_alter_system", "session_set", "session_alter_system"))
+                            observed = statistics_observation()
+                            assert state["observer_query"] == (observed["query"] if state["current_usage"] else "<insufficient privilege>")
+                            statistics_case(profile, denied=profile != "unrelated")
+                            switched = None
+                            if profile in {"switch_only", "transitive"}:
+                                switched = application("statistics_switch", role="ri_cap_carrier", observer_pid=observer_pid)
+                                assert switched["current_usage"] is True
+                                assert switched["observer_query"] == statistics_observation()["query"]
+                            receipt["statistics_profiles"].append(dict(profile=profile,delegated=delegated,
+                                state=state,switched=switched,catalog=authority_catalog()))
+                        finally:
+                            clear_statistics()
+                    for variant in ("catalog", "membership_function", "operator", "combined"):
+                        admin("CREATE TABLE public.statistics_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.statistics_lookup_effect TO ri_application;")
+                        try:
+                            if variant in {"catalog", "combined"}:
+                                admin("CREATE VIEW public.pg_roles AS SELECT oid,rolname,false AS rolsuper,false AS rolcreatedb,false AS rolcreaterole,false AS rolreplication,false AS rolbypassrls FROM pg_catalog.pg_roles WHERE rolname<>'pg_read_all_stats'; GRANT SELECT ON public.pg_roles TO PUBLIC;")
+                            if variant in {"membership_function", "combined"}:
+                                admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.statistics_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                            if variant in {"operator", "combined"}:
+                                admin("CREATE FUNCTION public.statistics_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.statistics_lookup_effect VALUES ('operator'); RETURN false; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.statistics_equal);")
+                            application("authority_search_path", public_first=True)
+                            statistics_case("shadow_" + variant + "/healthy")
+                            try:
+                                admin("GRANT pg_read_all_stats TO ri_application;")
+                                statistics_case("shadow_" + variant + "/direct", denied=True)
+                                admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                                application("statistics_switch", role="ri_cap_child", observer_pid=observer_pid)
+                                statistics_case("shadow_" + variant + "/session_only", denied=True)
+                            finally:
+                                clear_statistics()
+                            assert admin("SELECT count(*) FROM public.statistics_lookup_effect;").strip() == b"0"
+                        finally:
+                            application("authority_search_path", public_first=False)
+                            if variant in {"catalog", "combined"}:
+                                admin("DROP VIEW public.pg_roles;")
+                            if variant in {"membership_function", "combined"}:
+                                admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                            if variant in {"operator", "combined"}:
+                                admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.statistics_equal(pg_catalog.name,pg_catalog.name);")
+                            admin("DROP TABLE public.statistics_lookup_effect;")
+                    receipt["statistics_forged_lookup_side_effects"] = 0
+                    assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                    try:
+                        admin("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) FROM PUBLIC;")
+                        statistics_case("unavailable_lookup", unavailable=True)
+                    finally:
+                        admin("GRANT EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;")
+                    statistics_case("restored_lookup")
+                finally:
+                    clear_statistics()
+                    admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+                receipt["statistics_restored"] = authority_catalog()
+                assert receipt["statistics_restored"] == receipt["statistics_baseline"]
+                assert application("statistics_state", observer_pid=observer_pid) == receipt["statistics_redacted_baseline"]
+                statistics_case("restored_authority")
+                assert application("replication_controls") == receipt["replication_baseline"]
+                assert application("controls") == receipt["restored_controls"]
+                assert application("snapshot") == baseline
+            finally:
+                statistics_observer.stdin.close()
+                assert statistics_observer.wait(timeout=30) == 0
+            assert admin("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE pid=" + str(observer_pid) + ";").strip() == b"0"
+            receipt["statistics_observer_closed"] = True
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -857,7 +1007,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 660:
+    if receipt["failed"] or len(cases) != 714:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

@@ -1,0 +1,224 @@
+{
+  "packet": "P112",
+  "date": "2026-10-19",
+  "source_base": "315c33e4190fd05ac41462b47845b1cc6d691c7b",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "1a7ec6c95ab1e87c671aea64f1ee2c8f5421f2c6d0f73773a6406977e6449b83",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "0bd264a516a84d04fc9f2b74d8ac733dce4326f2a6e91e6afc78e53ec510acfb",
+    "scripts/qualify_private_schema_triggers.py": "120a1236917a678324947fa63dd258e296ac9812d26c8af33867d079c7294609"
+  },
+  "predecessor_reproduction": {
+    "before_passed": 680,
+    "before_failed": 34,
+    "original_660_passed": true,
+    "new_startup_cases": 54,
+    "administrator_deliberately_delegated_statistics_authority": true,
+    "synthetic_other_principal_query_observed": true,
+    "pg_monitor_included": true,
+    "scoped_catalogs_acls_roles_metadata_restored": true,
+    "observer_closed": true,
+    "actual_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17: a host administrator deliberately grants pg_read_all_stats or pg_monitor to restricted fixture principals. Frozen P111 accepts admission while effective use exposes only a synthetic administrator query. All 660 original physical cases pass; 34 new admission expectations fail. Grants, scoped catalogs and metadata restore, redaction returns, and the observer closes. No customer data/installation, public ports or application administrator credentials. Initial TLS/broker responses are fixtures."
+  },
+  "fixed_qualification": {
+    "standalone_physical_ri_cases": 714,
+    "new_statistics_cases": 54,
+    "original_660_ri_cases_preserved": true,
+    "statistics_catalog_roles_memberships_and_scoped_acls_restored": true,
+    "synthetic_query_visibility_profiles": [
+      "direct",
+      "inherited",
+      "switch_only/switched",
+      "transitive/switched",
+      "active_only",
+      "monitor"
+    ],
+    "monitor_membership_qualified": true,
+    "observer_closed": true,
+    "forged_lookup_side_effects": 0,
+    "profiles": [
+      {
+        "profile": "direct",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": true,
+        "query_visible": true,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "inherited",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": true,
+        "query_visible": true,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "switch_only",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "query_visible": false,
+        "switched_query_visible": true
+      },
+      {
+        "profile": "transitive",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "query_visible": false,
+        "switched_query_visible": true
+      },
+      {
+        "profile": "session_only",
+        "delegated": "pg_read_all_stats",
+        "current_member": false,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": true,
+        "query_visible": false,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "active_only",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": false,
+        "query_visible": true,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "options_disabled",
+        "delegated": "pg_read_all_stats",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "query_visible": false,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "unrelated",
+        "delegated": "pg_read_all_stats",
+        "current_member": false,
+        "session_member": false,
+        "current_usage": false,
+        "session_usage": false,
+        "query_visible": false,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "monitor",
+        "delegated": "pg_monitor",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": true,
+        "query_visible": true,
+        "switched_query_visible": false
+      },
+      {
+        "profile": "monitor_session_only",
+        "delegated": "pg_monitor",
+        "current_member": false,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": true,
+        "query_visible": false,
+        "switched_query_visible": false
+      }
+    ],
+    "baseline_redacted": true,
+    "revocation_redacts": true,
+    "observer_scope": "Only synthetic declarai_statistics_fixture_only query on a separately controlled administrator session; no customer data."
+  },
+  "predecessor_physical_cases": 660,
+  "predecessor_passed": 680,
+  "predecessor_failed": 34,
+  "standalone_physical_cases": 714,
+  "new_statistics_cases": 54,
+  "original_660_case_identities_and_expectations_preserved": true,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Bounded pg_read_all_stats current/session admission for the initial application profile, including indirect pg_monitor. Only deliberately delegated synthetic other-principal query visibility is observed. Roles/memberships/scoped ACLs/catalogs/metadata restore, revocation redacts and observer closes. Initial physical TLS/broker responses are fixtures. No customer data, no-grant exploit, custom grant certification, historical access audit, continuous fencing or release/customer readiness.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 65.877
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 47.01
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 300.541
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      },
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "frontend_unit_passed": 651,
+  "frontend_production_build": "passed",
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and original invariants preserved",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P112_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "sole_product_change": "add pg_read_all_stats to existing builtin-qualified authority predicate",
+    "primary_status_and_13_hashes_match": true
+  },
+  "receipts_scope": "Ignored local raw reports retained in this checkout; committed source receipt is self-contained. Exact PR and main receipts are qualified separately."
+}
