@@ -197,6 +197,29 @@ def main():
                     current_alter_system=row[4],session_set=row[5],session_alter_system=row[6],
                     elevated_attributes=list(row[7:12]),login_default=row[12])
 
+    def checkpoint_state():
+        state = authority_state()
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT
+                pg_catalog.pg_has_role(current_user,'pg_checkpoint'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(current_user,'pg_checkpoint'::pg_catalog.name,'USAGE'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_checkpoint'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_checkpoint'::pg_catalog.name,'USAGE'::pg_catalog.text)
+            """)
+            row = cursor.fetchone()
+        return dict(state=state,current_member=row[0],current_usage=row[1],session_member=row[2],session_usage=row[3])
+
+    def checkpoint_operation():
+        assert connection.get_autocommit() and not connection.in_atomic_block
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("CHECKPOINT")
+                assert cursor.statusmessage == "CHECKPOINT"
+        except DatabaseError as exc:
+            assert exc.__cause__.sqlstate == "42501"
+            return dict(status=None,sqlstate="42501")
+        return dict(status="CHECKPOINT",sqlstate=None)
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -252,6 +275,15 @@ def main():
                 with connection.cursor() as cursor:
                     cursor.execute("SET search_path TO public,pg_catalog" if request["public_first"] else "RESET search_path")
                 result = connection_state()
+            elif request["action"] == "checkpoint_state":
+                result = checkpoint_state()
+            elif request["action"] == "checkpoint_operation":
+                result = checkpoint_operation()
+            elif request["action"] == "checkpoint_switch":
+                assert request["role"] in {"ri_cap_carrier", "ri_cap_child", "reset"}
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
+                result = checkpoint_state()
             elif request["action"] == "authority_state":
                 result = authority_state()
             elif request["action"] == "authority_switch":

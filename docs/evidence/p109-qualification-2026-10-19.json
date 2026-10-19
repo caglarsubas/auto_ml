@@ -1,0 +1,124 @@
+{
+  "packet": "P109",
+  "date": "2026-10-19",
+  "source_base": "46eaf5e1a75f70f17cd4670ff29eb82e5c4529cd",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "c106c8c7ca9e23bb1d50b4f0c81e93bf2739b9ac5f71692d53ff344416bb0747",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "c5f0a9ec4ef56a3035fe984ed3f88fcb1d23a303823cb47b2a1f25933c1e8f01",
+    "scripts/qualify_private_schema_triggers.py": "59cda854cd38874d7784d75c31ee13309ee5751873ef5d71e3cc36c1ee701aef"
+  },
+  "predecessor_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_and_restored_checkpoint_denied_sqlstate": "42501",
+    "administrator_deliberately_grants_pg_checkpoint": true,
+    "role_flags_defaults_and_parameter_authority_unchanged": true,
+    "role_check_accepts_checkpoint_authority": true,
+    "require_application_role_command_error": null,
+    "command_broker_fixture_calls": 1,
+    "ordinary_application_checkpoint_command": "CHECKPOINT",
+    "independent_admin_control_checkpoint_lsn_advanced": true,
+    "checkpoint_lsn_before": "0/191E778",
+    "checkpoint_lsn_after": "0/1A494A8",
+    "grant_revoked_and_original_membership_restored": true,
+    "original_schema_triggers_rows_and_history_preserved": true,
+    "restored_deferred_orphan_and_duplicate_rejection": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17. A separate fixture administrator deliberately delegates pg_checkpoint to an otherwise restricted application role. Existing role admission and the flagged command accept it; the actual ordinary-role CHECKPOINT command succeeds, and independent administrator control-file evidence shows checkpoint LSN advancement. Role flags/defaults, replication mode/parameter ACLs and metadata remain unchanged. Revocation restores actual CHECKPOINT denial and original membership, rows/history and integrity controls. Initial TLS/broker responses are explicit fixtures over plaintext; no controller/endpoint, verified transport, no-grant exploit, host/customer operation, all-predefined-role attestation or continuous-fencing claim."
+  },
+  "fixed_reproduction": {
+    "migration_count": 31,
+    "declared_foreign_keys": 38,
+    "baseline_and_restored_checkpoint_denied_sqlstate": "42501",
+    "administrator_deliberately_grants_pg_checkpoint": true,
+    "role_flags_defaults_and_parameter_authority_unchanged": true,
+    "role_check_accepts_checkpoint_authority": false,
+    "require_application_role_command_error": "job_application_role_elevated",
+    "command_broker_fixture_calls": 1,
+    "ordinary_application_checkpoint_command": "CHECKPOINT",
+    "independent_admin_control_checkpoint_lsn_advanced": true,
+    "checkpoint_lsn_before": "0/191E778",
+    "checkpoint_lsn_after": "0/1A494A8",
+    "grant_revoked_and_original_membership_restored": true,
+    "original_schema_triggers_rows_and_history_preserved": true,
+    "restored_deferred_orphan_and_duplicate_rejection": true,
+    "actual_transport_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17. A separate fixture administrator deliberately delegates pg_checkpoint to an otherwise restricted application role. Fixed role admission and the flagged command reject it with job_application_role_elevated. A deliberately forced ordinary-role CHECKPOINT after admission denial remains a fixture capability control, not service execution after rejection; independent administrator control-file evidence shows checkpoint LSN advancement. Role flags/defaults, replication mode/parameter ACLs and metadata remain unchanged. Revocation restores actual CHECKPOINT denial and original membership, rows/history and integrity controls. Initial TLS/broker responses are explicit fixtures over plaintext; no controller/endpoint, verified transport, no-grant exploit, host/customer operation, all-predefined-role attestation or continuous-fencing claim."
+  },
+  "predecessor_physical_cases": 560,
+  "predecessor_passed": 530,
+  "predecessor_failed": 30,
+  "standalone_physical_cases": 560,
+  "new_checkpoint_cases": 50,
+  "original_510_case_identities_and_expectations_preserved": true,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Bounded existing private application-role admission for pg_checkpoint membership, including current/session conservative membership, actual ordinary checkpoint controls, forged and unavailable built-in evidence. Existing command runtime-before-role order remains. No all-predefined-role, no-grant exploit, historical integrity, continuous fencing or release/customer claim; actual TLS/installation/recovery need independent receipts.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 99.858
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 37.111
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 252.386
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      },
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and 49 original invariants",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P109_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "primary_status_and_13_hashes_match": true
+  }
+}
