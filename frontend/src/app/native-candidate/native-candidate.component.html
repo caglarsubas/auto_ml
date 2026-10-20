@@ -74,5 +74,12 @@
     @if (error) {
       <p role="alert">{{ error }}</p>
     }
+    <app-native-adoption
+      [job]="job"
+      [projectId]="projectId"
+      [role]="role"
+      [jobsEnabled]="jobsEnabled"
+      (queued)="queued.emit($event)"
+    />
   </section>
 }

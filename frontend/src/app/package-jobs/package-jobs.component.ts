@@ -305,9 +305,11 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       !this.evidenceEnabled ||
       this.busy ||
       this.job?.state !== 'succeeded' ||
-      ['native_numeric_training_search_v1', 'native_training_scoring_v1'].includes(
-        this.job.specification.kind,
-      )
+      [
+        'native_numeric_training_search_v1',
+        'native_training_scoring_v1',
+        'native_protected_assessment_v1',
+      ].includes(this.job.specification.kind)
     )
       return;
     const generation = this.generation;

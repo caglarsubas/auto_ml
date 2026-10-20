@@ -1,4 +1,4 @@
-from execution_jobs.views import JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
+from execution_jobs.views import NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -68,6 +68,10 @@ urlpatterns = [
     path('api/jobs/datasets/<int:file_id>/training-input/', JobTrainingInputView.as_view(), name='job-training-input'),
     path('api/jobs/datasets/<int:file_id>/', DatasetJobsView.as_view(), name='dataset-jobs'),
     path('api/jobs/datasets/<int:file_id>/input/', JobInputView.as_view(), name='job-input'),
+    path('api/jobs/<uuid:job_id>/adoptions/', NativeAdoptionListView.as_view(), name='native-adoption-list'),
+    path('api/native-adoptions/<uuid:adoption_id>/', NativeAdoptionView.as_view(), name='native-adoption'),
+    path('api/native-adoptions/<uuid:adoption_id>/protected-inputs/', NativeProtectedInputView.as_view(), name='native-protected-input'),
+    path('api/native-protected-inputs/<uuid:protected_id>/preview/', NativeAssessmentInputView.as_view(), name='native-assessment-input'),
     path('api/jobs/<uuid:job_id>/candidate/', JobCandidateExportView.as_view(), name='job-candidate'),
     path('api/jobs/<uuid:job_id>/scoring-input/', JobCandidateInputView.as_view(), name='job-candidate-input'),
     path('api/jobs/<uuid:job_id>/scores/', JobScoresView.as_view(), name='job-scores'),

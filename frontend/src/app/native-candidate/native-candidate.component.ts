@@ -11,12 +11,13 @@ import { FormsModule } from '@angular/forms';
 import { JsonPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { NativeAdoptionComponent } from '../native-adoption/native-adoption.component';
 import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-native-candidate',
   standalone: true,
-  imports: [FormsModule, JsonPipe],
+  imports: [FormsModule, JsonPipe, NativeAdoptionComponent],
   templateUrl: './native-candidate.component.html',
   styleUrl: './native-candidate.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,

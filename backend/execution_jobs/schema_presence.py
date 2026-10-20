@@ -26,7 +26,7 @@ STORAGE_TYPES = {
     "BigAutoField": "int8", "BigIntegerField": "int8", "PositiveBigIntegerField": "int8",
     "SmallAutoField": "int2", "SmallIntegerField": "int2", "PositiveSmallIntegerField": "int2",
     "BooleanField": "bool", "CharField": "varchar", "FileField": "varchar",
-    "TextField": "text", "DateTimeField": "timestamptz", "UUIDField": "uuid", "JSONField": "jsonb",
+    "BinaryField": "bytea", "TextField": "text", "DateTimeField": "timestamptz", "UUIDField": "uuid", "JSONField": "jsonb",
 }
 
 

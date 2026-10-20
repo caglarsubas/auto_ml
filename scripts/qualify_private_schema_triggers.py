@@ -126,7 +126,11 @@ def main():
             assert ready["ready"] is True
             baseline = ready["snapshot"]
             receipt["baseline"] = ready
-            assert baseline["migrations"] == 31 and baseline["internal_triggers"] == 152
+            if baseline["migrations"] == 32:
+                from native_assessment_schema_profile import qualify_native_assessment_schema
+                receipt["schema_profile"] = qualify_native_assessment_schema(baseline)
+            else:
+                assert baseline["migrations"] == 31 and baseline["internal_triggers"] == 152
             assert len(baseline["triggers"]) == 4
             admin('CREATE FUNCTION public."RI_FKey_check_ins"() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$; CREATE TRIGGER ri_qual_fixture AFTER INSERT ON public.access_control_projectmembership FOR EACH ROW WHEN (NEW.actor_id > 0) EXECUTE FUNCTION public."RI_FKey_check_ins"();')
             check_all("healthy", False)
@@ -1194,8 +1198,12 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 797:
-        raise SystemExit("RI-trigger qualification failed; retain original reports.")
+    if receipt.get("schema_profile"):
+        if receipt["failed"] or len(cases) != 809:
+            raise SystemExit("Expanded RI-trigger qualification failed; retain original reports.")
+    else:
+        if receipt["failed"] or len(cases) != 797:
+            raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 
 

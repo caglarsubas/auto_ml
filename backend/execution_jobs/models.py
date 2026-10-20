@@ -49,3 +49,39 @@ class JobEvent(models.Model):
     class Meta:
         ordering = ["revision"]
         constraints = [models.UniqueConstraint(fields=["job", "revision"], name="job_event_revision_unique")]
+
+
+class NativeAdoption(models.Model):
+    """Immutable developer proposal; independent decisions are separate events."""
+    id = models.UUIDField(primary_key=True, editable=False)
+    training_job = models.ForeignKey(NativeJob, on_delete=models.PROTECT, related_name='adoptions')
+    proposal = models.JSONField()
+    proposal_sha256 = models.CharField(max_length=64)
+    request_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(default=timezone.now)
+
+
+class NativeAdoptionEvent(models.Model):
+    id = models.UUIDField(primary_key=True, editable=False)
+    adoption = models.ForeignKey(NativeAdoption, on_delete=models.PROTECT, related_name='events')
+    revision = models.PositiveIntegerField()
+    kind = models.CharField(max_length=16)
+    payload = models.JSONField()
+    payload_sha256 = models.CharField(max_length=64)
+    request_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['revision']
+        constraints = [models.UniqueConstraint(fields=['adoption', 'revision'], name='native_adoption_event_revision')]
+
+
+class NativeProtectedInput(models.Model):
+    """Sealed custody bytes; never a generic dataset, artifact URL or job payload."""
+    id = models.UUIDField(primary_key=True, editable=False)
+    adoption = models.ForeignKey(NativeAdoption, on_delete=models.PROTECT, related_name='protected_inputs')
+    specification = models.JSONField()
+    specification_sha256 = models.CharField(max_length=64)
+    request_sha256 = models.CharField(max_length=64)
+    payload = models.BinaryField()
+    created_at = models.DateTimeField(default=timezone.now)
