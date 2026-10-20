@@ -425,3 +425,30 @@ def test_sealed_payload_has_explicit_writable_nonnullable_private_storage_contra
         "foreign_key": None,
         "identity": "",
     }
+    import importlib.util
+    from copy import deepcopy
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "assessment_schema_profile", Path(__file__).resolve().parents[3] / "scripts/native_assessment_schema_profile.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    counts = __import__("collections").Counter(module.LEGACY_ROLES) + __import__("collections").Counter(
+        module.ADDED_ROLES
+    )
+    rows = [[i, table, "RI_ConstraintTrigger_c_" + str(i)] for i, table in enumerate(counts.elements())]
+    snapshot = {"migrations": 32, "internal_triggers": 164, "all_internal": rows}
+    assert module.qualify_native_assessment_schema(snapshot)["all_roles_require_fault_testing"] is True
+    for changed in [
+        dict(snapshot, migrations=31),
+        dict(snapshot, migrations=33),
+        dict(snapshot, internal_triggers=152),
+        dict(snapshot, all_internal=rows[:-1]),
+    ]:
+        with pytest.raises(ValueError):
+            module.qualify_native_assessment_schema(changed)
+    changed = deepcopy(snapshot)
+    changed["all_internal"][-1][1] = "unrecognized_table"
+    with pytest.raises(ValueError):
+        module.qualify_native_assessment_schema(changed)

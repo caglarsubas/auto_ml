@@ -95,6 +95,13 @@ and result digests. Original test inventories, assertions, workloads, retries,
 resources and the native 900-second cap are preserved. Source qualification and
 exact-head/main qualification are distinct evidence states in the roadmap ledger.
 
+The RI-fixture controller retains its legacy 31-migration/152-trigger guard and
+adds a strict 32-migration/164-trigger profile with an exact per-table inventory.
+It runs all 797 original physical scenarios plus twelve additional foreign-key
+trigger-role cases. Raw full-schema snapshots must restore exactly. Historical
+verifiers consume an explicitly labeled legacy inventory projection only after
+all 809 raw expectations and the expanded schema's restoration have verified.
+
 Database operators remain trusted. This packet does not itself implement storage
 encryption, new retention policy, immutable external audit storage or protection
 against a privileged database administrator rewriting all data and hashes. Sealed
