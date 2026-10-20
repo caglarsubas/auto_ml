@@ -1,0 +1,78 @@
+@if (candidateAvailable) {
+  <section aria-labelledby="native-candidate-title">
+    <h4 id="native-candidate-title">Native development candidate</h4>
+    <p>
+      Export contains the recorded model, declaration, fitted preprocessing and development
+      evidence. Export and scoring do not approve model adoption or production use.
+    </p>
+    <button type="button" (click)="download()" [disabled]="busy || !!pending">
+      Download native candidate
+    </button>
+    @if (exportSha) {
+      <p>
+        Retain this export SHA-256 separately for the offline scorer: <code>{{ exportSha }}</code>
+      </p>
+    }
+    @if (role === 'developer') {
+      <fieldset [disabled]="busy || !!pending || !jobsEnabled">
+        <legend>Score a feature-only CSV</legend>
+        <p>
+          Upload a CSV containing exactly the candidate's numeric predictors. Column order may vary;
+          missing values use the frozen training means. Labels, extra columns and known protected
+          populations are blocked. Scores carry no performance or approval claim.
+        </p>
+        <label for="candidate-input-id">Candidate scoring dataset ID</label>
+        <input
+          id="candidate-input-id"
+          type="number"
+          min="1"
+          step="1"
+          [(ngModel)]="inputFileId"
+          (ngModelChange)="changed()"
+        />
+        <button type="button" (click)="prepare()" [disabled]="inputFileId < 1">
+          Prepare candidate scoring
+        </button>
+        @if (preview) {
+          <h5>Review candidate scoring</h5>
+          <p>{{ preview.evidence_scope }}</p>
+          <p>
+            Model result <code>{{ preview.training_result_sha256 }}</code> · Input
+            <code>{{ preview.input_sha256 }}</code> · Plan <code>{{ preview.scoring_sha256 }}</code>
+          </p>
+          <p>
+            Maximum {{ preview.budget.max_rows }} rows · {{ preview.budget.seconds }} seconds ·
+            {{ preview.budget.attempts }} attempts
+          </p>
+          <details>
+            <summary>Exact scoring contract, runtime and limits</summary>
+            <pre>{{ preview | json }}</pre>
+          </details>
+          <label
+            ><input type="checkbox" [(ngModel)]="approved" />I approve this exact candidate, input
+            and execution budget for exploratory scoring.</label
+          >
+          <button type="button" (click)="submit()" [disabled]="!approved">
+            Queue reviewed candidate scoring
+          </button>
+        }
+      </fieldset>
+      @if (!jobsEnabled) {
+        <p>The job service is unavailable. Export remains readable.</p>
+      }
+    }
+    @if (pending) {
+      <p>
+        Pending request <code>{{ pending.request_id }}</code
+        >. Keep this panel open to retry the same request. If you leave, inspect durable history
+        before creating a replacement.
+      </p>
+      <button type="button" (click)="retry()" [disabled]="busy">
+        Retry identical candidate scoring request
+      </button>
+    }
+    @if (error) {
+      <p role="alert">{{ error }}</p>
+    }
+  </section>
+}

@@ -129,14 +129,18 @@
     @if (
       evidenceEnabled &&
       job.state === 'succeeded' &&
-      job.specification.kind !== 'native_numeric_training_search_v1'
+      job.specification.kind !== 'native_numeric_training_search_v1' &&
+      job.specification.kind !== 'native_training_scoring_v1'
     ) {
       <button type="button" (click)="selectReceipt()" [disabled]="busy || !!pending">
         Use receipt for review action
       </button>
     }
     @if (job.result) {
-      @if (job.specification.kind === 'native_csv_scoring_v1') {
+      @if (
+        job.specification.kind === 'native_csv_scoring_v1' ||
+        job.specification.kind === 'native_training_scoring_v1'
+      ) {
         <p>
           Scored {{ job.result.n_scored }} rows · {{ job.result.score_semantics }} · Calibration
           applied: {{ job.result.scores_calibrated }}
@@ -160,6 +164,13 @@
           Native model and fold evidence are included in the job receipt. Model adoption and final
           assessment remain separate.
         </p>
+        <app-native-candidate
+          [job]="job"
+          [projectId]="projectId"
+          [role]="role"
+          [jobsEnabled]="!!directory?.jobs_enabled"
+          (queued)="candidateQueued($event)"
+        />
       } @else {
         <p>
           Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes

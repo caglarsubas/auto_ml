@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from access_control import projects
 from execution_jobs import service
-from execution_jobs import csv_scoring, training_search
+from execution_jobs import csv_scoring, training_search, training_scoring
 from execution_jobs.models import NativeJob
 
 
@@ -114,5 +114,27 @@ class JobScoresView(APIView):
             response["X-DeclarAI-Receipt-SHA256"] = sha
             response["Cache-Control"] = "no-store"
             return response
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobCandidateExportView(APIView):
+    def get(self, request, job_id):
+        try:
+            raw = training_scoring.export(request.user, job_id, request.query_params.get("sha256"))
+            response = HttpResponse(raw, content_type="application/json")
+            response["Content-Disposition"] = f'attachment; filename="candidate-{job_id}.json"'
+            response["X-DeclarAI-Export-SHA256"] = training_scoring.native_candidate.sha(raw)
+            response["Access-Control-Expose-Headers"] = "X-DeclarAI-Export-SHA256"
+            response["Cache-Control"] = "no-store"
+            return response
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobCandidateInputView(APIView):
+    def post(self, request, job_id):
+        try:
+            return Response(training_scoring.preview(request.user, job_id, request.data))
         except ERRORS as exc:
             return failure(exc)

@@ -23,7 +23,7 @@ from deployment.evidence import parse_metadata, verify_bundle
 from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import QueueLock, NativeJob, JobEvent
-from execution_jobs import csv_scoring, training_search
+from execution_jobs import csv_scoring, training_search, training_scoring
 from modeling.execution_artifacts import projection_lock
 
 ACTIVE = {"running", "cancel_requested"}
@@ -52,6 +52,8 @@ class JobStopped(Exception):
 
 
 def limits(kind):
+    if kind == training_scoring.KIND:
+        return {**LIMITS, **training_scoring.BUDGET}
     if kind == training_search.KIND:
         return {**LIMITS, **training_search.BUDGET}
     return {**LIMITS, **csv_scoring.BUDGET} if kind == csv_scoring.KIND else dict(LIMITS)
@@ -79,9 +81,9 @@ def runtime(kind=KIND):
         from deployment.scoring_receipts import scoring_runtime
 
         result["scoring"] = scoring_runtime()
-    if kind == training_search.KIND:
+    if kind in {training_search.KIND, training_scoring.KIND}:
         result["packages"].update({p: version(p) for p in ["numpy", "pandas", "scipy", "scikit-learn", "xgboost"]})
-        for name in ["execution_jobs/training_search.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
+        for name in ["execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
                      "modeling/declared_metric.py", "modeling/development_validation.py", "modeling/development_assessment.py",
                      "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
                      "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
@@ -212,11 +214,13 @@ def header(file_id, bundle_id, expected_sha):
 def submit(actor, file_id, data):
     if not settings.DECLARAI_JOBS_ENABLED:
         raise JobConflict("job_service_disabled")
-    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND}:
+    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND}:
         raise ValueError("Select a supported native job kind.")
     kind = data["kind"]
     if kind == training_search.KIND:
         return training_search.submit(actor, file_id, data)
+    if kind == training_scoring.KIND:
+        return training_scoring.submit(actor, file_id, data)
     fields = {"request_id", "kind", "bundle_id", "manifest_sha256"}
     if kind == csv_scoring.KIND:
         fields |= {"input_file_id", "input_sha256"}
@@ -289,7 +293,7 @@ def submit(actor, file_id, data):
 
 def serialize(job, *, replayed=False):
     result = job.result
-    if result and job.specification["kind"] == csv_scoring.KIND and len(result.get("scores", [])) > 500:
+    if result and job.specification["kind"] in {csv_scoring.KIND, training_scoring.KIND} and len(result.get("scores", [])) > 500:
         result = {k: v for k, v in result.items() if k != "scores"} | {
             "scores_preview": result["scores"][:500],
             "scores_truncated": True,
@@ -326,6 +330,14 @@ def serialize(job, *, replayed=False):
 
 
 def recheck_execution(job):
+    if job.specification.get("kind") == training_scoring.KIND:
+        trained = NativeJob.objects.get(pk=job.specification["training_job_id"])
+        if (trained.state != "succeeded" or trained.dataset_id != job.dataset_id
+                or trained.project_id != job.project_id
+                or trained.specification.get("kind") != training_search.KIND
+                or trained.result_sha256 != job.specification["training_result_sha256"]
+                or digest(trained.result) != trained.result_sha256):
+            raise JobConflict("job_training_result_changed")
     projects.recheck(job.authority)
     if job.source_dataset_id is not None:
         projects.recheck(job.specification["source_authority"])
@@ -351,7 +363,7 @@ def scoring_receipt(actor, identifier, expected):
     with locked():
         job = NativeJob.objects.get(pk=identifier)
         scopes = read_authority(actor, job)
-        if job.state != "succeeded" or job.specification["kind"] != csv_scoring.KIND or job.result_sha256 != expected:
+        if job.state != "succeeded" or job.specification["kind"] not in {csv_scoring.KIND, training_scoring.KIND} or job.result_sha256 != expected:
             raise JobConflict("job_scoring_result_unavailable")
         raw = csv_scoring.canonical_bytes(job.result)
         for current in scopes:
@@ -407,8 +419,11 @@ def claim(identifier):
         except (projects.ProjectDenied, ObjectDoesNotExist):
             close(job, "blocked", "job_authority_changed")
             return None
+        except JobConflict as exc:
+            close(job, "blocked", exc.code)
+            return None
         if (
-            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND}
+            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND}
             or job.specification.get("runtime") != runtime(job.specification.get("kind"))
             or job.specification.get("limits") != limits(job.specification.get("kind"))
         ):
@@ -468,6 +483,10 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             if _owns_live_lease(job, token, timezone.now()):
                 close(job, "blocked", "job_authority_changed")
             return
+        except JobConflict as exc:
+            if _owns_live_lease(job, token, timezone.now()):
+                close(job, "blocked", exc.code)
+            return
         prepared_result = result if state == "succeeded" else None
         prepared_digest = digest(prepared_result) if prepared_result else ""
         # Authority locks and result preparation can outlast the first check.
@@ -520,6 +539,10 @@ def execute(identifier):
         check()
         if spec["kind"] == training_search.KIND:
             result = training_search.train(job, check)
+            finish(identifier, token, "succeeded", result=result, deadline=deadline)
+            return
+        if spec["kind"] == training_scoring.KIND:
+            result = training_scoring.score(job, check)
             finish(identifier, token, "succeeded", result=result, deadline=deadline)
             return
         manifest, identity = header(job.dataset_id, spec["bundle_id"], spec["manifest_sha256"])

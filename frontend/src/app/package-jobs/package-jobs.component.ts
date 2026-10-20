@@ -12,12 +12,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { NativeCandidateComponent } from '../native-candidate/native-candidate.component';
 import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-package-jobs',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NativeCandidateComponent],
   templateUrl: './package-jobs.component.html',
   styleUrl: './package-jobs.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -190,11 +191,18 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     };
     this.retry();
   }
+  candidateQueued(job: any): void {
+    if (this.directory && !this.directory.jobs.some((j: any) => j.id === job.id)) {
+      this.directory.jobs.unshift({ id: job.id, state: job.state, kind: job.specification.kind });
+      this.directory.total++;
+    }
+    this.open(job.id);
+  }
   downloadScores(): void {
     if (
       this.busy ||
       this.job?.state !== 'succeeded' ||
-      this.job.specification.kind !== 'native_csv_scoring_v1'
+      !['native_csv_scoring_v1', 'native_training_scoring_v1'].includes(this.job.specification.kind)
     )
       return;
     const generation = this.generation,
@@ -297,7 +305,9 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       !this.evidenceEnabled ||
       this.busy ||
       this.job?.state !== 'succeeded' ||
-      this.job.specification.kind === 'native_numeric_training_search_v1'
+      ['native_numeric_training_search_v1', 'native_training_scoring_v1'].includes(
+        this.job.specification.kind,
+      )
     )
       return;
     const generation = this.generation;
