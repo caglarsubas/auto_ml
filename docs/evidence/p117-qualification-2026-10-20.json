@@ -1,0 +1,55 @@
+{
+  "packet": "P117",
+  "date": "2026-10-20",
+  "source_base": "f2862caa9e4d941a840e94d98efaecc3923ca0a0",
+  "scope": "Read-only managed-installation observations and explicit operator lifecycle inputs; no maintenance execution or recovery/upgrade qualification.",
+  "source_sha256": {
+    "scripts/private_installation_adopt.py": "f5c0e1c4dac324a01f0507ef2caea0b690650f5e510a323c31d2003699966c22",
+    "scripts/private_lifecycle_readiness.py": "0825ab9597f7143b65e31fa1af426a13517585f64e0f94aa85c4e0fbd6dd3311",
+    "scripts/qualify_private_lifecycle_readiness.py": "121d0863d91fd1d7eb18ccd989d467e8b31393cba46c804497b7ec7ff78056a5",
+    "scripts/qualify_private_dependency_start.py": "9451b53865d03c0096c624d2543863d213e6d11de09e691c8f63fa028b54b845",
+    "backend/tests/unit/test_private_lifecycle_readiness.py": "79c2550ecfd890a03cda1e36657dba70c6be6bd9d220ed002bb42401d10922a4"
+  },
+  "local_checks": {
+    "focused": {
+      "passed": 337,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.94
+    },
+    "native": {
+      "passed": 4501,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 301.309
+    },
+    "new_cases": 32,
+    "worker_isolation": true,
+    "original_inventories_preserved": true,
+    "ruff_new_findings": 0,
+    "actual_linux_host_observation": "pending exact-head CI"
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 242,
+    "byte_identical_original_files": 241,
+    "all_original_test_files_byte_identical": true,
+    "prior_managed_host_qualifier_exact_after_removing_added_observation": true,
+    "workflow_and_original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "raw_receipts": {
+    "test-reports/p117/focused-sqlite.xml": "f83a2b0553bf6855fc8816e7944cf4650da9254cf1be7d18e7cf6c7025fc3a0e",
+    "test-reports/p117/full-native/postgresql.xml": "c85ed3bb276558142e2053279ef5d7f3e97d5f0a802e05b80e94d6702130d92b",
+    "test-reports/p117/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e"
+  },
+  "pending_at_source_qualification": [
+    "actual Linux-root seven-service observation, held lock, paused-worker no-repair and unchanged history",
+    "all-six exact-head complete-report qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
