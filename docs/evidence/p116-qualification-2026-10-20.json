@@ -1,0 +1,63 @@
+{
+  "packet": "P116",
+  "date": "2026-10-20",
+  "source_base": "bb61076f626e3dca169c68404107fa76ebf95064",
+  "scope": "Managed controller operation serialization; historical unmanaged scope retained without new serialization qualification.",
+  "source_sha256": {
+    "scripts/private_installation_adopt.py": "fb2f090a3141613082993d6931f411c231d221727ab54caf6bffa7c37dab0e40",
+    "scripts/qualify_private_operation_lock.py": "20bd3d21b609f8a4673f45acc210a529f63441a82290840e1e2da654ca0d609a",
+    "scripts/qualify_private_dependency_start.py": "e6d38af38ff8b611e6a77ba4a6da6155a386fdd87c7e8576337ec1bf7f087e78",
+    "backend/tests/unit/test_private_operation_lock.py": "fa7d303f03acc6c2ec7170d6db85f69c9e89d5bb598049cbd7075644acd06ba8",
+    "backend/tests/unit/test_private_installation_adopt.py": "a249c91215b49f9d4906942a3f203cf5ff226656ad7b31d37fc4d6abdf906ab9"
+  },
+  "local_checks": {
+    "before": {
+      "passed": 0,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.371
+    },
+    "focused": {
+      "passed": 305,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.177
+    },
+    "native": {
+      "passed": 4469,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 317.361
+    },
+    "new_cases": 14,
+    "worker_isolation": true,
+    "original_inventories_preserved": true,
+    "ruff_new_findings": 0,
+    "actual_linux_host_lock": "pending exact-head CI"
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 240,
+    "byte_identical_original_files": 238,
+    "original_adoption_assertions_and_fixture_workloads_preserved": true,
+    "prior_managed_host_qualifier_exact_after_removing_added_guard_check": true,
+    "workflow_and_original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "raw_receipts": {
+    "test-reports/p116/before-sqlite.xml": "7875c0c5949ae82d6e8391bf959d5ab081b430d225c130a97dcfc8c2ded11510",
+    "test-reports/p116/focused-sqlite.xml": "31a1f95f9f2d54bbbfece7d1e5bbfc876a8af2f835ff7c32999bc9d8621e6ea1",
+    "test-reports/p116/full-native/postgresql.xml": "ce9d97234a0ca41f6abdf2215f1cf7711900415667d8048526dd23179a25eba5",
+    "test-reports/p116/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70"
+  },
+  "pending_at_source_qualification": [
+    "actual Linux-root shared operation checks",
+    "all-six exact-head complete-report qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
