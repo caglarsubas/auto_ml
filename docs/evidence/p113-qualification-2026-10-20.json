@@ -1,0 +1,253 @@
+{
+  "packet": "P113",
+  "date": "2026-10-20",
+  "source_base": "fad193efc1f535eab38bbc9d76be32f5b197afb9",
+  "source_sha256": {
+    "backend/execution_jobs/preflight.py": "6915343a6e90056993ec9fed8a488ce5f45f434bab87f6923b106d53ff27b40d",
+    "backend/execution_jobs/schema_presence.py": "22013b4ecc5beb5fc470bf80de1e2da269185442d9f5846293a3cb9b6ec0c927",
+    "backend/execution_jobs/schema_privileges.py": "8f933c73acfb80238272dd1586420a0e0bc883d26667a25dc6017967c526ee5a",
+    "backend/execution_jobs/metadata_write_mode.py": "6ac2013ad179d851dbc1c08fc4b40fe649e38685fcf8ed95be563614a3e9e422",
+    "backend/tests/qualification/private_schema_triggers.py": "f3e8b82783dd527cf258b279367756ce155b2b5cc88c5193f561934383d53519",
+    "scripts/qualify_private_schema_triggers.py": "7a8206b424ac5a1d3b751084564420c67e8535021060e4aa724a6fe65956873a"
+  },
+  "predecessor_reproduction": {
+    "before_passed": 734,
+    "before_failed": 30,
+    "before_matrix_cases": 764,
+    "original_714_passed": true,
+    "new_startup_cases": 50,
+    "administrator_deliberately_delegated_settings_authority": true,
+    "protected_owned_settings_observed": [
+      "data_directory",
+      "config_file",
+      "hba_file"
+    ],
+    "baseline_view_rows_hidden": true,
+    "baseline_direct_sqlstate": "42501",
+    "scoped_catalogs_acls_roles_metadata_restored": true,
+    "server_configuration_changed": false,
+    "files_read": false,
+    "actual_tls": false,
+    "customer_installation_modified": false,
+    "scope": "Owned PostgreSQL 17: the host administrator deliberately grants pg_read_all_settings to restricted fixture principals. Frozen P112 accepts admission while effective use exposes only protected paths of the disposable server through pg_settings/current_setting. All 714 original physical cases pass; 30 new admission expectations fail. Revocation restores hidden rows and denied direct reads; roles/scoped catalogs/metadata restore. No server configuration change, file read, customer operation or external connection. Initial TLS/broker responses are fixtures."
+  },
+  "fixed_qualification": {
+    "standalone_physical_ri_cases": 764,
+    "new_settings_cases": 50,
+    "original_714_ri_cases_preserved": true,
+    "settings_catalog_roles_memberships_and_scoped_acls_restored": true,
+    "protected_fixture_setting_visibility_profiles": [
+      "direct",
+      "inherited",
+      "switch_only/switched",
+      "transitive/switched",
+      "active_only"
+    ],
+    "view_hides_and_direct_read_denied_without_authority": true,
+    "server_configuration_changed_by_p113": false,
+    "files_read_by_p113": false,
+    "forged_lookup_side_effects": 0,
+    "owned_setting_observation": {
+      "settings": [
+        [
+          "config_file",
+          "/var/lib/postgresql/data/postgresql.conf"
+        ],
+        [
+          "data_directory",
+          "/var/lib/postgresql/data"
+        ],
+        [
+          "hba_file",
+          "/var/lib/postgresql/data/pg_hba.conf"
+        ]
+      ],
+      "direct": "/var/lib/postgresql/data"
+    },
+    "profiles": [
+      {
+        "profile": "direct",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": true,
+        "settings_visible": true,
+        "direct": {
+          "value": "/var/lib/postgresql/data",
+          "sqlstate": null
+        },
+        "switched_settings_visible": false
+      },
+      {
+        "profile": "inherited",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": true,
+        "settings_visible": true,
+        "direct": {
+          "value": "/var/lib/postgresql/data",
+          "sqlstate": null
+        },
+        "switched_settings_visible": false
+      },
+      {
+        "profile": "switch_only",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "settings_visible": false,
+        "direct": {
+          "value": null,
+          "sqlstate": "42501"
+        },
+        "switched_settings_visible": true
+      },
+      {
+        "profile": "transitive",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "settings_visible": false,
+        "direct": {
+          "value": null,
+          "sqlstate": "42501"
+        },
+        "switched_settings_visible": true
+      },
+      {
+        "profile": "session_only",
+        "current_member": false,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": true,
+        "settings_visible": false,
+        "direct": {
+          "value": null,
+          "sqlstate": "42501"
+        },
+        "switched_settings_visible": false
+      },
+      {
+        "profile": "active_only",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": true,
+        "session_usage": false,
+        "settings_visible": true,
+        "direct": {
+          "value": "/var/lib/postgresql/data",
+          "sqlstate": null
+        },
+        "switched_settings_visible": false
+      },
+      {
+        "profile": "options_disabled",
+        "current_member": true,
+        "session_member": true,
+        "current_usage": false,
+        "session_usage": false,
+        "settings_visible": false,
+        "direct": {
+          "value": null,
+          "sqlstate": "42501"
+        },
+        "switched_settings_visible": false
+      },
+      {
+        "profile": "unrelated",
+        "current_member": false,
+        "session_member": false,
+        "current_usage": false,
+        "session_usage": false,
+        "settings_visible": false,
+        "direct": {
+          "value": null,
+          "sqlstate": "42501"
+        },
+        "switched_settings_visible": false
+      }
+    ],
+    "baseline_view_hidden": true,
+    "baseline_direct_sqlstate": "42501",
+    "revocation_restores_hidden_and_denied_reads": true
+  },
+  "predecessor_physical_cases": 714,
+  "before_matrix_cases": 764,
+  "predecessor_passed": 734,
+  "predecessor_failed": 30,
+  "standalone_physical_cases": 764,
+  "new_settings_cases": 50,
+  "original_714_case_identities_and_expectations_preserved": true,
+  "local_final_source_qualification": "passed",
+  "exact_head_ci": "pending",
+  "independent_main_ci": "pending",
+  "full_suite_timeout_seconds": 900,
+  "per_test_timeout_seconds": 120,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "scope": "Bounded pg_read_all_settings current/session admission for the initial application profile. Deliberately delegated authority reveals only protected paths of an owned disposable server; the P113 controls change no server configuration and read no files. Revocation restores hidden view rows and denied direct reads; roles/memberships/scoped ACLs/catalogs/metadata restore. P112 already excludes pg_monitor. Initial physical TLS/broker responses are fixtures. No customer operation, no-grant exploit, complete configuration confidentiality, custom grant certification, historical audit, continuous fencing or release readiness is claimed.",
+  "checks": {
+    "focused-postgresql": {
+      "passed": 869,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 66.683
+    },
+    "focused-sqlite": {
+      "passed": 969,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 23.858
+    },
+    "full-native": {
+      "passed": 4439,
+      "skipped": 6,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 237.003
+    }
+  },
+  "coverage": {
+    "line": 75.79,
+    "branch": 66.18
+  },
+  "worker_isolation": {
+    "workers": {
+      "gw0": {
+        "worker": "gw0",
+        "cache_database": 2,
+        "database": "test_lock_fixture_gw0"
+      },
+      "gw1": {
+        "worker": "gw1",
+        "cache_database": 3,
+        "database": "test_lock_fixture_gw1"
+      }
+    },
+    "isolated": true
+  },
+  "original_native_case_and_skip_identities_preserved": true,
+  "frontend_unit_passed": 651,
+  "frontend_production_build": "passed",
+  "ruff": "complete unchanged workflow command passed",
+  "roadmap_projection": "deterministic projection and original invariants preserved",
+  "owned_cleanup": "passed",
+  "original_suite_audit": {
+    "original_files": 165,
+    "byte_identical_original_files": 163,
+    "only_additive_qualification_changes": [
+      "backend/tests/qualification/private_schema_triggers.py",
+      "scripts/qualify_private_schema_triggers.py"
+    ],
+    "original_qualification_bytes_restored_after_removing_P113_additions": true,
+    "original_scientific_suite_workflow_assertions_workloads_limits_coverage_retries_skips_unchanged": true,
+    "sole_product_change": "add pg_read_all_settings to existing builtin-qualified authority predicate",
+    "primary_status_and_13_hashes_match": true
+  },
+  "receipts_scope": "Ignored raw reports retained locally; committed source receipt is self-contained. Exact PR/main receipts are qualified separately."
+}
