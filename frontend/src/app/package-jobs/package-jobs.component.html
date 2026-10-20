@@ -116,7 +116,11 @@
       </p>
     }
     <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
-    @if (evidenceEnabled && job.state === 'succeeded') {
+    @if (
+      evidenceEnabled &&
+      job.state === 'succeeded' &&
+      job.specification.kind !== 'native_numeric_training_search_v1'
+    ) {
       <button type="button" (click)="selectReceipt()" [disabled]="busy || !!pending">
         Use receipt for review action
       </button>
@@ -135,6 +139,17 @@
             Job evidence includes a 500-row preview; the full scoring receipt contains all rows.
           </p>
         }
+      } @else if (job.specification.kind === 'native_numeric_training_search_v1') {
+        <p>
+          Development search: {{ job.result.prediction_contract.task }} ·
+          {{ job.result.candidates.length }} candidates · {{ job.result.metric.primary_metric }} ·
+          Selected depth {{ job.result.selected_max_depth }}
+        </p>
+        <p>{{ job.result.evidence_scope }}</p>
+        <p>
+          Native model and fold evidence are included in the job receipt. Model adoption and final
+          assessment remain separate.
+        </p>
       } @else {
         <p>
           Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes

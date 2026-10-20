@@ -291,7 +291,13 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     );
   }
   selectReceipt(): void {
-    if (!this.evidenceEnabled || this.busy || this.job?.state !== 'succeeded') return;
+    if (
+      !this.evidenceEnabled ||
+      this.busy ||
+      this.job?.state !== 'succeeded' ||
+      this.job.specification.kind === 'native_numeric_training_search_v1'
+    )
+      return;
     const generation = this.generation;
     const id = this.job.id;
     // Selection refreshes authority; the review API validates again on adoption.

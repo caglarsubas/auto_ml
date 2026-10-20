@@ -1,4 +1,4 @@
-from execution_jobs.views import DatasetJobsView, JobDetailView, JobInputView, JobScoresView
+from execution_jobs.views import DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -65,6 +65,7 @@ urlpatterns = [
     path('api/deployment/receipts/<int:file_id>/<uuid:batch_id>/', DeploymentReceiptView.as_view(), name='deployment-receipt'),
     path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
     path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
+    path('api/jobs/datasets/<int:file_id>/training-input/', JobTrainingInputView.as_view(), name='job-training-input'),
     path('api/jobs/datasets/<int:file_id>/', DatasetJobsView.as_view(), name='dataset-jobs'),
     path('api/jobs/datasets/<int:file_id>/input/', JobInputView.as_view(), name='job-input'),
     path('api/jobs/<uuid:job_id>/scores/', JobScoresView.as_view(), name='job-scores'),

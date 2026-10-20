@@ -506,6 +506,7 @@ def main():
             wrong_auth_file.chmod(0o600)
             run_python(preflight, {**job_env, "DECLARAI_JOB_BROKER_URL_FILE": str(wrong_auth_file)},
                        succeed=False, report="job-wrong-auth.log", rejection="job_broker_unavailable")
+            run_python(["scripts/qualify_private_training_search.py"], job_env, report="private-training-search.log")
             run_python(["scripts/qualify_private_jobs.py", "seed"], job_env, report="private-jobs.log")
             run_python(["scripts/qualify_private_scoring.py", "seed"], job_env, report="private-scoring.log")
             # Quiesce all owned job processes, then remove the actual broker and its
