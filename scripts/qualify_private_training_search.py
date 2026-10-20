@@ -240,7 +240,41 @@ def main():
                 assert len(result["candidates"]) == 2 and all(
                     len(c["folds"]) == 3 for c in result["candidates"]
                 )
+                for candidate in result["candidates"]:
+                    for planned, observed in zip(
+                        job.specification["training"]["folds"],
+                        candidate["folds"],
+                        strict=True,
+                    ):
+                        provenance = observed["preprocessing"]
+                        assert provenance["train_rows"] == planned["train_rows"]
+                        assert provenance["valid_rows"] == planned["valid_rows"]
+                        assert not {row // 4 for row in provenance["train_rows"]} & {
+                            row // 4 for row in provenance["valid_rows"]
+                        }
+                        assert observed["fit_receipt"]["train"]["n_rows"] == len(
+                            planned["train_rows"]
+                        )
+                        assert observed["fit_receipt"]["valid"]["n_rows"] == len(
+                            planned["valid_rows"]
+                        )
+                        assert observed["fit_receipt"]["early_stopping_rounds"] == 0
+                        assert np.isfinite(observed["score"]) and np.isfinite(
+                            observed["reference_score"]
+                        )
+                    assert candidate["mean_score"] == float(
+                        np.mean([fold["score"] for fold in candidate["folds"]])
+                    )
+                choose = min if result["metric"]["direction"] == "minimize" else max
+                assert (
+                    result["selected_max_depth"]
+                    == choose(
+                        result["candidates"],
+                        key=lambda candidate: candidate["mean_score"],
+                    )["max_depth"]
+                )
                 assert result["refit_receipt"]["train"]["n_rows"] == 1000
+                assert result["refit_receipt"]["train"]["features"] == ["x", "z"]
                 assert (
                     result["model_format"] == "xgboost_json"
                     and json.loads(result["model_json"])["learner"]

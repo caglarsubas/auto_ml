@@ -13,7 +13,7 @@
     "frontend/src/app/package-jobs/package-jobs.component.html": "c8d94ed154f0d6a62c69977e9e4bfaa572d60a36db383096c9aeba039769c980",
     "frontend/src/app/package-jobs/package-jobs.component.ts": "8dbb0766e18eb743af2ab6db12bbf6a22ed9638a005ea90b7076ad391b6f9175",
     "scripts/qualify_postgres_fixture.py": "f7eee2a8341603b761567908c8b1128aa9669d1fd1662d197d622f94b3fd8718",
-    "scripts/qualify_private_training_search.py": "d7facef4884c72ac9de52ceb56d7cf7e96862a53b9366db73069e57af435a24f"
+    "scripts/qualify_private_training_search.py": "d76d8a3632764558a1bf8279b5f5a452f19a4b646fb8a796dda5a59ff151d549"
   },
   "local_checks": {
     "focused": {
@@ -55,5 +55,6 @@
     "independent automatic push-main qualification"
   ],
   "release_qualified": false,
-  "customer_installation_modified": false
+  "customer_installation_modified": false,
+  "local_scope_note": "Private worker assertions strengthened after local product tests; complete exact-head private qualification remains pending."
 }
