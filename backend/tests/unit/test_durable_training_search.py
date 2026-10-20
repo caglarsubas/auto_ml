@@ -116,6 +116,11 @@ def test_real_training_search_and_refit_survive_process_local_state_loss(world, 
         service.execute(identifier)
     job = NativeJob.objects.get(pk=identifier)
     assert job.state == "succeeded" and job.attempts == 1 and job.result_sha256 == service.digest(job.result)
+    assert job.specification["training"]["profile"] == {
+        "kind": training.KIND,
+        "runtime": preview["runtime"],
+        "limits": preview["budget"],
+    }
     result = w.clients["reviewer"].get(f"/api/jobs/{identifier}/").json()["result"]
     assert result["prediction_contract"]["task"] == task
     assert result["prediction_contract"]["positive_class"] == positive
@@ -304,6 +309,22 @@ def test_request_id_cannot_be_rebound_to_other_training_fields(world):
     body["features"] = ["x"]
     response = post(world.clients["developer"], f"/api/jobs/datasets/{world.file_id}/", body)
     assert response.status_code == 409 and NativeJob.objects.count() == 1
+
+
+@pytest.mark.parametrize("change", ["budget", "runtime"])
+def test_preview_pins_execution_profile_before_queue_admission(world, monkeypatch, change):
+    body, preview = admission(world)
+    assert preview["budget"]["seconds"] == 120 and preview["budget"]["max_input_bytes"] == 5 * 1024**2
+    assert preview["runtime"] == service.runtime(training.KIND)
+    if change == "budget":
+        monkeypatch.setitem(training.BUDGET, "boost_rounds", 17)
+    else:
+        original = service.runtime
+        monkeypatch.setattr(service, "runtime", lambda kind: {**original(kind), "python": "changed"})
+    response = post(world.clients["developer"], f"/api/jobs/datasets/{world.file_id}/", body)
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "job_training_input_or_plan_changed"
+    assert not NativeJob.objects.exists()
 
 
 def test_preview_and_submission_require_csrf(world):

@@ -6,9 +6,11 @@ This is the first bounded training/search profile in the existing database-backe
 
 1. Sign in as a current project developer and bind a headered CSV to the project.
 2. POST `/api/jobs/datasets/{file_id}/training-input/` with `data_role: "development_only"`, `business_understanding`, an ordered `features` list, and `validation`.
-3. Review the resolved prediction contract, exact fold membership, budget, evidence scope, `input_sha256` and `training_sha256` returned by the preview.
+3. Review the resolved prediction contract, exact fold membership, complete execution budget, runtime version/source pins, evidence scope, `input_sha256` and `training_sha256` returned by the preview.
 4. POST those same four options to `/api/jobs/datasets/{file_id}/`, adding `kind: "native_numeric_training_search_v1"`, a fresh UUID `request_id`, and the two reviewed digests. Normal session, CSRF and project authorization apply to both endpoints. The service must be enabled to queue work.
 5. Use the existing job detail/list/cancel API. Repeating the identical request UUID returns the existing job; changed request fields conflict. Developers can cancel; authorized independent readers can inspect the resulting evidence.
+
+The preview digest binds the runtime and full limits as well as the input, declaration and folds. A changed runtime or budget between preview and submission requires a fresh preview; admission copies the reviewed profile into the job.
 
 The declaration must explicitly identify binary classification or regression, target and positive label when applicable, objective, population, prediction horizon, label maturity and feature availability. Cardinality does not choose the task. These are recorded customer declarations, not independent verification of their truth.
 

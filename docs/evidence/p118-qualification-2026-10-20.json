@@ -8,8 +8,8 @@
     "backend/backend/urls.py": "5a0b0e752e122970ce7f2f100a16c49a82595be5a3e247785f23e045d926b32e",
     "backend/execution_jobs/service.py": "4c903556f97b1e32f470a9d56f2e62716d443e6d2a098350ab2bf4e0bd5814e5",
     "backend/execution_jobs/views.py": "3469d3f5e30ed7634c654479110f54640eecd97b43f87c6a4212ddcab59c70a1",
-    "backend/execution_jobs/training_search.py": "3f17922dc167b42ff2a0a35a358d2d0bb9f48e77a3eca6e51bb6256f9c3e6252",
-    "backend/tests/unit/test_durable_training_search.py": "2a453c970ebadea6b7233fb10871a6760e4a20522bbb3be12cd41615a6235263",
+    "backend/execution_jobs/training_search.py": "46172de6878d21bcf772a1588144287d4ed923b9c03c80773a37aca54bd8f374",
+    "backend/tests/unit/test_durable_training_search.py": "3102393ffff57977181b863428caa49c57be62a9ea22430f9ea661462d02670e",
     "frontend/src/app/package-jobs/package-jobs.component.html": "c8d94ed154f0d6a62c69977e9e4bfaa572d60a36db383096c9aeba039769c980",
     "frontend/src/app/package-jobs/package-jobs.component.ts": "8dbb0766e18eb743af2ab6db12bbf6a22ed9638a005ea90b7076ad391b6f9175",
     "scripts/qualify_postgres_fixture.py": "f7eee2a8341603b761567908c8b1128aa9669d1fd1662d197d622f94b3fd8718",
@@ -17,20 +17,20 @@
   },
   "local_checks": {
     "focused": {
-      "passed": 154,
+      "passed": 156,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "seconds": 16.781
+      "seconds": 16.693
     },
     "native": {
-      "passed": 4541,
+      "passed": 4543,
       "failed": 0,
       "errors": 0,
       "skipped": 6,
-      "seconds": 223.328
+      "seconds": 270.02
     },
-    "new_cases": 40,
+    "new_cases": 42,
     "worker_isolation": true,
     "original_inventories_preserved": true,
     "ruff_new_findings": 0,
@@ -45,8 +45,8 @@
     "primary_status_and_13_hashes_match": true
   },
   "raw_receipts": {
-    "test-reports/p118/focused-sqlite.xml": "f11b355580d5244e7c9457920b3e693d37cf2fb2d2096501173e77135ee9a2c5",
-    "test-reports/p118/full-native/postgresql.xml": "501ee5fc563cb478a49ac186510a0e6c574b55a8293a124f9c0016eea9c4888a",
+    "test-reports/p118/focused-sqlite.xml": "f82635ad246867cde14c64b743f0815098ecf78331bb99e742dd73533e15470e",
+    "test-reports/p118/full-native/postgresql.xml": "27696ab6a3fd708b84752bdeb17e6220c8cc8d502d87b36473a9bbd7f452d7eb",
     "test-reports/p118/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70"
   },
   "pending_at_source_qualification": [
@@ -55,6 +55,5 @@
     "independent automatic push-main qualification"
   ],
   "release_qualified": false,
-  "customer_installation_modified": false,
-  "local_scope_note": "Private worker assertions strengthened after local product tests; complete exact-head private qualification remains pending."
+  "customer_installation_modified": false
 }

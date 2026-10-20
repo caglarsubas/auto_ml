@@ -32,6 +32,7 @@ from modeling.models import HoldoutAccess
 
 KIND = "native_numeric_training_search_v1"
 BUDGET = {
+    "max_input_bytes": csv_scoring.BUDGET["max_input_bytes"],
     "max_rows": 1000,
     "max_columns": 40,
     "max_features": 32,
@@ -74,6 +75,7 @@ def parsed_frame(raw):
 
 def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
     """Bind the displayed declaration and exact input before queue admission."""
+    from execution_jobs import service
     from execution_jobs.service import JobConflict
 
     current = projects.dataset_authority(actor_id, file_id, "read")
@@ -169,6 +171,7 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
     folds = list(development_folds(context, frame.index, labels, validation["n_splits"]))
     plan = {
         "schema_version": 1,
+        "profile": {"kind": KIND, "runtime": service.runtime(KIND), "limits": service.limits(KIND)},
         "source": source,
         "options": options,
         "prediction_contract": contract,
@@ -190,7 +193,8 @@ def preview(actor, file_id, options):
         "training_sha256": digest(plan),
         "prediction_contract": plan["prediction_contract"],
         "folds": plan["folds"],
-        "budget": BUDGET,
+        "budget": plan["profile"]["limits"],
+        "runtime": plan["profile"]["runtime"],
         "evidence_scope": "Exploratory development-only selection; no final assessment or model adoption.",
     }
 
@@ -232,8 +236,8 @@ def submit(actor, file_id, data):
                 "kind": KIND,
                 "training": plan,
                 "training_sha256": plan_sha,
-                "runtime": service.runtime(KIND),
-                "limits": service.limits(KIND),
+                "runtime": plan["profile"]["runtime"],
+                "limits": plan["profile"]["limits"],
             },
             request_sha256=request_sha,
             expires_at=timezone.now() + timedelta(hours=1),
