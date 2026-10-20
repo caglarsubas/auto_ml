@@ -1,7 +1,7 @@
 """Read-only physical-column checks for sealed private PostgreSQL.
 
 Migration records alone do not establish that required physical relations still
-exist with their declared storage types, modifiers, nullability, ordinary
+exist with their declared storage types, modifiers, collations, nullability, ordinary
 writable storage, identity modes, immediate primary keys, declared uniqueness
 and the selected foreign-key/RI-trigger profile in an origin/local connection.
 Historical row integrity and complete schema/restore equivalence remain outside
@@ -56,6 +56,11 @@ def required_storage_contract():
             if field.is_relation and (not isinstance(field, ForeignKey) or not field.db_constraint):
                 raise SchemaMismatch
             target = field.target_field if field.is_relation else field
+            # The sealed profile uses database-default collation. Explicit
+            # collations (including FK target declarations) need their own
+            # qualified contract; silently ignoring them changes comparisons.
+            if getattr(target, "db_collation", None) is not None:
+                raise SchemaMismatch
             try:
                 datatype = STORAGE_TYPES[target.get_internal_type()]
             except KeyError:
@@ -150,6 +155,11 @@ def check_schema():
                     AND (wanted.name IS NULL OR (
                         a.atttypid OPERATOR(pg_catalog.=) t.oid
                         AND a.atttypmod OPERATOR(pg_catalog.=) wanted.modifier
+                        AND a.attcollation OPERATOR(pg_catalog.=)
+                            CASE WHEN t.typname OPERATOR(pg_catalog.=)
+                                ANY(ARRAY['varchar','text']::pg_catalog.name[])
+                            THEN 'pg_catalog."default"'::pg_catalog.regcollation::pg_catalog.oid
+                            ELSE 0::pg_catalog.oid END
                         AND a.attnotnull OPERATOR(pg_catalog.=) wanted.not_null
                         AND a.attgenerated OPERATOR(pg_catalog.=) ''::pg_catalog."char"
                         AND a.attidentity OPERATOR(pg_catalog.=) wanted.identity

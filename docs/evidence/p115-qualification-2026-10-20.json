@@ -1,0 +1,89 @@
+{
+  "packet": "P115",
+  "date": "2026-10-20",
+  "source_base": "1911805095ee1b0d74e9f42354787dc8eaa28475",
+  "scope": "Admission-time physical column collation contract for sealed private PostgreSQL; no customer modification or release claim.",
+  "source_sha256": {
+    "backend/execution_jobs/schema_presence.py": "c01a250667f33e7ab8be3d482cd42227a364e38016c3600ca80e7dac573f2f2d",
+    "backend/tests/unit/test_private_schema_collations.py": "29326b677940ce861ef3df266481da713bbc4521414aae4d807dc5bab5c6f81d",
+    "backend/tests/qualification/private_schema_triggers.py": "9cd976031c35516c3e5cebcd68101c1f07498974e8391a118bba04cb7076769a",
+    "scripts/qualify_private_schema_triggers.py": "cf98276c9edf71bca951881d385b6519c27769bca9b47d74878f263f6040a20d"
+  },
+  "local_checks": {
+    "before_postgresql": {
+      "passed": 4,
+      "failed": 12,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.626
+    },
+    "focused_postgresql": {
+      "passed": 16,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 4.029
+    },
+    "sqlite": {
+      "passed": 985,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 41.088
+    },
+    "native": {
+      "passed": 4455,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "seconds": 279.713
+    },
+    "physical_cases": 797,
+    "original_physical_cases": 764,
+    "new_physical_cases": 33,
+    "worker_isolation": true,
+    "original_case_skip_identities": true,
+    "owned_cleanup": "passed",
+    "ruff": "passed"
+  },
+  "reproduction": {
+    "changed_orm_comparisons": 2,
+    "old_physical_denial_gaps": 12,
+    "old_new_pytest_failures": 12
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 239,
+    "byte_identical_original_files": 237,
+    "original_764_case_controller_and_application_exact_after_removing_additions": true,
+    "workflow_and_original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "prototype_fixture_corrections": {
+    "issue": "New migration-state fixture mutated shared Field instances; healthy follow-on cases caught contamination.",
+    "repair": "Clone fixture fields before altering collation declarations.",
+    "initial_focused_reports_retained": true,
+    "broad_sqlite_run_stopped_after_confirmed_fixture_failure": true,
+    "qualified_runs_will_use_fixed_fixture": true,
+    "physical_case_total_corrected_from_arithmetic_estimate": 797,
+    "original_764_physical_cases_unchanged": true,
+    "empty_declaration_test_adjustment": "Django clone/deconstruct canonicalizes empty collation to no declaration. Use a valid explicit default declaration to exercise the sealed unsupported-declaration gate.",
+    "initial_local_failures_retained": true
+  },
+  "raw_receipts": {
+    "test-reports/p115/before-postgresql.xml": "a4a3e8cf34f8055bebce7484456c7ebcfef70907697977e6dd78e5290812a230",
+    "test-reports/p115/focused-postgresql.xml": "6ef046e0d9715b78c51059db319515b8bc06395a8ed738054d730c4fb3c8e720",
+    "test-reports/p115/focused-sqlite.xml": "2d8b315e82e0e86cca10ea5057975520c58ef30349b06ee15e7da3f50b9113b0",
+    "test-reports/p115/full-native/postgresql.xml": "2b0ede98db2ca1c0c6d26504398422812b92ed32cff5275e7888ca1de3dfece3",
+    "test-reports/p115/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70",
+    "test-reports/p115/before-triggers/qualification.json": "4d8fdf0b48d04267eca60e9e0265e76eff156bb2b83ca94e081479ff9cf3c729",
+    "test-reports/p115/fixed-triggers/qualification.json": "34da5aae77c894c3d223a779e09d1cda7bf3c09082f7c7d63fc601203ee8194a"
+  },
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "pending_at_source_qualification": [
+    "PR publication",
+    "exact-head all-six complete-report qualification",
+    "guarded merge",
+    "independent automatic push-main complete-report qualification"
+  ]
+}
