@@ -987,6 +987,140 @@ def main():
                 assert statistics_observer.wait(timeout=30) == 0
             assert admin("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE pid=" + str(observer_pid) + ";").strip() == b"0"
             receipt["statistics_observer_closed"] = True
+            # P113: observe only protected paths in this disposable server.
+            # No configuration changes, file reads or external connections.
+            def settings_observation():
+                row = json.loads(admin("""SELECT pg_catalog.json_build_object(
+                    'settings',(SELECT pg_catalog.json_agg(pg_catalog.json_build_array(name,setting) ORDER BY name)
+                        FROM pg_catalog.pg_settings WHERE name IN ('data_directory','config_file','hba_file')),
+                    'direct',pg_catalog.current_setting('data_directory'));
+                """))
+                assert [item[0] for item in row["settings"]] == ["config_file", "data_directory", "hba_file"]
+                assert all(item[1].startswith("/var/lib/postgresql/data") for item in row["settings"])
+                assert row["direct"] == dict(row["settings"])["data_directory"]
+                return row
+
+            receipt["settings_observation"] = settings_observation()
+            receipt["settings_baseline"] = authority_catalog()
+            state = application("settings_state")
+            assert not any(state[k] for k in ("current_member", "current_usage", "session_member", "session_usage"))
+            assert state["settings"] == [] and state["direct"] == dict(value=None,sqlstate="42501")
+            receipt["settings_hidden_baseline"] = state
+
+            def settings_case(name, denied=False, unavailable=False):
+                for entry in ("role", "role_command"):
+                    started = time.monotonic()
+                    result = application(entry=entry)
+                    error = "job_application_role_unavailable" if unavailable else (
+                        "job_application_role_elevated" if denied else None)
+                    expected = dict(error=error, broker_calls=int(entry == "role_command"))
+                    cases.append(dict(name="settings_authority/" + name + "/" + entry,
+                        passed=result == expected, expected=expected, observed=result,
+                        seconds=time.monotonic() - started))
+
+            for value in ("origin", "local"):
+                mode(value)
+                settings_case("baseline_" + value)
+            mode("origin")
+            admin("""CREATE ROLE ri_cap_carrier NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_bridge NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                CREATE ROLE ri_cap_child NOLOGIN NOCREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+                GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ri_cap_child;""")
+            receipt["settings_profiles"] = []
+
+            def clear_settings():
+                application("settings_switch", role="reset")
+                admin("""REVOKE pg_read_all_settings FROM ri_application,ri_cap_carrier,ri_cap_child;
+                    REVOKE ri_cap_carrier FROM ri_application,ri_cap_bridge;
+                    REVOKE ri_cap_bridge,ri_cap_child FROM ri_application;""")
+
+            try:
+                for profile in ("direct", "inherited", "switch_only", "transitive", "session_only",
+                                "active_only", "options_disabled", "unrelated"):
+                    try:
+                        grantee = {"direct":"ri_application", "session_only":"ri_application",
+                            "active_only":"ri_cap_child"}.get(profile, "ri_cap_carrier")
+                        admin("GRANT pg_read_all_settings TO " + grantee + ";")
+                        if profile in {"inherited", "switch_only", "options_disabled"}:
+                            admin("GRANT ri_cap_carrier TO ri_application WITH INHERIT " + (
+                                "TRUE" if profile == "inherited" else "FALSE") + ", SET " + (
+                                "FALSE" if profile == "options_disabled" else "TRUE") + ";")
+                        elif profile == "transitive":
+                            admin("GRANT ri_cap_carrier TO ri_cap_bridge WITH INHERIT FALSE, SET TRUE; GRANT ri_cap_bridge TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                        elif profile in {"session_only", "active_only"}:
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("settings_switch", role="ri_cap_child")
+                        state = application("settings_state")
+                        assert state["current_member"] == (profile not in {"session_only", "unrelated"})
+                        assert state["session_member"] == (profile != "unrelated")
+                        assert state["current_usage"] == (profile in {"direct", "inherited", "active_only"})
+                        assert state["session_usage"] == (profile in {"direct", "inherited", "session_only"})
+                        assert state["state"]["mode"] == "origin"
+                        assert not any(state["state"][k] for k in (
+                            "current_set", "current_alter_system", "session_set", "session_alter_system"))
+                        observed = settings_observation()
+                        assert observed == receipt["settings_observation"]
+                        assert state["settings"] == (observed["settings"] if state["current_usage"] else [])
+                        assert state["direct"] == (dict(value=observed["direct"],sqlstate=None) if state["current_usage"] else dict(value=None,sqlstate="42501"))
+                        settings_case(profile, denied=profile != "unrelated")
+                        switched = None
+                        if profile in {"switch_only", "transitive"}:
+                            switched = application("settings_switch", role="ri_cap_carrier")
+                            assert switched["current_usage"] is True
+                            assert switched["settings"] == observed["settings"]
+                            assert switched["direct"] == dict(value=observed["direct"],sqlstate=None)
+                        receipt["settings_profiles"].append(dict(profile=profile,state=state,
+                            switched=switched,catalog=authority_catalog()))
+                    finally:
+                        clear_settings()
+                for variant in ("catalog", "membership_function", "operator", "combined"):
+                    admin("CREATE TABLE public.settings_lookup_effect(marker pg_catalog.text); GRANT INSERT,SELECT ON public.settings_lookup_effect TO ri_application;")
+                    try:
+                        if variant in {"catalog", "combined"}:
+                            admin("CREATE VIEW public.pg_roles AS SELECT oid,rolname,false AS rolsuper,false AS rolcreatedb,false AS rolcreaterole,false AS rolreplication,false AS rolbypassrls FROM pg_catalog.pg_roles WHERE rolname<>'pg_read_all_settings'; GRANT SELECT ON public.pg_roles TO PUBLIC;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("CREATE FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.settings_lookup_effect VALUES ('membership'); RETURN false; END$$;")
+                        if variant in {"operator", "combined"}:
+                            admin("CREATE FUNCTION public.settings_equal(pg_catalog.name,pg_catalog.name) RETURNS pg_catalog.bool LANGUAGE plpgsql AS $$BEGIN INSERT INTO public.settings_lookup_effect VALUES ('operator'); RETURN false; END$$; CREATE OPERATOR public.= (LEFTARG=pg_catalog.name,RIGHTARG=pg_catalog.name,PROCEDURE=public.settings_equal);")
+                        application("authority_search_path", public_first=True)
+                        settings_case("shadow_" + variant + "/healthy")
+                        try:
+                            admin("GRANT pg_read_all_settings TO ri_application;")
+                            settings_case("shadow_" + variant + "/direct", denied=True)
+                            admin("GRANT ri_cap_child TO ri_application WITH INHERIT FALSE, SET TRUE;")
+                            application("settings_switch", role="ri_cap_child")
+                            settings_case("shadow_" + variant + "/session_only", denied=True)
+                        finally:
+                            clear_settings()
+                        assert admin("SELECT count(*) FROM public.settings_lookup_effect;").strip() == b"0"
+                    finally:
+                        application("authority_search_path", public_first=False)
+                        if variant in {"catalog", "combined"}:
+                            admin("DROP VIEW public.pg_roles;")
+                        if variant in {"membership_function", "combined"}:
+                            admin("DROP FUNCTION public.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text);")
+                        if variant in {"operator", "combined"}:
+                            admin("DROP OPERATOR public.= (pg_catalog.name,pg_catalog.name); DROP FUNCTION public.settings_equal(pg_catalog.name,pg_catalog.name);")
+                        admin("DROP TABLE public.settings_lookup_effect;")
+                receipt["settings_forged_lookup_side_effects"] = 0
+                assert admin("SELECT proacl IS NULL FROM pg_catalog.pg_proc WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;").strip() == b"t"
+                try:
+                    admin("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) FROM PUBLIC;")
+                    settings_case("unavailable_lookup", unavailable=True)
+                finally:
+                    admin("GRANT EXECUTE ON FUNCTION pg_catalog.pg_has_role(pg_catalog.name,pg_catalog.oid,pg_catalog.text) TO PUBLIC; UPDATE pg_catalog.pg_proc SET proacl=NULL WHERE oid='pg_catalog.pg_has_role(name,oid,text)'::pg_catalog.regprocedure;")
+                settings_case("restored_lookup")
+            finally:
+                clear_settings()
+                admin("REVOKE SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public FROM ri_cap_child; DROP ROLE ri_cap_child,ri_cap_bridge,ri_cap_carrier; UPDATE pg_catalog.pg_class SET relacl=NULL WHERE relnamespace='public'::pg_catalog.regnamespace;")
+            receipt["settings_restored"] = authority_catalog()
+            assert receipt["settings_restored"] == receipt["settings_baseline"]
+            assert application("settings_state") == receipt["settings_hidden_baseline"]
+            assert settings_observation() == receipt["settings_observation"]
+            settings_case("restored_authority")
+            assert application("replication_controls") == receipt["replication_baseline"]
+            assert application("controls") == receipt["restored_controls"]
+            assert application("snapshot") == baseline
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -1007,7 +1141,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 714:
+    if receipt["failed"] or len(cases) != 764:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

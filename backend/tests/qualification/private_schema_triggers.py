@@ -314,6 +314,32 @@ def main():
                     session_member=roles[2],session_usage=roles[3],
                     observer_user=activity[0],observer_query=activity[1])
 
+    def settings_state():
+        state = authority_state()
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT
+                pg_catalog.pg_has_role(current_user,'pg_read_all_settings'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(current_user,'pg_read_all_settings'::pg_catalog.name,'USAGE'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_read_all_settings'::pg_catalog.name,'MEMBER'::pg_catalog.text),
+                pg_catalog.pg_has_role(session_user,'pg_read_all_settings'::pg_catalog.name,'USAGE'::pg_catalog.text)
+            """)
+            roles = cursor.fetchone()
+            cursor.execute("""SELECT name,setting FROM pg_catalog.pg_settings
+                WHERE name OPERATOR(pg_catalog.=) ANY (ARRAY['data_directory','config_file','hba_file']::pg_catalog.text[])
+                ORDER BY name""")
+            rows = cursor.fetchall()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_catalog.current_setting('data_directory'::pg_catalog.text)")
+                value = cursor.fetchone()[0]
+        except DatabaseError as exc:
+            assert exc.__cause__.sqlstate == '42501'
+            direct = dict(value=None,sqlstate='42501')
+        else:
+            direct = dict(value=value,sqlstate=None)
+        return dict(state=state,current_member=roles[0],current_usage=roles[1],
+                    session_member=roles[2],session_usage=roles[3],settings=rows,direct=direct)
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -407,6 +433,13 @@ def main():
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
                 result = statistics_state(request["observer_pid"])
+            elif request["action"] == "settings_state":
+                result = settings_state()
+            elif request["action"] == "settings_switch":
+                assert request["role"] in {"ri_cap_carrier", "ri_cap_child", "reset"}
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE" if request["role"] == "reset" else "SET ROLE " + request["role"])
+                result = settings_state()
             elif request["action"] == "authority_state":
                 result = authority_state()
             elif request["action"] == "authority_switch":
