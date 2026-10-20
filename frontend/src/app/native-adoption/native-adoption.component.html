@@ -1,0 +1,192 @@
+<section aria-labelledby="native-adoption-title">
+  <h4 id="native-adoption-title">Reviewed candidate adoption and protected assessment</h4>
+  <p>
+    Adoption selects one frozen development candidate for protected assessment. An independent
+    reviewer must accept it before sealing outcomes. Production use and confirmatory evidence
+    require separate approval and qualification.
+  </p>
+  <button type="button" (click)="refresh()" [disabled]="busy || !!pending">
+    Refresh native adoptions
+  </button>
+  @for (item of directory; track item.id) {
+    <button type="button" (click)="choose(item)" [disabled]="busy || !!pending">
+      Open native adoption {{ item.id }} · {{ item.state }}
+    </button>
+  }
+  @if (role === 'developer') {
+    <fieldset [disabled]="busy || !!pending">
+      <legend>Propose the exact development candidate</legend>
+      <p>
+        Training result <code>{{ job.result_sha256 }}</code>
+      </p>
+      <label for="adoption-proposal-rationale">Candidate adoption rationale</label>
+      <textarea
+        id="adoption-proposal-rationale"
+        maxlength="2000"
+        [(ngModel)]="proposalRationale"
+        (ngModelChange)="changed()"
+      ></textarea>
+      <label
+        ><input type="checkbox" [(ngModel)]="proposalConfirmed" />I propose this exact frozen
+        candidate for independent review.</label
+      >
+      <button
+        type="button"
+        (click)="propose()"
+        [disabled]="!proposalConfirmed || !proposalRationale.trim()"
+      >
+        Propose native candidate adoption
+      </button>
+    </fieldset>
+  }
+  @if (adoption) {
+    <p>
+      Adoption {{ adoption.id }} · {{ adoption.state }} · Current scope usable:
+      {{ adoption.usable }}
+    </p>
+    <p>{{ adoption.limitation }}</p>
+    @if (adoption.reason_code) {
+      <p role="status">
+        Scope unavailable: {{ adoption.reason_code }}. A fresh proposal and independent review may
+        be required.
+      </p>
+    }
+    <details>
+      <summary>Exact adoption proposal and attributable decisions</summary>
+      <pre>{{ adoption | json }}</pre>
+    </details>
+    @if (role === 'reviewer') {
+      <fieldset [disabled]="busy || !!pending">
+        <legend>Independent adoption decision</legend>
+        <p>
+          Proposal SHA-256 <code>{{ adoption.proposal_sha256 }}</code> · Revision
+          {{ adoption.revision }}
+        </p>
+        <label for="adoption-review-rationale">Independent review rationale</label>
+        <textarea
+          id="adoption-review-rationale"
+          maxlength="2000"
+          [(ngModel)]="reviewRationale"
+          (ngModelChange)="changed()"
+        ></textarea>
+        <label
+          ><input type="checkbox" [(ngModel)]="reviewConfirmed" />I independently reviewed this
+          exact candidate and scope; my decision does not approve production use.</label
+        >
+        @if (adoption.state === 'proposed') {
+          <button
+            type="button"
+            (click)="decide('approve')"
+            [disabled]="!reviewConfirmed || !reviewRationale.trim()"
+          >
+            Accept candidate for protected assessment
+          </button>
+        }
+        @if (adoption.state === 'accepted') {
+          <button
+            type="button"
+            (click)="decide('revoke')"
+            [disabled]="!reviewConfirmed || !reviewRationale.trim()"
+          >
+            Revoke native candidate adoption
+          </button>
+        }
+      </fieldset>
+    }
+    @if (canAssess) {
+      <fieldset [disabled]="busy || !!pending">
+        <legend>Seal protected outcomes</legend>
+        <p>
+          Reviewer-only custody: 30–1,000 rows, at most 5 MiB, exactly the frozen predictors, target
+          and declared validation controls. Outcomes cannot enter training/search or generic dataset
+          downloads. The worker checks declared entity/time constraints; unknown upstream history
+          stays unverified.
+        </p>
+        <label for="protected-csv">Protected assessment CSV</label
+        ><input
+          id="protected-csv"
+          type="file"
+          accept=".csv,text/csv"
+          (change)="selectFile($event)"
+        />
+        <label for="protected-as-of">Assessment as-of with timezone</label
+        ><input
+          id="protected-as-of"
+          type="text"
+          placeholder="2026-10-21T00:00:00Z"
+          [(ngModel)]="asOf"
+          (ngModelChange)="changed()"
+        />
+        <label for="protected-rationale">Protected population and maturity rationale</label
+        ><textarea
+          id="protected-rationale"
+          maxlength="2000"
+          [(ngModel)]="custodyRationale"
+          (ngModelChange)="changed()"
+        ></textarea>
+        <label
+          ><input type="checkbox" [(ngModel)]="custodyConfirmed" />I attest this frozen assessment
+          population is appropriate, disjoint from development and has mature labels; I disclose
+          prior access in my rationale.</label
+        >
+        <button
+          type="button"
+          (click)="seal()"
+          [disabled]="!file || !custodyConfirmed || !asOf || !custodyRationale.trim()"
+        >
+          Seal protected assessment input
+        </button>
+      </fieldset>
+      @for (input of adoption.protected_inputs; track input.id) {
+        <button type="button" (click)="selectInput(input)" [disabled]="busy || !!pending">
+          Select sealed input {{ input.id }}
+        </button>
+      }
+      @if (selected) {
+        <p>
+          Sealed input {{ selected.id }} · {{ selected.specification.rows }} rows · SHA-256
+          <code>{{ selected.specification.input_sha256 }}</code>
+        </p>
+        <button type="button" (click)="prepare()" [disabled]="busy || !!pending || !jobsEnabled">
+          Prepare protected assessment
+        </button>
+      }
+      @if (preview) {
+        <h5>Review protected assessment execution</h5>
+        <p>{{ preview.limitation }}</p>
+        <p>
+          Plan <code>{{ preview.assessment_sha256 }}</code> · {{ preview.limits.seconds }} seconds ·
+          {{ preview.limits.attempts }} attempts. Every outcome-access attempt is recorded before
+          labels are read.
+        </p>
+        <details>
+          <summary>Exact protected assessment plan and limits</summary>
+          <pre>{{ preview | json }}</pre>
+        </details>
+        <label
+          ><input type="checkbox" [(ngModel)]="executionConfirmed" />I authorize this exact frozen
+          assessment and execution budget; results remain exploratory.</label
+        >
+        <button
+          type="button"
+          (click)="submit()"
+          [disabled]="busy || !!pending || !executionConfirmed || !jobsEnabled"
+        >
+          Queue reviewed protected assessment
+        </button>
+      }
+    }
+  }
+  @if (pending) {
+    <p>
+      A request is pending. Keep this panel open to retry exactly the same request and file. If you
+      leave, refresh durable history before submitting a replacement.
+    </p>
+    <button type="button" (click)="retry()" [disabled]="busy">
+      Retry identical adoption or assessment request
+    </button>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+</section>

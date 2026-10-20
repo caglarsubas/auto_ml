@@ -23,7 +23,7 @@ from deployment.evidence import parse_metadata, verify_bundle
 from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import QueueLock, NativeJob, JobEvent
-from execution_jobs import csv_scoring, training_search, training_scoring
+from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment
 from modeling.execution_artifacts import projection_lock
 
 ACTIVE = {"running", "cancel_requested"}
@@ -52,6 +52,8 @@ class JobStopped(Exception):
 
 
 def limits(kind):
+    if kind == native_assessment.KIND:
+        return {**LIMITS, **native_assessment.BUDGET}
     if kind == training_scoring.KIND:
         return {**LIMITS, **training_scoring.BUDGET}
     if kind == training_search.KIND:
@@ -81,9 +83,9 @@ def runtime(kind=KIND):
         from deployment.scoring_receipts import scoring_runtime
 
         result["scoring"] = scoring_runtime()
-    if kind in {training_search.KIND, training_scoring.KIND}:
+    if kind in {training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
         result["packages"].update({p: version(p) for p in ["numpy", "pandas", "scipy", "scikit-learn", "xgboost"]})
-        for name in ["execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
+        for name in ["execution_jobs/native_assessment.py", "modeling/holdout_evidence.py", "execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
                      "modeling/declared_metric.py", "modeling/development_validation.py", "modeling/development_assessment.py",
                      "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
                      "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
@@ -214,13 +216,15 @@ def header(file_id, bundle_id, expected_sha):
 def submit(actor, file_id, data):
     if not settings.DECLARAI_JOBS_ENABLED:
         raise JobConflict("job_service_disabled")
-    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND}:
+    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
         raise ValueError("Select a supported native job kind.")
     kind = data["kind"]
     if kind == training_search.KIND:
         return training_search.submit(actor, file_id, data)
     if kind == training_scoring.KIND:
         return training_scoring.submit(actor, file_id, data)
+    if kind == native_assessment.KIND:
+        return native_assessment.submit(actor, file_id, data)
     fields = {"request_id", "kind", "bundle_id", "manifest_sha256"}
     if kind == csv_scoring.KIND:
         fields |= {"input_file_id", "input_sha256"}
@@ -330,6 +334,8 @@ def serialize(job, *, replayed=False):
 
 
 def recheck_execution(job):
+    if job.specification.get("kind") == native_assessment.KIND:
+        native_assessment.recheck(job)
     if job.specification.get("kind") == training_scoring.KIND:
         trained = NativeJob.objects.get(pk=job.specification["training_job_id"])
         if (trained.state != "succeeded" or trained.dataset_id != job.dataset_id
@@ -423,7 +429,7 @@ def claim(identifier):
             close(job, "blocked", exc.code)
             return None
         if (
-            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND}
+            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}
             or job.specification.get("runtime") != runtime(job.specification.get("kind"))
             or job.specification.get("limits") != limits(job.specification.get("kind"))
         ):
@@ -541,6 +547,10 @@ def execute(identifier):
             result = training_search.train(job, check)
             finish(identifier, token, "succeeded", result=result, deadline=deadline)
             return
+        if spec["kind"] == native_assessment.KIND:
+            result = native_assessment.assess(job, check)
+            finish(identifier, token, "succeeded", result=result, deadline=deadline)
+            return
         if spec["kind"] == training_scoring.KIND:
             result = training_scoring.score(job, check)
             finish(identifier, token, "succeeded", result=result, deadline=deadline)
@@ -584,7 +594,7 @@ def execute(identifier):
     except JobConflict as exc:
         finish(identifier, token, "blocked", exc.code)
     except (ValueError, OSError, TypeError, KeyError):
-        finish(identifier, token, "blocked", "job_training_or_budget_invalid" if spec["kind"] == training_search.KIND else "job_package_or_budget_invalid")
+        finish(identifier, token, "blocked", "job_assessment_or_budget_invalid" if spec["kind"] == native_assessment.KIND else "job_training_or_budget_invalid" if spec["kind"] == training_search.KIND else "job_package_or_budget_invalid")
     # Unexpected/storage failures leave a leased attempt for reconciliation;
     # do not turn uncertain publication into a successful or retryable receipt.
 

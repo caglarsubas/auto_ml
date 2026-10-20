@@ -81,10 +81,14 @@ SPECIAL = {
     "package-review-receipt",
     "job-detail",
     "job-scores",
+    "native-adoption-list",
+    "native-adoption",
+    "native-protected-input",
+    "native-assessment-input",
     "job-candidate",
     "job-candidate-input",
 }
-READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail", "vif-detail"}
+READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail", "vif-detail", "native-adoption", "native-protected-input", "native-assessment-input"}
 
 
 class AuthorityUnavailable(APIException):
@@ -163,13 +167,23 @@ def authorize(request, view):
             raise projects.ProjectDenied('package_review_unavailable') from None
         supplied.append(record.dataset_id)
         scopes.extend(source_scopes(request.user, record, body.get('evidence')))
-    elif name in {'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input'}:
+    elif name in {'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input', 'native-adoption-list'}:
         from execution_jobs.models import NativeJob
         try:
             record = NativeJob.objects.get(pk=view.kwargs['job_id'])
         except NativeJob.DoesNotExist:
             raise projects.ProjectDenied('job_unavailable') from None
         supplied.append(record.dataset_id)
+    elif name in {'native-adoption', 'native-protected-input', 'native-assessment-input'}:
+        from execution_jobs.models import NativeAdoption, NativeProtectedInput
+        try:
+            if name == 'native-assessment-input':
+                record = NativeProtectedInput.objects.defer('payload').select_related('adoption__training_job').get(pk=view.kwargs['protected_id']).adoption
+            else:
+                record = NativeAdoption.objects.select_related('training_job').get(pk=view.kwargs['adoption_id'])
+        except (NativeAdoption.DoesNotExist, NativeProtectedInput.DoesNotExist):
+            raise projects.ProjectDenied('native_adoption_unavailable') from None
+        supplied.append(record.training_job.dataset_id)
     # A browser workspace may narrow reads/writes to one already-authorized project.
     # Never use this selector as a resource assignment or substitute for its binding.
     if request.query_params.get("project_id") is not None:
