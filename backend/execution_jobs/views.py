@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from access_control import projects
 from execution_jobs import service
-from execution_jobs import csv_scoring
+from execution_jobs import csv_scoring, training_search
 from execution_jobs.models import NativeJob
 
 
@@ -43,7 +43,7 @@ class DatasetJobsView(APIView):
                     "id": str(j.pk),
                     "state": j.state,
                     "kind": j.specification["kind"],
-                    "bundle_id": j.specification["bundle_id"],
+                    "bundle_id": j.specification.get("bundle_id"),
                     "created_at": j.created_at.isoformat(),
                 }
                 for j in rows[offset : offset + 50]
@@ -92,6 +92,14 @@ class JobInputView(APIView):
     def get(self, request, file_id):
         try:
             return Response(csv_scoring.prepare(request.user, file_id))
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobTrainingInputView(APIView):
+    def post(self, request, file_id):
+        try:
+            return Response(training_search.preview(request.user, file_id, request.data))
         except ERRORS as exc:
             return failure(exc)
 

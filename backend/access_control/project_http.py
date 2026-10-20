@@ -52,6 +52,7 @@ DATASET = {
     "package-review-list",
     "dataset-jobs",
     "job-input",
+    "job-training-input",
     "crisp-export",
     "crisp-monitoring",
     "crisp-sequential",
