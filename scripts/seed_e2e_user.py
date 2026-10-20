@@ -86,6 +86,9 @@ def main():
                                  'user': review_developer.username, 'role': 'developer'},
                                 uuid.uuid4(), 'disposable-e2e-fixture')
                 seed_review_package(dataset, review_developer)
+    from seed_training_e2e import seed_training_e2e
+
+    seed_training_e2e(username, password)
     print("Created disposable, non-admin E2E accounts and owned workspace records.")
 
 

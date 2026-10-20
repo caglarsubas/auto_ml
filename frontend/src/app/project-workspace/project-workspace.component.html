@@ -69,7 +69,20 @@
                   {{ dataset.original_name || dataset.name }} <span>Dataset {{ dataset.id }}</span>
                   <button
                     type="button"
-                    (click)="reviewDataset = dataset.id"
+                    (click)="trainingDataset = dataset; reviewDataset = null"
+                    [attr.aria-label]="
+                      'Training jobs for ' + (dataset.original_name || dataset.name)
+                    "
+                  >
+                    {{
+                      project.role === 'developer'
+                        ? 'Develop with queued training'
+                        : 'View training jobs'
+                    }}
+                  </button>
+                  <button
+                    type="button"
+                    (click)="reviewDataset = dataset.id; trainingDataset = null"
                     [attr.aria-label]="
                       'Review package for ' + (dataset.original_name || dataset.name)
                     "
@@ -110,6 +123,15 @@
         <button type="button" (click)="reviewDataset = null">Close review panel</button>
         <app-package-review
           [fileId]="reviewDataset"
+          [projectId]="project.id"
+          [role]="project.role"
+        />
+      }
+      @if (trainingDataset && !loading && !recordsError) {
+        <button type="button" (click)="trainingDataset = null">Close training panel</button>
+        <app-training-launch
+          [fileId]="trainingDataset.id"
+          [datasetName]="trainingDataset.original_name || trainingDataset.name"
           [projectId]="project.id"
           [role]="project.role"
         />

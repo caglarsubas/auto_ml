@@ -1,0 +1,24 @@
+.training-jobs button {
+  padding: 0.65rem;
+  margin: 0.4rem 0.5rem 0.4rem 0;
+  border: 1px solid var(--neutral-500);
+  border-radius: 4px;
+  color: var(--primary-700);
+  background: var(--neutral-50);
+  font: inherit;
+  cursor: pointer;
+}
+.training-jobs button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.training-jobs button:focus-visible,
+.training-jobs summary:focus-visible {
+  outline: 3px solid var(--info-600);
+  outline-offset: 3px;
+}
+.training-jobs p,
+.training-jobs li,
+.training-jobs code {
+  overflow-wrap: anywhere;
+}
