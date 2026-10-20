@@ -19,9 +19,11 @@ import { AuthService } from '../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './package-jobs.component.html',
+  styleUrl: './package-jobs.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class PackageJobsComponent implements OnChanges, OnDestroy {
+  @Input() mode: 'package' | 'training' = 'package';
   @Input({ required: true }) fileId!: number;
   @Input({ required: true }) projectId!: string;
   @Input({ required: true }) role!: string;

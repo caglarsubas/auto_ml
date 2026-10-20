@@ -1,0 +1,113 @@
+.training {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--neutral-400);
+  color: var(--neutral-800);
+  background: var(--neutral-50);
+}
+h3 {
+  margin: 0 0 0.75rem;
+}
+h4 {
+  font-size: 1.1rem;
+}
+p {
+  max-width: 75ch;
+  line-height: 1.5;
+}
+fieldset {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--neutral-300);
+}
+legend {
+  font-weight: 600;
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+  font-weight: 600;
+}
+input,
+select,
+textarea,
+button {
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: var(--neutral-50);
+  border: 1px solid var(--neutral-500);
+  border-radius: 4px;
+  padding: 0.65rem;
+  max-width: 100%;
+}
+input,
+select,
+textarea {
+  width: 100%;
+}
+textarea {
+  min-height: 6rem;
+}
+.confirm {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  max-width: 75ch;
+  line-height: 1.5;
+}
+.confirm input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0.2rem 0.35rem 0 0;
+  flex: 0 0 auto;
+}
+button {
+  cursor: pointer;
+  margin: 0.75rem 0;
+  color: var(--primary-700);
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--info-600);
+  outline-offset: 3px;
+}
+.preview {
+  margin-top: 1.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--neutral-400);
+}
+dt {
+  font-weight: 600;
+}
+dd {
+  margin: 0.25rem 0 1rem;
+}
+code,
+dd,
+li,
+p {
+  overflow-wrap: anywhere;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 30rem;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--neutral-300);
+}

@@ -1,0 +1,301 @@
+<section class="training" aria-labelledby="training-title">
+  <h3 id="training-title">Development training · {{ datasetName }}</h3>
+  <p>
+    Dataset {{ fileId }} · Project <code>{{ projectId }}</code>
+  </p>
+  <p>
+    Bounded native search: a fresh development-only numeric CSV, binary classification or
+    regression, 30–1,000 rows, up to 40 columns and 32 predictors, at most 5 MiB. Two XGBoost depths
+    (1 and 2), 16 rounds each, matched folds and an all-development refit. No expert code,
+    calibration or final holdout assessment.
+  </p>
+  @if (role === 'developer') {
+    <form (ngSubmit)="prepare()" #form="ngForm">
+      <fieldset [disabled]="locked">
+        <legend>1. Declare the development experiment</legend>
+        <div class="fields">
+          <div>
+            <label for="training-task">Task</label
+            ><select
+              id="training-task"
+              name="task"
+              [(ngModel)]="draft.task"
+              (ngModelChange)="taskChanged()"
+              required
+            >
+              <option value="">Choose explicitly</option>
+              <option value="classification">Binary classification</option>
+              <option value="regression">Regression</option>
+            </select>
+          </div>
+          <label
+            >Target column<input
+              name="target"
+              [(ngModel)]="draft.target"
+              (ngModelChange)="changed()"
+              required
+          /></label>
+          @if (draft.task === 'classification') {
+            <label
+              >Positive class label<input
+                name="positive"
+                [(ngModel)]="draft.positive"
+                (ngModelChange)="changed()"
+                required
+                aria-describedby="positive-help"
+            /></label>
+            <p id="positive-help">
+              Enter the exact observed label, including its case. Review the resolved mapping below.
+            </p>
+          }
+          @for (field of declarations; track field.key) {
+            <label
+              >{{ field.label
+              }}<input
+                [name]="field.key"
+                [(ngModel)]="draft[field.key]"
+                (ngModelChange)="changed()"
+                required
+            /></label>
+          }
+          <div>
+            <label for="training-metric">Primary metric</label
+            ><select
+              id="training-metric"
+              name="metric"
+              [(ngModel)]="draft.metric"
+              (ngModelChange)="changed()"
+              required
+            >
+              <option value="">Choose a metric</option>
+              @for (metric of metrics; track metric) {
+                <option [value]="metric">{{ metric }}</option>
+              }
+            </select>
+          </div>
+          @if (draft.metric === 'expected_cost') {
+            <label
+              >False negative cost<input
+                type="number"
+                name="fn"
+                min="0"
+                step="any"
+                [(ngModel)]="draft.fnCost"
+                (ngModelChange)="changed()"
+                required
+            /></label>
+            <label
+              >False positive cost<input
+                type="number"
+                name="fp"
+                min="0"
+                step="any"
+                [(ngModel)]="draft.fpCost"
+                (ngModelChange)="changed()"
+                required
+            /></label>
+          }
+        </div>
+        <label
+          >Numeric predictor columns<textarea
+            name="predictors"
+            [(ngModel)]="draft.predictors"
+            (ngModelChange)="changed()"
+            required
+            aria-describedby="predictors-help"
+          ></textarea>
+        </label>
+        <p id="predictors-help">
+          One exact column name per line, in scoring order. Exclude the target,
+          time/entity/outcome-window controls and unavailable or forbidden predictors. Only selected
+          predictors are declared available at prediction time.
+        </p>
+        <div class="fields">
+          <div>
+            <label for="training-strategy">Validation strategy</label
+            ><select
+              id="training-strategy"
+              name="strategy"
+              [(ngModel)]="draft.strategy"
+              (ngModelChange)="changed()"
+              required
+            >
+              <option value="">Choose explicitly</option>
+              <option value="random">Random development folds</option>
+              <option value="group">Separate entities / groups</option>
+              <option value="oot">Ordered temporal folds</option>
+            </select>
+          </div>
+          <div>
+            <label for="training-folds">Development folds</label
+            ><select
+              id="training-folds"
+              name="folds"
+              [(ngModel)]="draft.folds"
+              (ngModelChange)="changed()"
+            >
+              <option [ngValue]="2">2</option>
+              <option [ngValue]="3">3</option>
+            </select>
+          </div>
+          @if (draft.strategy === 'group' || draft.strategy === 'oot') {
+            <label
+              >Group column {{ draft.strategy === 'oot' ? '(optional)' : ''
+              }}<input
+                name="group"
+                [(ngModel)]="draft.group"
+                (ngModelChange)="changed()"
+                [required]="draft.strategy === 'group'"
+            /></label>
+          }
+          @if (draft.strategy === 'oot') {
+            <label
+              >Date column<input
+                name="date"
+                [(ngModel)]="draft.date"
+                (ngModelChange)="changed()"
+                required
+            /></label>
+            <label
+              >Label end column (optional)<input
+                name="end"
+                [(ngModel)]="draft.labelEnd"
+                (ngModelChange)="changed()"
+            /></label>
+          }
+        </div>
+        <label class="confirm"
+          ><input
+            type="checkbox"
+            name="development"
+            [(ngModel)]="draft.developmentOnly"
+            (ngModelChange)="changed()"
+            required
+          />I confirm all rows belong to the declared development population and contain no reserved
+          final assessment data.</label
+        >
+        <label class="confirm"
+          ><input
+            type="checkbox"
+            name="availability"
+            [(ngModel)]="draft.available"
+            (ngModelChange)="changed()"
+            required
+          />I confirm every selected predictor is permitted and available at prediction time.</label
+        >
+        <p>
+          These are your declarations. The service rejects known assessment/split/model history; it
+          cannot establish unknown or external data history. Missing numeric predictors use
+          fold-local imputation. Validation never silently falls back to shuffled folds.
+        </p>
+      </fieldset>
+      <button type="submit" [disabled]="locked || form.invalid">Prepare training preview</button>
+    </form>
+  } @else {
+    <p>
+      Training submission requires the current project developer role. You can inspect authorized
+      job evidence below.
+    </p>
+  }
+  @if (busy) {
+    <p role="status">Checking the reviewed training request…</p>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+  @if (pending && !busy) {
+    <p>
+      Pending request <code>{{ pending.body.request_id }}</code>
+    </p>
+    <button type="button" (click)="retry()" [disabled]="role !== 'developer'">
+      Retry exact training request
+    </button>
+  }
+  @if (preview) {
+    <section aria-labelledby="training-preview-title" class="preview">
+      <h4 id="training-preview-title">2. Review the exact plan</h4>
+      <dl>
+        <dt>Resolved task and target</dt>
+        <dd>
+          {{ preview.prediction_contract.task }} · {{ preview.prediction_contract.target_column }} ·
+          Positive label: {{ preview.prediction_contract.positive_class ?? 'not applicable' }}
+        </dd>
+        <dt>Objective</dt>
+        <dd>
+          {{ reviewedOptions.business_understanding.success_criteria.primary_metric }} ·
+          {{ reviewedOptions.features.length }} predictors ·
+          {{ reviewedOptions.validation.strategy }}
+        </dd>
+        <dt>Worker budget</dt>
+        <dd>
+          {{ preview.budget.candidates }} candidates · {{ preview.budget.boost_rounds }} rounds ·
+          {{ preview.budget.nthread }} thread · {{ preview.budget.seconds }} seconds per attempt ·
+          at most {{ preview.budget.attempts }} attempts · {{ preview.budget.lease_seconds }}-second
+          lease
+        </dd>
+        <dt>Profile limits</dt>
+        <dd>
+          {{ preview.budget.max_rows }} rows · {{ preview.budget.max_columns }} columns ·
+          {{ preview.budget.max_features }} predictors · {{ preview.budget.max_input_bytes }} input
+          bytes · {{ preview.budget.max_output_bytes }} output bytes ·
+          {{ preview.budget.max_active }} active / {{ preview.budget.max_pending }} pending jobs
+        </dd>
+        <dt>Input SHA-256</dt>
+        <dd>
+          <code>{{ preview.input_sha256 }}</code>
+        </dd>
+        <dt>Plan SHA-256</dt>
+        <dd>
+          <code>{{ preview.training_sha256 }}</code>
+        </dd>
+      </dl>
+      <ol aria-label="Reviewed development folds">
+        @for (fold of preview.folds; track $index) {
+          <li>
+            Fold {{ $index + 1 }}: {{ fold.train_rows.length }} training rows ·
+            {{ fold.valid_rows.length }} validation rows
+          </li>
+        }
+      </ol>
+      <p>
+        {{ preview.evidence_scope }} No model adoption, review approval or production use is
+        granted.
+      </p>
+      <details>
+        <summary>Exact declaration, row membership and runtime</summary>
+        <pre>{{ { options: reviewedOptions, preview: preview } | json }}</pre>
+      </details>
+      <label class="confirm"
+        ><input
+          type="checkbox"
+          [ngModel]="approved"
+          (ngModelChange)="approved = $event"
+          [disabled]="locked"
+        />I reviewed this exact declaration, folds, input, runtime and execution budget.</label
+      >
+      <button
+        type="button"
+        (click)="submit()"
+        [disabled]="locked || !approved || !jobs?.directory?.jobs_enabled || role !== 'developer'"
+      >
+        Queue reviewed training search
+      </button>
+      @if (!jobs?.directory?.jobs_enabled) {
+        <p role="status">
+          Submission is blocked until the job service is available. Refresh jobs below after
+          operator recovery.
+        </p>
+      }
+    </section>
+  }
+  @if (submittedId) {
+    <p role="status">
+      Training request recorded: <code>{{ submittedId }}</code
+      >. Reopen it from job history after leaving this panel.
+    </p>
+    <button type="button" (click)="jobs?.open(submittedId)" [disabled]="jobs?.busy">
+      Open submitted training job
+    </button>
+  }
+  <app-package-jobs [fileId]="fileId" [projectId]="projectId" [role]="role" mode="training" />
+</section>

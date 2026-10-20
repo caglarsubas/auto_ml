@@ -1,0 +1,55 @@
+{
+  "packet": "P119",
+  "date": "2026-10-20",
+  "source_base": "474cc69528d58d714b30bb356146e0a5ce464215",
+  "scope": "Reviewed bounded training/search launch UI; no migration of legacy training/SFS/broad HPO, model adoption, customer deployment or release qualification.",
+  "source_sha256": {
+    "frontend/package.json": "3d5b2850d4ffd0cf9809ce813d067f630284dc2b9bb14bec64688ce3fd210e55",
+    "frontend/e2e/training-launch.spec.ts": "8c2b9b7b027284c79422cd169155937aa9d3c88433e12b1dfce35e75bcd0131e",
+    "scripts/seed_e2e_user.py": "edbd52166203d0bf8b8242c63a07e657346c86e70dbce1cc4f1cf0d7e200357a",
+    "scripts/seed_training_e2e.py": "3dfb9a7a27c4dab7935870b0fc6eb6092fbc347996b19e94bbd771c4c053aafe",
+    "frontend/src/app/project-workspace/project-workspace.component.ts": "7f913c9ebc67d1f19d9d536c4ca31adf8de381c3d48eb932f155dccc7ec0f180",
+    "frontend/src/app/project-workspace/project-workspace.component.html": "b344eb577a4b868107a9912e25fc9ca707853a89cf6cd301beb9adb16c23767b",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "cf600e92ba968708c7aeaa62e94db6db5dfe6ed7cfa6b591fd19189a78c727e8",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "fa5843081bc87d2b3224df3c4fc9f07b9850f0de05d8f11fe56d77ac7b5d84a6",
+    "frontend/src/app/package-jobs/package-jobs.component.css": "6f8201108067b92bd8d3f91cfd94528775a9d5aea09225e2333941346463d68e",
+    "frontend/src/app/training-launch/training-launch.component.ts": "584041312abdb75311f264dcbe479dd659123a0dc6c985e7fc1e180abcf8c5d4",
+    "frontend/src/app/training-launch/training-launch.component.html": "393f7453506654d95a04b0dfe9cec317acd2fc319619c7361c7168d53275cda4",
+    "frontend/src/app/training-launch/training-launch.component.css": "f700b1767ac627976aa64f1d7099f912da372b6a62f1da477b147f1e8dcd30e0",
+    "frontend/src/app/training-launch/training-launch.component.spec.ts": "f556eda47ed8ce050d8edba98b8ee51093d92cbc67f7da3230169ca76f05c7a5"
+  },
+  "local_checks": {
+    "native_passed": 4543,
+    "native_skipped": 6,
+    "native_seconds": 351.089,
+    "frontend_passed": 674,
+    "new_frontend_cases": 23,
+    "new_real_browser_cases": 3,
+    "browser_first_attempt": true,
+    "backend_cases_unchanged": true,
+    "worker_isolation": true,
+    "ruff_new_findings": 0
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 246,
+    "byte_identical_original_files": 246,
+    "all_original_test_files_byte_identical": true,
+    "original_seed_exact_after_removing_additive_call": true,
+    "existing_browser_command_exact_after_removing_additive_file": true,
+    "workflow_and_original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "raw_receipts": {
+    "test-reports/p119/full-native/postgresql.xml": "60226c2502389150f9062c3c3eaa06b115d942814aafb67a6c2fadd0d10aa621",
+    "test-reports/p119/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p119/frontend-unit.log": "078885629eade1fe0bf19004c477ea7f8055aee08b251e484a2a6471d23514e3",
+    "test-reports/p119/local-browser-first-attempt.json": "d04eb609686176a157e1dd5d50d23fddb56f6117df18620d42a0bf22540539aa"
+  },
+  "pending_at_source_qualification": [
+    "all-six exact-head and full report qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

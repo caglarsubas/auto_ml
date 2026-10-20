@@ -1,11 +1,21 @@
-<section aria-labelledby="package-jobs-title">
-  <h4 id="package-jobs-title">Queued package checks and scoring</h4>
-  <p>
-    Run an integrity check or score a governed CSV with the exact frozen package in a background
-    worker. Integrity checks do not load models. Scoring loads trusted native model state; expert
-    code is unsupported. Refresh to see progress; jobs continue after you leave this page. Results
-    do not approve review or production use.
-  </p>
+<section aria-labelledby="package-jobs-title" [class.training-jobs]="mode === 'training'">
+  <h4 id="package-jobs-title">
+    {{ mode === 'training' ? 'Durable job history' : 'Queued package checks and scoring' }}
+  </h4>
+  @if (mode === 'training') {
+    <p>
+      Refresh or reopen a job to inspect progress, cancellation and retained evidence. Jobs continue
+      after you leave this page. A completed development search does not adopt a model or approve
+      final assessment or production use.
+    </p>
+  } @else {
+    <p>
+      Run an integrity check or score a governed CSV with the exact frozen package in a background
+      worker. Integrity checks do not load models. Scoring loads trusted native model state; expert
+      code is unsupported. Refresh to see progress; jobs continue after you leave this page. Results
+      do not approve review or production use.
+    </p>
+  }
   @if (packageInfo) {
     <details>
       <summary>Check scope and execution budget</summary>
@@ -35,7 +45,7 @@
         The dedicated job service is not configured. Ask the installation operator to configure it.
       </p>
     }
-    @if (role === 'developer' || role === 'reviewer') {
+    @if (mode === 'package' && (role === 'developer' || role === 'reviewer')) {
       <button
         type="button"
         (click)="submit()"
@@ -44,7 +54,7 @@
         Queue integrity check
       </button>
     }
-    @if (role === 'developer') {
+    @if (mode === 'package' && role === 'developer') {
       <fieldset>
         <legend>CSV batch scoring</legend>
         <p>
@@ -83,7 +93,7 @@
         </button>
       </fieldset>
     }
-    <ul aria-label="Package jobs">
+    <ul [attr.aria-label]="mode === 'training' ? 'Dataset jobs' : 'Package jobs'">
       @for (item of directory.jobs; track item.id) {
         <li>
           <button type="button" (click)="open(item.id)" [disabled]="busy">

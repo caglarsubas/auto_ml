@@ -7,11 +7,12 @@ import { catchError, distinctUntilChanged, map, switchMap } from 'rxjs/operators
 import { DataService } from '../services/data.service';
 import { ProjectWorkspaceService } from '../services/project-workspace.service';
 import { PackageReviewComponent } from '../package-review/package-review.component';
+import { TrainingLaunchComponent } from '../training-launch/training-launch.component';
 
 @Component({
   selector: 'app-project-workspace',
   standalone: true,
-  imports: [CommonModule, FormsModule, PackageReviewComponent],
+  imports: [CommonModule, FormsModule, PackageReviewComponent, TrainingLaunchComponent],
   templateUrl: './project-workspace.component.html',
   styleUrl: './project-workspace.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -23,6 +24,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   recordsError = '';
   reportError = '';
   reviewDataset: number | null = null;
+  trainingDataset: any = null;
   private preferredProject: string | null = null;
   private readonly subscriptions = new Subscription();
   constructor(
@@ -43,6 +45,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
             this.recordsError = '';
             this.reportError = '';
             this.reviewDataset = null;
+            this.trainingDataset = null;
             this.loading = !!project;
             if (!project) return of(null);
             return forkJoin({
