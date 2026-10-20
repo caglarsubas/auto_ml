@@ -1,0 +1,115 @@
+{
+  "packet": "P114",
+  "date": "2026-10-20",
+  "source_base": "3d87a8654cc7718c40a25cd45b8f6a45002194f3",
+  "scope": "CI delivery qualification: isolate workflow/ref/trigger concurrency while retaining within-trigger supersession. No product runtime or customer change.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "6ca3f8adbe91943edd4209e930b75b402bf96106b9de11122203f4a79e6e597e",
+    ".github/scripts/check_ci_concurrency.py": "54f777fc07d867e4583bcf8e70e25a2498c23dfd86b5ed2c1592d727c7baf608"
+  },
+  "predecessor_incident": {
+    "cancelled_push_run": 39363097400,
+    "successful_scheduled_run": 39363175020,
+    "head": "3d87a8654cc7718c40a25cd45b8f6a45002194f3",
+    "inference": "Shared workflow/ref concurrency key with cancel-in-progress true and later scheduled run; cancelled push supplied no passing result."
+  },
+  "before_policy": {
+    "checks": 21,
+    "failed": 3,
+    "failures": [
+      "isolate push / schedule",
+      "isolate push / workflow_dispatch",
+      "isolate schedule / workflow_dispatch"
+    ]
+  },
+  "fixed_policy": {
+    "checks": 21,
+    "failed": 0,
+    "failures": []
+  },
+  "negative_controls": {
+    "omitted_trigger": {
+      "checks": 21,
+      "failed": 3,
+      "failures": [
+        "isolate push / schedule",
+        "isolate push / workflow_dispatch",
+        "isolate schedule / workflow_dispatch"
+      ]
+    },
+    "unique_sha_breaks_supersession": {
+      "checks": 21,
+      "failed": 4,
+      "failures": [
+        "supersede older push",
+        "supersede older schedule",
+        "supersede older workflow_dispatch",
+        "supersede older pull_request"
+      ]
+    },
+    "unique_run_breaks_supersession": {
+      "checks": 21,
+      "failed": 4,
+      "failures": [
+        "supersede older push",
+        "supersede older schedule",
+        "supersede older workflow_dispatch",
+        "supersede older pull_request"
+      ]
+    },
+    "omitted_workflow": {
+      "checks": 21,
+      "failed": 4,
+      "failures": [
+        "isolate workflows for push",
+        "isolate workflows for schedule",
+        "isolate workflows for workflow_dispatch",
+        "isolate workflows for pull_request"
+      ]
+    },
+    "omitted_ref": {
+      "checks": 21,
+      "failed": 5,
+      "failures": [
+        "isolate refs for push",
+        "isolate refs for schedule",
+        "isolate refs for workflow_dispatch",
+        "isolate refs for pull_request",
+        "isolate different pull requests"
+      ]
+    },
+    "disabled_cancellation": {
+      "rejected": true,
+      "error": "Retain explicit within-group cancellation"
+    },
+    "unsupported_expression": {
+      "rejected": true,
+      "error": "Unsupported concurrency scalar/expression"
+    },
+    "duplicate_group": {
+      "rejected": true,
+      "error": "Unsupported or duplicate concurrency field"
+    }
+  },
+  "actionlint": {
+    "version": "1.7.12",
+    "status": "same_two_preexisting_SC2034_warnings",
+    "new_findings": 0
+  },
+  "existing_full_ruff": "passed",
+  "policy_guard_ruff": "passed",
+  "original_suite_audit": {
+    "original_test_execution_files": 239,
+    "byte_identical_original_files": 238,
+    "workflow_restores_exactly_after_removing_trigger_isolation_and_guard_step": true,
+    "original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "product_runtime_files_unchanged": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "live_postfix_trigger_overlap": "not_observed",
+  "exact_head_ci": "pending",
+  "independent_push_main_ci": "pending",
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "notes": "Original scientific/native/browser/physical cases, six jobs, 900-second native and 120-second per-test limits, skip/coverage/retry/resource budgets are unchanged. Guard comparisons do not simulate GitHub scheduling or account limits. Full CI reports are required separately. P113 final CI/main facts are adopted without inheriting them as P114 qualification."
+}
