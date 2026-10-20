@@ -1121,6 +1121,59 @@ def main():
             assert application("replication_controls") == receipt["replication_baseline"]
             assert application("controls") == receipt["restored_controls"]
             assert application("snapshot") == baseline
+            # Column collations govern ORM comparisons independently of plain
+            # storage types. Only this host controller performs fault injection.
+            receipt["collation_baseline"] = application("collation_begin")
+            collation_baseline = receipt["collation_baseline"]
+            assert not collation_baseline["project_casefold"] and not collation_baseline["session_casefold"]
+            receipt["collation_profiles"] = []
+            check_all("column_collation/healthy", False)
+            admin("CREATE COLLATION public.ci_fixture (provider=icu,locale='und-u-ks-level2',deterministic=false);")
+            try:
+                for table, column, datatype, changed in (
+                    ("access_control_project", "name", "varchar(200)", "project_casefold"),
+                    ("django_session", "session_data", "text", "session_casefold"),
+                ):
+                    try:
+                        admin(f'ALTER TABLE public.{table} ALTER COLUMN {column} TYPE pg_catalog.{datatype} COLLATE public.ci_fixture;')
+                        observed = application("collation_state")
+                        assert observed[changed] is True
+                        other = "session_casefold" if changed == "project_casefold" else "project_casefold"
+                        assert observed[other] is False
+                        assert observed["project_name"] == "ri-fixture" and observed["session_data"] == "collation-fixture"
+                        receipt["collation_profiles"].append(dict(table=table, column=column, state=observed))
+                        check_all("column_collation/changed_" + column, True)
+                    finally:
+                        admin(f'ALTER TABLE public.{table} ALTER COLUMN {column} TYPE pg_catalog.{datatype} COLLATE pg_catalog."default";')
+                    assert application("collation_state") == collation_baseline
+                    check_all("column_collation/restored_" + column, False)
+                # Explicit catalog-corruption controls are separate from valid
+                # DDL above. Noncollatable fields require zero; text must not.
+                for table, column, value, original in (
+                    ("auth_user", "id", "'pg_catalog.\"default\"'::pg_catalog.regcollation::pg_catalog.oid", "0"),
+                    ("django_session", "session_data", "0", "'pg_catalog.\"default\"'::pg_catalog.regcollation::pg_catalog.oid"),
+                ):
+                    try:
+                        admin(f"UPDATE pg_catalog.pg_attribute SET attcollation={value} WHERE attrelid='public.{table}'::pg_catalog.regclass AND attname='{column}';")
+                        check_all("column_collation/catalog_" + column, True)
+                    finally:
+                        admin(f"UPDATE pg_catalog.pg_attribute SET attcollation={original} WHERE attrelid='public.{table}'::pg_catalog.regclass AND attname='{column}';")
+                    assert application("collation_state") == collation_baseline
+                    check_all("column_collation/catalog_restored_" + column, False)
+                try:
+                    admin("ALTER TABLE public.access_control_project ADD COLUMN collation_extra text COLLATE public.ci_fixture;")
+                    check_all("column_collation/extra_column", False)
+                finally:
+                    admin("ALTER TABLE public.access_control_project DROP COLUMN collation_extra;")
+                # DROP COLUMN leaves an attisdropped slot, outside the selected
+                # non-dropped column contract; required evidence stays identical.
+                assert application("collation_state") == collation_baseline
+            finally:
+                admin("DROP COLLATION public.ci_fixture;")
+            receipt["collation_restored"] = application("collation_state")
+            assert receipt["collation_restored"] == collation_baseline
+            assert application("collation_end") == baseline
+            check_all("column_collation/restored", False)
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
@@ -1141,7 +1194,7 @@ def main():
             if not result["passed"]:
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
-    if receipt["failed"] or len(cases) != 764:
+    if receipt["failed"] or len(cases) != 797:
         raise SystemExit("RI-trigger qualification failed; retain original reports.")
     print(json.dumps(dict(passed=receipt["passed"], failed=0, owned_cleanup="passed", actual_tls=False)))
 

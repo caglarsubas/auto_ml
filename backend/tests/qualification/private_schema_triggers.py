@@ -340,6 +340,20 @@ def main():
         return dict(state=state,current_member=roles[0],current_usage=roles[1],
                     session_member=roles[2],session_usage=roles[3],settings=rows,direct=direct)
 
+    def collation_state():
+        from django.contrib.sessions.models import Session
+
+        with connection.cursor() as cursor:
+            cursor.execute("""SELECT a.attrelid,a.attnum,a.attname,a.attcollation
+                FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid
+                WHERE c.relnamespace='public'::pg_catalog.regnamespace AND c.relkind='r'
+                    AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attrelid,a.attnum""")
+            columns = cursor.fetchall()
+        return dict(columns=columns, project_name=Project.objects.get(pk=project.pk).name,
+                    session_data=Session.objects.get(pk="collation-fixture").session_data,
+                    project_casefold=Project.objects.filter(pk=project.pk, name="RI-FIXTURE").exists(),
+                    session_casefold=Session.objects.filter(pk="collation-fixture", session_data="COLLATION-FIXTURE").exists())
+
     def check(entry):
         calls[0] = 0
         broker.reset_mock()
@@ -435,6 +449,19 @@ def main():
                 result = statistics_state(request["observer_pid"])
             elif request["action"] == "settings_state":
                 result = settings_state()
+            elif request["action"] == "collation_begin":
+                from django.contrib.sessions.models import Session
+                from django.utils import timezone
+
+                Session.objects.create(session_key="collation-fixture", session_data="collation-fixture", expire_date=timezone.now())
+                result = collation_state()
+            elif request["action"] == "collation_state":
+                result = collation_state()
+            elif request["action"] == "collation_end":
+                from django.contrib.sessions.models import Session
+
+                assert Session.objects.filter(pk="collation-fixture").delete()[0] == 1
+                result = snapshot()
             elif request["action"] == "settings_switch":
                 assert request["role"] in {"ri_cap_carrier", "ri_cap_child", "reset"}
                 with connection.cursor() as cursor:
