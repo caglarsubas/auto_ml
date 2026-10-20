@@ -234,7 +234,11 @@ def host_case(plan, expected, parent):
             from qualify_private_delivery_capture import qualify as qualify_delivery_capture
 
             delivery_capture = qualify_delivery_capture(value, parent)
+            from qualify_private_operation_lock import qualify as qualify_operation_lock
+
+            operation_serialization = qualify_operation_lock(value, plan, expected, parent, adopted)
             account_adoption = {
+                "operation_serialization": operation_serialization,
                 "controller_delivery_capture": delivery_capture,
                 "controller_stored_capture": controller_capture,
                 "postgresql_ca_preflight": postgres_ca,

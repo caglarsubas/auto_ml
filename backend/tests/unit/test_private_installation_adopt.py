@@ -1,6 +1,7 @@
 """Exact application adoption profile and private preflight boundaries."""
 
 import copy
+import contextlib
 import importlib
 from types import SimpleNamespace
 
@@ -14,8 +15,12 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def adopter(planner):
-    return importlib.import_module("private_installation_adopt")
+def adopter(planner, monkeypatch):
+    module = importlib.import_module("private_installation_adopt")
+    # These profile/CA/readiness tests simulate their external host boundary.
+    # Actual lock contention is covered separately and on the Linux host fixture.
+    monkeypatch.setattr(module, "managed_operation", lambda value: contextlib.nullcontext(False))
+    return module
 
 
 @pytest.fixture

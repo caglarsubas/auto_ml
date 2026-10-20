@@ -7,6 +7,8 @@ recreates existing services or grants model/release/production approval.
 """
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import http.client
 import json
@@ -25,6 +27,44 @@ import private_installation_resources as resources
 
 checker = resources.checker
 ROLES = {"api", "worker", "dispatcher", "ingress"}
+
+
+@contextlib.contextmanager
+def managed_operation(value):
+    """Share the managed startup/schema lock without changing legacy roots."""
+    root = resources.initializer.trusted_directory(Path(value["request"]["root"]))
+    dependency = lock = None
+    try:
+        try:
+            dependency = os.open("dependencies", resources.initializer.DIRECTORY_FLAGS, dir_fd=root)
+        except FileNotFoundError:
+            # Historical operator-managed dependencies have no managed lock
+            # protocol. Preserve that scope; never claim their serialization.
+            yield False
+            return
+        info = os.fstat(dependency)
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (0, 0, 0o700):
+            raise checker.planner.PlanError("installation_operation_directory_invalid")
+        checker.no_directory_acl(dependency)
+        lock = os.open("start.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                       0o600, dir_fd=dependency)
+        info = os.fstat(lock)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (0, 0, 0o600)):
+            raise checker.planner.PlanError("dependency_lock_invalid")
+        checker.no_directory_acl(lock)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise checker.planner.PlanError("dependency_operation_in_progress") from None
+        current = os.stat("start.lock", dir_fd=dependency, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+            raise checker.planner.PlanError("dependency_lock_changed")
+        yield True
+    finally:
+        for descriptor in (lock, dependency, root):
+            if descriptor is not None:
+                os.close(descriptor)
 
 
 def parsed_environment(values):
@@ -429,6 +469,14 @@ def adoption(plan, expected, ca):
         raise checker.planner.PlanError("installation_adopt_initialization_plan_mismatch")
     checker.check_paths(plan, expected)
     context = client_context(ca)
+    with managed_operation(value) as serialized:
+        result = adopt_prepared(value, expected, initialized, context)
+        result["managed_operation_serialized"] = serialized
+        return result
+
+
+def adopt_prepared(value, expected, initialized, context):
+    """Run only while the public controller holds its operation guard."""
     resources.docker_host(value["manifest"]["architecture"])
     if resources.record(["info", "--format", "{{json .}}"]).get("DefaultRuntime") != "runc":
         raise checker.planner.PlanError("installation_adopt_default_runtime_required")
