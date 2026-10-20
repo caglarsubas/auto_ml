@@ -237,8 +237,12 @@ def host_case(plan, expected, parent):
             from qualify_private_operation_lock import qualify as qualify_operation_lock
 
             operation_serialization = qualify_operation_lock(value, plan, expected, parent, adopted)
+            from qualify_private_lifecycle_readiness import qualify as qualify_lifecycle_readiness
+
+            lifecycle_readiness = qualify_lifecycle_readiness(value, plan, expected, parent, adopted)
             account_adoption = {
                 "operation_serialization": operation_serialization,
+                "lifecycle_readiness": lifecycle_readiness,
                 "controller_delivery_capture": delivery_capture,
                 "controller_stored_capture": controller_capture,
                 "postgresql_ca_preflight": postgres_ca,

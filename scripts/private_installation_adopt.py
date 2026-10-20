@@ -30,7 +30,7 @@ ROLES = {"api", "worker", "dispatcher", "ingress"}
 
 
 @contextlib.contextmanager
-def managed_operation(value):
+def managed_operation(value, *, create_lock=True):
     """Share the managed startup/schema lock without changing legacy roots."""
     root = resources.initializer.trusted_directory(Path(value["request"]["root"]))
     dependency = lock = None
@@ -46,7 +46,8 @@ def managed_operation(value):
         if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (0, 0, 0o700):
             raise checker.planner.PlanError("installation_operation_directory_invalid")
         checker.no_directory_acl(dependency)
-        lock = os.open("start.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+        flags = (os.O_RDWR | os.O_CREAT) if create_lock else os.O_RDONLY
+        lock = os.open("start.lock", flags | os.O_NOFOLLOW | os.O_NONBLOCK,
                        0o600, dir_fd=dependency)
         info = os.fstat(lock)
         if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
