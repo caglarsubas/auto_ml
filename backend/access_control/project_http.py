@@ -81,6 +81,8 @@ SPECIAL = {
     "package-review-receipt",
     "job-detail",
     "job-scores",
+    "job-candidate",
+    "job-candidate-input",
 }
 READ_POST = {"evaluation-pack", "deployment-pack", "crisp-export", "package-review-list", "package-review-detail", "dataset-jobs", "job-detail", "vif-detail"}
 
@@ -161,7 +163,7 @@ def authorize(request, view):
             raise projects.ProjectDenied('package_review_unavailable') from None
         supplied.append(record.dataset_id)
         scopes.extend(source_scopes(request.user, record, body.get('evidence')))
-    elif name in {'job-detail', 'job-scores'}:
+    elif name in {'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input'}:
         from execution_jobs.models import NativeJob
         try:
             record = NativeJob.objects.get(pk=view.kwargs['job_id'])

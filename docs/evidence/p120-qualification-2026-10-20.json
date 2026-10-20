@@ -1,0 +1,64 @@
+{
+  "packet": "P120",
+  "date": "2026-10-20",
+  "source_base": "d1f9fd210ca1d06a8153859d7998699b22686514",
+  "scope": "Native training candidate export and scoring; no migration of legacy training/SFS/broad HPO, model adoption, customer deployment or release qualification.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "04158563b38ef37f169957ef68163dcad4f3833ec8b0ecc56f002fb5b50752f1",
+    "backend/access_control/project_http.py": "6614c70a16b9e85f86b96647ae33c3cd142ed6399f8f6f994c11e98bb41dfdb2",
+    "backend/backend/urls.py": "e9761047dff3243d32df658c3744b89bfd5c7c8868702955ae7bc80ad86b39a7",
+    "backend/deployment/native_candidate.py": "753dd95cc48d457bcb6cd8b3328a9b72a7f05f6d22e99cfb3e6c7ca4f2ea9737",
+    "backend/execution_jobs/service.py": "326e22ab4af16e83e27a251bde2fc1b0eab30a347dd83be6255ac5f8434b41b6",
+    "backend/execution_jobs/training_scoring.py": "f992460fa8be2a74525226c1f79074b24a631ebbb82aaec807aa4564d3031451",
+    "backend/execution_jobs/views.py": "0ee5ab4c0612223ce88ef4819dba1ca28143cf24e93ba9f4d0cf6bb8945bd84e",
+    "backend/tests/unit/test_native_training_scoring.py": "d8ecbde9847d89c2b46aa440e7f8b1b316b1dc9c78a20f863ccc9516d88bb99a",
+    "frontend/e2e/native-candidate.spec.ts": "c02cdaafbaa2a8db5be555282ccdbad0183174090611871e553f3e5f54633976",
+    "frontend/package.json": "8b675d3779ef876af2da3df44d4e56bff1ed4215bc5162b2c0b26520073e524b",
+    "frontend/src/app/native-candidate/native-candidate.component.css": "6fa3262add14cddea262c423f474b93985f7ab4e6a4b9dfaa2fe3fae05623b4e",
+    "frontend/src/app/native-candidate/native-candidate.component.html": "ba4073eb1f6f07cfaeb9eaf8e97d73ccf52441b95d551fbd2015c0bf022e64b2",
+    "frontend/src/app/native-candidate/native-candidate.component.spec.ts": "f2603faadbfb62bd3e506bafda8473a5c6cbfa4065de4c91af71be84369a6d90",
+    "frontend/src/app/native-candidate/native-candidate.component.ts": "a472ce8cd99cf213182c480a339dcdc5f3fc26dc420da5245a6a9dffb13293b4",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "e8b9af38036113dbb3b53fb974f6c65a122b8884b5e0dc0acc74b42efcd126df",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "f5c7a70ef18d233d3ccb0338ff8af72618b5dd61f5c79bc2bb07b6015ded0f2f",
+    "scripts/qualify_postgres_fixture.py": "9def6a92291a4ca13b9243561b71bb6576ba5df007377b0d07519ff6cceca8b5",
+    "scripts/qualify_private_native_candidate.py": "1146fee73b22216813349ece79c237b20795712d6db5da3bd5d555d081f97f56",
+    "scripts/score_native_candidate.py": "9d2a241b2f39b3dd1ef2f6ef648923a3d91323757c7894a1fedb36b1b7b8b982",
+    "scripts/seed_e2e_user.py": "2cdc33216bdf6892992680417f1fdf916cbbbe7c22a94b3b82b7f6ea68195bf8",
+    "scripts/seed_native_candidate_e2e.py": "f2904833b02815946a8b39c1d2314189b44dbc30f24f6ebb1146cf4faf216df0"
+  },
+  "local_checks": {
+    "native_passed": 4582,
+    "native_skipped": 6,
+    "native_seconds": 362.824,
+    "frontend_passed": 689,
+    "new_frontend_cases": 15,
+    "new_real_browser_cases": 2,
+    "browser_first_attempt": true,
+    "new_backend_cases": 39,
+    "worker_isolation": true,
+    "ruff_new_findings": 0
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 250,
+    "byte_identical_original_files": 247,
+    "all_original_test_files_byte_identical": true,
+    "original_seed_exact_after_removing_additive_call": true,
+    "original_private_qualifier_exact_after_removing_additive_call": true,
+    "existing_browser_command_exact_after_removing_additive_file": true,
+    "workflow_and_original_assertions_workloads_timeouts_coverage_retries_skips_resources_preserved": true,
+    "primary_status_and_13_hashes_match": true
+  },
+  "raw_receipts": {
+    "test-reports/p120/full-native/postgresql.xml": "452c411a476ce4acf1e888f6e187061d69fbff4331599cf8d2b9229c3e0db871",
+    "test-reports/p120/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p120/frontend-unit-final.log": "bb7ed1052e2181e061d456857186a843b3c7505f07db86ff48faabf5dd287d3d",
+    "test-reports/p120/local-browser-first-attempt.json": "52bd8462b4d3a75114640b45e31fce81dd6eecd36f67af6fb6f2bcd2eb223620"
+  },
+  "pending_at_source_qualification": [
+    "all-six exact-head and full report qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

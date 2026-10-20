@@ -89,6 +89,9 @@ def main():
     from seed_training_e2e import seed_training_e2e
 
     seed_training_e2e(username, password)
+    from seed_native_candidate_e2e import seed_native_candidate_e2e
+
+    seed_native_candidate_e2e(username)
     print("Created disposable, non-admin E2E accounts and owned workspace records.")
 
 
