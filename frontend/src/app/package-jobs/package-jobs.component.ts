@@ -1,3 +1,4 @@
+import { downloadBlob } from '../utils/download-blob';
 import {
   Component,
   Input,
@@ -224,12 +225,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     );
   }
   private save(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob),
-      link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, filename);
   }
   cancel(): void {
     if (!this.canCancel || this.pending || this.busy) return;
@@ -290,14 +286,10 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
         next: (job) => {
           if (generation !== this.generation) return;
-          const url = URL.createObjectURL(
+          this.save(
             new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' }),
+            `job-${id}.json`,
           );
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `job-${id}.json`;
-          link.click();
-          URL.revokeObjectURL(url);
         },
         error: (error) => this.fail(generation, error, false),
       }),

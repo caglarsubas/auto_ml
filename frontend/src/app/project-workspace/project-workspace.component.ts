@@ -1,3 +1,4 @@
+import { downloadBlob } from '../utils/download-blob';
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -83,12 +84,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
       this.data.downloadPipelineReport(run.id, project).subscribe({
         next: (blob) => {
           if (project !== this.workspace.projectId) return;
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `pipeline-${run.id}-report.html`;
-          link.click();
-          URL.revokeObjectURL(url);
+          downloadBlob(blob, `pipeline-${run.id}-report.html`);
         },
         error: () => {
           if (project === this.workspace.projectId)
