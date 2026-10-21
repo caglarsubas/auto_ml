@@ -1,0 +1,69 @@
+{
+  "packet": "P122",
+  "date": "2026-10-21",
+  "source_base": "6e385586180df6ce073b99e6ca01a76c18eabb74",
+  "scope": "Read-only operational handoff and native cancellation/natural lease recovery with conservative protected access; no confirmatory or production approval, legacy training migration, customer deployment or release qualification.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "02875e0d946585e77b4431cac20f43266b193e482fa45dd6fd45abbd985ad15d",
+    "backend/access_control/project_http.py": "5a32e3366393b8ab3fd88425132f3063ad65674c2a3566b8a23947410eef9309",
+    "backend/backend/urls.py": "ea67954745e7eb11e702e4763d7fb0f3d127dff77f1243e9c95aaeef94baaeb0",
+    "backend/execution_jobs/operational_handoff.py": "747124639dfd22a1d09908acc0df5c7f741d3af8755afaca5940945b52a290e7",
+    "backend/execution_jobs/views.py": "c1ee4bf5228072bb80a8b8f284bed961dd00b181f919b0b0722af9feb3dd1b2c",
+    "backend/tests/unit/test_native_operational_handoff.py": "84dea7d763622bfa4ce95b363793ae234de4d28b8e8314d6c35ee9909cd411d6",
+    "frontend/e2e/native-operations.spec.ts": "405d4aa69ec29342fdbe70b020257a1e865881eeb02a0aed119988f1c683a3f4",
+    "frontend/package.json": "a92904ffeec309744e25aeea9b5feaed285813f50f7f25c89fce4578893d96b1",
+    "frontend/src/app/package-jobs/native-operations.component.spec.ts": "8d18ad006d3fc230c909422feefb5efd6c9f8f28fa6533fcb74dba90567a8c7c",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "385a62f050af8cbc3782e9de3a597ffd8bf2f76a45a167a3f293c146af7addba",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "bb0bab43c80860df91fd466e20c73b00cdf73aab0f661fdcb19561bd06d58d38",
+    "scripts/qualify_postgres_fixture.py": "6eb96ffb80ec9dcb1d413557aabc6e6ac35f3f70ad4610286a36db03cdc7c14f",
+    "scripts/qualify_private_native_operations.py": "7699aefe2104c9ba0a4e314f877f02b3b4db50d4cc18dcece89f8421ab5ab218",
+    "scripts/seed_e2e_user.py": "3fc88ebb4220c5a7955d9f1d148e66ea28a078094e7edf18d52d13aef0663b1a",
+    "scripts/seed_native_operations_e2e.py": "ace11f0bf4ffb33c89880e5413344ba76014df5423173acdf2dd5b31211db5cb"
+  },
+  "local_checks": {
+    "native_passed": 4640,
+    "native_skipped": 6,
+    "native_seconds": 282.876,
+    "frontend_passed": 708,
+    "new_frontend_cases": 7,
+    "new_real_browser_cases": 1,
+    "browser_first_attempt": true,
+    "new_backend_cases": 23,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "private_tls_assessment_and_coordinated_restore": true,
+    "native_cancellation_natural_lease_recovery_handoff_restore": true,
+    "physical_cases": 809,
+    "original_physical_cases": 797,
+    "new_physical_cases": 12,
+    "strict_expanded_schema_profile": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 277,
+    "all_original_tests_byte_identical": true,
+    "execution_changes_only_additive_qualification_calls": true,
+    "original_browser_command_preserved": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "predecessor_559_retained_sha256_preserved": true,
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p122/full-native/postgresql.xml": "765a39b4c0078fa43feadbc9f450f614bee6b569abc9913dc4fa59c1681adffa",
+    "test-reports/p122/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p122/frontend-unit-final.log": "f9a38801da3c00dd46c1f34584feab8bb1419027996ea27576863d08e15e7d2f",
+    "test-reports/p122/local-browser-first-attempt.json": "d894bf1b73b5285b0f682c21c4c571f77f7ebd6d32e4a556ad83536297231bf6",
+    "test-reports/p122/local-private/private-native-operations.log": "555a22fdda9989bb4f7c2b4847a102a4b5f013a82ecc90aaf616a6f91fa36be5",
+    "test-reports/p122/fixed-physical/qualification.json": "d05974be3bcd0f7842ebd31b0b4010c47ee9f699e9480a48a16b3084882dde68",
+    "test-reports/p122/fixed-physical/qualification.xml": "af98ab066a9521c4dd1e1ba05f08ad3160d45527306cfbf116dc6ecd165003f2"
+  },
+  "pending_at_source_qualification": [
+    "all-six exact-head and full report qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

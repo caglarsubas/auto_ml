@@ -33,6 +33,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   @Output() receiptSelected = new EventEmitter<any>();
   directory: any = null;
   job: any = null;
+  handoff: any = null;
   busy = false;
   error = '';
   inputFileId = 0;
@@ -51,7 +52,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.generation++;
     this.requests.unsubscribe();
     this.requests = new Subscription();
-    this.directory = this.job = this.pending = this.source = null;
+    this.directory = this.job = this.handoff = this.pending = this.source = null;
     this.inputFileId = this.fileId;
     this.busy = false;
     this.error = '';
@@ -99,7 +100,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   open(id: string): void {
     if (this.busy) return;
     this.busy = true;
-    this.job = null;
+    this.job = this.handoff = null;
     this.error = '';
     const generation = ++this.generation;
     this.requests.add(
@@ -232,11 +233,13 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   }
   cancel(): void {
     if (!this.canCancel || this.pending || this.busy) return;
+    this.handoff = null;
     this.pending = { url: this.url(this.job.id), body: { action: 'cancel' } };
     this.retry();
   }
   retry(): void {
     if (!this.pending || this.busy) return;
+    this.handoff = null;
     this.busy = true;
     this.error = '';
     const action = this.pending,
@@ -265,7 +268,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   private fail(generation: number, error: any, mutation: boolean): void {
     if (generation !== this.generation) return;
     this.busy = false;
-    this.job = null;
+    this.job = this.handoff = null;
     if (error.status === 403 || !mutation) {
       this.directory = null;
       this.source = null;
@@ -298,6 +301,43 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         },
         error: (error) => this.fail(generation, error, false),
       }),
+    );
+  }
+  inspectHandoff(download = false): void {
+    if (!this.job || this.busy || this.pending || (download && !this.handoff)) return;
+    const generation = this.generation,
+      id = this.job.id;
+    const params = {
+      ...this.params,
+      revision: String(this.job.revision),
+      ...(download ? { sha256: this.handoff.sha256 } : {}),
+    };
+    this.busy = true;
+    this.error = '';
+    this.requests.add(
+      this.http
+        .get<any>(this.url(`${id}/operational-handoff`), {
+          params,
+          transferCache: false,
+        })
+        .subscribe({
+          next: (handoff) => {
+            if (generation !== this.generation) return;
+            this.handoff = handoff;
+            this.busy = false;
+            if (download)
+              this.save(
+                new Blob([JSON.stringify(handoff, null, 2)], {
+                  type: 'application/json',
+                }),
+                `operational-handoff-${id}.json`,
+              );
+          },
+          error: (error) => {
+            this.handoff = null;
+            this.fail(generation, error, false);
+          },
+        }),
     );
   }
   selectReceipt(): void {

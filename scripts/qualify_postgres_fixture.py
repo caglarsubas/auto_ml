@@ -509,6 +509,7 @@ def main():
             run_python(["scripts/qualify_private_training_search.py"], job_env, report="private-training-search.log")
             run_python(["scripts/qualify_private_native_candidate.py"], job_env, report="private-native-candidate.log")
             run_python(["scripts/qualify_private_native_assessment.py"], job_env, report="private-native-assessment.log")
+            run_python(["scripts/qualify_private_native_operations.py"], job_env, report="private-native-operations.log")
             run_python(["scripts/qualify_private_jobs.py", "seed"], job_env, report="private-jobs.log")
             run_python(["scripts/qualify_private_scoring.py", "seed"], job_env, report="private-scoring.log")
             # Quiesce all owned job processes, then remove the actual broker and its
@@ -529,6 +530,7 @@ def main():
             run_python(["scripts/qualify_private_jobs.py", "verify"], restored_job_env, report="private-jobs.log")
             run_python(["scripts/qualify_private_scoring.py", "verify"], restored_job_env, report="private-scoring.log")
             run_python(["scripts/qualify_private_native_assessment.py", "verify-restored"], restored_job_env, report="private-native-assessment.log")
+            run_python(["scripts/qualify_private_native_operations.py", "verify-restored"], restored_job_env, report="private-native-operations.log")
             run_python(["scripts/qualify_private_scoring.py", "prepare-recovery"], restored_job_env, report="private-scoring.log")
             run_python(["scripts/qualify_private_jobs.py", "recover"], restored_job_env, report="private-jobs.log")
             run_python(["scripts/qualify_private_scoring.py", "recover"], restored_job_env, report="private-scoring.log")

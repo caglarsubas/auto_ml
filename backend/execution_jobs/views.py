@@ -192,3 +192,16 @@ class NativeAssessmentInputView(APIView):
             return Response(native_assessment.preview(request.user, protected_id))
         except ERRORS as exc:
             return failure(exc)
+
+
+class JobOperationalHandoffView(APIView):
+    def get(self, request, job_id):
+        try:
+            from execution_jobs import operational_handoff
+
+            value = operational_handoff.read(request.user, job_id, request.query_params.get("revision"), request.query_params.get("sha256"))
+            response = Response(value)
+            response["Cache-Control"] = "no-store"
+            return response
+        except ERRORS as exc:
+            return failure(exc)
