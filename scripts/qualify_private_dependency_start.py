@@ -243,7 +243,11 @@ def host_case(plan, expected, parent):
             from qualify_private_queue_incidents import qualify as qualify_queue_incidents
 
             queue_incidents = qualify_queue_incidents(value, plan, expected, parent, adopted)
+            from qualify_private_queue_evidence import qualify as qualify_queue_evidence
+
+            queue_evidence = qualify_queue_evidence(value, expected, parent, adopted)
             account_adoption = {
+                "queue_evidence": queue_evidence,
                 "queue_incidents": queue_incidents,
                 "operation_serialization": operation_serialization,
                 "lifecycle_readiness": lifecycle_readiness,

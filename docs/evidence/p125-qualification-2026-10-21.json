@@ -1,0 +1,62 @@
+{
+  "packet": "P125",
+  "date": "2026-10-21",
+  "source_base": "e63c2a615076f79d50a17b7ffe5b72de30bb5cd7",
+  "scope": "Offline incident evidence verification against independent trust pins and private runbook handoff; no live runtime access or recovery/approval authority.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "ccbd5b2602e8b25641463d29e94a73dfd706338943ced9057df6ea55047a3a84",
+    "backend/tests/unit/test_private_queue_evidence.py": "2deacf6cb7b5488841c5d757580b071de717f5dc5528fa305c5fdbe68bfab874",
+    "scripts/private_queue_evidence.py": "5031ea1a033cb90ee45cf5e4c0b820097051ab16b53cf3ed3b23265b4e524846",
+    "scripts/qualify_private_dependency_start.py": "a71a23a75a9c4bbdb5441259a46b2fe143a3e85d3faff198ccd628494164e199",
+    "scripts/qualify_private_queue_evidence.py": "f14bd3a0d0eda3cd7db924ced1ea0523eb63548862477723b709b186757a88b4"
+  },
+  "local_checks": {
+    "native_passed": 4755,
+    "native_skipped": 6,
+    "native_seconds": 303.413,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "new_backend_cases": 40,
+    "focused_passed": 400,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "physical_schema_and_execution_unchanged": true,
+    "all_47_original_browsers_and_722_units_and_private_host_physical_recovery_and_operator_proofs_required_in_CI": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 308,
+    "all_original_tests_byte_identical": true,
+    "execution_changes_only_additive_lint_and_managed_qualification_calls": true,
+    "original_browser_command_preserved": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p125/full-native/postgresql.xml": "fc6754d3982709b339e3df20beb4e0d73653a9be38fdb98d4098c7915ffcd91b",
+    "test-reports/p125/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70",
+    "test-reports/p125/focused-sqlite.xml": "0a0072c8f062a39d36f8e7fbd1f27d220ef4f89eec768bc524391d6937df79d4",
+    "test-reports/p125/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "development_note": "Initial focused398 passed; a separate offline CLI fixture correctly rejected its unsafe writable /tmp ancestor and passed under a private trusted mount. An early native attempt was intentionally interrupted during development to strengthen new private-file tests on non-root CI. Those outputs are retained as unqualified. Final400 focused and complete native run use the frozen final product/test sources. No original tests or budgets changed. Frontend sources remain byte-identical; all722 units and47 first-attempt browsers remain mandatory in both CI runs.",
+  "pending_at_source_qualification": [
+    "all-six exact-head and complete raw inventories/private/physical/host plus real Linux offline verification/handoff",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
