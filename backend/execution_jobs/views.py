@@ -28,6 +28,13 @@ ERRORS = (ObjectDoesNotExist, DatabaseError, ValueError, TypeError, OSError, pro
 
 
 class DatasetJobsView(APIView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        # Include permission/authentication failures raised before get() runs.
+        if request.method in {"GET", "HEAD"}:
+            response["Cache-Control"] = "no-store"
+        return response
+
     def get(self, request, file_id):
         try:
             current = service.scope(request.user, file_id)
@@ -38,15 +45,18 @@ class DatasetJobsView(APIView):
                 "-created_at", "-pk"
             )
             total = rows.count()
+            # The list must not materialize result/model state, authority or
+            # request bodies for its at-most-50 metadata summaries.
+            page = rows.values("id", "state", "specification__kind", "specification__bundle_id", "created_at")
             values = [
                 {
-                    "id": str(j.pk),
-                    "state": j.state,
-                    "kind": j.specification["kind"],
-                    "bundle_id": j.specification.get("bundle_id"),
-                    "created_at": j.created_at.isoformat(),
+                    "id": str(j["id"]),
+                    "state": j["state"],
+                    "kind": j["specification__kind"],
+                    "bundle_id": j["specification__bundle_id"],
+                    "created_at": j["created_at"].isoformat(),
                 }
-                for j in rows[offset : offset + 50]
+                for j in page[offset : offset + 50]
             ]
             projects.recheck(current)
             return Response(
