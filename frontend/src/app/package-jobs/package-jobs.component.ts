@@ -82,6 +82,9 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.error = '';
     const generation = ++this.generation;
     const selected = this.job?.id;
+    // Withdraw stale evidence before either refresh response can replace its
+    // controls; keyboard actions must target the newly verified receipt.
+    this.job = this.handoff = null;
     this.requests.add(
       this.http
         .get<any>(this.url(`datasets/${this.fileId}`), {

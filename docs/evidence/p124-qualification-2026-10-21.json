@@ -1,0 +1,70 @@
+{
+  "packet": "P124",
+  "date": "2026-10-21",
+  "source_base": "3fc5e225cae78f565d89aabf6b5e88c36e8d31fd",
+  "scope": "Read-only installation-operator queue incident triage and bounded digest-checked evidence export; no repair, job execution, global project API, outcome access or approval.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "1be38c4409b266ff5b9acd6875b7807246759fb340c11b69a24870c7094fb56a",
+    "backend/execution_jobs/operator_triage.py": "efa4e42477e925784294273f3bb4fdcf5cfe421ef1265622ef5daa76dadabca5",
+    "backend/tests/unit/test_native_operator_triage.py": "2a8d1e5e1ac83f226c6eb8e4eb6a834d58680803906f499fec6f2d8b465f220c",
+    "backend/tests/unit/test_private_queue_incidents.py": "53d0d7f58b5c6e009840db6d9ffe1cef3f6635d79921b3398ec009b0eb8f826a",
+    "frontend/e2e/native-queue-refresh.spec.ts": "91f06e71f6b5cb9b3a176f8bc9c6360606c10d9b7ca1c3b6a246af52ca7c0a98",
+    "frontend/package.json": "921bc7391fae3cc34e5db48056884bf3c1d95583fdb43747e7b84b06a59bde2d",
+    "frontend/src/app/package-jobs/package-jobs-refresh.component.spec.ts": "a6c8736b2ed8ac5bee9a430bd614058ba69fcae40c13d33319d5eb1f1141eb57",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "6f1a46e84a9d45b50dea6a2c3df2c96cdc57d60efa79bc2d1f37ee5d374d4899",
+    "scripts/private_queue_incidents.py": "24101b43262a11bcf23ce5e7f37ef5ea384c2743407585dcf12ee06c4a7470d7",
+    "scripts/qualify_private_dependency_start.py": "65e08664221cb23309ca84ea422d5df8de06e347b3573e7a77b906f6ec7465e6",
+    "scripts/qualify_private_queue_incidents.py": "0e0311c8f1ca5ab2b03ae1c6b4b644c048dcb44bc56c238d79fbfaf1549b950f"
+  },
+  "local_checks": {
+    "native_passed": 4715,
+    "native_skipped": 6,
+    "native_seconds": 858.395,
+    "frontend_passed": 722,
+    "new_frontend_cases": 2,
+    "new_real_browser_cases": 1,
+    "local_browser_first_attempt": 10,
+    "original_browser_cases_rechecked": 9,
+    "new_backend_cases": 37,
+    "focused_passed": 360,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "physical_schema_and_execution_unchanged": true,
+    "all_46_original_browsers_and_private_host_physical_recovery_and_operator_proofs_required_in_CI": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 294,
+    "all_original_tests_byte_identical": true,
+    "execution_changes_only_additive_lint_and_managed_qualification_calls": true,
+    "original_browser_command_preserved": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p124/full-native/postgresql.xml": "75a6b0d90ea8be1e44ba4c646847b18454f9d59ffb82c1a3c6713edd432b7c13",
+    "test-reports/p124/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p124/focused-sqlite.xml": "6cf4c5da718244d53632176b85fb4a0bf3d5837e020209a1c03e8f07c663c08b",
+    "test-reports/p124/frontend-unit-final.log": "0a22aa5c9a4300ac8e39145be08f7a95fa6e66957e582b9d9b6d3313c91537ea",
+    "test-reports/p124/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "development_note": "New fixture supplied actor_snapshot twice; corrected without changing an original test. Initial local Ruff cache was read-only; moved only its cache to temporary storage. Those outputs are retained as unqualified development. The pre-fix PR browser report (39559207333) had one inherited download timeout/retry and is unqualified. A deterministic new unit failed before the receipt-refresh correction and passes afterward; 10 fresh local browsers, including the original training workflows, pass on the first attempt. Backend/runtime/test sources remain unchanged from the complete local native run; the subsequent frontend correction has separate unit/build/lint/browser proof.",
+  "pending_at_source_qualification": [
+    "all-six exact-head and complete raw inventories/private/physical/host plus real Linux operator collection/export",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
