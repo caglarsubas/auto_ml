@@ -1,0 +1,65 @@
+{
+  "packet": "P128",
+  "date": "2026-10-22",
+  "source_base": "8775d25eaeaaca1733fb0f442735c621b30c8476",
+  "scope": "Shared native-job GET/HEAD no-store boundary for private evidence, downloads and early/handled failures; preserve payloads, digests, authority and mutation semantics",
+  "source_sha256": {
+    "backend/execution_jobs/views.py": "0524a6e8e3f72e9c4f85eb351a36c7765da22bf5703a09ea821043645b789629",
+    "backend/tests/unit/test_native_read_cache.py": "cccacfdc3a0717c3a621fc00aa07354a1837eac125a39976c1ef89af109125e9"
+  },
+  "local_checks": {
+    "native_passed": 4884,
+    "native_skipped": 6,
+    "native_seconds": 536.832,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "new_backend_cases": 63,
+    "focused_passed": 529,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "physical_schema_and_execution_unchanged": true,
+    "ci_workflow_byte_identical": true,
+    "all_47_original_browsers_and_722_units_and_private_host_physical_recovery_and_operator_proofs_required_in_CI": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 315,
+    "all_original_tests_byte_identical": true,
+    "only_native_read_views_and_additive_tests_changed": true,
+    "ci_workflow_byte_identical": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p128/full-native/postgresql.xml": "ef1577592637b2b862cfe46e4a08ef939443cd1f3f07b0864b1fd55346f802d4",
+    "test-reports/p128/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p128/focused-sqlite.xml": "087f45e99184820b68801ebb8d874be933d5efbfe9af9733d835b7dabc372d60",
+    "test-reports/p128/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p128/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc"
+  },
+  "development_note": "Initial59-case reproduction:52 failures,7 passes,no setup errors. Two unqualified fixture iterations retained: first59/10failures used nonexistent IDs and reached project denials instead of injected handlers; second63/2failures did the same for unsupported reads. Corrected fixtures use actual authorized records, separately verify authority unavailability, and exercise 404 after authorization. Final63 additions plus all inherited focused/native cases use frozen final source hashes. Docker default IPAM exhausted; non-overlapping explicit internal fixture subnets verified against Docker and host routes, no unrelated network or resource/test control changed. No original test, CI workflow, timeout, workload, retry, skip, coverage or customer installation changed",
+  "pending_at_source_qualification": [
+    "all-six exact-head CI and complete raw inventories/private/physical/host proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
