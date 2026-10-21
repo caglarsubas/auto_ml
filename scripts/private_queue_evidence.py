@@ -184,6 +184,14 @@ def queue_consistency(value):
     # With a complete sample every aggregate signal must agree exactly. A
     # truncated sample leaves at most one contribution per omitted job/signal.
     require(all(sample_signals[s] <= signals[s] <= sample_signals[s] + omitted for s in SIGNALS))
+    sampled_unfinished = sum(sample_states[s] for s in ("queued", "running", "cancel_requested"))
+    remaining = {s: signals[s] - sample_signals[s] for s in SIGNALS}
+    remaining_leases = remaining["missing_lease"] + remaining["overdue_lease"]
+    require(remaining_leases <= active - sample_states["running"] - sample_states["cancel_requested"])
+    require(max(remaining["expired_request"], remaining["attempt_limit"], remaining_leases)
+            <= selected - sampled_unfinished
+            <= min(unfinished - sampled_unfinished,
+                   remaining["expired_request"] + remaining["attempt_limit"] + remaining_leases))
     return newest_first
 
 

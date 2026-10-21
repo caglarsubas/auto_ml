@@ -96,6 +96,22 @@ def test_truncated_sample_cannot_exceed_global_counts_or_hide_impossible_remaind
         verify(value)
 
 
+@pytest.mark.parametrize("shape", ["no_remaining_signals", "no_remaining_active_jobs"])
+def test_omitted_incidents_must_have_possible_signals_and_active_lease_population(shape):
+    value = truncated()
+    q = value["queue"]
+    if shape == "no_remaining_signals":
+        q["signals"] = {s: 50 if count else 0 for s, count in q["signals"].items()}
+    else:
+        q["states"].update(running=50, queued=1)
+        q["signals"] = {s: 51 if s == "attempt_limit" else 1 if s == "missing_lease" else 0 for s in q["signals"]}
+        for row in q["rows"]:
+            row.update(expires_at=(NOW + dt.timedelta(seconds=60)).isoformat(),
+                       lease_until=(NOW + dt.timedelta(seconds=30)).isoformat(), signals=["attempt_limit"])
+    with pytest.raises(ValueError):
+        verify(value)
+
+
 @pytest.mark.parametrize("shape", ["empty", "overlapping", "truncated", "disabled", "reordered_flags"])
 def test_valid_observations_keep_overlap_truncation_unknown_and_disabled_limits(shape):
     value = sample() if shape == "empty" else truncated() if shape == "truncated" else populated()

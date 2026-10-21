@@ -5,20 +5,20 @@
   "scope": "Cross-check incident snapshot count/row/coverage/time consistency before offline handoff; preserve explicit order/availability limits and independent trust pins, without live access or recovery authority.",
   "source_sha256": {
     ".github/workflows/ci.yml": "243e3dfbd3c1dc29af587ef64871d9b1e3b114cf125fee051f6f3b222a41a730",
-    "backend/tests/unit/test_private_queue_consistency.py": "a8c799eaff2330c9b9aeb10f079ca38434084a3c389d625d4fad2f277fbe87a7",
-    "scripts/private_queue_evidence.py": "261e317b75e702fd6aa2941e7c37ff764a482dd629f55198e7c34a79d56e72db",
+    "backend/tests/unit/test_private_queue_consistency.py": "b2056daf4941190aef808f8030bfbee9c266934fea6f41d7cf0acd7c27f307a7",
+    "scripts/private_queue_evidence.py": "7f5ff81d3e3c193bef0c360912bbb866600d3fe39379bd97e92b91902d7b51bc",
     "scripts/qualify_private_dependency_start.py": "749cd4db7fceb381232adba1c265b8f802e285399ae597280bbaf741bbb22d13",
     "scripts/qualify_private_queue_consistency.py": "89549a6bf886127d6dafc001748e61f46137bfc005c49b15962332c51a31f370"
   },
   "local_checks": {
-    "native_passed": 4790,
+    "native_passed": 4792,
     "native_skipped": 6,
-    "native_seconds": 317.144,
+    "native_seconds": 326.856,
     "frontend_source_byte_identical": true,
     "new_frontend_cases": 0,
     "new_real_browser_cases": 0,
-    "new_backend_cases": 35,
-    "focused_passed": 435,
+    "new_backend_cases": 37,
+    "focused_passed": 437,
     "worker_isolation": true,
     "ruff_new_findings": 0,
     "physical_schema_and_execution_unchanged": true,
@@ -47,12 +47,12 @@
     "primary_runtime_exited": true
   },
   "raw_receipts": {
-    "test-reports/p126/full-native/postgresql.xml": "207be2fd4bc4459c5fa36de73cc9ad3b284b33904bf8e7a6ae8aec856a6b6143",
-    "test-reports/p126/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
-    "test-reports/p126/focused-sqlite.xml": "3f1b6f3df78ca89002b5ddab464ddc5fe850f9cfd26ac6ea86df7c7b3586aaea",
+    "test-reports/p126/full-native/postgresql.xml": "6c6759d3e7cc0f4d3fe71560ce51e0397d6a47d8656e17bce970c73e43cd7c98",
+    "test-reports/p126/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70",
+    "test-reports/p126/focused-sqlite.xml": "bfd73e5907b2028d5793b6c041e7358503ba181a40d37657861ed2e1c0b83d9b",
     "test-reports/p126/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
   },
-  "development_note": "Before implementation, 27 freshly checksummed contradictory/order samples were accepted and 8 new metadata assertions were absent (35 failures, no setup errors). An intermediate strict-order prototype passed its 35 additive cases but failed one original synthetic truncated-sample compatibility case:434 passed/1 failed. Final behavior keeps out-of-order evidence inspectable and unchanged with an explicit limitation, while contradictory count/row/time metadata blocks handoff. All original tests remain byte-identical. Final435 focused and complete native use frozen final sources. Frontend source remains unchanged, all722 units/47 first-attempt browsers mandatory in both CI runs.",
+  "development_note": "Before implementation, 27 freshly checksummed contradictory/order samples were accepted and 8 new metadata assertions were absent (35 failures, no setup errors). An intermediate strict-order prototype passed its 35 additive cases but failed one original synthetic truncated-sample compatibility case:434 passed/1 failed. Final behavior keeps out-of-order evidence inspectable and unchanged with an explicit limitation, while contradictory count/row/time metadata blocks handoff. All original tests remain byte-identical. The first local435/4790pass317.144s and PRheadc4af858c are superseded by two additional omitted-remainder tests (2failed/35passed before correction). Final437 focused and complete4792native use frozen final sources. Frontend source remains unchanged, all722 units/47 first-attempt browsers mandatory in both CI runs.",
   "pending_at_source_qualification": [
     "all-six exact-head and complete raw inventories/private/physical/host plus real Linux offline verification/handoff",
     "guarded merge",
