@@ -1,0 +1,63 @@
+:host {
+  display: block;
+}
+section {
+  overflow-wrap: anywhere;
+}
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+.history-filter {
+  display: grid;
+  gap: 0.35rem;
+}
+button,
+select {
+  padding: 0.65rem;
+  font: inherit;
+  color: var(--primary-700);
+  background: var(--neutral-50);
+  border: 1px solid var(--neutral-500);
+  border-radius: 4px;
+}
+button {
+  cursor: pointer;
+}
+button:disabled,
+select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+button:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--info-600);
+  outline-offset: 3px;
+}
+.queue-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+.queue-counts dd {
+  margin: 0.25rem 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+ul {
+  padding-inline-start: 1.25rem;
+}
+li {
+  margin-block: 0.75rem;
+}
+li span {
+  display: block;
+  margin-top: 0.25rem;
+}

@@ -95,6 +95,9 @@ def main():
     from seed_native_operations_e2e import seed_native_operations_e2e
 
     seed_native_operations_e2e(username)
+    from seed_native_history_e2e import seed_native_history_e2e
+
+    seed_native_history_e2e(username)
     from seed_native_assessment_e2e import seed_native_assessment_e2e
 
     seed_native_assessment_e2e(username, password)

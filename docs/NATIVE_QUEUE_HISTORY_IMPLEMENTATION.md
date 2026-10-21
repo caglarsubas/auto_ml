@@ -1,0 +1,19 @@
+# Native queue observations and bounded history (D07 / P123)
+
+This adds a read-only, dataset-scoped operational view to the durable native job UI. Select **Browse queue and history** in training or package jobs. The existing list and request APIs stay compatible; execution, cancellation, review and protected-access controls are unchanged.
+
+`GET /api/jobs/datasets/{file_id}/history/` requires current project read authority, rechecks it before returning, and sends `Cache-Control: no-store`. Developer, reviewer and project-admin readers can inspect it. It accepts one each of `project_id`, `state`, `kind` and `cursor`; unsupported or repeated parameters fail. All five native job kinds and all seven queue states are supported. No arbitrary task/code execution is added.
+
+The response contains at most 50 metadata rows, signed next/previous cursors, observation time, submission cutoff, unfiltered dataset state counts and unfinished-job signals: due dispatch, overdue/missing leases, expired requests, attempts at the configured limit and oldest queued age. Only selected job metadata is fetched; results, full specifications, events, models, protected outcomes and credentials are excluded. Counts from other datasets or projects are not exposed. Configured installation limits are labelled as limits, not available capacity. Aggregate scans and large histories still need workload profiling before capacity promises.
+
+Cursors bind the requesting user, project, dataset and filters; signatures and a one-hour age limit are checked before job queries. Ordering is descending creation time and UUID, with bounded keyset queries in both directions. New submissions after the first observation's cutoff do not shift that navigation. States remain live: transitions may remove filtered rows, and an empty continuation requests explicit refresh. This is not a transactional snapshot or a stable population for scientific comparison. Refresh starts a new cutoff. Each returned cursor expires one hour after issue; authority is checked on every page.
+
+The frontend replaces each page rather than accumulating rows, offers labelled state/type filters and keyboard navigation, and clears observations on errors, project/dataset changes or panel close. Errors distinguish denied access, invalid/expired navigation and unavailable observation. A failed read establishes no execution outcome. Opening a row uses the existing authority-checked job receipt.
+
+## Boundaries
+
+These are stored metadata observations. No broker ping, worker heartbeat, queue-position estimate, global installation occupancy or uptime claim is made. Due dispatch or an overdue lease is a signal rather than proof of service failure. Reading never claims, dispatches, reconciles, repairs, retries, cancels or publishes a job, nor authorizes any of those actions. The existing dispatcher retains recovery responsibility. Protected-access accounting, exact-request retry, independent review and exploratory-only assessment semantics remain intact.
+
+There is no schema migration or execution-profile change. All original tests, physical schema cases, private training/scoring/candidate/assessment/cancellation/recovery/restore qualifiers, 900-second native limit, resource limits, coverage and retry/skip controls remain required. New tests exercise permission and cursor boundaries, tied timestamps, insertion during navigation, live filter movement, failure diagnostics and absence of execution effects. A separate disposable browser metadata fixture covers 123 rows across three pages and filters without submitting work. It does not represent an actual execution or recovery qualification.
+
+Source qualification is recorded separately from PR checks, merge, independent push-main verification, release and customer acceptance in the roadmap and P123 receipts. D07 remains open.

@@ -1,4 +1,4 @@
-from execution_jobs.views import JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
+from execution_jobs.views import DatasetJobHistoryView, JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -67,6 +67,7 @@ urlpatterns = [
     path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
     path('api/jobs/datasets/<int:file_id>/training-input/', JobTrainingInputView.as_view(), name='job-training-input'),
     path('api/jobs/datasets/<int:file_id>/', DatasetJobsView.as_view(), name='dataset-jobs'),
+    path('api/jobs/datasets/<int:file_id>/history/', DatasetJobHistoryView.as_view(), name='dataset-job-history'),
     path('api/jobs/datasets/<int:file_id>/input/', JobInputView.as_view(), name='job-input'),
     path('api/jobs/<uuid:job_id>/adoptions/', NativeAdoptionListView.as_view(), name='native-adoption-list'),
     path('api/native-adoptions/<uuid:adoption_id>/', NativeAdoptionView.as_view(), name='native-adoption'),
