@@ -27,14 +27,18 @@ def failure(exc):
 ERRORS = (ObjectDoesNotExist, DatabaseError, ValueError, TypeError, OSError, projects.ProjectDenied, ValidationError)
 
 
-class DatasetJobsView(APIView):
+class NativeReadView(APIView):
+    """Private native evidence must not be retained by HTTP caches."""
+
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
-        # Include permission/authentication failures raised before get() runs.
+        # Finalize every GET/HEAD response, including DRF denials before handlers.
         if request.method in {"GET", "HEAD"}:
             response["Cache-Control"] = "no-store"
         return response
 
+
+class DatasetJobsView(NativeReadView):
     def get(self, request, file_id):
         try:
             current = service.scope(request.user, file_id)
@@ -84,7 +88,7 @@ def settings_enabled():
     return settings.DECLARAI_JOBS_ENABLED
 
 
-class JobDetailView(APIView):
+class JobDetailView(NativeReadView):
     def get(self, request, job_id):
         try:
             return Response(service.read(request.user, job_id))
@@ -98,7 +102,7 @@ class JobDetailView(APIView):
             return failure(exc)
 
 
-class JobInputView(APIView):
+class JobInputView(NativeReadView):
     def get(self, request, file_id):
         try:
             return Response(csv_scoring.prepare(request.user, file_id))
@@ -106,7 +110,7 @@ class JobInputView(APIView):
             return failure(exc)
 
 
-class JobTrainingInputView(APIView):
+class JobTrainingInputView(NativeReadView):
     def post(self, request, file_id):
         try:
             return Response(training_search.preview(request.user, file_id, request.data))
@@ -114,7 +118,7 @@ class JobTrainingInputView(APIView):
             return failure(exc)
 
 
-class JobScoresView(APIView):
+class JobScoresView(NativeReadView):
     def get(self, request, job_id):
         try:
             sha = request.query_params.get("sha256")
@@ -122,13 +126,12 @@ class JobScoresView(APIView):
             response = HttpResponse(raw, content_type="application/json")
             response["Content-Disposition"] = f'attachment; filename="scoring-{job_id}.json"'
             response["X-DeclarAI-Receipt-SHA256"] = sha
-            response["Cache-Control"] = "no-store"
             return response
         except ERRORS as exc:
             return failure(exc)
 
 
-class JobCandidateExportView(APIView):
+class JobCandidateExportView(NativeReadView):
     def get(self, request, job_id):
         try:
             raw = training_scoring.export(request.user, job_id, request.query_params.get("sha256"))
@@ -136,13 +139,12 @@ class JobCandidateExportView(APIView):
             response["Content-Disposition"] = f'attachment; filename="candidate-{job_id}.json"'
             response["X-DeclarAI-Export-SHA256"] = training_scoring.native_candidate.sha(raw)
             response["Access-Control-Expose-Headers"] = "X-DeclarAI-Export-SHA256"
-            response["Cache-Control"] = "no-store"
             return response
         except ERRORS as exc:
             return failure(exc)
 
 
-class JobCandidateInputView(APIView):
+class JobCandidateInputView(NativeReadView):
     def post(self, request, job_id):
         try:
             return Response(training_scoring.preview(request.user, job_id, request.data))
@@ -150,7 +152,7 @@ class JobCandidateInputView(APIView):
             return failure(exc)
 
 
-class NativeAdoptionListView(APIView):
+class NativeAdoptionListView(NativeReadView):
     def get(self, request, job_id):
         try:
             job = NativeJob.objects.get(pk=job_id)
@@ -169,7 +171,7 @@ class NativeAdoptionListView(APIView):
             return failure(exc)
 
 
-class NativeAdoptionView(APIView):
+class NativeAdoptionView(NativeReadView):
     def get(self, request, adoption_id):
         try:
             return Response(native_assessment.serialize(request.user, native_assessment.NativeAdoption.objects.select_related('training_job').get(pk=adoption_id)))
@@ -183,7 +185,7 @@ class NativeAdoptionView(APIView):
             return failure(exc)
 
 
-class NativeProtectedInputView(APIView):
+class NativeProtectedInputView(NativeReadView):
     def post(self, request, adoption_id):
         try:
             if set(request.FILES) != {'file'}:
@@ -194,7 +196,7 @@ class NativeProtectedInputView(APIView):
             return failure(exc)
 
 
-class NativeAssessmentInputView(APIView):
+class NativeAssessmentInputView(NativeReadView):
     def post(self, request, protected_id):
         try:
             if request.data:
@@ -204,20 +206,19 @@ class NativeAssessmentInputView(APIView):
             return failure(exc)
 
 
-class JobOperationalHandoffView(APIView):
+class JobOperationalHandoffView(NativeReadView):
     def get(self, request, job_id):
         try:
             from execution_jobs import operational_handoff
 
             value = operational_handoff.read(request.user, job_id, request.query_params.get("revision"), request.query_params.get("sha256"))
             response = Response(value)
-            response["Cache-Control"] = "no-store"
             return response
         except ERRORS as exc:
             return failure(exc)
 
 
-class DatasetJobHistoryView(APIView):
+class DatasetJobHistoryView(NativeReadView):
     def get(self, request, file_id):
         try:
             from execution_jobs import history
@@ -225,5 +226,4 @@ class DatasetJobHistoryView(APIView):
             response = Response(history.read(request.user, file_id, request.query_params))
         except ERRORS as exc:
             response = failure(exc)
-        response["Cache-Control"] = "no-store"
         return response
