@@ -20,7 +20,7 @@ jobs:
   # ---------------------------------------------------------------------------
   backend-tests:
     name: Backend tests (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       redis:
         image: redis:7-alpine
@@ -100,7 +100,7 @@ jobs:
   # Private configuration/TLS smoke, disposable restore and full metadata parity.
   postgresql-runtime:
     name: PostgreSQL runtime and metadata
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PROMETA_DISABLE: "1"
       OPENAI_API_KEY: ""
@@ -221,7 +221,7 @@ jobs:
   # ---------------------------------------------------------------------------
   frontend-unit:
     name: Frontend unit tests (Karma)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -253,7 +253,7 @@ jobs:
   # ---------------------------------------------------------------------------
   backend-lint:
     name: Backend lint (ruff)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -272,7 +272,7 @@ jobs:
   # ---------------------------------------------------------------------------
   frontend-lint:
     name: Frontend lint (ESLint + Prettier)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -298,7 +298,7 @@ jobs:
   # ---------------------------------------------------------------------------
   frontend-e2e:
     name: Frontend E2E (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CI: "true"
       # Test accounts and their database exist only for this job.
