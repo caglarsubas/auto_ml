@@ -240,7 +240,11 @@ def host_case(plan, expected, parent):
             from qualify_private_lifecycle_readiness import qualify as qualify_lifecycle_readiness
 
             lifecycle_readiness = qualify_lifecycle_readiness(value, plan, expected, parent, adopted)
+            from qualify_private_queue_incidents import qualify as qualify_queue_incidents
+
+            queue_incidents = qualify_queue_incidents(value, plan, expected, parent, adopted)
             account_adoption = {
+                "queue_incidents": queue_incidents,
                 "operation_serialization": operation_serialization,
                 "lifecycle_readiness": lifecycle_readiness,
                 "controller_delivery_capture": delivery_capture,
