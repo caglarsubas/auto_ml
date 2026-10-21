@@ -1,0 +1,84 @@
+{
+  "packet": "P126",
+  "date": "2026-10-21",
+  "source_base": "59e63c61736f8bef1f7bf27149e7a94afc85b70e",
+  "scope": "Cross-check incident snapshot count/row/coverage/time consistency before offline handoff; preserve explicit order/availability limits and independent trust pins, without live access or recovery authority.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "9ef6ab3098c83f25abbc9672e88b35b071442ab614531bf6f4f11b1941d6830f",
+    "backend/tests/unit/test_private_queue_consistency.py": "b2056daf4941190aef808f8030bfbee9c266934fea6f41d7cf0acd7c27f307a7",
+    "scripts/private_queue_evidence.py": "7f5ff81d3e3c193bef0c360912bbb866600d3fe39379bd97e92b91902d7b51bc",
+    "scripts/qualify_private_dependency_start.py": "749cd4db7fceb381232adba1c265b8f802e285399ae597280bbaf741bbb22d13",
+    "scripts/qualify_private_queue_consistency.py": "89549a6bf886127d6dafc001748e61f46137bfc005c49b15962332c51a31f370"
+  },
+  "local_checks": {
+    "native_passed": 4792,
+    "native_skipped": 6,
+    "native_seconds": 326.856,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "new_backend_cases": 37,
+    "focused_passed": 437,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "physical_schema_and_execution_unchanged": true,
+    "all_47_original_browsers_and_722_units_and_private_host_physical_recovery_and_operator_proofs_required_in_CI": true
+  },
+  "ci_runner_profile": {
+    "previous_label": "ubuntu-latest",
+    "selected_label": "ubuntu-24.04",
+    "jobs": 6,
+    "playwright": "1.59.1",
+    "failed_run": 39594035276,
+    "failed_job": 119202220612,
+    "failed_image": "ubuntu-26.04",
+    "failed_step": "Install Playwright browsers",
+    "diagnostic": "Playwright does not support chromium on ubuntu26.04-x64",
+    "previous_main_image": "ubuntu-24.04",
+    "previous_main_run": 39578077835,
+    "product_test_sources_unchanged_since_local_full_suite": true,
+    "test_commands_limits_retries_resources_unchanged": true,
+    "sources": [
+      "https://raw.githubusercontent.com/microsoft/playwright/v1.59.1/packages/playwright-core/src/server/utils/hostPlatform.ts",
+      "https://github.com/actions/runner-images/blob/main/README.md"
+    ],
+    "failure_log_sha256": "1c7ea76ab206770b04fcb3fde3e5b90ca3ba1d3edddf3130f8ad13b1ead83b29"
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 311,
+    "all_original_tests_byte_identical": true,
+    "execution_changes_limited_to_additive_qualification_and_supported_host_pin": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_browser_command_preserved": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p126/full-native/postgresql.xml": "6c6759d3e7cc0f4d3fe71560ce51e0397d6a47d8656e17bce970c73e43cd7c98",
+    "test-reports/p126/full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70",
+    "test-reports/p126/focused-sqlite.xml": "bfd73e5907b2028d5793b6c041e7358503ba181a40d37657861ed2e1c0b83d9b",
+    "test-reports/p126/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "development_note": "Before implementation, 27 freshly checksummed contradictory/order samples were accepted and 8 new metadata assertions were absent (35 failures, no setup errors). An intermediate strict-order prototype passed its 35 additive cases but failed one original synthetic truncated-sample compatibility case:434 passed/1 failed. Final behavior keeps out-of-order evidence inspectable and unchanged with an explicit limitation, while contradictory count/row/time metadata blocks handoff. All original tests remain byte-identical. The first local435/4790pass317.144s and PRheadc4af858c are superseded by two additional omitted-remainder tests (2failed/35passed before correction). Final437 focused and complete4792native use frozen final sources. After the full local suite, only CI runner labels were pinned to Ubuntu24.04 after Playwright1.59.1 rejected an ubuntu-latest Ubuntu26.04 runner. Application/test/qualification-script sources are unchanged since the complete local run. Existing concurrency policy and Ruff are rechecked; all722 units/47 first-attempt browsers remain mandatory in fresh PR and independent main CI.",
+  "pending_at_source_qualification": [
+    "all-six exact-head and complete raw inventories/private/physical/host plus real Linux offline verification/handoff",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

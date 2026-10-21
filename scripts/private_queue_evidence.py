@@ -13,6 +13,7 @@ import os
 import re
 import stat
 import sys
+from collections import Counter
 from pathlib import Path
 
 import private_queue_incidents as triage
@@ -27,7 +28,7 @@ STEPS = {
     "service_attention": "Ask the installation owner to inspect the identified service and existing lifecycle readiness evidence. This handoff neither tests connectivity nor repairs services.",
     "queue_unavailable": "Ask the installation owner to investigate API/database observation availability. Unavailable is not an empty or healthy queue.",
     "queue_signals": "Correlate exact project/job IDs and revisions with the project owner's authorized operational handoff. Signals overlap; terminal failures may be historical.",
-    "incomplete": "The sample is truncated, unstable or has unknown states. Preserve those limits and collect a separately authorized new observation if needed.",
+    "incomplete": "The sample is truncated, unstable, out of declared order or has unknown states. Preserve those limits and collect a separately authorized new observation if needed.",
     "age": "Compare the observation interval with the incident timeline. The chosen age threshold is a handoff aid, not proof of current health.",
     "authority": "Record investigation findings and a named owner. Maintenance, recovery, new requests, model review and production use each require their separate approved workflow. Do not edit job state, raise limits or replay requests from this handoff.",
     "protected": "Interrupted assessments may have accessed protected outcomes. Preserve access history and exploratory status; this handoff cannot restore confirmatory evidence.",
@@ -137,6 +138,61 @@ def queue(value):
     require(isinstance(value["guidance"], dict) and set(value["guidance"]) == SIGNALS)
     for guidance in value["guidance"].values():
         text(guidance)
+    return queue_consistency(value)
+
+
+def queue_consistency(value):
+    """Check necessary count/sample relationships, not truth beyond the file."""
+    states, signals = value["states"], value["signals"]
+    unfinished = sum(states[s] for s in ("queued", "running", "cancel_requested"))
+    active = states["running"] + states["cancel_requested"]
+    require(signals["failed"] == states["failed"] and signals["blocked"] == states["blocked"])
+    require(signals["expired_request"] <= unfinished and signals["attempt_limit"] <= unfinished)
+    leases = signals["missing_lease"] + signals["overdue_lease"]
+    require(leases <= active)  # Null and overdue leases are disjoint.
+    selected = value["incident_total"] - states["failed"] - states["blocked"]
+    # Expiry, exhausted attempts and lease incidents can overlap. Their union
+    # must fit the unfinished population; summing signals is not a job count.
+    require(max(signals["expired_request"], signals["attempt_limit"], leases) <= selected
+            <= min(unfinished, signals["expired_request"] + signals["attempt_limit"] + leases))
+    observed = timestamp(value["observed_at"])
+    sample_states, sample_signals = Counter(), Counter()
+    previous = None
+    newest_first = True
+    for row in value["rows"]:
+        state = row["state"]
+        expected = {state} if state in {"failed", "blocked"} else set()
+        if state in {"queued", "running", "cancel_requested"}:
+            if timestamp(row["expires_at"]) <= observed:
+                expected.add("expired_request")
+            if row["attempts"] >= value["attempt_limit"]:
+                expected.add("attempt_limit")
+            if state != "queued":
+                if row["lease_until"] is None:
+                    expected.add("missing_lease")
+                elif timestamp(row["lease_until"]) <= observed:
+                    expected.add("overdue_lease")
+        require(expected and set(row["signals"]) == expected)
+        rank = (timestamp(row["created_at"]), row["job_id"])
+        if previous is not None and previous <= rank:
+            newest_first = False
+        previous = rank
+        sample_states[state] += 1
+        sample_signals.update(expected)
+    omitted = value["incident_total"] - len(value["rows"])
+    require(all(count <= states[state] for state, count in sample_states.items()))
+    # With a complete sample every aggregate signal must agree exactly. A
+    # truncated sample leaves at most one contribution per omitted job/signal.
+    require(all(sample_signals[s] <= signals[s] <= sample_signals[s] + omitted for s in SIGNALS))
+    sampled_unfinished = sum(sample_states[s] for s in ("queued", "running", "cancel_requested"))
+    remaining = {s: signals[s] - sample_signals[s] for s in SIGNALS}
+    remaining_leases = remaining["missing_lease"] + remaining["overdue_lease"]
+    require(remaining_leases <= active - sample_states["running"] - sample_states["cancel_requested"])
+    require(max(remaining["expired_request"], remaining["attempt_limit"], remaining_leases)
+            <= selected - sampled_unfinished
+            <= min(unfinished - sampled_unfinished,
+                   remaining["expired_request"] + remaining["attempt_limit"] + remaining_leases))
+    return newest_first
 
 
 def verify(raw, *, expected_sha256, expected_plan_sha256, installation_id, initialization_id, now=None, max_age_seconds=900):
@@ -169,16 +225,20 @@ def verify(raw, *, expected_sha256, expected_plan_sha256, installation_id, initi
         services(evidence[key], set(triage.startup.ROLES))
     stable = evidence["services_before"] == evidence["services_after"] and evidence["dependencies_before"] == evidence["dependencies_after"]
     require(type(evidence["stable_service_observations"]) is bool and evidence["stable_service_observations"] == stable)
-    queue(evidence["queue"])
+    newest_first = queue(evidence["queue"])
     require(isinstance(evidence["limitations"], list) and len(evidence["limitations"]) == 6)
     for limit in evidence["limitations"]:
         text(limit)
     started, finished = timestamp(evidence["observation_started_at"]), timestamp(evidence["observation_finished_at"])
     current = now or dt.datetime.now(dt.timezone.utc)
     require(current.tzinfo is not None and started <= finished <= current + dt.timedelta(seconds=30))
+    if evidence["queue"]["status"] == "observed":
+        require(started <= timestamp(evidence["queue"]["observed_at"]) <= finished)
     age = max(0, int((current - finished).total_seconds()))
     return evidence, {"verified_at": current.isoformat(), "age_seconds": age, "max_age_seconds": max_age_seconds,
-                      "older_than_selected_age": age > max_age_seconds}
+                      "older_than_selected_age": age > max_age_seconds,
+                      "queue_consistency": "cross_checked_metadata" if evidence["queue"]["status"] == "observed" else "unavailable",
+                      "sample_order": "newest_first" if newest_first is True else "not_newest_first" if newest_first is False else "unavailable"}
 
 
 def load(path):
@@ -212,7 +272,8 @@ def handoff(evidence, verification, expected_sha256):
         steps.append("queue_unavailable")
     elif q["incident_total"]:
         steps.append("queue_signals")
-    if not evidence["stable_service_observations"] or (observed and (q["truncated"] or q["states"]["unknown"])):
+    if (not evidence["stable_service_observations"] or verification.get("sample_order") == "not_newest_first"
+            or (observed and (q["truncated"] or q["states"]["unknown"]))):
         steps.append("incomplete")
     steps += ["age", "authority", "protected"]
     value = {"schema": "private_queue_operator_handoff_v1", "source_evidence_sha256": expected_sha256,
