@@ -1,0 +1,113 @@
+<section aria-labelledby="native-history-title" [attr.aria-busy]="busy">
+  <h5 id="native-history-title">Queue observation and bounded history</h5>
+  <p>
+    Read stored job metadata for this dataset. Each page replaces the previous page and contains at
+    most 50 jobs. Opening a job rechecks current access.
+  </p>
+  <div class="history-controls">
+    <div class="history-filter">
+      <label for="history-state">Job state</label>
+      <select id="history-state" [(ngModel)]="state" (ngModelChange)="load()" [disabled]="busy">
+        <option value="">All states</option>
+        @for (value of states; track value) {
+          <option [value]="value">{{ value }}</option>
+        }
+      </select>
+    </div>
+    <div class="history-filter">
+      <label for="history-kind">Job type</label>
+      <select id="history-kind" [(ngModel)]="kind" (ngModelChange)="load()" [disabled]="busy">
+        <option value="">All types</option>
+        @for (value of kinds; track value[0]) {
+          <option [value]="value[0]">{{ value[1] }}</option>
+        }
+      </select>
+    </div>
+    <button type="button" (click)="load()" [disabled]="busy">Refresh queue and history</button>
+  </div>
+  @if (busy) {
+    <p role="status">Reading queue metadata…</p>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+  @if (page; as p) {
+    <section aria-label="Dataset queue snapshot">
+      <p>
+        Observed {{ p.observed_at | date: 'medium' }}. Refresh to observe changes. Live worker and
+        broker health: not observed.
+      </p>
+      @if (!p.jobs_enabled) {
+        <p role="status">
+          Job execution is disabled in this installation; recorded history remains readable.
+        </p>
+      }
+      <dl class="queue-counts">
+        @for (value of states; track value) {
+          <div>
+            <dt>{{ value }}</dt>
+            <dd>{{ p.queue.states[value] }}</dd>
+          </div>
+        }
+      </dl>
+      <p>
+        Queued and due for dispatch: {{ p.queue.signals['queued_due'] }} · Oldest queued age:
+        {{
+          p.queue.signals['oldest_queued_seconds'] === null
+            ? 'none'
+            : p.queue.signals['oldest_queued_seconds'] + ' seconds'
+        }}.
+      </p>
+      <p>
+        Overdue leases: {{ p.queue.signals['overdue_leases'] }} · Missing active leases:
+        {{ p.queue.signals['missing_active_leases'] }} · Expired unfinished requests:
+        {{ p.queue.signals['expired_requests'] }} · Unfinished attempts at limit:
+        {{ p.queue.signals['attempts_at_limit'] }}.
+      </p>
+      <p>
+        Configured installation limits: {{ p.queue.installation_limits.max_active }} active,
+        {{ p.queue.installation_limits.max_pending }} pending,
+        {{ p.queue.installation_limits.attempts }} attempts,
+        {{ p.queue.installation_limits.lease_seconds }}-second lease. Other datasets and actual
+        installation capacity use are not observed.
+      </p>
+      <p>{{ p.limitation }}</p>
+    </section>
+    <p role="status">
+      Showing {{ p.jobs.length }} jobs, up to {{ p.page_size }} per page. History cutoff
+      {{ p.history_cutoff | date: 'medium' }}. State filters use current recorded state.
+    </p>
+    @if (p.restart_required) {
+      <p role="status">
+        No jobs remain at this navigation position. Refresh queue and history to start again.
+      </p>
+    }
+    <nav aria-label="Job history pages">
+      <button
+        type="button"
+        (click)="load(p.previous_cursor)"
+        [disabled]="busy || !p.previous_cursor"
+      >
+        Newer history
+      </button>
+      <button type="button" (click)="load(p.next_cursor)" [disabled]="busy || !p.next_cursor">
+        Older history
+      </button>
+    </nav>
+    <ul aria-label="Bounded job history">
+      @for (item of p.jobs; track item.id) {
+        <li>
+          <button type="button" (click)="jobSelected.emit(item.id)" [disabled]="busy">
+            Inspect history job {{ item.id }}
+          </button>
+          <span
+            >{{ item.kind }} · {{ item.state }} · {{ item.created_at | date: 'medium' }} · Attempt
+            {{ item.attempts }} · {{ item.reason_code }}</span
+          >
+        </li>
+      } @empty {
+        <li>No jobs match this history view.</li>
+      }
+    </ul>
+  }
+</section>

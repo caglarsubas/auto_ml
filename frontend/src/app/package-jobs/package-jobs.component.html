@@ -30,6 +30,21 @@
     </details>
   }
   <button type="button" (click)="refresh()" [disabled]="busy">Refresh jobs</button>
+  <button
+    type="button"
+    (click)="showHistory = !showHistory"
+    [disabled]="busy || !!pending"
+    [attr.aria-expanded]="showHistory"
+  >
+    {{ showHistory ? 'Close queue and history' : 'Browse queue and history' }}
+  </button>
+  @if (showHistory) {
+    <app-native-job-history
+      [fileId]="fileId"
+      [projectId]="projectId"
+      (jobSelected)="open($event)"
+    />
+  }
   @if (busy) {
     <p role="status">Checking job receipt…</p>
   }
@@ -93,20 +108,22 @@
         </button>
       </fieldset>
     }
-    <ul [attr.aria-label]="mode === 'training' ? 'Dataset jobs' : 'Package jobs'">
-      @for (item of directory.jobs; track item.id) {
-        <li>
-          <button type="button" (click)="open(item.id)" [disabled]="busy">
-            Open job {{ item.id }}
-          </button>
-          · {{ item.kind }} · {{ item.state }} · {{ item.bundle_id }}
-        </li>
-      } @empty {
-        <li>No jobs recorded.</li>
+    @if (!showHistory) {
+      <ul [attr.aria-label]="mode === 'training' ? 'Dataset jobs' : 'Package jobs'">
+        @for (item of directory.jobs; track item.id) {
+          <li>
+            <button type="button" (click)="open(item.id)" [disabled]="busy">
+              Open job {{ item.id }}
+            </button>
+            · {{ item.kind }} · {{ item.state }} · {{ item.bundle_id }}
+          </li>
+        } @empty {
+          <li>No jobs recorded.</li>
+        }
+      </ul>
+      @if (directory.next_offset !== null) {
+        <button type="button" (click)="refresh(true)" [disabled]="busy">Load older jobs</button>
       }
-    </ul>
-    @if (directory.next_offset !== null) {
-      <button type="button" (click)="refresh(true)" [disabled]="busy">Load older jobs</button>
     }
   }
   @if (job) {

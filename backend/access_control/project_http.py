@@ -51,6 +51,7 @@ DATASET = {
     "deployment-pack",
     "package-review-list",
     "dataset-jobs",
+    "dataset-job-history",
     "job-input",
     "job-training-input",
     "crisp-export",

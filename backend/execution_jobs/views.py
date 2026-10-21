@@ -205,3 +205,15 @@ class JobOperationalHandoffView(APIView):
             return response
         except ERRORS as exc:
             return failure(exc)
+
+
+class DatasetJobHistoryView(APIView):
+    def get(self, request, file_id):
+        try:
+            from execution_jobs import history
+
+            response = Response(history.read(request.user, file_id, request.query_params))
+        except ERRORS as exc:
+            response = failure(exc)
+        response["Cache-Control"] = "no-store"
+        return response

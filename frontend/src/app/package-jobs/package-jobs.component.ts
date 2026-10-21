@@ -15,11 +15,12 @@ import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { NativeCandidateComponent } from '../native-candidate/native-candidate.component';
 import { AuthService } from '../services/auth.service';
+import { NativeJobHistoryComponent } from '../native-job-history/native-job-history.component';
 
 @Component({
   selector: 'app-package-jobs',
   standalone: true,
-  imports: [CommonModule, FormsModule, NativeCandidateComponent],
+  imports: [CommonModule, FormsModule, NativeCandidateComponent, NativeJobHistoryComponent],
   templateUrl: './package-jobs.component.html',
   styleUrl: './package-jobs.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -35,6 +36,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   directory: any = null;
   job: any = null;
   handoff: any = null;
+  showHistory = false;
   busy = false;
   error = '';
   inputFileId = 0;
@@ -54,6 +56,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.directory = this.job = this.handoff = this.pending = this.source = null;
+    this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
     this.error = '';

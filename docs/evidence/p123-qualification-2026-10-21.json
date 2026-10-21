@@ -1,0 +1,67 @@
+{
+  "packet": "P123",
+  "date": "2026-10-21",
+  "source_base": "19742beb42b9e49e64aea8e290465a6e98c0bdd3",
+  "scope": "Read-only dataset queue observations and bounded signed-cursor history; no execution, live health, recovery, review or production authority.",
+  "source_sha256": {
+    ".github/workflows/ci.yml": "68761694fee4786cb5fb816f0fd7aadf2aff83f3b4d1590c4be145e0cd42301c",
+    "backend/access_control/project_http.py": "955c5082de6930cf68ff7f5417c94fac43bef26f4f7d312ccdfa6c6b4c3d9455",
+    "backend/backend/urls.py": "d3bb4f5b6e413246a652a38e077a52bb58603c1db195e789b18b165e2025db50",
+    "backend/execution_jobs/history.py": "6f63303a5fb020e3dd060f268cdced07f130126fa94c35e637919c0fc4292ed4",
+    "backend/execution_jobs/views.py": "27ce23239e93541cc5d7e4c7c38c8218a25b7686daa722fc1eb26374c97cf206",
+    "backend/tests/unit/test_native_queue_history.py": "602dff1737f12bbedb335785f211219c7c3561595c018dd8ec86a85239e8f905",
+    "frontend/e2e/native-queue-history.spec.ts": "f67de4dc02b98167b1af9515925bc3f4b0050679b5ff219baf0cd396752b4c5c",
+    "frontend/package.json": "28c0bba330afde297a4c33c14087bbafcbaf7a324c8d0300f2c8f9bcd23fbaaa",
+    "frontend/src/app/native-job-history/native-job-history.component.css": "af9f2eb2186f9450cb249b83850daea216a25f9d4b4b72bcd77bf67b4fb1791f",
+    "frontend/src/app/native-job-history/native-job-history.component.html": "c7b2a35a8f2577984dbb1cb6b8055dc56538e2e4e70747fc7a7275a6a85fef38",
+    "frontend/src/app/native-job-history/native-job-history.component.spec.ts": "93911858a39459fe9d4599584659cee158cbb0710cb0ccdefdc5bddd46175212",
+    "frontend/src/app/native-job-history/native-job-history.component.ts": "edb54c1d19b0261fb6f612f29305765a9156955e7737561a032e71250c7cfcbb",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "51578e12495699e48b69cb119eb42351060ac469de9de6a9d0aa3d858f1dc2ba",
+    "frontend/src/app/package-jobs/package-jobs.component.ts": "b964eec179b9c7139086ea09a93cd04f94286379a015d0e895d150eac0e9adf4",
+    "scripts/seed_e2e_user.py": "f1bed91c423d9dacfc2d660264459917726049d493e67a63cb4f033ec1f35183",
+    "scripts/seed_native_history_e2e.py": "c68dd455aa54068e894dac0940c974ab4053cca3be9a0c27c7874687e7cfe230"
+  },
+  "local_checks": {
+    "native_passed": 4678,
+    "native_skipped": 6,
+    "native_seconds": 479.395,
+    "frontend_passed": 720,
+    "new_frontend_cases": 10,
+    "new_real_browser_cases": 1,
+    "original_browser_cases_rechecked": 5,
+    "browser_first_attempt": true,
+    "new_backend_cases": 38,
+    "focused_passed": 291,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "physical_schema_and_execution_unchanged": true,
+    "all_private_host_physical_and_recovery_proofs_required_in_CI": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 286,
+    "all_original_tests_byte_identical": true,
+    "execution_changes_only_additive_seed_and_browser_lint_calls": true,
+    "original_browser_command_preserved": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "predecessor_550_retained_sha256_preserved": true,
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p123/full-native/postgresql.xml": "4a63f4bcf9c724afa6004e9990aada81f48b80d15714e70a6966a520f4c692ca",
+    "test-reports/p123/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p123/focused-sqlite.xml": "dc5a33b4e0988bd32905bcf69271892e53b9ebd996d6c72c2ecded1697093a69",
+    "test-reports/p123/frontend-unit-bounded.log": "115b706cf464ea0e79f246cb855b1bbf3d6653c603639c7053d1623b1c1a0b3c",
+    "test-reports/p123/local-browser-first-attempt.json": "074bb18c7235c6e5a03f390282977fe82e9aba1c58eae3ebbb3a3f47b550e357"
+  },
+  "development_note": "First render/label defects corrected and failed browser run retained as unqualified; corrected browser uses a finished build in a fresh disposable fixture. Full local native run started before an error-response Cache-Control refactor; final focused rerun covers that source. Immutable exact-head CI is the complete source qualification gate.",
+  "pending_at_source_qualification": [
+    "all-six exact-head and full raw reports including every private/physical/host qualification",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
