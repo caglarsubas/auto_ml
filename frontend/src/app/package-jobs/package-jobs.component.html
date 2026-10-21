@@ -125,6 +125,39 @@
         completes; completed reads are not undone.
       </p>
     }
+    <button type="button" (click)="inspectHandoff()" [disabled]="busy || !!pending">
+      Inspect operational handoff
+    </button>
+    @if (handoff) {
+      <section aria-label="Operational review handoff">
+        <h5>Operational review handoff</h5>
+        <p>{{ handoff.next_action }}</p>
+        <p>
+          Attempt {{ handoff.attempts }} of {{ handoff.attempt_limit }} · Revision
+          {{ handoff.revision }}
+        </p>
+        <p>
+          Lease until {{ handoff.lease_until || 'No active lease' }} · Request expires
+          {{ handoff.expires_at }}
+        </p>
+        <p>
+          Possible protected-outcome accesses: {{ handoff.outcome_accesses.total }} ({{
+            handoff.outcome_accesses.started
+          }}
+          unresolved, {{ handoff.outcome_accesses.failed }} failed,
+          {{ handoff.outcome_accesses.completed }} completed).
+        </p>
+        <p>{{ handoff.access_limitation }}</p>
+        <p>{{ handoff.recovery_scope }}</p>
+        <p>This read-only handoff grants no recovery, review or production approval.</p>
+        <p>
+          Snapshot SHA-256 <code>{{ handoff.sha256 }}</code>
+        </p>
+        <button type="button" (click)="inspectHandoff(true)" [disabled]="busy || !!pending">
+          Download operational handoff
+        </button>
+      </section>
+    }
     <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
     @if (
       evidenceEnabled &&
