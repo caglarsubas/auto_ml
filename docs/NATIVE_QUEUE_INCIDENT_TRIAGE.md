@@ -14,6 +14,8 @@ The output directory must already exist, be root-owned `0700`, have no ACLs and 
 
 The file wraps `evidence` plus `sha256`. Verify the latter against UTF-8 JSON encoding of `evidence` with sorted keys, separators `(',', ':')`, and no non-finite values. It is a checksum against a separately trusted digest, not a signature or an approval. All reports contain installation-confidential project, dataset and job identifiers; follow the customer's retention and controlled-egress policy.
 
+Use the [offline evidence verifier and operator runbook handoff](NATIVE_QUEUE_EVIDENCE_HANDOFF.md) to check the export against separately trusted digest and installation pins and retain fixed investigative guidance. Verification does not refresh the observation or authorize recovery.
+
 ## What an operator observes
 
 The existing managed-operation lock is acquired without creating a lock, changing installation receipts or starting services. Four application roles and three managed dependency profiles are checked against the exact plan and native images before and after collection; private-network membership is verified. Missing, stopped, paused, restarting, dead and OOM states remain visible. A changed sample is explicitly marked unstable. Direct Docker actions and running workers can bypass this cooperative lock; it is not a stop-the-world snapshot.
