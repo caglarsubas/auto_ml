@@ -1,0 +1,83 @@
+{
+  "packet": "P132",
+  "date": "2026-10-22",
+  "source_base": "39b34b60d94a387d8e5cffaf8de75b329dc95f3a",
+  "scope": "Pin native package parents for bounded metadata/evidence reads and worker hashing through P131 descriptor capture",
+  "source_sha256": {
+    "backend/execution_jobs/service.py": "ad772b6cf1b112137551cec68b0f5e3c1ba4b4ce461876033606bf0cfbfc4952",
+    "backend/tests/unit/test_native_package_files.py": "052a64a3b9d5310cbaff974f25a2541b1925540240fef41af82006469cdef0f2",
+    "backend/tests/unit/test_native_package_parent_descriptors.py": "52213330258ee92d3cf0d9c0dd7a94f5d4fbcdc69651d462ae5e57773ec73cef"
+  },
+  "local_checks": {
+    "native_passed": 5135,
+    "native_skipped": 6,
+    "native_seconds": 294.696,
+    "focused_passed": 882,
+    "new_backend_cases": 103,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "parent_and_root_symlink_redirection_rejected": true,
+    "already_pinned_parent_retains_original_bytes": true,
+    "owned_descriptors_closed": true,
+    "metadata_evidence_and_worker_hash_capture_qualified": true,
+    "two_existing_fault_injections_resolve_descriptor_relative_paths": true,
+    "original_assertions_fixtures_workloads_limits_preserved": true,
+    "physical_schema_and_scientific_workloads_unchanged": true,
+    "ci_workflow_byte_identical": true
+  },
+  "original_suite_preservation": {
+    "protected_test_execution_files": 321,
+    "byte_identical_protected_files": 320,
+    "all_original_tests_byte_identical": false,
+    "explicit_test_adapter_exception": "backend/tests/unit/test_native_package_files.py",
+    "only_two_open_path_injections_adapted": true,
+    "all_original_test_assertions_fixtures_workloads_and_limits_unchanged": true,
+    "only_package_capture_adapter_and_additive_tests_changed": true,
+    "exact_original_local_helper_resource_profile": true,
+    "ci_workflow_byte_identical": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040,
+      "P130": 1016,
+      "P131": 1703
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved_since_current_observation": true,
+    "primary_runtime_state": "running"
+  },
+  "raw_receipts": {
+    "test-reports/p132/before-sqlite.xml": "cd9e53fab808b23cd6c8798bcf7b554451141dcfb89599703fb2062f787e8cc6",
+    "test-reports/p132/new-sqlite.xml": "b9a74fd69eea4711b9232c915be8b1b059c77ccfe401a9f1f99c98d7d6fb9513",
+    "test-reports/p132/full-native/postgresql.xml": "2804caa789a7a07af429ac4db76f7f6d5e7c64f97f9f20ddd19ce94f810c353d",
+    "test-reports/p132/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p132/focused-sqlite.xml": "228dc07f71e1b64cb44edd141efe111e6cb693ec52cfe6da8f16188a5d2b82ab",
+    "test-reports/p132/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p132/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc"
+  },
+  "development_note": "Unchanged-service additive baseline: 72 failures, 31 compatibility passes, no errors/skips. All 103 pass after the fix and in full PostgreSQL. Two existing fault-injection open-path adapters now resolve dir_fd paths through the actual directory descriptor; their original assertions, fixtures, workloads, budgets, retries, coverage and case identities remain unchanged. The exact permitted adapter patch is audited against the retained original file; 320 other protected test/execution files remain byte-identical. Custody of the configured root and its ancestors remains trusted; no atomic filesystem snapshot, hostile mount/root-ancestor safety, model-deserialization isolation or kernel-I/O deadline is claimed. Inherited local helper scratch drift was restored to the exact original 1-GiB limit before baseline/new/focused requalification; prior receipts are retained separately. Full native resources and the 900-second cap are unchanged. No customer installation or unrelated resource changed.",
+  "pending_at_source_qualification": [
+    "all-six exact-head CI and complete inventories/private/physical/host proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

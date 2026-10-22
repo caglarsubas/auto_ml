@@ -57,6 +57,13 @@ def worker(package, monkeypatch):
     return receipts, hashes
 
 
+def opened_path(candidate, kwargs):
+    path = Path(candidate)
+    if not path.is_absolute() and kwargs.get("dir_fd") is not None:
+        return Path(os.readlink(f"/proc/self/fd/{kwargs['dir_fd']}")) / path
+    return path
+
+
 def late_replacement(monkeypatch, path, fault, tmp_path):
     """Mutate only the owned final component after the existing path/stat checks."""
     original_open, original_path_open = os.open, Path.open
@@ -77,7 +84,7 @@ def late_replacement(monkeypatch, path, fault, tmp_path):
                 path.mkdir()
 
     def opened(candidate, *args, **kwargs):
-        replace(candidate)
+        replace(opened_path(candidate, kwargs))
         return original_open(candidate, *args, **kwargs)
 
     def path_opened(candidate, *args, **kwargs):
@@ -232,7 +239,7 @@ def test_worker_closes_owned_artifact_descriptor_on_failure(package, worker, mon
 
     def opened(path, *args, **kwargs):
         fd = original_open(path, *args, **kwargs)
-        if Path(path) == package.out / "native.bin":
+        if opened_path(path, kwargs) == package.out / "native.bin":
             descriptors.append(fd)
         return fd
 
