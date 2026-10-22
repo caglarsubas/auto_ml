@@ -133,3 +133,13 @@ using explicitly owned untrained datasets where appropriate, and adds a real-bro
 check that project denials preserve sign-in. Actual stdio qualification retains the
 original MCP scope/grant/actor checks and adds project revocation and reviewer role
 checks. Local browser role/revocation evidence supplements these automated cases.
+
+## Native resource routing metadata (P130)
+
+Native job, adoption, and sealed-input routes resolve their exact resource to its dataset through one scalar database query before project authorization. These routing lookups do not construct native model instances or select job results, specifications, authority snapshots, adoption proposals, or sealed-input bytes. The sealed-input path joins only through its adoption and training-job relationship to obtain the dataset ID.
+
+This closes an early-read gap: full native rows were previously fetched merely to discover their dataset, before membership and project checks could deny access. Authorized views and services still read the material they need after authorization. This is a bound on the authorization routing projection, not a claim about total request memory or a new permission.
+
+Existing read/write role rules, exact resource identity, dataset/project selector consistency, missing-resource diagnostics, audit events, final authority rechecks, cache policy, and downstream execution remain in force. Database failure during routing fails closed with the existing sanitized authority-unavailable response. The adoption listing/detail GET handlers preserve that diagnostic if their initial full-record lookup fails after authorization; downstream service failures retain their existing handling.
+
+Additive regressions inspect actual SQL and forbid native model materialization. They cover all nine native resource routes, three project roles, foreign and revoked memberships, missing resources, conflicting selectors, and database failures. Existing scientific, private-runtime, recovery, restore, browser, schema, and operational qualifications remain required without changed limits. D07 release and customer acceptance remain open.

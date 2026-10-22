@@ -1,0 +1,73 @@
+{
+  "packet": "P130",
+  "date": "2026-10-22",
+  "source_base": "a5b63c39925e4a4e60ea1abe4293ccb27bff4044",
+  "scope": "Resolve exact native resources from scalar dataset metadata before project authority, preserving routing/role/audit/recheck and adoption lookup diagnostics",
+  "source_sha256": {
+    "backend/access_control/project_http.py": "dec997b919c5619317dc2151e1f13875debd02e75170df0085cf4e587d82ef3f",
+    "backend/execution_jobs/views.py": "a27505a4cf4d85bb02db5c2fc676937803a7284602a35934c26e41a24ba138bd",
+    "backend/tests/unit/test_native_authority_metadata.py": "47806fd3f527aae2daad60b98635d00451adb5f702fd667436c3d04fa7c534a3"
+  },
+  "local_checks": {
+    "native_passed": 4978,
+    "native_skipped": 6,
+    "native_seconds": 303.731,
+    "focused_passed": 669,
+    "new_backend_cases": 57,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "authorization_routes_fetch_only_dataset_metadata": true,
+    "native_payload_materialization_forbidden_before_authority": true,
+    "adoption_lookup_diagnostics_compatible": true,
+    "physical_schema_and_scientific_execution_unchanged": true,
+    "ci_workflow_byte_identical": true,
+    "original_47_browsers_722_units_809_physical_private_host_recovery_operator_proofs_required": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 317,
+    "all_original_tests_byte_identical": true,
+    "only_native_authorization_and_additive_tests_changed": true,
+    "ci_workflow_byte_identical": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved_since_current_observation": true,
+    "primary_runtime_state": "running"
+  },
+  "raw_receipts": {
+    "test-reports/p130/before-sqlite.xml": "47c19118719507c1547e51b05bfe5d007752a5397c814e9d0de2f1625cafacca",
+    "test-reports/p130/full-native/postgresql.xml": "044d3f16946b6dd58749e2e970c4db3e731bf3d871019a8ff10a994bc6cc3b53",
+    "test-reports/p130/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p130/focused-sqlite.xml": "e224c60c2db8438cc09334d684b2fef37ff7b5e80933fed556ec37fa954296fc",
+    "test-reports/p130/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p130/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc"
+  },
+  "development_note": "All final 57 additive cases fail against tracked base. Initial prototype exposed eight additive assertions that incorrectly extended the existing GET-only Cache-Control contract to POST and two original adoption lookup diagnostic failures after moving full record reads past authorization. Prototype reports and exact source are retained as unqualified development evidence. Final tests explicitly preserve GET and POST cache behavior; production handlers preserve existing sanitized authority-unavailable lookup failures. All original tests, scientific workloads, timeouts, resources, skips, retries, coverage and CI workflow remain unchanged. Final 57 cases inspect SQL and reject native materialization for nine native routes, three roles, outsider/revoked membership, absent resources, conflicting selectors and DB failure. This bounds routing data only, not total request memory. Owned fixture subnet allocation was checked; no customer or unrelated resource changed.",
+  "pending_at_source_qualification": [
+    "all-six exact-head CI and complete inventories/private/physical/host proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
