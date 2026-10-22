@@ -452,15 +452,23 @@ def claim(identifier):
         return job, job.lease_token
 
 
-def checkpoint(identifier, token, deadline):
-    job = NativeJob.objects.get(pk=identifier)
+def _checkpoint_guards(job, token, deadline):
     if job.state != "running" or job.lease_token != token or timezone.now() >= job.lease_until:
         raise JobStopped
     if timezone.now() >= job.expires_at:
         raise JobConflict("job_expired")
     if time.monotonic() >= deadline:
         raise JobConflict("job_time_budget_exceeded")
+
+
+def checkpoint(identifier, token, deadline):
+    job = NativeJob.objects.get(pk=identifier)
+    _checkpoint_guards(job, token, deadline)
     recheck_execution(job)
+    # Authority reads can outlast a lease or work deadline, or overlap a
+    # cancellation/requeue. Refresh only the guards before returning to work.
+    current = NativeJob.objects.only("state", "lease_token", "lease_until", "expires_at").get(pk=identifier)
+    _checkpoint_guards(current, token, deadline)
 
 
 def _owns_live_lease(job, token, now):
