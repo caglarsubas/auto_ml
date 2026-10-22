@@ -20,6 +20,27 @@ def canonical_bytes(result):
     return json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+def _input_descriptor(root, parts):
+    """Pin each parent below the trusted root without following symlinks."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NONBLOCK | os.O_NOFOLLOW
+    directory = os.open(root, flags)
+    descriptor = None
+    try:
+        for part in parts[:-1]:
+            child = os.open(part, flags, dir_fd=directory)
+            previous, directory = directory, child
+            os.close(previous)
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=directory)
+    finally:
+        try:
+            os.close(directory)
+        except BaseException:
+            if descriptor is not None:
+                os.close(descriptor)
+            raise
+    return descriptor
+
+
 def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     from execution_jobs.service import JobConflict
 
@@ -42,7 +63,7 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     # Bound reads using the opened descriptor, including a concurrently enlarged
     # file. The job consumes these exact bytes, never a mutable path after parsing.
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        descriptor = _input_descriptor(settings.MEDIA_ROOT, Path(relative).parts)
     except FileNotFoundError:
         # Preserve existing missing-input API and durable worker diagnostics.
         raise
