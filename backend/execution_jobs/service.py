@@ -145,8 +145,14 @@ def scope(actor, file_id):
 
 @contextmanager
 def _regular_artifact(path):
-    """Pin the final component without waiting for a FIFO writer or following a link."""
-    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    """Pin storage parents and the regular file without following replacement links."""
+    try:
+        parts = Path(path).absolute().relative_to(Path(settings.MEDIA_ROOT).absolute()).parts
+    except ValueError:
+        raise OSError("artifact outside storage root") from None
+    if not parts or ".." in parts:
+        raise OSError("artifact outside storage root")
+    descriptor = csv_scoring._input_descriptor(settings.MEDIA_ROOT, parts)
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise OSError("regular artifact required")

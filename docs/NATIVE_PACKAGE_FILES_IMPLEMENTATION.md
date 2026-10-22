@@ -39,3 +39,13 @@ not a sandbox or a complete hostile-filesystem qualification. Protected artifact
 digests and external resource limits remain required. No customer installation
 or stored dataset is changed. D07 remains in progress; durable search,
 lifecycle/upgrade/restore, expert and release/customer qualification remain open.
+
+## Pinned package parents (P132)
+
+Native package metadata, evidence and worker artifact hashing now open files through P131's no-follow directory descriptors. Capture pins the configured storage root and every relative parent, then opens the final file relative to its pinned parent. Lexical root normalization prevents trailing separator/dot forms bypassing root no-follow. Outside-root and traversal paths fail before any open. A late parent/root symlink is rejected; renaming an already-opened parent cannot redirect its subsequent file open.
+
+The existing manifest/publication/evidence limits, regular-file checks, metadata/change digests, aggregate hash budget, authority/cancellation/deadline checkpoints and failure receipts remain. Every acquired descriptor has explicit cleanup. The helper already belongs to the runtime-fingerprinted CSV module; no new runtime dependency or untracked execution module is introduced.
+
+103 additive cases exercise real owned parent/root races, original pinned bytes, root suffixes, special/missing parents, descriptor cleanup, invalid paths, header admission and worker publication/hash behavior. Two existing package-test fault-injection adapters resolve relative opens through their real directory descriptors; all original assertions, fixtures, workloads, limits and test identities are preserved. The exact adapter patch is audited against the retained original file.
+
+Configured-root and ancestor custody remain trusted. This is not an atomic content snapshot, a bound on kernel I/O, hostile root-ancestor/mount-namespace qualification or model-deserialization isolation. Model/purifier/calibrator loading and non-job/offline readers retain their existing custody requirements. No stored dataset or customer installation is changed. D07, release and customer acceptance remain open.
