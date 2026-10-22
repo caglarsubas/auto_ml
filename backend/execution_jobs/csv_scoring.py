@@ -23,7 +23,9 @@ def canonical_bytes(result):
 def _input_descriptor(root, parts):
     """Pin each parent below the trusted root without following symlinks."""
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NONBLOCK | os.O_NOFOLLOW
-    directory = os.open(root, flags)
+    # A trailing slash or dot would otherwise turn the root into an ancestor,
+    # where O_NOFOLLOW does not prevent following a replacement symlink.
+    directory = os.open(Path(root), flags)
     descriptor = None
     try:
         for part in parts[:-1]:

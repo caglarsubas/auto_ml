@@ -188,3 +188,15 @@ def test_path_authority_denial_precedes_all_descriptor_opens(input_file, monkeyp
     monkeypatch.setattr(csv_scoring.os, "open", lambda *a, **k: pytest.fail("denied path reached descriptor open"))
     with pytest.raises(projects.ProjectDenied):
         csv_scoring.input_bytes(1, 7)
+
+
+@pytest.mark.parametrize("suffix", ["/", "/."])
+@pytest.mark.parametrize("entrypoint", ["prepare", "worker"])
+def test_root_trailing_separators_cannot_bypass_no_follow(input_file, tmp_path, settings, monkeypatch, suffix, entrypoint):
+    root, _, path = nested(input_file, 2)
+    settings.MEDIA_ROOT = str(root) + suffix
+    def replace(*args, **kwargs):
+        redirect(root, path, tmp_path / "outside")
+    monkeypatch.setattr(csv_scoring.projects, "path_authority", replace)
+    with pytest.raises(service.JobConflict, match="^job_input_unavailable$"):
+        capture(entrypoint)
