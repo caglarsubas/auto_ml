@@ -458,7 +458,8 @@ def claim(identifier):
 
 
 def _checkpoint_guards(job, token, deadline):
-    if job.state != "running" or job.lease_token != token or timezone.now() >= job.lease_until:
+    if (job.state != "running" or token is None or job.lease_token != token
+            or job.lease_until is None or timezone.now() >= job.lease_until):
         raise JobStopped
     if timezone.now() >= job.expires_at:
         raise JobConflict("job_expired")
@@ -477,7 +478,9 @@ def checkpoint(identifier, token, deadline):
 
 
 def _owns_live_lease(job, token, now):
-    return job.lease_token == token and job.state in ACTIVE and now < job.lease_until
+    # Missing metadata is not proof of ownership; leave it for operator review.
+    return (token is not None and job.lease_token == token and job.state in ACTIVE
+            and job.lease_until is not None and now < job.lease_until)
 
 
 def finish(identifier, token, state, reason="", result=None, *, deadline=None):
