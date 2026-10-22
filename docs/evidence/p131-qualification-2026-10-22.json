@@ -1,0 +1,76 @@
+{
+  "packet": "P131",
+  "date": "2026-10-22",
+  "source_base": "2b7761f9388feb0c6cda2b3e4dd88d6136c3a8e7",
+  "scope": "Open native CSVs through pinned no-follow parent directories below the trusted configured root, preserving input contracts",
+  "source_sha256": {
+    "backend/execution_jobs/csv_scoring.py": "3f45bc477335d629adfbefcb75e6256cbe42d97ad49040d56a2b7ccb1a1d0427",
+    "backend/tests/unit/test_native_csv_parent_descriptors.py": "85914af2d91b9483f74b32ab36572dd086202691cd6753c64ef6845493c31228"
+  },
+  "local_checks": {
+    "native_passed": 5032,
+    "native_skipped": 6,
+    "native_seconds": 501.235,
+    "focused_passed": 745,
+    "new_backend_cases": 54,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "parent_and_root_symlink_redirection_rejected": true,
+    "already_pinned_parent_retains_original_bytes": true,
+    "owned_descriptors_closed": true,
+    "input_diagnostics_budget_digest_cancellation_preserved": true,
+    "physical_schema_and_scientific_workloads_unchanged": true,
+    "ci_workflow_byte_identical": true,
+    "original_47_browsers_722_units_809_physical_private_host_recovery_operator_proofs_required": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 319,
+    "all_original_tests_byte_identical": true,
+    "only_native_csv_parent_capture_and_additive_tests_changed": true,
+    "ci_workflow_byte_identical": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040,
+      "P130": 1016
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved_since_current_observation": true,
+    "primary_runtime_state": "running"
+  },
+  "raw_receipts": {
+    "test-reports/p131/superseded-first-head/root-suffix-before-fix.xml": "4b3faa0afee8f32ed9ccd8f00587f12522b20b58a2a2559a8f5a50ab9aa4ae5e",
+    "test-reports/p131/before-sqlite.xml": "b519d342afa6fe4f11286d319973bbd8703b743cf997873bd16c3d9ae9aa68c7",
+    "test-reports/p131/new-sqlite.xml": "c8f9dc0e36c59fb606a136771f60a52317d9f400ac1e6fd0ace76fcb05fbd926",
+    "test-reports/p131/full-native/postgresql.xml": "07a21ebeb6bab09ec0945afd6da296039f544f36873e454b2f13af0cc3d39068",
+    "test-reports/p131/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p131/focused-sqlite.xml": "1357f9f220d97f0d1922a0a1a884db4b97d03867107d3fef141c8ec3d2c64b01",
+    "test-reports/p131/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p131/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc"
+  },
+  "development_note": "Unchanged-base additive baseline: 28 failures (22 redirection/pinning cases and six directory-open/cleanup expectations), 26 compatibility passes, no errors/skips. The first PR head was superseded after four additional trailing-root separator/dot cases reproduced a no-follow bypass (four failures, original 50 still pass). Lexical Path normalization closes it. All 54 pass after the fix and in full PostgreSQL. Cases use real owned directories, root/parent symlinks, replacement immediately before final open, FIFO/socket/regular/missing parents, exact regular/BOM bytes and receipts, expected digests, open/read/wrapper/budget/cancellation failures and descriptor cleanup. Original tests, workloads, limits, resources, skips, retries, coverage and CI workflow remain unchanged. Custody of the configured root and its ancestors remains trusted; no atomic filesystem snapshot, hostile mount/root-ancestor qualification or kernel-I/O deadline is claimed. Owned internal fixture subnets were checked; no customer/unrelated resource changed.",
+  "pending_at_source_qualification": [
+    "all-six exact-head CI and complete inventories/private/physical/host proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}

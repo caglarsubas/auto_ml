@@ -30,3 +30,13 @@ root custody, expected input digest checks and external runtime limits remain
 necessary. No existing dataset or installation is rewritten. D07 remains in
 progress; durable search, lifecycle/upgrade/restore, expert and release/customer
 gates remain open.
+
+## Descriptor-relative parent capture (P131)
+
+P131 closes the remaining parent-symlink replacement window below the configured storage root. After the existing authority/path checks, capture lexically normalizes the root to remove trailing separators/dot components, opens it as a nonblocking, no-follow directory, then opens every relative parent with the same directory flags using its pinned predecessor descriptor. The final file is opened relative to its pinned parent with the existing nonblocking/no-follow regular-file boundary. Every acquired parent descriptor and the final file descriptor has explicit cleanup.
+
+A parent or root replaced with a symlink before its open is rejected as `job_input_unavailable`. If an already-opened parent is renamed and its old path becomes a symlink, capture keeps reading the original pinned directory rather than following the replacement. Missing paths retain the existing missing-input failure boundary. Regular-file checks, byte limits, cancellation checkpoints, expected input digests, receipts, CSV parsing and scoring remain unchanged.
+
+54 additive cases use real owned directory/file operations: nested parent/root symlink races (including roots with trailing separators/dot components), replacement immediately before the final file open, FIFO/socket/regular/missing parents, open/read/wrapper/budget/cancellation failures, descriptor cleanup and exact normal/BOM receipts. The original P77 special-file cases and all scientific/private/recovery/restore/schema/browser workloads remain mandatory without changed limits.
+
+The configured root must itself be an actual directory when opened. Its custody and that of its ancestors remain trusted deployment prerequisites. Descriptor pinning is not an atomic filesystem snapshot, does not stop in-place regular-file writes or guarantee bounded kernel I/O, and does not qualify an adversary controlling the root's ancestors or mount namespace. Existing digest checks and external limits remain required. D07, release and customer acceptance remain open.
