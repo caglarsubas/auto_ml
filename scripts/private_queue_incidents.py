@@ -13,7 +13,9 @@ import os
 import stat
 import subprocess
 import sys
-import tempfile
+import selectors
+import threading
+from contextlib import contextmanager
 import uuid
 from pathlib import Path
 
@@ -23,6 +25,7 @@ import private_dependency_start as startup
 resources = adopter.resources
 checker = adopter.checker
 MAX_BYTES = 262144
+PROBE_BYTES = 131072
 STATE_KEYS = ("Running", "Paused", "Restarting", "Dead", "OOMKilled", "ExitCode", "Pid")
 
 
@@ -66,25 +69,92 @@ def dependencies(value, expected, images):
         os.close(root)
 
 
+@contextmanager
+def _probe_capture():
+    """Drain a bounded prefix without a file or waiting for inherited writers."""
+    output, started = None, False
+    finished = threading.Event()
+    captured, failed = bytearray(), False
+
+    def collect():
+        nonlocal failed
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(read_fd, selectors.EVENT_READ)
+                while True:
+                    if not finished.is_set() and not selector.select(0.05):
+                        continue
+                    try:
+                        chunk = os.read(read_fd, 8192)
+                    except BlockingIOError:
+                        if finished.is_set():
+                            return
+                        continue
+                    if not chunk:
+                        return
+                    captured.extend(chunk[:max(0, PROBE_BYTES + 1 - len(captured))])
+                    # Once the producer has returned, drain only immediately
+                    # available bytes up to the sentinel. A descendant retaining
+                    # stdout must not make cleanup wait for EOF indefinitely.
+                    if finished.is_set() and len(captured) > PROBE_BYTES:
+                        return
+        except BaseException:
+            # Worker failures cannot propagate to the caller. Invalidate even
+            # a valid prefix; no partial observation can become evidence.
+            failed = True
+        finally:
+            try:
+                os.close(read_fd)
+            except OSError:
+                failed = True
+
+    read_fd, write_fd = os.pipe()
+    try:
+        output = os.fdopen(write_fd, "wb")
+        os.set_blocking(read_fd, False)
+        worker = threading.Thread(target=collect, name="declarai-operator-probe-reader")
+        try:
+            worker.start()
+        except RuntimeError:
+            raise OSError("probe_capture_unavailable") from None
+        started = True
+        yield output, captured
+    finally:
+        try:
+            if output is None:
+                os.close(write_fd)
+            else:
+                output.close()
+        finally:
+            finished.set()
+            if started:
+                worker.join()
+            else:
+                os.close(read_fd)
+    if failed:
+        raise OSError("probe_capture_unavailable")
+
+
 def probe(api):
     if api.get("status") == "missing" or api["attention_required"]:
         return {"status": "unavailable", "reason": "api_not_active"}
     # No caller-controlled command, code, environment, mount, user or input.
-    # File-backed capture bounds memory; the fixed query enforces a 5s timeout.
-    with tempfile.TemporaryFile() as output:
-        try:
+    # Keep at most 128 KiB plus one over-budget sentinel in memory. The
+    # collector drains excess stdout while the original 20s timeout applies;
+    # neither stdout nor discarded stderr is persisted to temporary storage.
+    try:
+        with _probe_capture() as (output, captured):
             result = subprocess.run([*resources.PREFIX, "exec", "--user", "10001:10001", api["container_id"],
                                      "python", "-m", "execution_jobs.operator_triage"],
                                     stdout=output, stderr=subprocess.DEVNULL, timeout=20, check=False)
-        except (subprocess.TimeoutExpired, OSError):
-            return {"status": "unavailable", "reason": "probe_transport_unavailable"}
-        output.seek(0)
-        raw = output.read(131073)
+        raw = bytes(captured)
+    except (subprocess.TimeoutExpired, OSError):
+        return {"status": "unavailable", "reason": "probe_transport_unavailable"}
     if result.returncode != 0:
         return {"status": "unavailable", "reason": "probe_unavailable"}
     try:
         value = json.loads(raw)
-        if len(raw) > 131072 or not isinstance(value, dict) or value.get("schema") != "native_queue_operator_snapshot_v1" or value.get("status") not in {"observed", "unavailable"}:
+        if len(raw) > PROBE_BYTES or not isinstance(value, dict) or value.get("schema") != "native_queue_operator_snapshot_v1" or value.get("status") not in {"observed", "unavailable"}:
             raise ValueError
     except (ValueError, UnicodeError, RecursionError):
         raise checker.planner.PlanError("queue_incident_probe_output_invalid") from None

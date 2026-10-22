@@ -1,0 +1,72 @@
+{
+  "packet": "P129",
+  "date": "2026-10-22",
+  "source_base": "4b698d1aa71de4f7f1296bafba71430b79060f58",
+  "scope": "Capture fixed operator-probe stdout through a pipe; retain at most 128 KiB plus one sentinel byte; preserve the 20-second child deadline, fixed command, schema and sanitized failure semantics",
+  "source_sha256": {
+    "backend/tests/unit/test_operator_probe_capture.py": "3dcca0121cfd6e415dbafcc35ad86480c5757115f9b74ad9d2cd87987c2b9dba",
+    "scripts/private_queue_incidents.py": "dcfcf59d310d1d39c2ed2a9458ba383b80fed88c4936002ea709a3fc6cf59ee1"
+  },
+  "local_checks": {
+    "native_passed": 4921,
+    "native_skipped": 6,
+    "native_seconds": 442.678,
+    "frontend_source_byte_identical": true,
+    "new_frontend_cases": 0,
+    "new_real_browser_cases": 0,
+    "new_backend_cases": 37,
+    "focused_passed": 566,
+    "worker_isolation": true,
+    "ruff_new_findings": 0,
+    "operator_command_and_twenty_second_timeout_unchanged": true,
+    "retained_probe_bytes_limit": 131073,
+    "probe_stdout_temporary_files": false,
+    "physical_schema_and_execution_unchanged": true,
+    "ci_workflow_byte_identical": true,
+    "all_47_original_browsers_and_722_units_and_private_host_physical_recovery_and_operator_proofs_required_in_CI": true
+  },
+  "original_suite_preservation": {
+    "original_test_execution_files": 316,
+    "all_original_tests_byte_identical": true,
+    "only_operator_probe_and_additive_tests_changed": true,
+    "ci_workflow_byte_identical": true,
+    "ci_host_profile_selected": "ubuntu-24.04",
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_exited": true
+  },
+  "raw_receipts": {
+    "test-reports/p129/before-sqlite.xml": "3e92110f98a10997e89d3f7ad5be3dfd714abf5f5d41460dd409786cc010e838",
+    "test-reports/p129/event-before-sqlite.xml": "acd771a7da9fec3a29461b9acb124cf17ac9664b1f453b3bfbd111e2bd73f3e1",
+    "test-reports/p129/reader-before-sqlite.xml": "287ff6eb6bfc031ccbb972193bc5a84505b60e72a2ab5f292613505254e3e211",
+    "test-reports/p129/full-native/postgresql.xml": "9b7a5bd457ae8feb11b53b8cd0cfeb8c3cd0b219ed423e66b48a9fa904d69a07",
+    "test-reports/p129/full-native/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p129/focused-sqlite.xml": "54245ba909e3f6f52d0f0802b81fe449a40711c3e722ebdb392752a5f17f13a3",
+    "test-reports/p129/ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p129/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc"
+  },
+  "development_note": "Initial standalone before/after attempts failed before importing the product module because the additive test lacked its scripts-path bootstrap; retained as unqualified diagnostics. Corrected before-snapshot uses tracked base plus the final additive test source: 37 failures, no errors (21 temporary-spool detections, nine missing-helper checks and seven failure-path checks). An intermediate after-change run passed 32 of 33: the exact-limit fixture exceeded Linux argument length before reaching the transport. It now generates the identical payload inside a short child program. A further review found synchronization-state initialization after pipe allocation could leak descriptors on initialization failure. The added regression reproduced this leak; initialization now precedes pipe allocation. The earlier full 4,917-case pass remains an unqualified prototype with matching retained source copies. A second full prototype passed 4,918 cases, but subsequent review reproduced three uncaught reader exceptions that could publish a valid partial prefix; the reader now fails closed for every internal exception, including memory and system-exit failures. Both prototypes and the targeted failing regression remain retained with their exact source. Final 37 cases exercise real subprocesses, exact 128 KiB acceptance, 4 MiB rejection, bounded prefix retention, inherited writers, descriptor/thread cleanup, safe failures and a real 20-second timeout. Original tests, workloads, limits, skips, retries, coverage and workflow remain unchanged. Checked explicit internal fixture subnets avoid unrelated Docker pool exhaustion; no other network or customer installation was changed.",
+  "pending_at_source_qualification": [
+    "all-six exact-head CI and complete raw inventories/private/physical/host proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
