@@ -426,6 +426,11 @@ def claim(identifier):
         if timezone.now() >= job.expires_at:
             close(job, "failed", "job_expired")
             return None
+        # A restored/inconsistent queued row must not bypass the retry ceiling
+        # just because delivery arrives without an expired-lease reconciliation.
+        if job.attempts >= LIMITS["attempts"]:
+            close(job, "failed", "job_attempts_exhausted")
+            return None
         try:
             recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
