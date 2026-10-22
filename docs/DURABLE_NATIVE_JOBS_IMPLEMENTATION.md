@@ -66,3 +66,11 @@ Every native delivery now enforces the existing three-attempt ceiling while hold
 Existing nonqueued-state, capacity and request-expiry precedence remains. Queued requests below the ceiling still undergo the original authority/runtime checks and receive the original 180-second lease. The close and its event share the existing transaction: receipt storage failure rolls back the transition, and retained specification/result payloads are preserved. Reconciliation, retry counts, resource budgets, cancellation and publication rules are unchanged. This safeguard does not validate a customer restore or authorize automatic metadata repair.
 
 P135 adds 32 regressions: all five native kinds at/above the ceiling, actual task delivery stopping before package work, duplicate receipts, eligible retry leases, existing guard precedence and storage-failure rollback. The exact additive test on the unchanged service reproduces 19 failures and 13 compatibility passes. Source/local qualification is recorded separately from PR/main, release and customer evidence.
+
+### Incomplete-lease fencing (P136)
+
+Native checkpoints and result publication require a non-null caller token, a matching stored token and a non-null live expiry. A missing token pair is not ownership. A missing expiry stops safely rather than raising `TypeError`. The same checkpoint guard applies after authority validation and the final metadata read.
+
+A rejected checkpoint raises `JobStopped`; finish leaves the inconsistent row and its payloads/events unchanged, including when asked to acknowledge cancellation or publish a terminal failure. Existing operator guidance still requires investigating inconsistent active metadata with the installation owner. This safeguard does not repair metadata, replay work or qualify a customer restore. Valid leases, cancellation acknowledgement, authority checks, deadlines, reconciliation, attempts and resource limits retain their existing behavior.
+
+P136 adds 34 cases covering initial/refreshed metadata reads, all terminal finish requests, cancellation, actual worker delivery after committed lease metadata loss, and valid publication/cancellation. The unchanged-service baseline reproduces 21 failures and 13 compatibility passes. Source/local qualification remains distinct from PR/main, release and customer acceptance evidence.
