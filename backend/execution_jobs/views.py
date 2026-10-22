@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from access_control import projects
+from access_control.project_http import AuthorityUnavailable
 from execution_jobs import service
 from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment
 from execution_jobs.models import NativeJob
@@ -155,7 +156,12 @@ class JobCandidateInputView(NativeReadView):
 class NativeAdoptionListView(NativeReadView):
     def get(self, request, job_id):
         try:
-            job = NativeJob.objects.get(pk=job_id)
+            try:
+                job = NativeJob.objects.get(pk=job_id)
+            except DatabaseError:
+                # Keep the adoption reference-lookup diagnostic compatible
+                # when full record reads follow metadata-only authorization.
+                raise AuthorityUnavailable() from None
             for scope in service.read_authority(request.user, job):
                 projects.recheck(scope)
             rows = native_assessment.NativeAdoption.objects.filter(training_job=job).order_by('-created_at')
@@ -174,7 +180,11 @@ class NativeAdoptionListView(NativeReadView):
 class NativeAdoptionView(NativeReadView):
     def get(self, request, adoption_id):
         try:
-            return Response(native_assessment.serialize(request.user, native_assessment.NativeAdoption.objects.select_related('training_job').get(pk=adoption_id)))
+            try:
+                adoption = native_assessment.NativeAdoption.objects.select_related('training_job').get(pk=adoption_id)
+            except DatabaseError:
+                raise AuthorityUnavailable() from None
+            return Response(native_assessment.serialize(request.user, adoption))
         except ERRORS as exc:
             return failure(exc)
 

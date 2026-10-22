@@ -172,20 +172,22 @@ def authorize(request, view):
     elif name in {'job-operational-handoff', 'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input', 'native-adoption-list'}:
         from execution_jobs.models import NativeJob
         try:
-            record = NativeJob.objects.get(pk=view.kwargs['job_id'])
+            # Resolve routing metadata before authority; never load native
+            # request/result material merely to discover its dataset.
+            dataset_id = NativeJob.objects.values_list('dataset_id', flat=True).get(pk=view.kwargs['job_id'])
         except NativeJob.DoesNotExist:
             raise projects.ProjectDenied('job_unavailable') from None
-        supplied.append(record.dataset_id)
+        supplied.append(dataset_id)
     elif name in {'native-adoption', 'native-protected-input', 'native-assessment-input'}:
         from execution_jobs.models import NativeAdoption, NativeProtectedInput
         try:
             if name == 'native-assessment-input':
-                record = NativeProtectedInput.objects.defer('payload').select_related('adoption__training_job').get(pk=view.kwargs['protected_id']).adoption
+                dataset_id = NativeProtectedInput.objects.values_list('adoption__training_job__dataset_id', flat=True).get(pk=view.kwargs['protected_id'])
             else:
-                record = NativeAdoption.objects.select_related('training_job').get(pk=view.kwargs['adoption_id'])
+                dataset_id = NativeAdoption.objects.values_list('training_job__dataset_id', flat=True).get(pk=view.kwargs['adoption_id'])
         except (NativeAdoption.DoesNotExist, NativeProtectedInput.DoesNotExist):
             raise projects.ProjectDenied('native_adoption_unavailable') from None
-        supplied.append(record.training_job.dataset_id)
+        supplied.append(dataset_id)
     # A browser workspace may narrow reads/writes to one already-authorized project.
     # Never use this selector as a resource assignment or substitute for its binding.
     if request.query_params.get("project_id") is not None:
