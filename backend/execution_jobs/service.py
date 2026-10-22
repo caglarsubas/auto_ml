@@ -608,7 +608,13 @@ def execute(identifier):
 def reconcile():
     with locked():
         now = timezone.now()
-        for job in NativeJob.objects.select_for_update().filter(state__in=ACTIVE, lease_until__lte=now):
+        # Recovery needs transition metadata only. Deferred saves in record()
+        # retain opaque inputs/results without fetching or rewriting them.
+        jobs = NativeJob.objects.only(
+            "id", "state", "revision", "attempts", "lease_token", "lease_until",
+            "next_dispatch", "expires_at", "reason_code", "finished_at",
+        )
+        for job in jobs.select_for_update().filter(state__in=ACTIVE, lease_until__lte=now):
             if job.state == "cancel_requested":
                 close(job, "cancelled", "actor_cancelled_after_lease")
             elif job.attempts >= LIMITS["attempts"] or job.expires_at <= now:
@@ -616,7 +622,7 @@ def reconcile():
             else:
                 job.state, job.lease_token, job.lease_until, job.next_dispatch = "queued", None, None, now
                 record(job, "requeued", detail={"reason_code": "worker_lease_expired"})
-        for job in NativeJob.objects.select_for_update().filter(state="queued", expires_at__lte=now):
+        for job in jobs.select_for_update().filter(state="queued", expires_at__lte=now):
             close(job, "failed", "job_expired")
         return list(
             NativeJob.objects.filter(state="queued", next_dispatch__lte=now)
