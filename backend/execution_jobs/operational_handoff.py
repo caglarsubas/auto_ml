@@ -1,6 +1,8 @@
 """Read-only, revision-pinned job handoff; never recovery or review authority."""
 
-from django.db import connection
+from contextlib import contextmanager
+
+from django.db import connection, transaction
 from django.db.models import Count, Q
 from django.db.models.functions import Collate
 
@@ -19,12 +21,35 @@ NEXT = {
 }
 
 
+@contextmanager
+def _bounded_read():
+    # A handoff can scan history while holding the queue lock. Bound each SQL
+    # statement, without changing execution budgets or relaxing caller limits.
+    with transaction.atomic():
+        previous = None
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_setting('statement_timeout'), setting::bigint "
+                    "FROM pg_settings WHERE name = 'statement_timeout'"
+                )
+                previous, configured = cursor.fetchone()
+                cursor.execute("SELECT set_config('statement_timeout', %s, true)", [f"{min(configured or 5000, 5000)}ms"])
+        with service.locked():
+            yield
+        # Atomic rollback restores SET LOCAL on errors. On successful nested
+        # calls, restore the caller's setting before its transaction continues.
+        if previous is not None and not transaction.get_rollback():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('statement_timeout', %s, true)", [previous])
+
+
 def read(actor, identifier, revision, expected=None):
     if not isinstance(revision, str) or not revision.isascii() or not revision.isdecimal() or str(int(revision)) != revision:
         raise ValueError("Supply the observed nonnegative job revision.")
     if expected is not None:
         service.require_digest(expected)
-    with service.locked():
+    with _bounded_read():
         job = NativeJob.objects.get(pk=identifier)
         scopes = service.read_authority(actor, job)
         if job.revision != int(revision):
