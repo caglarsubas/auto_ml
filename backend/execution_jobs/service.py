@@ -648,7 +648,7 @@ def reconcile():
             close(job, "failed", "job_expired")
         return list(
             NativeJob.objects.filter(state="queued", next_dispatch__lte=now)
-            .order_by("created_at")
+            .order_by("created_at", "pk")
             .values_list("pk", flat=True)[:100]
         )
 
