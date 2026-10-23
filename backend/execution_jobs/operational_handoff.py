@@ -28,7 +28,8 @@ def read(actor, identifier, revision, expected=None):
         if job.revision != int(revision):
             raise service.JobConflict("job_handoff_stale")
         events = list(job.events.all())
-        if [e.revision for e in events] != list(range(1, job.revision + 1)):
+        # An inconsistent counter must not size an allocation under this lock.
+        if len(events) != job.revision or any(e.revision != n for n, e in enumerate(events, 1)):
             raise service.JobConflict("job_event_history_invalid")
         # Only scalar counters are fetched: no sealed bytes, row membership,
         # predictions, native state or arbitrary historical parameters.
