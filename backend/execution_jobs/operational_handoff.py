@@ -56,6 +56,15 @@ def read(actor, identifier, revision, expected=None):
             raise service.JobConflict("job_handoff_stale")
         if job.state not in NEXT:
             raise service.JobConflict("job_handoff_state_invalid")
+        spec = job.specification
+        if (
+            not isinstance(spec, dict) or not isinstance(spec.get("kind"), str)
+            or spec["kind"] not in {service.KIND, service.csv_scoring.KIND, service.training_search.KIND,
+                                   service.training_scoring.KIND, service.native_assessment.KIND}
+            or not isinstance(spec.get("limits"), dict)
+            or type(spec["limits"].get("attempts")) is not int or spec["limits"]["attempts"] < 1
+        ):
+            raise service.JobConflict("job_handoff_specification_invalid")
         events = list(job.events.all())
         # An inconsistent counter must not size an allocation under this lock.
         if len(events) != job.revision or any(
@@ -76,7 +85,6 @@ def read(actor, identifier, revision, expected=None):
         )
         if states.pop("unknown"):
             raise service.JobConflict("job_access_history_invalid")
-        spec = job.specification
         value = {
             "schema": "native_operational_handoff_v1", "read_only": True,
             "job_id": str(job.pk), "file_id": job.dataset_id, "project_id": str(job.project_id),
