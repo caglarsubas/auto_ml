@@ -1,6 +1,8 @@
 """Read-only, revision-pinned job handoff; never recovery or review authority."""
 
-from collections import Counter
+from django.db import connection
+from django.db.models import Count, Q
+from django.db.models.functions import Collate
 
 from execution_jobs import service
 from execution_jobs.models import NativeJob
@@ -33,11 +35,17 @@ def read(actor, identifier, revision, expected=None):
             raise service.JobConflict("job_event_history_invalid")
         # Only scalar counters are fetched: no sealed bytes, row membership,
         # predictions, native state or arbitrary historical parameters.
-        states = Counter(HoldoutAccess.objects.filter(
+        known = ("started", "failed", "completed")
+        # Return scalar counts, not one value per access under the queue lock.
+        # Explicit collation preserves the previous exact Python label checks.
+        states = HoldoutAccess.objects.filter(
             file_id=job.dataset_id, parameters__scope="native_protected_assessment_v1",
             parameters__job_id=str(job.pk),
-        ).values_list("attempt_state", flat=True))
-        if set(states) - {"started", "failed", "completed"}:
+        ).alias(_handoff_state=Collate("attempt_state", "C" if connection.vendor == "postgresql" else "BINARY")).aggregate(
+            **{key: Count("pk", filter=Q(_handoff_state=key)) for key in known},
+            unknown=Count("pk", filter=~Q(_handoff_state__in=known)),
+        )
+        if states.pop("unknown"):
             raise service.JobConflict("job_access_history_invalid")
         spec = job.specification
         value = {
