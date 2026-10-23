@@ -468,7 +468,13 @@ def _checkpoint_guards(job, token, deadline):
 
 
 def checkpoint(identifier, token, deadline):
-    job = NativeJob.objects.get(pk=identifier)
+    # Checkpoints need guards and execution authority, never stored outputs or
+    # publication history. Keep referenced training-result validation explicit
+    # in recheck_execution rather than loading this job's unrelated payloads.
+    job = NativeJob.objects.only(
+        "state", "lease_token", "lease_until", "expires_at", "authority",
+        "specification", "project_id", "dataset_id", "source_dataset_id",
+    ).get(pk=identifier)
     _checkpoint_guards(job, token, deadline)
     recheck_execution(job)
     # Authority reads can outlast a lease or work deadline, or overlap a
