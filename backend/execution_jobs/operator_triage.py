@@ -25,21 +25,27 @@ def read_snapshot():
     from django.conf import settings
     from django.db import connection, transaction
     from django.db.models import Count, Q
+    from django.db.models.functions import Collate
     from django.utils import timezone
     from execution_jobs.service import LIMITS
     from execution_jobs.models import NativeJob
 
     if connection.vendor != "postgresql":
         raise ValueError("operator_postgresql_required")
+
+    class ExactState(Collate):
+        def as_sqlite(self, compiler, database):
+            return super().as_sql(compiler, database, collation=database.ops.quote_name("BINARY"))
+
     with transaction.atomic():
         with connection.cursor() as cursor:
             cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             cursor.execute("SET LOCAL statement_timeout = '5000ms'")
         observed = timezone.now()
-        unfinished = Q(state__in=["queued", "running", "cancel_requested"])
-        active = Q(state__in=["running", "cancel_requested"])
+        unfinished = Q(_operator_state__in=["queued", "running", "cancel_requested"])
+        active = Q(_operator_state__in=["running", "cancel_requested"])
         conditions = {
-            "failed": Q(state="failed"), "blocked": Q(state="blocked"),
+            "failed": Q(_operator_state="failed"), "blocked": Q(_operator_state="blocked"),
             "expired_request": unfinished & Q(expires_at__lte=observed),
             "overdue_lease": active & Q(lease_until__lte=observed),
             "missing_lease": active & Q(lease_until__isnull=True),
@@ -48,8 +54,10 @@ def read_snapshot():
         selected = Q(pk__in=[])
         for condition in conditions.values():
             selected |= condition
-        jobs = NativeJob.objects.all()
-        states = jobs.aggregate(**{s: Count("pk", filter=Q(state=s)) for s in STATES}, unknown=Count("pk", filter=~Q(state__in=STATES)))
+        # State labels follow execution's exact spelling, even if a restored
+        # column uses a case/accent-insensitive database comparison profile.
+        jobs = NativeJob.objects.alias(_operator_state=ExactState("state", "C"))
+        states = jobs.aggregate(**{s: Count("pk", filter=Q(_operator_state=s)) for s in STATES}, unknown=Count("pk", filter=~Q(_operator_state__in=STATES)))
         signals = jobs.aggregate(**{s: Count("pk", filter=q) for s, q in conditions.items()})
         total = jobs.filter(selected).count()
         # Values only: no model construction, full specification, result, actor,
