@@ -9,6 +9,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 import stat
 import subprocess
@@ -32,6 +33,29 @@ STATE_KEYS = ("Running", "Paused", "Restarting", "Dead", "OOMKilled", "ExitCode"
 
 def encode(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def decode(raw):
+    """Decode one UTF-8 JSON value without ambiguous keys or non-finite numbers."""
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("queue_json_invalid")
+            value[key] = item
+        return value
+
+    def number(value):
+        result = float(value)
+        if not math.isfinite(result):
+            raise ValueError("queue_json_invalid")
+        return result
+
+    def constant(_):
+        raise ValueError("queue_json_invalid")
+
+    return json.loads(raw.decode("utf-8"), object_pairs_hook=unique,
+                      parse_float=number, parse_constant=constant)
 
 
 def service_observation(info):
@@ -154,8 +178,10 @@ def probe(api):
     if result.returncode != 0:
         return {"status": "unavailable", "reason": "probe_unavailable"}
     try:
-        value = json.loads(raw)
-        if len(raw) > PROBE_BYTES or not isinstance(value, dict) or value.get("schema") not in OPERATOR_SCHEMAS or value.get("status") not in {"observed", "unavailable"}:
+        if len(raw) > PROBE_BYTES:
+            raise ValueError
+        value = decode(raw)
+        if not isinstance(value, dict) or value.get("schema") not in OPERATOR_SCHEMAS or value.get("status") not in ("observed", "unavailable"):
             raise ValueError
     except (ValueError, UnicodeError, RecursionError):
         raise checker.planner.PlanError("queue_incident_probe_output_invalid") from None
