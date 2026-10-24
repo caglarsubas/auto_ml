@@ -7,7 +7,8 @@ from pathlib import Path
 
 MAX_ROWS = 50
 MAX_BYTES = 131072
-SCHEMA = "native_queue_operator_snapshot_v1"
+SCHEMA = "native_queue_operator_snapshot_v2"
+STATEMENT_TIMEOUT_MS = 5000
 STATES = ("queued", "running", "cancel_requested", "succeeded", "blocked", "failed", "cancelled")
 KINDS = ("package_integrity_v1", "native_csv_scoring_v1", "native_numeric_training_search_v1",
          "native_training_scoring_v1", "native_protected_assessment_v1")
@@ -32,6 +33,8 @@ def read_snapshot():
 
     if connection.vendor != "postgresql":
         raise ValueError("operator_postgresql_required")
+    if connection.in_atomic_block or not transaction.get_autocommit():
+        raise ValueError("operator_top_level_transaction_required")
 
     class ExactState(Collate):
         def as_sqlite(self, compiler, database):
@@ -40,7 +43,13 @@ def read_snapshot():
     with transaction.atomic():
         with connection.cursor() as cursor:
             cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-            cursor.execute("SET LOCAL statement_timeout = '5000ms'")
+            cursor.execute(
+                "SELECT current_setting('statement_timeout'), setting::bigint "
+                "FROM pg_settings WHERE name = 'statement_timeout'"
+            )
+            _, configured = cursor.fetchone()
+            timeout_ms = min(configured or STATEMENT_TIMEOUT_MS, STATEMENT_TIMEOUT_MS)
+            cursor.execute("SELECT set_config('statement_timeout', %s, true)", [f"{timeout_ms}ms"])
         observed = timezone.now()
         unfinished = Q(_operator_state__in=["queued", "running", "cancel_requested"])
         active = Q(_operator_state__in=["running", "cancel_requested"])
@@ -89,7 +98,7 @@ def read_snapshot():
             })
         return {"schema": SCHEMA, "status": "observed", "observed_at": observed.isoformat(),
                 "scope": "trusted_installation_all_projects", "read_only_transaction": True,
-                "repeatable_read": True, "statement_timeout_ms": 5000, "jobs_enabled": settings.DECLARAI_JOBS_ENABLED,
+                "repeatable_read": True, "statement_timeout_ms": timeout_ms, "jobs_enabled": settings.DECLARAI_JOBS_ENABLED,
                 "states": states, "signals": signals, "incident_total": total, "attempt_limit": LIMITS["attempts"],
                 "rows": incidents, "row_limit": MAX_ROWS, "truncated": total > len(incidents),
                 "selection": "Newest matching jobs by creation time and UUID; signals may overlap. Terminal failures are historical, not proof of a current outage.",

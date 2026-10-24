@@ -101,14 +101,15 @@ def queue(value):
     require(isinstance(value, dict))
     if value.get("status") == "unavailable":
         require(set(value) in ({"status", "reason"}, {"schema", "status", "reason"}))
-        require(value.get("schema", "native_queue_operator_snapshot_v1") == "native_queue_operator_snapshot_v1")
+        require(value.get("schema", triage.OPERATOR_SCHEMAS[0]) in triage.OPERATOR_SCHEMAS)
         require(value["reason"] in {"api_not_active", "probe_transport_unavailable", "probe_unavailable", "queue_metadata_unavailable"})
         return
     keys(value, "schema status observed_at scope read_only_transaction repeatable_read statement_timeout_ms jobs_enabled states signals incident_total attempt_limit rows row_limit truncated selection guidance live_service_health recovery_authorized")
-    require(value["schema"] == "native_queue_operator_snapshot_v1" and value["status"] == "observed")
+    require(value["schema"] in triage.OPERATOR_SCHEMAS and value["status"] == "observed")
     timestamp(value["observed_at"])
     require(value["scope"] == "trusted_installation_all_projects" and value["read_only_transaction"] is True and value["repeatable_read"] is True)
-    require(type(value["statement_timeout_ms"]) is int and value["statement_timeout_ms"] == 5000)
+    timeout = value["statement_timeout_ms"]
+    require(type(timeout) is int and (timeout == 5000 if value["schema"] == triage.OPERATOR_SCHEMAS[0] else 1 <= timeout <= 5000))
     require(type(value["jobs_enabled"]) is bool and value["row_limit"] == 50 and type(value["row_limit"]) is int)
     require(value["live_service_health"] == "not_tested" and value["recovery_authorized"] is False)
     require(isinstance(value["states"], dict) and set(value["states"]) == STATES | {"unknown"})

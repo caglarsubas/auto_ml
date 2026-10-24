@@ -19,7 +19,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db
 @pytest.fixture
 def snapshot(monkeypatch):
     # The native suite and private Linux qualifier exercise real PostgreSQL
-    # read-only/repeatable-read settings. SQLite only adapts unsupported SET.
+    # read-only/repeatable-read settings. SQLite adapts PostgreSQL control
+    # statements only; real model queries still execute.
     if connection.vendor != "postgresql":
         import django.db
         original = connection.cursor
@@ -28,12 +29,25 @@ def snapshot(monkeypatch):
         def cursor():
             with original() as current:
                 class SettingsCursor:
-                    def execute(self, sql):
-                        assert sql in {"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY", "SET LOCAL statement_timeout = '5000ms'"}
+                    def execute(self, sql, params=None):
+                        self.last = sql
+                        if sql in {"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY", "SET LOCAL statement_timeout = '5000ms'",
+                                   "SELECT current_setting('statement_timeout'), setting::bigint FROM pg_settings WHERE name = 'statement_timeout'"}:
+                            assert params is None
+                        else:
+                            assert sql == "SELECT set_config('statement_timeout', %s, true)" and params == ["5000ms"]
+
+                    def fetchone(self):
+                        assert self.last == "SELECT current_setting('statement_timeout'), setting::bigint FROM pg_settings WHERE name = 'statement_timeout'"
+                        return "0", 0
                 yield SettingsCursor()
 
         class SettingsConnection:
             vendor = "postgresql"
+
+            @property
+            def in_atomic_block(self):
+                return connection.in_atomic_block
 
             def cursor(self):
                 return cursor()

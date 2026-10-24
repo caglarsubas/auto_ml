@@ -26,6 +26,7 @@ resources = adopter.resources
 checker = adopter.checker
 MAX_BYTES = 262144
 PROBE_BYTES = 131072
+OPERATOR_SCHEMAS = ("native_queue_operator_snapshot_v1", "native_queue_operator_snapshot_v2")
 STATE_KEYS = ("Running", "Paused", "Restarting", "Dead", "OOMKilled", "ExitCode", "Pid")
 
 
@@ -154,7 +155,7 @@ def probe(api):
         return {"status": "unavailable", "reason": "probe_unavailable"}
     try:
         value = json.loads(raw)
-        if len(raw) > PROBE_BYTES or not isinstance(value, dict) or value.get("schema") != "native_queue_operator_snapshot_v1" or value.get("status") not in {"observed", "unavailable"}:
+        if len(raw) > PROBE_BYTES or not isinstance(value, dict) or value.get("schema") not in OPERATOR_SCHEMAS or value.get("status") not in {"observed", "unavailable"}:
             raise ValueError
     except (ValueError, UnicodeError, RecursionError):
         raise checker.planner.PlanError("queue_incident_probe_output_invalid") from None
