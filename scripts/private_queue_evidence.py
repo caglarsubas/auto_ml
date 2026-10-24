@@ -204,7 +204,7 @@ def verify(raw, *, expected_sha256, expected_plan_sha256, installation_id, initi
     identifier(initialization_id, r"[0-9a-f]{32}")
     require(type(max_age_seconds) is int and 1 <= max_age_seconds <= 86400)
     require(isinstance(raw, bytes) and len(raw) <= MAX_FILE_BYTES)
-    wrapper = json.loads(raw.decode("utf-8"), object_pairs_hook=unique, parse_constant=lambda _: require(False))
+    wrapper = triage.decode(raw)
     keys(wrapper, "evidence sha256")
     evidence = wrapper["evidence"]
     canonical = triage.encode(evidence)
