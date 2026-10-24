@@ -348,7 +348,23 @@ def serialize(job, *, replayed=False):
     }
 
 
+def execution_scope_bindings(job):
+    """A current scope for another resource is not this job's authority."""
+    def bound(value, file_id, actor_id=None):
+        if (not isinstance(value, dict) or type(value.get("file_id")) is not int
+                or value["file_id"] != file_id or value.get("project_id") != str(job.project_id)
+                or value.get("operation") != "read" or "pipeline_id" in value
+                or type(value.get("actor_id")) is not int or value["actor_id"] <= 0
+                or actor_id is not None and value["actor_id"] != actor_id):
+            raise projects.ProjectDenied("job_authority_binding_changed")
+    bound(job.authority, job.dataset_id)
+    if job.source_dataset_id is not None:
+        source = job.specification.get("source_authority") if isinstance(job.specification, dict) else None
+        bound(source, job.source_dataset_id, job.authority["actor_id"])
+
+
 def recheck_execution(job):
+    execution_scope_bindings(job)
     if job.specification.get("kind") == native_assessment.KIND:
         native_assessment.recheck(job)
     if job.specification.get("kind") == training_scoring.KIND:
@@ -513,18 +529,19 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
         if not _owns_live_lease(job, token, now):
             return
         if job.state == "cancel_requested":
-            close(job, "cancelled", "actor_cancelled")
+            close(job, "cancelled", "actor_cancelled", metadata_only=True)
             return
         if now >= job.expires_at:
-            close(job, "failed", "job_expired")
+            close(job, "failed", "job_expired", metadata_only=True)
             return
         if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
-            close(job, "blocked", "job_time_budget_exceeded")
+            close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
             return
         try:
             # Same project/binding/member locks as authoritative membership edits.
             from django.contrib.auth import get_user_model
 
+            execution_scope_bindings(job)
             actor = get_user_model().objects.get(pk=job.authority["actor_id"])
             lock_authority(actor, job.dataset_id, None)
             if job.source_dataset_id is not None:
@@ -532,11 +549,11 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
             if _owns_live_lease(job, token, timezone.now()):
-                close(job, "blocked", "job_authority_changed")
+                close(job, "blocked", "job_authority_changed", metadata_only=True)
             return
         except JobConflict as exc:
             if _owns_live_lease(job, token, timezone.now()):
-                close(job, "blocked", exc.code)
+                close(job, "blocked", exc.code, metadata_only=True)
             return
         prepared_result = result if state == "succeeded" else None
         prepared_digest = digest(prepared_result) if prepared_result else ""
@@ -546,10 +563,10 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
         if not _owns_live_lease(job, token, now):
             return
         if now >= job.expires_at:
-            close(job, "failed", "job_expired")
+            close(job, "failed", "job_expired", metadata_only=True)
             return
         if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
-            close(job, "blocked", "job_time_budget_exceeded")
+            close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
             return
         job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)
