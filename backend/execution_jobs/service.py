@@ -125,7 +125,7 @@ def locked():
                     cursor.execute("SELECT set_config('lock_timeout', %s, true)", [previous_lock_timeout])
 
 
-def record(job, kind, *, actor=None, detail=None):
+def record(job, kind, *, actor=None, detail=None, update_fields=None):
     job.revision += 1
     JobEvent.objects.create(
         job=job,
@@ -134,7 +134,10 @@ def record(job, kind, *, actor=None, detail=None):
         actor_snapshot=actor_snapshot(actor) if actor else {},
         detail=detail or {},
     )
-    job.save()
+    if update_fields is None:
+        job.save()
+    else:
+        job.save(update_fields=update_fields)
 
 
 def scope(actor, file_id):
@@ -412,10 +415,11 @@ def cancel(actor, identifier, data):
         return serialize(job)
 
 
-def close(job, state, reason):
+def close(job, state, reason, *, metadata_only=False):
     job.state, job.reason_code, job.finished_at = state, reason, timezone.now()
     job.lease_token = job.lease_until = None
-    record(job, state, detail={"reason_code": reason})
+    fields = ["state", "reason_code", "finished_at", "lease_token", "lease_until", "revision"] if metadata_only else None
+    record(job, state, detail={"reason_code": reason}, update_fields=fields)
 
 
 def claim(identifier):
@@ -424,31 +428,36 @@ def claim(identifier):
         if job.state != "queued" or NativeJob.objects.filter(state__in=ACTIVE).count() >= LIMITS["max_active"]:
             return None
         if timezone.now() >= job.expires_at:
-            close(job, "failed", "job_expired")
+            close(job, "failed", "job_expired", metadata_only=True)
             return None
         # A restored/inconsistent queued row must not bypass the retry ceiling
         # just because delivery arrives without an expired-lease reconciliation.
         if job.attempts >= LIMITS["attempts"]:
-            close(job, "failed", "job_attempts_exhausted")
+            close(job, "failed", "job_attempts_exhausted", metadata_only=True)
+            return None
+        # Malformed restored metadata must not remain a poison queued request
+        # that raises before claiming a lease on every duplicate delivery.
+        if not isinstance(job.specification, dict) or not isinstance(job.specification.get("kind"), str):
+            close(job, "blocked", "job_specification_invalid", metadata_only=True)
             return None
         try:
             recheck_execution(job)
         except (projects.ProjectDenied, ObjectDoesNotExist):
-            close(job, "blocked", "job_authority_changed")
+            close(job, "blocked", "job_authority_changed", metadata_only=True)
             return None
         except JobConflict as exc:
-            close(job, "blocked", exc.code)
+            close(job, "blocked", exc.code, metadata_only=True)
             return None
         if (
             job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}
             or job.specification.get("runtime") != runtime(job.specification.get("kind"))
             or job.specification.get("limits") != limits(job.specification.get("kind"))
         ):
-            close(job, "blocked", "job_runtime_changed")
+            close(job, "blocked", "job_runtime_changed", metadata_only=True)
             return None
         now = timezone.now()
         if now >= job.expires_at:
-            close(job, "failed", "job_expired")
+            close(job, "failed", "job_expired", metadata_only=True)
             return None
         job.state, job.lease_token = "running", uuid.uuid4()
         job.lease_until = now + timedelta(seconds=LIMITS["lease_seconds"])
