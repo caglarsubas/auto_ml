@@ -304,11 +304,17 @@ def submit(actor, file_id, data):
         return serialize(job)
 
 
+def _saved_kind(job):
+    value = job.specification.get("kind") if isinstance(job.specification, dict) else None
+    return value if isinstance(value, str) else None
+
+
 def serialize(job, *, replayed=False):
     result = job.result
-    if result and job.specification["kind"] in {csv_scoring.KIND, training_scoring.KIND} and len(result.get("scores", [])) > 500:
+    scores = result.get("scores") if isinstance(result, dict) else None
+    if _saved_kind(job) in (csv_scoring.KIND, training_scoring.KIND) and isinstance(scores, list) and len(scores) > 500:
         result = {k: v for k, v in result.items() if k != "scores"} | {
-            "scores_preview": result["scores"][:500],
+            "scores_preview": scores[:500],
             "scores_truncated": True,
         }
     return {
@@ -378,7 +384,9 @@ def scoring_receipt(actor, identifier, expected):
     with locked():
         job = NativeJob.objects.get(pk=identifier)
         scopes = read_authority(actor, job)
-        if job.state != "succeeded" or job.specification["kind"] not in {csv_scoring.KIND, training_scoring.KIND} or job.result_sha256 != expected:
+        if (job.state != "succeeded" or _saved_kind(job) not in (csv_scoring.KIND, training_scoring.KIND)
+                or job.result_sha256 != expected or not isinstance(job.result, dict)
+                or not isinstance(job.result.get("scores"), list)):
             raise JobConflict("job_scoring_result_unavailable")
         raw = csv_scoring.canonical_bytes(job.result)
         for current in scopes:
