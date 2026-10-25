@@ -363,21 +363,44 @@ def execution_scope_bindings(job):
         bound(source, job.source_dataset_id, job.authority["actor_id"])
 
 
+def execution_specification(job):
+    spec = job.specification
+    if not isinstance(spec, dict) or not isinstance(spec.get("kind"), str):
+        raise JobConflict("job_specification_invalid")
+    return spec
+
+
+def execution_reference(spec, identifier, checksum):
+    """Validate persisted reference syntax before ORM conversion or protected reads."""
+    value = spec.get(identifier)
+    try:
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError
+        require_digest(spec.get(checksum))
+    except ValueError:
+        raise JobConflict("job_specification_invalid") from None
+
+
 def recheck_execution(job):
+    spec = execution_specification(job)
     execution_scope_bindings(job)
-    if job.specification.get("kind") == native_assessment.KIND:
+    if spec["kind"] == native_assessment.KIND:
+        execution_reference(spec, "protected_input_id", "assessment_sha256")
         native_assessment.recheck(job)
-    if job.specification.get("kind") == training_scoring.KIND:
-        trained = NativeJob.objects.get(pk=job.specification["training_job_id"])
+    if spec["kind"] == training_scoring.KIND:
+        execution_reference(spec, "training_job_id", "training_result_sha256")
+        trained = NativeJob.objects.get(pk=spec["training_job_id"])
         if (trained.state != "succeeded" or trained.dataset_id != job.dataset_id
                 or trained.project_id != job.project_id
-                or trained.specification.get("kind") != training_search.KIND
+                or _saved_kind(trained) != training_search.KIND
                 or trained.result_sha256 != job.specification["training_result_sha256"]
                 or digest(trained.result) != trained.result_sha256):
             raise JobConflict("job_training_result_changed")
     projects.recheck(job.authority)
     if job.source_dataset_id is not None:
         projects.recheck(job.specification["source_authority"])
+    if spec["kind"] not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
+        raise JobConflict("job_runtime_changed")
 
 
 def read_authority(actor, job):
@@ -541,6 +564,7 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             # Same project/binding/member locks as authoritative membership edits.
             from django.contrib.auth import get_user_model
 
+            execution_specification(job)
             execution_scope_bindings(job)
             actor = get_user_model().objects.get(pk=job.authority["actor_id"])
             lock_authority(actor, job.dataset_id, None)
