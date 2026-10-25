@@ -40,8 +40,10 @@ def metric_spec(contract):
     for name in ('modeling/declared_metric.py', 'deployment/runtime_metadata.py', 'modeling/booster_adapters.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
         implementation.update(name.encode())
         implementation.update((root / name).read_bytes())
-    return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
-            'calculation': 'weighted_ovr_rank_auc_v1' if classes > 2 and primary == 'roc_auc' else 'trusted_reference_metrics_v1',
+    result = {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
+            'calculation': ('weighted_ovr_rank_auc_v1' if classes > 2 and primary == 'roc_auc' else
+                            'binary_rank_auc_v1' if classes == 2 and primary == 'roc_auc' else
+                            'trusted_reference_metrics_v1'),
             'direction': direction(primary), 'cost_matrix': costs, 'threshold': .5,
             'contract_sha256': contract.get('sha256'),
             'implementation_sha256': implementation.hexdigest(), 'metric_runtime': metric_runtime,
@@ -49,6 +51,16 @@ def metric_spec(contract):
             'semantics': 'Weighted one-vs-rest ROC-AUC / weighted F1 across declared classes' if classes > 2 else
                          ('Regression prediction errors' if task == 'regression' else
                           'Binary probabilities; threshold metrics use 0.5; expected cost is per observation.')}
+    if classes == 2 and primary == 'roc_auc':
+        from modeling.development_assessment import _MAX_BINARY_RANK_ROWS
+        result['calculation_details'] = {
+            'ties': 'average ranks; tied positive/negative pairs receive half credit',
+            'maximum_exact_rank_rows': _MAX_BINARY_RANK_ROWS,
+            'larger_partition_calculation': 'sklearn_roc_integration',
+            'independent_assessment_calculation': 'sklearn_roc_integration',
+        }
+    return result
+
 
 
 def bind_declared_metric(params, contract):
