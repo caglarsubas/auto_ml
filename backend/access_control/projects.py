@@ -8,7 +8,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connections, transaction
 from django.utils import timezone
 
 from access_control.authority import actor_snapshot
@@ -37,7 +37,11 @@ def governed():
     return settings.DECLARAI_RUNTIME_PROFILE == "private" or ProjectPolicy.objects.exists()
 
 
-def membership(actor_id, project_id, operation="read"):
+def membership(actor_id, project_id, operation="read", *, _dataset_id=None):
+    if _dataset_id is not None:
+        if project_id is not None:
+            raise ProjectDenied()
+        return _dataset_authority(actor_id, _dataset_id, operation)
     member = ProjectMembership.objects.filter(
         actor_id=actor_id, actor__is_active=True, project_id=project_id, active=True
     ).first()
@@ -54,11 +58,44 @@ def membership(actor_id, project_id, operation="read"):
 
 
 def dataset_authority(actor_id, file_id, operation="read"):
-    binding = ProjectDataset.objects.filter(dataset_id=positive_file_id(file_id)).first()
-    if not binding:
+    return membership(actor_id, None, operation, _dataset_id=positive_file_id(file_id))
+
+
+def _dataset_authority(actor_id, file_id, operation):
+    # Identifiers come only from model metadata; actor/file values stay bound.
+    # Each call executes a new statement, including every final recheck.
+    db = connections[ProjectDataset.objects.db]
+    quote = db.ops.quote_name
+    binding_meta, member_meta, actor_meta = ProjectDataset._meta, ProjectMembership._meta, get_user_model()._meta
+    def field(model, name):
+        return quote(model.get_field(name).column)
+    sql = f"""SELECT b.{field(binding_meta, 'dataset')}, b.{field(binding_meta, 'project')}, b.{field(binding_meta, 'revision')},
+                     m.{field(member_meta, 'actor')} AS authority_actor_id,
+                     m.{field(member_meta, 'role')} AS authority_role,
+                     m.{field(member_meta, 'revision')} AS authority_revision,
+                     u.{quote(actor_meta.pk.column)} AS authority_actor_pk
+              FROM {quote(binding_meta.db_table)} b
+              LEFT JOIN {quote(member_meta.db_table)} m
+                ON m.{field(member_meta, 'project')} = b.{field(binding_meta, 'project')}
+               AND m.{field(member_meta, 'actor')} = %s AND m.{field(member_meta, 'active')}
+              LEFT JOIN {quote(actor_meta.db_table)} u
+                ON u.{quote(actor_meta.pk.column)} = m.{field(member_meta, 'actor')} AND u.{field(actor_meta, 'is_active')}
+              WHERE b.{field(binding_meta, 'dataset')} = %s
+              ORDER BY m.{quote(member_meta.pk.column)} LIMIT 1"""
+    actor_value = actor_meta.pk.get_db_prep_value(actor_id, db)
+    rows = list(ProjectDataset.objects.using(db.alias).raw(sql, [actor_value, positive_file_id(file_id)]))
+    if not rows:
         raise ProjectDenied("dataset_project_assignment_required")
+    binding = rows[0]
+    roles = {"read": {"developer", "reviewer", "admin"}, "write": {"developer"}, "admin": {"admin"}}
+    if binding.authority_actor_pk is None or binding.authority_role not in roles.get(operation, set()):
+        raise ProjectDenied()
     return {
-        **membership(actor_id, binding.project_id, operation),
+        "project_id": str(binding.project_id),
+        "actor_id": binding.authority_actor_id,
+        "membership_revision": str(member_meta.get_field("revision").to_python(binding.authority_revision)),
+        "role": binding.authority_role,
+        "operation": operation,
         "file_id": binding.dataset_id,
         "binding_revision": str(binding.revision),
     }

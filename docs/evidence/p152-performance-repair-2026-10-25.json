@@ -12,16 +12,21 @@
     "backend/deployment/runtime_metadata.py": "4ab9b43688e0f6e7d9ffb067bfc747e2523db19da7678ed04c5490c615b0e798",
     "backend/deployment/scoring_receipts.py": "7df0cb829fe270c1c4d18921e36d0642988da366813c2222d253eb75cf2ebdbe",
     "backend/modeling/declared_metric.py": "97c437c320b04304c7c7d294e2a8c1ea5280366d3d9a42c4946be8d6de363f7f",
-    "backend/tests/unit/test_runtime_metadata.py": "c490f5dfef9327f125a067b68399d8d8bdd285b01619f4a99a7902c740fd5df1"
+    "backend/tests/unit/test_runtime_metadata.py": "c490f5dfef9327f125a067b68399d8d8bdd285b01619f4a99a7902c740fd5df1",
+    "backend/access_control/projects.py": "48eded151c9dedc10231601774eb510002e07741eed1e6ea5a2ce3ddff8cea35",
+    "backend/tests/unit/test_project_scope_snapshot.py": "d5a8efbbb86df7f71061df2cb80d1dad04d1e648107f4bef4eb1533d01c87ba2"
   },
   "local_checks": {
-    "focused_passed": 1851,
-    "native_passed": 6046,
+    "focused_passed": 1926,
+    "native_passed": 6121,
     "native_skipped": 6,
-    "native_seconds": 369.238,
-    "new_backend_cases": 116,
+    "native_seconds": 342.371,
+    "new_backend_cases": 191,
     "receipt_cases": 88,
     "metadata_cases": 28,
+    "scope_snapshot_cases": 75,
+    "live_scope_single_statement": true,
+    "permission_data_cached": false,
     "two_workers_isolated": true,
     "all_original_test_files_byte_identical": true,
     "inherited_guarded_files_byte_identical": 342,
@@ -94,6 +99,90 @@
       "raw": "failed-main-40170988504"
     }
   },
+  "metadata_only_PR_failure": {
+    "run": 40176565988,
+    "head": "6da38d75aa62ff252dd15be6a5185305f2290110",
+    "attempt": 1,
+    "passed_checks": 5,
+    "failed_check": "PostgreSQL runtime and metadata",
+    "cause": "900-second native pytest process timeout with incomplete final report",
+    "native_final_count_verified": false,
+    "merged": false,
+    "raw": "failed-pr-40176565988",
+    "ci_rerun_requested": false
+  },
+  "prior_metadata_only_local_qualification": {
+    "focused_passed": 1851,
+    "native_passed": 6046,
+    "native_skipped": 6,
+    "native_seconds": 369.238,
+    "new_backend_cases": 116,
+    "receipt_cases": 88,
+    "metadata_cases": 28,
+    "two_workers_isolated": true,
+    "all_original_test_files_byte_identical": true,
+    "inherited_guarded_files_byte_identical": 342,
+    "p152_receipt_test_file_byte_identical": true,
+    "source_hashes_match": true,
+    "fresh_distribution_lookup_and_standard_metadata_read": true,
+    "custom_property_providers_bypass_cache": true,
+    "bounded_pure_parsing_cache": true,
+    "changed_missing_unreadable_metadata_observable": true,
+    "helper_source_hashes_live": true,
+    "wait_policy_changed": false,
+    "resource_workload_coverage_skip_retry_timeout_settings_changed": false,
+    "tracker_isolated_JS_checks": 9,
+    "browser_rendering_qualified": false
+  },
+  "scope_diagnostic": {
+    "diagnostic_only": true,
+    "results": {
+      "baseline": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "256",
+        "time": "78.202",
+        "timestamp": "2026-10-25T07:41:07.183995+00:00",
+        "hostname": "384fb0e84cd3"
+      },
+      "metadata": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "256",
+        "time": "69.496",
+        "timestamp": "2026-10-25T07:55:45.579964+00:00",
+        "hostname": "e7ce5f4391d2"
+      },
+      "orm": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "256",
+        "time": "76.667",
+        "timestamp": "2026-10-25T09:21:12.245989+00:00",
+        "hostname": "dc8f918c4081"
+      },
+      "parameterized": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "256",
+        "time": "65.998",
+        "timestamp": "2026-10-25T09:34:15.263117+00:00",
+        "hostname": "ca122f304e78"
+      }
+    },
+    "original_256_case_identities_preserved": true,
+    "permission_results_not_cached": true,
+    "resource_workload_assertion_budgets_changed": false,
+    "full_qualification_pending": true
+  },
   "original_suite_preservation": {
     "protected_test_execution_files": 342,
     "byte_identical_protected_files": 342,
@@ -144,14 +233,15 @@
     "primary_runtime_preserved": true
   },
   "raw_receipts": {
-    "test-reports/p152/repair-new-v2-sqlite.xml": "50c72b73e3623ebb2e5160cb3c4844678c9184bff5d76c124b72051fafcd90ac",
-    "test-reports/p152/repair-focused-v2-sqlite.xml": "d559478021270874de47462a0c040fd414f69e36e81a437084ae531a80d3752d",
-    "test-reports/p152/full-repair-native-v2/postgresql.xml": "30bb29f37b7686db5289619ebe6aebfadb42a8548e6b1264f1bbff18d5908303",
-    "test-reports/p152/full-repair-native-v2/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
-    "test-reports/p152/repair-ruff-ci-exact-v2.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p152/repair-new-v3-sqlite.xml": "2798780cbf3152c3966557f2e9d008a073fa2e6dc3cdeab6676ce4c4d8ccedc5",
+    "test-reports/p152/repair-focused-v3-sqlite.xml": "521f02edc2c4b2b84f5b3985f02384a764b221c4dae13415160b20fe1b678523",
+    "test-reports/p152/full-repair-native-v3/postgresql.xml": "9beb114af38d55cee91afadd5c42e8af4bee660f154cefa998ddd5d1797e580d",
+    "test-reports/p152/full-repair-native-v3/postgresql-isolation.json": "c206e1d8471f00a043e2468e91b4c96a2ee3f77b6cbdc66bb35859c4262ecd0e",
+    "test-reports/p152/repair-ruff-ci-exact-v3.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
     "test-reports/p152/repair-workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc",
     "test-reports/p152/repair-tracker-js-logic.log": "98c1d3fd20669a666d50a9b2c1725824c8fa824d30c8585ae8aa6f553aacbc9f",
     "test-reports/p152/runtime-prototype-comparison.json": "736fe998d2369f30213045236def0fec236f70088aa83c6fbea7ebc64a7d5f48",
+    "test-reports/p152/authority-prototype-comparison.json": "410e17456920f2d27359e0c5bda2756744801bb2a8db35ac72883bbe7dd21ec7",
     "test-reports/p152/wait-policy-comparison.json": "134f327356f8eb0359a00b820ae697a7b55fc6d8771f8f73c1eebbdd50471c21",
     "test-reports/p152/profile-probe/gw0.pstats": "1d5fc6db7e07320b2cae24a69cd0af7b439b4150810dc847b2620e0def8d2d8c",
     "test-reports/p152/profile-probe/gw1.pstats": "6402a842640da07c13c5c970c71144128265e0c0a0e1148c7161fcb1fa050946"

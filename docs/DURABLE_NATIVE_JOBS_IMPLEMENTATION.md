@@ -237,3 +237,12 @@ Native runtime declarations, scoring receipts and declared metrics repeatedly pa
 The helper is included in the existing live source fingerprints for all three consumers. Runtime manifests, source bytes, permissions, scoring results and installed-state snapshots are not cached. The standalone portable native candidate reader retains its existing dependency and source checks. Existing compatibility checks continue to govern execution and replay.
 
 Twenty-eight additional tests cover installed-version parity, legacy metadata locations, header semantics, changed metadata, failures after a cached parse, per-call lookup/read behavior, cache bounds and source-fingerprint freshness. The original receipt tests, scientific cases, workload sizes, two-worker isolation, CPU/native-thread budgets, coverage, skip/retry policies and 900-second limit remain unchanged. Source qualification and final PR/main evidence are recorded separately in the roadmap and the P152 performance repair evidence.
+
+
+### Single-statement live dataset authority (P152 follow-up)
+
+The metadata-only repair PR head also exceeded the unchanged 900-second native process cap; its final suite count was incomplete and it remained unmerged. Its failed log/archive is retained. The combined repair additionally reduces live dataset-scope lookup overhead: each check now reads the binding, active membership and active actor in one statement instead of two separately compiled ORM reads. Rechecks execute another statement; no authority data is cached.
+
+The existing membership entrypoint remains responsible for dataset-bound resolution and retains its normal project-scoped path. A private dataset selector cannot be mixed with an explicit project scope. The joined query uses Django's routed model manager, table/column names quoted from model metadata, and bound actor/file parameters. It preserves missing-binding versus missing-membership denials, operation-specific roles, canonical revisions and current-project membership. The new source is already included in the existing runtime fingerprint for access_control/projects.py.
+
+Seventy-five new cases compare role/active-state behavior with the existing policy, require one live statement per resolution/recheck, and exercise unknown/unbound resources, revocation, revision changes, cross-project memberships, changed bindings and conflicting scope selectors. The previous receipt and metadata tests remain byte-identical. Full local and automatic exact-head/push-main qualification remain separate gates under the original budgets.
