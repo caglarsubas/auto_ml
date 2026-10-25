@@ -449,17 +449,20 @@ def cancel(actor, identifier, data):
     with locked():
         job = NativeJob.objects.select_for_update().get(pk=identifier)
         current = lock_authority(actor, job.dataset_id, None)
-        if actor.pk != job.authority["actor_id"] or current["role"] not in {"developer", "reviewer"}:
+        saved_actor = job.authority.get("actor_id") if isinstance(job.authority, dict) else None
+        if type(saved_actor) is not int or saved_actor <= 0 or actor.pk != saved_actor or current["role"] not in {"developer", "reviewer"}:
             raise projects.ProjectDenied("job_cancel_submitter_required")
         if job.state not in TERMINAL and job.state != "cancel_requested":
             job.state = "cancel_requested" if job.state == "running" else "cancelled"
             job.reason_code = "actor_cancelled"
             if job.state == "cancelled":
                 job.finished_at = timezone.now()
-            record(job, job.state, actor=actor)
-        for authority in read_authority(actor, job):
+            record(job, job.state, actor=actor, update_fields=["state", "reason_code", "finished_at", "revision"])
+        scopes = read_authority(actor, job)
+        result = serialize(job)
+        for authority in scopes:
             projects.recheck(authority)
-        return serialize(job)
+        return result
 
 
 def close(job, state, reason, *, metadata_only=False):
