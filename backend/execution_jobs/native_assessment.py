@@ -408,9 +408,10 @@ def submit(actor, file_id, data):
         if previous:
             if previous.request_sha256 != request_sha:
                 conflict("job_request_reused")
-            for scope in service.read_authority(actor, previous):
+            scopes = service.read_authority(actor, previous)
+            for scope in scopes:
                 projects.recheck(scope)
-            return service.serialize(previous, replayed=True)
+            return service.authorized_receipt(previous, scopes, replayed=True)
         if NativeJob.objects.filter(state__in=service.ACTIVE | {"queued"}).count() >= service.LIMITS["max_pending"]:
             conflict("job_queue_full")
         prepared, protected, _, _ = plan(actor, data["protected_input_id"])
@@ -428,7 +429,7 @@ def submit(actor, file_id, data):
             expires_at=timezone.now() + timedelta(hours=1),
         )
         service.record(job, "submitted", actor=actor)
-        return service.serialize(job)
+        return service.authorized_receipt(job, [authority])
 
 
 def recheck(job):

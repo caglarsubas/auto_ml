@@ -254,9 +254,10 @@ def submit(actor, file_id, data):
         if previous:
             if previous.request_sha256 != request_sha:
                 raise JobConflict("job_request_reused")
-            for authority in read_authority(actor, previous):
+            scopes = read_authority(actor, previous)
+            for authority in scopes:
                 projects.recheck(authority)
-            return serialize(previous, replayed=True)
+            return authorized_receipt(previous, scopes, replayed=True)
         if NativeJob.objects.filter(state__in=ACTIVE | {"queued"}).count() >= LIMITS["max_pending"]:
             raise JobConflict("job_queue_full")
         manifest, identity = header(file_id, bundle_id, sha)
@@ -301,7 +302,7 @@ def submit(actor, file_id, data):
         )
         projects.recheck(current)
         record(job, "submitted", actor=actor)
-        return serialize(job)
+        return authorized_receipt(job, [current, *([input_scope] if input_scope is not None else [])])
 
 
 def _saved_kind(job):
@@ -346,6 +347,15 @@ def serialize(job, *, replayed=False):
             for e in job.events.all()
         ],
     }
+
+
+
+def authorized_receipt(job, scopes, *, replayed=False):
+    """Prepare a receipt before the final live authority checks, inside its transaction."""
+    result = serialize(job, replayed=replayed)
+    for current in scopes:
+        projects.recheck(current)
+    return result
 
 
 def execution_scope_bindings(job):
@@ -436,11 +446,7 @@ def scoring_receipt(actor, identifier, expected):
 def read(actor, identifier):
     with locked():
         job = NativeJob.objects.get(pk=identifier)
-        scopes = read_authority(actor, job)
-        result = serialize(job)
-        for current in scopes:
-            projects.recheck(current)
-        return result
+        return authorized_receipt(job, read_authority(actor, job))
 
 
 def cancel(actor, identifier, data):
@@ -458,11 +464,7 @@ def cancel(actor, identifier, data):
             if job.state == "cancelled":
                 job.finished_at = timezone.now()
             record(job, job.state, actor=actor, update_fields=["state", "reason_code", "finished_at", "revision"])
-        scopes = read_authority(actor, job)
-        result = serialize(job)
-        for authority in scopes:
-            projects.recheck(authority)
-        return result
+        return authorized_receipt(job, read_authority(actor, job))
 
 
 def close(job, state, reason, *, metadata_only=False):
