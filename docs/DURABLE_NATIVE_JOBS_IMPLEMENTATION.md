@@ -208,3 +208,13 @@ Training-result scoring and protected assessment validate their referenced UUID 
 Publication checks the saved envelope before actor locking. Invalid metadata closes with one atomic blocked receipt through transition-only writes, preserving original specifications, opaque results and JSON-null payloads. Checkpoints keep their existing field projection, avoid unrelated actor/result payloads and do not publish events. Live database failures still propagate; no automatic data repair or recovery authority is introduced.
 
 96 additive regression cases cover the new boundaries, valid references, unknown-kind authority checks, referenced-kind integrity failures and rollback/storage failures. Existing real protected-assessment, private deployment, recovery and restoration qualification remains required. The broader D07 and customer acceptance gates remain open.
+
+### Cancellation authority and evidence safety (P151)
+
+Cancellation requires a strict positive integer saved submitter matching the current caller, in addition to the existing developer/reviewer role and fresh dataset/project/source permissions. Malformed snapshots, missing principals and Boolean/float/string substitutions receive the existing `job_cancel_submitter_required` denial without mutation. This validates cancellation identity syntax; it does not authenticate historical records or grant broader cancellation rights.
+
+Queued cancellation and running cancellation requests now save only `state`, `reason_code`, `finished_at` and `revision`. They preserve raw specifications, saved actor metadata, authority, results, digests, attempt counts and leases, including JSON-null retained payloads. Existing worker acknowledgement and slot/lease fencing remain unchanged. Cancellation remains available for invalid execution specifications when the submitter and current resource permissions are valid; it does not repair those specifications or authorize execution.
+
+The response is serialized inside the transaction before the final live primary/source/actor permission checks. Revocation during serialization refuses private output and rolls back the cancellation and receipt. Terminal/repeated requests follow the same final authorization checks. Source/project/result-integrity denials and genuine database/storage failures retain their existing diagnostics and atomic rollback behavior.
+
+74 additive service/HTTP cases cover identity shape/coercion, transition-only SQL, retained JSON-null/opaque evidence, late revocation, repeated/terminal behavior and storage/receipt failures. Existing real authentication/CSRF, native worker cancellation and private recovery qualification remains required. D07 and customer acceptance gates remain open.
