@@ -125,7 +125,7 @@ def serialize(actor, adoption, replayed=False):
         for p in protected_inputs
     ):
         conflict("native_protected_specification_changed")
-    return {
+    result = {
         "id": str(adoption.pk),
         "training_job_id": str(job.pk),
         "file_id": job.dataset_id,
@@ -158,6 +158,9 @@ def serialize(actor, adoption, replayed=False):
         "limitation": LIMITATION,
         "replayed": replayed,
     }
+    for authority in scopes:
+        projects.recheck(authority)
+    return result
 
 
 def propose(actor, job_id, data):
