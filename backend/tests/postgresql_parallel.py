@@ -19,6 +19,12 @@ def pytest_configure(config):
     worker = config.workerinput["workerid"]
     if worker not in {"gw0", "gw1"}:
         raise pytest.UsageError("PostgreSQL qualification requires exactly two workers")
+    from tests.native_worker_diagnostics import NativeWorkerDiagnostics
+
+    config.pluginmanager.register(
+        NativeWorkerDiagnostics(config.getoption("--postgresql-isolation-report"), worker),
+        "native-worker-diagnostics",
+    )
     url = urlsplit(os.environ.get("REDIS_URL", ""))
     if url.scheme != "redis" or not url.hostname or url.path != "/0" or url.query or url.fragment:
         raise pytest.UsageError("PostgreSQL qualification requires the owned Redis fixture")
