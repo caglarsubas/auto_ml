@@ -112,9 +112,10 @@ def submit(actor, file_id, data):
         if previous:
             if previous.request_sha256 != request_sha:
                 raise service.JobConflict("job_request_reused")
-            for authority in service.read_authority(actor, previous):
+            scopes = service.read_authority(actor, previous)
+            for authority in scopes:
                 projects.recheck(authority)
-            return service.serialize(previous, replayed=True)
+            return service.authorized_receipt(previous, scopes, replayed=True)
         if NativeJob.objects.filter(state__in=service.ACTIVE | {"queued"}).count() >= service.LIMITS["max_pending"]:
             raise service.JobConflict("job_queue_full")
         lock_authority(actor, data["input_file_id"], None)
@@ -129,7 +130,7 @@ def submit(actor, file_id, data):
         )
         projects.recheck(current)
         service.record(job, "submitted", actor=actor)
-        return service.serialize(job)
+        return service.authorized_receipt(job, [current, plan["source_authority"]])
 
 
 def score(job, check):
