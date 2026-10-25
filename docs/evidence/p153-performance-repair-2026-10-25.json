@@ -1,0 +1,269 @@
+{
+  "packet": "P153",
+  "date": "2026-10-25",
+  "source_base": "04b1f776dc427ac2beb3947deae136ddca1054b1",
+  "original_source_base": "9ccb1f058dbe730aa5f67b8d17bc882a25af1555",
+  "scope": "Fresh authority row materialization efficiency; same-packet repair for failed initial main900 cap",
+  "source_sha256": {
+    "backend/execution_jobs/native_assessment.py": "6c9d1f6b97831b9c4f9ae066811c4c025318e5ce84f2318904f95a065db477c7",
+    "backend/tests/unit/test_native_adoption_receipts.py": "477a475f9a2a10bbbef64d9c3fc6cabbff480d2c782977d542ec11f0a722eb87",
+    "backend/access_control/projects.py": "25fc4830b6601032e18d9f301a1db76442f573d94bc7609f918658c42d84fe0b"
+  },
+  "local_checks": {
+    "receipt_and_scope_cases": 198,
+    "live_scope_cursor": true,
+    "permission_data_cached": false,
+    "whole_profiled_subset_elapsed_improved": false,
+    "focused_passed": 2049,
+    "native_passed": 6244,
+    "native_skipped": 6,
+    "native_seconds": 357.769,
+    "new_backend_cases": 123,
+    "unchanged_source_failures_each_database": 57,
+    "unchanged_source_compatibility_passes_each_database": 66,
+    "two_workers_isolated": true,
+    "all_original_test_files_byte_identical": true,
+    "inherited_guarded_files_byte_identical": 345,
+    "new_test_file_byte_identical_to_baseline": true,
+    "source_hashes_match": true,
+    "early_authority_checks_preserved": true,
+    "real_training_review_sealing_and_transactions": true,
+    "late_viewer_authority_and_atomic_new_write_rollback": true,
+    "external_concurrent_commit_qualification": false,
+    "resource_workload_coverage_skip_retry_timeout_settings_changed": false,
+    "tracker_isolated_JS_checks": 9,
+    "browser_rendering_qualified": false
+  },
+  "initial_delivery": {
+    "pr": 245,
+    "head": "251f67edc2992334ea979423ed075a23a5de4bc1",
+    "ci_run": 40190930280,
+    "ci": {
+      "run": 40190930280,
+      "head": "251f67edc2992334ea979423ed075a23a5de4bc1",
+      "attempt": 1,
+      "all_six": "passed",
+      "full_postgresql": {
+        "passed": 6244,
+        "skipped": 6,
+        "failed": 0,
+        "errors": 0,
+        "line_coverage": 76.81,
+        "branch_coverage": 67.12
+      },
+      "postgresql_seconds": 573.842,
+      "new_cases": 123,
+      "backend_new_cases": 123,
+      "frontend": 722,
+      "browser": {
+        "total": 47,
+        "expected": 47,
+        "unexpected": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": true
+      },
+      "ci_runner_profile": "ubuntu-24.04",
+      "actual_frontend_host_image_verified": true,
+      "new_frontend_cases": 0,
+      "new_browser_cases": 0,
+      "native_images_match_exported_set": true,
+      "actual_linux_schema_accounts_adoption_https": "passed",
+      "owned_cleanup": "passed",
+      "release_qualified": false,
+      "customer_installation_modified": false
+    },
+    "merge": "04b1f776dc427ac2beb3947deae136ddca1054b1",
+    "main_run": 40193238523,
+    "main_conclusion": "failure",
+    "reason": "native_process_timeout_900_seconds",
+    "complete_native_report": false,
+    "physical_qualification": false,
+    "other_five_checks_passed": true
+  },
+  "diagnostic_profile": {
+    "baseline": {
+      "seconds": 176.624,
+      "cases": 379,
+      "failures": 0,
+      "scopes": [
+        {
+          "worker": "gw0",
+          "calls": 14607,
+          "self_seconds": 0.519001585,
+          "cumulative_seconds": 13.187608504
+        },
+        {
+          "worker": "gw1",
+          "calls": 19051,
+          "self_seconds": 0.6692145070000001,
+          "cumulative_seconds": 17.758409555
+        }
+      ],
+      "scope_calls": 33658,
+      "scope_seconds": 30.946018059
+    },
+    "prototype": {
+      "seconds": 208.468,
+      "cases": 379,
+      "failures": 0,
+      "scopes": [
+        {
+          "worker": "gw0",
+          "calls": 14607,
+          "self_seconds": 0.7806224380000001,
+          "cumulative_seconds": 12.146936217
+        },
+        {
+          "worker": "gw1",
+          "calls": 19051,
+          "self_seconds": 0.791764435,
+          "cumulative_seconds": 12.716177279
+        }
+      ],
+      "scope_calls": 33658,
+      "scope_seconds": 24.863113496
+    }
+  },
+  "diagnostic_microbenchmark": {
+    "records": [
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.08927950001088902
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.06682004098547623
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.06603550002910197
+      },
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.08509608398890123
+      },
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.10008720902260393
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.06745450000744313
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.07700324995676056
+      },
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.08512424997752532
+      },
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.08425754099152982
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.06601050001336262
+      },
+      {
+        "variant": "cursor",
+        "calls": 500,
+        "seconds": 0.06577570899389684
+      },
+      {
+        "variant": "baseline",
+        "calls": 500,
+        "seconds": 0.08816216699779034
+      }
+    ],
+    "real_database": true,
+    "permission_data_cached": false,
+    "all_fresh_revisions_observed": true,
+    "baseline_median_seconds": 0.08664320848765783,
+    "cursor_median_seconds": 0.0664277705072891
+  },
+  "whole_subset_elapsed_improved": false,
+  "original_suite_preservation": {
+    "protected_test_execution_files": 345,
+    "byte_identical_protected_files": 345,
+    "intentional_production_consumer_updates": [],
+    "all_existing_test_files_byte_identical": true,
+    "ci_workflow_byte_identical": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040,
+      "P130": 1016,
+      "P131": 1703,
+      "P132": 1016,
+      "P133": 1017,
+      "P134": 1011,
+      "P135": 1016,
+      "P136": 1013,
+      "P137": 1016,
+      "P138": 1016,
+      "P139": 1025,
+      "P140": 1028,
+      "P141": 1026,
+      "P142": 1024,
+      "P143": 1022,
+      "P144": 1029,
+      "P145": 1026,
+      "P146": 1606,
+      "P147": 1611,
+      "P148": 1622,
+      "P149": 1623,
+      "P150": 1596,
+      "P151": 1605,
+      "P152": 4516
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved": true
+  },
+  "raw_receipts": {
+    "test-reports/p153/regression-comparison.json": "5467a16a985a554438643655520e72c1e1acc7130fd698045eff3891d24a4fe5",
+    "test-reports/p153/before-sqlite.xml": "ab1a5a550241d862ffc817aed399412dbb51754228eac4205726c74638e8e975",
+    "test-reports/p153/before-native/postgresql.xml": "da0acfa8b7b18ef345169dd2108cd1f16e96b2cced59c0a01dcdff18c9d6142f",
+    "test-reports/p153/repair-new-sqlite.xml": "9fa9a21e263f45a7c774f3862c60f95cf54ad3def205c836f807613bc50fe8f8",
+    "test-reports/p153/repair-focused-sqlite.xml": "a411f64dd5aa55ec3b2e22b23f44935d3c4efea81fa2010cdecdc45523ae6deb",
+    "test-reports/p153/repair-full-native/postgresql.xml": "41d81e473f45d25d246e3f7c14f76eec05b20eeaa90c964e3f1df52d62d0126f",
+    "test-reports/p153/repair-full-native/postgresql-isolation.json": "2223698b618dee8068d41770eb1e99fb428044709e3acd1c1511299110f3ac70",
+    "test-reports/p153/repair-ruff-ci-exact.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "test-reports/p153/workflow-policy-local.log": "c8c76502cff982849601817f14850516aa5743327243441c514c3070829ac7fc",
+    "test-reports/p153/repair-tracker-js-logic.log": "98c1d3fd20669a666d50a9b2c1725824c8fa824d30c8585ae8aa6f553aacbc9f",
+    "test-reports/p153/cursor-profile-comparison.json": "213f183a91723be6ef5e99fc9bae95e31884782e741f12873fc95e5062f3aec6",
+    "test-reports/p153/scope-benchmark/measurement.json": "3a38b119ffc387ee1c5cca216bd37d1390a6528fae93c474000b303687d0b244"
+  },
+  "pending_at_source_qualification": [
+    "all-six exact-head PR CI with full raw proofs",
+    "guarded merge",
+    "independent automatic push-main qualification"
+  ],
+  "release_qualified": false,
+  "customer_installation_modified": false
+}
