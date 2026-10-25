@@ -83,21 +83,23 @@ def _dataset_authority(actor_id, file_id, operation):
               WHERE b.{field(binding_meta, 'dataset')} = %s
               ORDER BY m.{quote(member_meta.pk.column)} LIMIT 1"""
     actor_value = actor_meta.pk.get_db_prep_value(actor_id, db)
-    rows = list(ProjectDataset.objects.using(db.alias).raw(sql, [actor_value, positive_file_id(file_id)]))
-    if not rows:
+    with db.cursor() as cursor:
+        cursor.execute(sql, [actor_value, positive_file_id(file_id)])
+        row = cursor.fetchone()
+    if row is None:
         raise ProjectDenied("dataset_project_assignment_required")
-    binding = rows[0]
+    dataset_id, project_id, binding_revision, actor_id, role, member_revision, active_actor = row
     roles = {"read": {"developer", "reviewer", "admin"}, "write": {"developer"}, "admin": {"admin"}}
-    if binding.authority_actor_pk is None or binding.authority_role not in roles.get(operation, set()):
+    if active_actor is None or role not in roles.get(operation, set()):
         raise ProjectDenied()
     return {
-        "project_id": str(binding.project_id),
-        "actor_id": binding.authority_actor_id,
-        "membership_revision": str(member_meta.get_field("revision").to_python(binding.authority_revision)),
-        "role": binding.authority_role,
+        "project_id": str(binding_meta.get_field("project").target_field.to_python(project_id)),
+        "actor_id": actor_meta.pk.to_python(actor_id),
+        "membership_revision": str(member_meta.get_field("revision").to_python(member_revision)),
+        "role": role,
         "operation": operation,
-        "file_id": binding.dataset_id,
-        "binding_revision": str(binding.revision),
+        "file_id": binding_meta.get_field("dataset").target_field.to_python(dataset_id),
+        "binding_revision": str(binding_meta.get_field("revision").to_python(binding_revision)),
     }
 
 
