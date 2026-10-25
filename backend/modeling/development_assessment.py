@@ -21,6 +21,24 @@ def metric_coverage(values, *, complete_only=True):
             'status': 'complete' if complete else ('partial' if usable else 'unavailable')}
 
 
+_MAX_BINARY_RANK_ROWS = 2**26
+
+
+def _binary_rank_auc(y, p):
+    """Unweighted ROC-AUC for validated binary probabilities; ties get half credit."""
+    from scipy.stats import rankdata
+
+    # Keep every half-rank and intermediate rank sum exact in float64.
+    # Larger partitions retain the independent ROC-integration implementation.
+    if len(y) > _MAX_BINARY_RANK_ROWS:
+        return float(roc_auc_score(y, p))
+    positive = y == 1
+    support = float(positive.sum())
+    ranks = rankdata(p, method='average')
+    u = ranks[positive].sum() - support * (support + 1.) / 2.
+    return float(u / (support * (len(y) - support)))
+
+
 def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
@@ -50,22 +68,25 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')
     both = len(np.unique(y)) == 2
-    pred = (p >= threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+    threshold_metrics = {'accuracy', 'f1', 'precision', 'recall', 'expected_cost'}
+    pred = (p >= threshold).astype(int) if metric is None or metric in threshold_metrics else None
     costs = costs or {}
+    def expected_cost_value():
+        tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+        return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))
     def ks_value():
         if not both:
             return None
         fpr, tpr, _ = roc_curve(y, p)
         return float(np.max(np.abs(tpr - fpr)))
-    values = {'roc_auc': lambda: float(roc_auc_score(y, p)) if both else None,
+    values = {'roc_auc': lambda: (_binary_rank_auc(y, p) if metric is not None else float(roc_auc_score(y, p))) if both else None,
               'pr_auc': lambda: float(average_precision_score(y, p)) if both else None,
               'ks': ks_value, 'log_loss': lambda: float(log_loss(y, p, labels=[0, 1])),
               'brier': lambda: float(brier_score_loss(y, p)), 'accuracy': lambda: float(accuracy_score(y, pred)),
               'f1': lambda: float(f1_score(y, pred, zero_division=0)),
               'precision': lambda: float(precision_score(y, pred, zero_division=0)),
               'recall': lambda: float(recall_score(y, pred, zero_division=0)),
-              'expected_cost': lambda: float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))}
+              'expected_cost': expected_cost_value}
     return {name: values[name]() for name in ([metric] if metric else values)}
 
 

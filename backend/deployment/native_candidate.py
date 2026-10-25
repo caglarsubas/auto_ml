@@ -31,12 +31,14 @@ def sha(raw):
 
 
 def export_candidate(job_id, dataset_id, project_id, result, result_sha256):
+    from deployment.runtime_metadata import package_version
+
     if sha(canonical(result)) != result_sha256:
         raise ValueError("candidate_result_changed")
     payload = {
         "schema_version": 1, "scope": SCOPE, "training_job_id": str(job_id),
         "dataset_id": dataset_id, "project_id": str(project_id), "result_sha256": result_sha256,
-        "scoring_runtime": {"python": sys.version.split()[0], "packages": {p: version(p) for p in ("numpy", "pandas", "xgboost")}, "reader_sha256": sha(Path(__file__).read_bytes())},
+        "scoring_runtime": {"python": sys.version.split()[0], "packages": {p: package_version(p) for p in ("numpy", "pandas", "xgboost")}, "reader_sha256": sha(Path(__file__).read_bytes())},
         "result": result, "scoring_profile": "ordered_numeric_mean_imputation_xgboost_v1",
         "evidence_scope": "Exploratory all-development refit; export is not model adoption or production approval.",
     }

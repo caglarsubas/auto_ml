@@ -1,0 +1,194 @@
+{
+  "packet": "P153",
+  "date": "2026-10-26",
+  "status": "local_qualified_PR_and_main_pending",
+  "source_base": "f9ecc7f3670b4d67d2ae30f3849210d1b7704524",
+  "source_sha256": {
+    "backend/execution_jobs/native_assessment.py": "6c9d1f6b97831b9c4f9ae066811c4c025318e5ce84f2318904f95a065db477c7",
+    "backend/tests/unit/test_native_adoption_receipts.py": "477a475f9a2a10bbbef64d9c3fc6cabbff480d2c782977d542ec11f0a722eb87",
+    "backend/access_control/projects.py": "25fc4830b6601032e18d9f301a1db76442f573d94bc7609f918658c42d84fe0b",
+    "backend/tests/postgresql_parallel.py": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+    "backend/tests/native_worker_diagnostics.py": "1573cf32504ea5050f69ed57cd984cfa47e65a394570f86a1add36d235972732",
+    "backend/tests/unit/test_native_worker_diagnostics.py": "f2600d0d5501ac663c44920e922b7a2b7317d8e7a4a6145b6cfd75ad02eacf9a",
+    "backend/deployment/native_candidate.py": "af10793197f3e9c2253852a16a1b3f9e28caf1af7ba1c744e07511df4ce6abb1",
+    "backend/modeling/development_assessment.py": "df2d269803bcc4d5ea2d2ae7b5984563c019c70533e4b438d1d66fb26bf505a6",
+    "backend/execution_jobs/service.py": "465a4fe46bd7e3b94af2be472c3550789d67919d8a1505573ad1895e73e3d1b9",
+    "backend/tests/unit/test_native_execution_costs.py": "18c1f09eba14a87dd41a1bb158a03d47eb17cf25194b8113711c4c0e92b77e9a",
+    "backend/modeling/declared_metric.py": "bc7e88b9ba12b55f4e3b6588e2bd1e32512750da280dc5205614dd4b1bc4397a",
+    "backend/tests/unit/test_binary_auc_execution.py": "05e8a989fca2d89d91cbfbf70760c68325d2d29d7736182ed16d5ec62620e3a5"
+  },
+  "prior_failed_main_runs": [
+    40193238523,
+    40201125143,
+    40210778584
+  ],
+  "profile_workflows": 379,
+  "diagnostic_profiles": [
+    {
+      "variant": "cpu-query-profile",
+      "cases": 379,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 189.232,
+      "cpu_cumulative_seconds": {
+        "export_candidate": 15.417769643,
+        "development_metrics": 32.852394778000004,
+        "checkpoint": 23.9169832
+      }
+    },
+    {
+      "variant": "cost-prototype-profile",
+      "cases": 379,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 178.48,
+      "cpu_cumulative_seconds": {
+        "export_candidate": 3.0356137390000004,
+        "development_metrics": 25.945934529,
+        "checkpoint": 22.801483418
+      }
+    },
+    {
+      "variant": "row-prototype-profile",
+      "cases": 379,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 174.297,
+      "cpu_cumulative_seconds": {
+        "export_candidate": 2.935419764,
+        "development_metrics": 25.833637821000003,
+        "checkpoint": 17.59307571
+      }
+    }
+  ],
+  "profile_limitations": [
+    "Diagnostic subset profiles, not full-suite acceptance or production-capacity proof.",
+    "Existing full-suite workloads, two workers, resource and thread budgets, coverage, skips, retries, scheduling and 900-second cap remain unchanged."
+  ],
+  "source_changes": [
+    "Candidate exports resolve/read current installed metadata through existing bounded identical-text parsing helper; portable scoring retains its independent standard-library lookup.",
+    "Selected probability metrics defer unrelated threshold statistics; complete reference metrics and formulas remain.",
+    "Checkpoints use parameterized fixed projections through routed model reads; both guard reads, model conversion boundaries, fresh authority checks, duplicate/missing-row failures and final guards remain."
+  ],
+  "new_cases": 125,
+  "main_qualified": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "auc_source_base": "3a86e8d5372970fa5f0b225b555bf831a3327bc8",
+  "binary_auc_profile": {
+    "cases": 379,
+    "seconds": 164.937,
+    "cpu_cumulative_seconds": {
+      "development_metrics": 13.189858924,
+      "_binary_rank_auc": 0.593525398
+    },
+    "diagnostic_subset_only": true
+  },
+  "binary_auc_new_cases": 77,
+  "prior_failed_cost_head": {
+    "pr": 248,
+    "head": "3a86e8d5372970fa5f0b225b555bf831a3327bc8",
+    "ci_run": 40216279397,
+    "conclusion": "failure",
+    "reason": "original_900_second_native_process_timeout",
+    "other_five_checks_passed": true,
+    "collected_cases": 6335,
+    "finished_cases": 6278,
+    "complete_native_report": false,
+    "physical_qualification": "not_run",
+    "worker_snapshots": [
+      {
+        "case": "tests/unit/test_scoring_receipt_authority.py::test_all_current_read_roles_can_download_exact_receipt",
+        "case_id_sha256": "423e10a0a3a6b9b6f2fc60c9b9af5c7190e39f55010e454125e4fd11a86a8375",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.938348016999953,
+        "finished_cases": 2436,
+        "last_report_phase": "setup",
+        "observed_at": "2026-10-25T18:01:52.884307+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2437,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_private_tls_namespace.py::test_plaintext_namespace_substitutes_cannot_claim_verified_tls",
+        "case_id_sha256": "029225a536e8e4294e3f98b33031dbaaef93d4dc68ca282bffa33375bed1b0d0",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.6586244830000396,
+        "finished_cases": 3842,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-25T18:01:52.765772+00:00",
+        "outcome": "failed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3842,
+        "worker": "gw1"
+      }
+    ],
+    "ci_rerun_requested": false
+  },
+  "local_checks_of_first_cost_head": {
+    "focused_passed": 2239,
+    "native_passed": 6329,
+    "native_skipped": 6,
+    "native_seconds": 390.235,
+    "new_backend_cases": 208,
+    "new_cost_cases": 48,
+    "receipt_cases_preserved": 123,
+    "diagnostic_cases": 37,
+    "original_test_case_files_byte_identical": true,
+    "byte_identical_guarded_files": 344,
+    "inherited_guarded_files": 345,
+    "intentional_execution_support_updates": [
+      "backend/tests/postgresql_parallel.py"
+    ],
+    "all_worker_cases_accounted_for": true,
+    "two_workers_isolated": true,
+    "source_hashes_match": true,
+    "baseline_expected_regressions": 15,
+    "baseline_compatibility_passes": 33,
+    "baseline_errors": 0,
+    "baseline_skips": 0,
+    "original_test_case_assertion_fixture_workload_resource_coverage_skip_retry_schedule_timeout_changes": false,
+    "ruff_exact_CI_command_passed": true,
+    "local_policy_checks": 21,
+    "local_policy_failures": 0,
+    "browser_rendering_qualified": false
+  },
+  "local_checks": {
+    "focused_passed": 2316,
+    "native_passed": 6406,
+    "native_skipped": 6,
+    "native_seconds": 365.346,
+    "new_backend_cases": 285,
+    "new_cost_cases": 48,
+    "new_binary_auc_cases": 77,
+    "receipt_cases_preserved": 123,
+    "diagnostic_cases": 37,
+    "original_test_case_files_byte_identical": true,
+    "byte_identical_guarded_files": 344,
+    "inherited_guarded_files": 345,
+    "intentional_execution_support_updates": [
+      "backend/tests/postgresql_parallel.py"
+    ],
+    "all_worker_cases_accounted_for": true,
+    "two_workers_isolated": true,
+    "source_hashes_match": true,
+    "baseline_expected_regressions": 15,
+    "baseline_compatibility_passes": 33,
+    "binary_baseline_expected_regressions": 2,
+    "binary_baseline_compatibility_passes": 75,
+    "baseline_errors": 0,
+    "baseline_skips": 0,
+    "original_test_case_assertion_fixture_workload_resource_coverage_skip_retry_schedule_timeout_changes": false,
+    "ruff_exact_CI_command_passed": true,
+    "local_policy_checks": 21,
+    "local_policy_failures": 0,
+    "browser_rendering_qualified": false
+  }
+}

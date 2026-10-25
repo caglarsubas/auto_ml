@@ -529,19 +529,37 @@ def _checkpoint_guards(job, token, deadline):
         raise JobConflict("job_time_budget_exceeded")
 
 
+def _checkpoint_row(identifier, fields):
+    # Keep model conversion/fault boundaries while avoiding compilation of the
+    # same projection on every numerical-work checkpoint. All values stay bound.
+    from django.db import connections
+
+    alias = NativeJob.objects.db
+    db = connections[alias]
+    meta, quote = NativeJob._meta, db.ops.quote_name
+    columns = ", ".join(quote(meta.get_field(name).column) for name in fields)
+    sql = f"SELECT {columns} FROM {quote(meta.db_table)} WHERE {quote(meta.pk.column)} = %s LIMIT 21"
+    rows = list(NativeJob.objects.using(alias).raw(sql, [meta.pk.get_db_prep_value(identifier, db)]))
+    if not rows:
+        raise NativeJob.DoesNotExist("NativeJob matching query does not exist.")
+    if len(rows) != 1:
+        raise NativeJob.MultipleObjectsReturned("Checkpoint identifier is not unique.")
+    return rows[0]
+
+
 def checkpoint(identifier, token, deadline):
     # Checkpoints need guards and execution authority, never stored outputs or
     # publication history. Keep referenced training-result validation explicit
     # in recheck_execution rather than loading this job's unrelated payloads.
-    job = NativeJob.objects.only(
-        "state", "lease_token", "lease_until", "expires_at", "authority",
-        "specification", "project_id", "dataset_id", "source_dataset_id",
-    ).get(pk=identifier)
+    job = _checkpoint_row(identifier, (
+        "id", "state", "lease_token", "lease_until", "expires_at", "authority",
+        "specification", "project", "dataset", "source_dataset",
+    ))
     _checkpoint_guards(job, token, deadline)
     recheck_execution(job)
     # Authority reads can outlast a lease or work deadline, or overlap a
     # cancellation/requeue. Refresh only the guards before returning to work.
-    current = NativeJob.objects.only("state", "lease_token", "lease_until", "expires_at").get(pk=identifier)
+    current = _checkpoint_row(identifier, ("id", "state", "lease_token", "lease_until", "expires_at"))
     _checkpoint_guards(current, token, deadline)
 
 
