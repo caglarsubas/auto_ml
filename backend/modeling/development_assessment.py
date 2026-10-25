@@ -50,9 +50,12 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')
     both = len(np.unique(y)) == 2
-    pred = (p >= threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+    threshold_metrics = {'accuracy', 'f1', 'precision', 'recall', 'expected_cost'}
+    pred = (p >= threshold).astype(int) if metric is None or metric in threshold_metrics else None
     costs = costs or {}
+    def expected_cost_value():
+        tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+        return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))
     def ks_value():
         if not both:
             return None
@@ -65,7 +68,7 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
               'f1': lambda: float(f1_score(y, pred, zero_division=0)),
               'precision': lambda: float(precision_score(y, pred, zero_division=0)),
               'recall': lambda: float(recall_score(y, pred, zero_division=0)),
-              'expected_cost': lambda: float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))}
+              'expected_cost': expected_cost_value}
     return {name: values[name]() for name in ([metric] if metric else values)}
 
 
