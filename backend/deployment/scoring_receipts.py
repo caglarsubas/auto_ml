@@ -2,7 +2,8 @@
 import hashlib
 import platform
 import re
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError
+from deployment.runtime_metadata import package_version as version
 from pathlib import Path
 
 PACKAGES = ('Django', 'djangorestframework', 'pandas', 'numpy', 'scikit-learn',
@@ -11,7 +12,7 @@ RUNTIME_FILES = ('deployment/deploy_utils.py', 'deployment/evidence.py',
                  'deployment/scoring_receipts.py', 'deployment/offline_verify.py', 'encoding/fitted.py',
                  'preprocessing/replay.py', 'modeling/alt_pipelines.py',
                  'modeling/booster_adapters.py', 'modeling/calibration_utils.py',
-                 'modeling/execution_artifacts.py', 'evaluation/eval_utils.py')
+                 'modeling/execution_artifacts.py', 'evaluation/eval_utils.py', 'deployment/runtime_metadata.py')
 
 
 def byte_digest(raw):

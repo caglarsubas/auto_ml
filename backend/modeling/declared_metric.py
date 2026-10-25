@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
-from importlib.metadata import version
+from deployment.runtime_metadata import package_version as version
 from pathlib import Path
 
 import numpy as np
@@ -37,7 +37,7 @@ def metric_spec(contract):
     metric_runtime = {package: version(package) for package in ('numpy', 'scipy', 'scikit-learn')}
     implementation = hashlib.sha256()
     root = Path(__file__).parent.parent
-    for name in ('modeling/declared_metric.py', 'modeling/booster_adapters.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
+    for name in ('modeling/declared_metric.py', 'deployment/runtime_metadata.py', 'modeling/booster_adapters.py', 'modeling/development_assessment.py', 'evaluation/eval_utils.py'):
         implementation.update(name.encode())
         implementation.update((root / name).read_bytes())
     return {'schema_version': 1, 'task': task, 'class_count': classes, 'primary_metric': primary,
