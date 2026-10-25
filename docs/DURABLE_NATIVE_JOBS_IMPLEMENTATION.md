@@ -197,3 +197,14 @@ Claim, checkpoint and publication use the same binding check. A current snapshot
 The checkpoint still fetches only its existing authority/specification/identity/guard projection. No actor payload, result, new lazy fetch or authority query is added by binding validation. Earlier lease/cancellation/expiry guards and the original runtime, attempt and execution budgets remain. This consistency check does not authenticate historical metadata, repair a restore, introduce delegated authority or qualify customer recovery.
 
 P149 adds regression coverage for genuine current scopes borrowed across datasets/projects, missing/malformed snapshots, mismatched source actors, strict identifier types, all native kinds, actual claim/checkpoint/publication behavior, field projection, rollback and valid/failed live authority. Original tests, schema/scientific workloads, resources, skips/retries/coverage and the native 900-second cap are unchanged. Roadmap/delivery counts update independently of outcome acceptance and release gates.
+
+
+### Worker specification and reference safety (P150)
+
+Worker checkpoints and publication now reject non-object saved specifications and missing/non-string kinds with `job_specification_invalid`. The existing claim guard retains its earlier position, so expired/exhausted/capacity/lease checks keep their original precedence. Unsupported string kinds retain live authority checks and block with `job_runtime_changed` at every execution boundary.
+
+Training-result scoring and protected assessment validate their referenced UUID and SHA-256 syntax before ORM conversion or protected-evidence reads. A referenced training job with malformed saved kind metadata produces `job_training_result_changed`, rather than an unchecked dictionary access. Valid references still undergo the existing integrity, runtime, scientific, authority and protected-plan checks. This preflight is deliberately limited to shared shape and derived-reference safety; it does not replace each kind's full validation or authenticate restored historical metadata.
+
+Publication checks the saved envelope before actor locking. Invalid metadata closes with one atomic blocked receipt through transition-only writes, preserving original specifications, opaque results and JSON-null payloads. Checkpoints keep their existing field projection, avoid unrelated actor/result payloads and do not publish events. Live database failures still propagate; no automatic data repair or recovery authority is introduced.
+
+96 additive regression cases cover the new boundaries, valid references, unknown-kind authority checks, referenced-kind integrity failures and rollback/storage failures. Existing real protected-assessment, private deployment, recovery and restoration qualification remains required. The broader D07 and customer acceptance gates remain open.
