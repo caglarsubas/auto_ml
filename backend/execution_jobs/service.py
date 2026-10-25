@@ -8,7 +8,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import timedelta
-from importlib.metadata import version
+from deployment.runtime_metadata import package_version as version
 from pathlib import Path
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -70,6 +70,7 @@ def runtime(kind=KIND):
         "execution_jobs/csv_scoring.py",
         "backend/celery.py",
         "deployment/evidence.py",
+        "deployment/runtime_metadata.py",
         "deployment/deploy_utils.py",
         "access_control/projects.py",
     ]
