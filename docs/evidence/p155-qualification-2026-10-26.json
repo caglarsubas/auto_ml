@@ -28,7 +28,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 308,
+  "new_backend_cases": 332,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -734,12 +734,90 @@
     },
     "source_head": "f084e668cae29a66c09ee37335d492a9091c15d9"
   },
-  "local_checks": {
+  "metadata_serialization_cases": 24,
+  "metadata_serialization_diagnostics": {
+    "cases": 77,
+    "artifact_writes": 38,
+    "decoded_values_equal": true,
+    "with_coverage_cpu_seconds": {
+      "pretty_stream": 0.21805228799999643,
+      "compact_stream": 0.20168545499999224,
+      "compact_string": 0.00467508200000788
+    },
+    "performance_or_capacity_qualification": false,
+    "original_inventories_and_900_cap_unchanged": true
+  },
+  "failed_case_cost_ci": {
+    "run": 40393666632,
+    "head": "d2696127549d506342fd64abc6ec134fc45e8690",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6786,
+    "finished_cases": 6660,
+    "workers": [
+      {
+        "case": "tests/unit/test_private_schema_namespace_prefix.py::test_foreign_schema_names_never_inherit_reserved_prefix_status",
+        "case_id_sha256": "04d398a7026ae7e72e527590449dcb74928cd1053758d9b8bf01f1e90365bb6b",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.4231533399997716,
+        "finished_cases": 2652,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-26T20:49:24.199735+00:00",
+        "outcome": "failed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2652,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_dispatcher_batch_shutdown.py::test_stop_leaves_remaining_requests_and_evidence_unchanged",
+        "case_id_sha256": "95f2da9d0cac8f108d0243f7726f9767b44dbc14a0edf799c4894fe6026e6102",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.6041165759997966,
+        "finished_cases": 4008,
+        "last_report_phase": "setup",
+        "observed_at": "2026-10-26T20:49:24.243472+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 4009,
+        "worker": "gw1"
+      }
+    ],
+    "partial_case_costs_retained": true,
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "prior_case_cost_local_checks": {
     "focused_passed": 972,
     "native_passed": 6780,
     "native_skipped": 6,
     "native_seconds": 353.498,
     "new_cases": 308,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7694,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "source_payload_and_plan_scope": "Scoring-preview response values; new immutable metadata JSON uses compact whitespace as documented.",
+  "local_checks": {
+    "focused_passed": 996,
+    "native_passed": 6804,
+    "native_skipped": 6,
+    "native_seconds": 358.097,
+    "new_cases": 332,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
