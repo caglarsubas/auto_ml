@@ -9,7 +9,10 @@
     "backend/execution_jobs/service.py": "b82043e0f49721285d5b911b20dea3bd66974a52900870f654100bfb3b03a140",
     "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a",
     "backend/modeling/development_assessment.py": "e8258a85519193c6c6f59177c645177634fd7dd3d196511e9c5fda335ac3c06b",
-    "backend/tests/unit/test_development_binary_summary.py": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1"
+    "backend/tests/unit/test_development_binary_summary.py": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1",
+    "backend/tests/native_worker_diagnostics.py": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
+    "backend/tests/native_cpu_diagnostics.py": "008acb751dc59740481be1d2b7ee0ce9dcca32e4c4e538be4d08919c47a8f048",
+    "backend/tests/unit/test_native_cpu_diagnostics.py": "1617b77e0aa699c373bdc9c7c643fe894a9dda29bae23b11325d724852a9b1d2"
   },
   "before_source": {
     "tests": 26,
@@ -20,7 +23,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 86,
+  "new_backend_cases": 111,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -31,7 +34,14 @@
   "customer_installation_modified": false,
   "original_suite_preservation": {
     "protected_test_execution_files": 353,
-    "byte_identical_protected_files": 353,
+    "byte_identical_protected_files": 352,
+    "intentional_qualification_diagnostic_updates": {
+      "backend/tests/native_worker_diagnostics.py": {
+        "before": "1573cf32504ea5050f69ed57cd984cfa47e65a394570f86a1add36d235972732",
+        "after": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
+        "reason": "Add bounded CPU-sidecar lifecycle observation; original case snapshots, outcomes and allocation remain."
+      }
+    },
     "all_original_test_case_files_byte_identical": true,
     "ci_workflow_byte_identical": true,
     "original_native_cap_seconds": 900,
@@ -370,12 +380,83 @@
     "before_sha256": "94e54fabc511d9a36e77fa0729001017b6d55c6b8a0cceadea0c9fbc0149864d",
     "after_sha256": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1"
   },
-  "local_checks": {
+  "prior_reference_local_checks": {
     "focused_passed": 681,
     "native_passed": 6558,
     "native_skipped": 6,
     "native_seconds": 416.073,
     "new_cases": 86,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7689,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "cpu_diagnostic_cases": 25,
+  "intentional_guard_updates": {
+    "backend/tests/native_worker_diagnostics.py": {
+      "before": "1573cf32504ea5050f69ed57cd984cfa47e65a394570f86a1add36d235972732",
+      "after": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
+      "reason": "Add bounded CPU-sidecar lifecycle observation; original case snapshots, outcomes and allocation remain."
+    }
+  },
+  "failed_reference_ci": {
+    "run": 40340619353,
+    "head": "765b2f6c127b196a30203f64d9fb50be24541603",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6564,
+    "finished_cases": 6487,
+    "workers": [
+      {
+        "case": "tests/unit/test_private_dependency_probe_namespace.py::test_application_probe_rejects_substituted_authority",
+        "case_id_sha256": "8a5561bcf5a21efbc2921e4b0a00d88bb624ec58fffe4fedb53643658bd1305f",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 0.19328903099994932,
+        "finished_cases": 2803,
+        "last_report_phase": "call",
+        "observed_at": "2026-10-26T15:19:54.193981+00:00",
+        "outcome": "passed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2804,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_dispatcher_batch_shutdown.py::test_actual_os_signal_finishes_only_current_publish_and_restores_handlers",
+        "case_id_sha256": "6c2c1a41be7e093efff6668a3cad3ac31516d6a8c83ac575b3f686642f44b9da",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.6085563299998284,
+        "finished_cases": 3684,
+        "last_report_phase": "call",
+        "observed_at": "2026-10-26T15:19:54.376090+00:00",
+        "outcome": "passed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3685,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "local_checks": {
+    "focused_passed": 743,
+    "native_passed": 6583,
+    "native_skipped": 6,
+    "native_seconds": 373.437,
+    "new_cases": 111,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,

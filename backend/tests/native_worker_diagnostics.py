@@ -26,6 +26,7 @@ class NativeWorkerDiagnostics:
         self.started = None
         self.complete = False
         self.write_failed = False
+        self._cpu = None
         # Observe independently of artifact/clock faults deliberately injected
         # by the tests. These are operation references, never cached test data.
         self._open, self._write, self._close, self._replace = os.open, os.write, os.close, os.replace
@@ -55,6 +56,12 @@ class NativeWorkerDiagnostics:
             "diagnostic_write_failed": False,
         }
         self.publish()
+
+    def pytest_sessionstart(self, session):
+        from tests.native_cpu_diagnostics import NativeCPUDiagnostics
+
+        self._cpu = NativeCPUDiagnostics(self.path, self.state["worker"])
+        self._cpu.start()
 
     def publish(self):
         self.state["observed_at"] = self._now(timezone.utc).isoformat()
@@ -111,9 +118,13 @@ class NativeWorkerDiagnostics:
             self.state["finished_cases"] += 1
             self.complete = True
         self.publish()
+        if self._cpu is not None:
+            self._cpu.publish()
 
     def pytest_sessionfinish(self, session, exitstatus):
         # Preserve the last phase. Session shutdown can follow an interrupted
         # test or a broken worker transport and does not prove case completion.
         self.state.update(session_finished=True, session_exitstatus=int(exitstatus))
         self.publish()
+        if self._cpu is not None:
+            self._cpu.finish(exitstatus)
