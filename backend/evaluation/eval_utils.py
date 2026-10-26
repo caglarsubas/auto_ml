@@ -71,11 +71,19 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None, include_con
     classes = np.arange(p.shape[1])
     needs_labels = include_confusion or metric_names is None or any(name in {'accuracy', 'f1', 'f1_weighted'} for name in metric_names)
     pred = p.argmax(axis=1) if needs_labels else None
+    # The two exported F1 names are aliases of the same public calculation.
+    f1_result = {}
+
+    def weighted_f1():
+        if not f1_result:
+            f1_result['value'] = _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0))
+        return f1_result['value']
+
     values = {
         'accuracy': lambda: _safe_float(accuracy_score(y, pred)),
         'log_loss': lambda: _safe_float(log_loss(y, p, labels=classes)),
-        'f1_weighted': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
-        'f1': lambda: _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0)),
+        'f1_weighted': weighted_f1,
+        'f1': weighted_f1,
         'roc_auc': lambda: _safe_float(_weighted_ovr_rank_auc(y, p) if metric_names is not None else
                                       roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
                           if set(np.unique(y)) == set(classes) else None,
@@ -193,6 +201,13 @@ def evaluate_binary(
     y_proba = np.asarray(y_proba, dtype=float).ravel()
     y_pred = (y_proba >= threshold).astype(int)
     single = len(np.unique(y_true)) < 2
+    # Reuse the independently checked count formulas already used by the
+    # threshold table. Legacy/invalid shapes and ranges retain public fallbacks.
+    counts = None
+    if (y_true.ndim == 1 and len(y_true) == len(y_proba) > 0 and np.ndim(threshold) == 0
+            and np.isin(y_true, [0, 1]).all() and np.isfinite(y_proba).all()
+            and (y_proba >= 0).all() and (y_proba <= 1).all()):
+        counts = threshold_table(y_true, y_proba, [threshold])[0]
 
     metrics: Dict[str, Any] = {
         'threshold': threshold,
@@ -200,12 +215,12 @@ def evaluate_binary(
         'positive_rate': _safe_float(y_true.mean()) if len(y_true) else None,
         'roc_auc': None if single else _safe_float(roc_auc_score(y_true, y_proba)),
         'pr_auc': None if single else _safe_float(average_precision_score(y_true, y_proba)),
-        'f1': _safe_float(f1_score(y_true, y_pred, zero_division=0)),
-        'f2': _safe_float(fbeta_score(y_true, y_pred, beta=2, zero_division=0)),
-        'precision': _safe_float(precision_score(y_true, y_pred, zero_division=0)),
-        'recall': _safe_float(recall_score(y_true, y_pred, zero_division=0)),
-        'accuracy': _safe_float(accuracy_score(y_true, y_pred)),
-        'mcc': _safe_float(matthews_corrcoef(y_true, y_pred)),
+        'f1': counts['f1'] if counts is not None else _safe_float(f1_score(y_true, y_pred, zero_division=0)),
+        'f2': counts['f2'] if counts is not None else _safe_float(fbeta_score(y_true, y_pred, beta=2, zero_division=0)),
+        'precision': counts['precision'] if counts is not None else _safe_float(precision_score(y_true, y_pred, zero_division=0)),
+        'recall': counts['recall'] if counts is not None else _safe_float(recall_score(y_true, y_pred, zero_division=0)),
+        'accuracy': counts['accuracy'] if counts is not None else _safe_float(accuracy_score(y_true, y_pred)),
+        'mcc': counts['mcc'] if counts is not None else _safe_float(matthews_corrcoef(y_true, y_pred)),
         'log_loss': _safe_float(log_loss(y_true, np.clip(y_proba, 1e-7, 1 - 1e-7), labels=[0, 1])),
         'brier': _safe_float(brier_score_loss(y_true, y_proba)),
     }

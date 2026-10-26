@@ -46,7 +46,9 @@ def publish_execution(execution_id, payload):
     root = execution_root(execution_id)
     status_path = root / 'modeling_status.json'
     with status_path.open('x', encoding='utf-8') as stream:
-        json.dump(payload, stream, allow_nan=False, indent=2)
+        # Consumers parse JSON; manifests bind the exact bytes written. Compact
+        # encoding avoids Python's indented generator on every immutable run.
+        stream.write(json.dumps(payload, allow_nan=False, separators=(',', ':')))
     files = {}
     for path in sorted(root.rglob('*')):
         if path.is_file():
@@ -68,7 +70,7 @@ def publish_execution(execution_id, payload):
         except PackageNotFoundError:
             manifest['packages'][package] = None
     with (root / 'manifest.json').open('x', encoding='utf-8') as stream:
-        json.dump(manifest, stream, indent=2, allow_nan=False)
+        stream.write(json.dumps(manifest, allow_nan=False, separators=(',', ':')))
     from access_control.projects import governed, register_artifact
     if governed():
         from django.db import transaction
@@ -122,12 +124,12 @@ def publish_assessment(execution_id, receipt_id, payload, card):
     payload['model_card_path'] = str((root / 'model_card.json').relative_to(settings.MEDIA_ROOT))
     for name, value in [('evaluation.json', payload), ('model_card.json', card)]:
         with (root / name).open('x', encoding='utf-8') as stream:
-            json.dump(value, stream, indent=2, default=str, allow_nan=False)
+            stream.write(json.dumps(value, default=str, allow_nan=False, separators=(',', ':')))
     manifest = {'execution_id': execution_id, 'assessment_id': str(receipt_id),
                 'file_id': payload['file_id'], 'files': {
                     name: {'sha256': digest_file(root / name), 'bytes': (root / name).stat().st_size}
                     for name in ('evaluation.json', 'model_card.json')}}
-    (root / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    (root / 'manifest.json').write_text(json.dumps(manifest, separators=(',', ':')), encoding='utf-8')
     from access_control.projects import governed, register_artifact
     if governed():
         from django.db import transaction

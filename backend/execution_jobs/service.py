@@ -86,7 +86,7 @@ def runtime(kind=KIND):
         result["scoring"] = scoring_runtime()
     if kind in {training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
         result["packages"].update({p: version(p) for p in ["numpy", "pandas", "scipy", "scikit-learn", "xgboost"]})
-        for name in ["execution_jobs/native_assessment.py", "modeling/holdout_evidence.py", "execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
+        for name in ["execution_jobs/native_assessment.py", "modeling/holdout_evidence.py", "modeling/execution_artifacts.py", "execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
                      "modeling/declared_metric.py", "modeling/development_validation.py", "modeling/development_assessment.py",
                      "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
                      "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
@@ -539,7 +539,29 @@ def _checkpoint_row(identifier, fields):
     meta, quote = NativeJob._meta, db.ops.quote_name
     columns = ", ".join(quote(meta.get_field(name).column) for name in fields)
     sql = f"SELECT {columns} FROM {quote(meta.db_table)} WHERE {quote(meta.pk.column)} = %s LIMIT 21"
-    rows = list(NativeJob.objects.using(alias).raw(sql, [meta.pk.get_db_prep_value(identifier, db)]))
+    # Use the same backend/field conversion order and model materialization as
+    # Django's raw reader, without constructing a RawQuerySet for each fence.
+    selected = [meta.get_field(name) for name in fields]
+    with db.cursor() as cursor:
+        cursor.execute(sql, [meta.pk.get_db_prep_value(identifier, db)])
+        values = cursor.fetchall()
+    if meta.pk.attname not in {field.attname for field in selected}:
+        from django.core.exceptions import FieldDoesNotExist
+        raise FieldDoesNotExist("Raw query must include the primary key")
+    converted = []
+    for row in values:
+        if len(row) != len(selected):
+            from django.db import DatabaseError
+            raise DatabaseError("Checkpoint projection shape changed")
+        data = {}
+        for field, value in zip(selected, row):
+            expression = field.get_col(meta.db_table)
+            for convert in db.ops.get_db_converters(expression) + expression.get_db_converters(db):
+                value = convert(value, expression, db)
+            data[field.attname] = value
+        names = [field.attname for field in meta.concrete_fields if field.attname in data]
+        converted.append(NativeJob.from_db(alias, names, [data[name] for name in names]))
+    rows = converted
     if not rows:
         raise NativeJob.DoesNotExist("NativeJob matching query does not exist.")
     if len(rows) != 1:
