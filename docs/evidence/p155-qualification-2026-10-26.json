@@ -9,7 +9,7 @@
     "backend/execution_jobs/service.py": "b82043e0f49721285d5b911b20dea3bd66974a52900870f654100bfb3b03a140",
     "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a",
     "backend/modeling/development_assessment.py": "e8258a85519193c6c6f59177c645177634fd7dd3d196511e9c5fda335ac3c06b",
-    "backend/tests/unit/test_development_binary_summary.py": "94e54fabc511d9a36e77fa0729001017b6d55c6b8a0cceadea0c9fbc0149864d"
+    "backend/tests/unit/test_development_binary_summary.py": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1"
   },
   "before_source": {
     "tests": 26,
@@ -20,7 +20,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 56,
+  "new_backend_cases": 86,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -231,7 +231,7 @@
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
   },
-  "summary_reference_cases": 8,
+  "summary_reference_cases": 38,
   "failed_followup_ci": {
     "run": 40302779885,
     "head": "f2f56aa497c521a77b3ff8a9e8052392c80e6dfa",
@@ -297,12 +297,85 @@
     "original_case_and_skip_identities_preserved": true,
     "reference_absolute_and_relative_tolerance": 1e-15
   },
-  "local_checks": {
+  "prior_summary_local_checks": {
     "focused_passed": 651,
     "native_passed": 6528,
     "native_skipped": 6,
     "native_seconds": 524.552,
     "new_cases": 56,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7689,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "failed_summary_ci": {
+    "run": 40324898156,
+    "head": "e8100ee215d64d6782ff7cec69f59d4a846bfd65",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6534,
+    "finished_cases": 6449,
+    "workers": [
+      {
+        "case": "tests/unit/test_private_tls_namespace.py::test_plaintext_namespace_substitutes_cannot_claim_verified_tls",
+        "case_id_sha256": "f7512fdb9fbb0a7ad02bb1a02cab6004e910a357d38019a2878a7e8100880498",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.5548211969999102,
+        "finished_cases": 2974,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-26T13:21:10.327831+00:00",
+        "outcome": "failed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2974,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_development_binary_summary.py::test_binary_summary_matches_independent_metrics_across_supported_labels",
+        "case_id_sha256": "95e39de8564a5e0622734099eef3de2a7beb468521a6d1fb7502c82e32e3a8d0",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 4.528054398999757,
+        "finished_cases": 3475,
+        "last_report_phase": "call",
+        "observed_at": "2026-10-26T13:21:09.391558+00:00",
+        "outcome": "passed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3476,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "reference_matrix": {
+    "kind": "data_matrix_only",
+    "comparisons": 720,
+    "identical_values_dtypes_shapes_costs_thresholds": true,
+    "reference_probability_groups": 180,
+    "assertion_nodes_identical": true,
+    "numeric_qualification": false,
+    "before_sha256": "94e54fabc511d9a36e77fa0729001017b6d55c6b8a0cceadea0c9fbc0149864d",
+    "after_sha256": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1"
+  },
+  "local_checks": {
+    "focused_passed": 681,
+    "native_passed": 6558,
+    "native_skipped": 6,
+    "native_seconds": 416.073,
+    "new_cases": 86,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
