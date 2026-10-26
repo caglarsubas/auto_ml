@@ -2,6 +2,7 @@
 """Validate the development ledger and render its human-readable projection."""
 
 import argparse
+import importlib.util
 import json
 import re
 from pathlib import Path
@@ -129,6 +130,11 @@ def validate(data):
         required_text(qualification, ['pilot_scope', 'value_target'], 'qualification')
         if not queue:
             raise ValueError('Reconciliation requires the canonical implementation queue.')
+    if 'progress_baseline' in data or any('blocked_reason' in record for record in [*by_id.values(), *packet_map.values()]):
+        spec = importlib.util.spec_from_file_location('roadmap_progress', ROOT / 'docs/roadmap-tracker/metrics.py')
+        metrics = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(metrics)
+        metrics.status_metrics(data)
     return by_id
 
 

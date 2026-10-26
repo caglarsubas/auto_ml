@@ -389,13 +389,15 @@ def plan(actor, protected_id):
 
 
 def preview(actor, protected_id):
-    prepared, protected, _, _ = plan(actor, protected_id)
-    return {
+    prepared, protected, _, authority = plan(actor, protected_id)
+    result = {
         **prepared,
         "assessment_sha256": digest(prepared),
         "input_metadata": protected.specification,
         "limitation": LIMITATION,
     }
+    projects.recheck(authority)
+    return result
 
 
 def submit(actor, file_id, data):
