@@ -7,7 +7,9 @@
     "backend/execution_jobs/training_scoring.py": "66b321803e726596654b56d32e897911eedbc39a20aa840b480036e49b6eadd3",
     "backend/tests/unit/test_scoring_preview_authority.py": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1",
     "backend/execution_jobs/service.py": "b82043e0f49721285d5b911b20dea3bd66974a52900870f654100bfb3b03a140",
-    "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a"
+    "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a",
+    "backend/modeling/development_assessment.py": "e8258a85519193c6c6f59177c645177634fd7dd3d196511e9c5fda335ac3c06b",
+    "backend/tests/unit/test_development_binary_summary.py": "94e54fabc511d9a36e77fa0729001017b6d55c6b8a0cceadea0c9fbc0149864d"
   },
   "before_source": {
     "tests": 26,
@@ -18,7 +20,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 48,
+  "new_backend_cases": 56,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -215,7 +217,7 @@
     "end_to_end_improvement_established": false,
     "full_suite_qualification": false
   },
-  "local_checks": {
+  "prior_followup_local_checks": {
     "focused_passed": 302,
     "native_passed": 6520,
     "native_skipped": 6,
@@ -225,6 +227,86 @@
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
     "coverage_line_rate": 0.7688,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "summary_reference_cases": 8,
+  "failed_followup_ci": {
+    "run": 40302779885,
+    "head": "f2f56aa497c521a77b3ff8a9e8052392c80e6dfa",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6526,
+    "finished_cases": 6017,
+    "workers": [
+      {
+        "case": "tests/unit/test_native_assessment_preview_authority.py::test_late_revocation_withholds_complete_protected_preview",
+        "case_id_sha256": "b1b022bd9e0b386175347b568c6fee1dc3b6fa94633bc3ad9e220bffed4e0d62",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 0.7225229240002591,
+        "finished_cases": 2688,
+        "last_report_phase": "setup",
+        "observed_at": "2026-10-26T10:42:22.788874+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2689,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_job_lock_waits.py::test_actual_postgresql_contention_times_out_without_partial_metadata",
+        "case_id_sha256": "8953c889c4f060a1389d56b0e72e091848adea482f36ec26b137a370f0ca664d",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.7739486589998705,
+        "finished_cases": 3329,
+        "last_report_phase": "call",
+        "observed_at": "2026-10-26T10:42:22.762207+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3330,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "summary_diagnostics": {
+    "cases": 6526,
+    "baseline_seconds": 387.518,
+    "guarded_prototype_seconds": 401.598,
+    "baseline_metric_sample_share": 0.13361565041178458,
+    "guarded_metric_sample_share": 0.06720603820404787,
+    "end_to_end_improvement_established": false,
+    "capacity_qualified": false,
+    "focused_passed": 349,
+    "new_reference_cases": 8,
+    "reference_comparisons": 720,
+    "independent_ROC_and_confusion_checks_retained": true,
+    "earlier_unadopted_prototype_failures": 17,
+    "original_case_and_skip_identities_preserved": true,
+    "reference_absolute_and_relative_tolerance": 1e-15
+  },
+  "local_checks": {
+    "focused_passed": 651,
+    "native_passed": 6528,
+    "native_skipped": 6,
+    "native_seconds": 524.552,
+    "new_cases": 56,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7689,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false

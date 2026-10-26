@@ -39,6 +39,27 @@ def _binary_rank_auc(y, p):
     return float(u / (support * (len(y) - support)))
 
 
+def _binary_summary(y, p, pred, costs, both):
+    """Share work only after canonical binary inputs pass validation."""
+    from scipy.special import xlogy
+
+    tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+    fpr, tpr, _ = roc_curve(y, p) if both else (None, None, None)
+    clipped = np.clip(p, np.finfo(p.dtype).eps, 1 - np.finfo(p.dtype).eps)
+    return {
+        'roc_auc': float(roc_auc_score(y, p)) if both else None,
+        'pr_auc': float(average_precision_score(y, p)) if both else None,
+        'ks': float(np.max(np.abs(tpr - fpr))) if both else None,
+        'log_loss': float(-np.mean(xlogy(y, clipped) + xlogy(1 - y, 1 - clipped))),
+        'brier': float(np.mean((y - p) ** 2)),
+        'accuracy': float((tn + tp) / len(y)),
+        'f1': float(2 * tp / (2 * tp + fp + fn)) if 2 * tp + fp + fn else 0.,
+        'precision': float(tp / (tp + fp)) if tp + fp else 0.,
+        'recall': float(tp / (tp + fn)) if tp + fn else 0.,
+        'expected_cost': float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y)),
+    }
+
+
 def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
@@ -71,6 +92,8 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     threshold_metrics = {'accuracy', 'f1', 'precision', 'recall', 'expected_cost'}
     pred = (p >= threshold).astype(int) if metric is None or metric in threshold_metrics else None
     costs = costs or {}
+    if metric is None and y.ndim == 1 and y.dtype.kind in 'biuf' and y.dtype.itemsize <= 8 and len(y):
+        return _binary_summary(y, p, pred, costs, both)
     def expected_cost_value():
         tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
         return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))
