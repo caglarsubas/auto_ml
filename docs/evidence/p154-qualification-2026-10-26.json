@@ -1,0 +1,141 @@
+{
+  "packet": "P154",
+  "date": "2026-10-26",
+  "source_base": "65a35d64c696e18e3940091737068d9769e2eafb",
+  "source_sha256": {
+    "backend/execution_jobs/native_assessment.py": "0cb1d439e82c13ae2f6ba5334fc018c66c427ea9e0940ee0b7cc27273c8b4b63",
+    "backend/tests/unit/test_native_assessment_preview_authority.py": "7cfd4e756c76dcd855987a23205656a305d627fa8c1a9f70c818c31410ee94c5",
+    "backend/tests/unit/test_roadmap_progress_changes.py": "2b4676edce0abad0de57f6e458e1a8ffeb2015e3e7229e6a8139621b201ce672",
+    "docs/roadmap-tracker/metrics.py": "5a87d291b29b458406806fd1dad56a64226cd18eede15c873c2a4752226a8a93",
+    "docs/roadmap-tracker/template.html": "0fb4197207a315bcad4c7b019bf73f759c869b40761d4bd9dab67f82f17ca655",
+    "docs/roadmap-tracker/check_progress.cjs": "137e51c9cac0c66fe24371241bea36c0cebd9f3fb56b1e02a977cd4a8cbd236b",
+    "scripts/render_product_roadmap.py": "e6aeb49a6e9c0470e7d4d3e627ad1b1a33b3f7dc1c1f95ec726e67d0606788aa"
+  },
+  "scope": "Final live reviewer authority for protected assessment previews; explicit done/open/blocked changes",
+  "before_source": {
+    "tests": 18,
+    "failures": 8,
+    "compatibility_passes": 10,
+    "errors": 0,
+    "skipped": 0,
+    "http_compatibility_passed": 8,
+    "service_compatibility_passed": 2,
+    "initial_bad_path_unqualified": true
+  },
+  "focused": {
+    "passed": 264,
+    "new_cases": 42,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 31.854
+  },
+  "local_native_qualification": "passed",
+  "exact_head_pr_qualification": "pending",
+  "independent_push_main_qualification": "pending",
+  "progress_baseline": {
+    "schema": "roadmap_progress_baseline_v1",
+    "packet": "P153",
+    "source_commit": "65a35d64c696e18e3940091737068d9769e2eafb",
+    "outcomes": {
+      "total": 26,
+      "counts": {
+        "done": 0,
+        "open": 26,
+        "blocked": 0
+      }
+    },
+    "packets": {
+      "total": 153,
+      "counts": {
+        "done": 153,
+        "open": 0,
+        "blocked": 0
+      }
+    }
+  },
+  "new_backend_cases": 42,
+  "preview_cases": 18,
+  "progress_cases": 24,
+  "early_and_HTTP_authority_checks_preserved": true,
+  "existing_test_case_files_byte_identical": true,
+  "documentation_validator_update": "Validate optional progress comparisons and explicit blockers through shared metrics; existing acceptance assertions unchanged",
+  "external_concurrent_commit_qualification": false,
+  "browser_rendering_qualified": false,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "superseded_local_candidate": {
+    "native_passed": 6446,
+    "skipped": 6,
+    "seconds": 430.58,
+    "reason": "Stricter comparison validation and two new edge cases require fresh final-source qualification"
+  },
+  "local_checks": {
+    "focused_passed": 264,
+    "native_passed": 6448,
+    "native_skipped": 6,
+    "native_seconds": 406.225,
+    "new_cases": 42,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7684,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "original_suite_preservation": {
+    "protected_test_execution_files": 350,
+    "byte_identical_protected_files": 349,
+    "intentional_documentation_validator_updates": [
+      "scripts/render_product_roadmap.py"
+    ],
+    "all_original_test_case_files_byte_identical": true,
+    "ci_workflow_byte_identical": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040,
+      "P130": 1016,
+      "P131": 1703,
+      "P132": 1016,
+      "P133": 1017,
+      "P134": 1011,
+      "P135": 1016,
+      "P136": 1013,
+      "P137": 1016,
+      "P138": 1016,
+      "P139": 1025,
+      "P140": 1028,
+      "P141": 1026,
+      "P142": 1024,
+      "P143": 1022,
+      "P144": 1029,
+      "P145": 1026,
+      "P146": 1606,
+      "P147": 1611,
+      "P148": 1622,
+      "P149": 1623,
+      "P150": 1596,
+      "P151": 1605,
+      "P152": 4516,
+      "P153": 10217
+    },
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved": true,
+    "source_hashes_match": true
+  }
+}
