@@ -10,12 +10,14 @@
     "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a",
     "backend/modeling/development_assessment.py": "570a94834d5d9344828f3a4c07b7f6a29e6c38097fb37b6b59cf7158340060d8",
     "backend/tests/unit/test_development_binary_summary.py": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1",
-    "backend/tests/native_worker_diagnostics.py": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
+    "backend/tests/native_worker_diagnostics.py": "0b67ef1bdcb8ce10f4c67ba84d94ab5d8e60557afafa22bb9831c6043a21f0ce",
     "backend/tests/native_cpu_diagnostics.py": "008acb751dc59740481be1d2b7ee0ce9dcca32e4c4e538be4d08919c47a8f048",
     "backend/tests/unit/test_native_cpu_diagnostics.py": "1617b77e0aa699c373bdc9c7c643fe894a9dda29bae23b11325d724852a9b1d2",
     "backend/tests/unit/test_binary_selected_metrics.py": "b0ba2eba97e53632f0bf218dbaf1970a7150913fffdfa52faa98b2ef3cd461d6",
     "backend/evaluation/eval_utils.py": "436e1e2ada82073a563d1221f144bf08f3669089259dbdd12799282ba8c7eac5",
-    "backend/tests/unit/test_assessment_metric_reuse.py": "a7c08214be0e88d89299ad06ae87576abc98da868046725b26a1de3b83cf9fbc"
+    "backend/tests/unit/test_assessment_metric_reuse.py": "a7c08214be0e88d89299ad06ae87576abc98da868046725b26a1de3b83cf9fbc",
+    "backend/tests/native_case_costs.py": "8b72a18cb367860e0b1cdea6158eb5b89daf0201d2d3f2422b9c6ea5aa37078a",
+    "backend/tests/unit/test_native_case_costs.py": "089a1c9ebf2d20f140cc5a33d9280029abc8fcd97aca5093435ef5770eb561e8"
   },
   "before_source": {
     "tests": 26,
@@ -26,7 +28,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 259,
+  "new_backend_cases": 308,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -41,8 +43,8 @@
     "intentional_qualification_diagnostic_updates": {
       "backend/tests/native_worker_diagnostics.py": {
         "before": "1573cf32504ea5050f69ed57cd984cfa47e65a394570f86a1add36d235972732",
-        "after": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
-        "reason": "Add bounded CPU-sidecar lifecycle observation; original case snapshots, outcomes and allocation remain."
+        "after": "0b67ef1bdcb8ce10f4c67ba84d94ab5d8e60557afafa22bb9831c6043a21f0ce",
+        "reason": "Add bounded CPU and case-cost sidecars; original progress schema, counters, outcomes and allocation remain."
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -637,12 +639,107 @@
     "full_suite_qualification": false,
     "capacity_qualified": false
   },
-  "local_checks": {
+  "prior_assessment_local_checks": {
     "focused_passed": 923,
     "native_passed": 6731,
     "native_skipped": 6,
     "native_seconds": 351.175,
     "new_cases": 259,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7694,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "case_cost_cases": 49,
+  "failed_assessment_ci": {
+    "run": 40375041137,
+    "head": "f084e668cae29a66c09ee37335d492a9091c15d9",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6737,
+    "finished_cases": 6237,
+    "workers": [
+      {
+        "case": "tests/unit/test_job_lock_waits.py::test_actual_postgresql_contention_times_out_without_partial_metadata",
+        "case_id_sha256": "7274fc6fba1fe48b8b31c3fc18966be318963e3a40c636a17be280f18914fc8c",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.0456903249996685,
+        "finished_cases": 2872,
+        "last_report_phase": "call",
+        "observed_at": "2026-10-26T18:45:19.947936+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2873,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_native_assessment_preview_authority.py::test_late_authority_storage_failure_is_not_a_successful_preview",
+        "case_id_sha256": "4e6673db436126854a7bb7613ad721fee2e1da2c8260cdae9c5730655f871897",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.3792270809999536,
+        "finished_cases": 3365,
+        "last_report_phase": "setup",
+        "observed_at": "2026-10-26T18:45:20.848108+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3366,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "diagnostic_investigation": {
+    "full_inventory_profile": {
+      "passed": 6731,
+      "skipped": 6,
+      "seconds": 478.955,
+      "original_inventory_equal": true,
+      "diagnostic_only": true
+    },
+    "dependency_probe": {
+      "diagnostic_only": true,
+      "original_inventory_and_skips_identical": true,
+      "baseline_seconds": 351.175,
+      "probe_seconds": 356.256,
+      "changed_packages": {
+        "numpy": "2.5.4",
+        "coverage": "7.17.0"
+      },
+      "original_shared_image_unchanged": true,
+      "causal_timeout_fix_established": false,
+      "coverage_source_files_identical": true,
+      "coverage_measured_lines_and_branch_denominators_identical": true
+    },
+    "passive_wait_probe": {
+      "baseline_seconds": 351.175,
+      "probe_seconds": 378.978,
+      "original_inventory_equal": true,
+      "adopted": false,
+      "diagnostic_only": true
+    },
+    "source_head": "f084e668cae29a66c09ee37335d492a9091c15d9"
+  },
+  "local_checks": {
+    "focused_passed": 972,
+    "native_passed": 6780,
+    "native_skipped": 6,
+    "native_seconds": 353.498,
+    "new_cases": 308,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,

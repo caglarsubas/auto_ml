@@ -27,6 +27,7 @@ class NativeWorkerDiagnostics:
         self.complete = False
         self.write_failed = False
         self._cpu = None
+        self._costs = None
         # Observe independently of artifact/clock faults deliberately injected
         # by the tests. These are operation references, never cached test data.
         self._open, self._write, self._close, self._replace = os.open, os.write, os.close, os.replace
@@ -59,9 +60,11 @@ class NativeWorkerDiagnostics:
 
     def pytest_sessionstart(self, session):
         from tests.native_cpu_diagnostics import NativeCPUDiagnostics
+        from tests.native_case_costs import NativeCaseCosts
 
         self._cpu = NativeCPUDiagnostics(self.path, self.state["worker"])
         self._cpu.start()
+        self._costs = NativeCaseCosts(self.path, self.state["worker"])
 
     def publish(self):
         self.state["observed_at"] = self._now(timezone.utc).isoformat()
@@ -103,6 +106,8 @@ class NativeWorkerDiagnostics:
         self.complete = False
         self.started = self._clock()
         self.publish()
+        if self._costs is not None:
+            self._costs.start(self.state["case"], self.state["case_id_sha256"])
 
     def pytest_runtest_logreport(self, report):
         if self._hash(report.nodeid.encode()).hexdigest() != self.state["case_id_sha256"]:
@@ -114,7 +119,11 @@ class NativeWorkerDiagnostics:
         )
         self.state.update(phase=phase, last_report_phase=report.when,
                           outcome=report.outcome if report.outcome in {"passed", "failed", "skipped"} else "unknown")
+        if self._costs is not None:
+            self._costs.phase(report.when, report.outcome, getattr(report, "duration", None))
         if report.when == "teardown" and not self.complete:
+            if self._costs is not None:
+                self._costs.finish_case()
             self.state["finished_cases"] += 1
             self.complete = True
         self.publish()
@@ -128,3 +137,5 @@ class NativeWorkerDiagnostics:
         self.publish()
         if self._cpu is not None:
             self._cpu.finish(exitstatus)
+        if self._costs is not None:
+            self._costs.finish(exitstatus)
