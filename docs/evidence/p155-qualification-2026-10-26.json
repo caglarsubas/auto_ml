@@ -5,7 +5,9 @@
   "scope": "Final authority for native scoring previews",
   "source_sha256": {
     "backend/execution_jobs/training_scoring.py": "66b321803e726596654b56d32e897911eedbc39a20aa840b480036e49b6eadd3",
-    "backend/tests/unit/test_scoring_preview_authority.py": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1"
+    "backend/tests/unit/test_scoring_preview_authority.py": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1",
+    "backend/execution_jobs/service.py": "b82043e0f49721285d5b911b20dea3bd66974a52900870f654100bfb3b03a140",
+    "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a"
   },
   "before_source": {
     "tests": 26,
@@ -16,7 +18,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 26,
+  "new_backend_cases": 48,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -25,20 +27,6 @@
   "browser_rendering_qualified": false,
   "release_qualified": false,
   "customer_installation_modified": false,
-  "local_checks": {
-    "focused_passed": 83,
-    "native_passed": 6498,
-    "native_skipped": 6,
-    "native_seconds": 453.217,
-    "new_cases": 26,
-    "two_workers_isolated": true,
-    "original_inventory_and_skips_preserved": true,
-    "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7685,
-    "tracker_original_logic_checks": 9,
-    "tracker_progress_logic_checks": 16,
-    "browser_rendering_qualified": false
-  },
   "original_suite_preservation": {
     "protected_test_execution_files": 353,
     "byte_identical_protected_files": 353,
@@ -90,5 +78,155 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
+  },
+  "prior_source_local_qualification": {
+    "focused_passed": 83,
+    "native_passed": 6498,
+    "native_skipped": 6,
+    "native_seconds": 453.217,
+    "new_cases": 26,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7685,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "checkpoint_materialization_cases": 22,
+  "initial_delivery": {
+    "pr": 250,
+    "pr_url": "https://github.com/caglarsubas/auto_ml/pull/250",
+    "pr_head": "993ea21d60ea1e96c8fb04d6138a74b600a4b2ba",
+    "ci_run": 40282725682,
+    "merge": "3eb5e308e9a166186b6d8d518917d30bfd4ec623",
+    "main_run": 40286279261,
+    "ci": {
+      "run": 40282725682,
+      "head": "993ea21d60ea1e96c8fb04d6138a74b600a4b2ba",
+      "attempt": 1,
+      "all_six": "passed",
+      "full_postgresql": {
+        "passed": 6498,
+        "skipped": 6,
+        "failed": 0,
+        "errors": 0,
+        "line_coverage": 76.85,
+        "branch_coverage": 67.14
+      },
+      "postgresql_seconds": 540.87,
+      "new_cases": 26,
+      "backend_new_cases": 26,
+      "frontend": 722,
+      "browser": {
+        "total": 47,
+        "expected": 47,
+        "unexpected": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": true
+      },
+      "ci_runner_profile": "ubuntu-24.04",
+      "actual_frontend_host_image_verified": true,
+      "new_frontend_cases": 0,
+      "new_browser_cases": 0,
+      "native_images_match_exported_set": true,
+      "actual_linux_schema_accounts_adoption_https": "passed",
+      "owned_cleanup": "passed",
+      "release_qualified": false,
+      "customer_installation_modified": false
+    },
+    "source_sha256": {
+      "backend/execution_jobs/training_scoring.py": "66b321803e726596654b56d32e897911eedbc39a20aa840b480036e49b6eadd3",
+      "backend/tests/unit/test_scoring_preview_authority.py": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1"
+    },
+    "local_checks": {
+      "focused_passed": 83,
+      "native_passed": 6498,
+      "native_skipped": 6,
+      "native_seconds": 453.217,
+      "new_cases": 26,
+      "two_workers_isolated": true,
+      "original_inventory_and_skips_preserved": true,
+      "worker_cases_accounted_for": true,
+      "coverage_line_rate": 0.7685,
+      "tracker_original_logic_checks": 9,
+      "tracker_progress_logic_checks": 16,
+      "browser_rendering_qualified": false
+    }
+  },
+  "failed_main": {
+    "run": 40286279261,
+    "head": "3eb5e308e9a166186b6d8d518917d30bfd4ec623",
+    "attempt": 1,
+    "pr": 250,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6504,
+    "finished_cases": 6372,
+    "workers": [
+      {
+        "case": "tests/unit/test_dispatcher_batch_shutdown.py::test_stop_leaves_remaining_requests_and_evidence_unchanged",
+        "case_id_sha256": "9a516ba19d2e656a59177b59bce22867ae4628239a16e8e06b7b869b8c0d2fd7",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.9387256469999556,
+        "finished_cases": 2417,
+        "last_report_phase": "setup",
+        "observed_at": "2026-10-26T08:07:05.349712+00:00",
+        "outcome": "failed",
+        "phase": "teardown",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 2418,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_private_schema_namespace_prefix.py::test_foreign_schema_names_never_inherit_reserved_prefix_status",
+        "case_id_sha256": "3b74a49c2de877df2e334d6395fa024c42fd125d6912e6df3353af2c9d5b34cf",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 0.297863000000234,
+        "finished_cases": 3955,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-26T08:07:03.652893+00:00",
+        "outcome": "passed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3955,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "checkpoint_profiles": {
+    "cases": 379,
+    "baseline_seconds": 195.833,
+    "prototype_seconds": 201.77,
+    "row_cpu_baseline_seconds": 13.018,
+    "row_cpu_prototype_seconds": 8.903,
+    "checkpoint_cpu_baseline_seconds": 21.596,
+    "checkpoint_cpu_prototype_seconds": 18.143,
+    "end_to_end_improvement_established": false,
+    "full_suite_qualification": false
+  },
+  "local_checks": {
+    "focused_passed": 302,
+    "native_passed": 6520,
+    "native_skipped": 6,
+    "native_seconds": 374.55,
+    "new_cases": 48,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7688,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
   }
 }
