@@ -99,8 +99,15 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         def r2_value():
             value = float(r2_score(y, p, force_finite=False)) if len(y) >= 2 and np.var(y) > 0 else None
             return value if value is not None and np.isfinite(value) else None
-        values = {'r2': r2_value, 'rmse': lambda: float(np.sqrt(mean_squared_error(y, p))),
-                  'mse': lambda: float(mean_squared_error(y, p)), 'mae': lambda: float(mean_absolute_error(y, p))}
+        mse_result = {}
+
+        def mse_value():
+            if not mse_result:
+                mse_result['value'] = mean_squared_error(y, p)
+            return mse_result['value']
+
+        values = {'r2': r2_value, 'rmse': lambda: float(np.sqrt(mse_value())),
+                  'mse': lambda: float(mse_value()), 'mae': lambda: float(mean_absolute_error(y, p))}
         return {name: values[name]() for name in ([metric] if metric else values)}
     if task != 'classification':
         raise ValueError('Supervised development CV supports classification and regression only.')
