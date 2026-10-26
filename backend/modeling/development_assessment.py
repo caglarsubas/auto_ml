@@ -60,6 +60,34 @@ def _binary_summary(y, p, pred, costs, both):
     }
 
 
+def _binary_selected_value(y, p, pred, positive, metric, costs):
+    """Unweighted binary stopping values after shape, mapping and range checks.
+
+    Full summaries still execute their independent public ROC/confusion checks.
+    No result or label state is retained between calls.
+    """
+    if metric == 'brier':
+        return float(np.mean((y - p) ** 2))
+    if metric == 'log_loss':
+        from scipy.special import xlogy
+
+        clipped = np.clip(p, np.finfo(p.dtype).eps, 1 - np.finfo(p.dtype).eps)
+        return float(-np.mean(xlogy(y, clipped) + xlogy(1 - y, 1 - clipped)))
+    tp = int(np.count_nonzero(positive & (pred == 1)))
+    fp = int(np.count_nonzero(pred)) - tp
+    fn = int(np.count_nonzero(positive)) - tp
+    tn = len(y) - tp - fp - fn
+    if metric == 'accuracy':
+        return float((tn + tp) / len(y))
+    if metric == 'f1':
+        return float(2 * tp / (2 * tp + fp + fn)) if 2 * tp + fp + fn else 0.
+    if metric == 'precision':
+        return float(tp / (tp + fp)) if tp + fp else 0.
+    if metric == 'recall':
+        return float(tp / (tp + fn)) if tp + fn else 0.
+    return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))
+
+
 def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
@@ -76,7 +104,10 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         return {name: values[name]() for name in ([metric] if metric else values)}
     if task != 'classification':
         raise ValueError('Supervised development CV supports classification and regression only.')
-    if not np.isin(y, np.arange(class_count)).all():
+    canonical_binary = class_count == 2 and y.ndim == 1 and y.dtype.kind in 'biuf' and y.dtype.itemsize <= 8
+    positive = y == 1 if canonical_binary else None
+    valid_labels = ((y == 0) | positive).all() if canonical_binary else np.isin(y, np.arange(class_count)).all()
+    if not valid_labels:
         raise ValueError('Development labels do not match the declared class mapping.')
     if class_count > 2:
         if p.ndim != 2 or p.shape[1] != class_count:
@@ -88,12 +119,15 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         return {key: value for key, value in result['metrics'].items() if key != 'n_samples'}
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')
-    both = len(np.unique(y)) == 2
+    both = bool(positive.any() and not positive.all()) if canonical_binary else len(np.unique(y)) == 2
     threshold_metrics = {'accuracy', 'f1', 'precision', 'recall', 'expected_cost'}
     pred = (p >= threshold).astype(int) if metric is None or metric in threshold_metrics else None
     costs = costs or {}
-    if metric is None and y.ndim == 1 and y.dtype.kind in 'biuf' and y.dtype.itemsize <= 8 and len(y):
-        return _binary_summary(y, p, pred, costs, both)
+    if canonical_binary and len(y):
+        if metric is None:
+            return _binary_summary(y, p, pred, costs, both)
+        if metric in threshold_metrics or metric in {'log_loss', 'brier'}:
+            return {metric: _binary_selected_value(y, p, pred, positive, metric, costs)}
     def expected_cost_value():
         tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
         return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))

@@ -8,11 +8,12 @@
     "backend/tests/unit/test_scoring_preview_authority.py": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1",
     "backend/execution_jobs/service.py": "b82043e0f49721285d5b911b20dea3bd66974a52900870f654100bfb3b03a140",
     "backend/tests/unit/test_checkpoint_materialization.py": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a",
-    "backend/modeling/development_assessment.py": "e8258a85519193c6c6f59177c645177634fd7dd3d196511e9c5fda335ac3c06b",
+    "backend/modeling/development_assessment.py": "57936f20cc4a74052c901dee9b100682255a832daa3c3749ec7facf8103d3555",
     "backend/tests/unit/test_development_binary_summary.py": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1",
     "backend/tests/native_worker_diagnostics.py": "cc7c9aa1820c2a669d2dbed5d095533bd4951658bfd77eea10494bd732037cef",
     "backend/tests/native_cpu_diagnostics.py": "008acb751dc59740481be1d2b7ee0ce9dcca32e4c4e538be4d08919c47a8f048",
-    "backend/tests/unit/test_native_cpu_diagnostics.py": "1617b77e0aa699c373bdc9c7c643fe894a9dda29bae23b11325d724852a9b1d2"
+    "backend/tests/unit/test_native_cpu_diagnostics.py": "1617b77e0aa699c373bdc9c7c643fe894a9dda29bae23b11325d724852a9b1d2",
+    "backend/tests/unit/test_binary_selected_metrics.py": "b0ba2eba97e53632f0bf218dbaf1970a7150913fffdfa52faa98b2ef3cd461d6"
   },
   "before_source": {
     "tests": 26,
@@ -23,7 +24,7 @@
     "service_failures": 12,
     "http_input_scope_failures": 4
   },
-  "new_backend_cases": 111,
+  "new_backend_cases": 210,
   "local_native_qualification": "passed",
   "exact_head_PR_and_independent_main": "Separate later evidence; see canonical roadmap links and retained final audit",
   "source_payload_and_plan_unchanged": true,
@@ -451,7 +452,7 @@
     "standalone_physical_qualified": false,
     "workflow_rerun_requested": false
   },
-  "local_checks": {
+  "prior_diagnostic_local_checks": {
     "focused_passed": 743,
     "native_passed": 6583,
     "native_skipped": 6,
@@ -461,6 +462,70 @@
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
     "coverage_line_rate": 0.7689,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "selected_metric_cases": 99,
+  "failed_diagnostic_ci": {
+    "run": 40357220943,
+    "head": "0d6ef35d83c52dd10a2e5f216342217b44092ed9",
+    "attempt": 1,
+    "pr": 251,
+    "conclusion": "failure",
+    "qualified": false,
+    "cause": "unchanged_native_900_second_process_cap",
+    "other_five_checks_passed": true,
+    "collected_cases": 6589,
+    "finished_cases": 6385,
+    "workers": [
+      {
+        "case": "tests/unit/test_dispatcher_database_recovery.py::test_obsolete_connection_is_retired_before_first_cycle",
+        "case_id_sha256": "f20765e411049318bf94d1b03f97aeae31ec1969bf959ac398ca8d062d8396f0",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.1078628939999362,
+        "finished_cases": 3043,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-26T16:51:12.466367+00:00",
+        "outcome": "failed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3043,
+        "worker": "gw0"
+      },
+      {
+        "case": "tests/unit/test_private_migration_history.py::test_current_exact_history_allows_connectivity_probe",
+        "case_id_sha256": "343374e29eb6a044917b538b9b4a26b315115de12023d3d9ab95f34316e1bc29",
+        "diagnostic_write_failed": false,
+        "elapsed_seconds": 1.2879357020001407,
+        "finished_cases": 3342,
+        "last_report_phase": "teardown",
+        "observed_at": "2026-10-26T16:51:12.584172+00:00",
+        "outcome": "failed",
+        "phase": "finished",
+        "schema": "native_test_worker_diagnostic_v1",
+        "session_exitstatus": 3,
+        "session_finished": true,
+        "started_cases": 3342,
+        "worker": "gw1"
+      }
+    ],
+    "complete_native_XML": false,
+    "standalone_physical_qualified": false,
+    "workflow_rerun_requested": false
+  },
+  "local_checks": {
+    "focused_passed": 842,
+    "native_passed": 6682,
+    "native_skipped": 6,
+    "native_seconds": 356.233,
+    "new_cases": 210,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7692,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
