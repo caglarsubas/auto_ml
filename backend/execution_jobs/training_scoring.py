@@ -81,12 +81,15 @@ def prepare(actor, file_id, identifier, expected, input_id, check=lambda: None, 
 
 
 def preview(actor, identifier, data):
+    from execution_jobs import service
+
     if not isinstance(data, dict) or set(data) != {"input_file_id", "training_result_sha256"}:
         raise ValueError("Supply the selected training result and feature-only input dataset ID.")
     trained = NativeJob.objects.get(pk=identifier)
+    authority = service.scope(actor, trained.dataset_id)
     plan, raw_export, _ = prepare(actor, trained.dataset_id, identifier, require_digest(data["training_result_sha256"]), data["input_file_id"])
     candidate = json.loads(raw_export)
-    return {
+    result = {
         "kind": KIND, "training_job_id": str(identifier), "training_result_sha256": plan["training_result_sha256"],
         "input_file_id": data["input_file_id"], "input_sha256": plan["source"]["sha256"],
         "scoring_sha256": digest(plan), "export_sha256": plan["export_sha256"],
@@ -94,6 +97,9 @@ def preview(actor, identifier, data):
         "budget": plan["limits"], "runtime": plan["runtime"],
         "evidence_scope": "Candidate predictions only. Feature-only numeric CSV; missing values use frozen training means. No adoption, evaluation or production approval.",
     }
+    projects.recheck(authority)
+    projects.recheck(plan["source_authority"])
+    return result
 
 
 def submit(actor, file_id, data):
