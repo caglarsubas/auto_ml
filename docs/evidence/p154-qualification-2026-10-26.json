@@ -9,7 +9,10 @@
     "docs/roadmap-tracker/metrics.py": "5a87d291b29b458406806fd1dad56a64226cd18eede15c873c2a4752226a8a93",
     "docs/roadmap-tracker/template.html": "0fb4197207a315bcad4c7b019bf73f759c869b40761d4bd9dab67f82f17ca655",
     "docs/roadmap-tracker/check_progress.cjs": "137e51c9cac0c66fe24371241bea36c0cebd9f3fb56b1e02a977cd4a8cbd236b",
-    "scripts/render_product_roadmap.py": "e6aeb49a6e9c0470e7d4d3e627ad1b1a33b3f7dc1c1f95ec726e67d0606788aa"
+    "scripts/render_product_roadmap.py": "e6aeb49a6e9c0470e7d4d3e627ad1b1a33b3f7dc1c1f95ec726e67d0606788aa",
+    "backend/evaluation/eval_utils.py": "894e536a25e3394d9b1d9cf401059d40a25a6e1b25758e2e254315dfa7ebde81",
+    "backend/modeling/development_assessment.py": "0ca7fc14dbeb60b4d71591c568f9f2195c453390394b2acc8c498bfce0d91474",
+    "backend/tests/unit/test_multiclass_selected_diagnostics.py": "8a0ae7ce9a58a555f379e6d6933650014a68e820fbd77f14f8dfe1a94df845bc"
   },
   "scope": "Final live reviewer authority for protected assessment previews; explicit done/open/blocked changes",
   "before_source": {
@@ -22,16 +25,8 @@
     "service_compatibility_passed": 2,
     "initial_bad_path_unqualified": true
   },
-  "focused": {
-    "passed": 264,
-    "new_cases": 42,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0,
-    "seconds": 31.854
-  },
   "local_native_qualification": "passed",
-  "exact_head_pr_qualification": "pending",
+  "exact_head_pr_qualification": "failed_prior_head_new_source_pending",
   "independent_push_main_qualification": "pending",
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
@@ -54,7 +49,7 @@
       }
     }
   },
-  "new_backend_cases": 42,
+  "new_backend_cases": 66,
   "preview_cases": 18,
   "progress_cases": 24,
   "early_and_HTTP_authority_checks_preserved": true,
@@ -69,20 +64,6 @@
     "skipped": 6,
     "seconds": 430.58,
     "reason": "Stricter comparison validation and two new edge cases require fresh final-source qualification"
-  },
-  "local_checks": {
-    "focused_passed": 264,
-    "native_passed": 6448,
-    "native_skipped": 6,
-    "native_seconds": 406.225,
-    "new_cases": 42,
-    "two_workers_isolated": true,
-    "original_inventory_and_skips_preserved": true,
-    "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7684,
-    "tracker_original_logic_checks": 9,
-    "tracker_progress_logic_checks": 16,
-    "browser_rendering_qualified": false
   },
   "original_suite_preservation": {
     "protected_test_execution_files": 350,
@@ -137,5 +118,93 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
+  },
+  "prior_source_local_qualification": {
+    "focused_passed": 264,
+    "native_passed": 6448,
+    "native_skipped": 6,
+    "native_seconds": 406.225,
+    "new_cases": 42,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7684,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "prior_source_focused": {
+    "passed": 264,
+    "new_cases": 42,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 31.854
+  },
+  "selected_multiclass_cases": 24,
+  "selected_metric_before": {
+    "failed": 4,
+    "compatibility_passed": 20,
+    "errors": 0,
+    "skipped": 0
+  },
+  "failed_exact_head_attempts": [
+    {
+      "run": 40266040111,
+      "head": "b1113c9531c34cb62ba79c72017f44254d2d0fa8",
+      "attempt": 1,
+      "pr": 249,
+      "conclusion": "failure",
+      "qualified": false,
+      "failed_check": "PostgreSQL runtime and metadata",
+      "cause": "unchanged_native_900_second_process_cap",
+      "other_five_checks_passed": true,
+      "finished_cases": 6326,
+      "collected_cases": 6454,
+      "complete_native_XML": false,
+      "standalone_physical_qualified": false,
+      "resources_workloads_tests_900_cap_unchanged": true,
+      "workflow_rerun_requested": false
+    }
+  ],
+  "diagnostic_profiles": [
+    {
+      "variant": "cpu-query-baseline",
+      "cases": 379,
+      "seconds": 169.89,
+      "full_suite_qualification": false
+    },
+    {
+      "variant": "matrix-profile",
+      "cases": 379,
+      "seconds": 197.709,
+      "full_suite_qualification": false
+    },
+    {
+      "variant": "metric-profile",
+      "cases": 379,
+      "seconds": 186.398,
+      "full_suite_qualification": false
+    }
+  ],
+  "evaluator_cpu_seconds": {
+    "baseline": 9.419,
+    "prototype": 8.003
+  },
+  "end_to_end_improvement_established": false,
+  "matrix_prototype_adopted": false,
+  "local_checks": {
+    "focused_passed": 593,
+    "native_passed": 6472,
+    "native_skipped": 6,
+    "native_seconds": 515.218,
+    "new_cases": 66,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7684,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
   }
 }

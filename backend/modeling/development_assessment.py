@@ -63,7 +63,7 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         if (p < 0).any() or (p > 1).any() or not np.allclose(p.sum(axis=1), 1., atol=1e-6, rtol=0):
             raise ValueError('Multiclass development validation requires probabilities in [0, 1] summing to one per row.')
         from evaluation.eval_utils import evaluate_multiclass
-        result = evaluate_multiclass(y, p, metric_names=[metric]) if metric else evaluate_multiclass(y, p)
+        result = evaluate_multiclass(y, p, metric_names=[metric], include_confusion=False) if metric else evaluate_multiclass(y, p)
         return {key: value for key, value in result['metrics'].items() if key != 'n_samples'}
     if p.ndim != 1 or (p < 0).any() or (p > 1).any():
         raise ValueError('Binary development validation requires one probability in [0, 1] per row.')

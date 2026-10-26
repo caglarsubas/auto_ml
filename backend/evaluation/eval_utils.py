@@ -54,7 +54,7 @@ def _weighted_ovr_rank_auc(y, p):
     return float(np.average(values, weights=supports))
 
 
-def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
+def evaluate_multiclass(y_true, probabilities, *, metric_names=None, include_confusion=True):
     y = np.asarray(y_true)
     p = np.asarray(probabilities, dtype=float)
     if y.ndim != 1 or p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
@@ -69,7 +69,8 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
     # enforcing the declared tolerance; never accept arbitrary score vectors.
     p = p / p.sum(axis=1, keepdims=True)
     classes = np.arange(p.shape[1])
-    pred = p.argmax(axis=1)
+    needs_labels = include_confusion or metric_names is None or any(name in {'accuracy', 'f1', 'f1_weighted'} for name in metric_names)
+    pred = p.argmax(axis=1) if needs_labels else None
     values = {
         'accuracy': lambda: _safe_float(accuracy_score(y, pred)),
         'log_loss': lambda: _safe_float(log_loss(y, p, labels=classes)),
@@ -83,7 +84,7 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None):
     return {
         'task': 'classification', 'class_count': p.shape[1],
         'metrics': metrics,
-        'confusion_matrix': confusion_matrix(y, pred, labels=classes).tolist(),
+        'confusion_matrix': confusion_matrix(y, pred, labels=classes).tolist() if include_confusion else None,
         'threshold_table': [],
         'metric_semantics': {'roc_auc': 'weighted one-vs-rest', 'f1': 'weighted across declared classes',
                              'roc_auc_calculation': 'weighted_ovr_rank_auc_v1' if metric_names is not None else 'sklearn_roc_integration'},
