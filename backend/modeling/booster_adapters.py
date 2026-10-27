@@ -6,6 +6,7 @@ product flow (native categoricals, early stopping, gain importance, SHAP).
 
 from __future__ import annotations
 
+import json
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -177,8 +178,30 @@ class XGBoostAdapter(BoosterAdapter):
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         import xgboost as xgb
+        frame = X[self.feature_names] if self.feature_names else X
+        # A pinned CPU tree with dense float predictors needs no transient
+        # DMatrix. Check current names/configuration, then let the native
+        # predictor validate the array shape. Other profiles retain DMatrix.
+        if (type(self.model) is xgb.Booster and not self.enable_categorical
+                and isinstance(frame, pd.DataFrame) and len(frame)
+                and all(isinstance(dtype, np.dtype) and dtype.kind == 'f'
+                        and dtype.itemsize in (4, 8) and dtype.isnative for dtype in frame.dtypes)
+                and self.model.feature_names == list(map(str, frame.columns))
+                and self.model.feature_types == ['float'] * len(frame.columns)):
+            learner = json.loads(self.model.save_config()).get('learner', {})
+            if (learner.get('gradient_booster', {}).get('name') == 'gbtree'
+                    and learner.get('generic_param', {}).get('device') == 'cpu'):
+                values = frame.to_numpy()
+                limit = np.finfo(np.float32).max
+                # DMatrix rejects infinities and float32 overflow. NaNs remain
+                # supported missing values; unusual numeric ranges keep its
+                # original validation rather than broadening accepted inputs.
+                if not np.any(values > limit) and not np.any(values < -limit):
+                    rounds = (0, int(self.best_iteration) + 1) if self.best_iteration is not None and self.best_iteration >= 0 else (0, 0)
+                    return np.asarray(self.model.inplace_predict(values, iteration_range=rounds,
+                                                                validate_features=True), dtype=float)
         dmat = xgb.DMatrix(
-            X[self.feature_names] if self.feature_names else X,
+            frame,
             feature_names=self.feature_names or list(map(str, X.columns)),
             enable_categorical=self.enable_categorical,
         )
