@@ -355,3 +355,14 @@ Twenty-four additive cases exercise round trips, invalid/cyclic values, collisio
 Training/search preview captures the initially accepted project/dataset scope before preparation and rechecks it after the entire response, including the plan digest, has been constructed. Existing preparation and HTTP authorization remain. Late actor deactivation, membership or dataset-binding revisions, and authority storage failures cannot return preview evidence through the service. HTTP denials continue to withhold private diagnostics.
 
 Eighteen cases use real declaration inputs, SQL state, service and authenticated HTTP entrypoints. Before the fix, eight service cases fail; ten compatibility cases pass, including existing HTTP defenses. The checks cover both the prepared-plan and final-digest boundaries, verify unchanged plan semantics on success, and preserve source bytes, jobs/events, adoption state and protected-outcome access. Runtime fingerprints bind the changed source; historical evidence is not upgraded implicitly. Full qualification and subsequent PR/main evidence are tracked in the roadmap ledger.
+
+
+<a id="csv-input-authority-p157"></a>
+
+### Complete CSV input authority (P157)
+
+P157 retains the accepted CSV input authority through fingerprinting and complete byte/receipt construction, then rechecks it before returning any input or receipt. Existing path/descriptor, input-size, expected-fingerprint and early authority checks remain. Fifteen real-input cases reproduce eight service-level failures before the fix, with seven compatibility passes (the HTTP boundary already denied late changes). Actor deactivation, membership/binding revisions and authority outages withhold input evidence; private SQL remains private. Source bytes, jobs/events, adoption and protected-outcome records remain unchanged.
+
+The read helper materializes the complete return tuple and rechecks its original authority before releasing it. The HTTP boundary retains its own check. Existing descriptor pinning, bounded reads, expected-input comparisons and read-only behavior remain. This changes no queue, worker, scorer, adoption or protected-assessment semantics.
+
+The new regression file covers the byte reader, service preview and authenticated input API. Real hashing runs before actor deactivation or membership/dataset-binding revision; an injected authority outage withholds success and private SQL diagnostics. Authorized repeated calls preserve exact bytes, receipt fields, budget and authority. Local and automatic PR/main qualification are tracked separately in the roadmap. Broader D07 customer recovery/restore, upgrade/rollback, workload sizing and legacy training/search migration remain open.
