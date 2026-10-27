@@ -11,7 +11,7 @@
     "service_failures": 8,
     "http_compatibility_passes": 4
   },
-  "new_backend_cases": 15,
+  "new_backend_cases": 57,
   "early_authority_and_descriptor_checks_preserved": true,
   "authority_retained_through_fingerprinting_and_materialization": true,
   "input_bytes_and_receipt_semantics_preserved": true,
@@ -21,16 +21,33 @@
   "browser_rendering_qualified": false,
   "release_qualified": false,
   "customer_installation_modified": false,
+  "failed_ci": {
+    "run": 40478475844,
+    "native_timeout_seconds": 900,
+    "finished_cases": 6703,
+    "final_native_XML_available": false,
+    "new_authority_cases_passed": 15,
+    "same_head_rerun": false
+  },
+  "selected_regression_optimization": {
+    "new_cases": 42,
+    "before_reference_compatibility_passes": 39,
+    "before_redundant_public_work_failures": 3,
+    "original_full_public_assessment_preserved": true,
+    "all_input_validation_preserved": true,
+    "isolated_benchmark": "test-reports/p157/selected-metric-benchmark.json",
+    "end_to_end_capacity_qualified": false
+  },
   "local_checks": {
-    "focused_passed": 158,
-    "native_passed": 6837,
+    "focused_passed": 285,
+    "native_passed": 6879,
     "native_skipped": 6,
-    "native_seconds": 372.072,
-    "new_cases": 15,
+    "native_seconds": 426.371,
+    "new_cases": 57,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7694,
+    "coverage_line_rate": 0.7695,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
