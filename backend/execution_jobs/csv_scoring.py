@@ -93,7 +93,9 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     receipt = {"file_id": file_id, "name": dataset.original_name, "relative_path": relative, **csv_input(raw)}
     if not raw or expected and any(receipt[k] != expected[k] for k in ["sha256", "bytes", "parser", "pandas_version"]):
         raise JobConflict("job_input_changed")
-    return bytes(raw), receipt, authority
+    result = bytes(raw), receipt, authority
+    projects.recheck(authority)
+    return result
 
 
 def prepare(actor, file_id):

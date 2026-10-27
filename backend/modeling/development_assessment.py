@@ -95,6 +95,13 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     if task == 'regression':
         if p.ndim != 1 or not np.isfinite(y.astype(float)).all():
             raise ValueError('Regression validation requires one finite numeric label and prediction per row.')
+        if metric in {'mse', 'rmse', 'mae'} and y.ndim == 1 and y.dtype.kind in 'biuf' and y.dtype.itemsize <= 8 and len(y):
+            # These inputs already passed row/shape/finite validation. Keep the
+            # independent public implementation for complete assessments and
+            # noncanonical labels; no result survives this call.
+            errors = y - p
+            value = np.mean(np.abs(errors)) if metric == 'mae' else np.mean(errors ** 2)
+            return {metric: float(np.sqrt(value) if metric == 'rmse' else value)}
         # A constant validation target has undefined R², rather than an invented 0/1.
         def r2_value():
             value = float(r2_score(y, p, force_finite=False)) if len(y) >= 2 and np.var(y) > 0 else None
