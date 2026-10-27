@@ -185,9 +185,9 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
 def preview(actor, file_id, options):
     from execution_jobs import service
 
-    service.scope(actor, file_id)
+    authority = service.scope(actor, file_id)
     plan, _ = prepare(actor.pk, file_id, options)
-    return {
+    result = {
         "kind": KIND,
         "input_sha256": plan["source"]["sha256"],
         "training_sha256": digest(plan),
@@ -197,6 +197,8 @@ def preview(actor, file_id, options):
         "runtime": plan["profile"]["runtime"],
         "evidence_scope": "Exploratory development-only selection; no final assessment or model adoption.",
     }
+    projects.recheck(authority)
+    return result
 
 
 def submit(actor, file_id, data):
