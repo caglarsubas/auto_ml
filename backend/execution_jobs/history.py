@@ -1,10 +1,12 @@
 """Read-only, dataset-scoped metadata observations and bounded keyset navigation."""
 
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 
 from django.conf import settings
 from django.core import signing
+from django.db import connection, transaction
 from django.db.models import Count, Min, Q
 from django.utils import timezone
 
@@ -26,8 +28,34 @@ def key_filter(key, newer=False):
     return Q(**{f"created_at__{operator}": stamp}) | Q(created_at=stamp, **{f"pk__{operator}": identifier})
 
 
+@contextmanager
+def _bounded_read():
+    """Bound metadata SQL without taking the execution queue lock."""
+    with transaction.atomic():
+        previous = None
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_setting('statement_timeout'), setting::bigint "
+                    "FROM pg_settings WHERE name = 'statement_timeout'"
+                )
+                previous, configured = cursor.fetchone()
+                cursor.execute("SELECT set_config('statement_timeout', %s, true)", [f"{min(configured or 5000, 5000)}ms"])
+        yield
+        # Errors roll back SET LOCAL with the savepoint. Successful nested
+        # reads must restore the caller's setting before its work continues.
+        if previous is not None and not transaction.get_rollback():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('statement_timeout', %s, true)", [previous])
+
+
 def read(actor, file_id, params):
     current = service.scope(actor, file_id)
+    with _bounded_read():
+        return _read(actor, file_id, params, current)
+
+
+def _read(actor, file_id, params, current):
     # Validate bounded inputs before querying job storage. Authority is always first.
     if set(params) - {"project_id", "state", "kind", "cursor"} or any(len(params.getlist(k)) != 1 for k in params):
         raise ValueError("Unsupported history parameters.")
