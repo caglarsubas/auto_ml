@@ -9,7 +9,7 @@
     "skipped": 0,
     "compatibility_passes": 13
   },
-  "new_backend_cases": 15,
+  "new_backend_cases": 52,
   "local_native_qualification": "passed",
   "initial_focused_draft": "124 passed and one overbroad read-only assertion failed; diagnostic proves mandatory project-access audit writes outside the metadata bound",
   "product_postgresql_statement_ceiling_ms": 5000,
@@ -33,16 +33,28 @@
     "original_views_sha256": "a27505a4cf4d85bb02db5c2fc676937803a7284602a35934c26e41a24ba138bd"
   },
   "new_read_only_test_corrected_to_require_mandatory_audits_outside_bound": true,
+  "failed_ci_attempts": [
+    {
+      "run": 40629306805,
+      "head": "c0824434f43d56d1df395638c20b37ca9ed2517a",
+      "evidence": "failed-ci-40629306805",
+      "reason": "native_pytest_900_second_timeout",
+      "rerun": false
+    }
+  ],
+  "curve_reuse_scope": "One full CV invocation with owned readonly row-ordered input snapshots; public ROC-AUC/confusion references and noncanonical fallback retained.",
+  "lineage_encoding": "Compact newly written JSON; decoded schemas/default conversions and raw-byte integrity unchanged; historical artifacts untouched.",
+  "performance_probes_are_not_capacity_qualification": true,
   "local_checks": {
-    "focused_passed": 125,
-    "native_passed": 6954,
+    "focused_passed": 329,
+    "native_passed": 6991,
     "native_skipped": 6,
-    "native_seconds": 467.279,
-    "new_cases": 15,
+    "native_seconds": 473.03,
+    "new_cases": 52,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.77,
+    "coverage_line_rate": 0.7704,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
@@ -54,7 +66,7 @@
       "backend/execution_jobs/views.py": {
         "before": "a27505a4cf4d85bb02db5c2fc676937803a7284602a35934c26e41a24ba138bd",
         "after": "aeeb7ca6a89baa5508c1da5e65d8ec788384fa162c29445b83e74bfaad192455",
-        "reason": "Product directory SQL lifetime bound; original tests, fixtures, workloads and suite limits unchanged."
+        "reason": "Product SQL bound, fold-local curve reuse or new lineage serialization; original tests and qualification budgets unchanged."
       }
     },
     "all_original_test_case_files_byte_identical": true,

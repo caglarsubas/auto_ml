@@ -1188,7 +1188,7 @@ class ModelingStartView(APIView):
                 if purifier_state else 'Input snapshot and fold membership recorded; legacy upstream purifier provenance unverified.')
             lineage_path = execution_dir / 'lineage.json'
             with lineage_path.open('x', encoding='utf-8') as stream:
-                json.dump(lineage, stream, indent=2, default=str)
+                stream.write(json.dumps(lineage, separators=(',', ':'), default=str))
             model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
             model_info['lineage_id'] = lineage['lineage_id']
             model_info['fit_receipt'] = adapter.fit_receipt

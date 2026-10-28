@@ -277,7 +277,7 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
                    prediction_contract=contract, encoding_report=data.get('encoding_report', []),
                    purifier=data.get('purifier_state'), fit_receipt=fit_receipt, cv=cv)
     lineage_path = root / 'lineage.json'
-    lineage_path.write_text(json.dumps(lineage, indent=2, allow_nan=False), encoding='utf-8')
+    lineage_path.write_text(json.dumps(lineage, separators=(',', ':'), allow_nan=False), encoding='utf-8')
     # Only invariant declarations and input provenance can cross a model change.
     invariant = ('prediction_contract', 'holdout_spec', 'input_stage', 'purifier_provenance', 'diagnostic_limitations',
                  'impute_fit_on_train_only')

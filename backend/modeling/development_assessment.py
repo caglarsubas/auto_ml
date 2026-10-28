@@ -39,16 +39,22 @@ def _binary_rank_auc(y, p):
     return float(u / (support * (len(y) - support)))
 
 
-def _binary_summary(y, p, pred, costs, both):
+def _precision_recall_area(precision, recall):
+    """Unweighted AP is the decreasing-recall step sum, not trapezoidal area."""
+    return float(max(0., -np.sum(np.diff(recall) * precision[:-1])))
+
+
+def _binary_summary(y, p, pred, costs, both, curve_evidence=None):
     """Share work only after canonical binary inputs pass validation."""
     from scipy.special import xlogy
 
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
     fpr, tpr, _ = roc_curve(y, p) if both else (None, None, None)
+    precision, recall, _ = precision_recall_curve(y, p) if both else (None, None, None)
     clipped = np.clip(p, np.finfo(p.dtype).eps, 1 - np.finfo(p.dtype).eps)
-    return {
+    result = {
         'roc_auc': float(roc_auc_score(y, p)) if both else None,
-        'pr_auc': float(average_precision_score(y, p)) if both else None,
+        'pr_auc': _precision_recall_area(precision, recall) if both else None,
         'ks': float(np.max(np.abs(tpr - fpr))) if both else None,
         'log_loss': float(-np.mean(xlogy(y, clipped) + xlogy(1 - y, 1 - clipped))),
         'brier': float(np.mean((y - p) ** 2)),
@@ -58,6 +64,15 @@ def _binary_summary(y, p, pred, costs, both):
         'recall': float(tp / (tp + fn)) if tp + fn else 0.,
         'expected_cost': float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y)),
     }
+    if both and curve_evidence is not None:
+        # Only this CV invocation owns these snapshots. Bind reuse to complete
+        # row-ordered values, without retaining caller arrays or mutable state.
+        arrays = [np.array(value, copy=True) for value in (y, p, fpr, tpr, precision, recall)]
+        for value in arrays:
+            value.setflags(write=False)
+        curve_evidence.update(labels=arrays[0], predictions=arrays[1],
+                              roc=(arrays[2], arrays[3]), pr=(arrays[4], arrays[5]))
+    return result
 
 
 def _binary_selected_value(y, p, pred, positive, metric, costs):
@@ -88,7 +103,8 @@ def _binary_selected_value(y, p, pred, positive, metric, costs):
     return float((fn * costs.get('fn_cost', 1) + fp * costs.get('fp_cost', 1)) / len(y))
 
 
-def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None):
+def development_metrics(labels, predictions, task, class_count=2, costs=None, threshold=.5, *, metric=None,
+                        _curve_evidence=None):
     y, p = np.asarray(labels), np.asarray(predictions, dtype=float)
     if p.shape[0:1] != (len(y),) or not np.isfinite(p).all():
         raise ValueError('Development predictions must be finite and preserve every validation row.')
@@ -139,7 +155,7 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     costs = costs or {}
     if canonical_binary and len(y):
         if metric is None:
-            return _binary_summary(y, p, pred, costs, both)
+            return _binary_summary(y, p, pred, costs, both, _curve_evidence)
         if metric in threshold_metrics or metric in {'log_loss', 'brier'}:
             return {metric: _binary_selected_value(y, p, pred, positive, metric, costs)}
     def expected_cost_value():
@@ -161,16 +177,35 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
     return {name: values[name]() for name in ([metric] if metric else values)}
 
 
-def _binary_curves(labels, predictions):
+def _binary_curves(labels, predictions, _fold_curves=None):
     """Only draw curves when every fold supports the discrimination metrics."""
     grid = np.linspace(0., 1., 101)
     tprs, precisions, raw, baselines = [], [], [], []
-    for y, p in zip(labels, predictions):
-        fpr, tpr, _ = roc_curve(y, p)
+    for index, (y, p) in enumerate(zip(labels, predictions)):
+        evidence = (_fold_curves[index] if _fold_curves is not None
+                    and len(_fold_curves) == len(labels) else None)
+        reusable = (
+            isinstance(evidence, dict) and set(evidence) == {'labels', 'predictions', 'roc', 'pr'}
+            and isinstance(evidence['labels'], np.ndarray) and isinstance(evidence['predictions'], np.ndarray)
+            and isinstance(evidence['roc'], tuple) and len(evidence['roc']) == 2
+            and isinstance(evidence['pr'], tuple) and len(evidence['pr']) == 2
+            and all(isinstance(value, np.ndarray) and value.ndim == 1 and not value.flags.writeable
+                    for value in (evidence['labels'], evidence['predictions'], *evidence['roc'], *evidence['pr']))
+            and len(evidence['roc'][0]) == len(evidence['roc'][1]) >= 2
+            and len(evidence['pr'][0]) == len(evidence['pr'][1]) >= 2
+            and np.asarray(y).dtype == evidence['labels'].dtype
+            and np.asarray(p).dtype == evidence['predictions'].dtype
+            and np.array_equal(y, evidence['labels']) and np.array_equal(p, evidence['predictions'])
+        )
+        if reusable:
+            fpr, tpr = evidence['roc']
+            precision, recall = evidence['pr']
+        else:
+            fpr, tpr, _ = roc_curve(y, p)
+            precision, recall, _ = precision_recall_curve(y, p)
         interpolated = np.interp(grid, fpr, tpr)
         interpolated[0], interpolated[-1] = 0., 1.
         tprs.append(interpolated)
-        precision, recall, _ = precision_recall_curve(y, p)
         raw.append({'recall': recall.tolist(), 'precision': precision.tolist()})
         # Sample the first threshold attaining each recall after reversing
         # sklearn's decreasing-recall curve. Duplicate recalls retain the
@@ -179,7 +214,10 @@ def _binary_curves(labels, predictions):
         idx = np.clip(np.searchsorted(recall, grid, side='left'), 0, len(precision) - 1)
         precisions.append(precision[idx])
         baselines.append(float(np.mean(y)))
-    precision, recall, _ = precision_recall_curve(np.concatenate(labels), np.concatenate(predictions))
+    micro_y, micro_p = np.concatenate(labels), np.concatenate(predictions)
+    precision, recall, _ = precision_recall_curve(micro_y, micro_p)
+    canonical = (micro_y.ndim == 1 and micro_y.dtype.kind in 'biuf' and micro_y.dtype.itemsize <= 8
+                 and ((micro_y == 0) | (micro_y == 1)).all())
     return {'roc_curve': {'fpr': grid.tolist(), 'mean_tpr': np.mean(tprs, axis=0).tolist(),
                          'std_tpr': np.std(tprs, axis=0).tolist(), 'fold_tpr': [v.tolist() for v in tprs]},
             'pr_curve': {'recall': grid.tolist(), 'mean_precision': np.mean(precisions, axis=0).tolist(),
@@ -187,7 +225,8 @@ def _binary_curves(labels, predictions):
                         'fold_precision': [v.tolist() for v in precisions], 'folds_raw': raw,
                         'baseline': float(np.mean(baselines))},
             'pr_curve_micro': {'recall': recall.tolist(), 'precision': precision.tolist(),
-                              'ap': float(average_precision_score(np.concatenate(labels), np.concatenate(predictions)))}}
+                              'ap': (_precision_recall_area(precision, recall) if canonical else
+                                     float(average_precision_score(micro_y, micro_p)))}}
 
 
 def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
@@ -196,7 +235,7 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
     contract = context.get('prediction_contract') or {}
     objective = contract.get('objective') or {}
     class_count = len(contract.get('class_mapping') or []) or int(context['labels'].nunique())
-    rows, receipts, fold_labels, fold_predictions = [], [], [], []
+    rows, receipts, fold_labels, fold_predictions, fold_curves = [], [], [], [], []
     for fold, (X_tr, y_tr, X_va, y_va, receipt) in enumerate(
             prepared_folds(context, X, y, n_splits, all_declared_features=all_declared_features), 1):
         if task == 'classification' and set(y_tr.unique()) != set(range(class_count)):
@@ -218,13 +257,16 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
             adapter.train(X_tr, y_tr, X_va, y_va, fold_params,
                           num_boost_round=num_boost_round, early_stopping_rounds=early_stopping_rounds)
         predictions = adapter.predict(X_va) if task == 'regression' else adapter.predict_proba(X_va)
-        metrics = development_metrics(y_va, predictions, task, class_count, objective.get('cost_matrix'))
+        curve_evidence = {}
+        metrics = development_metrics(y_va, predictions, task, class_count, objective.get('cost_matrix'),
+                                      _curve_evidence=curve_evidence)
         rows.append({**metrics, 'training_eval_metric': getattr(adapter, 'training_eval_metric', None), 'fold': fold, 'n_train': len(y_tr), 'n_valid': len(y_va),
                      'best_iteration': int(getattr(adapter, 'best_iteration', 0) or 0)})
         receipt['native_fit'] = adapter.fit_receipt
         receipts.append(receipt)
         fold_labels.append(np.asarray(y_va))
         fold_predictions.append(np.asarray(predictions))
+        fold_curves.append(curve_evidence)
     if len(rows) != n_splits:
         raise ValueError('Development validation did not produce every requested fold.')
     keys = list(metrics)
@@ -254,7 +296,7 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
     summary['limitations'] = [f'{key} is available in {result["n_valid"]} of {n_splits} folds; its aggregate is unavailable.'
                               for key, result in coverage.items() if result['status'] != 'complete']
     if task == 'classification' and class_count == 2 and coverage['roc_auc']['status'] == 'complete':
-        summary.update(_binary_curves(fold_labels, fold_predictions))
+        summary.update(_binary_curves(fold_labels, fold_predictions, fold_curves))
     return summary
 
 
