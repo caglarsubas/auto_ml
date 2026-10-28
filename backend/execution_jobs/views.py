@@ -159,16 +159,17 @@ class JobCandidateInputView(NativeReadView):
 class NativeAdoptionListView(NativeReadView):
     def get(self, request, job_id):
         try:
-            try:
-                job = NativeJob.objects.get(pk=job_id)
-            except DatabaseError:
-                # Keep the adoption reference-lookup diagnostic compatible
-                # when full record reads follow metadata-only authorization.
-                raise AuthorityUnavailable() from None
-            for scope in service.read_authority(request.user, job):
-                projects.recheck(scope)
-            rows = native_assessment.NativeAdoption.objects.filter(training_job=job).order_by('-created_at')
-            return Response({'adoptions': [native_assessment.serialize(request.user, a) for a in rows[:50]]})
+            with history._bounded_read():
+                try:
+                    job = NativeJob.objects.get(pk=job_id)
+                except DatabaseError:
+                    # Keep the adoption reference-lookup diagnostic compatible
+                    # when full record reads follow metadata-only authorization.
+                    raise AuthorityUnavailable() from None
+                for scope in service.read_authority(request.user, job):
+                    projects.recheck(scope)
+                rows = native_assessment.NativeAdoption.objects.filter(training_job=job).order_by('-created_at')
+                return Response({'adoptions': [native_assessment.serialize(request.user, a) for a in rows[:50]]})
         except ERRORS as exc:
             return failure(exc)
 
@@ -183,11 +184,12 @@ class NativeAdoptionListView(NativeReadView):
 class NativeAdoptionView(NativeReadView):
     def get(self, request, adoption_id):
         try:
-            try:
-                adoption = native_assessment.NativeAdoption.objects.select_related('training_job').get(pk=adoption_id)
-            except DatabaseError:
-                raise AuthorityUnavailable() from None
-            return Response(native_assessment.serialize(request.user, adoption))
+            with history._bounded_read():
+                try:
+                    adoption = native_assessment.NativeAdoption.objects.select_related('training_job').get(pk=adoption_id)
+                except DatabaseError:
+                    raise AuthorityUnavailable() from None
+                return Response(native_assessment.serialize(request.user, adoption))
         except ERRORS as exc:
             return failure(exc)
 

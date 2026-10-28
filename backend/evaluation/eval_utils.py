@@ -41,8 +41,11 @@ def _weighted_ovr_rank_auc(y, p):
     class at a time, so temporary rank storage grows with rows, not rows ×
     classes. Full assessment keeps sklearn's independent ROC integration.
     """
-    from modeling.rank_metrics import MAX_EXACT_RANK_ROWS, tie_group_auc
+    from modeling.rank_metrics import MAX_EXACT_RANK_ROWS, tie_group_auc, small_weighted_ovr_auc
 
+    batched = small_weighted_ovr_auc(y, p)
+    if batched is not None:
+        return batched
     values, supports = [], []
     for label in range(p.shape[1]):
         positive = y == label
@@ -158,13 +161,19 @@ def threshold_table(
                and all(isinstance(t, (int, float, np.integer, np.floating)) and np.isfinite(t) for t in thresholds))
     if ordered:
         positive_scores, negative_scores = np.sort(scores[positives]), np.sort(scores[~positives])
+    partitions = None
+    if ordered and all(type(value) in (float, np.float64) for value in thresholds):
+        # One native search per class partition preserves the requested order
+        # and inclusive ties. Other scalar types retain scalar search.
+        partitions = (np.searchsorted(positive_scores, thresholds, side='left'),
+                      np.searchsorted(negative_scores, thresholds, side='left'))
     rows = []
-    for thr in thresholds:
+    for index, thr in enumerate(thresholds):
         y_pred = None if ordered else (y_proba >= thr).astype(int)
         if binary_counts and (ordered or y_pred.shape == truth.shape):
             if ordered:
-                fn = int(np.searchsorted(positive_scores, thr, side='left'))
-                tn = int(np.searchsorted(negative_scores, thr, side='left'))
+                fn = int(partitions[0][index] if partitions is not None else np.searchsorted(positive_scores, thr, side='left'))
+                tn = int(partitions[1][index] if partitions is not None else np.searchsorted(negative_scores, thr, side='left'))
                 tp, fp = len(positive_scores) - fn, len(negative_scores) - tn
             else:
                 predicted = y_pred.astype(bool)

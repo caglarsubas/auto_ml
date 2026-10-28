@@ -65,6 +65,7 @@ def runtime(kind=KIND):
     sources = [
         "execution_jobs/service.py",
         "execution_jobs/models.py",
+        "execution_jobs/metadata_json.py",
         "execution_jobs/tasks.py",
         "execution_jobs/config.py",
         "execution_jobs/csv_scoring.py",
@@ -80,6 +81,9 @@ def runtime(kind=KIND):
         "sources": {p: hashlib.sha256((Path(settings.BASE_DIR) / p).read_bytes()).hexdigest() for p in sources},
     }
 
+    from execution_jobs.metadata_json import runtime_profile
+
+    result["metadata_json"] = runtime_profile()
     if kind == csv_scoring.KIND:
         from deployment.scoring_receipts import scoring_runtime
 
@@ -302,7 +306,7 @@ def submit(actor, file_id, data):
             expires_at=timezone.now() + timedelta(hours=1),
         )
         projects.recheck(current)
-        record(job, "submitted", actor=actor)
+        record(job, "submitted", actor=actor, update_fields=["revision"])
         return authorized_receipt(job, [current, *([input_scope] if input_scope is not None else [])])
 
 
@@ -471,7 +475,9 @@ def cancel(actor, identifier, data):
 def close(job, state, reason, *, metadata_only=False):
     job.state, job.reason_code, job.finished_at = state, reason, timezone.now()
     job.lease_token = job.lease_until = None
-    fields = ["state", "reason_code", "finished_at", "lease_token", "lease_until", "revision"] if metadata_only else None
+    fields = ["state", "reason_code", "finished_at", "lease_token", "lease_until", "revision"]
+    if not metadata_only:
+        fields += ["result", "result_sha256"]
     record(job, state, detail={"reason_code": reason}, update_fields=fields)
 
 
@@ -515,7 +521,8 @@ def claim(identifier):
         job.state, job.lease_token = "running", uuid.uuid4()
         job.lease_until = now + timedelta(seconds=LIMITS["lease_seconds"])
         job.attempts += 1
-        record(job, "started", detail={"attempt": job.attempts})
+        record(job, "started", detail={"attempt": job.attempts},
+               update_fields=["state", "lease_token", "lease_until", "attempts", "revision"])
         return job, job.lease_token
 
 
@@ -742,14 +749,15 @@ def reconcile():
         )
         for job in jobs.select_for_update().filter(state__in=ACTIVE, lease_until__lte=now):
             if job.state == "cancel_requested":
-                close(job, "cancelled", "actor_cancelled_after_lease")
+                close(job, "cancelled", "actor_cancelled_after_lease", metadata_only=True)
             elif job.attempts >= LIMITS["attempts"] or job.expires_at <= now:
-                close(job, "failed", "job_attempts_exhausted")
+                close(job, "failed", "job_attempts_exhausted", metadata_only=True)
             else:
                 job.state, job.lease_token, job.lease_until, job.next_dispatch = "queued", None, None, now
-                record(job, "requeued", detail={"reason_code": "worker_lease_expired"})
+                record(job, "requeued", detail={"reason_code": "worker_lease_expired"},
+                       update_fields=["state", "lease_token", "lease_until", "next_dispatch", "revision"])
         for job in jobs.select_for_update().filter(state="queued", expires_at__lte=now):
-            close(job, "failed", "job_expired")
+            close(job, "failed", "job_expired", metadata_only=True)
         return list(
             NativeJob.objects.filter(state="queued", next_dispatch__lte=now)
             .order_by("created_at", "pk")
