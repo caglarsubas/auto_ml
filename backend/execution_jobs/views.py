@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from access_control import projects
 from access_control.project_http import AuthorityUnavailable
 from execution_jobs import service
-from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment
+from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment, history
 from execution_jobs.models import NativeJob
 
 
@@ -46,32 +46,35 @@ class DatasetJobsView(NativeReadView):
             offset = int(request.query_params.get("offset", "0"))
             if not 0 <= offset <= 2**63 - 1:
                 raise ValueError
-            rows = NativeJob.objects.filter(dataset_id=file_id, project_id=current["project_id"]).order_by(
-                "-created_at", "-pk"
-            )
-            total = rows.count()
-            # The list must not materialize result/model state, authority or
-            # request bodies for its at-most-50 metadata summaries.
-            page = rows.values("id", "state", "specification__kind", "specification__bundle_id", "created_at")
-            values = [
-                {
-                    "id": str(j["id"]),
-                    "state": j["state"],
-                    "kind": j["specification__kind"],
-                    "bundle_id": j["specification__bundle_id"],
-                    "created_at": j["created_at"].isoformat(),
-                }
-                for j in page[offset : offset + 50]
-            ]
-            projects.recheck(current)
-            return Response(
-                {
-                    "jobs_enabled": settings_enabled(),
-                    "jobs": values,
-                    "total": total,
-                    "next_offset": offset + 50 if offset + 50 < total else None,
-                }
-            )
+            # Candidate/adoption screens also use this directory. Its count
+            # and offset scan need the same SQL bound as keyset history.
+            with history._bounded_read():
+                rows = NativeJob.objects.filter(dataset_id=file_id, project_id=current["project_id"]).order_by(
+                    "-created_at", "-pk"
+                )
+                total = rows.count()
+                # The list must not materialize result/model state, authority or
+                # request bodies for its at-most-50 metadata summaries.
+                page = rows.values("id", "state", "specification__kind", "specification__bundle_id", "created_at")
+                values = [
+                    {
+                        "id": str(j["id"]),
+                        "state": j["state"],
+                        "kind": j["specification__kind"],
+                        "bundle_id": j["specification__bundle_id"],
+                        "created_at": j["created_at"].isoformat(),
+                    }
+                    for j in page[offset : offset + 50]
+                ]
+                projects.recheck(current)
+                return Response(
+                    {
+                        "jobs_enabled": settings_enabled(),
+                        "jobs": values,
+                        "total": total,
+                        "next_offset": offset + 50 if offset + 50 < total else None,
+                    }
+                )
         except ERRORS as exc:
             return failure(exc)
 
