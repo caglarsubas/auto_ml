@@ -86,7 +86,7 @@ def save_lineage(file_id: int, lineage: Dict[str, Any]) -> str:
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f'{file_id}_lineage.json')
     with open(path, 'w', encoding='utf-8') as f:
-        json.dump(lineage, f, indent=2, default=str)
+        f.write(json.dumps(lineage, separators=(',', ':'), default=str))
     return os.path.relpath(path, settings.MEDIA_ROOT)
 
 
