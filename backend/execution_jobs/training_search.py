@@ -246,7 +246,7 @@ def submit(actor, file_id, data):
             expires_at=timezone.now() + timedelta(hours=1),
         )
         projects.recheck(current)
-        service.record(job, "submitted", actor=actor)
+        service.record(job, "submitted", actor=actor, update_fields=["revision"])
         return service.authorized_receipt(job, [current])
 
 

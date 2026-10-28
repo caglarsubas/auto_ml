@@ -433,7 +433,7 @@ def submit(actor, file_id, data):
             request_sha256=request_sha,
             expires_at=timezone.now() + timedelta(hours=1),
         )
-        service.record(job, "submitted", actor=actor)
+        service.record(job, "submitted", actor=actor, update_fields=["revision"])
         return service.authorized_receipt(job, [authority])
 
 

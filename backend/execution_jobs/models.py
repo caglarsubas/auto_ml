@@ -4,6 +4,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from execution_jobs.metadata_json import NativeJSONField
 
 
 class QueueLock(models.Model):
@@ -16,9 +17,9 @@ class NativeJob(models.Model):
     dataset = models.ForeignKey("declaration.Declaration", on_delete=models.PROTECT)
     source_dataset = models.ForeignKey("declaration.Declaration", null=True, on_delete=models.PROTECT, related_name="scoring_jobs")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
-    actor_snapshot = models.JSONField()
-    authority = models.JSONField()
-    specification = models.JSONField()
+    actor_snapshot = NativeJSONField()
+    authority = NativeJSONField()
+    specification = NativeJSONField()
     request_sha256 = models.CharField(max_length=64)
     state = models.CharField(max_length=24, default="queued")
     revision = models.PositiveIntegerField(default=0)
@@ -27,7 +28,7 @@ class NativeJob(models.Model):
     lease_until = models.DateTimeField(null=True)
     next_dispatch = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField()
-    result = models.JSONField(null=True)
+    result = NativeJSONField(null=True)
     result_sha256 = models.CharField(max_length=64, blank=True)
     reason_code = models.CharField(max_length=64, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
@@ -42,8 +43,8 @@ class JobEvent(models.Model):
     job = models.ForeignKey(NativeJob, on_delete=models.PROTECT, related_name="events")
     revision = models.PositiveIntegerField()
     event_type = models.CharField(max_length=32)
-    actor_snapshot = models.JSONField(default=dict)
-    detail = models.JSONField(default=dict)
+    actor_snapshot = NativeJSONField(default=dict)
+    detail = NativeJSONField(default=dict)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -55,7 +56,7 @@ class NativeAdoption(models.Model):
     """Immutable developer proposal; independent decisions are separate events."""
     id = models.UUIDField(primary_key=True, editable=False)
     training_job = models.ForeignKey(NativeJob, on_delete=models.PROTECT, related_name='adoptions')
-    proposal = models.JSONField()
+    proposal = NativeJSONField()
     proposal_sha256 = models.CharField(max_length=64)
     request_sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(default=timezone.now)
@@ -66,7 +67,7 @@ class NativeAdoptionEvent(models.Model):
     adoption = models.ForeignKey(NativeAdoption, on_delete=models.PROTECT, related_name='events')
     revision = models.PositiveIntegerField()
     kind = models.CharField(max_length=16)
-    payload = models.JSONField()
+    payload = NativeJSONField()
     payload_sha256 = models.CharField(max_length=64)
     request_sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(default=timezone.now)
@@ -80,7 +81,7 @@ class NativeProtectedInput(models.Model):
     """Sealed custody bytes; never a generic dataset, artifact URL or job payload."""
     id = models.UUIDField(primary_key=True, editable=False)
     adoption = models.ForeignKey(NativeAdoption, on_delete=models.PROTECT, related_name='protected_inputs')
-    specification = models.JSONField()
+    specification = NativeJSONField()
     specification_sha256 = models.CharField(max_length=64)
     request_sha256 = models.CharField(max_length=64)
     payload = models.BinaryField()

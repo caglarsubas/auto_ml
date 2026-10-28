@@ -1,14 +1,21 @@
 {
   "packet": "P160",
   "source_base": "28d26a882943778f15f00b3aaf26ebcdff2e702f",
-  "scope": "Bound native adoption list and detail reads",
+  "scope": "Bound adoption reads and streamline fresh native metadata",
   "local_native_qualification": "passed",
   "source_sha256": {
-    "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
-    "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e",
-    "backend/modeling/rank_metrics.py": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17",
     "backend/evaluation/eval_utils.py": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d",
-    "backend/tests/unit/test_bounded_metric_work.py": "dbf76a69f7bdc2530e0c90a83c981cc788eb7b53e1a3846f4470bb3765c755a4"
+    "backend/execution_jobs/metadata_json.py": "2c102cd2cf4439eb5432b0a5f49527ce292ebd8ff98e6a875017af7b1fc14864",
+    "backend/execution_jobs/models.py": "9d8446e013e85b6b392353658e5a170112fedc599b0ec6b4f2f12603ab9706d4",
+    "backend/execution_jobs/native_assessment.py": "5618c4d80cdf615832bf18494bdc46bab72a8ff1a32cb012608e030e2eaff173",
+    "backend/execution_jobs/service.py": "07cb74b33a906ab7f21f5a3105b11a74af9cebebb92879650bed309b6e4401f4",
+    "backend/execution_jobs/training_scoring.py": "09a17bc478185be6e62188ae5587e276ba0fa3e1012ff247d8c9811de1b783b1",
+    "backend/execution_jobs/training_search.py": "4ff3437f050aa88b6322522f45bada400a5461570a81342fddf473545f8be7a3",
+    "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
+    "backend/modeling/rank_metrics.py": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17",
+    "backend/tests/unit/test_bounded_metric_work.py": "dbf76a69f7bdc2530e0c90a83c981cc788eb7b53e1a3846f4470bb3765c755a4",
+    "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e",
+    "backend/tests/unit/test_native_json_storage.py": "a528274a83576ab29d58e923c9858583a702a0ade1239cd9f5bf4d9a24fdf39f"
   },
   "before_source": {
     "sqlite": {
@@ -17,30 +24,95 @@
       "skipped": 0
     }
   },
-  "new_cases": 58,
+  "new_cases": 124,
   "original_native_cap_seconds": 900,
   "release_qualified": false,
   "customer_installation_modified": false,
   "browser_validation": "generated_source_only_retained_denial",
   "record_scope": "Local qualification before publication; remote qualification is recorded separately in the roadmap packet and retained exact-head/main receipts.",
+  "failed_ci_attempts": [
+    {
+      "run": 40682673186,
+      "head": "f84be826011348a5a95f4f4f25fa292b843ae291",
+      "qualification": "failed_unqualified",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "XML_or_successful_process_exit": false,
+      "finished_cases": 6912,
+      "expected_cases": 7085,
+      "new_adoption_cases_completed": 26,
+      "new_adoption_cases_all_passed": true,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "source_sha256": {
+        "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
+        "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
+      },
+      "whole_workflow_qualified": false
+    },
+    {
+      "run": 40694429802,
+      "head": "896edbc0b6e63fd1c3f11514be6fc3bfc96d56af",
+      "qualification": "failed_unqualified",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "XML_or_successful_process_exit": false,
+      "finished_cases": 6726,
+      "expected_cases": 7117,
+      "new_cases_completed": 58,
+      "new_cases_all_passed": true,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "source_sha256": {
+        "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
+        "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e",
+        "backend/modeling/rank_metrics.py": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17",
+        "backend/evaluation/eval_utils.py": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d",
+        "backend/tests/unit/test_bounded_metric_work.py": "dbf76a69f7bdc2530e0c90a83c981cc788eb7b53e1a3846f4470bb3765c755a4"
+      },
+      "whole_workflow_qualified": false
+    }
+  ],
+  "source_correction": {
+    "new_cases": 32,
+    "scope": "Exact tie-group U computation without index-trick dispatch; bounded small many-class rank matrices; batched native float64 threshold searches. Independent full assessment checks and unsupported-profile fallbacks remain.",
+    "dependency_profiles_unchanged": true,
+    "source_fingerprints_cover_all_changed_calculations": true,
+    "published_adoption_tests_byte_identical": true
+  },
+  "metadata_correction": {
+    "new_cases": 66,
+    "scope": "Compatible optional pydantic-core decoding with no string/value cache; unchanged JSONField storage and migration identity; fresh runtime parser/version provenance; explicit transition/submission update fields without generic record behavior changes.",
+    "dependency_profiles_unchanged": true,
+    "storage_migration_required": false,
+    "published_tests_byte_identical": true,
+    "generic_record_semantics_preserved": true,
+    "rejected_generic_submission_shortcut": "sealed original-test failure evidence retained"
+  },
   "local_checks": {
-    "focused_passed": 458,
-    "native_passed": 7111,
+    "focused_passed": 875,
+    "native_passed": 7177,
     "native_skipped": 6,
-    "native_seconds": 429.468,
-    "new_cases": 58,
+    "native_seconds": 666.518,
+    "new_cases": 124,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7712,
+    "coverage_line_rate": 0.7717,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
   },
   "original_suite_preservation": {
     "protected_test_execution_files": 384,
-    "byte_identical_protected_files": 381,
+    "byte_identical_protected_files": 380,
     "intentional_product_authority_updates": {
+      "backend/evaluation/eval_utils.py": {
+        "before": "014c1731b6d3e24388d259b464ffbc9e4c062149679b2c0adb7a78d938693f85",
+        "after": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d"
+      },
+      "backend/execution_jobs/service.py": {
+        "before": "736083ca82cfe3db31c916e0130490442b27f07a5375c9f9aebaa16b18abaeac",
+        "after": "07cb74b33a906ab7f21f5a3105b11a74af9cebebb92879650bed309b6e4401f4"
+      },
       "backend/execution_jobs/views.py": {
         "before": "aeeb7ca6a89baa5508c1da5e65d8ec788384fa162c29445b83e74bfaad192455",
         "after": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092"
@@ -48,10 +120,6 @@
       "backend/modeling/rank_metrics.py": {
         "before": "63c6d37fb903e531e46b79873e46bb52f0f2bdd4edd881415038e9234b0aa402",
         "after": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17"
-      },
-      "backend/evaluation/eval_utils.py": {
-        "before": "014c1731b6d3e24388d259b464ffbc9e4c062149679b2c0adb7a78d938693f85",
-        "after": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d"
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -108,32 +176,5 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
-  },
-  "failed_ci_attempts": [
-    {
-      "run": 40682673186,
-      "head": "f84be826011348a5a95f4f4f25fa292b843ae291",
-      "qualification": "failed_unqualified",
-      "cause": "unchanged_900_second_full_native_timeout",
-      "XML_or_successful_process_exit": false,
-      "finished_cases": 6912,
-      "expected_cases": 7085,
-      "new_adoption_cases_completed": 26,
-      "new_adoption_cases_all_passed": true,
-      "five_other_checks_passed": true,
-      "ci_rerun_requested": false,
-      "source_sha256": {
-        "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
-        "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
-      },
-      "whole_workflow_qualified": false
-    }
-  ],
-  "source_correction": {
-    "new_cases": 32,
-    "scope": "Exact tie-group U computation without index-trick dispatch; bounded small many-class rank matrices; batched native float64 threshold searches. Independent full assessment checks and unsupported-profile fallbacks remain.",
-    "dependency_profiles_unchanged": true,
-    "source_fingerprints_cover_all_changed_calculations": true,
-    "published_adoption_tests_byte_identical": true
   }
 }
