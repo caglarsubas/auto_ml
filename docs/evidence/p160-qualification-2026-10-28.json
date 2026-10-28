@@ -1,0 +1,101 @@
+{
+  "packet": "P160",
+  "source_base": "28d26a882943778f15f00b3aaf26ebcdff2e702f",
+  "scope": "Bound native adoption list and detail reads",
+  "local_native_qualification": "passed",
+  "source_sha256": {
+    "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
+    "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
+  },
+  "before_source": {
+    "sqlite": {
+      "failed": 4,
+      "passed": 22,
+      "skipped": 0
+    }
+  },
+  "new_cases": 26,
+  "original_native_cap_seconds": 900,
+  "release_qualified": false,
+  "customer_installation_modified": false,
+  "browser_validation": "generated_source_only_retained_denial",
+  "record_scope": "Local qualification before publication; remote qualification is recorded separately in the roadmap packet and retained exact-head/main receipts.",
+  "local_checks": {
+    "focused_passed": 247,
+    "native_passed": 7079,
+    "native_skipped": 6,
+    "native_seconds": 503.044,
+    "new_cases": 26,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7707,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "browser_rendering_qualified": false
+  },
+  "original_suite_preservation": {
+    "protected_test_execution_files": 384,
+    "byte_identical_protected_files": 383,
+    "intentional_product_authority_updates": {
+      "backend/execution_jobs/views.py": {
+        "before": "aeeb7ca6a89baa5508c1da5e65d8ec788384fa162c29445b83e74bfaad192455",
+        "after": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092"
+      }
+    },
+    "all_original_test_case_files_byte_identical": true,
+    "ci_workflow_byte_identical": true,
+    "original_native_cap_seconds": 900,
+    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "physical_schema_profile_and_matrix_byte_identical": true,
+    "older_retained_sha256_preserved": {
+      "P117": 343,
+      "P118": 398,
+      "P119": 873,
+      "P120": 561,
+      "P121": 559,
+      "P122": 550,
+      "P123": 435,
+      "P124": 458,
+      "P125": 366,
+      "P126": 403,
+      "P127": 367,
+      "P128": 375,
+      "P129": 1040,
+      "P130": 1016,
+      "P131": 1703,
+      "P132": 1016,
+      "P133": 1017,
+      "P134": 1011,
+      "P135": 1016,
+      "P136": 1013,
+      "P137": 1016,
+      "P138": 1016,
+      "P139": 1025,
+      "P140": 1028,
+      "P141": 1026,
+      "P142": 1024,
+      "P143": 1022,
+      "P144": 1029,
+      "P145": 1026,
+      "P146": 1606,
+      "P147": 1611,
+      "P148": 1622,
+      "P149": 1623,
+      "P150": 1596,
+      "P151": 1605,
+      "P152": 4516,
+      "P153": 10217,
+      "P154": 5609,
+      "P155": 9329,
+      "P156": 431,
+      "P157": 819,
+      "p158-qualified": 559,
+      "p159": 1175
+    },
+    "P158_failed_finalization_preserved_and_strict_append_only_receipt_verified": true,
+    "primary_status_and_13_hashes_match": true,
+    "primary_runtime_preserved": true,
+    "source_hashes_match": true
+  }
+}
