@@ -67,7 +67,13 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None, include_con
     p = np.asarray(probabilities, dtype=float)
     if y.ndim != 1 or p.ndim != 2 or p.shape[0] != len(y) or p.shape[1] < 3 or not np.isfinite(p).all():
         raise ValueError('Multiclass evaluation requires one finite probability per declared class and row.')
-    if not len(y) or np.iscomplexobj(y) or not np.isin(y, np.arange(p.shape[1])).all():
+    from modeling.rank_metrics import contiguous_class_membership
+    membership = False
+    if len(y) and not np.iscomplexobj(y):
+        membership = contiguous_class_membership(y, p.shape[1]) if metric_names is not None else None
+        if membership is None:
+            membership = np.isin(y, np.arange(p.shape[1])).all()
+    if not membership:
         raise ValueError('Multiclass labels must be encoded declared classes; fractional, missing or unknown labels are invalid.')
     y = y.astype(int)
     if (p < 0).any() or not np.allclose(p.sum(axis=1), 1, atol=1e-5):
@@ -108,7 +114,8 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None, include_con
         'f1': weighted_f1,
         'roc_auc': lambda: _safe_float(_weighted_ovr_rank_auc(y, p) if metric_names is not None else
                                       roc_auc_score(y, p, labels=classes, multi_class='ovr', average='weighted'))
-                          if set(np.unique(y)) == set(classes) else None,
+                          if (np.bincount(y, minlength=len(classes)).all() if metric_names is not None else
+                              set(np.unique(y)) == set(classes)) else None,
         'n_samples': lambda: len(y)}
     metrics = {name: values[name]() for name in (metric_names if metric_names is not None else values)}
     return {

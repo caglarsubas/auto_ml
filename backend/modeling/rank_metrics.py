@@ -46,3 +46,19 @@ def small_weighted_ovr_auc(y, probabilities):
     positives = y[:, None] == np.arange(classes)
     pairs = np.sum(ranks * positives, axis=0) - supports * (supports + 1.) / 2.
     return float(np.average(pairs / (supports * (rows - supports)), weights=supports))
+
+
+def contiguous_class_membership(labels, class_count):
+    """Fresh contiguous-label validation for canonical numeric selected metrics.
+
+    None retains the general NumPy membership path for unsupported profiles.
+    This checks every input value; no label or result state survives the call.
+    """
+    if (type(class_count) is not int or not 1 <= class_count <= 2**24
+            or labels.ndim != 1 or labels.dtype.kind not in 'biuf'
+            or labels.dtype.itemsize > 8 or not labels.dtype.isnative
+            or (labels.dtype.kind == 'f' and labels.dtype.itemsize not in (4, 8))):
+        return None
+    if not np.isfinite(labels).all() or np.any(labels < 0) or np.any(labels >= class_count):
+        return False
+    return bool(np.equal(labels, np.floor(labels)).all()) if labels.dtype.kind == 'f' else True
