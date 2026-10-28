@@ -9,7 +9,7 @@
     "skipped": 0,
     "compatibility_passes": 13
   },
-  "new_backend_cases": 96,
+  "new_backend_cases": 114,
   "local_native_qualification": "passed",
   "initial_focused_draft": "124 passed and one overbroad read-only assertion failed; diagnostic proves mandatory project-access audit writes outside the metadata bound",
   "product_postgresql_statement_ceiling_ms": 5000,
@@ -70,11 +70,11 @@
   "source_helpers_freshly_pinned": true,
   "installed_state_cache_introduced": false,
   "local_checks": {
-    "focused_passed": 472,
-    "native_passed": 7035,
+    "focused_passed": 490,
+    "native_passed": 7053,
     "native_skipped": 6,
-    "native_seconds": 367.506,
-    "new_cases": 96,
+    "native_seconds": 462.951,
+    "new_cases": 114,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
@@ -85,7 +85,7 @@
   },
   "original_suite_preservation": {
     "protected_test_execution_files": 369,
-    "byte_identical_protected_files": 368,
+    "byte_identical_protected_files": 367,
     "intentional_product_authority_updates": {
       "backend/execution_jobs/views.py": {
         "before": "a27505a4cf4d85bb02db5c2fc676937803a7284602a35934c26e41a24ba138bd",
@@ -94,7 +94,15 @@
       }
     },
     "all_original_test_case_files_byte_identical": true,
-    "ci_workflow_byte_identical": true,
+    "ci_workflow_byte_identical": false,
+    "only_allowlisted_private_dependency_initialization_changed": true,
+    "intentional_execution_profile_updates": {
+      ".github/workflows/ci.yml": {
+        "before": "9ef6ab3098c83f25abbc9672e88b35b071442ab614531bf6f4f11b1941d6830f",
+        "after": "5d870cf9e41af7f39e1a87d45d18a9dbdff1c42ee01def4c92b3532c1769371f",
+        "reason": "PostgreSQL host uses shipped private-runtime lock and pinned worker overlay, with fresh version verification. Latest serial backend job and all original test/workload/coverage/retry/resource/900-second controls retained."
+      }
+    },
     "original_native_cap_seconds": 900,
     "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
     "physical_schema_profile_and_matrix_byte_identical": true,
@@ -146,5 +154,17 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
+  },
+  "profile_cases": 18,
+  "native_dependency_environment_intentionally_aligned": true,
+  "private_runtime_lock_unchanged": true,
+  "serial_latest_dependency_profile_unchanged": true,
+  "test_commands_and_all_original_controls_unchanged": true,
+  "execution_profile_updates": {
+    ".github/workflows/ci.yml": {
+      "before": "9ef6ab3098c83f25abbc9672e88b35b071442ab614531bf6f4f11b1941d6830f",
+      "after": "5d870cf9e41af7f39e1a87d45d18a9dbdff1c42ee01def4c92b3532c1769371f",
+      "reason": "PostgreSQL host uses shipped private-runtime lock and pinned worker overlay, with fresh version verification. Latest serial backend job and all original test/workload/coverage/retry/resource/900-second controls retained."
+    }
   }
 }
