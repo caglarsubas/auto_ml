@@ -9,7 +9,7 @@
     "skipped": 0,
     "compatibility_passes": 13
   },
-  "new_backend_cases": 52,
+  "new_backend_cases": 96,
   "local_native_qualification": "passed",
   "initial_focused_draft": "124 passed and one overbroad read-only assertion failed; diagnostic proves mandatory project-access audit writes outside the metadata bound",
   "product_postgresql_statement_ceiling_ms": 5000,
@@ -45,16 +45,40 @@
   "curve_reuse_scope": "One full CV invocation with owned readonly row-ordered input snapshots; public ROC-AUC/confusion references and noncanonical fallback retained.",
   "lineage_encoding": "Compact newly written JSON; decoded schemas/default conversions and raw-byte integrity unchanged; historical artifacts untouched.",
   "performance_probes_are_not_capacity_qualification": true,
+  "published_P159_cases_preserved": 52,
+  "followup_cases": 44,
+  "failed_main_attempts": [
+    {
+      "run": 40641740511,
+      "head": "33b8f47dfdc6f9b86db4439a6572866253869dc5",
+      "qualification": false,
+      "reason": "Original900-second native process timeout near97percent; no finalXML/clean session exit",
+      "finished_cases": 6872,
+      "started_cases": 6873,
+      "observed_phase_outcomes": {
+        "passed": 6867,
+        "skipped": 5
+      },
+      "final_xml_present": false,
+      "other_checks_passed": 5,
+      "workflow_rerun": false,
+      "cap_seconds": 900
+    }
+  ],
+  "prior_merged_pr": 255,
+  "prior_pr_ci_qualified": 40637923610,
+  "source_helpers_freshly_pinned": true,
+  "installed_state_cache_introduced": false,
   "local_checks": {
-    "focused_passed": 329,
-    "native_passed": 6991,
+    "focused_passed": 472,
+    "native_passed": 7035,
     "native_skipped": 6,
-    "native_seconds": 473.03,
-    "new_cases": 52,
+    "native_seconds": 367.506,
+    "new_cases": 96,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7704,
+    "coverage_line_rate": 0.7707,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
@@ -66,7 +90,7 @@
       "backend/execution_jobs/views.py": {
         "before": "a27505a4cf4d85bb02db5c2fc676937803a7284602a35934c26e41a24ba138bd",
         "after": "aeeb7ca6a89baa5508c1da5e65d8ec788384fa162c29445b83e74bfaad192455",
-        "reason": "Product SQL bound, fold-local curve reuse or new lineage serialization; original tests and qualification budgets unchanged."
+        "reason": "Product SQL bounds, metric/evidence calculation optimization or fresh runtime implementation pins; original tests/workloads and qualification gates unchanged."
       }
     },
     "all_original_test_case_files_byte_identical": true,

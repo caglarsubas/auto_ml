@@ -26,17 +26,13 @@ _MAX_BINARY_RANK_ROWS = 2**26
 
 def _binary_rank_auc(y, p):
     """Unweighted ROC-AUC for validated binary probabilities; ties get half credit."""
-    from scipy.stats import rankdata
+    from modeling.rank_metrics import tie_group_auc
 
     # Keep every half-rank and intermediate rank sum exact in float64.
     # Larger partitions retain the independent ROC-integration implementation.
     if len(y) > _MAX_BINARY_RANK_ROWS:
         return float(roc_auc_score(y, p))
-    positive = y == 1
-    support = float(positive.sum())
-    ranks = rankdata(p, method='average')
-    u = ranks[positive].sum() - support * (support + 1.) / 2.
-    return float(u / (support * (len(y) - support)))
+    return tie_group_auc(y == 1, p)
 
 
 def _precision_recall_area(precision, recall):

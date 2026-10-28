@@ -41,15 +41,20 @@ def _weighted_ovr_rank_auc(y, p):
     class at a time, so temporary rank storage grows with rows, not rows ×
     classes. Full assessment keeps sklearn's independent ROC integration.
     """
-    from scipy.stats import rankdata
+    from modeling.rank_metrics import MAX_EXACT_RANK_ROWS, tie_group_auc
 
     values, supports = [], []
     for label in range(p.shape[1]):
         positive = y == label
         support = float(positive.sum())
-        ranks = rankdata(p[:, label], method='average')
-        u = ranks[positive].sum() - support * (support + 1.) / 2.
-        values.append(u / (support * (len(y) - support)))
+        if len(y) <= MAX_EXACT_RANK_ROWS:
+            value = tie_group_auc(positive, p[:, label])
+        else:
+            from scipy.stats import rankdata
+            ranks = rankdata(p[:, label], method='average')
+            u = ranks[positive].sum() - support * (support + 1.) / 2.
+            value = u / (support * (len(y) - support))
+        values.append(value)
         supports.append(support)
     return float(np.average(values, weights=supports))
 
@@ -76,12 +81,26 @@ def evaluate_multiclass(y_true, probabilities, *, metric_names=None, include_con
 
     def weighted_f1():
         if not f1_result:
-            f1_result['value'] = _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0))
+            if metric_names is not None:
+                support = np.bincount(y, minlength=len(classes))
+                predicted = np.bincount(pred, minlength=len(classes))
+                correct = np.bincount(y[y == pred], minlength=len(classes))
+                denominator = support.astype(float) + predicted
+                values = np.divide(2. * correct, denominator, out=np.zeros(len(classes)), where=denominator != 0)
+                f1_result['value'] = _safe_float(np.average(values, weights=support))
+            else:
+                f1_result['value'] = _safe_float(f1_score(y, pred, labels=classes, average='weighted', zero_division=0))
         return f1_result['value']
 
+    def probability_loss():
+        if metric_names is None:
+            return _safe_float(log_loss(y, p, labels=classes))
+        epsilon = np.finfo(p.dtype).eps
+        return _safe_float(-np.mean(np.log(np.clip(p[np.arange(len(y)), y], epsilon, 1 - epsilon))))
+
     values = {
-        'accuracy': lambda: _safe_float(accuracy_score(y, pred)),
-        'log_loss': lambda: _safe_float(log_loss(y, p, labels=classes)),
+        'accuracy': lambda: _safe_float(np.mean(y == pred) if metric_names is not None else accuracy_score(y, pred)),
+        'log_loss': probability_loss,
         'f1_weighted': weighted_f1,
         'f1': weighted_f1,
         'roc_auc': lambda: _safe_float(_weighted_ovr_rank_auc(y, p) if metric_names is not None else
@@ -131,15 +150,28 @@ def threshold_table(
         and np.isin(truth, [0, 1]).all()
     )
     positives = truth == 1 if binary_counts else None
+    # Sorted partitions share threshold counts without changing inclusive ties.
+    # Other dtypes, nonfinite scores and legacy scalar/container inputs retain
+    # their existing comparison and validation behavior.
+    ordered = (binary_counts and type(y_proba) is np.ndarray and scores.dtype == np.dtype(float) and np.isfinite(scores).all()
+               and isinstance(thresholds, (list, tuple)) and len(thresholds) >= 8
+               and all(isinstance(t, (int, float, np.integer, np.floating)) and np.isfinite(t) for t in thresholds))
+    if ordered:
+        positive_scores, negative_scores = np.sort(scores[positives]), np.sort(scores[~positives])
     rows = []
     for thr in thresholds:
-        y_pred = (y_proba >= thr).astype(int)
-        if binary_counts and y_pred.shape == truth.shape:
-            predicted = y_pred.astype(bool)
-            tp = int(np.count_nonzero(positives & predicted))
-            fn = int(np.count_nonzero(positives & ~predicted))
-            fp = int(np.count_nonzero(~positives & predicted))
-            tn = int(np.count_nonzero(~positives & ~predicted))
+        y_pred = None if ordered else (y_proba >= thr).astype(int)
+        if binary_counts and (ordered or y_pred.shape == truth.shape):
+            if ordered:
+                fn = int(np.searchsorted(positive_scores, thr, side='left'))
+                tn = int(np.searchsorted(negative_scores, thr, side='left'))
+                tp, fp = len(positive_scores) - fn, len(negative_scores) - tn
+            else:
+                predicted = y_pred.astype(bool)
+                tp = int(np.count_nonzero(positives & predicted))
+                fn = int(np.count_nonzero(positives & ~predicted))
+                fp = int(np.count_nonzero(~positives & predicted))
+                tn = int(np.count_nonzero(~positives & ~predicted))
             # Float factors avoid fixed-width integer overflow. A missing
             # predicted/actual class has the same MCC convention as sklearn.
             denominator = math.sqrt(float(tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
@@ -209,11 +241,14 @@ def evaluate_binary(
             and (y_proba >= 0).all() and (y_proba <= 1).all()):
         counts = threshold_table(y_true, y_proba, [threshold])[0]
 
+    from scipy.special import xlogy
+    clipped = np.clip(y_proba, 1e-7, 1 - 1e-7)
+    checked_auc = None if single else _safe_float(roc_auc_score(y_true, y_proba))
     metrics: Dict[str, Any] = {
         'threshold': threshold,
         'n_samples': int(len(y_true)),
         'positive_rate': _safe_float(y_true.mean()) if len(y_true) else None,
-        'roc_auc': None if single else _safe_float(roc_auc_score(y_true, y_proba)),
+        'roc_auc': checked_auc,
         'pr_auc': None if single else _safe_float(average_precision_score(y_true, y_proba)),
         'f1': counts['f1'] if counts is not None else _safe_float(f1_score(y_true, y_pred, zero_division=0)),
         'f2': counts['f2'] if counts is not None else _safe_float(fbeta_score(y_true, y_pred, beta=2, zero_division=0)),
@@ -221,10 +256,21 @@ def evaluate_binary(
         'recall': counts['recall'] if counts is not None else _safe_float(recall_score(y_true, y_pred, zero_division=0)),
         'accuracy': counts['accuracy'] if counts is not None else _safe_float(accuracy_score(y_true, y_pred)),
         'mcc': counts['mcc'] if counts is not None else _safe_float(matthews_corrcoef(y_true, y_pred)),
-        'log_loss': _safe_float(log_loss(y_true, np.clip(y_proba, 1e-7, 1 - 1e-7), labels=[0, 1])),
-        'brier': _safe_float(brier_score_loss(y_true, y_proba)),
+        'log_loss': _safe_float(-np.mean(xlogy(y_true, clipped) + xlogy(1 - y_true, 1 - clipped))) if counts is not None else _safe_float(log_loss(y_true, clipped, labels=[0, 1])),
+        'brier': _safe_float(np.mean((y_true - y_proba)**2)) if counts is not None else _safe_float(brier_score_loss(y_true, y_proba)),
     }
-    ks, gini = compute_ks_gini(y_true, y_proba)
+    roc_evidence = None
+    if counts is None:
+        ks, gini = compute_ks_gini(y_true, y_proba)
+    else:
+        ks, gini = None, None
+        if not single:
+            try:
+                fpr, tpr, _ = roc_curve(y_true, y_proba)
+                ks, gini = float(np.max(np.abs(tpr - fpr))), 2. * checked_auc - 1.
+                roc_evidence = fpr, tpr
+            except Exception:
+                pass
     metrics['ks'] = ks
     metrics['gini'] = gini
 
@@ -233,7 +279,10 @@ def evaluate_binary(
 
     curves: Dict[str, Any] = {}
     try:
-        fpr, tpr, thr = roc_curve(y_true, y_proba)
+        if roc_evidence is None:
+            fpr, tpr, _ = roc_curve(y_true, y_proba)
+        else:
+            fpr, tpr = roc_evidence
         curves['roc'] = {
             'fpr': [float(x) for x in fpr[:: max(1, len(fpr) // 100)]],
             'tpr': [float(x) for x in tpr[:: max(1, len(tpr) // 100)]],
