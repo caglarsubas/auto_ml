@@ -1,0 +1,4 @@
+# Test-only overlay for the private runtime qualification profile.
+# Application dependencies remain in private-api.requirements.lock.
+execnet==2.1.2
+pytest-xdist==3.8.0
