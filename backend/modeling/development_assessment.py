@@ -132,7 +132,13 @@ def development_metrics(labels, predictions, task, class_count=2, costs=None, th
         raise ValueError('Supervised development CV supports classification and regression only.')
     canonical_binary = class_count == 2 and y.ndim == 1 and y.dtype.kind in 'biuf' and y.dtype.itemsize <= 8
     positive = y == 1 if canonical_binary else None
-    valid_labels = ((y == 0) | positive).all() if canonical_binary else np.isin(y, np.arange(class_count)).all()
+    if canonical_binary:
+        valid_labels = ((y == 0) | positive).all()
+    else:
+        from modeling.rank_metrics import contiguous_class_membership
+        valid_labels = contiguous_class_membership(y, class_count) if metric is not None and class_count > 2 else None
+        if valid_labels is None:
+            valid_labels = np.isin(y, np.arange(class_count)).all()
     if not valid_labels:
         raise ValueError('Development labels do not match the declared class mapping.')
     if class_count > 2:
