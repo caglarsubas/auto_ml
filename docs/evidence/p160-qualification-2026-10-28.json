@@ -5,7 +5,10 @@
   "local_native_qualification": "passed",
   "source_sha256": {
     "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
-    "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
+    "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e",
+    "backend/modeling/rank_metrics.py": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17",
+    "backend/evaluation/eval_utils.py": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d",
+    "backend/tests/unit/test_bounded_metric_work.py": "dbf76a69f7bdc2530e0c90a83c981cc788eb7b53e1a3846f4470bb3765c755a4"
   },
   "before_source": {
     "sqlite": {
@@ -14,33 +17,41 @@
       "skipped": 0
     }
   },
-  "new_cases": 26,
+  "new_cases": 58,
   "original_native_cap_seconds": 900,
   "release_qualified": false,
   "customer_installation_modified": false,
   "browser_validation": "generated_source_only_retained_denial",
   "record_scope": "Local qualification before publication; remote qualification is recorded separately in the roadmap packet and retained exact-head/main receipts.",
   "local_checks": {
-    "focused_passed": 247,
-    "native_passed": 7079,
+    "focused_passed": 458,
+    "native_passed": 7111,
     "native_skipped": 6,
-    "native_seconds": 503.044,
-    "new_cases": 26,
+    "native_seconds": 429.468,
+    "new_cases": 58,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7707,
+    "coverage_line_rate": 0.7712,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "browser_rendering_qualified": false
   },
   "original_suite_preservation": {
     "protected_test_execution_files": 384,
-    "byte_identical_protected_files": 383,
+    "byte_identical_protected_files": 381,
     "intentional_product_authority_updates": {
       "backend/execution_jobs/views.py": {
         "before": "aeeb7ca6a89baa5508c1da5e65d8ec788384fa162c29445b83e74bfaad192455",
         "after": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092"
+      },
+      "backend/modeling/rank_metrics.py": {
+        "before": "63c6d37fb903e531e46b79873e46bb52f0f2bdd4edd881415038e9234b0aa402",
+        "after": "5d27e92e24b05b6f1ea0705bddcd433cac5bdeee4a063f43f25f778ebf00cb17"
+      },
+      "backend/evaluation/eval_utils.py": {
+        "before": "014c1731b6d3e24388d259b464ffbc9e4c062149679b2c0adb7a78d938693f85",
+        "after": "0bfd7572cbc91131e57cde46df3e63cf827a812789fd61c4cc939f47d8c2e52d"
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -97,5 +108,32 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
+  },
+  "failed_ci_attempts": [
+    {
+      "run": 40682673186,
+      "head": "f84be826011348a5a95f4f4f25fa292b843ae291",
+      "qualification": "failed_unqualified",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "XML_or_successful_process_exit": false,
+      "finished_cases": 6912,
+      "expected_cases": 7085,
+      "new_adoption_cases_completed": 26,
+      "new_adoption_cases_all_passed": true,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "source_sha256": {
+        "backend/execution_jobs/views.py": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
+        "backend/tests/unit/test_native_adoption_read_timeout.py": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
+      },
+      "whole_workflow_qualified": false
+    }
+  ],
+  "source_correction": {
+    "new_cases": 32,
+    "scope": "Exact tie-group U computation without index-trick dispatch; bounded small many-class rank matrices; batched native float64 threshold searches. Independent full assessment checks and unsupported-profile fallbacks remain.",
+    "dependency_profiles_unchanged": true,
+    "source_fingerprints_cover_all_changed_calculations": true,
+    "published_adoption_tests_byte_identical": true
   }
 }

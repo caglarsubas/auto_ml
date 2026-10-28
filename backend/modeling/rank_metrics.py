@@ -10,10 +10,39 @@ def tie_group_auc(positive, scores):
         return .5
     order = np.argsort(scores, kind='stable')
     ordered = scores[order]
-    starts = np.r_[0, np.flatnonzero(ordered[1:] != ordered[:-1]) + 1]
+    changes = np.flatnonzero(ordered[1:] != ordered[:-1]) + 1
+    starts = np.empty(len(changes) + 1, dtype=np.intp)
+    starts[0], starts[1:] = 0, changes
     positives = np.add.reduceat(positive[order].astype(np.int64), starts)
-    negatives = np.diff(np.r_[starts, len(scores)]) - positives
+    sizes = np.empty(len(starts), dtype=np.intp)
+    sizes[:-1], sizes[-1] = starts[1:] - starts[:-1], len(scores) - starts[-1]
+    negatives = sizes - positives
     prior_negatives = np.cumsum(negatives) - negatives
     pairs = np.sum(positives * (prior_negatives + .5 * negatives))
     support = float(np.count_nonzero(positive))
     return float(pairs / (support * (len(scores) - support)))
+
+
+MAX_BATCH_RANK_CELLS = 2**18
+MAX_BATCH_RANK_CLASSES = 256
+MAX_BATCH_RANK_ROWS = 4096
+
+
+def small_weighted_ovr_auc(y, probabilities):
+    """Bounded selected-metric calculation; None selects the row-wise fallback.
+
+    Callers already validate class mapping, probability shape/range and class
+    coverage. Temporary rank matrices are capped; no inputs/results are retained.
+    Complete assessment still executes independent public ROC integration.
+    """
+    rows, classes = probabilities.shape
+    if not (8 <= classes <= MAX_BATCH_RANK_CLASSES and rows <= min(MAX_EXACT_RANK_ROWS, MAX_BATCH_RANK_ROWS)
+            and rows * classes <= MAX_BATCH_RANK_CELLS):
+        return None
+    from scipy.stats import rankdata
+
+    supports = np.bincount(y, minlength=classes).astype(float)
+    ranks = rankdata(probabilities, axis=0, method='average')
+    positives = y[:, None] == np.arange(classes)
+    pairs = np.sum(ranks * positives, axis=0) - supports * (supports + 1.) / 2.
+    return float(np.average(pairs / (supports * (rows - supports)), weights=supports))
