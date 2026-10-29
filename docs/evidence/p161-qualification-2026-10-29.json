@@ -4,7 +4,8 @@
   "source_base": "d60903837d271e338e105d90a70f281bf48c47dd",
   "scope": [
     "D07 native receipt statement budget",
-    "D12 remaining roadmap backlog and tracker"
+    "D12 remaining roadmap backlog and tracker",
+    "D07 objective-only SFS screening with exact public ROC rounding"
   ],
   "local_native_qualification": "passed",
   "expected": {
@@ -15,38 +16,23 @@
     "pr_backend_skipped": 5,
     "frontend": 722,
     "browser": 47,
-    "new_cases": 104,
-    "native_passed": 7343,
-    "pr_backend_passed": 7199
+    "new_cases": 143,
+    "native_passed": 7382,
+    "pr_backend_passed": 7238
   },
   "release_qualified": false,
   "customer_installation_modified": false,
-  "local_checks": {
-    "focused_passed": 445,
-    "native_passed": 7343,
-    "native_skipped": 6,
-    "native_seconds": 423.981,
-    "new_cases": 104,
-    "two_workers_isolated": true,
-    "original_inventory_and_skips_preserved": true,
-    "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7721,
-    "tracker_original_logic_checks": 9,
-    "tracker_progress_logic_checks": 16,
-    "tracker_backlog_logic_checks": 23,
-    "browser_rendering_qualified": false
-  },
   "original_suite_preservation": {
     "protected_test_execution_files": 393,
     "byte_identical_protected_files": 391,
     "intentional_product_and_tracker_updates": {
-      "scripts/render_product_roadmap.py": {
-        "before": "e6aeb49a6e9c0470e7d4d3e627ad1b1a33b3f7dc1c1f95ec726e67d0606788aa",
-        "after": "3847212c7ffaa1fd9a6696dab2b6b0ecccc33ede5ac6bb0bb4796b7634894710"
-      },
       "backend/execution_jobs/views.py": {
         "before": "ddf635bfa9eff0a68a11c2d9abc190624e00ba85281326d1bd5f05a72f746092",
         "after": "b56daf57e1de0584050cd038ede6d5d962a170cd6788777703e3098a862cab1a"
+      },
+      "scripts/render_product_roadmap.py": {
+        "before": "e6aeb49a6e9c0470e7d4d3e627ad1b1a33b3f7dc1c1f95ec726e67d0606788aa",
+        "after": "3847212c7ffaa1fd9a6696dab2b6b0ecccc33ede5ac6bb0bb4796b7634894710"
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -189,5 +175,51 @@
     }
   ],
   "published_62_cases_byte_identical": true,
-  "corrective_new_cases": 42
+  "corrective_new_cases": 42,
+  "prior_source_local_checks": {
+    "focused_passed": 445,
+    "native_passed": 7343,
+    "native_skipped": 6,
+    "native_seconds": 423.981,
+    "new_cases": 104,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7721,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "tracker_backlog_logic_checks": 23,
+    "browser_rendering_qualified": false
+  },
+  "failed_ci_attempts": [
+    {
+      "run": 40817326245,
+      "head": "5b6bfb7d2102e45b8c3c4735068b9ffff439b088",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 7220,
+      "expected_cases": 7349,
+      "new_cases_completed": 104,
+      "new_cases_all_passed": true,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false
+    }
+  ],
+  "published_104_cases_byte_identical": true,
+  "local_checks": {
+    "focused_passed": 659,
+    "native_passed": 7382,
+    "native_skipped": 6,
+    "native_seconds": 410.969,
+    "new_cases": 143,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7723,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "tracker_backlog_logic_checks": 23,
+    "browser_rendering_qualified": false
+  }
 }

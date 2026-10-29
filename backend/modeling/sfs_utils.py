@@ -712,7 +712,15 @@ def _run_selection_step(
         predictions = (
             adapter.predict(X_valid[features]) if task == "regression" else adapter.predict_proba(X_valid[features])
         )
-        value = development_metrics(y_valid, predictions, task, 2, objective["cost_matrix"])[primary]
+        # Screening retains only the accepted objective. Top-K CV and the
+        # selected candidate's reports below still run complete assessments.
+        value = development_metrics(
+            y_valid, predictions, task, 2, objective["cost_matrix"], metric=primary
+        )[primary]
+        if primary == "roc_auc" and value is not None:
+            # Preserve the public integrator's exact rounding for screening
+            # ties; the selected rank statistic is only a validation precheck.
+            value = float(roc_auc_score(np.asarray(y_valid), np.asarray(predictions, dtype=float)))
         if value is None or not np.isfinite(value):
             raise ValueError(
                 f"Development-validation screening metric {primary} is unavailable; revise the split or objective."
