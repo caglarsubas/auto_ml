@@ -61,7 +61,7 @@ def status_metrics(ledger):
             or any(c not in '0123456789abcdef' for c in baseline['source_commit'])
             or not all(isinstance(baseline.get(key), dict) for key in ('outcomes', 'packets'))):
         raise ValueError('Invalid progress comparison source')
-    return {'schema': 'roadmap_status_metrics_v1', 'outcomes': outcomes, 'packets': delivered,
+    result = {'schema': 'roadmap_status_metrics_v1', 'outcomes': outcomes, 'packets': delivered,
             'progress': {'comparison': ({'packet': baseline['packet'], 'source_commit': baseline['source_commit']}
                                         if baseline else None),
                          'outcomes': progress_distribution(ledger['items'], baseline['outcomes'] if baseline else None),
@@ -69,3 +69,26 @@ def status_metrics(ledger):
             'delivery': {'tested': tested, 'd07_tested': d07, 'previous_packet': prior['packet'],
                          'tested_added': tested - prior['tested'], 'd07_added': d07 - prior['d07_tested'],
                          'recent': history[-12:], 'total_scope_known': False}}
+
+    # Load the sibling by its source path: both the tracker and renderer import
+    # metrics as a standalone module without modifying global import paths.
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('roadmap_backlog', Path(__file__).with_name('backlog.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    backlog = module.project_backlog(ledger)
+    if backlog is not None:
+        result['backlog'] = backlog
+        prior = ledger['backlog'].get('baseline')
+        old = None
+        if prior:
+            old = {'total': prior['total'], 'counts': {'done': prior['counts']['done'],
+                   'open': sum(prior['counts'][s] for s in ('ready', 'in_progress', 'waiting')),
+                   'blocked': prior['counts']['blocked']}}
+        records = [{'status': 'tested' if task['status'] == 'done' else 'planned',
+                    **({'blocked_reason': '; '.join(b['reason'] for b in task['blockers'])}
+                       if task['status'] == 'blocked' else {})} for task in backlog['tasks']]
+        result['progress']['backlog'] = progress_distribution(records, old)
+        result['progress']['backlog_comparison'] = backlog['comparison']
+    return result

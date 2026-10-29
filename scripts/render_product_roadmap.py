@@ -130,7 +130,7 @@ def validate(data):
         required_text(qualification, ['pilot_scope', 'value_target'], 'qualification')
         if not queue:
             raise ValueError('Reconciliation requires the canonical implementation queue.')
-    if 'progress_baseline' in data or any('blocked_reason' in record for record in [*by_id.values(), *packet_map.values()]):
+    if 'backlog' in data or 'progress_baseline' in data or any('blocked_reason' in record for record in [*by_id.values(), *packet_map.values()]):
         spec = importlib.util.spec_from_file_location('roadmap_progress', ROOT / 'docs/roadmap-tracker/metrics.py')
         metrics = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(metrics)
@@ -167,6 +167,29 @@ def render(data):
         for group in data['implementation_queue']:
             lines.append(f'| {group["order"]} | {group["title"]} | {", ".join(group["items"])} | {group["owner"]} | {group["exit_requirement"]} |')
         lines += ['', 'Compatible work may run concurrently only under explicit packet ownership; all release prerequisites still apply.', '']
+    if data.get('backlog'):
+        spec = importlib.util.spec_from_file_location('roadmap_backlog', ROOT / 'docs/roadmap-tracker/backlog.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        backlog = module.project_backlog(data)
+        lines += ['## Remaining roadmap backlog', '', data['backlog']['scope'], '',
+                  'Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; '
+                  'P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; '
+                  'waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. '
+                  'In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.', '',
+                  f"Inventory: {backlog['total']} tasks; " + '; '.join(f"{key}: {n} ({backlog['percentages'][key]:.1f}%)" for key, n in backlog['counts'].items()) + '.', '',
+                  backlog['scope_note'], '']
+        if backlog['unmapped_outcomes']:
+            lines += ['**Planning coverage gap:** ' + ', '.join(backlog['unmapped_outcomes']) + ' still needs task decomposition.', '']
+        for task in backlog['tasks']:
+            lines += [f"### {task['id']} — {task['title']}", '',
+                      f"**Priority / status:** {task['priority']} / {task['status']}. **Owner:** {task['owner']}. **Outcomes:** " + ', '.join(task['items']) + '.', '',
+                      task['description'], '', '**Dependencies:** ' + (', '.join(task['dependencies']) or 'None') + '.', '',
+                      '**Acceptance:** ' + '; '.join(task['acceptance']), '', '**Source / rationale:** ' + task['basis'], '']
+            for blocker in task['blockers']:
+                lines += [f"**Blocked ({blocker['kind']}):** {blocker['reason']} **Owner:** {blocker['owner']}. **Unblock:** {blocker['resolution']}", '']
+            if task['packet_refs'] or task['evidence']:
+                lines += ['**Packet / evidence:** ' + '; '.join(task['packet_refs'] + task['evidence']), '']
     if packets:
         lines += ['## Packet evidence and documentation adoption', '',
                   'Packet checks do not close the acceptance criteria of a roadmap outcome or milestone.', '']

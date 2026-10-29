@@ -95,7 +95,8 @@ def settings_enabled():
 class JobDetailView(NativeReadView):
     def get(self, request, job_id):
         try:
-            return Response(service.read(request.user, job_id))
+            with history._bounded_read():
+                return Response(service.read(request.user, job_id))
         except ERRORS as exc:
             return failure(exc)
 
