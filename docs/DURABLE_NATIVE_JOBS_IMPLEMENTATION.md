@@ -445,3 +445,59 @@ The SFS screening head also hit the original900-second native cap (6,843/7,388ca
 New SFS/HPO checkpoints and newly generated score-package metadata use compact standard-library JSON. Serializer options and decoded values remain unchanged. Atomic staging, file/directory synchronization, exclusive publication, strict duplicate-key readers, final source/authority checks and exact published-byte hashes remain. Copied historical evidence and previously published archives/packages retain their original bytes.
 
 Thirteen additive cases cover Unicode and numeric/key semantics, malformed output refusal before staging, immutable legacy/new archive retries and strict duplicate-key rejection. All143 previously published cases remain unchanged. Synthetic paired CPU observations show less serialization work and smaller records; they do not establish supported capacity or resolve CI qualification by themselves. Full native, six-check exact-head and independent main gates remain mandatory.
+
+### Revision-fenced read snapshot evaluation (P162)
+
+D07-T09 evaluates an opt-in interface before changing existing detail/download
+serialization. `GET` or `HEAD /api/jobs/{id}/snapshot/` supports:
+
+- `representation=receipt` (default), optionally pinned with `revision=0` or
+  another canonical nonnegative integer. The JSON envelope has schema
+  `native_job_snapshot_v1`, observation time, revision, `read_only: true` and the
+  existing public receipt, including its established 500-score preview limit.
+- `representation=candidate&sha256={result_digest}` or
+  `representation=scores&sha256={result_digest}`, optionally revision-pinned.
+  Downloads preserve the corresponding existing export/score bytes, filenames
+  and checksum conventions. `project_id` may narrow an already-authorized scope.
+
+Unknown/repeated parameters and invalid digests/revisions fail explicitly.
+Every GET/HEAD response, including permission and storage failures, uses
+`Cache-Control: no-store`. Successful responses identify their observed revision
+and `optimistic-read-committed-v1` mode in exposed headers. HEAD has no body.
+
+The evaluator requires PostgreSQL **READ COMMITTED**; SQLite and stronger caller
+isolation return explicit unsupported conflicts. A repeatable-read transaction
+would conceal late authority changes. Within the existing five-second SQL
+statement ceiling (or a stricter caller setting), it authorizes routing metadata
+before loading job material, collects a full row plus at most 257 events, validates
+contiguous history, encodes the complete public bytes, then recollects the row and
+events. Any change to concrete fields, full-precision timestamps, typed JSON or
+event content makes the read stale. Private row fingerprints never leave the
+service. It finally rechecks captured actor, project and source-dataset authority.
+
+A snapshot accepts at most **256 events**. Larger histories return
+`job_snapshot_budget_exceeded` rather than a truncated receipt; existing serialized
+routes remain available for those histories. Elapsed-time checks around collection,
+encoding and authority validation also refuse over-budget results. These checks
+and per-statement timeouts do not promise a hard total HTTP latency or preempt
+Python encoding. Initial HTTP permission/audit work precedes the service budget.
+Callers receive structured `409` stale/history/budget/unsupported diagnostics,
+`403` authority denials or `503` unavailable storage, without partial public bytes.
+
+This is a bounded optimistic observation of a coherent revision, not a
+linearizable latest-state guarantee, an authenticated event-chain proof, or new
+execution/recovery/review authority. Normal writers advance revisions atomically;
+privileged out-of-band A-to-B-to-A changes cannot generally be detected by double
+collection. Authority changes after the final check belong to a subsequent
+observation. Failed reads do not retry silently. No queue/row lock, result cache,
+expert deserialization or publication is introduced. Existing serialized routes,
+writer transactions, approval controls and UI remain unchanged.
+
+Acceptance evaluation includes real independent PostgreSQL connections: an
+execution writer commits while response encoding is paused, and the reader
+returns stale rather than holding the queue lock. Additional cases cover exact
+legacy candidate/score parity, same-revision field/event edits, late revocation,
+source/binding changes, unsupported transaction isolation, caller timeout
+restoration/cancellation, event bounds and private uncached GET/HEAD errors.
+P162 qualification evidence and the canonical ledger distinguish implementation,
+local testing, exact-head CI, independently qualified main and release acceptance.

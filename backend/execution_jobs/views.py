@@ -107,6 +107,29 @@ class JobDetailView(NativeReadView):
             return failure(exc)
 
 
+class JobSnapshotView(NativeReadView):
+    def get(self, request, job_id):
+        try:
+            from execution_jobs import read_snapshots
+
+            value = read_snapshots.read(request.user, job_id, request.query_params)
+            response = HttpResponse(value.raw, content_type="application/json")
+            response["X-DeclarAI-Snapshot-Revision"] = str(value.revision)
+            response["X-DeclarAI-Read-Mode"] = "optimistic-read-committed-v1"
+            exposed = ["X-DeclarAI-Snapshot-Revision", "X-DeclarAI-Read-Mode"]
+            if value.representation != "receipt":
+                filename = "scoring" if value.representation == "scores" else "candidate"
+                response["Content-Disposition"] = f'attachment; filename="{filename}-{job_id}.json"'
+                header = "X-DeclarAI-Receipt-SHA256" if value.representation == "scores" else "X-DeclarAI-Export-SHA256"
+                response[header] = (value.result_sha256 if value.representation == "scores"
+                                    else training_scoring.native_candidate.sha(value.raw))
+                exposed.append(header)
+            response["Access-Control-Expose-Headers"] = ", ".join(exposed)
+            return response
+        except ERRORS as exc:
+            return failure(exc)
+
+
 class JobInputView(NativeReadView):
     def get(self, request, file_id):
         try:
