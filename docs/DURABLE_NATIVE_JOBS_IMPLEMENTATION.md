@@ -519,3 +519,23 @@ fit receipts, predictions, round budgets, mutations and native refusals. All
 55 published snapshot tests remain unchanged, as do public full metric checks.
 A paired synthetic preparation probe used approximately half the original
 process CPU; it does not establish workload capacity or a delivery guarantee.
+
+### Native qualification resource observations (P162)
+
+Two P162 heads reached the unchanged full-native 900-second cap with incomplete
+case inventories. The qualification controller now records bounded read-only
+observations immediately before and after its existing pytest invocation,
+including timeout paths. Its original control flow, arguments, worker/thread
+settings, resource limits, fixtures, and exit/timeout behavior are preserved;
+CI configuration is unchanged. Diagnostics do not replace successful test exit,
+complete XML/case accounting, coverage, or the original qualification gates.
+
+The records contain OS/architecture, CPU model and observed frequencies/affinity,
+host CPU counters, current cgroup quota/cpuset/throttling/memory counters,
+system memory/pressure and allowlisted limits for exact owned fixture containers.
+They omit environment variables, credentials, host/container identifiers and
+cgroup paths. Missing/unsupported observations remain explicit. Host and current
+cgroup facts have their stated scopes; they do not establish effective capacity,
+a hardware cause, a supported workload or customer installation acceptance.
+No process, service or limit is changed. Diagnostic failure does not alter the
+original pytest return or timeout; unavailable output is reported explicitly.

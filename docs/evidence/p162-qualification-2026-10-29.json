@@ -18,9 +18,9 @@
     "pr_backend_skipped": 5,
     "frontend": 722,
     "browser": 47,
-    "new_cases": 92,
-    "native_passed": 7487,
-    "pr_backend_passed": 7343
+    "new_cases": 143,
+    "native_passed": 7538,
+    "pr_backend_passed": 7394
   },
   "predecessor_qualification": {
     "packet": "P161",
@@ -40,11 +40,11 @@
   "local_checks": {
     "snapshot_cases": 55,
     "mixed_preparation_cases": 37,
-    "focused_passed": 410,
-    "native_passed": 7487,
+    "focused_passed": 461,
+    "native_passed": 7538,
     "native_skipped": 6,
-    "native_seconds": 376.682,
-    "new_cases": 92,
+    "native_seconds": 389.671,
+    "new_cases": 143,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
@@ -52,18 +52,22 @@
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "tracker_backlog_logic_checks": 23,
-    "browser_rendering_qualified": false
+    "browser_rendering_qualified": false,
+    "resource_observation_cases": 51
   },
   "original_suite_preservation": {
     "current_packet_sealed_children_preserved": {
       "preliminary-snapshot": 14,
       "local-passed-stale-cost-journals": 16,
+      "local-qualified-before-observation": 16,
       "focused-before-final-additions": 13,
       "failed-ci-40846116612": 200,
+      "preliminary-observation": 4,
+      "failed-ci-40858199483": 202,
       "preliminary-mixed": 4
     },
     "protected_test_execution_files": 407,
-    "byte_identical_protected_files": 404,
+    "byte_identical_protected_files": 403,
     "intentional_product_and_tracker_updates": {
       "backend/execution_jobs/views.py": {
         "before": "b56daf57e1de0584050cd038ede6d5d962a170cd6788777703e3098a862cab1a",
@@ -76,6 +80,10 @@
       "backend/modeling/booster_adapters.py": {
         "before": "64293065db5e5f8d557108bc6c7a1ce2d4d8dccc3505e1d1ef330fe7494a8de8",
         "after": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5"
+      },
+      "scripts/qualify_postgres_fixture.py": {
+        "before": "6eb96ffb80ec9dcb1d413557aabc6e6ac35f3f70ad4610286a36db03cdc7c14f",
+        "after": "c184c1b5959e42d594f303af11d9f17cc8ecbd61f3d0f89e9cddd5efe9eb85e9"
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -142,10 +150,14 @@
     "backend/access_control/project_http.py": "0db8a3ba7244065c5916403de89a60a476a6e884c4a2f1fc452e21fe481f651f",
     "backend/backend/urls.py": "fc2f476a122aa300e5e6a28bd1b9d32e953cfc4afbd40d33a60cab0953520f41",
     "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
-    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f"
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
+    "scripts/native_qualification_observation.py": "ac03b2ed4d8d68e2ed18aaea4dafd7d82f95b2886a6e8ba1951ba67b62af6e6d",
+    "scripts/qualify_postgres_fixture.py": "c184c1b5959e42d594f303af11d9f17cc8ecbd61f3d0f89e9cddd5efe9eb85e9",
+    "backend/tests/unit/test_native_qualification_observation.py": "b149819e45834392d74c0077a3ce61932471a9450233b59ccc481367bb804759"
   },
   "preserved_published_tests": {
-    "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6"
+    "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6",
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f"
   },
   "failed_ci_attempts": [
     {
@@ -161,7 +173,30 @@
       "successful_process_exit": false,
       "five_other_checks_passed": true,
       "ci_rerun_requested": false
+    },
+    {
+      "run": 40858199483,
+      "head": "bf7043453c7733e6b2b39b98af43ea787f35e4a5",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 6663,
+      "expected_cases": 7493,
+      "completed_case_failures": 0,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "snapshot_cases_completed": 55,
+      "snapshot_cases_all_passed": true,
+      "mixed_cases_completed": 37,
+      "mixed_cases_all_passed": true
     }
   ],
-  "correction": "Explicit native training can prepare a bounded, freshly read mixed/categorical float32 matrix in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, retaining feature types, native DMatrix validation, exact cells/models/receipts, default helper dispatch and all fitter budgets/public metrics. Unsupported representations/versions/overflow/size retain pandas. No input/fitted cache. Paired synthetic preparation CPU approximately halved; not capacity qualification."
+  "correction": "Explicit native training can prepare a bounded, freshly read mixed/categorical float32 matrix in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, retaining feature types, native DMatrix validation, exact cells/models/receipts, default helper dispatch and all fitter budgets/public metrics. Unsupported representations/versions/overflow/size retain pandas. No input/fitted cache. Paired synthetic preparation CPU approximately halved; not capacity qualification.",
+  "qualification_source_scope_exception": {
+    "file": "scripts/qualify_postgres_fixture.py",
+    "change": "Bounded read-only before/after CPU/cgroup/memory/owned-container observations; original child argv, environment, timeout900, workers, limits, return/error paths and workload remain. CI workflow unchanged.",
+    "diagnostic_only": true,
+    "provisioning_or_spending_authorized": false
+  },
+  "resource_observation_scope": "Bounded read-only before/after host/cgroup/owned-container limits; entire prior qualification controller AST preserved after removing only observations. CI/workloads/resources/two-workers/900s cap unchanged. No hardware cause or capacity claim; no provisioning/spending authorized."
 }
