@@ -421,3 +421,27 @@ The merged first PR passed its exact-head qualification, but independent main ag
 The job-detail GET/HEAD handler wraps `service.read` in the shared metadata read transaction. PostgreSQL applies a five-second statement timeout or a stricter caller setting, restoring the exact setting after successful, cancelled or nested reads. Full job loading, serialized queue-lock acquisition, event loading and final receipt-authority verification share that budget. Existing receipt serialization and locking remain unchanged. Initial HTTP routing/authorization and mandatory access-audit writes stay outside this transaction. This bounds individual statements, not total request latency; the routing metadata lookup and HTTP authority boundary have their own operating behavior.
 
 Database failures return the existing private `job_storage_unavailable` response with `Cache-Control: no-store`. Authentication, current authority, immutable evidence and connection recovery retain independent tests. Lock-free detail/download reads need revision-fenced consistency qualification and remain separate backlog work; this packet does not remove the serialization guard. Supported-profile installation, upgrade/rollback, coordinated restore, remaining legacy execution, capacity and customer acceptance remain open in the canonical task backlog.
+
+### Numeric input preparation and fixed-cap correction (P161)
+
+The first P161 PR passed all six exact-head checks, but its independent main run reached the unchanged 900-second native suite limit. That failed run remains unqualified and separately retained; it was not rerun. Corrective qualification includes all original workloads and the 62 published P161 cases unchanged.
+
+XGBoost 2.1.4 with pandas 3.0.6 and NumPy 2.5.3 can construct native matrices from a homogeneous, single-block numeric view. The view shares current dataframe storage, and explicit feature types match the original pandas route. The native constructor still validates every matrix. Mixed, extension, categorical, fragmented, custom and other-version representations retain the original path. Numeric category detection and input receipts reuse fresh dtype information within their invocation. Row, feature, label and category hashing, fitter budgets, full public assessment references and runtime/source provenance remain intact; no input or fitted state is cached.
+
+Forty-two additive cases compare native CSR data, model bytes, predictions and receipt hashes against independent original paths, including mutations, read-only/strided inputs and fallbacks. Separate boundary observations preserve missing-value acceptance and rejection of infinities/float32 overflow. Synthetic paired process-CPU observations demonstrate less preparation work; they do not establish supported capacity. The complete PostgreSQL suite, all six corrective PR checks and independent main qualification remain mandatory.
+
+### Objective-only SFS screening (P161)
+
+The first corrective head also reached the original 900-second native cap. All104 published additions passed, but the incomplete workflow remains unqualified and sealed. No failed workflow was rerun.
+
+Candidate screening now requests only its accepted ranking metric from the existing validated metric path. Full top-K cross-validation, selected-candidate train/validation reports, independent public assessment failures, fitted parameters, budgets, partitions and evidence remain unchanged. ROC screening additionally retains the original public integrator after validated availability checks so floating-point rounding cannot reorder near-tied candidates. A new regression caught this rounding difference before publication; the corrected implementation preserves the old selection.
+
+Thirty-nine additive cases compare complete forward/backward steps against the full-metric reference across all supported objectives, including exact top-K membership, fold metrics/provenance, fitter inputs/budgets, stable serial/parallel ties, invalid or unavailable screening and full-assessment failures. All104 previously published additions remain byte-identical. Paired process-CPU probes characterize only the calculation; full local, automatic exact-head and independent main qualification remain required.
+
+### Compact checkpoint and newly generated package metadata (P161)
+
+The SFS screening head also hit the original900-second native cap (6,843/7,388cases completed;128/143published additions completed withoutfailure;15unverified). Its incomplete attempt and earlier valid local source are separately sealed, not rerun or counted as qualification.
+
+New SFS/HPO checkpoints and newly generated score-package metadata use compact standard-library JSON. Serializer options and decoded values remain unchanged. Atomic staging, file/directory synchronization, exclusive publication, strict duplicate-key readers, final source/authority checks and exact published-byte hashes remain. Copied historical evidence and previously published archives/packages retain their original bytes.
+
+Thirteen additive cases cover Unicode and numeric/key semantics, malformed output refusal before staging, immutable legacy/new archive retries and strict duplicate-key rejection. All143 previously published cases remain unchanged. Synthetic paired CPU observations show less serialization work and smaller records; they do not establish supported capacity or resolve CI qualification by themselves. Full native, six-check exact-head and independent main gates remain mandatory.

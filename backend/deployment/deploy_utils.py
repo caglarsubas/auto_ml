@@ -185,12 +185,14 @@ def _build_score_bundle(file_id, context, out):
         except Exception:
             model_card = None
 
+    # Encode new package metadata compactly; hash the exact published bytes below.
+    # Copied historical evidence retains its original bytes and source digests.
     with open(os.path.join(out, 'business_understanding.json'), 'w', encoding='utf-8') as f:
-        json.dump(bu, f, indent=2, default=str)
+        f.write(json.dumps(bu, separators=(',', ':'), default=str))
     with open(os.path.join(out, 'success_criteria.json'), 'w', encoding='utf-8') as f:
-        json.dump(success_criteria, f, indent=2, default=str)
+        f.write(json.dumps(success_criteria, separators=(',', ':'), default=str))
     with open(os.path.join(out, 'monitoring_plan.json'), 'w', encoding='utf-8') as f:
-        json.dump(monitoring_plan, f, indent=2, default=str)
+        f.write(json.dumps(monitoring_plan, separators=(',', ':'), default=str))
 
     freeze_stamp = datetime.now(timezone.utc).isoformat()
     lineage_hash = (lineage or {}).get('lineage_id') or model.get('lineage_id')
@@ -201,7 +203,7 @@ def _build_score_bundle(file_id, context, out):
         from preprocessing.replay import subset_purifier
         purifier = subset_purifier(purifier, feature_names, td.get('encoding_report') or [])
         with open(os.path.join(out, 'purifier.json'), 'x', encoding='utf-8') as stream:
-            json.dump(purifier, stream, indent=2, allow_nan=False)
+            stream.write(json.dumps(purifier, separators=(',', ':'), allow_nan=False))
     manifest = {
         'schema_version': 4 if purifier else 3,
         'scoring_schema_version': 4 if purifier else 3,
@@ -245,13 +247,13 @@ def _build_score_bundle(file_id, context, out):
         'monitoring': monitoring_plan,
     }
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as f:
-        json.dump(manifest, f, indent=2)
+        f.write(json.dumps(manifest, separators=(',', ':')))
 
     if context['execution_id']:
         shutil.copyfile(Path(settings.MEDIA_ROOT) / model['lineage_path'], Path(out) / 'lineage.json')
     else:
         with open(os.path.join(out, 'lineage.json'), 'w', encoding='utf-8') as f:
-            json.dump(lineage, f, indent=2, default=str)
+            f.write(json.dumps(lineage, separators=(',', ':'), default=str))
 
     # Small train reference for batch-score PSI monitoring (head sample)
     try:
@@ -273,10 +275,10 @@ def _build_score_bundle(file_id, context, out):
         for path in Path(out).iterdir() if path.is_file() and path.name != 'manifest.json'}
     manifest['immutable_freeze_hash'] = hashlib.sha256(json.dumps(manifest['artifact_integrity'], sort_keys=True).encode()).hexdigest()
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as stream:
-        json.dump(manifest, stream, indent=2, allow_nan=False)
+        stream.write(json.dumps(manifest, separators=(',', ':'), allow_nan=False))
     publication = {key: manifest[key] for key in ('file_id', 'bundle_id', 'execution_id', 'assessment_id')}
     publication['manifest_sha256'] = digest_file(Path(out) / 'manifest.json')
-    (Path(out) / 'publication.json').write_text(json.dumps(publication, indent=2), encoding='utf-8')
+    (Path(out) / 'publication.json').write_text(json.dumps(publication, separators=(',', ':')), encoding='utf-8')
     verify_bundle(out, file_id, bundle_id)
     if context['execution_id']:
         # Verify the copied native inputs against the original recorded evidence,

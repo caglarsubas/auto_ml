@@ -17,7 +17,51 @@ import pandas as pd
 from modeling.declared_metric import CatBoostDeclaredMetric, metric_value, prepare_metric, record_stopping
 
 
+_NO_MATRIX_LABEL = object()
+
+
+def _native_xgb_matrix(xgb, frame, *, feature_names, enable_categorical, label=_NO_MATRIX_LABEL):
+    """Same native DMatrix validation; avoid pandas dispatch for a qualified dtype.
+
+    Single-block native NumPy columns retain their exact representation and
+    explicit pandas feature types. Mixed, extension and categorical data, custom
+    frames/constructors and other library versions retain the original route.
+    The numeric view shares current storage; no dense consolidation or input
+    cache is introduced. Every call rechecks the supported representation.
+    """
+    data, options = frame, {}
+    if (getattr(xgb, '__version__', None) == '2.1.4'
+            and pd.__version__ == '3.0.6' and np.__version__ == '2.5.3' and not enable_categorical
+            and xgb.DMatrix is getattr(getattr(xgb, 'core', None), 'DMatrix', None)
+            and isinstance(xgb.DMatrix, type)
+            and type(frame) is pd.DataFrame and len(frame) and len(frame.columns)
+            and getattr(frame._mgr, 'is_single_block', False)):
+        dtypes = list(frame.dtypes)
+        dtype = dtypes[0]
+        if (isinstance(dtype, np.dtype) and dtype.isnative
+                and dtype.kind in 'biuf' and dtype.itemsize in (1, 2, 4, 8)
+                and (dtype.kind != 'f' or dtype.itemsize in (4, 8))
+                and all(isinstance(item, np.dtype) and item == dtype for item in dtypes)):
+            values = frame.to_numpy(copy=False)
+            try:
+                shared = np.shares_memory(values, frame._mgr.blocks[0].values, max_work=16)
+            except np.exceptions.TooHardError:
+                shared = False
+            if type(values) is np.ndarray and values.dtype == dtype and shared:
+                data = values
+                feature_type = 'float' if dtype.kind == 'f' else 'i' if dtype.kind == 'b' else 'int'
+                options['feature_types'] = [feature_type] * len(frame.columns)
+    if label is not _NO_MATRIX_LABEL:
+        options['label'] = label
+    return xgb.DMatrix(data, feature_names=feature_names, enable_categorical=enable_categorical, **options)
+
+
 def _cat_cols(X: pd.DataFrame) -> List[str]:
+    # Native numeric dtypes cannot expose a categorical/string column. Other
+    # representations retain their original per-column inspection.
+    if (type(X) is pd.DataFrame and all(isinstance(dtype, np.dtype) and dtype.kind in 'biuf'
+                                       for dtype in X.dtypes)):
+        return []
     out = []
     for c in X.columns:
         if hasattr(X[c], 'cat') or str(X[c].dtype) == 'category':
@@ -155,12 +199,12 @@ class XGBoostAdapter(BoosterAdapter):
                     'maximize': spec['direction'] == 'maximize'}
         if self.enable_categorical:
             p['enable_categorical'] = True
-        dtrain = xgb.DMatrix(
-            X_train, label=y_train, feature_names=self.feature_names,
+        dtrain = _native_xgb_matrix(
+            xgb, X_train, label=y_train, feature_names=self.feature_names,
             enable_categorical=self.enable_categorical,
         )
-        dvalid = xgb.DMatrix(
-            X_valid, label=y_valid, feature_names=self.feature_names,
+        dvalid = _native_xgb_matrix(
+            xgb, X_valid, label=y_valid, feature_names=self.feature_names,
             enable_categorical=self.enable_categorical,
         )
         self.model = xgb.train(
@@ -200,8 +244,8 @@ class XGBoostAdapter(BoosterAdapter):
                     rounds = (0, int(self.best_iteration) + 1) if self.best_iteration is not None and self.best_iteration >= 0 else (0, 0)
                     return np.asarray(self.model.inplace_predict(values, iteration_range=rounds,
                                                                 validate_features=True), dtype=float)
-        dmat = xgb.DMatrix(
-            frame,
+        dmat = _native_xgb_matrix(
+            xgb, frame,
             feature_names=self.feature_names or list(map(str, X.columns)),
             enable_categorical=self.enable_categorical,
         )

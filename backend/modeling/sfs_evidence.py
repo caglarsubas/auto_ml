@@ -17,7 +17,9 @@ def write_sfs_record(path, record, *, exclusive=False):
     failure occurs after replacement: the complete new record is visible, but its
     crash durability is uncertain, so the caller must not claim successful saving.
     """
-    payload = json.dumps(record, indent=2, allow_nan=False).encode("utf-8")
+    # New checkpoints need complete values, not expanded whitespace. Compact
+    # encoding keeps the C encoder path; publication and fsync stay unchanged.
+    payload = json.dumps(record, separators=(",", ":"), allow_nan=False).encode("utf-8")
     destination = Path(path)
     staged = None
     try:

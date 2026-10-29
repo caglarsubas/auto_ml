@@ -4,7 +4,9 @@
   "source_base": "d60903837d271e338e105d90a70f281bf48c47dd",
   "scope": [
     "D07 native receipt statement budget",
-    "D12 remaining roadmap backlog and tracker"
+    "D12 remaining roadmap backlog and tracker",
+    "D07 objective-only SFS screening with exact public ROC rounding",
+    "D07 compact new checkpoint/package metadata with historical evidence preservation"
   ],
   "local_native_qualification": "passed",
   "expected": {
@@ -15,27 +17,12 @@
     "pr_backend_skipped": 5,
     "frontend": 722,
     "browser": 47,
-    "new_cases": 62,
-    "native_passed": 7301,
-    "pr_backend_passed": 7157
+    "new_cases": 156,
+    "native_passed": 7395,
+    "pr_backend_passed": 7251
   },
   "release_qualified": false,
   "customer_installation_modified": false,
-  "local_checks": {
-    "focused_passed": 373,
-    "native_passed": 7301,
-    "native_skipped": 6,
-    "native_seconds": 412.514,
-    "new_cases": 62,
-    "two_workers_isolated": true,
-    "original_inventory_and_skips_preserved": true,
-    "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7719,
-    "tracker_original_logic_checks": 9,
-    "tracker_progress_logic_checks": 16,
-    "tracker_backlog_logic_checks": 23,
-    "browser_rendering_qualified": false
-  },
   "original_suite_preservation": {
     "protected_test_execution_files": 393,
     "byte_identical_protected_files": 391,
@@ -104,5 +91,150 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
+  },
+  "corrective_scope": "Zero-copy qualified native numeric matrix preparation; fresh numeric category and receipt dtype inspection; original fitter/evidence semantics preserved.",
+  "prior_merged_attempts": [
+    {
+      "pr": 259,
+      "pr_url": "https://github.com/caglarsubas/auto_ml/pull/259",
+      "pr_head": "f8100cc96a866825363e3ecd5de01c2976a74dde",
+      "merge": "dc4b87322f07064f0c18704c8bba401be3eef9e4",
+      "ci_run": 40803985127,
+      "main_run": 40807135390,
+      "ci": {
+        "run": 40803985127,
+        "head": "f8100cc96a866825363e3ecd5de01c2976a74dde",
+        "attempt": 1,
+        "all_six": "passed",
+        "full_postgresql": {
+          "passed": 7301,
+          "skipped": 6,
+          "failed": 0,
+          "errors": 0,
+          "line_coverage": 77.19,
+          "branch_coverage": 67.73
+        },
+        "postgresql_seconds": 553.915,
+        "new_cases": 62,
+        "backend_new_cases": 62,
+        "frontend": 722,
+        "browser": {
+          "total": 47,
+          "expected": 47,
+          "unexpected": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "ok": true
+        },
+        "ci_runner_profile": "ubuntu-24.04",
+        "actual_frontend_host_image_verified": true,
+        "new_frontend_cases": 0,
+        "new_browser_cases": 0,
+        "native_images_match_exported_set": true,
+        "actual_linux_schema_accounts_adoption_https": "passed",
+        "owned_cleanup": "passed",
+        "release_qualified": false,
+        "customer_installation_modified": false,
+        "private_dependency_profile_verified": true,
+        "private_dependency_packages": 173,
+        "native_qualification_profile": "shipped_private_lock_plus_pinned_test_overlay",
+        "serial_backend_profile": "latest_allowed_requirements_unchanged"
+      },
+      "local_checks": {
+        "focused_passed": 373,
+        "native_passed": 7301,
+        "native_skipped": 6,
+        "native_seconds": 412.514,
+        "new_cases": 62,
+        "two_workers_isolated": true,
+        "original_inventory_and_skips_preserved": true,
+        "worker_cases_accounted_for": true,
+        "coverage_line_rate": 0.7719,
+        "tracker_original_logic_checks": 9,
+        "tracker_progress_logic_checks": 16,
+        "tracker_backlog_logic_checks": 23,
+        "browser_rendering_qualified": false
+      }
+    }
+  ],
+  "failed_main_attempts": [
+    {
+      "run": 40807135390,
+      "head": "dc4b87322f07064f0c18704c8bba401be3eef9e4",
+      "qualification": "failed_unqualified",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 7168,
+      "expected_cases": 7307,
+      "new_cases_completed": 62,
+      "new_cases_all_passed": true,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "PR259_merged": true,
+      "prior_PR_CI_qualified": 40803985127
+    }
+  ],
+  "published_62_cases_byte_identical": true,
+  "corrective_new_cases": 42,
+  "prior_source_local_checks": {
+    "focused_passed": 659,
+    "native_passed": 7382,
+    "native_skipped": 6,
+    "native_seconds": 410.969,
+    "new_cases": 143,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7723,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "tracker_backlog_logic_checks": 23,
+    "browser_rendering_qualified": false
+  },
+  "failed_ci_attempts": [
+    {
+      "run": 40817326245,
+      "head": "5b6bfb7d2102e45b8c3c4735068b9ffff439b088",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 7220,
+      "expected_cases": 7349,
+      "new_cases_completed": 104,
+      "new_cases_all_passed": true,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false
+    },
+    {
+      "run": 40823708033,
+      "head": "b0c5c2d6b171a342f374a4c6641b7e88aa534699",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 6843,
+      "expected_cases": 7388,
+      "new_cases_completed": 128,
+      "new_cases_all_passed": false,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false
+    }
+  ],
+  "published_104_cases_byte_identical": true,
+  "published_143_cases_byte_identical": true,
+  "local_checks": {
+    "focused_passed": 787,
+    "native_passed": 7395,
+    "native_skipped": 6,
+    "native_seconds": 716.21,
+    "new_cases": 156,
+    "two_workers_isolated": true,
+    "original_inventory_and_skips_preserved": true,
+    "worker_cases_accounted_for": true,
+    "coverage_line_rate": 0.7723,
+    "tracker_original_logic_checks": 9,
+    "tracker_progress_logic_checks": 16,
+    "tracker_backlog_logic_checks": 23,
+    "browser_rendering_qualified": false
   }
 }
