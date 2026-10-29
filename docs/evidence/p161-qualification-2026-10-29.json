@@ -5,7 +5,8 @@
   "scope": [
     "D07 native receipt statement budget",
     "D12 remaining roadmap backlog and tracker",
-    "D07 objective-only SFS screening with exact public ROC rounding"
+    "D07 objective-only SFS screening with exact public ROC rounding",
+    "D07 compact new checkpoint/package metadata with historical evidence preservation"
   ],
   "local_native_qualification": "passed",
   "expected": {
@@ -16,9 +17,9 @@
     "pr_backend_skipped": 5,
     "frontend": 722,
     "browser": 47,
-    "new_cases": 143,
-    "native_passed": 7382,
-    "pr_backend_passed": 7238
+    "new_cases": 156,
+    "native_passed": 7395,
+    "pr_backend_passed": 7251
   },
   "release_qualified": false,
   "customer_installation_modified": false,
@@ -177,15 +178,15 @@
   "published_62_cases_byte_identical": true,
   "corrective_new_cases": 42,
   "prior_source_local_checks": {
-    "focused_passed": 445,
-    "native_passed": 7343,
+    "focused_passed": 659,
+    "native_passed": 7382,
     "native_skipped": 6,
-    "native_seconds": 423.981,
-    "new_cases": 104,
+    "native_seconds": 410.969,
+    "new_cases": 143,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7721,
+    "coverage_line_rate": 0.7723,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "tracker_backlog_logic_checks": 23,
@@ -204,15 +205,29 @@
       "successful_process_exit": false,
       "five_other_checks_passed": true,
       "ci_rerun_requested": false
+    },
+    {
+      "run": 40823708033,
+      "head": "b0c5c2d6b171a342f374a4c6641b7e88aa534699",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 6843,
+      "expected_cases": 7388,
+      "new_cases_completed": 128,
+      "new_cases_all_passed": false,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false
     }
   ],
   "published_104_cases_byte_identical": true,
+  "published_143_cases_byte_identical": true,
   "local_checks": {
-    "focused_passed": 659,
-    "native_passed": 7382,
+    "focused_passed": 787,
+    "native_passed": 7395,
     "native_skipped": 6,
-    "native_seconds": 410.969,
-    "new_cases": 143,
+    "native_seconds": 716.21,
+    "new_cases": 156,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
