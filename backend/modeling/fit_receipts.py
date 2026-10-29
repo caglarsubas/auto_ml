@@ -17,14 +17,17 @@ def input_receipt(X, y):
     labels = y if isinstance(y, pd.Series) else pd.Series(y, index=X.index)
     if not labels.index.equals(X.index) or len(labels) != len(X):
         raise ValueError('Native fit labels must preserve the exact feature row order.')
-    schema = {'features': list(map(str, X.columns)), 'dtypes': list(map(str, X.dtypes)),
+    dtypes = list(X.dtypes)
+    schema = {'features': list(map(str, X.columns)), 'dtypes': list(map(str, dtypes)),
               'label_dtype': str(labels.dtype), 'n_rows': len(X)}
     h = hashlib.sha256(json.dumps(schema, sort_keys=True).encode())
     h.update(pd.util.hash_pandas_object(X, index=True, categorize=False).to_numpy(dtype='<u8').tobytes())
     h.update(pd.util.hash_pandas_object(labels, index=True, categorize=False).to_numpy(dtype='<u8').tobytes())
     # Category order is also part of a native categorical feature's semantics.
+    category_columns = ([name for name, dtype in zip(X.columns, dtypes) if isinstance(dtype, pd.CategoricalDtype)]
+                        if type(X) is pd.DataFrame else X)
     categories = {str(name): {'levels': [{'type': type(level).__name__, 'value': str(level)} for level in X[name].cat.categories], 'ordered': X[name].cat.ordered}
-                  for name in X if isinstance(X[name].dtype, pd.CategoricalDtype)}
+                  for name in category_columns if isinstance(X[name].dtype, pd.CategoricalDtype)}
     h.update(json.dumps(categories, sort_keys=True).encode())
     return {**schema, 'sha256': h.hexdigest()}
 
