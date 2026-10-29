@@ -29,6 +29,10 @@
 .distribution-meta span{font-size:11px;color:var(--muted)}
 .distribution-bar{display:flex;height:32px;overflow:hidden;border-radius:3px;background:var(--wash);outline:1px solid var(--line);outline-offset:-1px}
 .distribution-segment{display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--status-color);color:white;font:11px var(--mono)}
+.distribution [data-state=ready]{--status-color:#276448}
+.distribution [data-state=waiting]{--status-color:#71717a}
+.distribution [data-state=blocked]{--status-color:#740505}
+.distribution [data-state=done]{--status-color:#0f766e}
 .distribution [data-state=planned]{--status-color:#71717a}
 .distribution [data-state=in_progress]{--status-color:#986014}
 .distribution [data-state=implemented]{--status-color:#536889}
@@ -46,7 +50,9 @@
 @media(max-width:1100px){.distribution-head{align-items:flex-start;flex-direction:column;gap:13px}}
 @media(max-width:760px){.distribution{padding:18px}.distribution-legend{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}.distribution-meta{flex-direction:column;gap:3px}.distribution-switch button{padding:8px 10px}.distribution-head{margin-bottom:16px}}
 @media print{.distribution-switch{display:none}.distribution{padding:12pt}.distribution-legend{grid-template-columns:repeat(3,1fr)}.distribution-bar,.distribution-key{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
-  </style>
+  details[id^="task-"]>summary{grid-template-columns:90px minmax(0,1fr) 160px 15px}details[id^="task-"] .item-id{overflow-wrap:anywhere}
+@media(max-width:760px){details[id^="task-"]>summary{grid-template-columns:62px minmax(0,1fr) 13px}}
+</style>
 </head>
 <body>
 <a href="#main" class="skip">Skip to roadmap content</a>
@@ -56,6 +62,7 @@
     <div class="rail-label">Product development ledger</div>
     <nav aria-label="Views">
       <a href="#roadmap" data-nav="roadmap" aria-current="page"><span class="num">01</span>Roadmap</a>
+      <a href="#backlog" data-nav="backlog"><span class="num">02</span>Remaining backlog</a>
       <a href="#sequence" data-nav="sequence"><span class="num">02</span>Delivery order</a>
       <a href="#deliveries" data-nav="deliveries"><span class="num">03</span>Done / deliveries</a>
       <a href="#gates" data-nav="gates"><span class="num">04</span>Release gates</a>
@@ -77,12 +84,14 @@
         <div class="distribution-switch" role="group" aria-label="Status distribution item type">
           <button type="button" data-distribution="outcomes" aria-pressed="true" aria-controls="distribution-content">Product outcomes</button>
           <button type="button" data-distribution="packets" aria-pressed="false" aria-controls="distribution-content">Delivery packets</button>
+          <button type="button" data-distribution="backlog" aria-pressed="false" aria-controls="distribution-content">Remaining-scope tasks</button>
         </div>
       </div>
       <div id="progress-summary" aria-live="polite" aria-atomic="true"></div>
       <div id="distribution-content" aria-live="polite" aria-atomic="true"></div>
       <p class="distribution-note">Each percentage uses the selected record count. New deliveries can increase the count while its status share stays the same. Outcome and release acceptance require their own evidence.</p>
     </div>
+    <div id="backlog-overview" aria-live="polite"></div>
     <div id="verification-notice"></div>
 
     <section id="roadmap-view" aria-labelledby="roadmap-title">
@@ -96,6 +105,18 @@
       <div class="chips" id="status-filters" aria-label="Outcome status filters"></div>
       <div class="resultbar"><span id="outcome-count" aria-live="polite" role="status"></span><div><button class="quiet" id="reset-outcomes">Reset</button><button class="quiet" id="expand-outcomes" aria-pressed="false">Expand visible items</button></div></div>
       <div id="outcomes"></div>
+    </section>
+
+    <section id="backlog-view" aria-labelledby="backlog-title" hidden>
+      <div class="section-hero"><div class="eyebrow">Current remaining scope · dependency-derived readiness</div><h2 id="backlog-title">Priorities & next work.</h2><p>Ready tasks can be scoped now. Waiting tasks need their listed dependencies. Blocked tasks need the named input or approval. Completing a task requires qualified evidence; release and customer acceptance keep their own gates.</p></div>
+      <div class="tools">
+        <div class="field"><label for="backlog-search">Search tasks, dependencies, owners or acceptance</label><input id="backlog-search" type="search" autocomplete="off" placeholder="e.g. restore, D07-T02, reviewer"></div>
+        <div class="field"><label for="backlog-priority">Priority</label><select id="backlog-priority"><option value="all">All priorities</option><option>P0</option><option>P1</option><option>P2</option><option>P3</option></select></div>
+        <div class="field"><label for="backlog-outcome">Outcome</label><select id="backlog-outcome"><option value="all">All outcomes</option></select></div>
+      </div>
+      <div class="chips" id="backlog-status-filters" aria-label="Task readiness filters"></div>
+      <div class="resultbar"><span id="backlog-count" role="status" aria-live="polite"></span><button id="reset-backlog" class="quiet" type="button">Reset task filters</button></div>
+      <div id="backlog-tasks"></div>
     </section>
 
     <section id="sequence-view" aria-labelledby="sequence-title" hidden>
@@ -125,7 +146,7 @@
       <div class="section-hero"><div class="eyebrow">Read-only projection · portable HTML</div><h2 id="sources-title">Trace the status.</h2><p>This is a dated snapshot of the repository ledger with an explicitly recorded live GitHub verification overlay. It does not change roadmap status or fetch data while you browse.</p></div>
       <div id="sources"></div>
     </section>
-    <div class="bottom-note"><span>Stable D IDs = product outcomes · P IDs = bounded delivery packets</span><span>No release dates inferred. No percentage completion invented.</span></div>
+    <div class="bottom-note"><span>Stable D IDs = outcomes · Dxx-Txx IDs = backlog tasks · P IDs = delivery evidence</span><span>No release dates inferred. No percentage completion invented.</span></div>
     <noscript><p class="note">Enable JavaScript to use this offline tracker. The complete source ledger is also saved alongside this HTML as product-roadmap.source.json.</p></noscript>
   </main>
 </div>
@@ -165,23 +186,24 @@ function renderProgress(){
  const p=SNAPSHOT.status_metrics.progress;
  if(!p){$('#progress-summary').innerHTML='<p class="progress-comparison">No progress comparison snapshot recorded.</p>';return;}
  const signed=n=>n>0?'+'+n:String(n);
- const groups=[['outcomes','Outcome gates'],['packets','Delivery packets']];
- $('#progress-summary').innerHTML=`<p class="progress-comparison">Done / open / blocked · ${p.comparison?`changes since ${esc(p.comparison.packet)}`:'no previous comparison snapshot'} · all records, independent of filters</p><div class="progress-rollups">${groups.map(([key,label])=>{const g=p[key];return `<section class="progress-rollup" aria-label="${label} progress"><h3>${label} · ${g.total} records</h3><dl>${['done','open','blocked'].map(state=>`<div data-progress="${state}" data-count="${g.counts[state]}"><dt>${state[0].toUpperCase()+state.slice(1)}</dt><dd><strong>${g.counts[state]}</strong> · ${g.percentages[state].toFixed(1)}%<small>${g.delta?`Δ ${signed(g.delta.counts[state])} items · ${signed(g.delta.percentage_points[state])} pp`:'No prior comparison'}</small></dd></div>`).join('')}</dl></section>`;}).join('')}</div><p class="progress-comparison">Done groups tested, released and customer-accepted records. Open includes planned and unfinished work. Blocked requires an explicitly recorded reason; prerequisites alone do not imply a blocker. Release and customer acceptance retain separate gates.</p>`;
+ const groups=[...(p.backlog?[['backlog','Remaining-scope tasks']]:[]),['outcomes','Outcome gates'],['packets','Delivery packets']];
+ $('#progress-summary').innerHTML=`<p class="progress-comparison">Done / open / blocked · ${p.comparison?`changes since ${esc(p.comparison.packet)}`:'no previous comparison snapshot'} · all records, independent of filters</p><div class="progress-rollups">${groups.map(([key,label])=>{const g=p[key];return `<section class="progress-rollup" aria-label="${label} progress"><h3>${label} · ${g.total} records</h3>${key==='backlog'?`<p class="small muted">Changes since ${esc(p.backlog_comparison||'initial task inventory')}</p>`:''}<dl>${['done','open','blocked'].map(state=>`<div data-progress="${state}" data-count="${g.counts[state]}"><dt>${state[0].toUpperCase()+state.slice(1)}</dt><dd><strong>${g.counts[state]}</strong> · ${g.percentages[state].toFixed(1)}%<small>${g.delta?`Δ ${signed(g.delta.counts[state])} items · ${signed(g.delta.percentage_points[state])} pp`:'No prior comparison'}</small></dd></div>`).join('')}</dl></section>`;}).join('')}</div><p class="progress-comparison">Task done requires resolved dependencies and qualified packet evidence. Outcome/delivery done groups tested, released and customer-accepted records. Open includes planned and unfinished work. Blocked requires an explicitly recorded reason; prerequisites alone do not imply a blocker. Release and customer acceptance retain separate gates.</p>`;
 }
 function renderDistribution(){
  renderProgress();
  const m=SNAPSHOT.status_metrics, d=m.delivery;
- const population=distributionType==='outcomes'?m.outcomes:m.packets;
- const rows=distributionStates.map(state=>({state,count:population.counts[state],share:population.percentages[state]}));
+ const taskView=distributionType==='backlog'&&m.backlog;
+ const population=taskView|| (distributionType==='outcomes'?m.outcomes:m.packets);
+ const rows=(taskView?['ready','in_progress','waiting','blocked','done']:distributionStates).map(state=>({state,count:population.counts[state],share:population.percentages[state]}));
  const percent=share=>share.toFixed(1)+'%';
- const label=distributionType==='outcomes'?'product outcomes':'delivery packets';
+ const label=taskView?'remaining-scope tasks':distributionType==='outcomes'?'product outcomes':'delivery packets';
  const waiting=m.outcomes.counts.planned;
- const explanation=distributionType==='outcomes'?`${percent(m.outcomes.percentages.planned)} = ${waiting} of ${m.outcomes.total} outcomes waiting. These shares change when an outcome changes state. Delivery inside D07 adds evidence while its acceptance stays open.`:`${percent(m.packets.percentages.tested)} = ${m.packets.counts.tested} of ${m.packets.total} records marked tested. Adding another tested packet increases both numbers, so the percentage can stay the same. The total future delivery scope has not been estimated.`;
+ const explanation=taskView?`${taskView.remaining} tasks remain in this inventory. Readiness follows task dependencies and explicit blockers. Counts change as scope is refined and tasks qualify; these percentages do not measure effort or release readiness.`:distributionType==='outcomes'?`${percent(m.outcomes.percentages.planned)} = ${waiting} of ${m.outcomes.total} outcomes waiting. These shares change when an outcome changes state. Delivery inside D07 adds evidence while its acceptance stays open.`:`${percent(m.packets.percentages.tested)} = ${m.packets.counts.tested} of ${m.packets.total} records marked tested. Adding another tested packet increases both numbers, so the percentage can stay the same. The total future delivery scope has not been estimated.`;
  const recent=d.recent, low=Math.min(...recent.map(x=>x.tested),0), high=Math.max(...recent.map(x=>x.tested),1);
  const bottom=86, scale=66/high;
  const points=recent.map((x,i)=>`${32+(recent.length>1?i/(recent.length-1)*536:268)},${bottom-x.tested*scale}`).join(' ');
  const graph=recent.length?`<svg viewBox="0 0 600 120" role="img" aria-labelledby="delivery-history-title"><title id="delivery-history-title">Current test-qualified packet counts accumulated in ledger order: ${recent.map(x=>x.packet+': '+x.tested).join(', ')}</title><line x1="32" y1="86" x2="568" y2="86" stroke="var(--line)"/><text x="8" y="89">${low}</text><text x="8" y="20">${high}</text><polyline points="${points}" fill="none" stroke="var(--teal)" stroke-width="2"/>${recent.map((x,i)=>`<circle cx="${32+(recent.length>1?i/(recent.length-1)*536:268)}" cy="${bottom-x.tested*scale}" r="3" fill="var(--teal)"><title>${esc(x.packet)}: ${x.tested} tested · ${x.d07_tested} D07</title></circle>`).join('')}<text x="32" y="112">${esc(recent[0].packet)}</text><text x="568" y="112" text-anchor="end">${esc(recent.at(-1).packet)}</text></svg>`:'<p>No delivery packets recorded yet.</p>';
- $('#distribution-content').innerHTML=`<div class="distribution-meta"><strong>${population.total} ${label} · denominator</strong><span>All records · independent of list filters</span></div><p class="note" id="distribution-explanation"><strong>Why shares can stay fixed.</strong> ${esc(explanation)}</p><div class="distribution-bar" aria-hidden="true">${rows.filter(row=>row.count).map(row=>`<span class="distribution-segment" data-state="${esc(row.state)}" style="width:${row.share}%">${row.share>=10?percent(row.share):''}</span>`).join('')}</div><dl class="distribution-legend">${rows.map(row=>`<div data-state="${esc(row.state)}" data-count="${row.count}" data-percentage="${percent(row.share)}"><dt><span class="distribution-key" aria-hidden="true"></span>${esc(statusLabel(row.state))}</dt><dd>${row.count} <span>of ${population.total} ·</span> ${percent(row.share)}</dd></div>`).join('')}</dl><div class="delivery-activity"><div><h3>Delivery activity</h3><p><strong>${d.tested} test-qualified packets</strong> · ${d.d07_tested} D07 implementations</p><p class="small">${d.previous_packet?`Since ${esc(d.previous_packet)}: +${d.tested_added} test-qualified packet · +${d.d07_added} D07`:'First recorded delivery'}</p></div>${graph}<p class="small muted">Last ${recent.length} records in ledger order, using their current states. Tested, released and customer-accepted records have test evidence. This counts deliveries; total future scope and release readiness remain separate.</p></div>`;
+ $('#distribution-content').innerHTML=`<div class="distribution-meta"><strong>${population.total} ${label} · denominator</strong><span>All records · independent of list filters</span></div><p class="note" id="distribution-explanation"><strong>Why shares can stay fixed.</strong> ${esc(explanation)}</p><div class="distribution-bar" aria-hidden="true">${rows.filter(row=>row.count).map(row=>`<span class="distribution-segment" data-state="${esc(row.state)}" style="width:${row.share}%">${row.share>=10?percent(row.share):''}</span>`).join('')}</div><dl class="distribution-legend">${rows.map(row=>`<div data-state="${esc(row.state)}" data-count="${row.count}" data-percentage="${percent(row.share)}"><dt><span class="distribution-key" aria-hidden="true"></span>${esc(taskView?({ready:'Ready',in_progress:'In progress',waiting:'Waiting on dependencies',blocked:'Blocked',done:'Done'}[row.state]):statusLabel(row.state))}</dt><dd>${row.count} <span>of ${population.total} ·</span> ${percent(row.share)}</dd></div>`).join('')}</dl><div class="delivery-activity"><div><h3>Delivery activity</h3><p><strong>${d.tested} test-qualified packets</strong> · ${d.d07_tested} D07 implementations</p><p class="small">${d.previous_packet?`Since ${esc(d.previous_packet)}: +${d.tested_added} test-qualified packet · +${d.d07_added} D07`:'First recorded delivery'}</p></div>${graph}<p class="small muted">Last ${recent.length} records in ledger order, using their current states. Tested, released and customer-accepted records have test evidence. This counts deliveries; total future scope and release readiness remain separate.</p></div>`;
  $$('[data-distribution]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.distribution===distributionType)));
 }
 $$('[data-distribution]').forEach(button=>button.addEventListener('click',()=>{distributionType=button.dataset.distribution;renderDistribution();}));
@@ -243,7 +265,31 @@ record('Provider reports · source fingerprints',`<p>Reports are recommendation 
 record('Packaged font licenses',`<p>The HTML embeds the product's existing Instrument Sans, Instrument Serif and IBM Plex Mono assets. Their SIL Open Font License notices are included here and retained in the adjacent font-licenses folder. No font service is contacted.</p>${SNAPSHOT.font_licenses.map(l=>'<h4>'+esc(l.name)+'</h4><pre>'+esc(l.text)+'</pre>').join('')}`);
 function resetOutcomes(){status='all';expanded=false;$('#outcome-search').value='';$('#milestone-filter').value='all';$('#phase-filter').value='all';$('#expand-outcomes').textContent='Expand visible items';$('#expand-outcomes').setAttribute('aria-pressed','false');renderOutcomes();}
 function resetPackets(){packetStatus='tested';$('#packet-search').value='';$('#packet-outcome').value='all';$('#packet-sort').value='newest';renderPackets();}
-function route(){const [part,target]=(location.hash.slice(1)||'roadmap').split('/');const view=['roadmap','sequence','deliveries','gates','sources'].includes(part)?part:'roadmap';$$('main>section').forEach(s=>s.hidden=s.id!==view+'-view');$$('[data-nav]').forEach(a=>{if(a.dataset.nav===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});if(target&&view==='roadmap'&&byID.has(target)){resetOutcomes();const row=$('#outcome-'+target);row.open=true;requestAnimationFrame(()=>{row.scrollIntoView({block:'start'});row.querySelector('summary').focus({preventScroll:true});});}else if(target&&view==='deliveries'&&L.implementation_packets.some(p=>p.id===target)){resetPackets();packetStatus=L.implementation_packets.find(p=>p.id===target).status;renderPackets();const row=$('#packet-'+target);row.open=true;requestAnimationFrame(()=>{row.scrollIntoView({block:'start'});row.querySelector('summary').focus({preventScroll:true});});}else{window.scrollTo(0,0);}}
+// BEGIN BACKLOG LOGIC: pure projection rendering and explicit filter handlers.
+const backlog=SNAPSHOT.status_metrics.backlog;
+const taskLabels={ready:'Ready',in_progress:'In progress',waiting:'Waiting',blocked:'Blocked',done:'Done'};
+let backlogStatus='all';
+function taskLink(id){return `<a href="#backlog/${encodeURIComponent(id)}">${esc(id)}</a>`;}
+function taskHTML(task){return `<details class="outcome packet" id="task-${esc(task.id)}"><summary tabindex="0"><span class="item-id">${esc(task.id)}</span><span><span class="item-title">${esc(task.title)}</span><span class="item-preview">${esc(task.description)}</span></span><span class="item-status">${pill(task.priority+' · '+taskLabels[task.status],task.status==='blocked'?'review':task.status==='done'?'tested':'')}<small>${esc(task.owner)}</small></span><span class="chevron" aria-hidden="true">›</span></summary><div class="item-body"><div class="detail-grid"><div class="detail-block"><h4>Dependencies</h4><p>${task.dependencies.length?task.dependencies.map(taskLink).join(' · '):'None'}</p><p class="small muted">${task.unmet_dependencies.length?'Still needed: '+task.unmet_dependencies.map(taskLink).join(' · '):'All prerequisites satisfied.'}</p><h4>Outcome coverage</h4><p>${task.items.map(id=>`<a href="#roadmap/${encodeURIComponent(id)}">${esc(id)}</a>`).join(' · ')}</p></div><div class="detail-block"><h4>Acceptance criteria</h4>${list(task.acceptance)}<h4>Source / rationale</h4><p>${esc(task.basis)}</p></div>${task.blockers.length?`<div class="detail-block full"><h4>What unblocks this task</h4>${task.blockers.map(b=>`<p><strong>${esc(b.kind.replaceAll('_',' '))}:</strong> ${esc(b.reason)}<br>Owner: ${esc(b.owner)}<br>Required: ${esc(b.resolution)}</p>`).join('')}</div>`:''}${task.packet_refs.length||task.evidence.length?`<div class="detail-block full"><h4>Delivery evidence</h4><p>${task.packet_refs.map(id=>`<a href="#deliveries/${encodeURIComponent(id)}">${esc(id)}</a>`).join(' · ')}</p>${list(task.evidence)}</div>`:''}</div></div></details>`;}
+function renderBacklog(){
+ if(!backlog){$('#backlog-overview').innerHTML='<p class="note">Remaining-scope tasks have not been inventoried in this snapshot.</p>';$('#backlog-count').textContent='No task inventory';$('#backlog-tasks').innerHTML='';return;}
+ const signed=n=>n>0?'+'+n:String(n);
+ $('#backlog-overview').innerHTML=`<div class="note"><strong>${backlog.remaining} remaining tasks · ${backlog.covered_outcomes} of ${backlog.outcome_total} outcomes mapped.</strong> ${Object.keys(taskLabels).map(s=>`${taskLabels[s]}: ${backlog.counts[s]} (${backlog.percentages[s].toFixed(1)}%${backlog.delta?`; Δ ${signed(backlog.delta.counts[s])} tasks / ${signed(backlog.delta.percentage_points[s])} pp`:''})`).join(' · ')}<p class="small">${esc(backlog.scope_note)} Changes since ${esc(backlog.comparison||'no recorded baseline')}. <a href="#backlog">Open priorities, dependencies & acceptance →</a></p>${backlog.unmapped_outcomes.length?`<p><strong>Planning coverage gap:</strong> ${backlog.unmapped_outcomes.map(esc).join(', ')} still needs task decomposition.</p>`:''}</div>`;
+ const q=$('#backlog-search').value.trim().toLowerCase(), priority=$('#backlog-priority').value, outcome=$('#backlog-outcome').value;
+ const tasks=backlog.tasks.filter(t=>(backlogStatus==='all'||t.status===backlogStatus)&&(priority==='all'||t.priority===priority)&&(outcome==='all'||t.items.includes(outcome))&&(!q||JSON.stringify(t).toLowerCase().includes(q)));
+ $('#backlog-status-filters').innerHTML=[['all','All tasks'],...Object.entries(taskLabels)].map(([key,label])=>`<button class="chip" type="button" data-task-status="${key}" aria-pressed="${key===backlogStatus}">${esc(label)}<em>${key==='all'?backlog.total:backlog.counts[key]}</em></button>`).join('');
+ $('#backlog-count').textContent=`${tasks.length} of ${backlog.total} tasks · priority then ledger order · totals above ignore filters`;
+ $('#backlog-tasks').innerHTML=tasks.length?tasks.map(taskHTML).join(''):'<div class="empty"><strong>No matching tasks.</strong>Reset filters to see the remaining inventory.</div>';
+}
+function resetBacklog(){backlogStatus='all';$('#backlog-search').value='';$('#backlog-priority').value='all';$('#backlog-outcome').value='all';renderBacklog();}
+$('#backlog-search').addEventListener('input',renderBacklog);
+['#backlog-priority','#backlog-outcome'].forEach(id=>$(id).addEventListener('change',renderBacklog));
+$('#reset-backlog').addEventListener('click',resetBacklog);
+$('#backlog-status-filters').addEventListener('click',event=>{const button=event.target.closest('[data-task-status]');if(button){backlogStatus=button.dataset.taskStatus;renderBacklog();}});
+L.items.forEach(item=>$('#backlog-outcome').insertAdjacentHTML('beforeend',`<option value="${esc(item.id)}">${esc(item.id+' · '+item.title)}</option>`));
+renderBacklog();
+// END BACKLOG LOGIC
+function route(){const [part,target]=(location.hash.slice(1)||'roadmap').split('/');const view=['roadmap','backlog','sequence','deliveries','gates','sources'].includes(part)?part:'roadmap';$$('main>section').forEach(s=>s.hidden=s.id!==view+'-view');$$('[data-nav]').forEach(a=>{if(a.dataset.nav===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});if(target&&view==='roadmap'&&byID.has(target)){resetOutcomes();const row=$('#outcome-'+target);row.open=true;requestAnimationFrame(()=>{row.scrollIntoView({block:'start'});row.querySelector('summary').focus({preventScroll:true});});}else if(target&&view==='deliveries'&&L.implementation_packets.some(p=>p.id===target)){resetPackets();packetStatus=L.implementation_packets.find(p=>p.id===target).status;renderPackets();const row=$('#packet-'+target);row.open=true;requestAnimationFrame(()=>{row.scrollIntoView({block:'start'});row.querySelector('summary').focus({preventScroll:true});});}else if(target&&view==='backlog'&&backlog?.tasks.some(t=>t.id===target)){resetBacklog();const row=$('#task-'+target);row.open=true;requestAnimationFrame(()=>{row.scrollIntoView({block:'start'});row.querySelector('summary').focus({preventScroll:true});});}else{window.scrollTo(0,0);}}
 function go(hash){if(location.hash===hash)route();else location.hash=hash;}
 document.addEventListener('click',event=>{const nav=event.target.closest('[data-nav],.brand');if(nav){event.preventDefault();go(nav.getAttribute('href'));return;}const e=event.target.closest('button');if(!e)return;if(e.dataset.packetStatus){packetStatus=e.dataset.packetStatus;renderPackets();}if(e.dataset.status){status=e.dataset.status;renderOutcomes();}if(e.dataset.outcome)go('#roadmap/'+e.dataset.outcome);if(e.dataset.packet)go('#deliveries/'+e.dataset.packet);if(e.dataset.packetsFor){resetPackets();$('#packet-outcome').value=e.dataset.packetsFor;renderPackets();go('#deliveries');}});
 $('#outcome-search').addEventListener('input',renderOutcomes);$('#milestone-filter').addEventListener('change',renderOutcomes);$('#phase-filter').addEventListener('change',renderOutcomes);$('#reset-outcomes').addEventListener('click',resetOutcomes);$('#expand-outcomes').addEventListener('click',()=>{expanded=!expanded;$$('#outcomes>.milestone>.outcome').forEach(d=>d.open=expanded);$('#expand-outcomes').textContent=expanded?'Collapse visible items':'Expand visible items';$('#expand-outcomes').setAttribute('aria-pressed',String(expanded));});
