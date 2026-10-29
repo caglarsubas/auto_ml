@@ -501,3 +501,21 @@ source/binding changes, unsupported transaction isolation, caller timeout
 restoration/cancellation, event bounds and private uncached GET/HEAD errors.
 P162 qualification evidence and the canonical ledger distinguish implementation,
 local testing, exact-head CI, independently qualified main and release acceptance.
+
+The first P162 CI head reached the unchanged 900-second full-suite cap. Its
+incomplete raw reports and the successful local source are retained separately;
+that workflow was not rerun. The corrective source explicitly opts native
+training into small mixed numeric/categorical matrix preparation for the exact
+XGBoost 2.1.4 / pandas 3.0.6 / NumPy 2.5.3 profile. This reads current cells into
+at most 1 MiB of float32 storage, matching native feature types and categorical
+missing codes. Every matrix still goes through native `DMatrix` validation.
+Default helper dispatch remains unchanged; unsupported representations, versions,
+size, disabled category flags and overflow keep the original pandas route.
+No source input, fitted state, authority or result cache is introduced.
+
+Thirty-seven differential cases cover native matrix contents, signed/unsigned
+integer and float boundaries, missing/category ordering, exact fitted model bytes,
+fit receipts, predictions, round budgets, mutations and native refusals. All
+55 published snapshot tests remain unchanged, as do public full metric checks.
+A paired synthetic preparation probe used approximately half the original
+process CPU; it does not establish workload capacity or a delivery guarantee.

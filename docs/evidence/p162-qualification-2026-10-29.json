@@ -4,7 +4,7 @@
   "scope": [
     "D07-T09 snapshot-safe read design/evaluation"
   ],
-  "phase": "implementation",
+  "phase": "local_qualified",
   "local_native_qualification": "passed",
   "main_qualified": false,
   "release_qualified": false,
@@ -18,9 +18,9 @@
     "pr_backend_skipped": 5,
     "frontend": 722,
     "browser": 47,
-    "new_cases": 55,
-    "native_passed": 7450,
-    "pr_backend_passed": 7306
+    "new_cases": 92,
+    "native_passed": 7487,
+    "pr_backend_passed": 7343
   },
   "predecessor_qualification": {
     "packet": "P161",
@@ -39,23 +39,31 @@
   ],
   "local_checks": {
     "snapshot_cases": 55,
-    "focused_passed": 297,
-    "native_passed": 7450,
+    "mixed_preparation_cases": 37,
+    "focused_passed": 410,
+    "native_passed": 7487,
     "native_skipped": 6,
-    "native_seconds": 513.644,
-    "new_cases": 55,
+    "native_seconds": 376.682,
+    "new_cases": 92,
     "two_workers_isolated": true,
     "original_inventory_and_skips_preserved": true,
     "worker_cases_accounted_for": true,
-    "coverage_line_rate": 0.7735,
+    "coverage_line_rate": 0.7738,
     "tracker_original_logic_checks": 9,
     "tracker_progress_logic_checks": 16,
     "tracker_backlog_logic_checks": 23,
     "browser_rendering_qualified": false
   },
   "original_suite_preservation": {
+    "current_packet_sealed_children_preserved": {
+      "preliminary-snapshot": 14,
+      "local-passed-stale-cost-journals": 16,
+      "focused-before-final-additions": 13,
+      "failed-ci-40846116612": 200,
+      "preliminary-mixed": 4
+    },
     "protected_test_execution_files": 407,
-    "byte_identical_protected_files": 405,
+    "byte_identical_protected_files": 404,
     "intentional_product_and_tracker_updates": {
       "backend/execution_jobs/views.py": {
         "before": "b56daf57e1de0584050cd038ede6d5d962a170cd6788777703e3098a862cab1a",
@@ -64,6 +72,10 @@
       "backend/access_control/project_http.py": {
         "before": "dec997b919c5619317dc2151e1f13875debd02e75170df0085cf4e587d82ef3f",
         "after": "0db8a3ba7244065c5916403de89a60a476a6e884c4a2f1fc452e21fe481f651f"
+      },
+      "backend/modeling/booster_adapters.py": {
+        "before": "64293065db5e5f8d557108bc6c7a1ce2d4d8dccc3505e1d1ef330fe7494a8de8",
+        "after": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5"
       }
     },
     "all_original_test_case_files_byte_identical": true,
@@ -122,5 +134,34 @@
     "primary_status_and_13_hashes_match": true,
     "primary_runtime_preserved": true,
     "source_hashes_match": true
-  }
+  },
+  "source_sha256": {
+    "backend/execution_jobs/read_snapshots.py": "c33d3e877ebee8e865af70b469c34be837cd42ca45562b0c56a72d28f13a0e45",
+    "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6",
+    "backend/execution_jobs/views.py": "585c443bf3bed1fff79235024442a3c3cec6a0e3965e4803bd07ff3802e3006a",
+    "backend/access_control/project_http.py": "0db8a3ba7244065c5916403de89a60a476a6e884c4a2f1fc452e21fe481f651f",
+    "backend/backend/urls.py": "fc2f476a122aa300e5e6a28bd1b9d32e953cfc4afbd40d33a60cab0953520f41",
+    "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f"
+  },
+  "preserved_published_tests": {
+    "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6"
+  },
+  "failed_ci_attempts": [
+    {
+      "run": 40846116612,
+      "head": "1b589c7d152e8af7bd58395d8ccf00a7dce4c85a",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 7020,
+      "expected_cases": 7456,
+      "snapshot_cases_completed": 55,
+      "snapshot_cases_all_passed": true,
+      "teardown_errors_at_deadline": 1,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false
+    }
+  ],
+  "correction": "Explicit native training can prepare a bounded, freshly read mixed/categorical float32 matrix in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, retaining feature types, native DMatrix validation, exact cells/models/receipts, default helper dispatch and all fitter budgets/public metrics. Unsupported representations/versions/overflow/size retain pandas. No input/fitted cache. Paired synthetic preparation CPU approximately halved; not capacity qualification."
 }
