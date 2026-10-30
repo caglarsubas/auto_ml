@@ -4,8 +4,8 @@
   "scope": [
     "D07-T09 snapshot-safe read design/evaluation"
   ],
-  "phase": "local_qualified",
-  "local_native_qualification": "passed",
+  "phase": "mac_pilot_preflight_qualified",
+  "local_native_qualification": "Linux ARM64 local full suite passed; emulated AMD64 PR/main qualification pending",
   "main_qualified": false,
   "release_qualified": false,
   "customer_installation_modified": false,
@@ -35,7 +35,8 @@
     "Opt-in PostgreSQL READ COMMITTED only; legacy routes and UI unchanged.",
     "Bounded optimistic coherent observation; not latest-state linearizability or authenticated event history.",
     "D07 whole-outcome installation/recovery/upgrade/capacity/customer acceptance remains open.",
-    "Fresh browser rendering unavailable under retained policy; generated source and isolated JavaScript checks only."
+    "Fresh browser rendering unavailable under retained policy; generated source and isolated JavaScript checks only.",
+    "Approved experimental CI profile is emulated x86_64 on an ARM64 Mac, not native-amd64 hardware or customer capacity."
   ],
   "local_checks": {
     "snapshot_cases": 55,
@@ -53,12 +54,14 @@
     "tracker_progress_logic_checks": 16,
     "tracker_backlog_logic_checks": 23,
     "browser_rendering_qualified": false,
-    "resource_observation_cases": 51
+    "resource_observation_cases": 51,
+    "execution_architecture": "Linux ARM64 Docker images"
   },
   "original_suite_preservation": {
     "current_packet_sealed_children_preserved": {
       "preliminary-snapshot": 14,
       "local-passed-stale-cost-journals": 16,
+      "failed-ci-40870496793": 208,
       "local-qualified-before-observation": 16,
       "focused-before-final-additions": 13,
       "failed-ci-40846116612": 200,
@@ -67,7 +70,7 @@
       "preliminary-mixed": 4
     },
     "protected_test_execution_files": 407,
-    "byte_identical_protected_files": 403,
+    "byte_identical_protected_files": 402,
     "intentional_product_and_tracker_updates": {
       "backend/execution_jobs/views.py": {
         "before": "b56daf57e1de0584050cd038ede6d5d962a170cd6788777703e3098a862cab1a",
@@ -86,10 +89,17 @@
         "after": "c184c1b5959e42d594f303af11d9f17cc8ecbd61f3d0f89e9cddd5efe9eb85e9"
       }
     },
+    "intentional_execution_profile_updates": {
+      ".github/workflows/ci.yml": {
+        "before": "5d870cf9e41af7f39e1a87d45d18a9dbdff1c42ee01def4c92b3532c1769371f",
+        "after": "475f23a91669b7a590c285e19f914ddd9f2be27234a1a36a694e707490c9cc7b"
+      }
+    },
     "all_original_test_case_files_byte_identical": true,
-    "ci_workflow_byte_identical": true,
+    "ci_workflow_byte_identical": false,
     "original_native_cap_seconds": 900,
-    "original_workloads_timeouts_coverage_skips_retries_resources_preserved": true,
+    "original_workloads_timeouts_coverage_skips_retries_preserved": true,
+    "approved_emulated_hardware_profile": "mac_hosted_emulated_amd64",
     "physical_schema_profile_and_matrix_byte_identical": true,
     "older_retained_sha256_preserved": {
       "P117": 343,
@@ -153,11 +163,21 @@
     "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
     "scripts/native_qualification_observation.py": "ac03b2ed4d8d68e2ed18aaea4dafd7d82f95b2886a6e8ba1951ba67b62af6e6d",
     "scripts/qualify_postgres_fixture.py": "c184c1b5959e42d594f303af11d9f17cc8ecbd61f3d0f89e9cddd5efe9eb85e9",
-    "backend/tests/unit/test_native_qualification_observation.py": "b149819e45834392d74c0077a3ce61932471a9450233b59ccc481367bb804759"
+    "backend/tests/unit/test_native_qualification_observation.py": "b149819e45834392d74c0077a3ce61932471a9450233b59ccc481367bb804759",
+    ".github/workflows/ci.yml": "475f23a91669b7a590c285e19f914ddd9f2be27234a1a36a694e707490c9cc7b",
+    "scripts/ci_reference/worker_guard.py": "89435458d7a91a6a037c21a3678b04054e69ffc4304b2ccabb008a6d928d7fd2",
+    "scripts/ci_reference/test_profile.py": "63b6f6ce5baeb69c54d8b39721d3a9b862e95533cd0348ee04d80e2982c9a5c3",
+    "scripts/ci_reference/proxy_server.py": "1ed5f98d5e4e0c7c9004caa402f175597e4f6f3d2dbfa8619e70d3d0bcbafe73",
+    "scripts/ci_reference/verify_profile.py": "995357e4242f02f7275345f1051d5973e924ac369830a2eb8aa23cd0e9a3a46b",
+    "scripts/ci_reference/test_proxy_server.py": "a705f6f6b7ed02ceea7a03d371c77b007c44a111a63c6fb7b1fb8e017230d864",
+    "scripts/ci_reference/pilot-public.pem": "3e35e38eeab88a87513b89d3a01cd783b50b7f9a6adc03cfc3844c18a3e88ec6",
+    "scripts/ci_reference/test_worker_guard.py": "e86b9eaa1dcdcba5fb672f08f839c958e8b32ac7ca10b5f735453bfc80627f6e",
+    "scripts/ci_reference/README.md": "a5f53eadd88ece4d4a7160ec53672de0c32187f6eaddf88717920b02d8ef9ff0"
   },
   "preserved_published_tests": {
     "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6",
-    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f"
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
+    "backend/tests/unit/test_native_qualification_observation.py": "b149819e45834392d74c0077a3ce61932471a9450233b59ccc481367bb804759"
   },
   "failed_ci_attempts": [
     {
@@ -189,6 +209,24 @@
       "snapshot_cases_all_passed": true,
       "mixed_cases_completed": 37,
       "mixed_cases_all_passed": true
+    },
+    {
+      "run": 40870496793,
+      "head": "6166cb3ff4086ed459bd777d68b1e52f57546730",
+      "cause": "unchanged_900_second_full_native_timeout",
+      "finished_cases": 6978,
+      "expected_cases": 7544,
+      "completed_case_failures": 0,
+      "final_XML": false,
+      "successful_process_exit": false,
+      "five_other_checks_passed": true,
+      "ci_rerun_requested": false,
+      "snapshot_cases_completed": 55,
+      "snapshot_cases_all_passed": true,
+      "mixed_cases_completed": 37,
+      "mixed_cases_all_passed": true,
+      "observation_cases_completed": 51,
+      "observation_cases_all_passed": true
     }
   ],
   "correction": "Explicit native training can prepare a bounded, freshly read mixed/categorical float32 matrix in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, retaining feature types, native DMatrix validation, exact cells/models/receipts, default helper dispatch and all fitter budgets/public metrics. Unsupported representations/versions/overflow/size retain pandas. No input/fitted cache. Paired synthetic preparation CPU approximately halved; not capacity qualification.",
@@ -198,5 +236,28 @@
     "diagnostic_only": true,
     "provisioning_or_spending_authorized": false
   },
-  "resource_observation_scope": "Bounded read-only before/after host/cgroup/owned-container limits; entire prior qualification controller AST preserved after removing only observations. CI/workloads/resources/two-workers/900s cap unchanged. No hardware cause or capacity claim; no provisioning/spending authorized."
+  "resource_observation_scope": "Bounded read-only before/after host/cgroup/owned-container limits; entire prior qualification controller AST preserved after removing only observations. CI/workloads/resources/two-workers/900s cap unchanged. No hardware cause or capacity claim; no provisioning/spending authorized.",
+  "last_updated": "2026-10-30",
+  "approved_reference_pilot": {
+    "profile": "Mac-hosted emulated Ubuntu24.04amd64",
+    "owner_approved": true,
+    "approval_date": "2026-10-30",
+    "vCPUs": 4,
+    "memory_GiB": 16,
+    "minimum_free_disk_GB": 100,
+    "pytest_workers": 2,
+    "native_child_cap_seconds": 900,
+    "outer_job_minutes": 60,
+    "one_automatic_PR_workflow": true,
+    "one_independent_automatic_main_only_after_PR_passes": true,
+    "reruns_allowed": false,
+    "native_amd64_hardware_qualified": false,
+    "controller_checks_in_guest": 22,
+    "credential_mock_tests": 5,
+    "runner_registered": true,
+    "workflow_started": false,
+    "runner_listener_started": false,
+    "package_build_preflight_passed": true,
+    "pinned_vendor_wire_preflight_passed": true
+  }
 }

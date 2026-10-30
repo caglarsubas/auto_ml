@@ -539,3 +539,31 @@ cgroup facts have their stated scopes; they do not establish effective capacity,
 a hardware cause, a supported workload or customer installation acceptance.
 No process, service or limit is changed. Diagnostic failure does not alter the
 original pytest return or timeout; unavailable output is reported explicitly.
+
+
+## Mac-hosted P162 reference qualification
+
+After three exact-head native timeouts at the unchanged 900-second cap, the
+owner approved a bounded reference-host pilot and explicitly selected this Mac
+variant. It uses a separate disposable Ubuntu 24.04 amd64 VM on the ARM64 Mac,
+four emulated guest vCPUs, 16 GiB RAM and at least 100 GB free disk. Existing Mac
+services and workspaces are preserved. The earlier 389.671-second local report
+used Linux ARM64 images and does not qualify this emulated x86_64 profile.
+
+PR #261 and its marked automatic main push are the only routed workflows. A
+host controller verifies exact GitHub run/source/actor facts and arms a root-owned
+pre-worker admission policy. A signed profile binds the emulated execution facts
+to the exact run and revision. The personal runner-administration credential and
+signing key remain outside the guest. Network, workspace and Docker isolation are
+externally enforced; package downloads use a bounded allowlist proxy. See
+[the controller boundary](../scripts/ci_reference/README.md).
+
+All original application tests, assertions, fixtures, coverage, skips, retries,
+two-worker/thread settings and the 900-second child cap remain. Every original
+native step and the other five CI jobs are preserved. Pilot controller checks
+supplement application tests. One automatic PR qualification is allowed; only
+complete success permits guarded merge and one independent automatic main
+qualification on a fresh matching guest. Failure stops the pilot without a
+rerun. Emulated success does not establish native-amd64 hardware or customer
+capacity. D07-T09 stays open until both qualifications pass; the 66-task done
+share remains 3.0% until then, with an intended 4.5% after proven closure.
