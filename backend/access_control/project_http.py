@@ -81,6 +81,7 @@ SPECIAL = {
     "package-review-detail",
     "package-review-receipt",
     "job-detail",
+    "job-snapshot",
     "job-operational-handoff",
     "job-scores",
     "native-adoption-list",
@@ -169,7 +170,7 @@ def authorize(request, view):
             raise projects.ProjectDenied('package_review_unavailable') from None
         supplied.append(record.dataset_id)
         scopes.extend(source_scopes(request.user, record, body.get('evidence')))
-    elif name in {'job-operational-handoff', 'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input', 'native-adoption-list'}:
+    elif name in {'job-snapshot', 'job-operational-handoff', 'job-detail', 'job-scores', 'job-candidate', 'job-candidate-input', 'native-adoption-list'}:
         from execution_jobs.models import NativeJob
         try:
             # Resolve routing metadata before authority; never load native

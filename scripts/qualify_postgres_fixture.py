@@ -323,16 +323,28 @@ def main():
                     cwd = ROOT / "backend" if arguments[0] == "-m" else ROOT
                 log_path = reports / (report or "private-runtime.log")
                 offset = log_path.stat().st_size if log_path.exists() else 0
+                observe_native = report == "postgresql.log" and arguments[:2] == ["-m", "pytest"]
+                if observe_native:
+                    from native_qualification_observation import write_observation
+                    owned = {"postgres": db, "cache": redis, "broker": job_broker}
+                    location = "core_image" if args.runner_image else "host"
+                    if not write_observation(reports / "native-resources-before.json", owned, execution=location):
+                        print("Native resource observation before suite unavailable", file=sys.stderr)
                 with log_path.open("ab") as log:
-                    result = subprocess.run(
-                        argv,
-                        env=current,
-                        cwd=cwd,
-                        stdout=log,
-                        stderr=log,
-                        timeout=900,
-                        check=False,
-                    )
+                    try:
+                        result = subprocess.run(
+                            argv,
+                            env=current,
+                            cwd=cwd,
+                            stdout=log,
+                            stderr=log,
+                            timeout=900,
+                            check=False,
+                        )
+                    finally:
+                        if observe_native:
+                            if not write_observation(reports / "native-resources-after.json", owned, execution=location):
+                                print("Native resource observation after suite unavailable", file=sys.stderr)
                 if (result.returncode == 0) != succeed:
                     raise RuntimeError(
                         "Fixture Python check failed; inspect its ignored report."

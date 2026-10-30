@@ -445,3 +445,151 @@ The SFS screening head also hit the original900-second native cap (6,843/7,388ca
 New SFS/HPO checkpoints and newly generated score-package metadata use compact standard-library JSON. Serializer options and decoded values remain unchanged. Atomic staging, file/directory synchronization, exclusive publication, strict duplicate-key readers, final source/authority checks and exact published-byte hashes remain. Copied historical evidence and previously published archives/packages retain their original bytes.
 
 Thirteen additive cases cover Unicode and numeric/key semantics, malformed output refusal before staging, immutable legacy/new archive retries and strict duplicate-key rejection. All143 previously published cases remain unchanged. Synthetic paired CPU observations show less serialization work and smaller records; they do not establish supported capacity or resolve CI qualification by themselves. Full native, six-check exact-head and independent main gates remain mandatory.
+
+### Revision-fenced read snapshot evaluation (P162)
+
+D07-T09 evaluates an opt-in interface before changing existing detail/download
+serialization. `GET` or `HEAD /api/jobs/{id}/snapshot/` supports:
+
+- `representation=receipt` (default), optionally pinned with `revision=0` or
+  another canonical nonnegative integer. The JSON envelope has schema
+  `native_job_snapshot_v1`, observation time, revision, `read_only: true` and the
+  existing public receipt, including its established 500-score preview limit.
+- `representation=candidate&sha256={result_digest}` or
+  `representation=scores&sha256={result_digest}`, optionally revision-pinned.
+  Downloads preserve the corresponding existing export/score bytes, filenames
+  and checksum conventions. `project_id` may narrow an already-authorized scope.
+
+Unknown/repeated parameters and invalid digests/revisions fail explicitly.
+Every GET/HEAD response, including permission and storage failures, uses
+`Cache-Control: no-store`. Successful responses identify their observed revision
+and `optimistic-read-committed-v1` mode in exposed headers. HEAD has no body.
+
+The evaluator requires PostgreSQL **READ COMMITTED**; SQLite and stronger caller
+isolation return explicit unsupported conflicts. A repeatable-read transaction
+would conceal late authority changes. Within the existing five-second SQL
+statement ceiling (or a stricter caller setting), it authorizes routing metadata
+before loading job material, collects a full row plus at most 257 events, validates
+contiguous history, encodes the complete public bytes, then recollects the row and
+events. Any change to concrete fields, full-precision timestamps, typed JSON or
+event content makes the read stale. Private row fingerprints never leave the
+service. It finally rechecks captured actor, project and source-dataset authority.
+
+A snapshot accepts at most **256 events**. Larger histories return
+`job_snapshot_budget_exceeded` rather than a truncated receipt; existing serialized
+routes remain available for those histories. Elapsed-time checks around collection,
+encoding and authority validation also refuse over-budget results. These checks
+and per-statement timeouts do not promise a hard total HTTP latency or preempt
+Python encoding. Initial HTTP permission/audit work precedes the service budget.
+Callers receive structured `409` stale/history/budget/unsupported diagnostics,
+`403` authority denials or `503` unavailable storage, without partial public bytes.
+
+This is a bounded optimistic observation of a coherent revision, not a
+linearizable latest-state guarantee, an authenticated event-chain proof, or new
+execution/recovery/review authority. Normal writers advance revisions atomically;
+privileged out-of-band A-to-B-to-A changes cannot generally be detected by double
+collection. Authority changes after the final check belong to a subsequent
+observation. Failed reads do not retry silently. No queue/row lock, result cache,
+expert deserialization or publication is introduced. Existing serialized routes,
+writer transactions, approval controls and UI remain unchanged.
+
+Acceptance evaluation includes real independent PostgreSQL connections: an
+execution writer commits while response encoding is paused, and the reader
+returns stale rather than holding the queue lock. Additional cases cover exact
+legacy candidate/score parity, same-revision field/event edits, late revocation,
+source/binding changes, unsupported transaction isolation, caller timeout
+restoration/cancellation, event bounds and private uncached GET/HEAD errors.
+P162 qualification evidence and the canonical ledger distinguish implementation,
+local testing, exact-head CI, independently qualified main and release acceptance.
+
+The first P162 CI head reached the unchanged 900-second full-suite cap. Its
+incomplete raw reports and the successful local source are retained separately;
+that workflow was not rerun. The corrective source explicitly opts native
+training into small mixed numeric/categorical matrix preparation for the exact
+XGBoost 2.1.4 / pandas 3.0.6 / NumPy 2.5.3 profile. This reads current cells into
+at most 1 MiB of float32 storage, matching native feature types and categorical
+missing codes. Every matrix still goes through native `DMatrix` validation.
+Default helper dispatch remains unchanged; unsupported representations, versions,
+size, disabled category flags and overflow keep the original pandas route.
+No source input, fitted state, authority or result cache is introduced.
+
+Thirty-seven differential cases cover native matrix contents, signed/unsigned
+integer and float boundaries, missing/category ordering, exact fitted model bytes,
+fit receipts, predictions, round budgets, mutations and native refusals. All
+55 published snapshot tests remain unchanged, as do public full metric checks.
+A paired synthetic preparation probe used approximately half the original
+process CPU; it does not establish workload capacity or a delivery guarantee.
+
+### Native qualification resource observations (P162)
+
+Two P162 heads reached the unchanged full-native 900-second cap with incomplete
+case inventories. The qualification controller now records bounded read-only
+observations immediately before and after its existing pytest invocation,
+including timeout paths. Its original control flow, arguments, worker/thread
+settings, resource limits, fixtures, and exit/timeout behavior are preserved;
+CI configuration is unchanged. Diagnostics do not replace successful test exit,
+complete XML/case accounting, coverage, or the original qualification gates.
+
+The records contain OS/architecture, CPU model and observed frequencies/affinity,
+host CPU counters, current cgroup quota/cpuset/throttling/memory counters,
+system memory/pressure and allowlisted limits for exact owned fixture containers.
+They omit environment variables, credentials, host/container identifiers and
+cgroup paths. Missing/unsupported observations remain explicit. Host and current
+cgroup facts have their stated scopes; they do not establish effective capacity,
+a hardware cause, a supported workload or customer installation acceptance.
+No process, service or limit is changed. Diagnostic failure does not alter the
+original pytest return or timeout; unavailable output is reported explicitly.
+
+
+## Mac-hosted P162 reference qualification
+
+After three exact-head native timeouts at the unchanged 900-second cap, the
+owner approved a bounded reference-host pilot and explicitly selected this Mac
+variant. It uses a separate disposable Ubuntu 24.04 amd64 VM on the ARM64 Mac,
+four emulated guest vCPUs, 16 GiB RAM and at least 100 GB free disk. Existing Mac
+services and workspaces are preserved. The earlier 389.671-second local report
+used Linux ARM64 images and does not qualify this emulated x86_64 profile.
+
+PR #261 and its marked automatic main push are the only routed workflows. A
+host controller verifies exact GitHub run/source/actor facts and arms a root-owned
+pre-worker admission policy. A signed profile binds the emulated execution facts
+to the exact run and revision. The personal runner-administration credential and
+signing key remain outside the guest. Network, workspace and Docker isolation are
+externally enforced; package downloads use a bounded allowlist proxy. See
+[the controller boundary](../scripts/ci_reference/README.md).
+
+All original application tests, assertions, fixtures, coverage, skips, retries,
+two-worker/thread settings and the 900-second child cap remain. Every original
+native step and the other five CI jobs are preserved. Pilot controller checks
+supplement application tests. One automatic PR qualification is allowed; only
+complete success permits guarded merge and one independent automatic main
+qualification on a fresh matching guest. Failure stops the pilot without a
+rerun. Emulated success does not establish native-amd64 hardware or customer
+capacity. D07-T09 stays open until both qualifications pass; the 66-task done
+share remains 3.0% until then, with an intended 4.5% after proven closure.
+
+
+The first Mac pilot automatic PR workflow40992060920 failed before the vendor
+worker/checkout with exit78 and no application tests. Five other checks passed;
+the126-file raw failure archive is sealed. Its generic refusal did not identify
+the failing predicate. On30October2026 the owner approved one additional automatic
+diagnostic qualification with safe fixed-stage/claim-result diagnostics. The
+original admission predicates and all existing tests/limits remain; twelve guard
+tests pass onhostandguest. This uses a distinct fresh guest and registration.
+Any failure stops the additional allowance. Success still requires all six checks
+and raw receipts before merge and one independent automatic main qualification.
+
+
+The additional diagnostic workflow41002594802 isolated `stage=admission/code=job`
+while all eight scope checks matched and the listener confirmed the expected
+display. Its143-file failure archive is sealed. The owner then continued from
+the prepared strict job-identity correction and one-corrective-run checkpoint.
+The correction replaces the unsupported internal `JobName` equality assumption
+with unique identity from exact frozen workflow bytes and the complete six-job
+API inventory, checked before listener startup. A root-owned proof and exact
+display are required in addition to all eight existing scope checks, expiry,
+vendor integrity and the single-use lease. Pre-listener receipts are retained
+and reverified against final run metadata. This intentionally changes identity
+mapping; controller tests disclose the corrected expectations. Application tests,
+fixtures, two workers, 900-second cap and all original native steps remain.
+One distinct fresh corrective guest is used; any failure stops the allowance.

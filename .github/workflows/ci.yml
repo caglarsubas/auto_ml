@@ -100,7 +100,10 @@ jobs:
   # Private configuration/TLS smoke, disposable restore and full metadata parity.
   postgresql-runtime:
     name: PostgreSQL runtime and metadata
-    runs-on: ubuntu-24.04
+    runs-on: ${{ ((github.event_name == 'pull_request' && github.event.pull_request.number == 261 && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, '[P162-MAC-PILOT]'))) && fromJSON('["self-hosted","Linux","X64","ubuntu-24.04","declarai-p162-mac-amd64"]') || fromJSON('["ubuntu-24.04"]') }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
     env:
       PROMETA_DISABLE: "1"
       OPENAI_API_KEY: ""
@@ -110,6 +113,14 @@ jobs:
       MKL_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@v4
+      - name: Verify bounded Mac reference profile and controller checks
+        if: (github.event_name == 'pull_request' && github.event.pull_request.number == 261 && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, '[P162-MAC-PILOT]'))
+        run: |
+          mkdir -p test-reports/postgresql/pilot-profile
+          python3 scripts/ci_reference/verify_profile.py --output test-reports/postgresql/pilot-profile
+          python3 scripts/ci_reference/test_worker_guard.py > test-reports/postgresql/pilot-guard-tests.log 2>&1
+          python3 scripts/ci_reference/test_proxy_server.py > test-reports/postgresql/pilot-proxy-tests.log 2>&1
+          python3 scripts/ci_reference/test_profile.py > test-reports/postgresql/pilot-profile-tests.log 2>&1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
