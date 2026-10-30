@@ -33,6 +33,45 @@ def typed(d):
 
 
 class GuardTests(unittest.TestCase):
+    def test_claim_diagnostics_emit_only_fixed_names_and_results(self):
+        secret='PRIVATE_JOB_VALUE_NEVER_LOG'
+        github={**FIELDS,'sha':secret,'actor_id':{'t':4,'n':secret},'extra_secret':secret}
+        del github['ref']
+        checks=g.claim_checks(body(message(github)),POLICY)
+        self.assertEqual(checks['sha'],'mismatch')
+        self.assertEqual(checks['actor_id'],'invalid_type')
+        self.assertEqual(checks['ref'],'absent')
+        self.assertNotIn(secret,json.dumps(checks))
+        self.assertNotIn('extra_secret',checks)
+        self.assertEqual(g.claim_checks(b'bad',POLICY),{'context_structure':'invalid'})
+
+    def test_main_diagnostic_never_logs_exception_text_or_payload(self):
+        import contextlib,io
+        from unittest.mock import patch
+        for error in [ValueError('PRIVATE_SECRET'),OSError(9,'PRIVATE_SECRET'),RuntimeError('PRIVATE_SECRET')]:
+            out=io.StringIO()
+            def fail(*a,**kw):
+                kw['report'](stage='frame')
+                raise error
+            with patch.object(g,'load_policy',return_value=POLICY),patch.object(g,'execute',side_effect=fail),contextlib.redirect_stderr(out):
+                self.assertEqual(g.main(),78)
+            self.assertNotIn('PRIVATE_SECRET',out.getvalue())
+            record=json.loads(out.getvalue().splitlines()[0].removeprefix('P162_ADMISSION_DIAGNOSTIC '))
+            self.assertEqual(record['stage'],'frame')
+
+    def test_invalid_authority_reports_scope_then_refuses_vendor(self):
+        from unittest.mock import patch
+        read,write=os.pipe();out,send=os.pipe()
+        b=body(message({**FIELDS,'sha':'UNAPPROVED_SECRET_REVISION'}));os.write(write,struct.pack('<ii',1,len(b))+b)
+        reports=[]
+        try:
+            with patch.object(g.subprocess,'Popen',side_effect=AssertionError('must not start')),self.assertRaises(ValueError):
+                g.execute(['guard','spawnclient',str(read),str(send)],POLICY,'unused',report=lambda **v:reports.append(v))
+        finally:
+            for fd in [read,write,out,send]:os.close(fd)
+        self.assertEqual(reports[-1]['claims']['sha'],'mismatch')
+        self.assertNotIn('UNAPPROVED_SECRET_REVISION',json.dumps(reports))
+
     def test_plain_and_vendor_typed_context(self):
         for v in [message(), message(typed(FIELDS))]:
             self.assertEqual(g.admit(body(v), POLICY)["jobname"], "postgresql-runtime")

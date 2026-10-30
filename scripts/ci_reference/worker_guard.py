@@ -146,7 +146,28 @@ def write(fd, data):
         view = view[size:]
 
 
-def execute(argv, policy, vendor):
+def claim_checks(body, policy):
+    """Diagnostic names/types only: never retain a value or the job payload."""
+    fields = {'repository', 'repository_id', 'event_name', 'run_id', 'run_attempt', 'sha', 'ref', 'actor_id'}
+    try:
+        msg = lower(json.loads(body.decode('utf-16-le'), object_pairs_hook=pairs))
+        github = dictionary(dictionary(msg['contextdata'])['github'])
+        result = {}
+        for key in sorted(fields):
+            if key not in github:
+                result[key] = 'absent'
+            else:
+                try:
+                    result[key] = 'match' if string(github[key]) == policy['github'].get(key) else 'mismatch'
+                except ValueError:
+                    result[key] = 'invalid_type'
+        return result
+    except Exception:
+        return {'context_structure': 'invalid'}
+
+
+def execute(argv, policy, vendor, report=lambda **kw: None):
+    report(stage='arguments')
     if (
         len(argv) != 4
         or argv[1] != "spawnclient"
@@ -154,16 +175,24 @@ def execute(argv, policy, vendor):
     ):
         raise ValueError("arguments")
     source, target = map(int, argv[2:])
+    report(stage='frame')
     kind, first = frame(source)
     if kind != 1:
         raise ValueError("first_message")
-    admit(first[8:], policy)
+    report(stage='admission')
+    try:
+        admit(first[8:], policy)
+    except Exception:
+        report(claims=claim_checks(first[8:], policy))
+        raise
+    report(stage='vendor_integrity')
     sha = hashlib.sha256()
     with open(vendor, "rb") as stream:
         while block := stream.read(1024 * 1024):
             sha.update(block)
     if sha.hexdigest() != policy["vendor_sha256"]:
         raise ValueError("worker_integrity")
+    report(stage='lease')
     lease = os.open(
         policy["used_marker"],
         os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
@@ -174,12 +203,14 @@ def execute(argv, policy, vendor):
     drain, child_out = os.pipe()
     stop = threading.Event()
     errors = []
+    report(stage='vendor_start')
     child = subprocess.Popen(
         [vendor, "spawnclient", str(child_in), str(child_out)],
         pass_fds=(child_in, child_out),
     )
     os.close(child_in)
     os.close(child_out)
+    report(stage='relay')
 
     def fail():
         errors.append(True)
@@ -255,17 +286,31 @@ def load_policy(path):
 
 
 def main():
+    diagnostic = {'stage': 'policy_load'}
+    def report(**values):
+        diagnostic.update(values)
     try:
         result = execute(
             sys.argv,
             load_policy("/opt/declarai-pilot/admission.json"),
             "/opt/actions-runner/bin/Runner.Worker.vendor",
+            report=report,
         )
         if result < 0:
             signal.signal(-result, signal.SIG_DFL)
             os.kill(os.getpid(), -result)
         return result
-    except Exception:
+    except Exception as error:
+        # All possible messages/payloads are untrusted. Only fixed classifications
+        # and check results derived from a fixed set of public claim names escape.
+        codes = {'duplicate','object','duplicate_case','context','duplicate_context','context_string',
+                 'job','authority','policy','expired','arguments','frame','first_message',
+                 'worker_integrity','second_job','policy_file'}
+        diagnostic['code'] = str(error) if type(error) is ValueError and str(error) in codes else 'unclassified'
+        diagnostic['category'] = next((name for cls,name in [(TimeoutError,'timeout'),(EOFError,'eof'),(OSError,'os_error'),(ValueError,'invalid_input'),(KeyError,'missing_key')] if isinstance(error,cls)), 'internal_error')
+        if isinstance(error,OSError) and type(error.errno) is int:
+            diagnostic['errno'] = error.errno
+        print('P162_ADMISSION_DIAGNOSTIC '+json.dumps(diagnostic,sort_keys=True),file=sys.stderr)
         print(
             "Pilot job admission denied before vendor worker startup.", file=sys.stderr
         )

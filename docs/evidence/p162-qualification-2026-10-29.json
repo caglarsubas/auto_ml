@@ -4,7 +4,7 @@
   "scope": [
     "D07-T09 snapshot-safe read design/evaluation"
   ],
-  "phase": "mac_pilot_preflight_qualified",
+  "phase": "mac_pilot_diagnostic_preflight_qualified",
   "local_native_qualification": "Linux ARM64 local full suite passed; emulated AMD64 PR/main qualification pending",
   "main_qualified": false,
   "release_qualified": false,
@@ -59,6 +59,7 @@
   },
   "original_suite_preservation": {
     "current_packet_sealed_children_preserved": {
+      "failed-mac-pilot-40992060920": 126,
       "preliminary-snapshot": 14,
       "local-passed-stale-cost-journals": 16,
       "failed-ci-40870496793": 208,
@@ -165,14 +166,14 @@
     "scripts/qualify_postgres_fixture.py": "c184c1b5959e42d594f303af11d9f17cc8ecbd61f3d0f89e9cddd5efe9eb85e9",
     "backend/tests/unit/test_native_qualification_observation.py": "b149819e45834392d74c0077a3ce61932471a9450233b59ccc481367bb804759",
     ".github/workflows/ci.yml": "475f23a91669b7a590c285e19f914ddd9f2be27234a1a36a694e707490c9cc7b",
-    "scripts/ci_reference/worker_guard.py": "89435458d7a91a6a037c21a3678b04054e69ffc4304b2ccabb008a6d928d7fd2",
+    "scripts/ci_reference/worker_guard.py": "1082d0a8fefc934cde84f49acada4f4a95096ea3d48079c7f12b4f8c6f8c5786",
     "scripts/ci_reference/test_profile.py": "63b6f6ce5baeb69c54d8b39721d3a9b862e95533cd0348ee04d80e2982c9a5c3",
     "scripts/ci_reference/proxy_server.py": "1ed5f98d5e4e0c7c9004caa402f175597e4f6f3d2dbfa8619e70d3d0bcbafe73",
     "scripts/ci_reference/verify_profile.py": "995357e4242f02f7275345f1051d5973e924ac369830a2eb8aa23cd0e9a3a46b",
     "scripts/ci_reference/test_proxy_server.py": "a705f6f6b7ed02ceea7a03d371c77b007c44a111a63c6fb7b1fb8e017230d864",
     "scripts/ci_reference/pilot-public.pem": "3e35e38eeab88a87513b89d3a01cd783b50b7f9a6adc03cfc3844c18a3e88ec6",
-    "scripts/ci_reference/test_worker_guard.py": "e86b9eaa1dcdcba5fb672f08f839c958e8b32ac7ca10b5f735453bfc80627f6e",
-    "scripts/ci_reference/README.md": "a5f53eadd88ece4d4a7160ec53672de0c32187f6eaddf88717920b02d8ef9ff0"
+    "scripts/ci_reference/test_worker_guard.py": "86a5b2a23ca150f3ef465acc772dd4adf033aec832faea37c9e692fca1d90141",
+    "scripts/ci_reference/README.md": "c780d40895c1e1207881f174443715a3a32ff8a364b076ddb7d7ba491dcb7213"
   },
   "preserved_published_tests": {
     "backend/tests/unit/test_native_read_snapshots.py": "c45f2b17cda9faeb11a75389abfd2bfbc93b00c71f0dc210d208e346253c6aa6",
@@ -254,10 +255,69 @@
     "native_amd64_hardware_qualified": false,
     "controller_checks_in_guest": 22,
     "credential_mock_tests": 5,
-    "runner_registered": true,
-    "workflow_started": false,
+    "runner_registered": false,
+    "workflow_started": true,
     "runner_listener_started": false,
     "package_build_preflight_passed": true,
     "pinned_vendor_wire_preflight_passed": true
+  },
+  "mac_pilot_PR_run": 40992060920,
+  "mac_pilot_head": "7edeaed666182c53a647a0f4a7b51e1406ae0aad",
+  "mac_pilot_native_result": {
+    "conclusion": "failure",
+    "worker_exit": 78,
+    "vendor_started": false,
+    "checkout_started": false,
+    "workflow_steps": 0,
+    "application_tests_run": 0,
+    "root_cause": "unproven_generic_admission_refusal",
+    "five_other_checks_passed": true,
+    "backend_passed": 7394,
+    "backend_original_skips": 5,
+    "browser_original_first_attempt_passed": 47,
+    "frontend_unit_passed": 722
+  },
+  "mac_guest_destroyed": true,
+  "owned_runner_removed": true,
+  "additional_workflow_authorized": true,
+  "mac_pilot_failed_archive": {
+    "path": "test-reports/p162/failed-mac-pilot-40992060920",
+    "files": 126,
+    "manifest_sha256": "65ce34c5c4c2d14a76d27aa0a4ce90c7d2c82680218fe603711067166a8f227b"
+  },
+  "diagnostic_candidate": {
+    "patch": "test-reports/p162/mac-pilot/diagnostics-candidate/proposed.patch",
+    "host_tests": 12,
+    "guest_tests": 12,
+    "original_controller_tests_preserved": 9,
+    "source_applied": true,
+    "published": false,
+    "approved": true
+  },
+  "diagnostic_owner_approval": {
+    "approved": true,
+    "recorded_at": "2026-10-30T04:16:04.750963+00:00",
+    "human_answer": "Approve one additional diagnostic PR run",
+    "question_id": "call_4bacd8916ecf4eaa8ec8aeb7d36dc7cb",
+    "decision_document": "test-reports/p162/mac-pilot/ADMISSION_DIAGNOSTIC_DECISION.md",
+    "decision_sha256": "c259afb7cf655df8c860a12385fb71fd2d80043494dc7f05903176cc71e3fa1c",
+    "patch_sha256": "0c649e45339334829eee74a4fbe09a65fa90a6c20a67b5d07d06381724a4612d",
+    "additional_automatic_PR_workflows": 1,
+    "main_allowance_conditional_and_unused": 1,
+    "stop_on_any_failure": true,
+    "admission_relaxation_allowed": false,
+    "workload_or_900_second_cap_changes_allowed": false,
+    "new_spending_allowed": false
+  },
+  "additional_automatic_PR_runs_authorized": 1,
+  "additional_automatic_PR_runs_started": 0,
+  "diagnostic_guest_preflight": {
+    "controller_tests_passed": 25,
+    "credential_mock_tests_passed": 5,
+    "isolation_and_clock_passed": true,
+    "package_egress_passed": true,
+    "fresh_overlay": true,
+    "prefix": "pr-diagnostic-1",
+    "runner_registered_offline": true
   }
 }

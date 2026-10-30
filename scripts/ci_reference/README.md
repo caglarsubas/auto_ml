@@ -43,3 +43,14 @@ There is no automatic retry or broader self-hosted runner rollout.
 
 Protocol reference: [pinned GitHub runner ProcessChannel](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Common/ProcessChannel.cs).
 Trust guidance: [GitHub self-hosted runner security](https://docs.github.com/en/actions/reference/security/secure-use).
+
+
+The first Mac PR workflow (40992060920) refused admission before vendor startup
+or checkout. The owner approved one additional diagnostic PR workflow on
+30 October 2026. The guard now emits fixed stages/error classifications and
+match/mismatch/absent/invalid-type results for eight fixed public claim names.
+It never logs job values, payloads, exception messages, tracebacks or credentials.
+Admission predicates and original controller tests remain; three tests cover
+safe refusal diagnostics. The diagnostic guest/registration and evidence use a
+separate ordinal. Another failure stops this additional allowance; no admission
+relaxation, workflow rerun or further source head is authorized by it.

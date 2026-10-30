@@ -567,3 +567,14 @@ qualification on a fresh matching guest. Failure stops the pilot without a
 rerun. Emulated success does not establish native-amd64 hardware or customer
 capacity. D07-T09 stays open until both qualifications pass; the 66-task done
 share remains 3.0% until then, with an intended 4.5% after proven closure.
+
+
+The first Mac pilot automatic PR workflow40992060920 failed before the vendor
+worker/checkout with exit78 and no application tests. Five other checks passed;
+the126-file raw failure archive is sealed. Its generic refusal did not identify
+the failing predicate. On30October2026 the owner approved one additional automatic
+diagnostic qualification with safe fixed-stage/claim-result diagnostics. The
+original admission predicates and all existing tests/limits remain; twelve guard
+tests pass onhostandguest. This uses a distinct fresh guest and registration.
+Any failure stops the additional allowance. Success still requires all six checks
+and raw receipts before merge and one independent automatic main qualification.
