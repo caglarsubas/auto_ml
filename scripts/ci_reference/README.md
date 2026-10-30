@@ -54,3 +54,23 @@ Admission predicates and original controller tests remain; three tests cover
 safe refusal diagnostics. The diagnostic guest/registration and evidence use a
 separate ordinal. Another failure stops this additional allowance; no admission
 relaxation, workflow rerun or further source head is authorized by it.
+
+
+The corrective checkpoint replaces the unsupported internal `JobName`/YAML-key
+assumption with explicit workflow/API-backed unique display identity. The host
+verifier is published verbatim as `verify_job_identity.py` for independent review.
+Before listener startup it checks the exact approved CI bytes and all six API
+jobs against literal unique workflow names, the exact source/run, target queued
+state/API ID and runner labels. The worker requires the resulting root-owned
+identity proof and exact display, alongside all eight original scope claims,
+expiry, vendor hash and single-use lease. Numeric API IDs are not equated to the
+runner's internal UUID. Opaque internal names are no longer identity claims.
+
+The owner continued from the concrete reviewed correction on 30 October 2026,
+authorizing one corrective automatic PR run and conditional independent main.
+Fourteen guard and eight host-verifier tests cover this mapping. Nine of the
+previous twelve controller methods remain identical; three transparently revise
+the incorrect internal-name expectation/identity fixtures. Application tests and
+all existing qualification controls remain. Pre-listener proof receipts preserve
+exact workflow/API/policy bytes for post-run independent verification. Failure
+stops this corrective allowance without another head or rerun.

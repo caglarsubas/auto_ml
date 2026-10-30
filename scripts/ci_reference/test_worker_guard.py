@@ -12,7 +12,8 @@ FIELDS = dict(
     ref="refs/pull/261/merge",
     actor_id="37515097",
 )
-POLICY = {"github": FIELDS, "valid_until": time.time() + 600}
+IDENTITY = dict(schema='declarai_verified_workflow_job_identity_v1',workflow_sha256='475f23a91669b7a590c285e19f914ddd9f2be27234a1a36a694e707490c9cc7b',job_key='postgresql-runtime',display_name='PostgreSQL runtime and metadata',declared_jobs=6,API_job_id=1,source_head='a'*40,run_id='123',unique_display_verified=True)
+POLICY = {"github": FIELDS, "valid_until": time.time() + 600, "job_identity": IDENTITY}
 
 
 def message(github=None):
@@ -33,6 +34,22 @@ def typed(d):
 
 
 class GuardTests(unittest.TestCase):
+    def test_internal_job_name_is_opaque_under_verified_unique_identity(self):
+        for value in ['opaque-server-label',None,'postgresql_runtime']:
+            v=message();v['JobName']=value
+            self.assertEqual(g.admit(body(v),POLICY)['jobdisplayname'],IDENTITY['display_name'])
+        v=message();del v['JobName']
+        self.assertEqual(g.admit(body(v),POLICY)['jobdisplayname'],IDENTITY['display_name'])
+
+    def test_missing_or_forged_identity_proof_is_refused(self):
+        for key in IDENTITY:
+            proof=dict(IDENTITY);proof.pop(key)
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                g.admit(body(message()),{**POLICY,'job_identity':proof})
+        for key,value in [('workflow_sha256','b'*64),('unique_display_verified',1),('API_job_id',True),('API_job_id',0),('declared_jobs',True),('run_id','999'),('source_head','not-a-sha'),('job_key','other'),('display_name','other'),('schema','other')]:
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                g.admit(body(message()),{**POLICY,'job_identity':{**IDENTITY,key:value}})
+        with self.assertRaises(ValueError):g.admit(body(message()),{k:v for k,v in POLICY.items() if k!='job_identity'})
     def test_claim_diagnostics_emit_only_fixed_names_and_results(self):
         secret='PRIVATE_JOB_VALUE_NEVER_LOG'
         github={**FIELDS,'sha':secret,'actor_id':{'t':4,'n':secret},'extra_secret':secret}
@@ -91,7 +108,7 @@ class GuardTests(unittest.TestCase):
                     g.admit(body(message(d)), POLICY)
 
     def test_job_name_expiry_and_unapproved_policy(self):
-        for key in ["JobName", "JobDisplayName"]:
+        for key in ["JobDisplayName"]:
             v = message()
             v[key] = "untrusted"
             with self.assertRaises(ValueError):
@@ -103,7 +120,7 @@ class GuardTests(unittest.TestCase):
         ]:
             fields = copy.deepcopy(FIELDS)
             fields[key] = value
-            p = {"github": fields, "valid_until": time.time() + 600}
+            p = {"github": fields, "valid_until": time.time() + 600, "job_identity": IDENTITY}
             with self.assertRaises(ValueError):
                 g.admit(body(message(fields)), p)
         with self.assertRaises(ValueError):
@@ -117,7 +134,7 @@ class GuardTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 g.admit(
                     body(message(msg)),
-                    {"github": expected, "valid_until": time.time() + 600},
+                    {"github": expected, "valid_until": time.time() + 600, "job_identity": IDENTITY},
                 )
         for expiry in [float("nan"), float("inf"), True]:
             with self.assertRaises(ValueError):
@@ -166,7 +183,7 @@ class GuardTests(unittest.TestCase):
         read, write = os.pipe()
         out, send = os.pipe()
         v = message()
-        v["JobName"] = "untrusted"
+        v["JobDisplayName"] = "untrusted"
         b = body(v)
         os.write(write, struct.pack("<ii", 1, len(b)) + b)
         with (

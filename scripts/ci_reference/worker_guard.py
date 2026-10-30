@@ -5,7 +5,7 @@ Protocol: actions/runner ProcessChannel + StreamString, little-endian Int32
 message kind and UTF-16LE byte length. No payload/credentials are logged.
 """
 
-import hashlib, json, math, os, select, signal, stat, struct, subprocess, sys, threading, time
+import hashlib, json, math, os, re, select, signal, stat, struct, subprocess, sys, threading, time
 
 MAX = 50_000_000
 
@@ -73,11 +73,23 @@ def string(value):
 
 def admit(body, policy):
     msg = lower(json.loads(body.decode("utf-16-le"), object_pairs_hook=pairs))
-    if (
-        msg.get("jobname") != "postgresql-runtime"
-        or msg.get("jobdisplayname") != "PostgreSQL runtime and metadata"
-    ):
-        raise ValueError("job")
+    identity = policy.get('job_identity')
+    if (type(identity) is not dict or set(identity) != {'schema','workflow_sha256','job_key','display_name','declared_jobs','API_job_id','source_head','run_id','unique_display_verified'}
+        or identity.get('schema') != 'declarai_verified_workflow_job_identity_v1'
+        or identity.get('workflow_sha256') != '475f23a91669b7a590c285e19f914ddd9f2be27234a1a36a694e707490c9cc7b'
+        or identity.get('job_key') != 'postgresql-runtime'
+        or identity.get('display_name') != 'PostgreSQL runtime and metadata'
+        or type(identity.get('declared_jobs')) is not int or identity['declared_jobs'] != 6
+        or type(identity.get('API_job_id')) is not int or identity['API_job_id'] <= 0
+        or type(identity.get('source_head')) is not str or re.fullmatch('[0-9a-f]{40}',identity['source_head']) is None
+        or type(identity.get('run_id')) is not str or identity['run_id'] != policy.get('github',{}).get('run_id')
+        or identity.get('unique_display_verified') is not True):
+        raise ValueError('job_identity_policy')
+    # Identity is the unique literal job display in the exact frozen workflow,
+    # checked against its complete live API job inventory by the host. Internal
+    # JobName is opaque; no assumed equivalence to the YAML job key is required.
+    if msg.get('jobdisplayname') != identity['display_name']:
+        raise ValueError('job_display_name')
     github = dictionary(dictionary(msg["contextdata"])["github"])
     expected = policy["github"]
     if (
@@ -305,7 +317,7 @@ def main():
         # and check results derived from a fixed set of public claim names escape.
         codes = {'duplicate','object','duplicate_case','context','duplicate_context','context_string',
                  'job','authority','policy','expired','arguments','frame','first_message',
-                 'worker_integrity','second_job','policy_file'}
+                 'worker_integrity','second_job','policy_file','job_identity_policy','job_display_name'}
         diagnostic['code'] = str(error) if type(error) is ValueError and str(error) in codes else 'unclassified'
         diagnostic['category'] = next((name for cls,name in [(TimeoutError,'timeout'),(EOFError,'eof'),(OSError,'os_error'),(ValueError,'invalid_input'),(KeyError,'missing_key')] if isinstance(error,cls)), 'internal_error')
         if isinstance(error,OSError) and type(error.errno) is int:

@@ -578,3 +578,18 @@ original admission predicates and all existing tests/limits remain; twelve guard
 tests pass onhostandguest. This uses a distinct fresh guest and registration.
 Any failure stops the additional allowance. Success still requires all six checks
 and raw receipts before merge and one independent automatic main qualification.
+
+
+The additional diagnostic workflow41002594802 isolated `stage=admission/code=job`
+while all eight scope checks matched and the listener confirmed the expected
+display. Its143-file failure archive is sealed. The owner then continued from
+the prepared strict job-identity correction and one-corrective-run checkpoint.
+The correction replaces the unsupported internal `JobName` equality assumption
+with unique identity from exact frozen workflow bytes and the complete six-job
+API inventory, checked before listener startup. A root-owned proof and exact
+display are required in addition to all eight existing scope checks, expiry,
+vendor integrity and the single-use lease. Pre-listener receipts are retained
+and reverified against final run metadata. This intentionally changes identity
+mapping; controller tests disclose the corrected expectations. Application tests,
+fixtures, two workers, 900-second cap and all original native steps remain.
+One distinct fresh corrective guest is used; any failure stops the allowance.
