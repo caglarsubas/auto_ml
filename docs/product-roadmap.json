@@ -765,7 +765,7 @@
         "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40858199483)",
         "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40870496793)"
       ],
-      "progress": "P161 is qualified; P162 remains an unmerged P1 optimization. P163 implements online-staging diagnostics and defines the next P0 closure, D07-T02 clean installation, independently of P162. Real Docker-versus-Python transport evidence is retained; host connectivity and all six current main checks were verified on 2 November. Clean-install, upgrade, restore, workload and customer acceptance remain open."
+      "progress": "P161 remains qualified. P163 / PR #262 addresses the recurring 900-second native qualification cap with bounded numeric preparation and shared curve construction, preserving independent ROC/confusion checks and original workloads. D07-T02 clean installation is the next P0 closure; P162 remains independent P1 work. Vendor-image staging and attestation coverage are being qualified; installation, upgrade, restore, workload and customer gates remain open."
     },
     {
       "id": "D08",
@@ -1993,6 +1993,10 @@
     {
       "date": "2026-11-02",
       "change": "Prioritize D07-T02 clean-install closure over optional P162 optimization; record the real Docker/Python distinction and stage bounded read-only network diagnostics. Fixed 66-task inventory and done count remain unchanged."
+    },
+    {
+      "date": "2026-11-02",
+      "change": "Retain failed P163 native qualification without weakening its900-second gate; add bounded numeric/curve preparation with original independent checks. Identify the missing Redis platform attestation and verify augmented OCI archives. Done/open/blocked remains2/57/7."
     }
   ],
   "implementation_packets": [
@@ -4850,20 +4854,24 @@
     },
     {
       "id": "P163",
-      "title": "D07 online-staging diagnostics and clean-install acceptance path",
+      "title": "D07 bounded native preparation, diagnostics and clean-install closure path",
       "kind": "product_implementation",
       "owner": "Platform",
       "status": "in_progress",
       "items": [
         "D07"
       ],
-      "description": "Distinguish Docker engine availability from public TLS/VPN failures before online staging; direct installation work at a finite clean-install acceptance sequence using existing controllers.",
+      "description": "Reduce repeated mixed-frame preparation and curve construction while preserving independent assessment checks; diagnose online staging and direct P0 delivery at clean installation.",
       "evidence": [
         "[Clean-install acceptance path](PRIVATE_INSTALLATION_ACCEPTANCE.md)",
         "[Online staging preflight](../scripts/private_build_preflight.py)",
-        "[P163 preparation evidence](evidence/p163-preparation-2026-11-02.json)"
+        "[P163 preparation evidence](evidence/p163-preparation-2026-11-02.json)",
+        "[Native runtime repair](NATIVE_QUALIFICATION_PERFORMANCE_P163.md)",
+        "[P163 runtime evidence](evidence/p163-runtime-repair-2026-11-02.json)",
+        "[PR #262](https://github.com/caglarsubas/auto_ml/pull/262)",
+        "[Retained failed qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41448923298)"
       ],
-      "remaining": "15 local regression tests and a real read-only host preflight pass. PR/main CI, isolated dependency staging and full D07-T02 clean-install acceptance remain open. No installation, recovery, release or customer acceptance is claimed."
+      "remaining": "The first PR #262 head passed five jobs but its original 7401-case native suite hit the unchanged 900-second cap after 6912 finished cases. A bounded repair adds58 cases and passes295 related cases under pinned numeric libraries plus15 staging tests locally; all original test files, workers, scheduling, workloads and limits are preserved. New exact-head PR/main qualification and D07-T02 acceptance remain open. Verified OCI staging passes three original vendor pulls, but full preparation exposed a missing platform attestation layer; augmented archives are independently hash-verified and await fresh runtime verification."
     }
   ],
   "release_qualification": {

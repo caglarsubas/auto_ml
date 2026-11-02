@@ -1,0 +1,105 @@
+{
+  "schema": "declarai_native_runtime_repair_evidence_v1",
+  "packet": "P163",
+  "observed_at": "2026-11-02T14:48:20.185957+00:00",
+  "source_base": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+  "source_sha256": {
+    "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
+    "backend/modeling/development_assessment.py": "90f277b78998907c15458815101d77e9608e49596e941a37dd34b73977d4aefa",
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
+    "backend/tests/unit/test_development_shared_curves.py": "5116bd2f58d2002909d61393215394101cefb45eb3a68970864a3dc57c09b067"
+  },
+  "retained_failure": {
+    "head": "0deb9968737e85f8c37fc2122bab8323b3286cb8",
+    "run": 41448923298,
+    "native_timeout_seconds": 900,
+    "finished_cases": 6912,
+    "expected_cases": 7401,
+    "native_qualification": false,
+    "artifact_zip_sha256": "8059d8ed00ec9d6de2313ad0b7ea666164bd1d1f9c317e912313c110eaac3e91"
+  },
+  "original_test_files_byte_identical": 234,
+  "new_cases": 58,
+  "expected": {
+    "PR_backend_passed": 7309,
+    "PR_backend_skipped": 5,
+    "native_passed": 7453,
+    "native_skipped": 6
+  },
+  "local_tests": {
+    "qualified_numeric_and_metric_cases": 214,
+    "qualified_original_numeric_cases": 81,
+    "staging_preflight_cases": 15,
+    "all_passed": true
+  },
+  "microbenchmark": {
+    "scope": "Local controlled microbenchmark; not native CI qualification or a capacity claim",
+    "system": "Darwin",
+    "architecture": "arm64",
+    "versions": {
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "xgboost": "2.1.4",
+      "sklearn": "1.9.1"
+    },
+    "binary_summary": {
+      "iterations": 200,
+      "before_seconds": 0.18643770890776068,
+      "after_seconds": 0.15338983293622732,
+      "speedup": 1.2154502377303793,
+      "trials": [
+        [
+          0.17747266590595245,
+          0.1439767919946462
+        ],
+        [
+          0.18664437509141862,
+          0.15338983293622732
+        ],
+        [
+          0.18643770890776068,
+          0.15394404204562306
+        ]
+      ]
+    },
+    "mixed_matrix": {
+      "iterations": 200,
+      "before_seconds": 0.055174707900732756,
+      "after_seconds": 0.021292374935001135,
+      "speedup": 2.5912895141647483,
+      "trials": [
+        [
+          0.05583841598127037,
+          0.021159250056371093
+        ],
+        [
+          0.055174707900732756,
+          0.021654332987964153
+        ],
+        [
+          0.054996457998640835,
+          0.021292374935001135
+        ]
+      ]
+    },
+    "summary_values_exactly_equal": true,
+    "native_cells_types_names_exactly_equal": true,
+    "qualification": false
+  },
+  "scientific_checks_preserved": {
+    "independent_ROC_AUC": true,
+    "independent_confusion_matrix": true,
+    "original_test_assertions_fixtures_and_workloads": true
+  },
+  "limits_preserved": {
+    "native_seconds": 900,
+    "workers": 2,
+    "distribution": "loadfile",
+    "worker_restarts": 0,
+    "coverage_floor": 50
+  },
+  "qualification": false,
+  "main_qualified": false,
+  "installation_qualified": false,
+  "release_qualified": false
+}

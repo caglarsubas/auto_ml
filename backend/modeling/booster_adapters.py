@@ -20,7 +20,42 @@ from modeling.declared_metric import CatBoostDeclaredMetric, metric_value, prepa
 _NO_MATRIX_LABEL = object()
 
 
-def _native_xgb_matrix(xgb, frame, *, feature_names, enable_categorical, label=_NO_MATRIX_LABEL):
+def _small_native_numeric_matrix(frame):
+    """Bounded current-value conversion for a qualified mixed pandas frame.
+
+    XGBoost 2.1.4 stores these columns as float32, including categorical codes.
+    Preserve its feature types and let DMatrix perform all native validation.
+    Unsupported storage, overflow and large frames keep the pandas route.
+    """
+    if not frame.columns.is_unique or frame.size > 2**18:
+        return None
+    dtypes = list(frame.dtypes)
+    if not any(isinstance(t, pd.CategoricalDtype) or t != dtypes[0] for t in dtypes):
+        return None
+    for dtype in dtypes:
+        if isinstance(dtype, pd.CategoricalDtype):
+            if len(dtype.categories) > 2**24:
+                return None
+        elif (not isinstance(dtype, np.dtype) or not dtype.isnative or dtype.kind not in 'biuf'
+              or dtype.itemsize not in (1, 2, 4, 8) or dtype.kind == 'f' and dtype.itemsize not in (4, 8)):
+            return None
+    values, types = np.empty(frame.shape, dtype=np.float32), []
+    for index, (name, dtype) in enumerate(zip(frame.columns, dtypes)):
+        if isinstance(dtype, pd.CategoricalDtype):
+            codes = frame[name].cat.codes.to_numpy()
+            values[:, index] = codes
+            values[codes == -1, index] = np.nan
+            types.append('c')
+        else:
+            with np.errstate(over='ignore', invalid='ignore'):
+                values[:, index] = frame[name].to_numpy(copy=False)
+            if np.isinf(values[:, index]).any():
+                return None
+            types.append('float' if dtype.kind == 'f' else 'i' if dtype.kind == 'b' else 'int')
+    return values, types
+
+
+def _native_xgb_matrix(xgb, frame, *, feature_names, enable_categorical, label=_NO_MATRIX_LABEL, compact_mixed=False):
     """Same native DMatrix validation; avoid pandas dispatch for a qualified dtype.
 
     Single-block native NumPy columns retain their exact representation and
@@ -28,6 +63,8 @@ def _native_xgb_matrix(xgb, frame, *, feature_names, enable_categorical, label=_
     frames/constructors and other library versions retain the original route.
     The numeric view shares current storage; no dense consolidation or input
     cache is introduced. Every call rechecks the supported representation.
+    Native training may explicitly opt into the bounded mixed-column helper;
+    default helper dispatch remains compatible with existing callers.
     """
     data, options = frame, {}
     if (getattr(xgb, '__version__', None) == '2.1.4'
@@ -51,6 +88,14 @@ def _native_xgb_matrix(xgb, frame, *, feature_names, enable_categorical, label=_
                 data = values
                 feature_type = 'float' if dtype.kind == 'f' else 'i' if dtype.kind == 'b' else 'int'
                 options['feature_types'] = [feature_type] * len(frame.columns)
+    if (compact_mixed and data is frame and getattr(xgb, '__version__', None) == '2.1.4'
+            and pd.__version__ == '3.0.6' and np.__version__ == '2.5.3'
+            and xgb.DMatrix is getattr(getattr(xgb, 'core', None), 'DMatrix', None)
+            and isinstance(xgb.DMatrix, type) and type(frame) is pd.DataFrame
+            and len(frame) and len(frame.columns)):
+        prepared = _small_native_numeric_matrix(frame)
+        if prepared is not None and (enable_categorical or 'c' not in prepared[1]):
+            data, options['feature_types'] = prepared
     if label is not _NO_MATRIX_LABEL:
         options['label'] = label
     return xgb.DMatrix(data, feature_names=feature_names, enable_categorical=enable_categorical, **options)
@@ -201,11 +246,11 @@ class XGBoostAdapter(BoosterAdapter):
             p['enable_categorical'] = True
         dtrain = _native_xgb_matrix(
             xgb, X_train, label=y_train, feature_names=self.feature_names,
-            enable_categorical=self.enable_categorical,
+            enable_categorical=self.enable_categorical, compact_mixed=True,
         )
         dvalid = _native_xgb_matrix(
             xgb, X_valid, label=y_valid, feature_names=self.feature_names,
-            enable_categorical=self.enable_categorical,
+            enable_categorical=self.enable_categorical, compact_mixed=True,
         )
         self.model = xgb.train(
             p, dtrain, num_boost_round=num_boost_round,

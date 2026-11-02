@@ -40,13 +40,45 @@ def _precision_recall_area(precision, recall):
     return float(max(0., -np.sum(np.diff(recall) * precision[:-1])))
 
 
+def _shared_binary_curves(y, p):
+    """Bounded public threshold counts, retaining independent full checks.
+
+    Matches sklearn 1.9.1's ROC corner filtering and PR endpoints. Only these
+    canonical, unweighted CPU arrays use the shared sort. Unsupported versions,
+    large inputs and replaced curve callables retain the original public route.
+    No input or result survives this call.
+    """
+    import sklearn
+    from sklearn import metrics as public
+
+    if (sklearn.__version__ != '1.9.1' or np.__version__ != '2.5.3'
+            or len(p) > 2**18
+            or roc_curve is not public.roc_curve
+            or precision_recall_curve is not public.precision_recall_curve):
+        return None
+    _, fps, _, tps, _ = public.confusion_matrix_at_thresholds(y, p, pos_label=1)
+    precision = tps / (tps + fps)
+    recall = tps / tps[-1]
+    precision, recall = np.r_[precision[::-1], 1.], np.r_[recall[::-1], 0.]
+    if len(fps) > 2:
+        keep = np.r_[True, np.logical_or(np.diff(fps, 2), np.diff(tps, 2)), True]
+        roc_fps, roc_tps = fps[keep], tps[keep]
+    else:
+        roc_fps, roc_tps = fps, tps
+    return np.r_[0., roc_fps] / fps[-1], np.r_[0., roc_tps] / tps[-1], precision, recall
+
+
 def _binary_summary(y, p, pred, costs, both, curve_evidence=None):
     """Share work only after canonical binary inputs pass validation."""
     from scipy.special import xlogy
 
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
-    fpr, tpr, _ = roc_curve(y, p) if both else (None, None, None)
-    precision, recall, _ = precision_recall_curve(y, p) if both else (None, None, None)
+    shared = _shared_binary_curves(y, p) if both else None
+    if shared is not None:
+        fpr, tpr, precision, recall = shared
+    else:
+        fpr, tpr, _ = roc_curve(y, p) if both else (None, None, None)
+        precision, recall, _ = precision_recall_curve(y, p) if both else (None, None, None)
     clipped = np.clip(p, np.finfo(p.dtype).eps, 1 - np.finfo(p.dtype).eps)
     result = {
         'roc_auc': float(roc_auc_score(y, p)) if both else None,
