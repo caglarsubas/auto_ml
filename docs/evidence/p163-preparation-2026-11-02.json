@@ -1,0 +1,164 @@
+{
+  "schema": "declarai_delivery_preparation_evidence_v1",
+  "packet": "P163",
+  "observed_at": "2026-11-02T12:47:34.655258+00:00",
+  "source_base": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+  "scope": "Online-staging diagnostics and D07-T02 acceptance path; preparation evidence, not full task closure.",
+  "source_sha256": {
+    "scripts/private_build_preflight.py": "2145bf9eb84237f21ea0a7e4ae5157d5f1e3638d258bb5dad555e672a1eb9b33",
+    "scripts/tests/test_private_build_preflight.py": "61b19ca9449955efca3715210df9f475247a0e60f2a3979c1536eb131dfae665",
+    ".github/workflows/ci.yml": "782ad04f34160b1bb4f21ab3b145d427070985fd7c9959bae1089ec8d15b258c",
+    "docs/PRIVATE_INSTALLATION_ACCEPTANCE.md": "04f8abf2a07a29ae8e5b336ceace12c159f228834ce1d26c254595de1d91aa9f"
+  },
+  "local_tests": {
+    "staging_preflight": 15,
+    "roadmap": 135,
+    "skipped": 0,
+    "ruff": "passed",
+    "projection": "passed"
+  },
+  "main_at_preparation": {
+    "observed_at": 1793622974.4482272,
+    "head": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+    "run_id": 40834711368,
+    "status": "completed",
+    "conclusion": "success",
+    "attempt": 1,
+    "jobs": [
+      {
+        "name": "PostgreSQL runtime and metadata",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend unit tests (Karma)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend E2E (Playwright)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Backend tests (pytest)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Backend lint (ruff)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend lint (ESLint + Prettier)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "verification_route": "verified_TLS_fixed_public_DoH_proxy",
+    "anonymous_public_API": true
+  },
+  "docker_comparison": {
+    "default_transport": {
+      "schema": "p162_public_vendor_transport_diagnostic_v1",
+      "qualification": false,
+      "docker_pull_invocations": 1,
+      "image": "nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "blob_sha256": "703c5424632fab32aa3327bebe6e5202ac53a93740062efb830f8188e580b9db",
+      "docker_returncode": 1,
+      "docker_pull_passed": false,
+      "docker_log_bytes": 1116,
+      "docker_log_sha256": "d920f154e18cdc2bd063dc2bedf7b551e7afcd00676438d914e2d29041df9023",
+      "python_control": {
+        "client": "guest_OS_Python",
+        "TLS_verification_required": true,
+        "TLS_verified": true,
+        "stage": "complete",
+        "protocol": "HTTP/1.1",
+        "passed": true,
+        "bytes": 1210,
+        "qualification": false,
+        "HTTP_status": 200,
+        "sha256": "703c5424632fab32aa3327bebe6e5202ac53a93740062efb830f8188e580b9db",
+        "blob_sha256": "703c5424632fab32aa3327bebe6e5202ac53a93740062efb830f8188e580b9db"
+      },
+      "original_failure_cause_established": false,
+      "docker_error_code": "unexpected_EOF",
+      "actual_failed_blob_sha256": "703c5424632fab32aa3327bebe6e5202ac53a93740062efb830f8188e580b9db",
+      "public_target_sha256": "faa15e196544a9ae8cdba60b0c6013e1ca0602d3efe2c5117ab937e34d74ace0",
+      "public_URL_sha256": "11c426e3a56a2c147cedd552c6b756742a224a09247b9c541f1c2be03d3e445f",
+      "observed_at": "2026-11-02T12:39:31.160415+00:00",
+      "guest_probe_seconds": 13.443255,
+      "runner_registered": false,
+      "model_or_customer_data_present": false,
+      "full_preparation_performed": false,
+      "native_suite_executed": false
+    },
+    "http1_transport": {
+      "schema": "p162_public_vendor_transport_diagnostic_v1",
+      "qualification": false,
+      "docker_pull_invocations": 1,
+      "image": "nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "blob_sha256": "703c5424632fab32aa3327bebe6e5202ac53a93740062efb830f8188e580b9db",
+      "docker_returncode": 0,
+      "docker_pull_passed": true,
+      "docker_log_bytes": 1219,
+      "docker_log_sha256": "e807fa608e3ffb610a1b819740f2ac61e2b2e15b4501e327d4460bfd1c47e83e",
+      "python_control": {
+        "status": "not_needed_docker_pull_succeeded"
+      },
+      "original_failure_cause_established": false,
+      "observed_at": "2026-11-02T12:42:15.457774+00:00",
+      "guest_probe_seconds": 23.596417000000002,
+      "runner_registered": false,
+      "model_or_customer_data_present": false,
+      "full_preparation_performed": false,
+      "native_suite_executed": false
+    },
+    "scope": "Fresh isolated unregistered Mac-hosted amd64 guests; no host Docker or global network configuration changed.",
+    "followup_vendor_matrix": {
+      "schema": "declarai_vendor_transport_matrix_v1",
+      "images": [
+        {
+          "image": "nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+          "returncode": 1,
+          "passed": false,
+          "log_bytes": 1084,
+          "log_sha256": "d43b3d912efb33ecbb22d3c90f9a874d2cc543529f18704b7c1df2d1a05821f7"
+        }
+      ],
+      "docker_pull_invocations": 1,
+      "docker_pull_passed": false,
+      "image": "nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "qualification": false,
+      "python_control": {
+        "status": "separate_prior_exact_blob_comparison"
+      },
+      "runner_registered": false,
+      "full_preparation_performed": false,
+      "native_suite_executed": false,
+      "observed_at": "2026-11-02T12:47:11.568706+00:00"
+    },
+    "conclusion": "One HTTP/1.1 image pull passed, but the fresh all-vendor check failed at nginx. Transport repair is not established; no full preparation started."
+  },
+  "PR_CI_qualified": false,
+  "main_qualified": false,
+  "installation_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false,
+  "limits_preserved": {
+    "native_timeout_seconds": 900,
+    "native_workers": 2,
+    "workload_assertions_skips_retries_unchanged": true
+  },
+  "progress": {
+    "total": 66,
+    "done": 2,
+    "open": 57,
+    "blocked": 7,
+    "done_percent": 3.0,
+    "done_delta": 0
+  },
+  "next_closure": "D07-T02, then D07-T03/D07-T04; P162 is independent P1 work."
+}
