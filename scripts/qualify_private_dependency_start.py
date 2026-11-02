@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import platform
 import secrets
 import subprocess
 import sys
@@ -249,7 +250,11 @@ def host_case(plan, expected, parent):
             from qualify_private_queue_consistency import qualify as qualify_queue_consistency
 
             queue_consistency = qualify_queue_consistency(parent)
+            from qualify_private_installation_workflow import qualify as qualify_installed_workflow
+
+            installed_workflow = qualify_installed_workflow(value, accounts, account_passwords, parent, prepared, command)
             account_adoption = {
+                "installed_developer_workflow": installed_workflow,
                 "queue_consistency": queue_consistency,
                 "queue_evidence": queue_evidence,
                 "queue_incidents": queue_incidents,
@@ -288,6 +293,9 @@ def host_case(plan, expected, parent):
                 )
                 command(["container", "stop", "--time", "30", container["Id"]])
                 command(["container", "rm", "--volumes", container["Id"]])
+        from qualify_private_installation_backup import qualify as qualify_baseline_backup
+
+        baseline_backup = qualify_baseline_backup(value, expected, parent, ids["postgres"], command)
         db = value["request"]["database"]
         # Only this fresh fixture database is seeded; no operator table enters.
         command(
@@ -407,6 +415,19 @@ def host_case(plan, expected, parent):
             "existing_services_and_history_preserved": "passed",
             "managed_adoption_hardening": "verified_and_changed_profile_blocked",
             "dependency_start_does_not_migrate": True,
+            "baseline_backup": baseline_backup,
+            "installation_profile": {
+                "os_release": platform.freedesktop_os_release(),
+                "architecture": platform.machine(),
+                "cpu_count": os.cpu_count(),
+                "observed_memory_bytes": os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"),
+                "application_images": value["images"],
+                "installation_id": value["request"]["installation_id"],
+                "root_exclusively_created": True,
+                "application_pull_policy": "never",
+                "private_network_internal": True,
+                "workload_capacity_qualified": False,
+            },
             "account_enrollment": accounts,
             "fresh_application_adoption": account_adoption,
             "schema_initialization": {

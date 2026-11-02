@@ -105,7 +105,37 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                 qualify_adoption(plan, result["plan_manifest_sha256"], path_check_image, reports)
                 from qualify_private_dependency_start import qualify as qualify_dependency_start
 
-                qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports)
+                first = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports)
+                repeated = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "clean-repeat")
+                runs = [first, repeated]
+                profiles = [run["qualification"]["installation_profile"] for run in runs]
+                if (profiles[0]["installation_id"] == profiles[1]["installation_id"]
+                    or any(profile["application_images"] != result["images"] for profile in profiles)
+                    or any(profile["architecture"] != "x86_64" or profile["os_release"].get("ID") != "ubuntu"
+                           or profile["os_release"].get("VERSION_ID") != "24.04" for profile in profiles)
+                    or any(run["source_plan_sha256"] != result["plan_manifest_sha256"] for run in runs)
+                    or any(not run["owned_root_and_resources_removed"] for run in runs)):
+                    raise planner.PlanError("installation_clean_reproduction_mismatch")
+                acceptance = {
+                    "schema": "private_clean_installation_acceptance_v1",
+                    "image_set_manifest_sha256": expected,
+                    "plan_manifest_sha256": result["plan_manifest_sha256"],
+                    "images": result["images"],
+                    "clean_roots": 2,
+                    "same_exact_image_inputs": True,
+                    "installation_profiles": profiles,
+                    "workflows": [run["qualification"]["fresh_application_adoption"]["installed_developer_workflow"] for run in runs],
+                    "backups": [run["qualification"]["baseline_backup"] for run in runs],
+                    "all_original_dependency_start_assertions": "passed_twice",
+                    "owned_roots_and_resources_removed": True,
+                    "synthetic_clean_installation_qualified": True,
+                    "upgrade_or_machine_loss_restore_qualified": False,
+                    "operator_key_custody_qualified": False,
+                    "customer_accepted": False,
+                    "release_qualified": False,
+                }
+                reports.mkdir(parents=True, exist_ok=True)
+                (reports / "clean-installation-acceptance.json").write_bytes(planner.encoded(acceptance))
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)
         (reports / "installation-plan.json").write_bytes(planner.encoded(result))

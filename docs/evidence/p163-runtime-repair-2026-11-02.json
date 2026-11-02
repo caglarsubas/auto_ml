@@ -1,13 +1,13 @@
 {
   "schema": "declarai_native_runtime_repair_evidence_v1",
   "packet": "P163",
-  "observed_at": "2026-11-02T14:48:20.185957+00:00",
+  "observed_at": "2026-11-02T15:48:54.381300+00:00",
   "source_base": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
   "source_sha256": {
     "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
-    "backend/modeling/development_assessment.py": "90f277b78998907c15458815101d77e9608e49596e941a37dd34b73977d4aefa",
+    "backend/modeling/development_assessment.py": "235803d2a42913c856cfc5516e0dd4c115c3e34f9dd8e061efccb6b3b2c91322",
     "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
-    "backend/tests/unit/test_development_shared_curves.py": "5116bd2f58d2002909d61393215394101cefb45eb3a68970864a3dc57c09b067"
+    "backend/tests/unit/test_development_shared_curves.py": "75778422748267d021c664966f3c9ee8f392e6715004404591839287a5b1a825"
   },
   "retained_failure": {
     "head": "0deb9968737e85f8c37fc2122bab8323b3286cb8",
@@ -19,18 +19,21 @@
     "artifact_zip_sha256": "8059d8ed00ec9d6de2313ad0b7ea666164bd1d1f9c317e912313c110eaac3e91"
   },
   "original_test_files_byte_identical": 234,
-  "new_cases": 58,
+  "new_cases": 70,
   "expected": {
-    "PR_backend_passed": 7309,
+    "PR_backend_passed": 7321,
     "PR_backend_skipped": 5,
-    "native_passed": 7453,
+    "native_passed": 7465,
     "native_skipped": 6
   },
   "local_tests": {
-    "qualified_numeric_and_metric_cases": 214,
+    "qualified_numeric_and_metric_cases": 226,
     "qualified_original_numeric_cases": 81,
     "staging_preflight_cases": 15,
-    "all_passed": true
+    "all_passed": true,
+    "installation_acceptance_boundary_cases": 10,
+    "overlapping_curve_and_metric_regression_cases": 211,
+    "suites_overlap": true
   },
   "microbenchmark": {
     "scope": "Local controlled microbenchmark; not native CI qualification or a capacity claim",
@@ -101,5 +104,69 @@
   "qualification": false,
   "main_qualified": false,
   "installation_qualified": false,
-  "release_qualified": false
+  "release_qualified": false,
+  "second_failed_qualification": {
+    "run": 41466554790,
+    "head": "6fd1544d433f7e5bd0cf03b5503b021b129a0d46",
+    "five_other_checks_passed": true,
+    "native_finished_cases": 7459,
+    "native_expected_cases": 7459,
+    "native_worker_exits": [
+      0,
+      0
+    ],
+    "native_parent_process_exited_successfully": false,
+    "native_cap_seconds": 900,
+    "postgresql_artifact_sha256": "48179f4422497e3ba246c54dc272495af4c860984aca4253d33eadf623d3c33d",
+    "qualification": false
+  },
+  "previous_repair_source_sha256": {
+    "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
+    "backend/modeling/development_assessment.py": "90f277b78998907c15458815101d77e9608e49596e941a37dd34b73977d4aefa",
+    "backend/tests/unit/test_native_mixed_preparation.py": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f",
+    "backend/tests/unit/test_development_shared_curves.py": "5116bd2f58d2002909d61393215394101cefb45eb3a68970864a3dc57c09b067"
+  },
+  "threshold_grouping_microbenchmark": {
+    "scope": "ARM64 local microbenchmark, not native qualification",
+    "before_seconds": 0.27323333406820893,
+    "after_seconds": 0.2519123749807477,
+    "speedup": 1.0846364101370196,
+    "trials": [
+      [
+        0.2861407920718193,
+        0.2519123749807477
+      ],
+      [
+        0.26496283302549273,
+        0.23899916699156165
+      ],
+      [
+        0.27323333406820893,
+        0.253195708966814
+      ]
+    ],
+    "exact_summary_parity": true,
+    "independent_ROC_and_confusion_checks_retained": true,
+    "qualification": false
+  },
+  "all_original_backend_test_tree_files_byte_identical": 234,
+  "installation_acceptance_source_sha256": {
+    "scripts/qualify_private_dependency_start.py": "5b93a13111871a001f7e37df86456908514139b3d33aba25c54545fd0219c895",
+    "scripts/qualify_private_installation_plan.py": "1419ba3f27348d81d3bb411a77afd0dd1df9ef86322a50aefda2406aeed4e853",
+    "scripts/qualify_private_installation_workflow.py": "29199b40864762701be5b8fb01f7ace82f6f798bda7bd82cf06e6ffae2c1b0f9",
+    "scripts/qualify_private_installation_backup.py": "3665251b1bd3f0509a7195224de532d30e5467258d9adef8238df9839b977e39",
+    "scripts/tests/test_private_installation_acceptance.py": "540a14c330f341650b6171290faf01caeb63177f2ad58447d3db069da32ed988"
+  },
+  "installation_acceptance": {
+    "implemented": true,
+    "local_boundary_cases_passed": 10,
+    "required_clean_roots": 2,
+    "same_exact_images": true,
+    "original_initialization_and_fault_assertions_preserved": true,
+    "actual_https_developer_training_export_scoring": true,
+    "offline_exact_image_chunk_parity": true,
+    "quiescent_encrypted_database_artifact_backup_verification": true,
+    "execution_qualified": false,
+    "upgrade_restore_operator_key_custody_qualified": false
+  }
 }

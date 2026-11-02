@@ -41,7 +41,7 @@ def _precision_recall_area(precision, recall):
 
 
 def _shared_binary_curves(y, p):
-    """Bounded public threshold counts, retaining independent full checks.
+    """Bounded unweighted threshold counts, retaining independent full checks.
 
     Matches sklearn 1.9.1's ROC corner filtering and PR endpoints. Only these
     canonical, unweighted CPU arrays use the shared sort. Unsupported versions,
@@ -56,7 +56,15 @@ def _shared_binary_curves(y, p):
             or roc_curve is not public.roc_curve
             or precision_recall_curve is not public.precision_recall_curve):
         return None
-    _, fps, _, tps, _ = public.confusion_matrix_at_thresholds(y, p, pos_label=1)
+    # The caller has checked every label, shape, probability and both classes.
+    # Counts are exact below this row ceiling. Stable threshold grouping matches
+    # the public reference, while full assessments still call independent
+    # public ROC-AUC and confusion-matrix implementations.
+    order = np.argsort(p, kind='stable')[::-1]
+    ordered = p[order]
+    ends = np.r_[np.flatnonzero(ordered[1:] != ordered[:-1]), len(p) - 1]
+    tps = np.cumsum(y[order] == 1, dtype=np.float64)[ends]
+    fps = 1. + ends - tps
     precision = tps / (tps + fps)
     recall = tps / tps[-1]
     precision, recall = np.r_[precision[::-1], 1.], np.r_[recall[::-1], 0.]

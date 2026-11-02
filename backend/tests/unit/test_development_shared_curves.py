@@ -62,3 +62,32 @@ def test_replaced_curve_callable_is_never_bypassed(monkeypatch):
     monkeypatch.setattr(m, 'roc_curve', observed)
     m.development_metrics(np.array([0, 1]), np.array([.1, .9]), 'classification')
     assert calls == [True]
+
+
+@pytest.mark.parametrize('n', [2, 19, 4096])
+@pytest.mark.parametrize('style', ['constant', 'ties', 'ascending', 'random'])
+def test_bounded_threshold_grouping_matches_reference_for_noncontiguous_inputs(n, style):
+    rng = np.random.default_rng(164)
+    y = np.resize([0, 1], 2*n)[::2].copy()
+    y[::2], y[1::2] = 0, 1
+    scores = rng.random(2*n)
+    p = scores[::2]
+    if style == 'constant':
+        p[:] = .5
+    elif style == 'ties':
+        p[:] = rng.choice([0., .3, 1.], n)
+    elif style == 'ascending':
+        p[:] = np.linspace(0., 1., n)
+    before_y, before_p = y.copy(), p.copy()
+    actual = m._shared_binary_curves(y, p)
+    # An unqualified installed library intentionally takes the public route.
+    if actual is None:
+        result = m.development_metrics(y, p, 'classification')
+        assert result['roc_auc'] == metrics.roc_auc_score(y, p)
+    else:
+        fpr, tpr, precision, recall = actual
+        for left, right in zip((fpr, tpr, precision, recall),
+                               (*metrics.roc_curve(y, p)[:2], *metrics.precision_recall_curve(y, p)[:2])):
+            np.testing.assert_array_equal(left, right)
+    np.testing.assert_array_equal(y, before_y)
+    np.testing.assert_array_equal(p, before_p)
