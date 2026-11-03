@@ -1,0 +1,513 @@
+{
+  "schema": "declarai_staged_upgrade_qualification_v1",
+  "packet": "P165",
+  "recorded_at": "2026-11-03T15:36:26.654476+00:00",
+  "pr": 266,
+  "qualified_head": "374ae945f5696a09f0e854b602b8e3e4ca021c27",
+  "merge": "970aeeb71fa9c52159fa2081d2cba21cf9342d21",
+  "ci_run": 41649015673,
+  "main_run": 41657060822,
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "source_hashes_match": true,
+  "qualified_profile": "Synthetic Ubuntu 24.04 ARM64; four CPUs/16 GiB; distinct sealed source/target API images; identical dependency images; reversible physical-index release only",
+  "retained_failures": [
+    {
+      "run": 41633269570,
+      "head": "2a4f6543bd940e535d6c2c2aa6712d4663048b2e",
+      "event": "pull_request",
+      "five_other_jobs_passed": true,
+      "stage": "upgrade_retry_after_transaction_fault",
+      "code": "recovery_helper_failed",
+      "diagnostic_sha256": "f9763e8365e3e59b65b858d759e35181399c51aecc937bb7dc3f6034d48b6036",
+      "artifact_sha256": "bf712b59e794691063c5f634e19514e540a02fc022488b11489022f1b289aab6",
+      "cause": "PostgreSQL migration-recorder sequence advances despite transaction rollback. Retrying COPY wrongly re-entered unchanged strict recovery sequence admission.",
+      "correction": "Bind completed COPY to a private checkpoint; resume only migration and verify all application rows/sequences. Preserve the stricter recovery protocol unchanged.",
+      "native_suite_started": false
+    },
+    {
+      "run": 41636659912,
+      "head": "77817e85cadc69d0caee3bb419ad8de3070740e9",
+      "event": "pull_request",
+      "five_other_jobs_passed": true,
+      "stage": "downstream_private_api_fixture",
+      "diagnostic_sha256": "c402ded5923b12aad0570093a2a2934de825371318731cbf2f432cda56a34279",
+      "artifact_sha256": "6008f3ec37b3f79d6d84750f95400a6f9a818332ebcdd07e3ba9d6dcbd49b296",
+      "upgrade_and_rollback_drill_passed": true,
+      "cause": "Temporary reference-image cleanup removed the untagged current API image on classic Docker storage.",
+      "correction": "Disable parent pruning and re-import/verify the exact original API identity from its independently pinned offline handoff before downstream qualification. No pull, tag overwrite, assertion bypass or test retry.",
+      "native_suite_started": false
+    },
+    {
+      "run": 41640880850,
+      "head": "dcd9e00a1698100813a9f4190ea5ab7d2d54a0e4",
+      "event": "pull_request",
+      "five_other_jobs_passed": true,
+      "stage": "RI_schema_profile_admission",
+      "native_cases": 7600,
+      "native_seconds": 781.791,
+      "native_failures": 0,
+      "native_skips": 6,
+      "upgrade_and_rollback_drill_passed": true,
+      "artifact_sha256": "53bc36986e13ff3137defdffef9a9a50a60856ab9c33a4a708cda8e0e6e9129e",
+      "cause": "The final RI controller admits old migration counts31/32 only; the real index release adds migration33.",
+      "correction": "Add exact33-migration/index proof and reuse the unchanged32-migration164-role profile, keeping every original RI fault case and legacy31 assertion.",
+      "native_suite_started": true
+    }
+  ],
+  "pr_qualification": {
+    "schema": "declarai_P165_run_audit_v1",
+    "run": 41649015673,
+    "head": "374ae945f5696a09f0e854b602b8e3e4ca021c27",
+    "event": "pull_request",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7467,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 982.612,
+      "passed": 7462
+    },
+    "native": {
+      "tests": 7612,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 781.296,
+      "passed": 7606
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7256,
+        "additional_cases": 211,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "1800eee947d7e7ade1d36e97670b3c290d852ea996d58de15eeb7b944ebf7811"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 211,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "dded1d39d348a7b039ef6fd614155a43aee925368001cdbcfebe85b5245d74e3",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "coordinated_installed_recovery": {
+      "cancellation_preserved": true,
+      "classification_regression_export_score_bytes": "passed",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "database_artifact_and_schema_binding": "passed",
+      "duplicate_deliveries": 21,
+      "duplicate_publication": "refused",
+      "empty_broker_pending_reconstruction": "passed",
+      "lease_clock_modified": false,
+      "lost_artifact_publication_ack": "resumed",
+      "lost_database_commit_ack": "resumed",
+      "occupied_artifacts": "preserved_and_refused",
+      "occupied_database": "refused_without_intent",
+      "old_sessions_invalidated": true,
+      "operator_key_custody_qualified": false,
+      "original_completed_job_history": "preserved",
+      "original_lease_seconds": 180,
+      "original_source_controller_assertions": "passed",
+      "orphan_completed_attempts": 2,
+      "owned_roots_and_resources_removed": true,
+      "pending_recovery_adoption": "refused",
+      "post_use_restore_replay": "read_only",
+      "release_qualified": false,
+      "restore_plan_sha256": "5cf8f514f66698f46998d112db4c4c7d6223e9a856683160098e99a0830d233f",
+      "restored_account_project_authority": "passed",
+      "same_exact_images": true,
+      "schema": "private_installed_recovery_v1",
+      "source_backup_sha256": "93ca5ec6e78ad38b4a6f81eedfec3d561cd4c533eb7080bd0519114114161ee9",
+      "source_installation_id": "q-9257e37493a7411686a7",
+      "source_installation_storage_unavailable": true,
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:339414c5f0711278523e37d4cbd3317356fdeb8657a5bf89af9a91cae99ed5b5",
+          "ingress": "sha256:938866e940890618bcff57abeb58a3edd141d107fe7ba7e493a6ce366231fc0f",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-9257e37493a7411686a7",
+        "observed_memory_bytes": 16715923456,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "synthetic_installed_recovery_qualified": true,
+      "tampered_backup": "refused",
+      "target_installation_id": "q-73d76500a28949f2aaf6",
+      "wrong_key": "refused",
+      "wrong_schema": "refused_without_intent"
+    },
+    "staged_upgrade_and_rollback": {
+      "account_project_authority": "passed",
+      "actual_schema_migration": "execution_jobs/0004_project_history_index",
+      "all_application_rows_and_sequences": "preserved",
+      "both_directions": "passed",
+      "catalog_delta_exact_reviewed_index_only": "passed",
+      "classification_regression_export_score_bytes": "passed",
+      "completed_copy_checkpoint": "preserved_no_recopy",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "forward_plan_sha256": "9cdbcc5321f6d0a466609ece3a3cb50346eff22ab1b636133c0a2eea927e6ffb",
+      "general_schema_changes_qualified": false,
+      "lost_commit_ack": "resumed",
+      "lost_publication_ack": "resumed",
+      "migration_transaction_fault": "rolled_back",
+      "nontransactional_recorder_sequence": "advanced_without_application_sequence_change",
+      "operator_key_custody_qualified": false,
+      "original_source_controller_assertions": "passed",
+      "owned_roots_and_resources_removed": true,
+      "pending_transition_adoption": "refused",
+      "post_upgrade_work_after_rollback": "preserved",
+      "post_use_transition_replays": "read_only",
+      "qualification_input_api_restored": true,
+      "release_qualified": false,
+      "rollback_installation_id": "q-721551892c0c477d91d0",
+      "rollback_plan_sha256": "c0fa115928cb5122d9fd968e05e1856d20ca80d522dd5639914dc231ab5d561f",
+      "schema": "private_installed_upgrade_v1",
+      "source_history": "preserved",
+      "source_images": {
+        "api": "sha256:b74c61e6d2c1acfbbf45df321fd2396a725674c0cb06d01e817d5733eadbe9e2",
+        "ingress": "sha256:938866e940890618bcff57abeb58a3edd141d107fe7ba7e493a6ce366231fc0f",
+        "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+        "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+      },
+      "source_installation_id": "q-20ba097fcbe641429f5e",
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:b74c61e6d2c1acfbbf45df321fd2396a725674c0cb06d01e817d5733eadbe9e2",
+          "ingress": "sha256:938866e940890618bcff57abeb58a3edd141d107fe7ba7e493a6ce366231fc0f",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-20ba097fcbe641429f5e",
+        "observed_memory_bytes": 16715923456,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "source_reconstruction": "exact_previous_source_on_current_locked_dependencies",
+      "stale_plan": "refused_before_mutation",
+      "synthetic_installed_upgrade_qualified": true,
+      "target_images": {
+        "api": "sha256:339414c5f0711278523e37d4cbd3317356fdeb8657a5bf89af9a91cae99ed5b5",
+        "ingress": "sha256:938866e940890618bcff57abeb58a3edd141d107fe7ba7e493a6ce366231fc0f",
+        "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+        "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+      },
+      "target_installation_id": "q-fc6c9e826fff4364b482"
+    },
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13237761719,
+        "sha256": "9c1b6bf1cae0d43ed50f0e9bdc4226ba01caf3ae6112e03b108273dd8c19c7d3"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13238789823,
+        "sha256": "4d20e8afb3ce3e6728790a0cda5353fff0c8bb998f89383c2e6202bf5cfa9b5f"
+      },
+      "playwright-report": {
+        "artifact_id": 13236428765,
+        "sha256": "266cb0ed0cc0d6298adc59794f75078b12308c3e2d5837c41e60fc4e81353aa0"
+      }
+    },
+    "main_qualified": false,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "main_qualification": {
+    "schema": "declarai_P165_run_audit_v1",
+    "run": 41657060822,
+    "head": "970aeeb71fa9c52159fa2081d2cba21cf9342d21",
+    "event": "push",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7612,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 942.393,
+      "passed": 7606
+    },
+    "native": {
+      "tests": 7612,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 809.824,
+      "passed": 7606
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 211,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "f78b26dca906f0fbf585350678ba54632bc2d2866fc9e1835721ed2ee688d02f"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 211,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "2cd34fb7cbbae4a9f8856d096257270468b9fe8c3c0d189cbf199ecfcacd69a7",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "coordinated_installed_recovery": {
+      "cancellation_preserved": true,
+      "classification_regression_export_score_bytes": "passed",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "database_artifact_and_schema_binding": "passed",
+      "duplicate_deliveries": 21,
+      "duplicate_publication": "refused",
+      "empty_broker_pending_reconstruction": "passed",
+      "lease_clock_modified": false,
+      "lost_artifact_publication_ack": "resumed",
+      "lost_database_commit_ack": "resumed",
+      "occupied_artifacts": "preserved_and_refused",
+      "occupied_database": "refused_without_intent",
+      "old_sessions_invalidated": true,
+      "operator_key_custody_qualified": false,
+      "original_completed_job_history": "preserved",
+      "original_lease_seconds": 180,
+      "original_source_controller_assertions": "passed",
+      "orphan_completed_attempts": 2,
+      "owned_roots_and_resources_removed": true,
+      "pending_recovery_adoption": "refused",
+      "post_use_restore_replay": "read_only",
+      "release_qualified": false,
+      "restore_plan_sha256": "d792a791b3916474a75e6ebadce476afd18676761b7529dfd33d689fef0a9f3c",
+      "restored_account_project_authority": "passed",
+      "same_exact_images": true,
+      "schema": "private_installed_recovery_v1",
+      "source_backup_sha256": "937191b3168fbf24efd0eff949992032f167c351c6eb1d9b09efdca7f06185da",
+      "source_installation_id": "q-6ca9c5874c94403794cc",
+      "source_installation_storage_unavailable": true,
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:9e32f1fd91a5b98c69909c34c13f42f6810b8a05cf37d95826ef52112bb7d2cb",
+          "ingress": "sha256:4ecb628154ad262a061f74a21b53eb6a4a7f799f4773e2096ff7b1faceaf92b8",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-6ca9c5874c94403794cc",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "synthetic_installed_recovery_qualified": true,
+      "tampered_backup": "refused",
+      "target_installation_id": "q-2b688c5b8fca4f37bbb8",
+      "wrong_key": "refused",
+      "wrong_schema": "refused_without_intent"
+    },
+    "staged_upgrade_and_rollback": {
+      "account_project_authority": "passed",
+      "actual_schema_migration": "execution_jobs/0004_project_history_index",
+      "all_application_rows_and_sequences": "preserved",
+      "both_directions": "passed",
+      "catalog_delta_exact_reviewed_index_only": "passed",
+      "classification_regression_export_score_bytes": "passed",
+      "completed_copy_checkpoint": "preserved_no_recopy",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "forward_plan_sha256": "170320ce7860ee751b9fd5d4ee1ad02c04d401d02aaf05b473f6066ab50795c4",
+      "general_schema_changes_qualified": false,
+      "lost_commit_ack": "resumed",
+      "lost_publication_ack": "resumed",
+      "migration_transaction_fault": "rolled_back",
+      "nontransactional_recorder_sequence": "advanced_without_application_sequence_change",
+      "operator_key_custody_qualified": false,
+      "original_source_controller_assertions": "passed",
+      "owned_roots_and_resources_removed": true,
+      "pending_transition_adoption": "refused",
+      "post_upgrade_work_after_rollback": "preserved",
+      "post_use_transition_replays": "read_only",
+      "qualification_input_api_restored": true,
+      "release_qualified": false,
+      "rollback_installation_id": "q-b1ba9de881ea4ebebed2",
+      "rollback_plan_sha256": "8a7a997d963b32427674597a279b01ae264f1d27887fb0e22a921a170e99426b",
+      "schema": "private_installed_upgrade_v1",
+      "source_history": "preserved",
+      "source_images": {
+        "api": "sha256:4bc5c0288e0f63aa9a42c34f77f5617c618e55effaec8f6a12c87b9640f3c86b",
+        "ingress": "sha256:4ecb628154ad262a061f74a21b53eb6a4a7f799f4773e2096ff7b1faceaf92b8",
+        "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+        "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+      },
+      "source_installation_id": "q-7665b2270ffe4d0fa9a5",
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:4bc5c0288e0f63aa9a42c34f77f5617c618e55effaec8f6a12c87b9640f3c86b",
+          "ingress": "sha256:4ecb628154ad262a061f74a21b53eb6a4a7f799f4773e2096ff7b1faceaf92b8",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-7665b2270ffe4d0fa9a5",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "source_reconstruction": "exact_previous_source_on_current_locked_dependencies",
+      "stale_plan": "refused_before_mutation",
+      "synthetic_installed_upgrade_qualified": true,
+      "target_images": {
+        "api": "sha256:9e32f1fd91a5b98c69909c34c13f42f6810b8a05cf37d95826ef52112bb7d2cb",
+        "ingress": "sha256:4ecb628154ad262a061f74a21b53eb6a4a7f799f4773e2096ff7b1faceaf92b8",
+        "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+        "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+      },
+      "target_installation_id": "q-552f1e82132a4b1da23e"
+    },
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13241411652,
+        "sha256": "29b9f26d402eac6589dc33da169aae5e31a192813e946b3d111af5ea540615ac"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13246331021,
+        "sha256": "1355789113c1530e31bf3e9d19c361443356dcdb659e1b52f24bdb0021e9fea0"
+      },
+      "playwright-report": {
+        "artifact_id": 13240982241,
+        "sha256": "6fe0baec5a40494ea47c620c2e952078e35ce0175d5d78030395b4fd9af5fb2d"
+      }
+    },
+    "main_qualified": true,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "accepted_counts": {
+    "done": 5,
+    "open": 54,
+    "blocked": 7,
+    "total": 66
+  },
+  "release_qualified": false,
+  "customer_accepted": false
+}
