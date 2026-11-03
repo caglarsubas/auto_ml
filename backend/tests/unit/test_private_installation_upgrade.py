@@ -327,3 +327,51 @@ def test_unrecorded_copy_requires_source_schema(upgrade, copied):
     with pytest.raises(upgrade.checker.planner.PlanError, match="upgrade_copy_schema_incompatible"):
         run(False)
     assert not calls and not (root / "copied.json").exists()
+
+
+@pytest.fixture
+def original_image(upgrade, tmp_path, monkeypatch):
+    module = importlib.import_module("qualify_private_upgrade_reference")
+    current = "sha256:" + "a" * 64
+    metadata = {"components": {"api": {"image_id": current, "manifest_sha256": "b" * 64}}}
+    calls = []
+
+    def load(path, pin):
+        calls.append((path, pin))
+        return {"image_id": current, "offline_image_verified": True}
+
+    monkeypatch.setattr(module.api, "load", load)
+    return module, tmp_path, current, metadata, calls
+
+
+def test_reference_cleanup_reimports_exact_original_tagless_image(original_image):
+    module, root, image, metadata, calls = original_image
+    raw = json.dumps(metadata).encode()
+    (root / "manifest.json").write_bytes(raw)
+    result = module.restore_original_api(root, module.hashlib.sha256(raw).hexdigest(), image)
+    assert calls == [(root / "api", "b" * 64)]
+    assert result["image_id"] == image and result["offline_image_verified"] is True
+
+
+@pytest.mark.parametrize("fault", ["digest", "image", "extra_pin", "loaded_image", "verification"])
+def test_reference_cleanup_requires_trusted_original_identity(upgrade, original_image, monkeypatch, fault):
+    module, root, image, metadata, calls = original_image
+    if fault == "image":
+        metadata["components"]["api"]["image_id"] = "sha256:" + "c" * 64
+    elif fault == "extra_pin":
+        metadata["components"]["api"]["tag"] = "unexpected"
+    if fault in {"loaded_image", "verification"}:
+        monkeypatch.setattr(
+            module.api,
+            "load",
+            lambda *args: {
+                "image_id": image if fault == "verification" else "sha256:" + "c" * 64,
+                "offline_image_verified": fault != "verification",
+            },
+        )
+    raw = json.dumps(metadata).encode()
+    (root / "manifest.json").write_bytes(raw)
+    expected = "d" * 64 if fault == "digest" else module.hashlib.sha256(raw).hexdigest()
+    with pytest.raises(upgrade.checker.planner.PlanError):
+        module.restore_original_api(root, expected, image)
+    assert not calls

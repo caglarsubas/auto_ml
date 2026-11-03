@@ -535,8 +535,9 @@ def qualify(directory, expected, reports):
                 owned_roots_and_resources_removed=True,
                 synthetic_installed_upgrade_qualified=True,
             )
-            (reports / "installed-upgrade.json").write_bytes(recovery.encoded(record))
-            return record
+        record["qualification_input_api_restored"] = True
+        (reports / "installed-upgrade.json").write_bytes(recovery.encoded(record))
+        return record
 
 
 if __name__ == "__main__":

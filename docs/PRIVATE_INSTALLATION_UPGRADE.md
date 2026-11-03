@@ -103,3 +103,9 @@ real scoring work after upgrade, backs up current data, rolls back to a third ro
 and checks original plus new history, role enforcement and prediction parity.
 The new additional drill has a 600-second parent cap; the original installation,
 recovery, native-suite and workflow limits are unchanged.
+
+The qualification fixture removes only its temporary image references with parent
+pruning disabled, then reimports and verifies the original API image from its
+trusted tag-free offline bundle. This preserves the exact inputs required by
+downstream tests on the supported Linux Docker profile. Keep the exact controller
+revision with the reviewed plan for later replay and adoption.

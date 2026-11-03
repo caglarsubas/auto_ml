@@ -4,6 +4,7 @@ This is a disclosed qualification fixture, not a historical/customer image.
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import tempfile
@@ -37,6 +38,28 @@ source.update(source_sha256=reference['source_sha256'],git_commit=reference['sou
 (root/'runtime-manifest.json').write_text(json.dumps(snapshot(root),sort_keys=True,indent=2)+'\n')
 verify(root)
 """
+
+
+def restore_original_api(directory, expected, current_image):
+    """Leave the exact original tag-free input available after owned cleanup.
+
+    On the classic Docker store removing the last temporary base/reference tags
+    can delete an untagged parent image. Reconstitute its content-addressed
+    identity from the same verified offline handoff, without pulls or tag writes.
+    """
+    raw = (directory / "manifest.json").read_bytes()
+    if len(raw) > api.MAX_METADATA_BYTES or hashlib.sha256(raw).hexdigest() != expected:
+        raise planner.PlanError("upgrade_reference_image_set_binding")
+    pin = json.loads(raw)["components"]["api"]
+    if set(pin) != {"image_id", "manifest_sha256"} or pin["image_id"] != current_image:
+        raise planner.PlanError("upgrade_reference_original_image_binding")
+    result = api.load(directory / "api", pin["manifest_sha256"])
+    if (
+        result["image_id"] != current_image
+        or result["offline_image_verified"] is not True
+    ):
+        raise planner.PlanError("upgrade_reference_original_image_not_restored")
+    return result
 
 
 @contextlib.contextmanager
@@ -111,7 +134,10 @@ def reference_plan(directory, expected, current_image):
             )
             yield temp / "plan", rendered["plan_manifest_sha256"], identifier
     finally:
-        if base_tagged and api.inspect_image(base)["Id"] == current_image:
-            api.run(["docker", "image", "rm", base])
-        if identifier is not None and api.inspect_image(tag)["Id"] == identifier:
-            api.run(["docker", "image", "rm", tag])
+        try:
+            if base_tagged and api.inspect_image(base)["Id"] == current_image:
+                api.run(["docker", "image", "rm", "--no-prune", base])
+            if identifier is not None and api.inspect_image(tag)["Id"] == identifier:
+                api.run(["docker", "image", "rm", "--no-prune", tag])
+        finally:
+            restore_original_api(directory, expected, current_image)
