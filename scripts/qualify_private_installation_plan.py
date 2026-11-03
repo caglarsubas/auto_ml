@@ -154,6 +154,9 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
         from qualify_private_installation_recovery import qualify as qualify_recovery
 
         qualify_recovery(reports)
+        from qualify_private_installation_upgrade import qualify as qualify_upgrade
+
+        qualify_upgrade(directory, expected, reports)
     return result
 
 

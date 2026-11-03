@@ -79,7 +79,7 @@ def failure_diagnostic(phase, error):
     result = {"schema": "private_recovery_fixture_failure_v1", "stage": phase, "error_type": type(error).__name__}
     code = str(error)
     if isinstance(error, recovery.checker.planner.PlanError) and recovery.resources.re.fullmatch(
-            r"(?:recovery|installed_workflow|dependency|installation|schema)_[a-z0-9_]{1,100}", code):
+            r"(?:recovery|upgrade|installed_workflow|dependency|installation|schema)_[a-z0-9_]{1,100}", code):
         result["code"] = code
     return result
 
@@ -98,7 +98,7 @@ def delivery(path, values):
         os.chown(child, 10001, 10001)
 
 
-def prepare_empty(plan, expected, parent):
+def prepare_empty(plan, expected, parent, *, initialize_schema=True):
     value = startup.checker.verify(plan, expected)
     for stem, subject in (("server", "postgres"), ("cache", "cache")):
         names = "DNS:postgres,DNS:job-broker,DNS:cache,DNS:api.private.test" if stem == "server" else "DNS:cache"
@@ -124,8 +124,9 @@ def prepare_empty(plan, expected, parent):
     delivery(parent / "dependency-delivery", dependencies)
     prepared = startup.preparation.initialize(plan, expected, parent / "dependency-delivery")
     startup.start(plan, expected)
-    description = recovery.schema_init.initialize(plan, expected)
-    recovery.schema_init.initialize(plan, expected, description["schema_sha256"])
+    if initialize_schema:
+        description = recovery.schema_init.initialize(plan, expected)
+        recovery.schema_init.initialize(plan, expected, description["schema_sha256"])
     return value, initialized, prepared
 
 
