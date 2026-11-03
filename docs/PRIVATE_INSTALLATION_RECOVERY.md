@@ -1,6 +1,6 @@
 # D07-T04 — Coordinated installed recovery
 
-P164 is in progress. The acceptance target is recovery of the supported synthetic
+P164 is test-qualified. D07-T04 is accepted for recovery of the supported synthetic
 Ubuntu 24.04 ARM64 installation after removal of its application/dependency
 services and installation storage. A second, independently initialized root
 must recover its database and artifact files from one encrypted backup, using
@@ -47,10 +47,10 @@ RPO/RTO promises. Operator key custody, external identity/revocation reconciliat
 actual customer recovery objectives, upgrade/rollback, full D07 and release
 acceptance retain their separate gates.
 
-The fixed inventory remains 66 tasks. D07-T04 stays open until implementation,
-regressions, the complete installed recovery scenario, all six exact-head PR
-checks and independent automatic push-main qualification pass. The target is
-4 done (6.1%); the current 3 done (4.5%) is unchanged during implementation.
+The fixed inventory remains 66 tasks. Implementation, regressions, the complete
+installed recovery scenario, all six exact-head PR checks and independent
+automatic push-main qualification have passed. D07-T04 adds one accepted task;
+operator/customer and broader release acceptance remain separate.
 
 ## Operator handoff
 
@@ -61,7 +61,7 @@ procedure; keep its managed database, broker and cache available. The controller
 refuses a source or incomplete target with application containers present.
 
 Provision an external, root-owned private directory and a random 32-byte backup
-key in a root-owned regular file with mode0400. Keep that key separately from
+key in a root-owned regular file with mode 0400. Keep that key separately from
 the encrypted archive and preserve the returned archive digest in independent
 trusted storage. The backup and key must be outside the source installation.
 The controller does not print either content.
@@ -91,9 +91,20 @@ invalidate old sessions; password/project authority is restored as of the
 chosen backup point. Review revocations and external identity changes since
 that point before customer use.
 
-Initial bounds:64MiB combined table/artifact bytes,96MiB encrypted envelope,
-1024 artifact files,2048 directory entries,32 directory levels, and an empty
+Initial bounds: 64 MiB combined table/artifact bytes, 96 MiB encrypted envelope,
+1024 artifact files, 2048 directory entries, 32 directory levels, and an empty
 artifact root on the installation metadata filesystem. The data helper uses
-one CPU,1GiB RAM,64 PIDs, a read-only exact runtime and a120-second invocation
-cap. PostgreSQL statement/lock limits remain45/5 seconds. No saved SQL schema,
+one CPU, 1 GiB RAM, 64 PIDs, a read-only exact runtime and a 120-second invocation
+cap. PostgreSQL statement/lock limits remain 45/5 seconds. No saved SQL schema,
 expert module or fitted pickle is imported by the controller.
+
+## Qualification evidence
+
+PR #264 and independent automatic push-main passed all six checks. The exact
+commits, artifact hashes, original case/skip identities, native durations,
+installed recovery receipts and retained failed cleanup/bootstrap attempts are recorded in
+[P164 qualification](evidence/p164-qualification-2026-11-03.json).
+
+The fixed inventory now has 4 done/55 open/7 blocked tasks: 6.1% done, up from 4.5%.
+The full D07 outcome, upgrade/rollback, customer recovery objectives and release
+acceptance remain open.

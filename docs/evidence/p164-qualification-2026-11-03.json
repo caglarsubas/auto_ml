@@ -1,0 +1,331 @@
+{
+  "schema": "declarai_coordinated_recovery_qualification_v1",
+  "packet": "P164",
+  "recorded_at": "2026-11-03T07:31:58.758130+00:00",
+  "pr": 264,
+  "qualified_head": "8cde8f861bafef64677c277899e3ba1525ccb798",
+  "merge": "1df7712d3e409ff99b9cd3c13145457964740c11",
+  "ci_run": 41587387666,
+  "main_run": 41592049960,
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "source_hashes_match": true,
+  "qualified_profile": "Synthetic Ubuntu24.04 ARM64; four CPUs/16GiB; identical sealed source/target images",
+  "pr_qualification": {
+    "schema": "declarai_P164_run_audit_v1",
+    "run": 41587387666,
+    "head": "8cde8f861bafef64677c277899e3ba1525ccb798",
+    "event": "pull_request",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7396,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 529.811,
+      "passed": 7391
+    },
+    "native": {
+      "tests": 7541,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 835.818,
+      "passed": 7535
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7256,
+        "additional_cases": 140,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "1800eee947d7e7ade1d36e97670b3c290d852ea996d58de15eeb7b944ebf7811"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 140,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "b91f9b04985d5ea4e541b66e041bec418d48f64f0e46ff50cd5d9778be45bab8",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "coordinated_installed_recovery": {
+      "cancellation_preserved": true,
+      "classification_regression_export_score_bytes": "passed",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "database_artifact_and_schema_binding": "passed",
+      "duplicate_deliveries": 21,
+      "duplicate_publication": "refused",
+      "empty_broker_pending_reconstruction": "passed",
+      "lease_clock_modified": false,
+      "lost_artifact_publication_ack": "resumed",
+      "lost_database_commit_ack": "resumed",
+      "occupied_artifacts": "preserved_and_refused",
+      "occupied_database": "refused_without_intent",
+      "old_sessions_invalidated": true,
+      "operator_key_custody_qualified": false,
+      "original_completed_job_history": "preserved",
+      "original_lease_seconds": 180,
+      "original_source_controller_assertions": "passed",
+      "orphan_completed_attempts": 2,
+      "owned_roots_and_resources_removed": true,
+      "pending_recovery_adoption": "refused",
+      "post_use_restore_replay": "read_only",
+      "release_qualified": false,
+      "restore_plan_sha256": "5272014a6867847e5eddba7583d7549588b83419e9d304bd5eda94f3975f6934",
+      "restored_account_project_authority": "passed",
+      "same_exact_images": true,
+      "schema": "private_installed_recovery_v1",
+      "source_backup_sha256": "d528fb523e6ab8cfbfd5716549d7a29878dbc2f115abb61ed23502fddabfe558",
+      "source_installation_id": "q-e415aeac0114436fb4c4",
+      "source_installation_storage_unavailable": true,
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:9fd01ce04de6f1d6a69d1dce2cd68d99712b6afb54d9d0908a9c80b1d634bfad",
+          "ingress": "sha256:60b74bf5f22fac24a9da2037966fdc1ac85ce248d7f309c122d446d61c61368e",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-e415aeac0114436fb4c4",
+        "observed_memory_bytes": 16715923456,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "synthetic_installed_recovery_qualified": true,
+      "tampered_backup": "refused",
+      "target_installation_id": "q-5275d05ff77941029d3c",
+      "wrong_key": "refused",
+      "wrong_schema": "refused_without_intent"
+    },
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13209086784,
+        "sha256": "8589e28989b8a692a7c9002f246428634b0feb2fb05ad8fb0ec17247ef015f5a"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13210591512,
+        "sha256": "738886501994557f02e67afefd1cef90cced37c3de151881d6a54ab6b1862a32"
+      },
+      "playwright-report": {
+        "artifact_id": 13208243710,
+        "sha256": "c5d46e15a4b2cb5c9e65e2e25ca22e7c09d7b883371c9796a6ca99f1424af0f0"
+      }
+    },
+    "main_qualified": false,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "main_qualification": {
+    "schema": "declarai_P164_run_audit_v1",
+    "run": 41592049960,
+    "head": "1df7712d3e409ff99b9cd3c13145457964740c11",
+    "event": "push",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7541,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 944.105,
+      "passed": 7535
+    },
+    "native": {
+      "tests": 7541,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 839.27,
+      "passed": 7535
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 140,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "f78b26dca906f0fbf585350678ba54632bc2d2866fc9e1835721ed2ee688d02f"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 140,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "8eb9b3dc8530d0e66935d335ad713cd39101df6c7aa37278651348a958183c99",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "coordinated_installed_recovery": {
+      "cancellation_preserved": true,
+      "classification_regression_export_score_bytes": "passed",
+      "customer_RPO_RTO_qualified": false,
+      "customer_accepted": false,
+      "database_artifact_and_schema_binding": "passed",
+      "duplicate_deliveries": 21,
+      "duplicate_publication": "refused",
+      "empty_broker_pending_reconstruction": "passed",
+      "lease_clock_modified": false,
+      "lost_artifact_publication_ack": "resumed",
+      "lost_database_commit_ack": "resumed",
+      "occupied_artifacts": "preserved_and_refused",
+      "occupied_database": "refused_without_intent",
+      "old_sessions_invalidated": true,
+      "operator_key_custody_qualified": false,
+      "original_completed_job_history": "preserved",
+      "original_lease_seconds": 180,
+      "original_source_controller_assertions": "passed",
+      "orphan_completed_attempts": 2,
+      "owned_roots_and_resources_removed": true,
+      "pending_recovery_adoption": "refused",
+      "post_use_restore_replay": "read_only",
+      "release_qualified": false,
+      "restore_plan_sha256": "3dba2c743f26878370294f726517ac70978b08307bb622b4ebad9b8fc488cb85",
+      "restored_account_project_authority": "passed",
+      "same_exact_images": true,
+      "schema": "private_installed_recovery_v1",
+      "source_backup_sha256": "5a309d708d607c6ad31e5c626791249417f1effe2cc79d91e90e7d0c2cb74f31",
+      "source_installation_id": "q-65eecb0cad3045b9bcd4",
+      "source_installation_storage_unavailable": true,
+      "source_profile": {
+        "application_images": {
+          "api": "sha256:80b1ab81f1285671dc0fe5aa0bc578683e302408df106d36d8619d104ce37eb6",
+          "ingress": "sha256:ff5b86eed93d58baeabd716a9f03adad72cef87b6a00d65100c864dbe3f03d06",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-65eecb0cad3045b9bcd4",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      "synthetic_installed_recovery_qualified": true,
+      "tampered_backup": "refused",
+      "target_installation_id": "q-385e22a85f7e4208a04f",
+      "wrong_key": "refused",
+      "wrong_schema": "refused_without_intent"
+    },
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13210444482,
+        "sha256": "1d547526fbf592feb962b71f3f266f9060a0994c93a8590803cde349ea38aa93"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13212263013,
+        "sha256": "8bc2a27cb0f7c0786ec4958e48a1c1415193ad14c4a28ee4ee13e4250daf2bcf"
+      },
+      "playwright-report": {
+        "artifact_id": 13211211160,
+        "sha256": "4c1f52e6b37b209c9d98b24494a0a8b1de2613f3ac3082c8527c0edae5434de3"
+      }
+    },
+    "main_qualified": true,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "retained_failed_attempts": [
+    {
+      "head": "fc86c67c1e02c82a73f6a0479ac6c4f70c0f0858",
+      "run": 41583809267,
+      "stage": "installed_recovery_fixture_cleanup",
+      "reason": "container listings use Names rather than network/volume Name",
+      "native_suite_started": false,
+      "artifact_id": 13208045344,
+      "artifact_sha256": "e56f36c76c477d335918941307ebc7f3c4f4261c4c930a13c137e6fdf87c4cf5",
+      "fix": "exact-name stopped-container listing and ownership revalidation; four additional unit cases"
+    },
+    {
+      "head": "ef3a7fd01e73c723c1d1c6084ce0f5ea05c42309",
+      "run": 41585514465,
+      "stage": "fresh_target_guard",
+      "reason": "sealed initial migration seeds QueueLock(id=1), which the empty-target detector incorrectly rejected",
+      "native_suite_started": false,
+      "artifact_id": 13208640801,
+      "artifact_sha256": "1a1c7ddd9226fbc401bb8e525ee45552d3597dd8f0c661749963bab0c618a7b4",
+      "fix": "accept precisely the known singleton, refuse missing/changed/extra lock rows and occupied application tables; preserve original body stage before cleanup"
+    }
+  ],
+  "acceptance_task": "D07-T04",
+  "baseline_done": 3,
+  "accepted_done": 4,
+  "inventory_total": 66,
+  "native_cap_seconds": 900,
+  "workers": 2,
+  "scheduling": "loadfile",
+  "release_qualified": false,
+  "customer_accepted": false,
+  "operator_key_custody_qualified": false,
+  "customer_RPO_RTO_qualified": false,
+  "full_AMD64_native_qualified": false
+}
