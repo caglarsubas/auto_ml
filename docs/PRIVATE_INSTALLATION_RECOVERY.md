@@ -13,6 +13,9 @@ approved restore plan for an empty target. Backups contain binary table data and
 artifact bytes, never saved Python modules or executable SQL schemas. A fresh
 schema comes from the sealed target runtime; schema/image mismatch stops before
 data replacement. Restore uses the existing application database authority.
+An empty target permits the sealed migration's exact QueueLock(id=1) singleton
+and Django migration/content-type/permission seeds. Additional or altered lock
+rows, accounts, projects, jobs, sessions and customer rows are refused.
 
 A protected intent fences application adoption throughout recovery. Interrupted
 database/artifact publication must resume only the same approved operation,

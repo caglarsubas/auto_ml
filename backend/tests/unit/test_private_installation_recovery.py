@@ -112,6 +112,30 @@ def test_runtime_and_controller_data_fingerprints_agree(recovery):
     assert encoder(value) == recovery.canonical(value)
 
 
+@pytest.mark.parametrize("fault", ["pristine", "missing_lock", "changed_lock", "extra_lock", "user", "project", "job", "session"])
+def test_empty_target_accepts_only_exact_bootstrap_state(recovery, fault):
+    tree = ast.parse(recovery.CODE)
+    function = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "application_empty")
+    context = {}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), "fixed-runtime-empty-target", "exec"), context)
+    tables = {k: {"rows": n} for k, n in [("django_migrations", 40), ("django_content_type", 30),
+                                          ("auth_permission", 120), ("execution_jobs_queuelock", 1),
+                                          ("auth_user", 0), ("access_control_project", 0),
+                                          ("execution_jobs_nativejob", 0), ("django_session", 0)]}
+    locks = [(1,)]
+    if fault == "missing_lock":
+        locks = []
+    elif fault == "changed_lock":
+        locks = [(2,)]
+    elif fault == "extra_lock":
+        locks = [(1,), (2,)]
+    elif fault != "pristine":
+        key = {"user": "auth_user", "project": "access_control_project", "job": "execution_jobs_nativejob",
+               "session": "django_session"}[fault]
+        tables[key]["rows"] = 1
+    assert context["application_empty"](tables, locks) is (fault == "pristine")
+
+
 @pytest.mark.parametrize("role", ["api", "ingress", "postgres", "redis", "controller"])
 def test_restore_plan_requires_exact_runtime(recovery, payload, role):
     target = {"images": dict(payload["images"]), "request": {"root": "/srv/target", "installation_id": "target"}}
@@ -311,3 +335,15 @@ def test_installed_drill_cleanup_uses_exact_container_listing(recovery, monkeypa
     else:
         assert qualifier.dependency_ids(name) == (["a" * 64] if fault == "stopped" else [])
     assert "--all" in calls[0] and "--no-trunc" in calls[0]
+
+
+@pytest.mark.parametrize("fault", ["stable_code", "unsafe_plan_error", "arbitrary_exception"])
+def test_drill_failure_diagnostics_do_not_expose_exception_arguments(recovery, fault):
+    qualifier = importlib.import_module("qualify_private_installation_recovery")
+    error = (recovery.checker.planner.PlanError("recovery_target_database_occupied") if fault == "stable_code"
+             else recovery.checker.planner.PlanError("secret") if fault == "unsafe_plan_error"
+             else RuntimeError("password=secret customer bytes"))
+    result = qualifier.failure_diagnostic("coordinated_restore_and_replay", error)
+    assert result["stage"] == "coordinated_restore_and_replay"
+    assert ("code" in result) is (fault == "stable_code")
+    assert "secret" not in json.dumps(result) and "customer bytes" not in json.dumps(result)

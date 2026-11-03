@@ -75,6 +75,15 @@ def boundary(api, action, **payload):
                               recovery.encoded({"action": action, **payload})))
 
 
+def failure_diagnostic(phase, error):
+    result = {"schema": "private_recovery_fixture_failure_v1", "stage": phase, "error_type": type(error).__name__}
+    code = str(error)
+    if isinstance(error, recovery.checker.planner.PlanError) and recovery.resources.re.fullmatch(
+            r"(?:recovery|installed_workflow|dependency|installation|schema)_[a-z0-9_]{1,100}", code):
+        result["code"] = code
+    return result
+
+
 def delivery(path, values):
     path.mkdir(mode=0o700)
     os.chown(path, 10001, 10001)
@@ -373,6 +382,7 @@ def run_case(v):
             and recovery.resources.re.fullmatch(r"declarai-recovery-[0-9a-f]{32}", custody.name), "recovery_fixture_scope")
     created = []
     src_plan, dst_plan = source / "plan", target / "plan"
+    phase = "source_initialization_and_backup"
     try:
         custody.mkdir(mode=0o700);created.append(custody)
         scenario = Scenario(custody)
@@ -380,16 +390,24 @@ def run_case(v):
         for name, raw in v["source_files"].items():
             (src_plan / name).write_text(raw)
         source_result = source_fixture.host_case(src_plan, v["source_sha"], source, recovery=scenario)
+        phase = "source_storage_removal"
         shutil.rmtree(source)
         require(not source.exists(), "recovery_source_storage_survived")
         target.mkdir(mode=0o700);created.append(target);dst_plan.mkdir(mode=0o700)
         for name, raw in v["target_files"].items():
             (dst_plan / name).write_text(raw)
+        phase = "target_initialization"
         _, _, prepared = prepare_empty(dst_plan, v["target_sha"], target)
+        phase = "coordinated_restore_and_replay"
         result = scenario.restore(dst_plan, v["target_sha"], target, prepared)
         result.update(source_installation_storage_unavailable=True, original_source_controller_assertions="passed",
                       source_profile=source_result["installation_profile"])
         return result
+    except BaseException as error:
+        # Preserve the original bounded stage/code before cleanup can raise.
+        # Never emit exception arguments, credentials, data or HTTP bodies.
+        print(json.dumps(failure_diagnostic(phase, error)), file=sys.stderr, flush=True)
+        raise
     finally:
         if src_plan.exists():
             cleanup(src_plan, v["source_sha"])

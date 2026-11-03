@@ -64,6 +64,12 @@ try:
                 c.execute(sql.SQL('SELECT last_value,is_called FROM {}').format(sql.Identifier('public',name)))
                 value,called=c.fetchone();out[name]=[value,called]
         return out
+    def application_empty(tables, lock_rows):
+        # The sealed initial migration seeds precisely QueueLock(pk=1).
+        # Accept that exact coordination row, never arbitrary lock contents or
+        # rows in accounts, projects, jobs, sessions or customer data tables.
+        seeds={'django_migrations','django_content_type','auth_permission','execution_jobs_queuelock'}
+        return lock_rows==[(1,)] and all(v['rows']==0 for k,v in tables.items() if k not in seeds)
     def inspect(include_data=False):
         tables={};total=0
         with connection.cursor() as c:
@@ -83,7 +89,10 @@ try:
                 if include_data:row['data']=base64.b64encode(b''.join(chunks)).decode()
                 tables[table]=row
         identities={k:{f:v[f] for f in ('sha256','bytes','rows')} for k,v in tables.items()}
-        fresh=all(v['rows']==0 for k,v in tables.items() if k not in {'django_migrations','django_content_type','auth_permission'})
+        with connection.cursor() as c:
+            c.execute('SELECT id FROM public.execution_jobs_queuelock ORDER BY id')
+            lock_rows=c.fetchall()
+        fresh=application_empty(tables,lock_rows)
         return {'catalog':catalog,'tables':tables,'data_sha256':sha(encode(identities)),'sequences':sequences(),'empty_application':fresh,'bytes':total}
     phase='snapshot'
     if request['action'] in {'snapshot','inspect'}:
