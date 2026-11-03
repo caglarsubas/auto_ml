@@ -286,3 +286,28 @@ def test_artifact_staging_refuses_divergence_without_repair(recovery, stage_boun
     with pytest.raises(recovery.checker.planner.PlanError, match="stage_changed"):
         recovery.stage_artifacts(root, values)
     assert (path / "first").read_bytes() == b"changed"
+
+
+@pytest.mark.parametrize("fault", ["stopped", "substring", "duplicate", "malformed"])
+def test_installed_drill_cleanup_uses_exact_container_listing(recovery, monkeypatch, fault):
+    qualifier = importlib.import_module("qualify_private_installation_recovery")
+    name = "declarai-owned-postgres"
+    row = {"ID": "a" * 64, "Names": name, "State": "exited"}
+    rows = [row]
+    if fault == "substring":
+        rows = [{**row, "Names": name + "-other"}]
+    elif fault == "duplicate":
+        rows.append({**row, "ID": "b" * 64})
+    elif fault == "malformed":
+        rows = [{"ID": "a" * 64, "Name": name}]
+    calls = []
+    def listing(args):
+        calls.append(args)
+        return b"\n".join(json.dumps(r).encode() for r in rows)
+    monkeypatch.setattr(qualifier, "command", listing)
+    if fault in {"duplicate", "malformed"}:
+        with pytest.raises(recovery.checker.planner.PlanError, match="cleanup_"):
+            qualifier.dependency_ids(name)
+    else:
+        assert qualifier.dependency_ids(name) == (["a" * 64] if fault == "stopped" else [])
+    assert "--all" in calls[0] and "--no-trunc" in calls[0]

@@ -120,6 +120,19 @@ def prepare_empty(plan, expected, parent):
     return value, initialized, prepared
 
 
+def dependency_ids(name):
+    # Container listings use Names, unlike network/volume listings (Name).
+    # Include stopped containers, especially after the warm shutdown assertion.
+    rows = [json.loads(line) for line in command(["container", "ls", "--all", "--no-trunc", "--filter",
+                                                "name=" + name, "--format", "{{json .}}"]).splitlines() if line]
+    require(all(isinstance(row, dict) and isinstance(row.get("Names"), str)
+                and isinstance(row.get("ID"), str) for row in rows), "recovery_cleanup_listing")
+    identifiers = [row["ID"] for row in rows if row["Names"] == name]
+    require(len(identifiers) <= 1 and all(recovery.resources.re.fullmatch(r"[0-9a-f]{64}", x) for x in identifiers),
+            "recovery_cleanup_identity")
+    return identifiers
+
+
 def cleanup(plan, expected):
     if not (Path(plan).parent / "installation/initialization.json").exists():
         return
@@ -134,11 +147,11 @@ def cleanup(plan, expected):
         command(["container", "rm", "--force", "--volumes", info["Id"]])
     owner = recovery.resources.labels(value, expected, initialized["initialization_id"])
     for name in startup.names(value).values():
-        if not recovery.resources.listing("container", name):
-            continue
-        info = recovery.resources.inspect("container", name)
-        require(all(info["Config"]["Labels"].get(k) == v for k, v in owner.items()), "recovery_cleanup_owner")
-        command(["container", "rm", "--force", "--volumes", info["Id"]])
+        for identifier in dependency_ids(name):
+            info = recovery.resources.inspect("container", identifier)
+            require(info["Name"] == "/" + name and info["Id"] == identifier
+                    and all(info["Config"]["Labels"].get(k) == v for k, v in owner.items()), "recovery_cleanup_owner")
+            command(["container", "rm", "--force", "--volumes", info["Id"]])
     for kind, specs in (("network", value["prerequisites"]["networks"]), ("volume", [value["prerequisites"]["socket_volume"]])):
         for spec in specs:
             if recovery.resources.listing(kind, spec["name"]):

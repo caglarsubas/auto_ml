@@ -48,3 +48,49 @@ The fixed inventory remains 66 tasks. D07-T04 stays open until implementation,
 regressions, the complete installed recovery scenario, all six exact-head PR
 checks and independent automatic push-main qualification pass. The target is
 4 done (6.1%); the current 3 done (4.5%) is unchanged during implementation.
+
+## Operator handoff
+
+Use the exact image set and verified source plan from the accepted installation.
+Record the chosen quiescent authority point and maintenance window. Remove all
+application service containers through the owned installation's normal service
+procedure; keep its managed database, broker and cache available. The controller
+refuses a source or incomplete target with application containers present.
+
+Provision an external, root-owned private directory and a random 32-byte backup
+key in a root-owned regular file with mode0400. Keep that key separately from
+the encrypted archive and preserve the returned archive digest in independent
+trusted storage. The backup and key must be outside the source installation.
+The controller does not print either content.
+
+The root controller's sequence is:
+
+1. `private_installation_recovery.py backup` with the source `--plan`, its
+   `--expected-plan-sha256`, `--key-file` and an absent external `--archive`.
+2. Independently initialize the destination with exactly the same four images,
+   new deployment credentials and signing key, fresh schema, no application
+   accounts, an empty artifact directory, and no application containers.
+3. `private_installation_recovery.py plan` with the destination plan/digest,
+   archive/key, independently trusted `--expected-backup-sha256` and an absent
+   `--restore-plan` output. Review that output's source/target, images, schema
+   and chosen authority point; retain its exact returned digest.
+4. `private_installation_recovery.py restore` with the same destination,
+   archive/key, `--restore-plan` and `--expected-restore-plan-sha256`. An
+   interrupted attempt may repeat only those exact inputs. Divergent state is
+   refused, and an incomplete journal blocks application adoption.
+5. After completion, adopt the installation through the usual pinned-plan and
+   selected-CA procedure. Verify restored access, immutable exports and pending
+   work. The technical completion receipt grants no production-use approval.
+
+A completed restore replay returns its recorded completion without reverting
+subsequent legitimate work. It is not a new health check. New signing keys
+invalidate old sessions; password/project authority is restored as of the
+chosen backup point. Review revocations and external identity changes since
+that point before customer use.
+
+Initial bounds:64MiB combined table/artifact bytes,96MiB encrypted envelope,
+1024 artifact files,2048 directory entries,32 directory levels, and an empty
+artifact root on the installation metadata filesystem. The data helper uses
+one CPU,1GiB RAM,64 PIDs, a read-only exact runtime and a120-second invocation
+cap. PostgreSQL statement/lock limits remain45/5 seconds. No saved SQL schema,
+expert module or fitted pickle is imported by the controller.
