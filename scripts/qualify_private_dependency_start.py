@@ -17,7 +17,7 @@ from qualify_private_installation_resources import fixture_plan
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def host_case(plan, expected, parent):
+def host_case(plan, expected, parent, recovery=None):
     value = startup.checker.verify(plan, expected)
     if (
         sys.platform != "linux"
@@ -252,7 +252,10 @@ def host_case(plan, expected, parent):
             queue_consistency = qualify_queue_consistency(parent)
             from qualify_private_installation_workflow import qualify as qualify_installed_workflow
 
-            installed_workflow = qualify_installed_workflow(value, accounts, account_passwords, parent, prepared, command)
+            installed_workflow = qualify_installed_workflow(
+                value, accounts, account_passwords, parent, prepared, command,
+                observer=None if recovery is None else recovery.observe(value, accounts, account_passwords, parent, prepared, adopted, command),
+            )
             account_adoption = {
                 "installed_developer_workflow": installed_workflow,
                 "queue_consistency": queue_consistency,
@@ -296,6 +299,8 @@ def host_case(plan, expected, parent):
         from qualify_private_installation_backup import qualify as qualify_baseline_backup
 
         baseline_backup = qualify_baseline_backup(value, expected, parent, ids["postgres"], command)
+        if recovery is not None:
+            recovery.capture(plan, expected)
         db = value["request"]["database"]
         # Only this fresh fixture database is seeded; no operator table enters.
         command(

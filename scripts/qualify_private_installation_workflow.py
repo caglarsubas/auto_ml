@@ -146,7 +146,7 @@ class Session:
             time.sleep(.2)
 
 
-def qualify(value, accounts, passwords, parent, prepared, command):
+def qualify(value, accounts, passwords, parent, prepared, command, observer=None):
     owned(value, parent)
     session = Session(value, parent)
     anonymous = session.data("GET", "/api/auth/session/")
@@ -159,6 +159,7 @@ def qualify(value, accounts, passwords, parent, prepared, command):
     input_raw = b"z,x\n,0.1\n3,0.6\n9,0.9\n"
     input_id = session.upload(input_raw, "features.csv", project)
     proofs = []
+    handles = []
     for task in ("classification", "regression"):
         lines = ["x,z,outcome"]
         for index in range(40):
@@ -200,6 +201,10 @@ def qualify(value, accounts, passwords, parent, prepared, command):
         require(session.data("GET", f'/api/jobs/{trained["id"]}/')["result_sha256"] == trained["result_sha256"], "training_immutable")
         proofs.append({"task": task, "training_result_sha256": trained["result_sha256"], "export_sha256": export_sha,
                        "scoring_result_sha256": scored["result_sha256"], "rows": 3, "prediction_and_chunk_parity": "passed"})
+        handles.append({"task": task, "dataset_id": dataset, "input_file_id": input_id, "training": trained,
+                        "scoring": scored, "export": export, "scores": scores})
+    if observer is not None:
+        observer(session, handles)
     require(session.data("POST", "/api/auth/logout/", {})["authenticated"] is False, "logout")
     return {"schema": "private_installed_workflow_v1", "actual_installed_tls_api_worker_dispatcher": "passed", "workflows": proofs,
             "duplicate_submission_single_job": "passed", "model_adopted": False, "production_use_approved": False,

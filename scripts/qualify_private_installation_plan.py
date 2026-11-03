@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify offline planning and real Compose normalization, without adoption."""
+"""Qualify offline planning and optionally complete installation and recovery."""
 
 import argparse
 import json
@@ -150,6 +150,10 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
         # Retain nonsecret rendered evidence, not the multi-GiB image archives.
         for name in planner.FILES | {"manifest.json"}:
             (reports / ("installation-plan-" + name)).write_bytes((plan / name).read_bytes())
+    if adoption_check:
+        from qualify_private_installation_recovery import qualify as qualify_recovery
+
+        qualify_recovery(reports)
     return result
 
 
@@ -158,7 +162,7 @@ def main():
     parser.add_argument("image_set", type=Path)
     parser.add_argument("--expected-image-set-sha256", required=True)
     parser.add_argument("--path-check-image", help="Exact API image from the verified set; adds owned Linux filesystem qualification")
-    parser.add_argument("--adoption-check", action="store_true", help="Additionally qualify a complete owned Linux root adoption fixture")
+    parser.add_argument("--adoption-check", action="store_true", help="Additionally qualify owned Linux installation and coordinated recovery fixtures")
     parser.add_argument("--reports", type=Path, default=ROOT / "test-reports/postgresql")
     args = parser.parse_args()
     print(json.dumps(qualify(args.image_set, args.expected_image_set_sha256, args.reports, args.path_check_image, args.adoption_check)))
