@@ -15,7 +15,10 @@ The destination is a separately initialized root. An exact plan binds source
 backup, source/target images and migration graphs, the trusted migration runner,
 code and resource limits. Source history is preserved. The source schema/data is
 restored from trusted sealed code and encrypted binary data, then the reviewed
-migration runs transactionally. Pending transition intent blocks adoption. A lost
+migration runs transactionally. A verified copy checkpoint prevents recopy after
+a failed migration advances PostgreSQL's nontransactional migration-recorder
+sequence; every application sequence must still match exactly. Pending transition
+intent blocks adoption. A lost
 commit/completion acknowledgement resumes only the same operation, verifies data
 and artifact evidence, and never silently executes a changed plan.
 

@@ -263,3 +263,67 @@ def test_incomplete_or_stale_transition_cannot_adopt(upgrade, journal, fault):
 def test_unrelated_installation_keeps_original_admission(upgrade, tmp_path, monkeypatch):
     monkeypatch.setattr(upgrade.recovery, "private_read", lambda *a: pytest.fail("unrelated transition metadata read"))
     upgrade.adoption_guard({"request": {"root": str(tmp_path)}}, "b" * 64)
+
+
+@pytest.fixture
+def copied(upgrade, tmp_path, monkeypatch):
+    root = tmp_path / "transition"
+    root.mkdir()
+    (root / "baseline.json").write_text("{}")
+    calls = []
+    monkeypatch.setattr(upgrade.recovery, "private_read", lambda path, *args: path.read_bytes())
+    monkeypatch.setattr(upgrade.recovery, "publish", lambda path, raw: path.write_bytes(raw))
+    monkeypatch.setattr(upgrade.recovery, "helper", lambda *args: calls.append(args))
+    payload = {"database": {"data_sha256": "c" * 64}}
+
+    def run(current=True):
+        upgrade.copy_stage(root, {}, {}, {}, payload, "a" * 64, "b" * 64, current)
+
+    return root, calls, run
+
+
+def test_copy_checkpoint_resumes_after_nontransactional_recorder_advance(copied):
+    root, calls, run = copied
+    run()
+    before = (root / "copied.json").read_bytes()
+    run(False)  # migrated graph or a failed migration must never trigger recopy
+    assert len(calls) == 1 and calls[0][3] == "restore"
+    assert (root / "copied.json").read_bytes() == before
+
+
+def test_missing_copy_ack_resumes_only_before_migration(upgrade, copied, monkeypatch):
+    root, calls, run = copied
+    publish = upgrade.recovery.publish
+
+    def fail(*args):
+        raise RuntimeError("publication interrupted")
+
+    monkeypatch.setattr(upgrade.recovery, "publish", fail)
+    with pytest.raises(RuntimeError):
+        run()
+    assert not (root / "copied.json").exists()
+    monkeypatch.setattr(upgrade.recovery, "publish", publish)
+    run()
+    assert len(calls) == 2 and (root / "copied.json").exists()
+
+
+@pytest.mark.parametrize(
+    "field", ["schema", "target_plan_sha256", "backup_sha256", "source_data_sha256", "controller_sha256", "extra"]
+)
+def test_changed_copy_checkpoint_refuses_without_recopy(upgrade, copied, field):
+    root, calls, run = copied
+    run()
+    path = root / "copied.json"
+    value = json.loads(path.read_bytes())
+    value[field] = "changed"
+    path.write_text(json.dumps(value))
+    with pytest.raises(upgrade.checker.planner.PlanError, match="upgrade_copy_checkpoint_changed"):
+        run()
+    assert len(calls) == 1
+
+
+def test_unrecorded_copy_requires_source_schema(upgrade, copied):
+    root, calls, run = copied
+    with pytest.raises(upgrade.checker.planner.PlanError, match="upgrade_copy_schema_incompatible"):
+        run(False)
+    assert not calls and not (root / "copied.json").exists()

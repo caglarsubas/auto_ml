@@ -195,6 +195,8 @@ def transition(
             require(False, "upgrade_transaction_fault_accepted")
         finally:
             upgrade.execute = execute
+        require((journal / "copied.json").exists(), "upgrade_copy_checkpoint_missing")
+        copy_checkpoint = (journal / "copied.json").read_bytes()
         pending(target_plan, target_sha, parent)
         _, receipt, _ = upgrade.context(target_plan, target_sha)
         source = upgrade.image_value(
@@ -204,6 +206,21 @@ def transition(
         state = recovery.schema_init.helper(source, receipt, source_image, "describe")
         require(state["state"] == "current", "upgrade_transaction_not_rolled_back")
         before = recovery.helper(source, receipt, source_image, "inspect")
+        source_database = recovery.unseal(
+            recovery.private_read(archive, recovery.MAX_WIRE),
+            recovery.private_read(scenario.key, 32, 0o400),
+            backup["backup_sha256"],
+        )["database"]
+        require(
+            before["sequences"]["django_migrations_id_seq"][0]
+            > source_database["sequences"]["django_migrations_id_seq"][0],
+            "upgrade_recorder_sequence_not_advanced",
+        )
+        require(
+            upgrade.sequence_identity(before)
+            == upgrade.sequence_identity(source_database),
+            "upgrade_application_sequence_changed",
+        )
         expected_catalog = recovery.unseal(
             recovery.private_read(archive, recovery.MAX_WIRE),
             recovery.private_read(scenario.key, 32, 0o400),
@@ -230,6 +247,10 @@ def transition(
             require(False, "upgrade_lost_ack_missing")
         finally:
             upgrade.execute = execute
+        require(
+            (journal / "copied.json").read_bytes() == copy_checkpoint,
+            "upgrade_copy_checkpoint_changed",
+        )
         pending(target_plan, target_sha, parent)
         publish = recovery.publish
 
@@ -412,6 +433,8 @@ def run_case(v):
             "catalog_delta_exact_reviewed_index_only": "passed",
             "post_upgrade_work_after_rollback": "preserved",
             "migration_transaction_fault": "rolled_back",
+            "nontransactional_recorder_sequence": "advanced_without_application_sequence_change",
+            "completed_copy_checkpoint": "preserved_no_recopy",
             "lost_commit_ack": "resumed",
             "lost_publication_ack": "resumed",
             "pending_transition_adoption": "refused",

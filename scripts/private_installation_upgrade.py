@@ -514,6 +514,41 @@ def adoption_guard(value, expected):
     require(result == complete(intent), "completion_changed")
 
 
+def copy_stage(
+    root, source, receipt, image, payload, target_sha, backup_sha, source_current
+):
+    """Fence completed COPY before any migration can advance recorder sequences.
+
+    PostgreSQL sequences are not transactional. A rolled-back migration may
+    advance only django_migrations_id_seq. Never recopy after that boundary;
+    the migration helper independently verifies every application row/sequence.
+    """
+    path = root / "copied.json"
+    expected = {
+        "schema": "private_upgrade_copy_v1",
+        "target_plan_sha256": target_sha,
+        "backup_sha256": backup_sha,
+        "source_data_sha256": payload["database"]["data_sha256"],
+        "controller_sha256": controller_sha(),
+    }
+    if path.exists() or path.is_symlink():
+        actual = checker.planner.decode(recovery.private_read(path, 16384, 0o600))
+        require(actual == expected, "copy_checkpoint_changed")
+        return
+    require(source_current, "copy_schema_incompatible")
+    baseline = checker.planner.decode(
+        recovery.private_read(root / "baseline.json", recovery.MAX_JOURNAL, 0o600)
+    )
+    recovery.helper(
+        source,
+        receipt,
+        image,
+        "restore",
+        {"source": payload["database"], "baseline": baseline},
+    )
+    recovery.publish(path, recovery.encoded(expected))
+
+
 def apply(archive, keyfile, target_plan, target_sha, request, request_sha):
     raw = recovery.private_read(request, recovery.MAX_JOURNAL, 0o600)
     require(
@@ -668,9 +703,6 @@ def apply(archive, keyfile, target_plan, target_sha, request, request_sha):
                 "target_occupied",
             )
             recovery.publish(baseline_file, recovery.encoded(baseline))
-        baseline = checker.planner.decode(
-            recovery.private_read(baseline_file, recovery.MAX_JOURNAL, 0o600)
-        )
         current_files = recovery.artifacts(root.parent / "artifacts")
         require(
             not current_files or current_files == payload["artifacts"],
@@ -681,14 +713,16 @@ def apply(archive, keyfile, target_plan, target_sha, request, request_sha):
             if current_files == payload["artifacts"]
             else recovery.stage_artifacts(root, payload["artifacts"])
         )
-        if description["state"] == "current":
-            recovery.helper(
-                source,
-                receipt,
-                source_image,
-                "restore",
-                {"source": payload["database"], "baseline": baseline},
-            )
+        copy_stage(
+            root,
+            source,
+            receipt,
+            source_image,
+            payload,
+            target_sha,
+            approved["backup_sha256"],
+            description["state"] == "current",
+        )
         runner = image_value(value, approved["runner_image"])
         result = execute(
             runner,
