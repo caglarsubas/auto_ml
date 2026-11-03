@@ -1,5 +1,7 @@
 # Controlled private application adoption — P38
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 P38 renders version 2 installation plans. Their data-service bridge stays internal; their separate ingress bridge supports Docker port publication. Version 1 plans remain verifiable with their original two-internal-network semantics, but adoption rejects them before host access. Render a separately approved v2 plan for a new root/installation ID; do not edit a saved manifest, reuse its initialized root or rewrite its resources.
 
 After [fresh filesystem initialization](PRIVATE_INSTALLATION_INIT_IMPLEMENTATION.md) and [network/socket preparation](PRIVATE_INSTALLATION_RESOURCES_IMPLEMENTATION.md), this Linux root controller starts the four application roles from one exact saved plan. It is partial D07: the operator must already have prepared the database, cache and TLS broker and applied current migrations using the same artifact-root configuration, which initializes the application folders. It does not provision these dependencies, generate credentials, enroll users or authorize model use.

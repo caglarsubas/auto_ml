@@ -1,5 +1,7 @@
 # Private plan verification and filesystem prerequisites — P35
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 P35 verifies a saved P34 application-layer plan against a separately trusted digest and adds Linux filesystem metadata checks before installation. This is partial D07. It does not initialize dependencies, deliver credentials, migrate a database or adopt services.
 
 ## Verify the saved plan

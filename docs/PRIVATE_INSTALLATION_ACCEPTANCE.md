@@ -1,8 +1,8 @@
-# D07-T02 — Clean-install closure target
+# D07-T02 — Qualified ARM64 clean installation
 
-The next D07 closure is a reproducible installation on the supported Linux
-profile. P162's optional snapshot-read optimization is P1 work and is not a
-prerequisite. Installation, upgrade, restore and customer acceptance retain
+D07-T02 is qualified for synthetic clean installation on Ubuntu 24.04 Linux
+ARM64, with audited successful PR and independent automatic push-main runs.
+P162's optional snapshot-read optimization is P1 work and is not a prerequisite. Installation, upgrade, restore and customer acceptance retain
 separate evidence; a preparation script or successful image pull closes none
 of those gates.
 
@@ -41,7 +41,7 @@ become a clean-install acceptance receipt by relabeling.
 ## Coherent qualification profile
 
 The automated profile is one organization on Ubuntu 24.04 Linux with the exact
-four-image offline bundle. Current full qualification targets native ARM64;
+four-image offline bundle. Full qualification covers native ARM64;
 the other five CI jobs retain AMD64 coverage. The earlier AMD64 two-root
 installation stage passed, but its complete native PostgreSQL suite exceeded
 900 seconds and remains unqualified. ARM64 evidence never confers AMD64 support.
@@ -59,7 +59,7 @@ steps, two test workers, loadfile scheduling, no worker restarts, coverage,
 skips/retries and 900-second native child cap. The repository is public and
 this standard runner has no runner charge. This is an execution-profile
 experiment, not a claim that hardware caused previous timeouts. Full PR and
-independent main success are still required.
+independent automatic push-main success are verified in the receipts below.
 
 The existing adoption qualification now creates two distinct empty owned roots
 from the same exact image IDs. Each run keeps the original initialization,
@@ -93,7 +93,7 @@ delivery, backup-key custody, resource sizing and recovery policy before actual
 customer use. The synthetic technical acceptance does not confer release,
 customer, production-model-use, upgrade or restore approval.
 
-The task stays open until both ledger acceptance criteria are demonstrated.
+Both ledger acceptance criteria are demonstrated for the synthetic ARM64 profile.
 Restore after machine loss and interrupted upgrade/rollback are D07-T04 and
 D07-T03 respectively. Their evidence is not inferred from backup creation or a
 healthy point-in-time lifecycle observation. D07-T02 completion unlocks both
@@ -101,7 +101,31 @@ tasks; it does not depend on P162.
 
 ## Progress accounting
 
-The fixed inventory contains 66 acceptance tasks. Closing D07-T02 changes the
-done share from 2/66 (3.0%) to 3/66 (4.5%), provided no other task changes. Code
+The fixed inventory contains 66 acceptance tasks. D07-T02 changes the
+done share from 2/66 (3.0%) to 3/66 (4.5%), with the denominator unchanged. Code
 preparation, PR checks and merge are reported separately. Do not subdivide the
 inventory or mark an entire task done to improve the percentage.
+
+## Observed qualification — 2026-11-03
+
+[PR #262](https://github.com/caglarsubas/auto_ml/pull/262) merged at `e3698782dce55d182d351d12b34ee2f56e59969a`
+with the same source tree as qualified head `16fb200eb334f4ee013b8c4e32c7ca92eed23863`.
+The [versioned evidence record](evidence/p163-qualification-2026-11-03.json) binds artifact digests,
+image IDs, host resources, dependency markers and the following independent runs.
+
+| Evidence | PR | Automatic push-main |
+| --- | --- | --- |
+| All six checks | [Passed](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421) | [Passed](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461) |
+| Full native suite | 7,465 passed / 6 original skips | 7,465 passed / 6 original skips |
+| Native duration; unchanged 900-second cap | 785.986s | 764.030s |
+| Fresh owned installations | 2 | 2 |
+| Installed classification/regression workflows | 4 | 4 |
+| Encrypted baseline backups and integrity checks | 2 | 2 |
+
+Both runs preserve all original case/skip identities, 297 original test/fixture
+files, two workers, loadfile scheduling, native fits/folds, coverage and retry
+budgets. ARM64 activates 172 shipped dependency pins; the unchanged declared
+x86-only NCCL marker is inactive. This does not add a skip or remove a test.
+The other five jobs retain AMD64 coverage, while its complete native suite
+remains unqualified. Upgrade/rollback and coordinated restore are now ready;
+D07, release and customer acceptance remain open.

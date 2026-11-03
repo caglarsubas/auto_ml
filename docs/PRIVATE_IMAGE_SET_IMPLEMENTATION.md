@@ -1,5 +1,7 @@
 # P32 — Verified offline native image set
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 The private API/worker/dispatcher image, compiled TLS/frontend ingress, PostgreSQL 17 and Redis 7 can travel as one digest-pinned handoff. This is partial D07. Image preparation, offline import, installation, migration, service adoption, release and customer acceptance remain distinct states.
 
 ## Prepare and export

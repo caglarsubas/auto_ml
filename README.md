@@ -32,6 +32,8 @@ The name *DeclarAI* reflects this philosophy: models are built through a series 
 | **Infrastructure** | Docker Compose (development backend/frontend/Redis, hot-reload volumes) | — |
 | **Database** | SQLite (development); explicit PostgreSQL metadata configuration | — |
 
+The [current clean-install qualification](docs/PRIVATE_INSTALLATION_ACCEPTANCE.md) covers a synthetic private Ubuntu 24.04 ARM64 installation and exact offline image bundle. Upgrade/rollback, coordinated machine-loss restore, capacity, release and customer acceptance remain open. Complete AMD64 native qualification is separate.
+
 The bundled Docker stack is development only. The [private runtime settings](docs/private-runtime-configuration.md)
 require external secrets, explicit hosts/HTTPS origins and certificate-verified
 PostgreSQL. This foundation does not qualify a production installation; deployment,
@@ -620,7 +622,7 @@ feature/v{x}.{y}.{z}-{YYYYMMDD}-{short-description}
 
 ## Roadmap
 
-The adopted development sequence is the [DeclarAI product development roadmap](docs/PRODUCT_DEVELOPMENT_ROADMAP.md), backed by the authoritative [D01–D17 ledger](docs/product-roadmap.json). It covers scientific correctness, private deployment with sandboxed expert Python, independent review, credit workflows, and outcome monitoring. Regenerate/check it with `python3 scripts/render_product_roadmap.py [--check]`.
+The adopted development sequence is the [DeclarAI product development roadmap](docs/PRODUCT_DEVELOPMENT_ROADMAP.md), backed by the authoritative [D01–D26 ledger](docs/product-roadmap.json). It covers scientific correctness, private deployment with sandboxed expert Python, independent review, credit workflows, and outcome monitoring. Regenerate/check it with `python3 scripts/render_product_roadmap.py [--check]`.
 
 The entries below preserve the earlier capability history. The ledger defines current priorities, dependencies, acceptance gates, and evidence status.
 
