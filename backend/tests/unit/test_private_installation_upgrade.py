@@ -375,3 +375,70 @@ def test_reference_cleanup_requires_trusted_original_identity(upgrade, original_
     with pytest.raises(upgrade.checker.planner.PlanError):
         module.restore_original_api(root, expected, image)
     assert not calls
+
+
+@pytest.fixture
+def index_schema(upgrade):
+    profile = importlib.import_module("private_upgrade_schema_profile")
+    old = importlib.import_module("native_assessment_schema_profile")
+    from collections import Counter
+
+    roles = Counter(old.LEGACY_ROLES) + Counter(old.ADDED_ROLES)
+    rows = [
+        [i, table, "RI_ConstraintTrigger_" + str(i)]
+        for i, table in enumerate(table for table, count in roles.items() for _ in range(count))
+    ]
+    snapshot = {"migrations": 33, "internal_triggers": 164, "all_internal": rows}
+    proof = {
+        "migrations": sorted([list(row) for row in profile.PREVIOUS_MIGRATIONS] + [list(profile.MIGRATION)]),
+        "indexes": [copy.deepcopy(profile.INDEX)],
+    }
+    return profile, snapshot, proof
+
+
+def test_index_release_preserves_original_ri_inventory_and_exact_new_proof(index_schema):
+    profile, snapshot, proof = index_schema
+    original = copy.deepcopy(snapshot)
+    result = profile.qualify_project_history_schema(snapshot, proof)
+    assert result["previous_profile"]["migrations"] == 32 and result["all_roles_require_fault_testing"] is True
+    assert snapshot == original
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "count",
+        "trigger_count",
+        "roles",
+        "duplicate_oid",
+        "missing_migration",
+        "extra_migration",
+        "history_name",
+        "missing_index",
+        "index_unique",
+        "index_fields",
+        "index_invalid",
+    ],
+)
+def test_index_release_profile_rejects_changed_history_index_or_ri_roles(index_schema, fault):
+    profile, snapshot, proof = index_schema
+    if fault == "count":
+        snapshot["migrations"] = 32
+    elif fault == "trigger_count":
+        snapshot["internal_triggers"] -= 1
+    elif fault == "roles":
+        snapshot["all_internal"][0][1] = "unknown_table"
+    elif fault == "duplicate_oid":
+        snapshot["all_internal"][0][0] = snapshot["all_internal"][1][0]
+    elif fault == "missing_migration":
+        proof["migrations"].pop()
+    elif fault == "extra_migration":
+        proof["migrations"].append(["unknown", "0001"])
+    elif fault == "history_name":
+        proof["migrations"][0][1] = "changed"
+    elif fault == "missing_index":
+        proof["indexes"] = []
+    else:
+        proof["indexes"][0][{"index_unique": 1, "index_fields": 6, "index_invalid": 2}[fault]] = "changed"
+    with pytest.raises(ValueError):
+        profile.qualify_project_history_schema(snapshot, proof)

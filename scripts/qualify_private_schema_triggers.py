@@ -55,6 +55,15 @@ def main():
         return command(["exec", "-i", database, "psql", "-U", "postgres", "-d", "ri_fixture",
                         "-v", "ON_ERROR_STOP=1", "-At"], sql.encode())
 
+    def project_history_proof():
+        return json.loads(admin("""
+            SELECT json_build_object(
+                'migrations',(SELECT json_agg(json_build_array(app,name) ORDER BY app,name) FROM public.django_migrations),
+                'indexes',(SELECT json_agg(json_build_array(ci.relname,i.indisunique,i.indisvalid,i.indisready,i.indisexclusion,i.indimmediate,pg_get_indexdef(i.indexrelid)))
+                    FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class ci ON ci.oid=i.indexrelid
+                    WHERE ci.relname='native_job_project_history_idx' AND i.indrelid='public.execution_jobs_nativejob'::regclass))
+        """))
+
     def receive():
         selector = selectors.DefaultSelector()
         try:
@@ -126,7 +135,11 @@ def main():
             assert ready["ready"] is True
             baseline = ready["snapshot"]
             receipt["baseline"] = ready
-            if baseline["migrations"] == 32:
+            if baseline["migrations"] == 33:
+                from private_upgrade_schema_profile import qualify_project_history_schema
+                history_proof = project_history_proof()
+                receipt["schema_profile"] = qualify_project_history_schema(baseline, history_proof)
+            elif baseline["migrations"] == 32:
                 from native_assessment_schema_profile import qualify_native_assessment_schema
                 receipt["schema_profile"] = qualify_native_assessment_schema(baseline)
             else:
@@ -1178,6 +1191,8 @@ def main():
             assert receipt["collation_restored"] == collation_baseline
             assert application("collation_end") == baseline
             check_all("column_collation/restored", False)
+            if baseline["migrations"] == 33:
+                assert project_history_proof() == history_proof
             process.stdin.close()
             assert process.wait(timeout=30) == 0
             process = None
