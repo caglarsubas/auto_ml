@@ -40,13 +40,26 @@ become a clean-install acceptance receipt by relabeling.
 
 ## Coherent qualification profile
 
-The automated profile is one organization on Ubuntu 24.04 Linux amd64 with
-the exact four-image offline bundle. It uses PostgreSQL 17, a dedicated Redis
+The automated profile is one organization on Ubuntu 24.04 Linux with the exact
+four-image offline bundle. Current full qualification targets native ARM64;
+the other five CI jobs retain AMD64 coverage. The earlier AMD64 two-root
+installation stage passed, but its complete native PostgreSQL suite exceeded
+900 seconds and remains unqualified. ARM64 evidence never confers AMD64 support.
+Each fresh host's architecture must match its exact frozen image bundle.
+The profile uses PostgreSQL 17, a dedicated Redis
 broker and reconstructible Redis cache, the fixed API/worker/dispatcher image,
 and the immutable frontend/TLS ingress image. Image, package and asset hashes
 come from the separately trusted image-set manifest. Docker and Compose versions,
 OS, architecture, observed host resources and per-service limits are retained;
 these observations do not establish a customer capacity envelope.
+
+The native PostgreSQL job uses GitHub's standard public-repository
+`ubuntu-24.04-arm` runner: four CPUs and 16 GB RAM, with the same original
+steps, two test workers, loadfile scheduling, no worker restarts, coverage,
+skips/retries and 900-second native child cap. The repository is public and
+this standard runner has no runner charge. This is an execution-profile
+experiment, not a claim that hardware caused previous timeouts. Full PR and
+independent main success are still required.
 
 The existing adoption qualification now creates two distinct empty owned roots
 from the same exact image IDs. Each run keeps the original initialization,

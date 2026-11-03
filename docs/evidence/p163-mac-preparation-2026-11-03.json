@@ -1,0 +1,27 @@
+{
+  "schema": "declarai_dependency_preparation_receipt_v1",
+  "scope": "verified AMD64 dependency base only; no application or CI qualification",
+  "preparation_passed": true,
+  "elapsed_seconds": 6819.11408429197,
+  "preparation_cap_seconds": 14400,
+  "image_sha256": "b216d5f9cbb02f85cc125d8d2f896826598a5a95176f0a6400c69bf7d7eaa529",
+  "image_bytes": 17038376960,
+  "image_read_only": true,
+  "independently_rehashed": true,
+  "dependency_manifest_sha256": "fead16a3b87c0fea5d69e908d86d97c86453d2e3902c6b942e51c592b5eef9c9",
+  "vendor_archive_staging_sha256": "f6d70c187ac658401480c2a8b54d4563a9bc5ca5ce692aec77dfcdb253ca43a3",
+  "verified_locked_packages": 173,
+  "contains_application_source": false,
+  "contains_runner_registration": false,
+  "native_prequalification_passed": false,
+  "owned_cleanup": {
+    "owned_VM_stopped": true,
+    "runner_never_registered": true,
+    "guest_disk_removed": true,
+    "proxy_stopped": true,
+    "immutable_dependency_base_retained": true,
+    "host_Docker_modified": false
+  },
+  "host_Docker_modified": false,
+  "release_qualified": false
+}

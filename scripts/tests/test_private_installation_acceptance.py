@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import qualify_private_installation_backup as backup
 import qualify_private_installation_workflow as workflow
+import qualify_private_installation_plan as installation
 
 
 class BackupFiles(unittest.TestCase):
@@ -69,6 +70,22 @@ class OwnedWorkflow(unittest.TestCase):
         session = object.__new__(workflow.Session)
         with self.assertRaisesRegex(workflow.schema_init.checker.planner.PlanError, "path_invalid"):
             session.request("GET", "https://example.com/")
+
+
+class NativeProfile(unittest.TestCase):
+    def test_each_architecture_is_bound_to_its_own_bundle(self):
+        for machine, image in (("x86_64", "amd64"), ("aarch64", "arm64")):
+            with self.subTest(machine=machine):
+                profile = {"architecture": machine, "os_release": {"ID": "ubuntu", "VERSION_ID": "24.04"}}
+                self.assertTrue(installation.qualification_profile_matches(profile, image))
+
+    def test_foreign_architecture_or_os_cannot_gain_qualification(self):
+        for machine, image, system, release in (("x86_64", "arm64", "ubuntu", "24.04"),
+                ("aarch64", "amd64", "ubuntu", "24.04"), ("unknown", "unknown", "ubuntu", "24.04"),
+                ("aarch64", "arm64", "debian", "24.04"), ("aarch64", "arm64", "ubuntu", "22.04")):
+            with self.subTest(machine=machine, image=image, system=system, release=release):
+                profile = {"architecture": machine, "os_release": {"ID": system, "VERSION_ID": release}}
+                self.assertFalse(installation.qualification_profile_matches(profile, image))
 
 
 if __name__ == "__main__":

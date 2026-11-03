@@ -48,3 +48,19 @@ component receipts. The next acceptance closure remains
 [D07-T02 clean installation](PRIVATE_INSTALLATION_ACCEPTANCE.md). P162 snapshot
 reads remain an independent P1 optimization. This performance repair does not
 close installation, upgrade, recovery, release or customer acceptance.
+
+## Native ARM64 qualification profile
+
+The third AMD64 run retained the two-root installation receipts, but its full
+native child timed out after 7,059 of 7,471 completed cases. All three failed
+runs remain unqualified. Under the owner's 3 November delegation, the next
+qualification uses the standard public Ubuntu 24.04 ARM64 runner with the same
+four CPUs and 16 GB RAM. Its original steps, tests, fits, folds, two workers,
+loadfile scheduling, coverage, retries/skips and 900-second cap are preserved.
+The other five jobs retain AMD64. Host architecture must match each frozen
+bundle, and ARM64 success will not qualify the timed-out AMD64 full suite.
+
+The separate Mac AMD64 dependency preparation succeeded within its four-hour
+cap. Its read-only base was independently rehashed, all 173 active package pins
+verified, and its owned guest/proxy cleaned up. It contains no application
+source or runner registration and grants no native or release qualification.

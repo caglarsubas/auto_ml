@@ -102,7 +102,11 @@ jobs:
   # Private configuration/TLS smoke, disposable restore and full metadata parity.
   postgresql-runtime:
     name: PostgreSQL runtime and metadata
-    runs-on: ubuntu-24.04
+    # Native ARM64 qualification; the other five jobs retain AMD64 coverage.
+    # Standard public-repository runners keep four CPUs / 16 GB. All original
+    # steps, workloads, two workers, scheduling and the 900-second cap remain.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     env:
       PROMETA_DISABLE: "1"
       OPENAI_API_KEY: ""

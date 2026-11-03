@@ -1,7 +1,7 @@
 {
   "schema": "declarai_native_runtime_repair_evidence_v1",
   "packet": "P163",
-  "observed_at": "2026-11-02T15:48:54.381300+00:00",
+  "observed_at": "2026-11-02T16:47:25.627215+00:00",
   "source_base": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
   "source_sha256": {
     "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
@@ -31,7 +31,7 @@
     "qualified_original_numeric_cases": 81,
     "staging_preflight_cases": 15,
     "all_passed": true,
-    "installation_acceptance_boundary_cases": 10,
+    "installation_acceptance_boundary_cases": 12,
     "overlapping_curve_and_metric_regression_cases": 211,
     "suites_overlap": true
   },
@@ -152,10 +152,10 @@
   "all_original_backend_test_tree_files_byte_identical": 234,
   "installation_acceptance_source_sha256": {
     "scripts/qualify_private_dependency_start.py": "5b93a13111871a001f7e37df86456908514139b3d33aba25c54545fd0219c895",
-    "scripts/qualify_private_installation_plan.py": "1419ba3f27348d81d3bb411a77afd0dd1df9ef86322a50aefda2406aeed4e853",
+    "scripts/qualify_private_installation_plan.py": "551883c440e714e292ef6a491006bcd88740a27f12083310c4060171c9eb889b",
     "scripts/qualify_private_installation_workflow.py": "29199b40864762701be5b8fb01f7ace82f6f798bda7bd82cf06e6ffae2c1b0f9",
     "scripts/qualify_private_installation_backup.py": "3665251b1bd3f0509a7195224de532d30e5467258d9adef8238df9839b977e39",
-    "scripts/tests/test_private_installation_acceptance.py": "540a14c330f341650b6171290faf01caeb63177f2ad58447d3db069da32ed988"
+    "scripts/tests/test_private_installation_acceptance.py": "392d3fbf1ec0d3213cebe52d3055f9f146db690ca90390e81bb34e16d2601ec1"
   },
   "installation_acceptance": {
     "implemented": true,
@@ -168,5 +168,50 @@
     "quiescent_encrypted_database_artifact_backup_verification": true,
     "execution_qualified": false,
     "upgrade_restore_operator_key_custody_qualified": false
+  },
+  "third_failed_qualification": {
+    "schema": "declarai_partial_clean_installation_audit_v1",
+    "run": 41475774630,
+    "head": "9840db9a3eeec133e5b18219d9b3dc311c0ba803",
+    "archive_sha256": "605bb2398df5fe210977e1cb9abf0ba692c3ab6d774b654dfab6772afbb32991",
+    "clean_roots_verified": 2,
+    "classification_and_regression_workflows_verified": 4,
+    "encrypted_baseline_backups_verified": 2,
+    "same_exact_image_inputs_verified": true,
+    "original_assertions_passed_twice": true,
+    "owned_root_cleanup_verified": true,
+    "full_native_finished": 7059,
+    "full_native_expected": 7471,
+    "native_child_cap": 900,
+    "full_run_qualified": false,
+    "main_qualified": false,
+    "task_closed": false,
+    "release_qualified": false
+  },
+  "profile_selection": {
+    "schema": "declarai_native_architecture_profile_change_v1",
+    "recorded_at": "2026-11-03T00:46:52.296426+00:00",
+    "authorization_basis": "User delegated full authority to continue development and merges until one additional done item",
+    "user_instruction": "you have full auth. continue development and merges till the done items increases 1 more",
+    "agent_selected_profile_under_delegation": true,
+    "explicit_user_architecture_selection_claimed": false,
+    "repository_public": true,
+    "runner": "ubuntu-24.04-arm",
+    "CPU": 4,
+    "memory_GB": 16,
+    "runner_price": "free standard runner for this public repository",
+    "source": "https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories",
+    "other_five_jobs_unchanged": true,
+    "all_original_qualification_steps_unchanged": true,
+    "original_backend_test_tree_files_byte_identical": 234,
+    "native_driver_byte_identical_to_main": true,
+    "worker_count": 2,
+    "scheduling": "loadfile",
+    "worker_restarts": 0,
+    "native_child_cap_seconds": 900,
+    "job_cap_seconds": 3600,
+    "native_ARM64_qualification": false,
+    "native_AMD64_full_suite_qualification": false,
+    "release_qualified": false
   }
 }

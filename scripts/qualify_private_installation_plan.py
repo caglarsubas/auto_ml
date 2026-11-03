@@ -13,6 +13,15 @@ import private_installation_plan as planner
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def qualification_profile_matches(profile, image_architecture):
+    """A native profile must match the frozen bundle; never relabel evidence."""
+    architectures = {"x86_64": "amd64", "aarch64": "arm64"}
+    return (image_architecture in architectures.values()
+            and architectures.get(profile["architecture"]) == image_architecture
+            and profile["os_release"].get("ID") == "ubuntu"
+            and profile["os_release"].get("VERSION_ID") == "24.04")
+
+
 def normalized_mounts(values):
     # Compose 2 serializes its false CreateHostPath bool as an omitted field.
     # Accept only that representation; true and other mount changes still fail.
@@ -111,8 +120,7 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                 profiles = [run["qualification"]["installation_profile"] for run in runs]
                 if (profiles[0]["installation_id"] == profiles[1]["installation_id"]
                     or any(profile["application_images"] != result["images"] for profile in profiles)
-                    or any(profile["architecture"] != "x86_64" or profile["os_release"].get("ID") != "ubuntu"
-                           or profile["os_release"].get("VERSION_ID") != "24.04" for profile in profiles)
+                    or any(not qualification_profile_matches(profile, result["architecture"]) for profile in profiles)
                     or any(run["source_plan_sha256"] != result["plan_manifest_sha256"] for run in runs)
                     or any(not run["owned_root_and_resources_removed"] for run in runs)):
                     raise planner.PlanError("installation_clean_reproduction_mismatch")
