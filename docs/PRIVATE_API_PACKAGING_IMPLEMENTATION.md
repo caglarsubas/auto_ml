@@ -1,5 +1,7 @@
 # P29 — Fixed private native API and offline image handoff
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 Updated 11 October 2026. Partial D06/D07 after verified [PR #118](https://github.com/caglarsubas/auto_ml/pull/118). The existing developer stack remains available. This packet supplies a native API/worker/dispatcher image and an offline handoff, not a complete governed installation or a release qualification.
 
 ## Build and trust

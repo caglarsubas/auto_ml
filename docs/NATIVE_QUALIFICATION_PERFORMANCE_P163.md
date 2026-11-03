@@ -46,8 +46,8 @@ classification/regression, export/scoring and baseline-backup acceptance route.
 It preserves existing installation/fault assertions rather than substituting
 component receipts. The next acceptance closure remains
 [D07-T02 clean installation](PRIVATE_INSTALLATION_ACCEPTANCE.md). P162 snapshot
-reads remain an independent P1 optimization. This performance repair does not
-close installation, upgrade, recovery, release or customer acceptance.
+reads remain an independent P1 optimization. The performance repair alone does not establish installation, upgrade,
+recovery, release or customer acceptance.
 
 ## Native ARM64 qualification profile
 
@@ -64,3 +64,5 @@ The separate Mac AMD64 dependency preparation succeeded within its four-hour
 cap. Its read-only base was independently rehashed, all 173 active package pins
 verified, and its owned guest/proxy cleaned up. It contains no application
 source or runner registration and grants no native or release qualification.
+
+The [P163 observed qualification](PRIVATE_INSTALLATION_ACCEPTANCE.md#observed-qualification--2026-11-03) now records successful exact-head PR and independent push-main runs, including the two-root clean-install acceptance. Earlier failures remain retained and unqualified.

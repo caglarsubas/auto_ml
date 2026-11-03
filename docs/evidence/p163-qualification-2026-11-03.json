@@ -1,0 +1,607 @@
+{
+  "schema": "declarai_clean_installation_qualification_v1",
+  "packet": "P163",
+  "recorded_at": "2026-11-03T02:08:19.624147+00:00",
+  "pr": 262,
+  "qualified_head": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
+  "merge": "e3698782dce55d182d351d12b34ee2f56e59969a",
+  "ci_run": 41555519421,
+  "main_run": 41560167461,
+  "merged_tree_matches_qualified_pr": true,
+  "main_qualified": true,
+  "qualified_profile": "Ubuntu 24.04 Linux ARM64; standard four-CPU/16-GB runner",
+  "scope": "Synthetic two-clean-root private installation with exact offline images, TLS/authentication, installed durable training/scoring, offline replay and baseline encrypted backup creation",
+  "pr_qualification": {
+    "schema": "declarai_P163_run_audit_v1",
+    "run": 41555519421,
+    "head": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
+    "event": "pull_request",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7326,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 937.142,
+      "passed": 7321
+    },
+    "native": {
+      "tests": 7471,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 785.986,
+      "passed": 7465
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7256,
+        "additional_cases": 70,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "1800eee947d7e7ade1d36e97670b3c290d852ea996d58de15eeb7b944ebf7811"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 70,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "450ed34dc638f150b43943290d3e76da479b8977d377bcbbb4acffe6387ab54e",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13194433910,
+        "sha256": "605ec5c2e0f0322ac28eecd1d4723293456b9586b1849ed0501e625111db7376"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13196921195,
+        "sha256": "14980ea5aa6769b8cb6fa8b5ecb79d042e38ad343f7c73870845eb4e17de7d63"
+      },
+      "playwright-report": {
+        "artifact_id": 13195376302,
+        "sha256": "1053039a858ce4cd8f3270eb96956213eb00765e2d97e4aebbdf3fbe9b696bc3"
+      }
+    },
+    "main_qualified": false,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "main_qualification": {
+    "schema": "declarai_P163_run_audit_v1",
+    "run": 41560167461,
+    "head": "e3698782dce55d182d351d12b34ee2f56e59969a",
+    "event": "push",
+    "six_jobs_passed": true,
+    "qualified_architecture": "arm64",
+    "backend": {
+      "tests": 7471,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 959.521,
+      "passed": 7465
+    },
+    "native": {
+      "tests": 7471,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 764.03,
+      "passed": 7465
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 70,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "f78b26dca906f0fbf585350678ba54632bc2d2866fc9e1835721ed2ee688d02f"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 70,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "coverage_line_rate": 0.7728,
+    "private_dependency_packages_verified": 172,
+    "declared_platform_inactive_dependencies": {
+      "nvidia-nccl-cu12": "platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    },
+    "frontend": 722,
+    "browser": {
+      "total": 47,
+      "expected": 47,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend_unit_log_sha256": "309a84789f7de2b291e818e25fbf172c4a03326cde056409f11e41f04bacaf78",
+    "two_clean_roots_and_both_workflows_verified": true,
+    "baseline_backup_creation_verified": true,
+    "successful_native_parent_and_downstream_checks": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13198120477,
+        "sha256": "8d462b41c23ebbbbbf295d146336f81c760e59ad0c240c6d9f0d48140b9928cf"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13197178513,
+        "sha256": "bdebffcfd276a55d6999d830871fd83716496ec6664be835550ec3006ff274ca"
+      },
+      "playwright-report": {
+        "artifact_id": 13196033684,
+        "sha256": "7608491e3513d85ff4ef9cc4a3e3b87fd7f1272c8a7eafe899b07d59d7b8b6bc"
+      }
+    },
+    "main_qualified": true,
+    "release_qualified": false,
+    "customer_accepted": false
+  },
+  "pr_clean_installations": {
+    "all_original_dependency_start_assertions": "passed_twice",
+    "backups": [
+      {
+        "artifact_files": 3,
+        "backup_manifest_sha256": "aada27bd3be8a150f4b7fc936d9f1d9efc7a6c077b178da4aa982cd0870903d0",
+        "credential_or_backup_bytes_retained_in_reports": false,
+        "database_archive_catalog": "verified",
+        "decrypted_all_members_and_hashes": "passed",
+        "encrypted_archive_bytes": 143388,
+        "encrypted_archive_sha256": "9ac75c88652f9e734f84c124f31a68152c73722c10f9d9858dbf9bdfaded3da7",
+        "fixture_key_and_archive_removed_with_owned_root": true,
+        "operator_key_custody_qualified": false,
+        "plan_manifest_sha256": "884905a30c3ae8fb8b7f002c75c4046061cb1b45155d5637b77e04b8c189753d",
+        "quiescent_database_and_artifact_capture": "passed",
+        "restore_qualified": false,
+        "schema": "private_installed_baseline_backup_qualification_v1",
+        "tamper_and_wrong_plan_binding": "refused"
+      },
+      {
+        "artifact_files": 3,
+        "backup_manifest_sha256": "39cee06d5d02cdac5eac8eff1838db56dd106407680de55c3ff3ee653ee9d8a7",
+        "credential_or_backup_bytes_retained_in_reports": false,
+        "database_archive_catalog": "verified",
+        "decrypted_all_members_and_hashes": "passed",
+        "encrypted_archive_bytes": 143388,
+        "encrypted_archive_sha256": "0d4818a67238f2915c44a6a876d755e81c9aff4786481e3ec5156d1cc77670ae",
+        "fixture_key_and_archive_removed_with_owned_root": true,
+        "operator_key_custody_qualified": false,
+        "plan_manifest_sha256": "61675c0c5a2b7ad731e48fe2960c191864c5866f9e91770803f846d5469e7567",
+        "quiescent_database_and_artifact_capture": "passed",
+        "restore_qualified": false,
+        "schema": "private_installed_baseline_backup_qualification_v1",
+        "tamper_and_wrong_plan_binding": "refused"
+      }
+    ],
+    "clean_roots": 2,
+    "customer_accepted": false,
+    "image_set_manifest_sha256": "45869e6c283fbc1383408052d4971ed9e3f1cefc96c66ab245a820a51ee52657",
+    "images": {
+      "api": "sha256:5228569fa754211257b8c096ed89b030334b9f8c47ed0ae6684b92dbd088b820",
+      "ingress": "sha256:a8b519a9eb4c0e96c0d44ae512e87b59653913557abc66fefb5238a46c54ab9e",
+      "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+      "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+    },
+    "installation_profiles": [
+      {
+        "application_images": {
+          "api": "sha256:5228569fa754211257b8c096ed89b030334b9f8c47ed0ae6684b92dbd088b820",
+          "ingress": "sha256:a8b519a9eb4c0e96c0d44ae512e87b59653913557abc66fefb5238a46c54ab9e",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-6859c7c6463e4ddb9261",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      {
+        "application_images": {
+          "api": "sha256:5228569fa754211257b8c096ed89b030334b9f8c47ed0ae6684b92dbd088b820",
+          "ingress": "sha256:a8b519a9eb4c0e96c0d44ae512e87b59653913557abc66fefb5238a46c54ab9e",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-1307035a15ed407b811d",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      }
+    ],
+    "operator_key_custody_qualified": false,
+    "owned_roots_and_resources_removed": true,
+    "plan_manifest_sha256": "e3cdf484c4e8aa09fb0e89cd5515cfbde97c7da734ca83934f9b1cda24e603b2",
+    "release_qualified": false,
+    "same_exact_image_inputs": true,
+    "schema": "private_clean_installation_acceptance_v1",
+    "synthetic_clean_installation_qualified": true,
+    "upgrade_or_machine_loss_restore_qualified": false,
+    "workflows": [
+      {
+        "actual_installed_tls_api_worker_dispatcher": "passed",
+        "credential_or_session_values_retained": false,
+        "duplicate_submission_single_job": "passed",
+        "model_adopted": false,
+        "operator_installation_modified": false,
+        "production_use_approved": false,
+        "schema": "private_installed_workflow_v1",
+        "workflows": [
+          {
+            "export_sha256": "eef269e8ed010e1bf20984f289fbcda0e346c37b825e5ac7205ace3b51cda3e2",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "cf8ed649c8d06d35ccb81a3c4ef003904d34dba77359161f27ffc5d9c083c39a",
+            "task": "classification",
+            "training_result_sha256": "ed5ccfbb5e4992080f929032416e795e8e9cfb9163220ff48d6bea3898eb3c93"
+          },
+          {
+            "export_sha256": "fa50baccf4522dccf32c18ccf2509e247baae49d812597d364dae1c7fceab65c",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "c8348af023f77e4dc0e13913026ce8b4e0f17abc5ce0fa3dc3fda6ee82fb67a7",
+            "task": "regression",
+            "training_result_sha256": "b6855992929034ed98fddf4fe5c525dd00a15c32a5c655add866b0fc13178c11"
+          }
+        ]
+      },
+      {
+        "actual_installed_tls_api_worker_dispatcher": "passed",
+        "credential_or_session_values_retained": false,
+        "duplicate_submission_single_job": "passed",
+        "model_adopted": false,
+        "operator_installation_modified": false,
+        "production_use_approved": false,
+        "schema": "private_installed_workflow_v1",
+        "workflows": [
+          {
+            "export_sha256": "96715938c4ab560309b3cff52d1bfc2d5c2eb109f87b45651d7242021d1b4a80",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "c4052411c7510ff9276d485689c3384f40e225c0b6c96e5139122e80a1962c2b",
+            "task": "classification",
+            "training_result_sha256": "e4441b0a0d653b59ee4b355f48a40c23885d86669804d859d6d8d1340502a1e6"
+          },
+          {
+            "export_sha256": "4cfb27f82aa3de2540258b33b6895a1626b87c2c8e1f507e4d02d4fbbfb75a17",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "7babedc99d28f2bb61029034ade03887a5d5c71ee96266faac41342de75ec1ed",
+            "task": "regression",
+            "training_result_sha256": "20cbbb03c47f729227b04ce0d6fda39ff4cc8718a849698987efb560573bff10"
+          }
+        ]
+      }
+    ]
+  },
+  "main_clean_installations": {
+    "all_original_dependency_start_assertions": "passed_twice",
+    "backups": [
+      {
+        "artifact_files": 3,
+        "backup_manifest_sha256": "76252f5475d2a7ce31206b49095b668d98882f37fc9607bcaa4545c98630679c",
+        "credential_or_backup_bytes_retained_in_reports": false,
+        "database_archive_catalog": "verified",
+        "decrypted_all_members_and_hashes": "passed",
+        "encrypted_archive_bytes": 143388,
+        "encrypted_archive_sha256": "a087119cb0cf15f87d74f49dd4d5dcbf217b364a97e69751b76c9ddb5bd69262",
+        "fixture_key_and_archive_removed_with_owned_root": true,
+        "operator_key_custody_qualified": false,
+        "plan_manifest_sha256": "955ec6368e6e3d345e136b4be8e683a13b5d09a410b9cc4c5c007e81efd55da4",
+        "quiescent_database_and_artifact_capture": "passed",
+        "restore_qualified": false,
+        "schema": "private_installed_baseline_backup_qualification_v1",
+        "tamper_and_wrong_plan_binding": "refused"
+      },
+      {
+        "artifact_files": 3,
+        "backup_manifest_sha256": "5aeea56cc5a57c9b17c25141075bc01fa9c58500457a01ca00401524262bf427",
+        "credential_or_backup_bytes_retained_in_reports": false,
+        "database_archive_catalog": "verified",
+        "decrypted_all_members_and_hashes": "passed",
+        "encrypted_archive_bytes": 143388,
+        "encrypted_archive_sha256": "b50d79d7ea52bfe4a8d1bd6eb89f1fbfb1e9f34f580e8b63f4ed01e53e1fd6f3",
+        "fixture_key_and_archive_removed_with_owned_root": true,
+        "operator_key_custody_qualified": false,
+        "plan_manifest_sha256": "bcc3589f0041a5a6fc124647e052474c972e9e3dca828025c6ee395ba6af5626",
+        "quiescent_database_and_artifact_capture": "passed",
+        "restore_qualified": false,
+        "schema": "private_installed_baseline_backup_qualification_v1",
+        "tamper_and_wrong_plan_binding": "refused"
+      }
+    ],
+    "clean_roots": 2,
+    "customer_accepted": false,
+    "image_set_manifest_sha256": "10f2dedb896150da3990747bc446d85d3d0b988012053e1df09510b022ba22e8",
+    "images": {
+      "api": "sha256:2a4c53693b6803b6bbed2b0008a2e174063cc027920fe5cd1238116e9387cf14",
+      "ingress": "sha256:36c4ca2b50b7ad43a960fe4277be581cd3496b1c4687ee3435f6cf1a9d1f2cd7",
+      "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+      "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+    },
+    "installation_profiles": [
+      {
+        "application_images": {
+          "api": "sha256:2a4c53693b6803b6bbed2b0008a2e174063cc027920fe5cd1238116e9387cf14",
+          "ingress": "sha256:36c4ca2b50b7ad43a960fe4277be581cd3496b1c4687ee3435f6cf1a9d1f2cd7",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-9397a5fe8afc4abfb771",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      },
+      {
+        "application_images": {
+          "api": "sha256:2a4c53693b6803b6bbed2b0008a2e174063cc027920fe5cd1238116e9387cf14",
+          "ingress": "sha256:36c4ca2b50b7ad43a960fe4277be581cd3496b1c4687ee3435f6cf1a9d1f2cd7",
+          "postgres": "sha256:747ba3316147cd68af2221d325c3554945de9a0447a7198279ac8d581cccb783",
+          "redis": "sha256:01f73c85aec472daf9dacf96db7a9a1fd819e0a26a2a3710e5a36b5077919de5"
+        },
+        "application_pull_policy": "never",
+        "architecture": "aarch64",
+        "cpu_count": 4,
+        "installation_id": "q-7755ce38c2c54d9c92e6",
+        "observed_memory_bytes": 16715927552,
+        "os_release": {
+          "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+          "HOME_URL": "https://www.ubuntu.com/",
+          "ID": "ubuntu",
+          "ID_LIKE": "debian",
+          "LOGO": "ubuntu-logo",
+          "NAME": "Ubuntu",
+          "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+          "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+          "SUPPORT_URL": "https://help.ubuntu.com/",
+          "UBUNTU_CODENAME": "noble",
+          "VERSION": "24.04.5 LTS (Noble Numbat)",
+          "VERSION_CODENAME": "noble",
+          "VERSION_ID": "24.04"
+        },
+        "private_network_internal": true,
+        "root_exclusively_created": true,
+        "workload_capacity_qualified": false
+      }
+    ],
+    "operator_key_custody_qualified": false,
+    "owned_roots_and_resources_removed": true,
+    "plan_manifest_sha256": "ace14dca4dac32736d64af8f44bc164b2a50fab6815b12837ed93150af86a666",
+    "release_qualified": false,
+    "same_exact_image_inputs": true,
+    "schema": "private_clean_installation_acceptance_v1",
+    "synthetic_clean_installation_qualified": true,
+    "upgrade_or_machine_loss_restore_qualified": false,
+    "workflows": [
+      {
+        "actual_installed_tls_api_worker_dispatcher": "passed",
+        "credential_or_session_values_retained": false,
+        "duplicate_submission_single_job": "passed",
+        "model_adopted": false,
+        "operator_installation_modified": false,
+        "production_use_approved": false,
+        "schema": "private_installed_workflow_v1",
+        "workflows": [
+          {
+            "export_sha256": "523b50de5adcff24f91a5ca71b20c68e495847a94ea2ae2329625081bed72ea4",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "de2c0e97cd276175361446e45b0007c54720dbc1ad61bd24735f6e9884d6d36e",
+            "task": "classification",
+            "training_result_sha256": "834453fc1095e178703c9bf91e5ad6cae71eb715653ecccc13d698420f2256cf"
+          },
+          {
+            "export_sha256": "b94c844be2a17752be4f7ff113d35891cfd5af76f1b1ae230b93e0e2abdcca2e",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "bdbf86845f6a76ff1909966f30bb060de16ca2402d04e0da12523ada17ca71c8",
+            "task": "regression",
+            "training_result_sha256": "b182ca00f862806719c7c3de413a6964ba86b3a5bc8de8a6cd91521fd4301b7e"
+          }
+        ]
+      },
+      {
+        "actual_installed_tls_api_worker_dispatcher": "passed",
+        "credential_or_session_values_retained": false,
+        "duplicate_submission_single_job": "passed",
+        "model_adopted": false,
+        "operator_installation_modified": false,
+        "production_use_approved": false,
+        "schema": "private_installed_workflow_v1",
+        "workflows": [
+          {
+            "export_sha256": "52b96dc42d227e8857752142eaf8326deae4e6e3fd3021643f8efb341644206d",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "cd3db550859d4206a130b747f3112af6215e9bbfe09a759de9f92d7b7418da47",
+            "task": "classification",
+            "training_result_sha256": "000f8a7cb53e170072abc9f3c63dad2c9f80fb73e6130cacf427c194c5f78baa"
+          },
+          {
+            "export_sha256": "5eeb6044a97f7ce9c678102a92cafc6202418d92b88bd7890dfd36362c555884",
+            "prediction_and_chunk_parity": "passed",
+            "rows": 3,
+            "scoring_result_sha256": "40c844fe7788cd9234c71c4bd2aed8477031868ce8d1177c00fb102032099f9d",
+            "task": "regression",
+            "training_result_sha256": "a2664480b14679a485bf6df37aa56313be3e4892872deab3edf60202060cbc17"
+          }
+        ]
+      }
+    ]
+  },
+  "source_sha256": {
+    ".github/workflows/ci.yml": "cfafd062bcf1418be2b86265e1c7ae6666ed8be2ba8bb92937e994676c990031",
+    "backend/modeling/booster_adapters.py": "b7eb7d2f25d1fdd5fe1c1158804c828aa8c7ab7e8499388bae95d512169fafd5",
+    "backend/modeling/development_assessment.py": "235803d2a42913c856cfc5516e0dd4c115c3e34f9dd8e061efccb6b3b2c91322",
+    "scripts/private_build_preflight.py": "2145bf9eb84237f21ea0a7e4ae5157d5f1e3638d258bb5dad555e672a1eb9b33",
+    "scripts/qualify_private_dependency_start.py": "5b93a13111871a001f7e37df86456908514139b3d33aba25c54545fd0219c895",
+    "scripts/qualify_private_installation_plan.py": "551883c440e714e292ef6a491006bcd88740a27f12083310c4060171c9eb889b",
+    "scripts/qualify_private_installation_workflow.py": "29199b40864762701be5b8fb01f7ace82f6f798bda7bd82cf06e6ffae2c1b0f9",
+    "scripts/qualify_private_installation_backup.py": "3665251b1bd3f0509a7195224de532d30e5467258d9adef8238df9839b977e39",
+    "scripts/qualify_postgres_fixture.py": "6eb96ffb80ec9dcb1d413557aabc6e6ac35f3f70ad4610286a36db03cdc7c14f",
+    "docker/private-api.requirements.lock": "cc7d8ad6a52cf73eaa34e22b0fbe8846650fc14b88ba5e0b4a210a46849c3538",
+    "docker/private-qualification.constraints.txt": "8acca7d1d0af624e0055c395d6a16df71981ee7ab1166aa00551050ba7369558"
+  },
+  "source_hashes_match": true,
+  "all_original_test_files_byte_identical": true,
+  "original_test_and_fixture_files_preserved": 297,
+  "original_case_skip_workload_limits_preserved": true,
+  "native_cap_seconds": 900,
+  "workers": 2,
+  "scheduling": "loadfile",
+  "worker_restarts": 0,
+  "native_AMD64_full_suite_qualified": false,
+  "upgrade_qualified": false,
+  "machine_loss_restore_qualified": false,
+  "operator_key_custody_qualified": false,
+  "customer_capacity_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false,
+  "retained_unqualified_runs": [
+    41448923298,
+    41466554790,
+    41475774630
+  ],
+  "before": {
+    "done": 2,
+    "open": 57,
+    "blocked": 7
+  },
+  "after": {
+    "done": 3,
+    "open": 56,
+    "blocked": 7
+  },
+  "task_closed": "D07-T02",
+  "fixed_task_inventory": 66,
+  "mac_host_staging_preflight": {
+    "schema": "private_online_staging_preflight_v1",
+    "observed_at": "2026-11-03T01:46:05.808837+00:00",
+    "docker": {
+      "available": true,
+      "os": "linux",
+      "architecture": "arm64"
+    },
+    "public_https": [
+      {
+        "host": "registry-1.docker.io",
+        "passed": true,
+        "synthetic_dns": true,
+        "stage": "HTTP",
+        "http_status": 401
+      },
+      {
+        "host": "auth.docker.io",
+        "passed": true,
+        "synthetic_dns": true,
+        "stage": "HTTP",
+        "http_status": 200
+      },
+      {
+        "host": "dns.google",
+        "passed": true,
+        "synthetic_dns": true,
+        "stage": "HTTP",
+        "http_status": 200
+      },
+      {
+        "host": "api.github.com",
+        "passed": true,
+        "synthetic_dns": true,
+        "stage": "HTTP",
+        "http_status": 200
+      }
+    ],
+    "hints": [],
+    "ready_for_online_staging": true,
+    "read_only": true,
+    "installation_qualified": false,
+    "scope": "current_host_online_staging_only",
+    "limitations": [
+      "Does not prove guest, daemon or CDN blob connectivity.",
+      "Synthetic DNS alone is not a failure; some VPNs use it normally.",
+      "Offline installation does not require these public endpoints."
+    ]
+  },
+  "request_start_counts": {
+    "done": 2,
+    "open": 56,
+    "blocked": 8
+  }
+}

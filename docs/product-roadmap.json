@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-02",
+  "updated": "2026-11-03",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -763,9 +763,12 @@
         "[Exact-head CI](https://github.com/caglarsubas/auto_ml/actions/runs/41010944833)",
         "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40846116612)",
         "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40858199483)",
-        "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40870496793)"
+        "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40870496793)",
+        "[P163 clean-install qualification](evidence/p163-qualification-2026-11-03.json)",
+        "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421)",
+        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)"
       ],
-      "progress": "P163 / PR #262 continues under full delegated authority. The native PostgreSQL job targets standard Ubuntu 24.04 ARM64 with 4 CPUs / 16 GB; all original workloads, steps, two workers and 900-second cap remain, while the other five jobs retain AMD64. Earlier AMD64 two-root installation, four workflow and two backup receipts are verified partial evidence. Mac dependency preparation passed and cleanup is verified. Exact-head PR/main qualification and D07-T02 closure remain pending; AMD64 full-suite, upgrade, restore, capacity, release and customer gates remain open."
+      "progress": "P163 / PR #262 closes D07-T02: Ubuntu 24.04 ARM64 clean private installation is reproduced from exact offline images in two fresh roots in both qualified PR and independent push-main. Installed HTTPS classification/regression training, export/scoring replay and baseline encrypted backup checks pass. Original 297 test files, case/skip identities, workloads, two workers and 900-second cap are preserved. D07-T03 upgrade/rollback and D07-T04 coordinated restore become ready; AMD64 native, operator, capacity, broader D07/release and customer gates remain open."
     },
     {
       "id": "D08",
@@ -1997,6 +2000,11 @@
     {
       "date": "2026-11-02",
       "change": "Retain failed P163 native qualification without weakening its900-second gate; add bounded numeric/curve preparation with original independent checks. Identify the missing Redis platform attestation and verify augmented OCI archives. Done/open/blocked remains2/57/7."
+    },
+    {
+      "date": "2026-11-03",
+      "packet": "P163",
+      "change": "Close D07-T02 only after qualified PR and automatic push-main on Ubuntu 24.04 ARM64. Fixed 66-task inventory changes from2/57/7 to3/56/7 done/open/blocked (3.0% to4.5% done); upgrade/rollback and coordinated restore become ready. AMD64 native, broader D07, release and customer acceptance remain open."
     }
   ],
   "implementation_packets": [
@@ -4854,10 +4862,10 @@
     },
     {
       "id": "P163",
-      "title": "D07 bounded native preparation, diagnostics and clean-install closure path",
+      "title": "D07 qualified ARM64 clean installation and bounded native preparation",
       "kind": "product_implementation",
       "owner": "Platform",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D07"
       ],
@@ -4873,9 +4881,12 @@
         "[Retained second timeout](https://github.com/caglarsubas/auto_ml/actions/runs/41466554790)",
         "[Retained third timeout and installation receipts](https://github.com/caglarsubas/auto_ml/actions/runs/41475774630)",
         "[Native architecture profile](evidence/p163-hosted-arm64-profile-2026-11-03.json)",
-        "[Verified Mac dependency preparation](evidence/p163-mac-preparation-2026-11-03.json)"
+        "[Verified Mac dependency preparation](evidence/p163-mac-preparation-2026-11-03.json)",
+        "[P163 clean-install qualification](evidence/p163-qualification-2026-11-03.json)",
+        "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421)",
+        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)"
       ],
-      "remaining": "Owner delegated full authority on 3 November. Native ARM64 Ubuntu 24.04 qualification now uses GitHub standard public runners with 4 CPUs / 16 GB; all original steps, workloads, two workers, coverage, skips/retries and 900-second cap remain. Other five jobs retain AMD64. The existing AMD64 preparation passed independently and its guest/proxy were cleaned. Prior AMD64 installation receipts remain valid partial evidence, while its timed-out full suite remains unqualified. New exact-head PR and independent main qualification are required before D07-T02 closes."
+      "remaining": "D07-T02 is closed for the synthetic Ubuntu 24.04 ARM64 profile after all six PR and automatic push-main checks and audited installation receipts. AMD64 full native qualification, interrupted upgrade/rollback, coordinated machine-loss restore, operator backup-key custody, supported workload capacity, release and customer acceptance remain open. P162 / PR #261 remains separate unmerged P1 work."
     }
   ],
   "release_qualification": {
@@ -5037,8 +5048,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P161",
-    "source_commit": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+    "packet": "P163 (before qualification)",
+    "source_commit": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5048,11 +5059,11 @@
       }
     },
     "packets": {
-      "total": 161,
+      "total": 163,
       "counts": {
         "done": 161,
-        "open": 0,
-        "blocked": 0
+        "open": 1,
+        "blocked": 1
       }
     }
   },
@@ -5411,13 +5422,13 @@
       {
         "id": "D07-T02",
         "title": "Close the supported Linux deployment profile and clean install",
-        "description": "Specify the supported topology/assets/resources and qualify a clean restricted-network installation.",
+        "description": "Qualified synthetic clean restricted-network installation on Ubuntu 24.04 Linux ARM64 from an exact frozen image bundle, reproduced in two fresh owned installation roots in both PR and independent main qualification.",
         "items": [
           "D07"
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D07-T01"
         ],
@@ -5427,7 +5438,10 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Finite clean-install acceptance sequence](PRIVATE_INSTALLATION_ACCEPTANCE.md)"
+          "[Finite clean-install acceptance sequence](PRIVATE_INSTALLATION_ACCEPTANCE.md)",
+          "[P163 clean-install qualification](evidence/p163-qualification-2026-11-03.json)",
+          "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421)",
+          "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)"
         ],
         "packet_refs": [
           "P163"
@@ -6742,15 +6756,15 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Qualified P161 remaining-scope inventory",
-      "recorded_on": "2026-10-29",
-      "inventory_source_commit": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+      "label": "Before qualified P163 clean-install closure",
+      "recorded_on": "2026-11-03",
+      "inventory_source_commit": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
       "total": 66,
       "counts": {
-        "ready": 12,
-        "in_progress": 0,
+        "ready": 10,
+        "in_progress": 1,
         "waiting": 46,
-        "blocked": 6,
+        "blocked": 7,
         "done": 2
       }
     },
@@ -6767,6 +6781,20 @@
           "waiting": 48,
           "blocked": 6,
           "done": 0
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Qualified P161 remaining-scope inventory",
+        "recorded_on": "2026-10-29",
+        "inventory_source_commit": "45bdd0deb7a9640c05c2d2316ef1e75d21ad0fec",
+        "total": 66,
+        "counts": {
+          "ready": 12,
+          "in_progress": 0,
+          "waiting": 46,
+          "blocked": 6,
+          "done": 2
         }
       }
     ]

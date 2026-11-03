@@ -1,5 +1,7 @@
 # Packaged private native jobs — P33
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 P33 runs the fixed private image's worker and dispatcher as separate disposable containers, through their unchanged manifest-verified entrypoint. The existing private PostgreSQL fixture now performs this check whenever `--private-api-image` is selected. The fixture uses its TLS-verified PostgreSQL and authenticated TLS job broker; it never adopts or modifies an installed service.
 
 ## Execution and evidence

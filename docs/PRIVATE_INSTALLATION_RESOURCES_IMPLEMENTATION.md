@@ -1,5 +1,7 @@
 # Dedicated private networks and socket — P37
 
+Current complete installation qualification is recorded in [D07-T02 acceptance](PRIVATE_INSTALLATION_ACCEPTANCE.md) for Ubuntu 24.04 ARM64. This implementation record retains its original architecture-specific observations; they do not confer complete AMD64 native qualification.
+
 The historical v1 profile below used two internal bridges. [P38 adoption](PRIVATE_INSTALLATION_ADOPT_IMPLEMENTATION.md) adds a versioned v2 profile: the data-service bridge remains internal and the dedicated ingress bridge supports approved-address HTTPS publication. Current preparation follows the exact verified version; existing networks are never converted or repaired.
 
 After [fresh filesystem initialization](PRIVATE_INSTALLATION_INIT_IMPLEMENTATION.md), the operator can prepare the dedicated networks and empty API socket volume required by the reviewed application plan. P37 remains partial D07. It starts only a bounded filesystem initializer; database/cache/broker and application service adoption are separate steps.
