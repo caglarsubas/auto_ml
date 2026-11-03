@@ -1,9 +1,9 @@
 # D07-T03 — Staged upgrade and compatible rollback
 
-P165 is in progress. D07-T03 acceptance is unchanged. The target is a real sealed
-release/schema transition, interrupted execution without partial adoption, and
-rollback that rejects incompatible state while preserving current data/evidence.
-The inventory stays 66 tasks: 4 done/55 open/7 blocked until qualification.
+P165 is test-qualified. D07-T03 is accepted for the supported synthetic ARM64
+physical-index release: distinct sealed API images, interrupted execution without
+partial adoption and compatible rollback preserving current data/evidence.
+The fixed 66-task inventory is 5 done/54 open/7 blocked (7.6%/81.8%/10.6%).
 
 The initial supported transition is an API-image upgrade with identical dependency
 images, interpreter/dependency versions, application/data layout and scientific
@@ -109,3 +109,14 @@ pruning disabled, then reimports and verifies the original API image from its
 trusted tag-free offline bundle. This preserves the exact inputs required by
 downstream tests on the supported Linux Docker profile. Keep the exact controller
 revision with the reviewed plan for later replay and adoption.
+
+## Recorded acceptance
+
+[PR #266](https://github.com/caglarsubas/auto_ml/pull/266) and independent
+automatic push-main passed all six checks. Exact commits, artifact digests, original
+case/skip preservation and installed forward/rollback evidence are retained in
+[P165 qualification](evidence/p165-qualification-2026-11-03.json).
+
+Done increased 4 to 5 of 66 tasks: 6.1% to 7.6%, an actual 1.515 percentage-point
+increase. Open decreased 55 to 54; blocked remains 7. The broader D07 outcome,
+arbitrary schema/application changes and release/customer acceptance remain open.
