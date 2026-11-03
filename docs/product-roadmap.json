@@ -766,9 +766,13 @@
         "[Retained failed CI](https://github.com/caglarsubas/auto_ml/actions/runs/40870496793)",
         "[P163 clean-install qualification](evidence/p163-qualification-2026-11-03.json)",
         "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421)",
-        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)"
+        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)",
+        "[P164 recovery qualification](evidence/p164-qualification-2026-11-03.json)",
+        "[PR #264](https://github.com/caglarsubas/auto_ml/pull/264)",
+        "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41587387666)",
+        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)"
       ],
-      "progress": "P163 / PR #262 closes D07-T02: Ubuntu 24.04 ARM64 clean private installation is reproduced from exact offline images in two fresh roots in both qualified PR and independent push-main. Installed HTTPS classification/regression training, export/scoring replay and baseline encrypted backup checks pass. Original 297 test files, case/skip identities, workloads, two workers and 900-second cap are preserved. D07-T03 upgrade/rollback and D07-T04 coordinated restore become ready; AMD64 native, operator, capacity, broader D07/release and customer gates remain open."
+      "progress": "P164 / PR #264 closes D07-T04 for synthetic Ubuntu 24.04 ARM64 coordinated installed recovery. An independently initialized target restores encrypted same-image database/artifact state after source storage and services are removed. Authority, classification/regression export/scoring bytes, original completed job history, natural 180-second orphan recovery, cancellation, duplicate-delivery refusal and interrupted publication recovery pass in PR and independent push-main. Fixed 66-task progress:3 to 4 done (4.5% to 6.1%); open 56 to 55; blocked 7 unchanged. D07-T03 upgrade/rollback and other remaining D07/release/customer gates stay open."
     },
     {
       "id": "D08",
@@ -1337,7 +1341,7 @@
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
-  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. Immediate D07 closure target: D07-T02 clean Linux installation, then D07-T03/T04 upgrade and restore. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. Next D07 closure target: D07-T03 interrupted upgrade/rollback, followed by the remaining durable execution and operational acceptance tasks. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
   "history": [
     {
       "date": "2026-10-07",
@@ -2010,6 +2014,11 @@
       "date": "2026-11-03",
       "packet": "P164",
       "change": "Begin D07-T04 coordinated recovery on the qualified Ubuntu24.04 ARM64 profile. Keep66 tasks and3 done; target4 done only after complete installed recovery, original tests and independent PR/main evidence."
+    },
+    {
+      "date": "2026-11-03",
+      "packet": "P164",
+      "change": "Qualify D07-T04 coordinated installed recovery through all six exact-head PR and independent push-main checks. Retain the failed cleanup/bootstrap attempts and original workload/skip limits. Fixed 66 tasks: 4 done/55 open/7 blocked; no release or customer acceptance is implied."
     }
   ],
   "implementation_packets": [
@@ -4898,15 +4907,19 @@
       "title": "D07 coordinated installed recovery and broker/cache reconstruction",
       "kind": "product_implementation",
       "owner": "Platform",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D07"
       ],
       "description": "Provide encrypted same-runtime database/artifact recovery plans, exclusive empty-target restoration, resumable verification and adoption fencing. Qualify complete installed state after deliberate loss of source services/storage, preserving authority, completed results and pending durable work.",
       "evidence": [
-        "[Recovery scope and acceptance](PRIVATE_INSTALLATION_RECOVERY.md)"
+        "[Recovery scope and acceptance](PRIVATE_INSTALLATION_RECOVERY.md)",
+        "[P164 recovery qualification](evidence/p164-qualification-2026-11-03.json)",
+        "[PR #264](https://github.com/caglarsubas/auto_ml/pull/264)",
+        "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41587387666)",
+        "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)"
       ],
-      "remaining": "Implementation, original regression suites, actual installed machine-loss/recovery scenarios, exact-head PR and independent push-main qualification remain required. Customer RPO/RTO, operator key custody, capacity, upgrade, release and acceptance remain separate."
+      "remaining": "D07-T04 is closed for the supported synthetic Ubuntu24.04 ARM64 recovery profile. Customer recovery objectives, operator key custody, capacity, external identity/revocation reconciliation, upgrade/rollback, full AMD64 native qualification, broader D07, release and customer acceptance retain separate gates."
     }
   ],
   "release_qualification": {
@@ -5501,7 +5514,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D07-T02"
         ],
@@ -5511,7 +5524,11 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Coordinated recovery acceptance](PRIVATE_INSTALLATION_RECOVERY.md)"
+          "[Coordinated recovery acceptance](PRIVATE_INSTALLATION_RECOVERY.md)",
+          "[P164 recovery qualification](evidence/p164-qualification-2026-11-03.json)",
+          "[PR #264](https://github.com/caglarsubas/auto_ml/pull/264)",
+          "[Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41587387666)",
+          "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)"
         ],
         "packet_refs": [
           "P164"
