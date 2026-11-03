@@ -161,7 +161,7 @@ def qualify(value, receipt, parent):
             m.command(["container", "rm", "--force", identifier])
 
 
-def https_roles(value, accounts, passwords, parent):
+def https_roles(value, accounts, passwords, parent, username_token=None):
     """Actual CA/hostname-verified sessions; never retain cookies or passwords."""
     from http.cookies import SimpleCookie
 
@@ -197,7 +197,7 @@ def https_roles(value, accounts, passwords, parent):
         status, anonymous = request("GET", "/api/auth/session/")
         if status != 200 or anonymous["authenticated"] is not False:
             raise schema_init.checker.planner.PlanError("account_fixture_https_failed")
-        username = "fixture-" + role + "-" + parent.name.removeprefix("declarai-p37-")
+        username = "fixture-" + role + "-" + (username_token or parent.name.removeprefix("declarai-p37-"))
         status, session = request(
             "POST", "/api/auth/login/", {"username": username, "password": passwords[role]}, anonymous["csrf_token"]
         )

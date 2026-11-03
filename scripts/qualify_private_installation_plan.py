@@ -150,6 +150,10 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
         # Retain nonsecret rendered evidence, not the multi-GiB image archives.
         for name in planner.FILES | {"manifest.json"}:
             (reports / ("installation-plan-" + name)).write_bytes((plan / name).read_bytes())
+    if adoption_check:
+        from qualify_private_installation_recovery import qualify as qualify_recovery
+
+        qualify_recovery(reports)
     return result
 
 

@@ -2005,6 +2005,11 @@
       "date": "2026-11-03",
       "packet": "P163",
       "change": "Close D07-T02 only after qualified PR and automatic push-main on Ubuntu 24.04 ARM64. Fixed 66-task inventory changes from2/57/7 to3/56/7 done/open/blocked (3.0% to4.5% done); upgrade/rollback and coordinated restore become ready. AMD64 native, broader D07, release and customer acceptance remain open."
+    },
+    {
+      "date": "2026-11-03",
+      "packet": "P164",
+      "change": "Begin D07-T04 coordinated recovery on the qualified Ubuntu24.04 ARM64 profile. Keep66 tasks and3 done; target4 done only after complete installed recovery, original tests and independent PR/main evidence."
     }
   ],
   "implementation_packets": [
@@ -4887,6 +4892,21 @@
         "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)"
       ],
       "remaining": "D07-T02 is closed for the synthetic Ubuntu 24.04 ARM64 profile after all six PR and automatic push-main checks and audited installation receipts. AMD64 full native qualification, interrupted upgrade/rollback, coordinated machine-loss restore, operator backup-key custody, supported workload capacity, release and customer acceptance remain open. P162 / PR #261 remains separate unmerged P1 work."
+    },
+    {
+      "id": "P164",
+      "title": "D07 coordinated installed recovery and broker/cache reconstruction",
+      "kind": "product_implementation",
+      "owner": "Platform",
+      "status": "in_progress",
+      "items": [
+        "D07"
+      ],
+      "description": "Provide encrypted same-runtime database/artifact recovery plans, exclusive empty-target restoration, resumable verification and adoption fencing. Qualify complete installed state after deliberate loss of source services/storage, preserving authority, completed results and pending durable work.",
+      "evidence": [
+        "[Recovery scope and acceptance](PRIVATE_INSTALLATION_RECOVERY.md)"
+      ],
+      "remaining": "Implementation, original regression suites, actual installed machine-loss/recovery scenarios, exact-head PR and independent push-main qualification remain required. Customer RPO/RTO, operator key custody, capacity, upgrade, release and acceptance remain separate."
     }
   ],
   "release_qualification": {
@@ -5048,8 +5068,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P163 (before qualification)",
-    "source_commit": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
+    "packet": "P163",
+    "source_commit": "b8fb7211a45de93f1050fface8fb6b7072528dc9",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5061,8 +5081,8 @@
     "packets": {
       "total": 163,
       "counts": {
-        "done": 161,
-        "open": 1,
+        "done": 162,
+        "open": 0,
         "blocked": 1
       }
     }
@@ -5481,7 +5501,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D07-T02"
         ],
@@ -5490,8 +5510,12 @@
           "Reconstruction of broker/cache state never duplicates publication or loses authority."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Coordinated recovery acceptance](PRIVATE_INSTALLATION_RECOVERY.md)"
+        ],
+        "packet_refs": [
+          "P164"
+        ],
         "order": 18,
         "basis": "Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt."
       },
@@ -6756,16 +6780,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before qualified P163 clean-install closure",
+      "label": "Before P164 coordinated installed recovery",
       "recorded_on": "2026-11-03",
-      "inventory_source_commit": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
+      "inventory_source_commit": "b8fb7211a45de93f1050fface8fb6b7072528dc9",
       "total": 66,
       "counts": {
-        "ready": 10,
-        "in_progress": 1,
-        "waiting": 46,
+        "ready": 12,
+        "in_progress": 0,
+        "waiting": 44,
         "blocked": 7,
-        "done": 2
+        "done": 3
       }
     },
     "baseline_history": [
@@ -6794,6 +6818,20 @@
           "in_progress": 0,
           "waiting": 46,
           "blocked": 6,
+          "done": 2
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before qualified P163 clean-install closure",
+        "recorded_on": "2026-11-03",
+        "inventory_source_commit": "16fb200eb334f4ee013b8c4e32c7ca92eed23863",
+        "total": 66,
+        "counts": {
+          "ready": 10,
+          "in_progress": 1,
+          "waiting": 46,
+          "blocked": 7,
           "done": 2
         }
       }

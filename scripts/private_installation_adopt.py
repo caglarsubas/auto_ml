@@ -471,6 +471,9 @@ def adoption(plan, expected, ca):
     checker.check_paths(plan, expected)
     context = client_context(ca)
     with managed_operation(value) as serialized:
+        from private_installation_recovery import adoption_guard
+
+        adoption_guard(value, expected)
         result = adopt_prepared(value, expected, initialized, context)
         result["managed_operation_serialized"] = serialized
         return result

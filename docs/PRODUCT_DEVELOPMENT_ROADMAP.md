@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 12 (18.2%); in_progress: 0 (0.0%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 3 (4.5%).
+Inventory: 66 tasks; ready: 11 (16.7%); in_progress: 1 (1.5%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 3 (4.5%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -270,7 +270,7 @@ Exercise additive schema/artifact compatibility and a reversible version transit
 
 ### D07-T04 — Qualify coordinated recovery beyond bounded fixtures
 
-**Priority / status:** P0 / ready. **Owner:** Platform. **Outcomes:** D07.
+**Priority / status:** P0 / in_progress. **Owner:** Platform. **Outcomes:** D07.
 
 Exercise database/artifact recovery and machine-loss scenarios on the supported profile.
 
@@ -279,6 +279,8 @@ Exercise database/artifact recovery and machine-loss scenarios on the supported 
 **Acceptance:** Restore checks matching database/artifact versions before adoption.; Reconstruction of broker/cache state never duplicates publication or loses authority.
 
 **Source / rationale:** Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P164; [Coordinated recovery acceptance](PRIVATE_INSTALLATION_RECOVERY.md)
 
 ### D07-T05 — Migrate remaining legacy training, SFS and HPO execution
 
@@ -2509,6 +2511,16 @@ Reduce bounded mixed-frame/curve preparation; diagnose online staging; qualify t
 **Evidence:** [Clean-install acceptance path](PRIVATE_INSTALLATION_ACCEPTANCE.md); [Online staging preflight](../scripts/private_build_preflight.py); [P163 preparation evidence](evidence/p163-preparation-2026-11-02.json); [Native runtime repair](NATIVE_QUALIFICATION_PERFORMANCE_P163.md); [P163 runtime evidence](evidence/p163-runtime-repair-2026-11-02.json); [PR #262](https://github.com/caglarsubas/auto_ml/pull/262); [Retained failed qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41448923298); [Retained second timeout](https://github.com/caglarsubas/auto_ml/actions/runs/41466554790); [Retained third timeout and installation receipts](https://github.com/caglarsubas/auto_ml/actions/runs/41475774630); [Native architecture profile](evidence/p163-hosted-arm64-profile-2026-11-03.json); [Verified Mac dependency preparation](evidence/p163-mac-preparation-2026-11-03.json); [P163 clean-install qualification](evidence/p163-qualification-2026-11-03.json); [Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41555519421); [Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41560167461)
 
 **Remaining:** D07-T02 is closed for the synthetic Ubuntu 24.04 ARM64 profile after all six PR and automatic push-main checks and audited installation receipts. AMD64 full native qualification, interrupted upgrade/rollback, coordinated machine-loss restore, operator backup-key custody, supported workload capacity, release and customer acceptance remain open. P162 / PR #261 remains separate unmerged P1 work.
+
+### P164 — D07 coordinated installed recovery and broker/cache reconstruction
+
+**Packet status:** in_progress. **Mapped outcomes:** D07.
+
+Provide encrypted same-runtime database/artifact recovery plans, exclusive empty-target restoration, resumable verification and adoption fencing. Qualify complete installed state after deliberate loss of source services/storage, preserving authority, completed results and pending durable work.
+
+**Evidence:** [Recovery scope and acceptance](PRIVATE_INSTALLATION_RECOVERY.md)
+
+**Remaining:** Implementation, original regression suites, actual installed machine-loss/recovery scenarios, exact-head PR and independent push-main qualification remain required. Customer RPO/RTO, operator key custody, capacity, upgrade, release and acceptance remain separate.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
