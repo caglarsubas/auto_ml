@@ -474,6 +474,9 @@ def adoption(plan, expected, ca):
         from private_installation_recovery import adoption_guard
 
         adoption_guard(value, expected)
+        from private_installation_upgrade import adoption_guard as upgrade_guard
+
+        upgrade_guard(value, expected)
         result = adopt_prepared(value, expected, initialized, context)
         result["managed_operation_serialized"] = serialized
         return result

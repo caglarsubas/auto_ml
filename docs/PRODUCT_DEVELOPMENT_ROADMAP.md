@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 11 (16.7%); in_progress: 0 (0.0%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 4 (6.1%).
+Inventory: 66 tasks; ready: 10 (15.2%); in_progress: 1 (1.5%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 4 (6.1%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -258,7 +258,7 @@ Qualified synthetic clean restricted-network installation on Ubuntu 24.04 Linux 
 
 ### D07-T03 — Qualify interrupted upgrade and rollback
 
-**Priority / status:** P0 / ready. **Owner:** Platform. **Outcomes:** D07.
+**Priority / status:** P0 / in_progress. **Owner:** Platform. **Outcomes:** D07.
 
 Exercise additive schema/artifact compatibility and a reversible version transition on the supported profile.
 
@@ -267,6 +267,8 @@ Exercise additive schema/artifact compatibility and a reversible version transit
 **Acceptance:** Interrupted upgrades recover without partial adoption.; Rollback rejects incompatible state and restores a documented compatible version.
 
 **Source / rationale:** Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P165; [Upgrade/rollback acceptance](PRIVATE_INSTALLATION_UPGRADE.md)
 
 ### D07-T04 — Qualify coordinated recovery beyond bounded fixtures
 
@@ -2521,6 +2523,16 @@ Provide encrypted same-runtime database/artifact recovery plans, exclusive empty
 **Evidence:** [Recovery scope and acceptance](PRIVATE_INSTALLATION_RECOVERY.md); [P164 recovery qualification](evidence/p164-qualification-2026-11-03.json); [PR #264](https://github.com/caglarsubas/auto_ml/pull/264); [Qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/41587387666); [Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)
 
 **Remaining:** D07-T04 is closed for the supported synthetic Ubuntu24.04 ARM64 recovery profile. Customer recovery objectives, operator key custody, capacity, external identity/revocation reconciliation, upgrade/rollback, full AMD64 native qualification, broader D07, release and customer acceptance retain separate gates.
+
+### P165 — D07 staged upgrade and compatible rollback
+
+**Packet status:** in_progress. **Mapped outcomes:** D07.
+
+Execute image/graph-bound staged transitions with transactional data-preserving migrations, resumable adoption fencing and compatible rollback from the latest quiescent state.
+
+**Evidence:** [Upgrade/rollback acceptance](PRIVATE_INSTALLATION_UPGRADE.md)
+
+**Remaining:** Implementation, genuine sealed release transition, interrupted migration/publication, incompatible rollback refusal, original regression coverage, PR and independent main qualification remain required. Customer/release acceptance stays separate.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

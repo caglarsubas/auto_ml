@@ -2019,6 +2019,11 @@
       "date": "2026-11-03",
       "packet": "P164",
       "change": "Qualify D07-T04 coordinated installed recovery through all six exact-head PR and independent push-main checks. Retain the failed cleanup/bootstrap attempts and original workload/skip limits. Fixed 66 tasks: 4 done/55 open/7 blocked; no release or customer acceptance is implied."
+    },
+    {
+      "date": "2026-11-03",
+      "packet": "P165",
+      "change": "Begin D07-T03 from qualified P164 recovery. Preserve66 tasks and4 accepted; target5 only after upgrade/rollback and PR/main qualification."
     }
   ],
   "implementation_packets": [
@@ -4920,6 +4925,21 @@
         "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)"
       ],
       "remaining": "D07-T04 is closed for the supported synthetic Ubuntu24.04 ARM64 recovery profile. Customer recovery objectives, operator key custody, capacity, external identity/revocation reconciliation, upgrade/rollback, full AMD64 native qualification, broader D07, release and customer acceptance retain separate gates."
+    },
+    {
+      "id": "P165",
+      "title": "D07 staged upgrade and compatible rollback",
+      "kind": "product_implementation",
+      "owner": "Platform",
+      "status": "in_progress",
+      "items": [
+        "D07"
+      ],
+      "description": "Execute image/graph-bound staged transitions with transactional data-preserving migrations, resumable adoption fencing and compatible rollback from the latest quiescent state.",
+      "evidence": [
+        "[Upgrade/rollback acceptance](PRIVATE_INSTALLATION_UPGRADE.md)"
+      ],
+      "remaining": "Implementation, genuine sealed release transition, interrupted migration/publication, incompatible rollback refusal, original regression coverage, PR and independent main qualification remain required. Customer/release acceptance stays separate."
     }
   ],
   "release_qualification": {
@@ -5081,8 +5101,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P163",
-    "source_commit": "b8fb7211a45de93f1050fface8fb6b7072528dc9",
+    "packet": "P164",
+    "source_commit": "3cfc65febe6be575e28d7d1785079fbff39385ee",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5092,9 +5112,9 @@
       }
     },
     "packets": {
-      "total": 163,
+      "total": 164,
       "counts": {
-        "done": 162,
+        "done": 163,
         "open": 0,
         "blocked": 1
       }
@@ -5491,7 +5511,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D07-T02"
         ],
@@ -5500,8 +5520,12 @@
           "Rollback rejects incompatible state and restores a documented compatible version."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Upgrade/rollback acceptance](PRIVATE_INSTALLATION_UPGRADE.md)"
+        ],
+        "packet_refs": [
+          "P165"
+        ],
         "order": 17,
         "basis": "Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt."
       },
@@ -6797,16 +6821,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P164 coordinated installed recovery",
+      "label": "Before P165 upgrade/rollback",
       "recorded_on": "2026-11-03",
-      "inventory_source_commit": "b8fb7211a45de93f1050fface8fb6b7072528dc9",
+      "inventory_source_commit": "3cfc65febe6be575e28d7d1785079fbff39385ee",
       "total": 66,
       "counts": {
-        "ready": 12,
+        "ready": 11,
         "in_progress": 0,
         "waiting": 44,
         "blocked": 7,
-        "done": 3
+        "done": 4
       }
     },
     "baseline_history": [
@@ -6850,6 +6874,20 @@
           "waiting": 46,
           "blocked": 7,
           "done": 2
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P164 coordinated installed recovery",
+        "recorded_on": "2026-11-03",
+        "inventory_source_commit": "b8fb7211a45de93f1050fface8fb6b7072528dc9",
+        "total": 66,
+        "counts": {
+          "ready": 12,
+          "in_progress": 0,
+          "waiting": 44,
+          "blocked": 7,
+          "done": 3
         }
       }
     ]
