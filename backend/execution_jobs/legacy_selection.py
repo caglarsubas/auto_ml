@@ -153,7 +153,7 @@ def select(actor, identifier, data):
     request_sha = digest({"actor_id": actor.pk, "job_id": str(identifier), "request": data})
     routing = NativeJob.objects.only("dataset_id").get(pk=identifier)
     with projection_lock(routing.dataset_id):
-        with service.locked():
+        with service.locked(write=True):
             job, scopes = bound_job(actor, identifier, pin)
             authority = lock_authority(actor, job.dataset_id, None)
             if authority["role"] != "developer":
@@ -200,7 +200,7 @@ def select(actor, identifier, data):
                 )
         # The committed intent survives a lost publication acknowledgement. All
         # following state remains under live authority and the projection fence.
-        with service.locked():
+        with service.locked(write=True):
             job, scopes = bound_job(actor, identifier, pin)
             authority = lock_authority(actor, job.dataset_id, None)
             if authority["role"] != "developer":

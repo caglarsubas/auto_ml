@@ -435,7 +435,7 @@ def submit(actor, file_id, data):
     pin = require_digest(data["plan_sha256"])
     inputs_pin = require_digest(data["inputs_sha256"])
     request_sha = digest({"actor_id": actor.pk, "file_id": file_id, "request": data})
-    with service.locked():
+    with service.locked(write=True):
         authority = lock_authority(actor, file_id, None)
         if authority["role"] != "developer":
             raise projects.ProjectDenied("job_submit_role_required")

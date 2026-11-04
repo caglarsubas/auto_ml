@@ -51,7 +51,7 @@ def bind_source(actor, file_id, options):
 def materialize(actor, identifier):
     """Publish exact v1-compatible evidence paths after a successful receipt."""
     routing = NativeJob.objects.only("dataset_id").get(pk=identifier)
-    with projection_lock(routing.dataset_id), service.locked():
+    with projection_lock(routing.dataset_id), service.locked(write=True):
         job, scopes = bound_job(actor, identifier)
         if job.specification["legacy"]["options"].get("legacy_response_contract") != PROTOCOL:
             return

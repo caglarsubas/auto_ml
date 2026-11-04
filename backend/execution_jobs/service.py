@@ -111,15 +111,16 @@ def runtime(kind=KIND):
 
 
 @contextmanager
-def locked():
+def locked(*, write=False):
     # Development SQLite has no SELECT FOR UPDATE; use the existing cross-process
     # local projection lock. Private installations always require PostgreSQL.
     if connection.vendor == "sqlite":
         with projection_lock(0), transaction.atomic():
-            # Reserve SQLite write ownership before reading. Other API writers
-            # do not take this queue lock; a deferred read-to-write upgrade can
-            # otherwise fail immediately with SQLITE_BUSY_SNAPSHOT.
-            QueueLock.objects.filter(pk=1).update(id=1)
+            if write:
+                # New legacy mutations reserve SQLite write ownership before
+                # reading, avoiding SQLITE_BUSY_SNAPSHOT during concurrent API
+                # writes. Existing read-only paths never perform this update.
+                QueueLock.objects.filter(pk=1).update(id=1)
             QueueLock.objects.get_or_create(pk=1)
             QueueLock.objects.select_for_update().get(pk=1)
             yield

@@ -22,7 +22,7 @@ from execution_jobs.models import NativeJob
 def event(identifier, token, kind, detail):
     from execution_jobs import service
 
-    with service.locked():
+    with service.locked(write=True):
         job = NativeJob.objects.select_for_update().get(pk=identifier)
         if not service._owns_live_lease(job, token, timezone.now()):
             return False
