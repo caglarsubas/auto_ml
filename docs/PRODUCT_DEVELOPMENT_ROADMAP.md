@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 10 (15.2%); in_progress: 0 (0.0%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 5 (7.6%).
+Inventory: 66 tasks; ready: 9 (13.6%); in_progress: 1 (1.5%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 5 (7.6%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -310,7 +310,7 @@ Integrate remaining workflows with supported-profile interruption and recovery d
 
 ### D07-T07 — Profile workload envelopes and operational limits
 
-**Priority / status:** P0 / ready. **Owner:** Platform. **Outcomes:** D07.
+**Priority / status:** P0 / in_progress. **Owner:** Platform. **Outcomes:** D07.
 
 Measure representative data/model workloads before publishing capacity promises.
 
@@ -319,6 +319,8 @@ Measure representative data/model workloads before publishing capacity promises.
 **Acceptance:** Dataset sizes, concurrency, memory/CPU, recovery costs and limitations are recorded.; Microbenchmarks and one green CI run are not represented as customer capacity.
 
 **Source / rationale:** Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P166; [Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)
 
 ### D08-T01 — Implement the dedicated gVisor expert execution service
 
@@ -2533,6 +2535,16 @@ Execute image/graph-bound staged transitions with transactional data-preserving 
 **Evidence:** [Upgrade/rollback acceptance](PRIVATE_INSTALLATION_UPGRADE.md); [P165 upgrade/rollback qualification](evidence/p165-qualification-2026-11-03.json); [PR #266](https://github.com/caglarsubas/auto_ml/pull/266); [Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41657060822)
 
 **Remaining:** D07-T03 is accepted for the supported synthetic Ubuntu 24.04 ARM64 reversible physical-index release. Staged forward and reverse transitions preserve all application rows/sequences, artifacts, project authority, original classification/regression export/scoring and post-upgrade work. Transaction faults roll back, lost acknowledgements resume and pending transitions refuse adoption. Both sealed API image IDs differ; dependency images and application/data layout remain identical. Previous-source reconstruction on locked dependencies is disclosed. Arbitrary schema/application changes, full AMD64 native, customer operations, broader D07 and release/customer acceptance retain separate gates.
+
+### P166 — D07 installed workload envelopes and observed recovery costs
+
+**Packet status:** in_progress. **Mapped outcomes:** D07.
+
+Measure complete supported native development/search, export and scoring at admitted input bounds, paired job submission and recovery on independently initialized reference installations.
+
+**Evidence:** [Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)
+
+**Remaining:** Implementation, two-root observed resource/timing measurements, recovery cost receipts, all original regressions, PR and independent main qualification are required. Customer capacity, legacy migration and full D07 remain separate.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
