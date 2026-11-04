@@ -773,9 +773,12 @@
         "[Independent push-main CI](https://github.com/caglarsubas/auto_ml/actions/runs/41592049960)",
         "[P165 upgrade/rollback qualification](evidence/p165-qualification-2026-11-03.json)",
         "[PR #266](https://github.com/caglarsubas/auto_ml/pull/266)",
-        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41657060822)"
+        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41657060822)",
+        "[P166 workload qualification](evidence/p166-qualification-2026-11-04.json)",
+        "[PR #268](https://github.com/caglarsubas/auto_ml/pull/268)",
+        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)"
       ],
-      "progress": "P165 / PR #266 closes D07-T03 for a synthetic Ubuntu 24.04 ARM64 reversible physical-index release. Distinct sealed API images transition through separate roots; original evidence/authority and real post-upgrade scoring work survive compatible rollback from a fresh current backup. Migration transaction faults, lost commit/publication acknowledgements, pending adoption refusal and read-only replay pass in PR and independent push-main. Fixed 66-task progress: 4 to 5 done (6.1% to 7.6%); open 55 to 54; blocked 7 unchanged. D07-T02 installation and D07-T04 recovery remain accepted on their qualified profiles. General schema/application upgrades, remaining durable/operational scope, full D07 and release/customer acceptance remain open."
+      "progress": "P166 / PR #268 closes D07-T07 workload profiling on the synthetic Ubuntu 24.04 ARM64 native numeric profile: six end-to-end cases per root, two independent clean roots in PR and main, declared admission bounds, exact input/prediction parity, sampled resource observations and fault-inclusive recovery costs. Fixed 66-task progress: 5 to 6 done (7.6% to 9.1%); open 54 to 53; blocked 7 unchanged. D07-T02 installation, D07-T03 index-release upgrade/rollback and D07-T04 recovery remain accepted on their qualified profiles. D07-T05 legacy migration, broader capacity, customer operations, full D07 and release/customer acceptance remain open."
     },
     {
       "id": "D08",
@@ -1344,7 +1347,7 @@
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
-  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. Continue remaining durable execution and operational acceptance tasks; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. D07-T07 native workload observations are accepted for the disclosed synthetic ARM64 envelope. Continue legacy durable execution and operational acceptance tasks; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
   "history": [
     {
       "date": "2026-10-07",
@@ -2037,6 +2040,11 @@
       "date": "2026-11-04",
       "packet": "P166",
       "change": "Begin independently ready D07-T07 to establish measured workload/admission limits before legacy durable migration. Preserve fixed66 tasks and5 accepted; target6 after full qualification."
+    },
+    {
+      "date": "2026-11-04",
+      "packet": "P166",
+      "change": "Accept D07-T07 measured synthetic native workload envelope after all six exact-head PR and independent automatic main checks. Original test/skip/RI inventories, scientific workloads and limits remain preserved. Fixed 66 tasks: 6 done/53 open/7 blocked (9.1%/80.3%/10.6%); done increases 1.515 percentage points. Customer and legacy capacity remain unqualified."
     }
   ],
   "implementation_packets": [
@@ -4962,15 +4970,18 @@
       "title": "D07 installed workload envelopes and observed recovery costs",
       "kind": "product_implementation",
       "owner": "Platform",
-      "status": "in_progress",
+      "status": "tested",
       "items": [
         "D07"
       ],
       "description": "Measure complete supported native development/search, export and scoring at admitted input bounds, paired job submission and recovery on independently initialized reference installations.",
       "evidence": [
-        "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)"
+        "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)",
+        "[P166 workload qualification](evidence/p166-qualification-2026-11-04.json)",
+        "[PR #268](https://github.com/caglarsubas/auto_ml/pull/268)",
+        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)"
       ],
-      "remaining": "Implementation, two-root observed resource/timing measurements, recovery cost receipts, all original regressions, PR and independent main qualification are required. Customer capacity, legacy migration and full D07 remain separate."
+      "remaining": "D07-T07 is accepted for the disclosed synthetic ARM64 native numeric profile. Two fresh roots in both PR and independent main reproduce six installed training/search/export/scoring cases with exact seeded input/prediction parity, owned-service resource observations and observed recovery costs. Sampled observations are not exact peaks, throughput guarantees, customer capacity or broader legacy qualification. D07-T05 legacy migration, customer operational acceptance, full D07 and release acceptance remain separate."
     }
   ],
   "release_qualification": {
@@ -5649,7 +5660,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Dataset sizes, concurrency, memory/CPU, recovery costs and limitations are recorded.",
@@ -5657,7 +5668,10 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)"
+          "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)",
+          "[P166 workload qualification](evidence/p166-qualification-2026-11-04.json)",
+          "[PR #268](https://github.com/caglarsubas/auto_ml/pull/268)",
+          "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)"
         ],
         "packet_refs": [
           "P166"
