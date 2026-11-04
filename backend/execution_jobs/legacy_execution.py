@@ -19,8 +19,13 @@ from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import NativeJob
 
+def enabled():
+    """Governed execution only; private installations never bypass the queue."""
+    return settings.DECLARAI_JOBS_ENABLED and projects.governed()
+
+
 KIND = "legacy_native_execution_v1"
-OPERATIONS = {"training", "sfs", "hpo"}
+OPERATIONS = {"training", "sfs", "hpo", "champion"}
 BUDGET = {
     "max_input_bytes": 64 * 1024**2,
     "max_output_bytes": 64 * 1024**2,
@@ -33,6 +38,7 @@ BUDGET = {
     "max_hpo_booster_fits": 1000,
 }
 FIELDS = {
+    "champion": {"file_id", "execution_id", "features", "hyperparam", "hp", "algorithm"},
     "training": {
         "algorithm",
         "business_understanding",
@@ -248,7 +254,7 @@ def prepare(actor, file_id, operation, options):
     if authority["role"] != "developer":
         raise projects.ProjectDenied("job_submit_role_required")
     if operation not in OPERATIONS or not isinstance(options, dict) or set(options) - FIELDS[operation] - SOURCE_FIELDS:
-        raise ValueError("Select training, sfs or hpo with supported native options.")
+        raise ValueError("Select a supported native training, search or candidate-acceptance operation.")
     options = json.loads(json.dumps(options, allow_nan=False))
     if len(json.dumps(options).encode()) > 32768:
         conflict("spec_budget")
@@ -286,6 +292,11 @@ def prepare(actor, file_id, operation, options):
         if options.get("task") is not None and options["task"] != declared_task:
             raise ValueError("The task is bound to the source candidate. Start a new training version to change it.")
         algorithm = options.get("algorithm") or payload.get("algorithm")
+        if operation == "champion":
+            if not isinstance(options.get("features"), list) or not options["features"]:
+                raise ValueError("Send the exact accepted feature list.")
+            if algorithm != payload.get("algorithm"):
+                raise ValueError("Changing the algorithm requires a separately evaluated candidate.")
         options.setdefault("n_jobs", 1)
         options.setdefault("cv_folds", 3 if operation == "sfs" else 5)
         for key in ("n_jobs", "cv_folds"):
@@ -294,7 +305,7 @@ def prepare(actor, file_id, operation, options):
                 raise ValueError("Use one/two candidate workers and two to five folds within the displayed budget.")
         if options.get("cv_folds", 3) < 2:
             raise ValueError("Use at least two folds.")
-        if algorithm not in {"xgboost", "lightgbm", "catboost"}:
+        if operation != "champion" and algorithm not in {"xgboost", "lightgbm", "catboost"}:
             conflict("search_algorithm_unsupported")
         if operation == "hpo":
             from modeling.hyperparam_utils import (

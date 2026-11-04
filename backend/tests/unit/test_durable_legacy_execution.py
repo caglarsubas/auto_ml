@@ -489,9 +489,12 @@ def test_v1_http_contract_uses_durable_worker_and_preserves_versioned_search_evi
         },
     )
     assert sfs.status_code == 200 and sfs.json()["status"] == "started", sfs.content
+    assert sfs.json()["parent_execution_id"] == trained["execution_id"]
+    assert sfs.json()["sfs_completed"] is False
     service.execute(sfs.json()["native_job_id"])
     status = w.clients["developer"].get(f"/api/modeling/sfs/status/{w.file_id}/")
     assert status.status_code == 200 and status.json()["status"] == "completed", status.content
+    assert status.json()["sfs_completed"] is True
     search = NativeJob.objects.get(pk=sfs.json()["native_job_id"])
     new_execution = search.result["payload"]["forward_execution_id"]
     assert (w.root / "execution_runs" / new_execution / "manifest.json").is_file()
@@ -556,3 +559,80 @@ def test_fixture_delivery_uses_real_lease_result_and_selection_before_workers_st
     assert job.result["model_adopted"] is job.result["production_use_approved"] is False
     selected = world.clients["developer"].get(f"/api/modeling/status/{world.file_id}/", {"selected": "true"})
     assert selected.status_code == 200 and selected.json()["selected_for_development"] is True
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_governed_purifier_raw_recipe_can_be_frozen_and_trained_without_permission_fallback(world, task):
+    from tests.unit.test_governed_foundation import declaration
+
+    w = world
+    if task == "regression":
+        w.frame["outcome"] = [float(i / 7 + i % 3) for i in range(len(w.frame))]
+        w.frame.to_csv(w.path, index=False)
+    w.options["business_understanding"] = declaration(task, "bad" if task == "classification" else None)
+    prepared = post(
+        w.clients["developer"],
+        "/api/preprocessing/run/",
+        {
+            "file_id": w.file_id,
+            "options": [29],
+            "target_column": "outcome",
+            "split": {"strategy": "oot", "date_column": "date", "cutoff": "2020-03-20"},
+        },
+    )
+    assert prepared.status_code == 200, prepared.content[:1000]
+    data = {**options(w), "processed_file": prepared.json()["processed_file"]}
+    identifier, _, _ = launch(w, "training", data)
+    service.execute(identifier)
+    job = NativeJob.objects.get(pk=identifier)
+    assert job.state == "succeeded", list(job.events.values("event_type", "detail"))
+    assert job.result["payload"]["model"]["task"] == task
+    raw = Path(data["processed_file"]).with_suffix(".raw.csv").as_posix()
+    assert raw in job.specification["legacy"]["inputs"]
+    assert w.clients["outsider"].get("/media/" + raw).status_code in (403, 404)
+
+
+def test_private_installation_cannot_bypass_durable_routing_without_policy(settings):
+    settings.DECLARAI_JOBS_ENABLED = True
+    settings.DECLARAI_RUNTIME_PROFILE = "private"
+    with patch("access_control.projects.ProjectPolicy.objects.exists", return_value=False):
+        assert legacy.enabled() is True
+    settings.DECLARAI_RUNTIME_PROFILE = "development"
+    with patch("access_control.projects.ProjectPolicy.objects.exists", return_value=False):
+        assert legacy.enabled() is False
+
+
+def test_durable_champion_refit_remains_a_verified_source_for_hpo(world, monkeypatch):
+    from execution_jobs import legacy_compatibility as compatibility
+
+    w = world
+    def work(actor, identifier):
+        with patch("pickle.load", side_effect=AssertionError("API deserialized a model")):
+            service.execute(identifier)
+        return service.read(actor, identifier)
+    monkeypatch.setattr(compatibility, "wait", work)
+    trained = post(w.clients["developer"], "/api/modeling/start/", options(w))
+    assert trained.status_code == 200, trained.content
+    parent = trained.json()
+    accepted = post(w.clients["developer"], "/api/modeling/champion/", {
+        "file_id": w.file_id, "execution_id": parent["execution_id"],
+        "features": ["x"], "hyperparam": {"n_estimators": 5},
+    })
+    assert accepted.status_code == 200, accepted.content
+    payload = accepted.json()
+    child = NativeJob.objects.get(pk=payload["native_job_id"])
+    assert child.specification["legacy"]["operation"] == "champion"
+    assert child.result["source"]["job_id"] == parent["native_job_id"]
+    assert payload["selected_for_development"] is True
+    assert payload["champion"]["production_use_approved"] is False
+    assert payload["execution_id"] != parent["execution_id"]
+    status = w.clients["developer"].get(f"/api/modeling/status/{w.file_id}/?selected=true")
+    assert status.status_code == 200, status.content
+    assert status.json()["champion"] == payload["champion"]
+    binding = compatibility.bind_source(w.users["developer"], w.file_id, {"execution_id": payload["execution_id"]})
+    assert binding["source_job_id"] == str(child.pk)
+    preview = legacy.preview(w.users["developer"], w.file_id, "hpo", {
+        "file_id": w.file_id, **binding, "n_iter": 2, "cv_folds": 2,
+        "validation_curve_points": 2,
+    })
+    assert preview["source"]["result_sha256"] == child.result_sha256

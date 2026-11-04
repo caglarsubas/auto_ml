@@ -144,9 +144,17 @@ def launch(request, operation, options):
     from execution_jobs.views import ERRORS, failure
 
     try:
+        if not isinstance(options, dict):
+            raise ValueError("Supply a request object.")
         file_id = options.get("file_id")
         if file_id is None:
             return Response({"error": "file_id is required"}, status=400)
+        if operation == "champion":
+            if not options.get("execution_id") or not options.get("features"):
+                return Response({"error": "Send the exact execution_id and accepted feature list."}, status=409)
+            _, selected = current(file_id)
+            if (selected or {}).get("execution_id") != options["execution_id"]:
+                return Response({"error": "The selected execution has changed. Refresh before accepting it."}, status=409)
         service.scope(request.user, file_id)
         options = {**options, "legacy_response_contract": PROTOCOL}
         base, _ = current(file_id)
@@ -154,7 +162,7 @@ def launch(request, operation, options):
             source = bind_source(request.user, file_id, options)
             if source is None:
                 return Response(
-                    {"error": "Native training data not found. Run a new training version first.", "status": "error"},
+                    {"error": "Training data not found for a verified native execution. Run a new training version first.", "status": "error"},
                     status=404,
                 )
             if options.get("resume") and not options.get("checkpoint_job_id"):
@@ -179,7 +187,7 @@ def launch(request, operation, options):
                 "inputs_sha256": preview["inputs_sha256"],
             },
         )
-        if operation == "training":
+        if operation in {"training", "champion"}:
             receipt = wait(request.user, receipt["id"])
             if receipt["state"] == "succeeded":
                 execution = receipt["result"]["payload"]["execution_id"]

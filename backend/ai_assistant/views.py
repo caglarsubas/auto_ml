@@ -838,13 +838,12 @@ declared problem type.
 6. Sequential Feature Selection (SFS — forward, backward, forward-from-backward)
 
 ═══ TOOL ROUTING — READ BEFORE ANSWERING (CRITICAL) ═══
-The slim context above contains feature NAMES and pipeline STATUS, NOT the
-actual analysis numbers (SFS step trajectory, SHAP values, CV metrics, PSI
-values, encoding plan rows, etc.).  If a user asks about specific results,
-you MUST call the matching tool FIRST and ground your answer in the
-returned data.
+The context contains feature NAMES and pipeline STATUS, not analysis numbers.
+For specific results, call the matching tool FIRST and ground your answer in
+its returned data.
 
 User asks about ... → CALL THIS TOOL FIRST:
+• job progress / failure / receipt → get_execution_job
 • SFS / sequential feature selection / forward / backward / step trajectory
   / which features were dropped or added / optimal feature count
   → get_sfs_results

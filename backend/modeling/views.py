@@ -13,6 +13,7 @@ import json
 import math
 import warnings
 import pandas as pd
+from execution_jobs.legacy_execution import enabled as durable_legacy_enabled
 from execution_jobs.legacy_context import native_threads, operation_id as native_operation_id
 
 import numpy as np
@@ -111,7 +112,7 @@ class ModelingStartView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import launch
             return launch(request, "training")
         return execute_legacy_training(request.data)
@@ -1285,7 +1286,7 @@ class ModelingStatusView(APIView):
     """Returns current modeling status and metrics for a file id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import status as durable_status
             response = durable_status(request, file_id, "training")
             if response is not None:
@@ -1722,7 +1723,7 @@ class SFSResultsView(APIView):
     """Returns Sequential Feature Selection results for a given file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import status as durable_status
             response = durable_status(request, file_id, "sfs")
             if response is not None:
@@ -1766,7 +1767,7 @@ class SFSStartView(APIView):
     """Start Sequential Feature Selection with user-defined parameters."""
 
     def post(self, request, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import launch
             return launch(request, "sfs")
         return execute_legacy_sfs(request.data)
@@ -2204,7 +2205,7 @@ class SFSStopView(APIView):
     The background thread checks stop_requested flag at each step."""
 
     def post(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import cancel
             return cancel(request, file_id, "sfs")
         parameters = request.data  # Let DRF report parser/media errors before the execution boundary.
@@ -2248,7 +2249,7 @@ class SFSStatusView(APIView):
     """Get current SFS progress/status for a file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import status as durable_status
             response = durable_status(request, file_id, "sfs")
             if response is not None:
@@ -2309,7 +2310,7 @@ class HyperparamStartView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import launch
             return launch(request, "hpo")
         return execute_legacy_hpo(request.data)
@@ -2643,7 +2644,7 @@ class HyperparamStatusView(APIView):
     """Get current hyperparameter-tuning progress/status for a file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import status as durable_status
             response = durable_status(request, file_id, "hpo")
             if response is not None:
@@ -2679,7 +2680,7 @@ class HyperparamStopView(APIView):
     """Request a graceful stop of an in-flight hyperparameter-tuning run."""
 
     def post(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import cancel
             return cancel(request, file_id, "hpo")
         parameters = request.data
@@ -2709,7 +2710,7 @@ class HyperparamResultsView(APIView):
     """Return persisted hyperparameter-tuning results for a given file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        if settings.DECLARAI_JOBS_ENABLED:
+        if durable_legacy_enabled():
             from execution_jobs.legacy_http import status as durable_status
             response = durable_status(request, file_id, "hpo")
             if response is not None:
@@ -3084,114 +3085,121 @@ class ChampionPromoteView(APIView):
     """Fit the accepted native configuration as a new, assessable version."""
 
     def post(self, request, *args, **kwargs):
-        data = request.data or {}
-        if not isinstance(data, dict):
-            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
-        file_id = data.get('file_id')
-        if file_id is None:
-            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            file_id = int(file_id)
-        except Exception:
-            return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_compatibility import launch
+            return launch(request, "champion", request.data)
+        return execute_legacy_champion(request.data)
 
-        features = data.get('features') or []
-        hyperparam = data.get('hyperparam') or data.get('hp') or {}
-        algorithm = data.get('algorithm')
-        if not data.get('execution_id'):
-            return Response({'error': 'Select an exact execution_id before accepting a candidate; latest-file fallback is prohibited.'}, status=status.HTTP_409_CONFLICT)
 
-        if not features:
-            return Response({
-                'error': 'Send the exact accepted feature list; historical per-file search results are not an acceptance declaration.',
-            }, status=status.HTTP_409_CONFLICT)
+def execute_legacy_champion(data):
+    data = data or {}
+    if not isinstance(data, dict):
+        return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+    file_id = data.get('file_id')
+    if file_id is None:
+        return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        file_id = int(file_id)
+    except Exception:
+        return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-            with open(status_path, encoding='utf-8') as stream:
-                current = json.load(stream)
-            parent_id = current.get('execution_id')
-            if not parent_id:
-                return Response({'error': 'This historical model has no immutable execution. Re-run modeling under an accepted declaration before adopting a champion.'}, status=status.HTTP_409_CONFLICT)
-            if data.get('execution_id') and data['execution_id'] != parent_id:
-                return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
-            development = load_development_data(file_id, parent_id)
-            if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
-                raise ValueError('Accepted features must be a unique list of column names.')
-            missing = [name for name in features if name not in development['X_train']]
-            if missing:
-                raise ValueError(f'Accepted features are absent from this execution: {missing}')
-            if not isinstance(hyperparam, dict):
-                raise ValueError('Accepted hyperparameters must be an object.')
-            algorithm = algorithm or development['algorithm']
-            if algorithm != development['algorithm']:
-                raise ValueError('Changing the algorithm requires a separately evaluated candidate execution.')
-            from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
-            if is_alt_algorithm(algorithm):
-                adapter = get_alt_adapter(algorithm).train(development['X_train'][features], development['y_train'],
-                    development['X_valid'][features], development['y_valid'], hyperparam)
-            else:
-                from modeling.booster_adapters import fit_booster
-                from modeling.declared_metric import bind_declared_metric
-                hyperparam = bind_declared_metric(hyperparam, development['prediction_contract'])
-                adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
-                    development['X_valid'][features], development['y_valid'], hyperparam,
-                    task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))
-            published = publish_candidate(parent_id, file_id, adapter, features, hyperparam, 'accepted_champion')
-            if published['adoption_status'] != 'adopted':
-                return Response({'error': 'Another execution became current while fitting. The candidate is retained; refresh before adoption.',
-                                 'candidate_execution_id': published['execution_id']}, status=status.HTTP_409_CONFLICT)
-        except (ValueError, KeyError, OSError) as error:
-            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+    features = data.get('features') or []
+    hyperparam = data.get('hyperparam') or data.get('hp') or {}
+    algorithm = data.get('algorithm')
+    if not data.get('execution_id'):
+        return Response({'error': 'Select an exact execution_id before accepting a candidate; latest-file fallback is prohibited.'}, status=status.HTTP_409_CONFLICT)
 
-        champion = {
-            'file_id': file_id,
-            'features': list(features),
-            'feature_count': len(features),
-            'hyperparam': hyperparam,
-            'algorithm': algorithm,
-            'execution_id': published['execution_id'],
-            'parent_execution_id': parent_id,
-            'model_path': published['model']['model_path'],
-            'evidence_status': 'exploratory',
-            'production_use_approved': False,
-            'promoted_at': __import__('datetime').datetime.now(
-                __import__('datetime').timezone.utc
-            ).isoformat(),
-            'ready_for_evaluation': True,
-        }
-
-        champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
-        os.makedirs(champ_dir, exist_ok=True)
-        champ_path = os.path.join(champ_dir, f"champion_{published['execution_id']}.json")
-        with open(champ_path, 'x', encoding='utf-8') as f:
-            json.dump(champion, f, indent=2, default=str)
-        replace_projection(champ_path, os.path.join(champ_dir, 'champion.json'))
-
-        try:
-            from modeling.crisp_dm import merge_crisp_dm
-            run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-            if run is not None:
-                st = dict(run.state or {})
-                st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
-                    'champion': champion,
-                    'phase_status': {'modeling': 'completed'},
-                })
-                st['champion'] = champion
-                run.state = st
-                run.save(update_fields=['state', 'updated_at'])
-        except Exception as pe:
-            print(f"[Champion] PipelineRun update skipped: {pe}")
-
+    if not features:
         return Response({
-            'status': 'ok',
-            'file_id': file_id,
-            'champion': champion,
-            'execution_id': published['execution_id'],
-            'model': published['model'],
-            'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
-        })
+            'error': 'Send the exact accepted feature list; historical per-file search results are not an acceptance declaration.',
+        }, status=status.HTTP_409_CONFLICT)
 
+    try:
+        status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+        with open(status_path, encoding='utf-8') as stream:
+            current = json.load(stream)
+        parent_id = current.get('execution_id')
+        if not parent_id:
+            return Response({'error': 'This historical model has no immutable execution. Re-run modeling under an accepted declaration before adopting a champion.'}, status=status.HTTP_409_CONFLICT)
+        if data.get('execution_id') and data['execution_id'] != parent_id:
+            return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
+        development = load_development_data(file_id, parent_id)
+        if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
+            raise ValueError('Accepted features must be a unique list of column names.')
+        missing = [name for name in features if name not in development['X_train']]
+        if missing:
+            raise ValueError(f'Accepted features are absent from this execution: {missing}')
+        if not isinstance(hyperparam, dict):
+            raise ValueError('Accepted hyperparameters must be an object.')
+        algorithm = algorithm or development['algorithm']
+        if algorithm != development['algorithm']:
+            raise ValueError('Changing the algorithm requires a separately evaluated candidate execution.')
+        from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
+        if is_alt_algorithm(algorithm):
+            adapter = get_alt_adapter(algorithm).train(development['X_train'][features], development['y_train'],
+                development['X_valid'][features], development['y_valid'], hyperparam)
+        else:
+            from modeling.booster_adapters import fit_booster
+            from modeling.declared_metric import bind_declared_metric
+            hyperparam = bind_declared_metric(hyperparam, development['prediction_contract'])
+            adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
+                development['X_valid'][features], development['y_valid'], hyperparam,
+                task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))
+        published = publish_candidate(parent_id, file_id, adapter, features, hyperparam, 'accepted_champion')
+        from execution_jobs.legacy_context import active
+        if active() is None and published['adoption_status'] != 'adopted':
+            return Response({'error': 'Another execution became current while fitting. The candidate is retained; refresh before adoption.',
+                             'candidate_execution_id': published['execution_id']}, status=status.HTTP_409_CONFLICT)
+    except (ValueError, KeyError, OSError) as error:
+        return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+
+    champion = {
+        'file_id': file_id,
+        'features': list(features),
+        'feature_count': len(features),
+        'hyperparam': hyperparam,
+        'algorithm': algorithm,
+        'execution_id': published['execution_id'],
+        'parent_execution_id': parent_id,
+        'model_path': published['model']['model_path'],
+        'evidence_status': 'exploratory',
+        'production_use_approved': False,
+        'promoted_at': __import__('datetime').datetime.now(
+            __import__('datetime').timezone.utc
+        ).isoformat(),
+        'ready_for_evaluation': True,
+    }
+
+    champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+    os.makedirs(champ_dir, exist_ok=True)
+    champ_path = os.path.join(champ_dir, f"champion_{published['execution_id']}.json")
+    with open(champ_path, 'x', encoding='utf-8') as f:
+        json.dump(champion, f, indent=2, default=str)
+    replace_projection(champ_path, os.path.join(champ_dir, 'champion.json'))
+
+    try:
+        from modeling.crisp_dm import merge_crisp_dm
+        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+        if run is not None:
+            st = dict(run.state or {})
+            st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
+                'champion': champion,
+                'phase_status': {'modeling': 'completed'},
+            })
+            st['champion'] = champion
+            run.state = st
+            run.save(update_fields=['state', 'updated_at'])
+    except Exception as pe:
+        print(f"[Champion] PipelineRun update skipped: {pe}")
+
+    return Response({
+        'status': 'ok',
+        'file_id': file_id,
+        'champion': champion,
+        'execution_id': published['execution_id'],
+        'model': published['model'],
+        'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
+    })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class BoosterCompareView(APIView):

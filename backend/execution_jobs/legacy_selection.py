@@ -58,6 +58,8 @@ def expected_pointer(job, execution, stamp):
     if encoded and not encoded.startswith(prefix):
         member(job, encoded)
         payload["encoded_file"] = str((legacy.output_root(job) / encoded).relative_to(Path(settings.MEDIA_ROOT)))
+    if job.specification["legacy"]["operation"] == "champion":
+        payload["champion"] = job.result["payload"]["champion"]
     payload.update(
         native_job_selection=stamp, selected_for_development=True, review_approved=False, production_use_approved=False
     )
@@ -247,12 +249,7 @@ def select(actor, identifier, data):
                 member(job, encoded)
                 payload["encoded_file"] = str((legacy.output_root(job) / encoded).relative_to(root))
                 projects.register_artifact(root / payload["encoded_file"], file_id=job.dataset_id)
-            payload.update(
-                native_job_selection=stamp,
-                selected_for_development=True,
-                review_approved=False,
-                production_use_approved=False,
-            )
+            payload = expected_pointer(job, execution, stamp)
             if already and digest(existing) != digest(payload):
                 legacy.conflict("selection_pointer_changed")
             if not already:

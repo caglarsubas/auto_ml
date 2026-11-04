@@ -67,7 +67,7 @@ test('reviewed legacy training survives browser navigation and requires developm
   expect(saved.status()).toBe(201);
   async function load(browserPage: Page) {
     await browserPage.goto('/model-development');
-    await browserPage.getByRole('button', { name: 'Saved Pipelines', exact: true }).click();
+    await browserPage.getByRole('button', { name: /Saved Pipelines/ }).click();
     const row = browserPage.getByTitle(name, { exact: true }).locator('..').locator('..');
     await row.getByRole('button', { name: 'Load', exact: true }).click();
     await expect(

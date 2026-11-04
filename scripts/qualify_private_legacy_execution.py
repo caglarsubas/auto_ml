@@ -84,7 +84,9 @@ def launch(session, file_id, operation, options):
 def finished(session, ids, seconds=135):
     deadline = time.monotonic() + seconds
     while True:
-        rows = [session.data("GET", "/api/jobs/" + item + "/") for item in ids]
+        # Legacy results permit 8 MiB, plus bounded request/event metadata.
+        # Preserve the default 1 MiB limit for every original workflow request.
+        rows = [json.loads(session.request("GET", "/api/jobs/" + item + "/", response_limit=10 * 1024**2)[0]) for item in ids]
         require(
             not any(r["state"] in ("blocked", "failed", "cancelled") for r in rows),
             "legacy_native_job_failed",

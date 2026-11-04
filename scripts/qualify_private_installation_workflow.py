@@ -94,7 +94,7 @@ class Session:
         self.cookies = SimpleCookie()
         self.csrf = None
 
-    def request(self, method, path, body=None, status=200, content_type="application/json"):
+    def request(self, method, path, body=None, status=200, content_type="application/json", *, response_limit=1024 * 1024):
         require(path.startswith("/api/") and len(path) < 1024, "path_invalid")
         authority = self.value["request"]["authority"]
         headers = {"Host": authority, "Origin": "https://" + authority}
@@ -110,9 +110,11 @@ class Session:
         try:
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
-            raw = response.read(1024 * 1024 + 1)
+            require(type(response_limit) is int and 0 < response_limit <= 10 * 1024**2, "response_budget")
+            raw = response.read(response_limit + 1)
             # Do not emit credentials, cookies, response bodies or arbitrary errors.
-            require(response.status == status and len(raw) <= 1024 * 1024, "https_status_or_size")
+            require(response.status == status, "https_status_" + str(response.status))
+            require(len(raw) <= response_limit, "https_response_budget_exceeded")
             for key, value in response.getheaders():
                 if key.lower() == "set-cookie":
                     self.cookies.load(value)

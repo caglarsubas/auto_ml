@@ -42,6 +42,11 @@ def save_recipe(processed_path, file_id, eligible, options, dictionary, preserve
               'processed_input': {'path': str(processed.relative_to(root)), 'sha256': digest_file(processed)}}
     with processed.with_suffix('.purifier.json').open('x', encoding='utf-8') as stream:
         json.dump(recipe, stream, indent=2, allow_nan=False)
+    # The raw snapshot and recipe are independently permission-checked by
+    # durable training; bind their ownership when this native step creates them.
+    from access_control.projects import register_artifact
+    register_artifact(raw_path, file_id=int(file_id))
+    register_artifact(processed.with_suffix('.purifier.json'), file_id=int(file_id))
     return recipe
 
 

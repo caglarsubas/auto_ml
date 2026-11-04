@@ -60,6 +60,7 @@ def main():
         "training": views.execute_legacy_training,
         "sfs": views.execute_legacy_sfs,
         "hpo": views.execute_legacy_hpo,
+        "champion": views.execute_legacy_champion,
     }
     try:
         response = handlers[operation](options)
@@ -67,9 +68,9 @@ def main():
             if (control / "failure.json").is_file():
                 raise SystemExit(1)
             raise ValueError("legacy_request_or_pipeline_invalid")
-        if operation == "training":
+        if operation in {"training", "champion"}:
             payload = response.data
-            outcome = "succeeded" if payload.get("job_status") == "completed" else "failed"
+            outcome = "succeeded" if payload.get("job_status") == "completed" or operation == "champion" and payload.get("status") == "ok" else "failed"
         else:
             prefix, suffix = (
                 ("sfs_results", "sfs_results") if operation == "sfs" else ("hyperparam_results", "hyperparam")

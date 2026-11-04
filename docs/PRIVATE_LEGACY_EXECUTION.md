@@ -56,3 +56,23 @@ verifies child termination without publication, and restores the original frozen
 request under its natural lease. Original 300-second clean-install, 600-second
 recovery/upgrade, 900-second native-suite and 60-minute job caps remain unchanged.
 No customer, expert-code, independent-review or release acceptance is inferred.
+
+The purifier records project ownership of its newly generated raw snapshot and
+recipe. Durable training independently checks both recipe integrity and raw-input
+ownership. An older unregistered raw sidecar remains unverified: re-run the
+purifier to create a new governed version; no permission fallback is applied.
+
+Candidate acceptance through the existing champion API also refits in the fixed
+native worker, so a subsequently tuned accepted candidate has exact durable
+source provenance. The v1 request includes selection; it confers no independent
+review or production authority.
+
+Durable training retains the dataset as evidence. Three existing browser API
+cases now additionally assert the native job identifier and a 409 retention
+response with a readable retained dataset after training. Their scientific
+assertions, fits, folds and identities are preserved. The paired search workflow also asserts that completion leaves the assessed
+source selected, then explicitly selects the exact HPO result before exercising
+the unchanged unassessed-package blocker. The historical source baseline stays
+frozen; this single strengthened contract delta is recorded
+in [the source audit](evidence/p167-test-contract-delta.json). The other 296
+historical test files and all 236 original backend test files remain byte-identical.

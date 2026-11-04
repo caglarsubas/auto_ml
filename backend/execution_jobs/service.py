@@ -116,6 +116,10 @@ def locked():
     # local projection lock. Private installations always require PostgreSQL.
     if connection.vendor == "sqlite":
         with projection_lock(0), transaction.atomic():
+            # Reserve SQLite write ownership before reading. Other API writers
+            # do not take this queue lock; a deferred read-to-write upgrade can
+            # otherwise fail immediately with SQLITE_BUSY_SNAPSHOT.
+            QueueLock.objects.filter(pk=1).update(id=1)
             QueueLock.objects.get_or_create(pk=1)
             QueueLock.objects.select_for_update().get(pk=1)
             yield

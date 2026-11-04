@@ -134,9 +134,9 @@ def read_shap_details(file_id: int) -> Optional[Any]:
 
 
 def _durable_legacy_state(file_id, operation):
-    from django.conf import settings
+    from execution_jobs.legacy_execution import enabled
 
-    if not settings.DECLARAI_JOBS_ENABLED:
+    if not enabled():
         return None
     from django.contrib.auth import get_user_model
     from access_control import projects

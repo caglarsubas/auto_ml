@@ -2,15 +2,13 @@
 
 import uuid
 
-from django.conf import settings
-
 from execution_jobs import legacy_execution as legacy, service
 
 ACTIONS = {"start_modeling": "training", "start_sfs": "sfs", "start_hyperparameter": "hpo"}
 
 
 def prepare(actor, file_id, action_type, payload):
-    if not settings.DECLARAI_JOBS_ENABLED or action_type not in ACTIONS:
+    if not legacy.enabled() or action_type not in ACTIONS:
         return None
     from execution_jobs.legacy_selection import current
 

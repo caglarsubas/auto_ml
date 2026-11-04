@@ -2554,7 +2554,7 @@ Measure complete supported native development/search, export and scoring at admi
 
 Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection.
 
-**Evidence:** [Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)
+**Evidence:** [Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md); [PR #270](https://github.com/caglarsubas/auto_ml/pull/270); [Strengthened retention contract source audit](evidence/p167-test-contract-delta.json)
 
 **Remaining:** Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits.
 

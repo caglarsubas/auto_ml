@@ -88,4 +88,18 @@ describe('Durable legacy launch transport', () => {
     expect(request.request.body.expected_projection_sha256).toBe('d'.repeat(64));
     request.flush({ currently_selected: true });
   });
+  it('a fresh checkpoint restores exact source selectors for reviewed search', () => {
+    const execution = '22222222-2222-4222-8222-222222222222';
+    data.rememberLegacyReceipt(1, {
+      native_job_id: jobId,
+      result_sha256: 'c'.repeat(64),
+      execution_id: execution,
+    });
+    data.startSfs(1, ['forward'], {}, [], 1, 2, 'xgboost', { executionId: execution }).subscribe();
+    const request = http.expectOne(base + 'modeling/sfs/start/');
+    expect(request.request.body.source_job_id).toBe(jobId);
+    expect(request.request.body.source_result_sha256).toBe('c'.repeat(64));
+    expect(request.request.body.execution_id).toBe(execution);
+    request.flush({ status: 'started', operation_id: jobId, native_job_id: jobId });
+  });
 });

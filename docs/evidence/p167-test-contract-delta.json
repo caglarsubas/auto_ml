@@ -1,0 +1,16 @@
+{
+  "schema": "test_contract_delta_v1",
+  "scope": "D07-T05 durable retention and explicit development selection",
+  "historical_files": 297,
+  "byte_identical": 296,
+  "changed_files": [
+    {
+      "path": "frontend/e2e/raw-replay-api.spec.ts",
+      "before_sha256": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+      "after_sha256": "26a56ad3d553beb627b8bb72e4a38bf392c644cecf9a0a9f6efb8e5906791efe"
+    }
+  ],
+  "original_236_backend_files_byte_identical": true,
+  "scientific_assertions_fits_folds_and_case_identities_preserved": true,
+  "reason": "Durable training protects its dataset evidence: require native job identity and 409/readable retained dataset after training, preserving pre-admission 204 cleanup. Search completion no longer adopts its candidate: additionally assert the assessed source stays selected, then explicitly select the exact HPO job/result/execution against the prior projection before the unchanged unassessed-package blocker. Every original scientific assertion, fit, fold and test identity remains."
+}

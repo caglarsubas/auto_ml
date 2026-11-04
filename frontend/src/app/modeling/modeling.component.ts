@@ -1986,6 +1986,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       encodingPlan: this.encodingPlan,
       modelingStatus: this.slimModelingStatus(),
       legacyJobs: this.currentFileId == null ? {} : this.dataService.legacyJobReferences?.(this.currentFileId),
+      legacyCheckpoint: this.currentFileId == null ? null : this.dataService.legacyCheckpointReference?.(this.currentFileId),
       sfsReady: this.sfsReady,
       encodingReport: this.encodingReport,
       catLabelLookup: this.catLabelLookup,
@@ -2047,7 +2048,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedAlgorithm = state.selectedAlgorithm || null;
     this.encodingPlan = state.encodingPlan || [];
     this.modelingStatus = state.modelingStatus || null;
-    if (this.currentFileId != null) this.dataService.restoreLegacyJobs?.(this.currentFileId, state.legacyJobs);
+    if (this.currentFileId != null) {
+      this.dataService.restoreLegacyJobs?.(this.currentFileId, state.legacyJobs);
+      this.dataService.restoreLegacyCheckpoint?.(this.currentFileId, state.legacyCheckpoint);
+      for (const receipt of [state.modelingStatus, state.sfsResults, state.hpResults]) {
+        this.dataService.rememberLegacyReceipt?.(this.currentFileId, receipt);
+      }
+    }
     this.applyTaskMetricDefaults();
     this.sfsReady = state.sfsReady || false;
     this.encodingReport = state.encodingReport || [];

@@ -46,6 +46,27 @@ export class DataService {
     }
   }
 
+  legacyCheckpointReference(fileId: number): any {
+    return this.legacyCheckpoints.get(fileId);
+  }
+
+  restoreLegacyCheckpoint(fileId: number, checkpoint: any): void {
+    if (
+      checkpoint &&
+      isSearchOperationId(checkpoint.job_id) &&
+      typeof checkpoint.sha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(checkpoint.sha256)
+    ) {
+      this.legacyCheckpoints.set(fileId, JSON.parse(JSON.stringify(checkpoint)));
+    }
+  }
+
+  rememberLegacyReceipt(fileId: number, reply: any): void {
+    // Browser checkpoints provide selectors only. Admission independently
+    // verifies the exact immutable source, scope and hashes on the server.
+    this.rememberLegacy(fileId, reply);
+  }
+
   notifyLegacyJob(fileId: number, operation: string, jobId: string): void {
     if (!isSearchOperationId(jobId) || !['training', 'sfs', 'hpo'].includes(operation)) return;
     this.legacyActive.set(`${fileId}:${operation}`, jobId);
