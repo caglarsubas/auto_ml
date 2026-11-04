@@ -17,7 +17,7 @@ from qualify_private_installation_resources import fixture_plan
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def host_case(plan, expected, parent, recovery=None):
+def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False):
     value = startup.checker.verify(plan, expected)
     if (
         sys.platform != "linux"
@@ -252,12 +252,21 @@ def host_case(plan, expected, parent, recovery=None):
             queue_consistency = qualify_queue_consistency(parent)
             from qualify_private_installation_workflow import qualify as qualify_installed_workflow
 
+            workload_envelope = {}
+            observer = None if recovery is None else recovery.observe(value, accounts, account_passwords, parent, prepared, adopted, command)
+            if profile_workloads:
+                if recovery is not None:
+                    raise startup.checker.planner.PlanError("dependency_workload_observer_conflict")
+                from qualify_private_workload_envelope import qualify as qualify_envelope
+                def observer(session, handles):
+                    workload_envelope.update(qualify_envelope(session, value, accounts, parent, prepared, adopted, command))
             installed_workflow = qualify_installed_workflow(
                 value, accounts, account_passwords, parent, prepared, command,
-                observer=None if recovery is None else recovery.observe(value, accounts, account_passwords, parent, prepared, adopted, command),
+                observer=observer,
             )
             account_adoption = {
                 "installed_developer_workflow": installed_workflow,
+                "workload_envelope": workload_envelope,
                 "queue_consistency": queue_consistency,
                 "queue_evidence": queue_evidence,
                 "queue_incidents": queue_incidents,
@@ -513,13 +522,13 @@ created=False
 try:
     parent.mkdir(mode=0o700);created=True;plan=parent/'plan';plan.mkdir(mode=0o700)
     for name,data in v['files'].items():(plan/name).write_text(data)
-    print(json.dumps(q.host_case(plan,v['expected'],parent)))
+    print(json.dumps(q.host_case(plan,v['expected'],parent,profile_workloads=v.get('profile_workloads',False))))
 finally:
     if created:shutil.rmtree(parent)
 """
 
 
-def qualify(plan, expected, image, reports):
+def qualify(plan, expected, image, reports, *, profile_workloads=False):
     value = startup.checker.verify(plan, expected)
     if (
         sys.platform != "linux"
@@ -539,6 +548,7 @@ def qualify(plan, expected, image, reports):
             "parent": "/srv/declarai-p37-" + identifier,
             "files": {k: data.decode() for k, data in files.items()},
             "expected": pin,
+            "profile_workloads": profile_workloads,
         }
     )
     result = subprocess.run(

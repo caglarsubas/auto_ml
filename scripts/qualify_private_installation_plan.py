@@ -114,8 +114,8 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                 qualify_adoption(plan, result["plan_manifest_sha256"], path_check_image, reports)
                 from qualify_private_dependency_start import qualify as qualify_dependency_start
 
-                first = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports)
-                repeated = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "clean-repeat")
+                first = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports, profile_workloads=True)
+                repeated = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "clean-repeat", profile_workloads=True)
                 runs = [first, repeated]
                 profiles = [run["qualification"]["installation_profile"] for run in runs]
                 if (profiles[0]["installation_id"] == profiles[1]["installation_id"]
@@ -143,6 +143,10 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                     "release_qualified": False,
                 }
                 reports.mkdir(parents=True, exist_ok=True)
+                envelopes = [run["qualification"]["fresh_application_adoption"]["workload_envelope"] for run in runs]
+                from qualify_private_workload_envelope import comparison
+                observed = comparison(envelopes, profiles, result["images"])
+                (reports / "workload-envelope.json").write_bytes(planner.encoded(observed))
                 (reports / "clean-installation-acceptance.json").write_bytes(planner.encoded(acceptance))
         reports.mkdir(parents=True, exist_ok=True)
         result.update(schema="private_installation_plan_qualification_v1", actual_compose_configuration="passed", missing_bind_auto_creation="blocked", services=list(wanted["services"]), service_adoption=False, secret_reads=False)

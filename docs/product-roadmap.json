@@ -2032,6 +2032,11 @@
       "date": "2026-11-03",
       "packet": "P165",
       "change": "Qualify D07-T03 staged upgrade and compatible current-data rollback through all six exact-head PR and independent automatic push-main checks. Preserve original tests, workloads, skip identities and limits. Fixed 66 tasks: 5 done/54 open/7 blocked (7.6%/81.8%/10.6%); done increases 1.515 percentage points. No full D07, general schema, release or customer acceptance implied."
+    },
+    {
+      "date": "2026-11-04",
+      "packet": "P166",
+      "change": "Begin independently ready D07-T07 to establish measured workload/admission limits before legacy durable migration. Preserve fixed66 tasks and5 accepted; target6 after full qualification."
     }
   ],
   "implementation_packets": [
@@ -4951,6 +4956,21 @@
         "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41657060822)"
       ],
       "remaining": "D07-T03 is accepted for the supported synthetic Ubuntu 24.04 ARM64 reversible physical-index release. Staged forward and reverse transitions preserve all application rows/sequences, artifacts, project authority, original classification/regression export/scoring and post-upgrade work. Transaction faults roll back, lost acknowledgements resume and pending transitions refuse adoption. Both sealed API image IDs differ; dependency images and application/data layout remain identical. Previous-source reconstruction on locked dependencies is disclosed. Arbitrary schema/application changes, full AMD64 native, customer operations, broader D07 and release/customer acceptance retain separate gates."
+    },
+    {
+      "id": "P166",
+      "title": "D07 installed workload envelopes and observed recovery costs",
+      "kind": "product_implementation",
+      "owner": "Platform",
+      "status": "in_progress",
+      "items": [
+        "D07"
+      ],
+      "description": "Measure complete supported native development/search, export and scoring at admitted input bounds, paired job submission and recovery on independently initialized reference installations.",
+      "evidence": [
+        "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)"
+      ],
+      "remaining": "Implementation, two-root observed resource/timing measurements, recovery cost receipts, all original regressions, PR and independent main qualification are required. Customer capacity, legacy migration and full D07 remain separate."
     }
   ],
   "release_qualification": {
@@ -5112,8 +5132,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P164",
-    "source_commit": "3cfc65febe6be575e28d7d1785079fbff39385ee",
+    "packet": "P165",
+    "source_commit": "9c6051291ee4192507c4c3e6a387b06115d52d6d",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5123,9 +5143,9 @@
       }
     },
     "packets": {
-      "total": 164,
+      "total": 165,
       "counts": {
-        "done": 163,
+        "done": 164,
         "open": 0,
         "blocked": 1
       }
@@ -5629,15 +5649,19 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [],
         "acceptance": [
           "Dataset sizes, concurrency, memory/CPU, recovery costs and limitations are recorded.",
           "Microbenchmarks and one green CI run are not represented as customer capacity."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md)"
+        ],
+        "packet_refs": [
+          "P166"
+        ],
         "order": 21,
         "basis": "Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt."
       },
@@ -6835,16 +6859,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P165 upgrade/rollback",
-      "recorded_on": "2026-11-03",
-      "inventory_source_commit": "3cfc65febe6be575e28d7d1785079fbff39385ee",
+      "label": "Before P166 workload-envelope qualification",
+      "recorded_on": "2026-11-04",
+      "inventory_source_commit": "9c6051291ee4192507c4c3e6a387b06115d52d6d",
       "total": 66,
       "counts": {
-        "ready": 11,
+        "ready": 10,
         "in_progress": 0,
         "waiting": 44,
         "blocked": 7,
-        "done": 4
+        "done": 5
       }
     },
     "baseline_history": [
@@ -6902,6 +6926,20 @@
           "waiting": 44,
           "blocked": 7,
           "done": 3
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P165 upgrade/rollback",
+        "recorded_on": "2026-11-03",
+        "inventory_source_commit": "3cfc65febe6be575e28d7d1785079fbff39385ee",
+        "total": 66,
+        "counts": {
+          "ready": 11,
+          "in_progress": 0,
+          "waiting": 44,
+          "blocked": 7,
+          "done": 4
         }
       }
     ]

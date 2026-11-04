@@ -213,9 +213,12 @@ class Scenario:
         return callback
 
     def capture(self, plan, expected):
+        began = time.monotonic()
         self.backup = recovery.backup(plan, expected, self.key, self.archive)
+        self.backup_seconds = time.monotonic() - began
 
     def restore(self, plan, expected, parent, prepared):
+        cycle_started = time.monotonic()
         value = startup.checker.verify(plan, expected)
         approved = self.custody / "restore-plan.json"
         spec = recovery.render(self.archive, self.backup["backup_sha256"], self.key, plan, expected, approved)
@@ -315,6 +318,8 @@ class Scenario:
         again = recovery.restore(self.archive, self.key, plan, expected, approved, spec["restore_plan_sha256"])
         require(first["reused"] is False and again["reused"] is True and (parent / "installation/recovery/complete.json").read_bytes() == before, "recovery_repeat")
         adopted = adopter.adoption(plan, expected, parent / "server.crt")
+        adoption_ready_seconds = time.monotonic() - cycle_started
+        ready_at = time.monotonic()
         api = adopted["services"]["api"]["container_id"]
         from qualify_private_account_enrollment import https_roles
 
@@ -339,6 +344,7 @@ class Scenario:
                 break
             require(time.monotonic() < deadline, "recovery_pending_deadline")
             time.sleep(.3)
+        pending_recovery_seconds = time.monotonic() - ready_at
         require([r["state"] for r in rows] == ["succeeded", "succeeded", "cancelled"], "recovery_pending_outcomes")
         require(rows[0]["result"]["scores"] == self.handles[0]["scoring"]["result"]["scores"]
                 and rows[1]["result"]["scores"] == rows[0]["result"]["scores"], "recovery_scoring_parity")
@@ -346,6 +352,7 @@ class Scenario:
         evidence = boundary(api, "evidence", ids=ids)
         require(evidence[self.orphan]["attempts"] == 2 and evidence[self.queued]["attempts"] == 1
                 and evidence[self.cancelled]["attempts"] == 0, "recovery_attempts")
+        duplicate_started = time.monotonic()
         boundary(api, "duplicates", ids=ids)
         deadline = time.monotonic() + 30
         while any(boundary(api, "broker").values()):
@@ -357,7 +364,18 @@ class Scenario:
         # Idempotent restore remains read-only after legitimate new work.
         require(recovery.restore(self.archive, self.key, plan, expected, approved, spec["restore_plan_sha256"])["reused"] is True,
                 "recovery_post_use_replay")
-        return {"schema": "private_installed_recovery_v1", "source_installation_id": self.source_id,
+        return {"schema": "private_installed_recovery_v1", "observed_costs": {
+                    "source_backup_seconds": self.backup_seconds, "source_archive_bytes": self.archive.stat().st_size,
+                    "source_workloads": [{"task": h["task"], "features": len(h["training"]["result"]["features"]),
+                        "rows": len({i for fold in h["training"]["specification"]["training"]["folds"]
+                                     for key in ("train_rows", "valid_rows") for i in fold[key]})} for h in self.handles],
+                    "completed_jobs": len(self.completed), "pending_or_cancelled_jobs": 3,
+                    "restore_with_faults_to_adoption_seconds": adoption_ready_seconds,
+                    "adoption_to_pending_terminal_seconds": pending_recovery_seconds,
+                    "duplicate_drain_and_final_checks_seconds": time.monotonic() - duplicate_started,
+                    "restore_cycle_seconds": time.monotonic() - cycle_started,
+                    "fault_injection_and_verification_overhead_included": True,
+                    "customer_RPO_RTO_qualified": False}, "source_installation_id": self.source_id,
                 "target_installation_id": value["request"]["installation_id"], "same_exact_images": True,
                 "database_artifact_and_schema_binding": "passed", "classification_regression_export_score_bytes": "passed",
                 "restored_account_project_authority": "passed", "old_sessions_invalidated": True,
