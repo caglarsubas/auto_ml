@@ -1,0 +1,22 @@
+{
+  "schema": "private_index_fixture_contract_v1",
+  "qualification_only": true,
+  "customer_release_qualified": false,
+  "fixture_basis": "same_current_application_previous_index_schema",
+  "application_files": "All current verified application files retain exact hashes; only the approved index migration is absent from the source fixture. Source and runtime manifest metadata are rebuilt and verified.",
+  "removed_migration": {
+    "path": "backend/execution_jobs/migrations/0004_project_history_index.py",
+    "sha256": "92dc16affb2b40721b56bab66230949e5d7c1aa81ee168882e3683d9dca66ae3"
+  },
+  "unchanged_production_sources": {
+    "scripts/private_installation_upgrade.py": "a6d1261600cd0bbf9abe8b723c29a0715690a1e1ad64ce1a83c8de0fcf2d8278",
+    "scripts/private_upgrade_runtime.py": "2533575e292bad1e1a1ef2ff352aec9d6568d32dafc65ae219d0b051534c2772",
+    "scripts/private_recovery_runtime.py": "28a5796aede1e1bbc011b47b3c869b7d7405fd0fb19513fe78631a4572e2cb69"
+  },
+  "historical_reference_sha256": "0fb59bdd01e5b226fc61738447669b038ce8aa3f7159b6aeb40803939ca993b3",
+  "historical_archive_pin_sha256": "9dc25472a36e7e47f7c2ce0c85d41916b0e9398226bbba395e982928e35de18a",
+  "historical_application_upgrade_qualified": false,
+  "historical_reference_use": "Frozen archive remains independently verified historical evidence. It is not substituted into an index-only compatibility pair after application code evolves.",
+  "runtime_and_dependencies": "Both fixture images derive from the same verified current image without dependency installation.",
+  "installed_upgrade_cap_seconds": 600
+}

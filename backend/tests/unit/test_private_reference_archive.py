@@ -1,4 +1,4 @@
-"""The frozen previous source remains exact as current application files evolve."""
+"""Frozen historical archive and same-application index fixture boundaries."""
 
 import copy
 import gzip
@@ -77,3 +77,34 @@ def test_no_archive_member_can_escape_or_weaken_exact_inventory(reference, fault
     pin["archive_sha256"] = hashlib.sha256(archive).hexdigest()
     with pytest.raises(reader.ReferenceError):
         reader.sources(archive, old, pin)
+
+
+def test_previous_schema_fixture_preserves_current_application_exactly(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    module = importlib.import_module("qualify_private_upgrade_reference")
+    source = {"schema": "private_api_source_v1", "git_commit": "a" * 40,
+              "source_sha256": {module.MIGRATION: "b" * 64, "backend/new_legacy.py": "c" * 64}}
+    original = copy.deepcopy(source)
+    reference = module.previous_schema_reference(source, "sha256:" + "d" * 64, "b" * 64)
+    assert source == original
+    assert reference["source_sha256"] == {"backend/new_legacy.py": "c" * 64}
+    assert reference["fixture_basis"] == "same_current_application_previous_index_schema"
+    assert reference["removed_migration"] == {"path": module.MIGRATION, "sha256": "b" * 64}
+    assert reference["qualification_reconstruction_only"] and not reference["customer_release_qualified"]
+
+
+@pytest.mark.parametrize("fault", ["schema", "image", "migration"])
+def test_previous_schema_fixture_rejects_unbound_inputs(monkeypatch, fault):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    module = importlib.import_module("qualify_private_upgrade_reference")
+    source = {"schema": "private_api_source_v1", "git_commit": "a" * 40,
+              "source_sha256": {module.MIGRATION: "b" * 64}}
+    image, pin = "sha256:" + "d" * 64, "b" * 64
+    if fault == "schema":
+        source["schema"] = "historical"
+    elif fault == "image":
+        image = "latest"
+    else:
+        pin = "e" * 64
+    with pytest.raises(module.planner.PlanError):
+        module.previous_schema_reference(source, image, pin)

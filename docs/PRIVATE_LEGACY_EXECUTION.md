@@ -76,3 +76,12 @@ the unchanged unassessed-package blocker. The historical source baseline stays
 frozen; this single strengthened contract delta is recorded
 in [the source audit](evidence/p167-test-contract-delta.json). The other 296
 historical test files and all 236 original backend test files remain byte-identical.
+
+Upgrade qualification preserves the production index-only compatibility guard.
+Its source fixture now contains the same verified current application with only
+the approved index migration absent. All other application hashes and runtime
+dependencies agree; the 600-second installed upgrade/rollback cap is unchanged.
+This is a synthetic previous-schema variant, with modified-source metadata, not
+a historical application release. The sealed historical source archive remains
+independently verified and is not represented as a compatible application upgrade.
+See the [fixture contract](evidence/p167-upgrade-fixture-contract.json).
