@@ -776,9 +776,12 @@
         "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41657060822)",
         "[P166 workload qualification](evidence/p166-qualification-2026-11-04.json)",
         "[PR #268](https://github.com/caglarsubas/auto_ml/pull/268)",
-        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)"
+        "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)",
+        "[P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json)",
+        "[PR #270](https://github.com/caglarsubas/auto_ml/pull/270)",
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)"
       ],
-      "progress": "P166 / PR #268 closes D07-T07 workload profiling on the synthetic Ubuntu 24.04 ARM64 native numeric profile: six end-to-end cases per root, two independent clean roots in PR and main, declared admission bounds, exact input/prediction parity, sampled resource observations and fault-inclusive recovery costs. Fixed 66-task progress: 5 to 6 done (7.6% to 9.1%); open 54 to 53; blocked 7 unchanged. D07-T02 installation, D07-T03 index-release upgrade/rollback and D07-T04 recovery remain accepted on their qualified profiles. D07-T05 legacy migration, broader capacity, customer operations, full D07 and release/customer acceptance remain open."
+      "progress": "P167 / PR #270 closes D07-T05 durable legacy training/SFS/HPO and accepted native refits on the disclosed synthetic Ubuntu 24.04 ARM64 profile, after all-six PR and independent main qualification. The 21-case installed kernel matrix, browser/API workflows, exact source/results, explicit selection, worker-parent loss, natural 180-second lease and restored replay are qualified. Fixed 66-task progress: done 6 to 7 (9.1% to 10.6%, +1.515 percentage points), open 53 to 52, blocked 7 unchanged. D07-T06 full concurrency/cancellation/failure matrix is next ready; broader D07, operator/customer operational acceptance, expert execution and release remain open."
     },
     {
       "id": "D08",
@@ -1347,7 +1350,7 @@
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
-  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. D07-T07 native workload observations are accepted for the disclosed synthetic ARM64 envelope. Continue legacy durable execution and operational acceptance tasks; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. D07-T07 native workload observations are accepted for the disclosed synthetic ARM64 envelope. D07-T05 durable legacy native execution is accepted on the disclosed synthetic ARM64 profile. Continue D07-T06 full concurrency/cancellation/failure-matrix qualification and customer operational acceptance; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
   "history": [
     {
       "date": "2026-10-07",
@@ -2050,6 +2053,11 @@
       "date": "2026-11-04",
       "packet": "P167",
       "change": "Begin D07-T05 durable legacy training/SFS/HPO migration. Freeze the previous reference sources exactly; retain 66 tasks with 6 done/53 open/7 blocked until qualification."
+    },
+    {
+      "date": "2026-11-04",
+      "packet": "P167",
+      "change": "Accept D07-T05 after all six exact-head PR checks, guarded merge and independent automatic main artifact audit. Preserve every scientific assertion/fit/fold/case and all fixed limits; record the one strengthened browser retention/explicit-selection contract delta. Fixed 66 tasks: 7 done / 52 open / 7 blocked (10.6% / 78.8% / 10.6%); done +1.515 percentage points. D07-T06 becomes ready. Full D07 and release/customer acceptance remain open."
     }
   ],
   "implementation_packets": [
@@ -4996,14 +5004,16 @@
         "D07"
       ],
       "owner": "Platform",
-      "status": "in_progress",
+      "status": "tested",
       "evidence": [
         "[Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)",
         "[PR #270](https://github.com/caglarsubas/auto_ml/pull/270)",
         "[Strengthened retention contract source audit](evidence/p167-test-contract-delta.json)",
-        "[Index-only qualification fixture contract](evidence/p167-upgrade-fixture-contract.json)"
+        "[Index-only qualification fixture contract](evidence/p167-upgrade-fixture-contract.json)",
+        "[P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json)",
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)"
       ],
-      "remaining": "Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits. Full PostgreSQL qualification now uses the verified application image and source hashes, with only two pinned test tools in an explicit overlay. All original cases, fits, folds, branch coverage, two workers and the 900-second cap are preserved. Current-head PR and independent main qualification remain pending; local TLS/non-superuser full-suite evidence is not completion credit.",
+      "remaining": "D07-T05 is accepted for the disclosed synthetic ARM64 registered-native profile. Governed training/search and accepted refits use frozen shared jobs, detached native children, exact source/result references, immutable candidate publication and explicit attributable development selection. Browser closure, assistant launch, cancellation/checkpoint recovery, worker-parent loss and natural-lease restored replay are qualified. Broader D07-T06 failure-matrix coverage, customer operational acceptance, expert code, full D07, release and customer acceptance remain separate.",
       "description": "Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection."
     }
   ],
@@ -5637,7 +5647,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Browser closure and worker loss preserve inspectable state and diagnostics.",
@@ -5645,7 +5655,10 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)"
+          "[Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)",
+          "[P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json)",
+          "[PR #270](https://github.com/caglarsubas/auto_ml/pull/270)",
+          "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)"
         ],
         "packet_refs": [
           "P167"

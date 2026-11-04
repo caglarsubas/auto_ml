@@ -1,8 +1,12 @@
 # D07-T05 — Durable legacy training, SFS and HPO
 
-P167 is in progress. The fixed 66-task inventory remains 6 done/53 open/7 blocked.
-The acceptance target is 7 done/52 open/7 blocked (10.6%/78.8%/10.6%), after PR
-qualification, guarded merge and independent automatic main verification.
+P167 closes D07-T05 for the disclosed synthetic ARM64 private-installation
+profile. [PR #270](https://github.com/caglarsubas/auto_ml/pull/270) and its
+[independent automatic main run](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)
+passed all six checks; [receipts and artifact digests](evidence/p167-qualification-2026-11-04.json)
+retain the measured evidence. Fixed task distribution moves from 6/53/7 to
+7 done/52 open/7 blocked (10.6%/78.8%/10.6%), a 1.515 percentage-point
+increase in done. D07-T06 is next ready; full D07 and customer acceptance remain open.
 
 The migration reuses existing registered native fitters, declarations, fold-local
 preparation, search objectives and immutable execution packages. Shared durable
@@ -61,8 +65,10 @@ The full PostgreSQL test suite uses the verified application image's native
 Python and numerical libraries, with application source hashes checked against
 the checkout. Only the pinned `execnet` and `pytest-xdist` tools are copied into
 a separate, hashed qualification overlay. Application dependencies are verified
-again inside that controller; host site packages and host credentials are not
-mounted. The controller retains the host's existing CPU affinity, two workers,
+again inside that controller. Host site packages and the Docker socket are not
+mounted. The controller receives an allowlisted test environment, the repository
+checkout and the owned synthetic fixture; it makes no expert-code or credential
+confinement claim. The controller retains the host's existing CPU affinity, two workers,
 zero worker restarts, branch coverage and the 900-second cap. This trusted test
 controller is separate from the installed service and D08 expert isolation.
 
@@ -94,3 +100,8 @@ This is a synthetic previous-schema variant, with modified-source metadata, not
 a historical application release. The sealed historical source archive remains
 independently verified and is not represented as a compatible application upgrade.
 See the [fixture contract](evidence/p167-upgrade-fixture-contract.json).
+
+The implementation PR and independent main each pass 7,732 native cases with
+six unchanged skips under the 900-second process limit, 809 unchanged RI cases,
+731 frontend unit tests and 48 browser cases. Each installed legacy matrix
+contains 21 cases; neither matrix substitutes for customer workload profiling.
