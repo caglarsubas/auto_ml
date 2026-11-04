@@ -57,6 +57,15 @@ request under its natural lease. Original 300-second clean-install, 600-second
 recovery/upgrade, 900-second native-suite and 60-minute job caps remain unchanged.
 No customer, expert-code, independent-review or release acceptance is inferred.
 
+The full PostgreSQL test suite uses the verified application image's native
+Python and numerical libraries, with application source hashes checked against
+the checkout. Only the pinned `execnet` and `pytest-xdist` tools are copied into
+a separate, hashed qualification overlay. Application dependencies are verified
+again inside that controller; host site packages and host credentials are not
+mounted. The controller retains the host's existing CPU affinity, two workers,
+zero worker restarts, branch coverage and the 900-second cap. This trusted test
+controller is separate from the installed service and D08 expert isolation.
+
 The purifier records project ownership of its newly generated raw snapshot and
 recipe. Durable training independently checks both recipe integrity and raw-input
 ownership. An older unregistered raw sidecar remains unverified: re-run the

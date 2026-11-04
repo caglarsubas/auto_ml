@@ -5003,7 +5003,7 @@
         "[Strengthened retention contract source audit](evidence/p167-test-contract-delta.json)",
         "[Index-only qualification fixture contract](evidence/p167-upgrade-fixture-contract.json)"
       ],
-      "remaining": "Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits.",
+      "remaining": "Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits. Full PostgreSQL qualification now uses the verified application image and source hashes, with only two pinned test tools in an explicit overlay. All original cases, fits, folds, branch coverage, two workers and the 900-second cap are preserved. Current-head PR and independent main qualification remain pending; local TLS/non-superuser full-suite evidence is not completion credit.",
       "description": "Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection."
     }
   ],
