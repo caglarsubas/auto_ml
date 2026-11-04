@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError, tap, map } from 'rxjs/operators';
+import { Observable, Subject, throwError } from 'rxjs';
+import { catchError, tap, map, switchMap } from 'rxjs/operators';
+import { LegacyExecutionCancelled, LegacyExecutionReviewService } from './legacy-execution-review.service';
 import { environment } from '../../environments/environment';
 import { AssistantStep } from './ai-assistant.service';
 import { ProjectWorkspaceService } from './project-workspace.service';
@@ -14,7 +15,114 @@ import { isSearchOperationId } from './search-operation';
 export class DataService {
   private apiUrl = environment.apiBaseUrl;
 
-  constructor(private http: HttpClient, private auth: AuthService, private workspace: ProjectWorkspaceService) { }
+  constructor(private http: HttpClient, private auth: AuthService, private workspace: ProjectWorkspaceService, private legacyReview: LegacyExecutionReviewService) {
+    this.auth.isLoggedIn$?.subscribe(signedIn => {
+      if (!signedIn) {
+        this.legacyReview.resolve(false);
+        this.legacySources.clear(); this.legacyCurrent.clear();
+        this.legacyActive.clear(); this.legacyCheckpoints.clear();
+      }
+    });
+  }
+
+  private readonly legacySources = new Map<string, { jobId: string; resultSha: string; executionId: string }>();
+  private readonly legacyCurrent = new Map<number, string>();
+  private readonly legacyActive = new Map<string, string>();
+  private readonly legacyCheckpoints = new Map<number, any>();
+  private readonly legacyStarted = new Subject<{ fileId: number; operation: string; jobId: string }>();
+  readonly legacyJobStarted$ = this.legacyStarted.asObservable();
+
+  legacyJobReferences(fileId: number): Record<string, string> {
+    return Object.fromEntries(['training', 'sfs', 'hpo'].flatMap(operation => {
+      const job = this.legacyActive.get(`${fileId}:${operation}`);
+      return job ? [[operation, job]] : [];
+    }));
+  }
+
+  restoreLegacyJobs(fileId: number, references: Record<string, string> | undefined): void {
+    if (!references || typeof references !== 'object') return;
+    for (const operation of ['training', 'sfs', 'hpo']) {
+      if (isSearchOperationId(references[operation])) this.legacyActive.set(`${fileId}:${operation}`, references[operation]);
+    }
+  }
+
+  notifyLegacyJob(fileId: number, operation: string, jobId: string): void {
+    if (!isSearchOperationId(jobId) || !['training', 'sfs', 'hpo'].includes(operation)) return;
+    this.legacyActive.set(`${fileId}:${operation}`, jobId);
+    this.legacyStarted.next({ fileId, operation, jobId });
+  }
+
+  private rememberLegacy(fileId: number, reply: any): void {
+    if (reply?.resume_checkpoint) this.legacyCheckpoints.set(fileId, reply.resume_checkpoint);
+    if (!reply?.native_job_id || !reply?.result_sha256) return;
+    for (const name of ['execution_id', 'forward_execution_id', 'backward_execution_id', 'forward_from_backward_execution_id']) {
+      const executionId = reply[name];
+      if (!isSearchOperationId(executionId)) continue;
+      const key = `${this.auth.user?.id}:${fileId}:${executionId}`;
+      this.legacySources.set(key, { jobId: reply.native_job_id, resultSha: reply.result_sha256, executionId });
+      if (name === 'execution_id') this.legacyCurrent.set(fileId, executionId);
+    }
+  }
+
+  private developmentPost(operation: 'training' | 'sfs' | 'hpo', path: string, supplied: any): Observable<any> {
+    const payload = JSON.parse(JSON.stringify(supplied));
+    const fileId = payload.file_id;
+    const actorId = this.auth.user?.id;
+    const csrf = this.auth.csrfToken;
+    if (operation !== 'training') {
+      const executionId = payload.execution_id || this.legacyCurrent.get(fileId);
+      const source = this.legacySources.get(`${this.auth.user?.id}:${fileId}:${executionId}`);
+      if (source) Object.assign(payload, { execution_id: source.executionId, source_job_id: source.jobId, source_result_sha256: source.resultSha });
+      const checkpoint = this.legacyCheckpoints.get(fileId);
+      if (payload.resume && checkpoint && checkpoint.source?.execution_id === executionId) {
+        payload.checkpoint_job_id = checkpoint.job_id;
+        payload.checkpoint_sha256 = checkpoint.sha256;
+      }
+    }
+    return this.http.post<any>(`${this.apiUrl}${path}`, payload, { headers: { "X-DeclarAI-Execution-Protocol": "native-reviewed-v1" } }).pipe(
+      catchError(error => {
+        if (error.status !== 409 || error.error?.error_code !== 'job_legacy_preview_required') return throwError(() => error);
+        return this.http.post<any>(`${this.apiUrl}jobs/datasets/${fileId}/legacy-input/`, { operation, options: payload }).pipe(
+          switchMap(preview => this.legacyReview.request({ fileId, operation, options: preview.execution_options || payload, preview }).pipe(
+            switchMap(accepted => !accepted ? throwError(() => new LegacyExecutionCancelled())
+              : actorId !== this.auth.user?.id || csrf !== this.auth.csrfToken
+                ? throwError(() => new Error('Your session changed. Review the execution again.'))
+                : this.http.post<any>(`${this.apiUrl}${path}`, {
+              ...payload, execution_request: { request_id: crypto.randomUUID(), plan_sha256: preview.plan_sha256, inputs_sha256: preview.inputs_sha256 },
+            })),
+          )),
+        );
+      }),
+      tap(reply => {
+        if (reply.native_job_id) this.legacyActive.set(`${fileId}:${operation}`, reply.native_job_id);
+        this.rememberLegacy(fileId, reply);
+      }),
+    );
+  }
+
+  private legacyParams(fileId: number, operation: string): Record<string, string> {
+    const jobId = this.legacyActive.get(`${fileId}:${operation}`);
+    return jobId ? { job_id: jobId } : {};
+  }
+
+  getLegacySelection(jobId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}jobs/${jobId}/legacy-selection/`);
+  }
+
+  selectLegacyCandidate(jobId: string, preview: any, executionId: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}jobs/${jobId}/legacy-selection/`, {
+      request_id: crypto.randomUUID(), result_sha256: preview.result_sha256,
+      execution_id: executionId, expected_projection_sha256: preview.expected_projection_sha256,
+    }).pipe(tap(() => this.legacyActive.delete(`${preview.file_id}:training`)));
+  }
+
+  getSelectedModelingStatus(fileId: number): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}modeling/status/${fileId}/`, { params: { selected: 'true' } }).pipe(tap(reply => this.rememberLegacy(fileId, reply)));
+  }
+
+  cancelLegacyJob(jobId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}jobs/${jobId}/`, { action: 'cancel' });
+  }
 
   uploadFile(file: File): Observable<any> {
     const formData = new FormData();
@@ -152,8 +260,9 @@ export class DataService {
     if (encodingUseNative !== undefined) payload.encoding_use_native = encodingUseNative;
     if (businessUnderstanding) payload.business_understanding = businessUnderstanding;
     if (pipelineRunId !== undefined) payload.pipeline_run_id = pipelineRunId;
-    return this.http.post(`${this.apiUrl}modeling/start/`, payload).pipe(
+    return this.developmentPost('training', 'modeling/start/', payload).pipe(
       catchError((error: any) => {
+        if (error.executionCancelled) return throwError(() => error);
         console.error('Error starting modeling:', error);
         return throwError(() => new Error(error.error?.model?.error || error.error?.error || error.message || 'Failed to start modeling'));
       })
@@ -162,7 +271,8 @@ export class DataService {
 
   // Get modeling status/metrics
   getModelingStatus(fileId: number, executionId?: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/status/${fileId}/`, { params: executionId ? { execution_id: executionId } : {} }).pipe(
+    return this.http.get(`${this.apiUrl}modeling/status/${fileId}/`, { params: executionId ? { execution_id: executionId } : this.legacyParams(fileId, 'training') }).pipe(
+      tap(reply => this.rememberLegacy(fileId, reply)),
       catchError((error: any) => {
         console.error('Error getting modeling status:', error);
         return throwError(() => new Error(error.message || 'Failed to get modeling status'));
@@ -207,7 +317,7 @@ export class DataService {
         payload.candidate_top_k = opts.candidateTopK;
       }
     }
-    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+    return this.developmentPost('sfs', 'modeling/sfs/start/', payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS:', error);
         return throwError(() => error);
@@ -236,7 +346,7 @@ export class DataService {
     };
     if (algorithm) payload.algorithm = algorithm;
     if (executionId) payload.execution_id = executionId;
-    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+    return this.developmentPost('sfs', 'modeling/sfs/start/', payload).pipe(
       catchError((error: any) => {
         console.error('Error starting SFS with initial features:', error);
         return throwError(() => error);
@@ -246,7 +356,8 @@ export class DataService {
 
   // Get SFS progress/status
   getSfsStatus(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/sfs/status/${fileId}/`).pipe(
+    return this.http.get(`${this.apiUrl}modeling/sfs/status/${fileId}/`, { params: this.legacyParams(fileId, 'sfs') }).pipe(
+      tap(reply => this.rememberLegacy(fileId, reply)),
       catchError((error: any) => {
         console.error('Error getting SFS status:', error);
         return throwError(() => error);
@@ -293,7 +404,7 @@ export class DataService {
     }
     if (algorithm) payload.algorithm = algorithm;
     if (executionId) payload.execution_id = executionId;
-    return this.http.post(`${this.apiUrl}modeling/sfs/start/`, payload).pipe(
+    return this.developmentPost('sfs', 'modeling/sfs/start/', payload).pipe(
       catchError((error: any) => {
         console.error('Error resuming SFS:', error);
         return throwError(() => error);
@@ -303,7 +414,8 @@ export class DataService {
 
   // Get Sequential Feature Selection (SFS) results
   getSfsResults(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`).pipe(
+    return this.http.get(`${this.apiUrl}modeling/sfs/${fileId}/`, { params: this.legacyParams(fileId, 'sfs') }).pipe(
+      tap(reply => this.rememberLegacy(fileId, reply)),
       catchError((error: any) => {
         console.error('Error getting SFS results:', error);
         return throwError(() => error);
@@ -347,7 +459,7 @@ export class DataService {
     if (typeof options.gridPointsPerParam === 'number') payload.grid_points_per_param = options.gridPointsPerParam;
     if (options.gridPointsPerParamMap) payload.grid_points_per_param_map = options.gridPointsPerParamMap;
     if (options.algorithm) payload.algorithm = options.algorithm;
-    return this.http.post(`${this.apiUrl}modeling/hyperparam/start/`, payload).pipe(
+    return this.developmentPost('hpo', 'modeling/hyperparam/start/', payload).pipe(
       catchError((error: any) => {
         console.error('Error starting hyperparameter tuning:', error);
         return throwError(() => error);
@@ -357,7 +469,8 @@ export class DataService {
 
   // Get hyperparameter-tuning progress/status.
   getHyperparamStatus(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/hyperparam/status/${fileId}/`).pipe(
+    return this.http.get(`${this.apiUrl}modeling/hyperparam/status/${fileId}/`, { params: this.legacyParams(fileId, 'hpo') }).pipe(
+      tap(reply => this.rememberLegacy(fileId, reply)),
       catchError((error: any) => {
         console.error('Error getting hyperparameter status:', error);
         return throwError(() => new Error(error.message || 'Failed to get hyperparameter status'));
@@ -382,7 +495,8 @@ export class DataService {
 
   // Get persisted hyperparameter-tuning results.
   getHyperparamResults(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/hyperparam/${fileId}/`).pipe(
+    return this.http.get(`${this.apiUrl}modeling/hyperparam/${fileId}/`, { params: this.legacyParams(fileId, 'hpo') }).pipe(
+      tap(reply => this.rememberLegacy(fileId, reply)),
       catchError((error: any) => {
         console.error('Error getting hyperparameter results:', error);
         return throwError(() => new Error(error.message || 'Failed to get hyperparameter results'));

@@ -19,7 +19,7 @@ CURSOR_SECONDS = 3600
 SALT = "native-job-history-v1"
 STATES = ("queued", "running", "cancel_requested", "succeeded", "blocked", "failed", "cancelled")
 KINDS = (service.KIND, service.csv_scoring.KIND, service.training_search.KIND,
-         service.training_scoring.KIND, service.native_assessment.KIND)
+         service.training_scoring.KIND, service.native_assessment.KIND, service.legacy_execution.KIND)
 
 
 def key_filter(key, newer=False):

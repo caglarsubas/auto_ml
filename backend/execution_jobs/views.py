@@ -243,3 +243,30 @@ class DatasetJobHistoryView(NativeReadView):
         except ERRORS as exc:
             response = failure(exc)
         return response
+
+
+class JobLegacyInputView(NativeReadView):
+    def post(self, request, file_id):
+        try:
+            from execution_jobs.legacy_execution import preview
+            if set(request.data) != {'operation', 'options'}:
+                raise ValueError('Supply the operation and native options.')
+            return Response(preview(request.user, file_id, request.data['operation'], request.data['options']))
+        except ERRORS as exc:
+            return failure(exc)
+
+
+class JobLegacySelectionView(NativeReadView):
+    def get(self, request, job_id):
+        try:
+            from execution_jobs.legacy_selection import preview
+            return Response(preview(request.user, job_id))
+        except ERRORS as exc:
+            return failure(exc)
+
+    def post(self, request, job_id):
+        try:
+            from execution_jobs.legacy_selection import select
+            return Response(select(request.user, job_id, request.data))
+        except ERRORS as exc:
+            return failure(exc)

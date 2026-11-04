@@ -42,6 +42,12 @@ def launch_search_worker(registry, file_id, target, context, *, thread_factory=N
     try:
         if owner is None or owner.get("operation_id") != context["operation_id"] or owner.get("status") != "running":
             raise ValueError("Search launch requires its current running owner.")
+        from execution_jobs.legacy_context import active
+        if active() is not None:
+            # A durable lease owns the work. This scratch owner only feeds the
+            # unchanged numerical kernel; it cannot publish a global result.
+            run()
+            return None
         thread = (thread_factory or threading.Thread)(target=run)
         thread.daemon = True
         thread.start()

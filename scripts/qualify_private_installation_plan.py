@@ -116,6 +116,11 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
 
                 first = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports, profile_workloads=True)
                 repeated = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "clean-repeat", profile_workloads=True)
+                legacy = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "legacy-execution", profile_legacy=True)
+                legacy_profile = legacy["qualification"]["fresh_application_adoption"]["legacy_execution"]
+                if (legacy_profile.get("case_count") != 21 or not legacy["owned_root_and_resources_removed"]
+                    or legacy_profile.get("application_images") != result["images"]):
+                    raise planner.PlanError("installation_legacy_execution_incomplete")
                 runs = [first, repeated]
                 profiles = [run["qualification"]["installation_profile"] for run in runs]
                 if (profiles[0]["installation_id"] == profiles[1]["installation_id"]

@@ -2045,6 +2045,11 @@
       "date": "2026-11-04",
       "packet": "P166",
       "change": "Accept D07-T07 measured synthetic native workload envelope after all six exact-head PR and independent automatic main checks. Original test/skip/RI inventories, scientific workloads and limits remain preserved. Fixed 66 tasks: 6 done/53 open/7 blocked (9.1%/80.3%/10.6%); done increases 1.515 percentage points. Customer and legacy capacity remain unqualified."
+    },
+    {
+      "date": "2026-11-04",
+      "packet": "P167",
+      "change": "Begin D07-T05 durable legacy training/SFS/HPO migration. Freeze the previous reference sources exactly; retain 66 tasks with 6 done/53 open/7 blocked until qualification."
     }
   ],
   "implementation_packets": [
@@ -4982,6 +4987,21 @@
         "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)"
       ],
       "remaining": "D07-T07 is accepted for the disclosed synthetic ARM64 native numeric profile. Two fresh roots in both PR and independent main reproduce six installed training/search/export/scoring cases with exact seeded input/prediction parity, owned-service resource observations and observed recovery costs. Sampled observations are not exact peaks, throughput guarantees, customer capacity or broader legacy qualification. D07-T05 legacy migration, customer operational acceptance, full D07 and release acceptance remain separate."
+    },
+    {
+      "id": "P167",
+      "kind": "product_implementation",
+      "title": "Durable legacy training, SFS and HPO execution",
+      "items": [
+        "D07"
+      ],
+      "owner": "Platform",
+      "status": "in_progress",
+      "evidence": [
+        "[Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)"
+      ],
+      "remaining": "Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits.",
+      "description": "Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection."
     }
   ],
   "release_qualification": {
@@ -5143,8 +5163,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P165",
-    "source_commit": "9c6051291ee4192507c4c3e6a387b06115d52d6d",
+    "packet": "P166",
+    "source_commit": "c2c9aa7a69442051e45ab24fc8797f8351ae3e0f",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5154,9 +5174,9 @@
       }
     },
     "packets": {
-      "total": 165,
+      "total": 166,
       "counts": {
-        "done": 164,
+        "done": 165,
         "open": 0,
         "blocked": 1
       }
@@ -5614,15 +5634,19 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [],
         "acceptance": [
           "Browser closure and worker loss preserve inspectable state and diagnostics.",
           "Shared admission, cancellation and immutable result adoption replace remaining process-local authority."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)"
+        ],
+        "packet_refs": [
+          "P167"
+        ],
         "order": 19,
         "basis": "Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt."
       },
@@ -6873,16 +6897,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P166 workload-envelope qualification",
+      "label": "Before P167 durable legacy execution qualification",
       "recorded_on": "2026-11-04",
-      "inventory_source_commit": "9c6051291ee4192507c4c3e6a387b06115d52d6d",
+      "inventory_source_commit": "c2c9aa7a69442051e45ab24fc8797f8351ae3e0f",
       "total": 66,
       "counts": {
-        "ready": 10,
+        "ready": 9,
         "in_progress": 0,
         "waiting": 44,
         "blocked": 7,
-        "done": 5
+        "done": 6
       }
     },
     "baseline_history": [
@@ -6954,6 +6978,20 @@
           "waiting": 44,
           "blocked": 7,
           "done": 4
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P166 workload-envelope qualification",
+        "recorded_on": "2026-11-04",
+        "inventory_source_commit": "9c6051291ee4192507c4c3e6a387b06115d52d6d",
+        "total": 66,
+        "counts": {
+          "ready": 10,
+          "in_progress": 0,
+          "waiting": 44,
+          "blocked": 7,
+          "done": 5
         }
       }
     ]

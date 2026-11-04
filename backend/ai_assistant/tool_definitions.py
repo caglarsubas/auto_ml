@@ -412,3 +412,12 @@ PIPELINE_TOOLS = [
     _invoke_skill_definition(),
     _get_skill_file_definition(),
 ]
+
+
+PIPELINE_TOOLS.append({
+    "type": "function", "function": {
+        "name": "get_execution_job",
+        "description": "Read one exact durable development job, attempts, candidate references and failure diagnostics. Works while the browser is closed. Does not submit, retry, select or approve a model.",
+        "parameters": {"type": "object", "properties": {"job_id": {"type": "string", "description": "Exact job UUID from the launch/approval receipt."}}, "required": ["job_id"]},
+    },
+})

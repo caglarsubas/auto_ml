@@ -1,0 +1,70 @@
+dialog {
+  border: 1px solid #c5cbd3;
+  border-radius: 8px;
+  padding: 24px;
+  width: min(42rem, calc(100vw - 3rem));
+  max-height: 85vh;
+  overflow: auto;
+  color: #1c2735;
+  background: white;
+}
+dialog::backdrop {
+  background: rgb(15 23 42 / 45%);
+}
+h2 {
+  margin: 0 0 16px;
+  font-size: 1.35rem;
+}
+p {
+  line-height: 1.55;
+}
+dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 2fr;
+  gap: 9px 16px;
+}
+dt {
+  font-weight: 600;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+code {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+.actions {
+  display: flex;
+  justify-content: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+button {
+  min-height: 44px;
+  border: 1px solid #bbc5d2;
+  border-radius: 4px;
+  padding: 9px 16px;
+  cursor: pointer;
+  background: white;
+  color: inherit;
+}
+.confirm {
+  background: #1d4f85;
+  border-color: #1d4f85;
+  color: white;
+}
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #1987bd;
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  dl {
+    grid-template-columns: 1fr;
+  }
+  dd {
+    margin-bottom: 8px;
+  }
+}

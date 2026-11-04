@@ -1,0 +1,97 @@
+<dialog #dialog aria-labelledby="legacy-execution-title" (cancel)="cancel($event)">
+  @if (review.pending$ | async; as proposal) {
+    <h2 id="legacy-execution-title">Review model development execution</h2>
+    <p>
+      The operation continues in the job queue if you close this browser. Its result is a new
+      candidate for review.
+    </p>
+    <dl>
+      <dt>Operation</dt>
+      <dd>
+        {{
+          proposal.operation === 'hpo'
+            ? 'Hyperparameter tuning'
+            : proposal.operation === 'sfs'
+              ? 'Feature selection'
+              : 'Model training'
+        }}
+      </dd>
+      <dt>Dataset</dt>
+      <dd>{{ proposal.fileId }}</dd>
+      <dt>Algorithm</dt>
+      <dd>{{ proposal.options['algorithm'] || 'Source candidate algorithm' }}</dd>
+      <dt>Task</dt>
+      <dd>
+        {{
+          proposal.preview.semantic_contract?.task ||
+            proposal.preview.semantic_contract?.problem_type
+        }}
+      </dd>
+      <dt>Target</dt>
+      <dd>
+        {{
+          proposal.preview.semantic_contract?.target_column ||
+            proposal.preview.semantic_contract?.target_contract?.target_column
+        }}
+      </dd>
+      @if (
+        proposal.preview.semantic_contract?.positive_class != null ||
+        proposal.preview.semantic_contract?.target_contract?.positive_class != null
+      ) {
+        <dt>Positive outcome</dt>
+        <dd>
+          {{
+            proposal.preview.semantic_contract?.positive_class ??
+              proposal.preview.semantic_contract?.target_contract?.positive_class
+          }}
+        </dd>
+      }
+      <dt>Source version</dt>
+      <dd>
+        {{ proposal.preview.source?.execution_id || proposal.preview.inputs_sha256.slice(0, 16) }}
+      </dd>
+      <dt>Time limit</dt>
+      <dd>{{ proposal.preview.budget.seconds }} seconds per attempt</dd>
+      <dt>Shared concurrency</dt>
+      <dd>At most {{ proposal.preview.budget.max_active }} active jobs</dd>
+      <dt>Requested search workers</dt>
+      <dd>{{ proposal.options['n_jobs'] || 1 }}</dd>
+      @if (proposal.options['cv_folds']) {
+        <dt>Development folds</dt>
+        <dd>{{ proposal.options['cv_folds'] }}</dd>
+      }
+      @if (proposal.options['n_iter']) {
+        <dt>Requested trials</dt>
+        <dd>{{ proposal.options['n_iter'] }}</dd>
+      }
+    </dl>
+    <p>
+      Completion preserves an immutable candidate. Selecting it for development and approving
+      production use are separate actions.
+    </p>
+    @if (proposal.preview.semantic_contract?.search_budget; as search) {
+      <p>
+        {{ search.candidates }} search candidates; at most
+        {{ search.candidate_fit_upper_bound }} candidate fits, including curves.
+      </p>
+      @for (note of search.normalization_notes; track note) {
+        <p>{{ note }}</p>
+      }
+    }
+    <details>
+      <summary>Exact input and execution references</summary>
+      <p>
+        Inputs: <code>{{ proposal.preview.inputs_sha256 }}</code>
+      </p>
+      <p>
+        Execution plan: <code>{{ proposal.preview.plan_sha256 }}</code>
+      </p>
+    </details>
+    <div class="actions">
+      <button type="button" (click)="review.resolve(false)">Cancel</button>
+      <button type="button" class="confirm" (click)="review.resolve(true)">
+        Submit reviewed execution
+      </button>
+    </div>
+  }
+</dialog>

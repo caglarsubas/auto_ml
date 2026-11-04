@@ -1,4 +1,4 @@
-from execution_jobs.views import DatasetJobHistoryView, JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
+from execution_jobs.views import JobLegacySelectionView, JobLegacyInputView, DatasetJobHistoryView, JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -65,6 +65,7 @@ urlpatterns = [
     path('api/deployment/receipts/<int:file_id>/<uuid:batch_id>/', DeploymentReceiptView.as_view(), name='deployment-receipt'),
     path('api/deployment/status/<int:file_id>/', DeploymentStatusView.as_view(), name='deployment-status'),
     path('api/deployment/pack/', DeploymentPackView.as_view(), name='deployment-pack'),
+    path('api/jobs/datasets/<int:file_id>/legacy-input/', JobLegacyInputView.as_view(), name='job-legacy-input'),
     path('api/jobs/datasets/<int:file_id>/training-input/', JobTrainingInputView.as_view(), name='job-training-input'),
     path('api/jobs/datasets/<int:file_id>/', DatasetJobsView.as_view(), name='dataset-jobs'),
     path('api/jobs/datasets/<int:file_id>/history/', DatasetJobHistoryView.as_view(), name='dataset-job-history'),
@@ -77,6 +78,7 @@ urlpatterns = [
     path('api/jobs/<uuid:job_id>/scoring-input/', JobCandidateInputView.as_view(), name='job-candidate-input'),
     path('api/jobs/<uuid:job_id>/scores/', JobScoresView.as_view(), name='job-scores'),
     path('api/jobs/<uuid:job_id>/operational-handoff/', JobOperationalHandoffView.as_view(), name='job-operational-handoff'),
+    path('api/jobs/<uuid:job_id>/legacy-selection/', JobLegacySelectionView.as_view(), name='job-legacy-selection'),
     path('api/jobs/<uuid:job_id>/', JobDetailView.as_view(), name='job-detail'),
     path('api/reviews/datasets/<int:file_id>/', PackageReviewListView.as_view(), name='package-review-list'),
     path('api/reviews/<uuid:review_id>/', PackageReviewDetailView.as_view(), name='package-review-detail'),

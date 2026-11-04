@@ -1,4 +1,5 @@
 import { NgModule } from '@angular/core';
+import { LegacyExecutionReviewComponent } from './legacy-execution-review/legacy-execution-review.component';
 import { BrowserModule } from '@angular/platform-browser';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { SessionInterceptor } from './services/session.interceptor';
@@ -57,6 +58,7 @@ import { PipelineCodelineComponent } from './pipeline-codeline/pipeline-codeline
     PipelineCodelineComponent
   ],
   imports: [
+    LegacyExecutionReviewComponent,
     BrowserModule,
     ProjectWorkspaceComponent,
     AppRoutingModule,

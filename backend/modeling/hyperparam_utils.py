@@ -29,6 +29,8 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from execution_jobs.legacy_context import native_threads
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold
@@ -679,7 +681,7 @@ def run_hyperparam_search_with_progress(
     X_train, X_test = X_train[selected], X_test[selected]
 
     has_cat = _has_categorical(X_train)
-    nthread = 1 if n_jobs and n_jobs > 1 else 0
+    nthread = native_threads(1 if n_jobs and n_jobs > 1 else 0)
     enabled_params = [p for p, s in space.items() if s.get('enabled')]
     rng = np.random.default_rng(random_state)
 

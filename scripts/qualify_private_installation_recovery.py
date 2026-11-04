@@ -170,13 +170,17 @@ def cleanup(plan, expected):
 
 
 class Scenario:
-    def __init__(self, custody):
+    def __init__(self, custody, *, legacy=False):
         self.custody = custody
         self.key = custody / "backup.key"
         self.key.write_bytes(os.urandom(32))
         self.key.chmod(0o400)
         self.archive = custody / "backup.aesgcm"
         self.handles = []
+        self.legacy = None
+        if legacy:
+            from qualify_private_legacy_execution import LossProbe
+            self.legacy = LossProbe()
 
     def observe(self, value, accounts, passwords, parent, prepared, adopted, invoke):
         self.accounts, self.passwords, self.token = accounts, passwords, parent.name.removeprefix("declarai-p37-")
@@ -186,6 +190,8 @@ class Scenario:
             self.handles = handles
             self.completed = [row[k]["id"] for row in handles for k in ("training", "scoring")]
             self.source_evidence = boundary(adopted["services"]["api"]["container_id"], "evidence", ids=self.completed)
+            if self.legacy is not None:
+                self.legacy.before_stop(session, accounts, adopted, invoke)
             for role in ("worker", "dispatcher"):
                 identifier = adopted["services"][role]["container_id"]
                 invoke(["container", "stop", "--time", "30", identifier])
@@ -352,6 +358,7 @@ class Scenario:
         evidence = boundary(api, "evidence", ids=ids)
         require(evidence[self.orphan]["attempts"] == 2 and evidence[self.queued]["attempts"] == 1
                 and evidence[self.cancelled]["attempts"] == 0, "recovery_attempts")
+        legacy_evidence = self.legacy.after_restore(session, api, boundary) if self.legacy is not None else None
         duplicate_started = time.monotonic()
         boundary(api, "duplicates", ids=ids)
         deadline = time.monotonic() + 30
@@ -364,12 +371,13 @@ class Scenario:
         # Idempotent restore remains read-only after legitimate new work.
         require(recovery.restore(self.archive, self.key, plan, expected, approved, spec["restore_plan_sha256"])["reused"] is True,
                 "recovery_post_use_replay")
-        return {"schema": "private_installed_recovery_v1", "observed_costs": {
+        return {"legacy_worker_loss": legacy_evidence, "schema": "private_installed_recovery_v1", "observed_costs": {
                     "source_backup_seconds": self.backup_seconds, "source_archive_bytes": self.archive.stat().st_size,
                     "source_workloads": [{"task": h["task"], "features": len(h["training"]["result"]["features"]),
                         "rows": len({i for fold in h["training"]["specification"]["training"]["folds"]
                                      for key in ("train_rows", "valid_rows") for i in fold[key]})} for h in self.handles],
                     "completed_jobs": len(self.completed), "pending_or_cancelled_jobs": 3,
+                    "additional_legacy_jobs": 3 if self.legacy is not None else 0,
                     "restore_with_faults_to_adoption_seconds": adoption_ready_seconds,
                     "adoption_to_pending_terminal_seconds": pending_recovery_seconds,
                     "duplicate_drain_and_final_checks_seconds": time.monotonic() - duplicate_started,
@@ -404,7 +412,7 @@ def run_case(v):
     phase = "source_initialization_and_backup"
     try:
         custody.mkdir(mode=0o700);created.append(custody)
-        scenario = Scenario(custody)
+        scenario = Scenario(custody, legacy=True)
         source.mkdir(mode=0o700);created.append(source);src_plan.mkdir(mode=0o700)
         for name, raw in v["source_files"].items():
             (src_plan / name).write_text(raw)

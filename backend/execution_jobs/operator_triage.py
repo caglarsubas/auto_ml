@@ -10,7 +10,7 @@ MAX_BYTES = 131072
 SCHEMA = "native_queue_operator_snapshot_v2"
 STATEMENT_TIMEOUT_MS = 5000
 STATES = ("queued", "running", "cancel_requested", "succeeded", "blocked", "failed", "cancelled")
-KINDS = ("package_integrity_v1", "native_csv_scoring_v1", "native_numeric_training_search_v1",
+KINDS = ("package_integrity_v1", "native_csv_scoring_v1", "native_numeric_training_search_v1", "legacy_native_execution_v1",
          "native_training_scoring_v1", "native_protected_assessment_v1")
 GUIDANCE = {
     "failed": "Inspect the exact project job receipt and worker/dispatcher/database/broker availability with the project owner.",

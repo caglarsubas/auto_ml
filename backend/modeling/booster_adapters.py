@@ -207,6 +207,9 @@ class XGBoostAdapter(BoosterAdapter):
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
         self.fit_receipt = None
+        from execution_jobs.legacy_context import active as native_child
+        if native_child():
+            params = {**params, "nthread": 1}
         import xgboost as xgb
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
@@ -360,6 +363,9 @@ class LightGBMAdapter(BoosterAdapter):
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
         self.fit_receipt = None
+        from execution_jobs.legacy_context import active as native_child
+        if native_child():
+            params = {**params, "nthread": 1}
         import lightgbm as lgb
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)
@@ -468,6 +474,9 @@ class CatBoostAdapter(BoosterAdapter):
     def train(self, X_train, y_train, X_valid, y_valid, params,
               num_boost_round=500, early_stopping_rounds=50):
         self.fit_receipt = None
+        from execution_jobs.legacy_context import active as native_child
+        if native_child():
+            params = {**params, "nthread": 1}
         from catboost import CatBoostClassifier, CatBoostRegressor, Pool
         self.feature_names = list(map(str, X_train.columns))
         self.cat_features = _cat_cols(X_train)

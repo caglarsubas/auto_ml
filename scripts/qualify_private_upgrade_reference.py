@@ -21,17 +21,20 @@ import hashlib,json,sys
 from pathlib import Path
 sys.path.insert(0,'/app/scripts')
 from private_runtime_manifest import verify,snapshot
+sys.path.insert(0,'/tmp')
+from reference_reader import sources
 root=Path('/app');verify(root)
-reference=json.loads(Path('/tmp/reference.json').read_bytes())
-assert reference['schema']=='private_reference_source_v1'
-assert reference['qualification_reconstruction_only'] is True and reference['customer_release_qualified'] is False
+reference,files=sources(Path('/tmp/previous.tar.gz').read_bytes(),Path('/tmp/reference.json').read_bytes(),json.loads(Path('/tmp/archive.json').read_bytes()))
 source=json.loads((root/'source-manifest.json').read_bytes())
-path='backend/execution_jobs/migrations/0004_project_history_index.py'
-assert path in source['source_sha256']
-assert {k:v for k,v in source['source_sha256'].items() if k!=path}==reference['source_sha256']
-for name,digest in reference['source_sha256'].items():
-    assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
-(root/path).unlink()
+# The current image may evolve. The previous source stays exact: no current
+# application file survives unless its bytes are in the frozen old inventory.
+for name in source['source_sha256']:
+    path=Path(name)
+    assert not path.is_absolute() and '..' not in path.parts and str(path)==name
+    if name not in files:(root/path).unlink()
+for name,data in files.items():
+    path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+    assert hashlib.sha256(path.read_bytes()).hexdigest()==reference['source_sha256'][name]
 source.update(source_sha256=reference['source_sha256'],git_commit=reference['source_commit'],working_tree_changes=False)
 (root/'source-manifest.json').write_text(json.dumps(source,sort_keys=True,indent=2)+'\n')
 (root/'runtime-manifest.json').unlink()
@@ -79,9 +82,16 @@ def reference_plan(directory, expected, current_image):
             (temp / "reference.json").write_bytes(
                 (ROOT / "docs/evidence/p165-reference-source.json").read_bytes()
             )
+            from private_reference_source import sources
+            archive = (ROOT / "docs/evidence/p167-previous-source.tar.gz").read_bytes()
+            pin = (ROOT / "docs/evidence/p167-previous-source.json").read_bytes()
+            sources(archive, (temp / "reference.json").read_bytes(), json.loads(pin))
+            (temp / "previous.tar.gz").write_bytes(archive)
+            (temp / "archive.json").write_bytes(pin)
+            (temp / "reference_reader.py").write_bytes((ROOT / "scripts/private_reference_source.py").read_bytes())
             (temp / "reconstruct.py").write_text(RECONSTRUCT)
             (temp / "Dockerfile").write_text(
-                "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nUSER 0:0\nCOPY reference.json reconstruct.py /tmp/\nRUN python -I -B /tmp/reconstruct.py && rm /tmp/reference.json /tmp/reconstruct.py\nUSER 10001:10001\n"
+                "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nUSER 0:0\nCOPY reference.json reconstruct.py reference_reader.py previous.tar.gz archive.json /tmp/\nRUN python -I -B /tmp/reconstruct.py && rm /tmp/reference.json /tmp/reconstruct.py /tmp/reference_reader.py /tmp/previous.tar.gz /tmp/archive.json\nUSER 10001:10001\n"
             )
             api.run(
                 [

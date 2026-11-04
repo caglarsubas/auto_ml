@@ -133,8 +133,28 @@ def read_shap_details(file_id: int) -> Optional[Any]:
         return data
 
 
+def _durable_legacy_state(file_id, operation):
+    from django.conf import settings
+
+    if not settings.DECLARAI_JOBS_ENABLED:
+        return None
+    from django.contrib.auth import get_user_model
+    from access_control import projects
+    from execution_jobs.legacy_http import read_current
+
+    actor_id = projects.current_actor.get()
+    if actor_id is None:
+        return {"status": "unavailable", "source": "durable", "error_code": "job_actor_required"}
+    actor = get_user_model().objects.get(pk=actor_id, is_active=True)
+    state = read_current(actor, file_id, operation, selected=operation == "training")
+    return {**(state or {"status": "not_started", "progress": 0.0, "completed_step_count": 0}), "source": "durable"}
+
+
 @prometa_tool(name="cache-read:sfs_results")
 def read_sfs_results(file_id: int) -> Optional[dict]:
+    durable = _durable_legacy_state(file_id, 'sfs')
+    if durable is not None:
+        return durable if durable.get('status') != 'not_started' else None
     with span_timer('declarai.cache'):
         data = cache_get(file_id, ARTIFACT_SFS_RESULTS)
         _stamp_read_attrs(ARTIFACT_SFS_RESULTS, data)
@@ -216,6 +236,10 @@ def read_sfs_status(file_id: int) -> dict:
     on what state SFS is in.
     """
     stamp_mcp_tool_marker('state-read:sfs_status')
+    durable = _durable_legacy_state(file_id, 'sfs')
+    if durable is not None:
+        return durable
+
     # Local import: ``modeling.views`` imports ``ai_assistant.cache``
     # transitively for tracing decorators; importing it at module load
     # would create a circular dependency.  Inside a function call all
@@ -819,8 +843,14 @@ def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
     # regression test ``test_get_pipeline_config_keys_match_frontend``
     # in ``tests/test_unit.py`` guards against drift.
     data = read_pipeline_config(file_id)
+    durable = {kind: _durable_legacy_state(file_id, kind) for kind in ("training", "sfs", "hpo")}
+    state_lines = [
+        f"  Durable {kind}: {value.get('native_state', value.get('status'))}; job={value.get('native_job_id')}; result={value.get('result_sha256')}; execution={value.get('execution_id')}"
+        for kind, value in durable.items()
+        if value is not None
+    ]
     if not data:
-        return _not_available("pipeline configuration")
+        return "\n".join(state_lines) if state_lines else _not_available("pipeline configuration")
     lines = [
         "Pipeline Configuration:",
         f"  Pipeline type: {data.get('pipeline_type', '?')}",
@@ -829,16 +859,16 @@ def _handle_get_pipeline_config(file_id: int, args: dict) -> str:
         f"  Rows: {data.get('rows_before', '?')} → {data.get('rows_after', '?')}",
         f"  Rows removed: {data.get('rows_removed', '?')}",
     ]
-    bu_lines = format_business_understanding(data.get('business_understanding'))
+    bu_lines = format_business_understanding(data.get("business_understanding"))
     if bu_lines:
-        lines.append('')
+        lines.append("")
         lines.extend(bu_lines)
-    purifier = data.get('selected_purifier_steps', [])
+    purifier = data.get("selected_purifier_steps", [])
     if purifier:
         lines.append(f"  Selected purifier steps ({len(purifier)}):")
         for s in purifier:
             lines.append(f"    • {s}")
-    return '\n'.join(lines)
+    return "\n".join(lines + state_lines)
 
 
 def _handle_get_data_dictionary(file_id: int, args: dict) -> str:
@@ -1074,7 +1104,46 @@ def _handle_get_skill_file(file_id: int, args: dict) -> str:
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+def _handle_get_execution_job(file_id, args):
+    from django.contrib.auth import get_user_model
+    from access_control import projects
+    from execution_jobs import service
+    from execution_jobs.legacy_selection import preview
+
+    actor_id = projects.current_actor.get()
+    if actor_id is None:
+        raise projects.ProjectDenied("job_actor_required")
+    actor = get_user_model().objects.get(pk=actor_id, is_active=True)
+    record = service.read(actor, args["job_id"])
+    if record["file_id"] != file_id:
+        raise projects.ProjectDenied("job_dataset_mismatch")
+    result = record.get("result") or {}
+    choices = (
+        preview(actor, record["id"])["candidates"]
+        if record["state"] == "succeeded" and record["specification"]["kind"] == "legacy_native_execution_v1"
+        else []
+    )
+    return json.dumps(
+        {
+            "job_id": record["id"],
+            "state": record["state"],
+            "kind": record["specification"]["kind"],
+            "attempts": record["attempts"],
+            "reason_code": record["reason_code"],
+            "result_sha256": record["result_sha256"],
+            "source": result.get("source"),
+            "candidates": choices,
+            "events": record["events"][-8:],
+            "review_approved": False,
+            "production_use_approved": False,
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+
+
 _HANDLERS = {
+    'get_execution_job': _handle_get_execution_job,
     'get_split_validation': _handle_get_split_validation,
     'get_dq_summary': _handle_get_dq_summary,
     'get_feature_stats': _handle_get_feature_stats,

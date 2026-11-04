@@ -34,6 +34,11 @@ class ProjectDenied(PermissionError):
 
 
 def governed():
+    from execution_jobs.legacy_context import active
+    if active() is not None:
+        # The fixed native child operates only on its fenced scratch copy and
+        # has a dummy database. Live authority and all adoption stay in the parent.
+        return False
     return settings.DECLARAI_RUNTIME_PROFILE == "private" or ProjectPolicy.objects.exists()
 
 

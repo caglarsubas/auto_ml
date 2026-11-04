@@ -360,6 +360,14 @@ def _register_read_tools(mcp) -> None:
         )
 
     @mcp.tool(
+        name="declarai.get_execution_job", title="Get durable development job",
+        description=descriptions['get_execution_job'], annotations=read_annotations,
+        meta=_read_tool_meta(read_specs['get_execution_job']), structured_output=False,
+    )
+    def get_execution_job(file_id: int, job_id: str) -> str:
+        return _run_read_tool(file_id, 'declarai.get_execution_job', 'get_execution_job', {'job_id':job_id})
+
+    @mcp.tool(
         name="declarai.get_sfs_results",
         title="Get SFS results",
         description=descriptions["get_sfs_results"],
